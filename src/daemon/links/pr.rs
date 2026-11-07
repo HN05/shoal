@@ -98,7 +98,7 @@ impl Manager {
     /// chat was removed meanwhile, which deleted its registration.
     async fn record_chat_registration(&self, id: String, change: RegistrationChange) -> Result<()> {
         self.store
-            .run(move |db| record_chat_change(db, &id, change))
+            .write(move |tx| record_chat_change(tx, &id, change))
             .await
     }
 
@@ -145,11 +145,9 @@ impl Manager {
         );
         let id = workspace.id;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
-                change.apply(&tx, &id)?;
-                tx.commit()?;
+            .write(move |tx| {
+                store::require_ready(tx, &id)?;
+                change.apply(tx, &id)?;
                 Ok(())
             })
             .await?;
@@ -608,14 +606,16 @@ pub(crate) fn origin<'a>(
 /// Apply `change` to the PR registration of the chat `id` in a transaction
 /// that finds the chat still recorded: a removed one has no registration
 /// to change, and writing one would outlive it.
-fn record_chat_change(db: &mut Connection, id: &str, change: RegistrationChange) -> Result<()> {
-    let tx = db.transaction()?;
+fn record_chat_change(
+    tx: &rusqlite::Transaction<'_>,
+    id: &str,
+    change: RegistrationChange,
+) -> Result<()> {
     ensure!(
-        super::space::is_chat(&tx, id)?,
+        super::space::is_chat(tx, id)?,
         "the chat was removed before its PR links changed"
     );
-    change.apply(&tx, id)?;
-    tx.commit()?;
+    change.apply(tx, id)?;
     Ok(())
 }
 

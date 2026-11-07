@@ -946,10 +946,9 @@ impl Manager {
     ) -> Result<bool> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                require_ready_space(&tx, &id)?;
-                let linked = polled_items(&tx, &id)?;
+            .write(move |tx| {
+                require_ready_space(tx, &id)?;
+                let linked = polled_items(tx, &id)?;
                 let mut merged = false;
                 for (url, kind, mut snapshot) in
                     observations.into_iter().filter_map(|(url, snapshot)| {
@@ -981,7 +980,7 @@ impl Manager {
                         for update in previous.changes(&snapshot, &url) {
                             merged |= update.kind == UpdateKind::Merged;
                             crate::daemon::events::record_item_activity(
-                                &tx, &id, kind, &url, &update,
+                                tx, &id, kind, &url, &update,
                             )?;
                         }
                     }
@@ -992,7 +991,6 @@ impl Manager {
                         params![id, url, serde_json::to_string(&snapshot)?],
                     )?;
                 }
-                tx.commit()?;
                 Ok(merged)
             })
             .await
@@ -1126,7 +1124,7 @@ impl Manager {
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store
-            .run(move |db| record_observations(db, &id, observations, &poll, &agents))
+            .write(move |tx| record_observations(tx, &id, observations, &poll, &agents))
             .await
     }
 
@@ -1167,6 +1165,8 @@ impl Manager {
         let waits = [self.item_waits.clone(), self.chat_waits.clone()];
         let agents = self.tracked_agents().await;
         self.store
+            // Not `write`: the commit happens inside `with_unwatched`, so no
+            // wait starts before the acknowledgement lands.
             .run(move |db| {
                 let tx = db.transaction()?;
                 require_ready_space(&tx, &id)?;
@@ -1202,16 +1202,15 @@ struct Poll {
 /// transaction, and return the updates its watch reports. Observations of
 /// items the watch no longer follows are dropped.
 fn record_observations(
-    db: &mut rusqlite::Connection,
+    tx: &rusqlite::Transaction<'_>,
     id: &str,
     observations: Vec<(String, Snapshot)>,
     poll: &Poll,
     agents: &crate::daemon::workspace::TrackedAgents,
 ) -> Result<Vec<Update>> {
     let observed_at = poll.observed_at;
-    let tx = db.transaction()?;
-    require_ready_space(&tx, id)?;
-    let followed = recorded_urls(&tx, id, poll, agents)?;
+    require_ready_space(tx, id)?;
+    let followed = recorded_urls(tx, id, poll, agents)?;
     let mut updates = Vec::new();
     for (url, snapshot) in observations {
         if followed
@@ -1220,11 +1219,10 @@ fn record_observations(
         {
             continue;
         }
-        let mut record = cursor_record(&tx, id, &url)?.unwrap_or_default();
+        let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();
         updates.extend(record.observe(snapshot, &url, observed_at.unsigned_seconds()));
-        save_cursor_record(&tx, id, &url, &record)?;
+        save_cursor_record(tx, id, &url, &record)?;
     }
-    tx.commit()?;
     Ok(updates)
 }
 

@@ -177,13 +177,11 @@ impl Manager {
     ) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 for (relation, item) in &items {
                     let title = item.title.as_deref();
-                    record(&tx, &id, *relation, item.kind, &item.url, title)?;
+                    record(tx, &id, *relation, item.kind, &item.url, title)?;
                 }
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -200,12 +198,7 @@ impl Manager {
     ) -> Result<usize> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let removed = remove(&tx, &id, relation, kind, url.as_deref())?;
-                tx.commit()?;
-                Ok(removed)
-            })
+            .write(move |tx| remove(tx, &id, relation, kind, url.as_deref()))
             .await
     }
 

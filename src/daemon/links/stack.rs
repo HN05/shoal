@@ -1,6 +1,6 @@
 //! Move stacked workspaces down when their base workspace's PRs merge.
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::params;
 
 use super::{
     pr::{RegistrationKind, current_head},
@@ -121,7 +121,7 @@ impl Manager {
         self.ensure_base_unchanged(base, head).await?;
         let (id, base_id) = (workspace.id, base.id.clone());
         self.store
-            .run(move |db| record_restack(db, &id, &base_id, updates, retargeted))
+            .write(move |tx| record_restack(tx, &id, &base_id, updates, retargeted))
             .await
     }
 
@@ -224,13 +224,12 @@ fn base_merged_update(
 /// longer builds on `base_id`: another sweep or a manual change already
 /// moved it.
 fn record_restack(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     id: &str,
     base_id: &str,
     updates: Vec<Update>,
     retargeted: Vec<(String, Edited)>,
 ) -> Result<()> {
-    let tx = db.transaction()?;
     let changed = tx.execute(
         "UPDATE workspaces SET base_workspace_id=(SELECT base_workspace_id FROM workspaces WHERE id=?2)
          WHERE id=?1 AND base_workspace_id=?2",
@@ -239,9 +238,9 @@ fn record_restack(
     if changed == 0 {
         return Ok(());
     }
-    record_base_changed(&tx, id, EventCause::Pr)?;
+    record_base_changed(tx, id, EventCause::Pr)?;
     for update in updates {
-        wait::queue_update(&tx, id, update)?;
+        wait::queue_update(tx, id, update)?;
     }
     for (url, edited) in retargeted {
         let change = wait::OwnChange {
@@ -250,8 +249,7 @@ fn record_restack(
             state: None,
             edited,
         };
-        wait::record_own_change(&tx, id, change)?;
+        wait::record_own_change(tx, id, change)?;
     }
-    tx.commit()?;
     Ok(())
 }

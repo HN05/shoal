@@ -78,12 +78,7 @@ impl Manager {
     ) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                assign(&tx, &id, &url, title.as_deref())?;
-                tx.commit()?;
-                Ok(())
-            })
+            .write(move |tx| assign(tx, &id, &url, title.as_deref()))
             .await
     }
 
@@ -96,12 +91,7 @@ impl Manager {
             None => None,
         };
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                unlink(&tx, &id, selected.as_deref())?;
-                tx.commit()?;
-                Ok(())
-            })
+            .write(move |tx| unlink(tx, &id, selected.as_deref()))
             .await?;
         self.signals.wake_cleanup();
         Ok(())

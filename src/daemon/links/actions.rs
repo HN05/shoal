@@ -275,17 +275,15 @@ impl Manager {
             edited,
         } = own;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                events::record_item(&tx, &id, kind, &url, name)?;
+            .write(move |tx| {
+                events::record_item(tx, &id, kind, &url, name)?;
                 let change = OwnChange {
                     url: &url,
                     authored,
                     state,
                     edited,
                 };
-                record_received_change(&tx, &id, change, &agents)?;
-                tx.commit()?;
+                record_received_change(tx, &id, change, &agents)?;
                 Ok(())
             })
             .await
@@ -525,7 +523,7 @@ impl Manager {
         let (id, url, title) = (space.to_owned(), item.url.clone(), item.title.clone());
         let recorded = self
             .store
-            .run(move |db| record_opened(db, &id, kind, &url, &title))
+            .write(move |tx| record_opened(tx, &id, kind, &url, &title))
             .await
             .with_context(|| format!("{} was opened, but recording it failed", item.url))?;
         if !recorded || !link {
@@ -574,19 +572,17 @@ fn watch(item: &Item) -> super::pr::Action {
 /// removal that started after the caller's check takes no link changes, and
 /// the item exists either way.
 fn record_opened(
-    db: &mut rusqlite::Connection,
+    tx: &rusqlite::Transaction<'_>,
     id: &str,
     kind: ItemKind,
     url: &str,
     title: &str,
 ) -> Result<bool> {
-    let tx = db.transaction()?;
-    events::record_item(&tx, id, kind, url, "open")?;
-    let recorded = super::accepts_links(&tx, id)?;
+    events::record_item(tx, id, kind, url, "open")?;
+    let recorded = super::accepts_links(tx, id)?;
     if recorded {
-        super::record(&tx, id, Relation::Opened, kind, url, Some(title))?;
+        super::record(tx, id, Relation::Opened, kind, url, Some(title))?;
     }
-    tx.commit()?;
     Ok(recorded)
 }
 
