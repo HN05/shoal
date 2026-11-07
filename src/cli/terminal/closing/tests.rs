@@ -1,5 +1,6 @@
 use super::*;
 use crate::terminal::Closes;
+use crate::time::UnixTime;
 use crate::{
     model::{AgentStatus, Completion, Execution, Inspection, Workspace},
     paths::Paths,
@@ -366,7 +367,7 @@ async fn inspect(
         );
         workspace.agent_state = turn.map(|state| AgentStatus {
             state,
-            since: 0,
+            since: UnixTime::from_seconds(0),
             prompt_cache_expires_at: None,
         });
         let inspection = Inspection {

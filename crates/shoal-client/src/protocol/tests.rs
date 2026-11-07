@@ -497,7 +497,7 @@ async fn ready_outcomes_too_large_for_a_frame_arrive_in_pages() {
                 kind: Some(crate::forge::items::link::ItemKind::Pr),
                 url: Some(format!("https://forge.invalid/team/project/pulls/{n}")),
                 head: format!("{n:040}"),
-                created_at: 1,
+                created_at: crate::time::UnixTime::from_seconds(1),
                 stale: Some(false),
                 warnings: Vec::new(),
             })

@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 use crate::{forge::items::link::ItemKind, state::WorkspaceState};
 
 fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) -> Workspace {
@@ -26,7 +27,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         issue_title: None,
         state: crate::state::QueueState::Queued,
         position: Some(2),
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         workspace_id: None,
         execution: None,
         opens: None,
@@ -61,7 +62,7 @@ fn queue_status_names_a_restore_that_waits_for_an_update() {
         issue_title: None,
         state: crate::state::QueueState::Queued,
         position: Some(1),
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         workspace_id: Some("ui".into()),
         execution: Some("execution".into()),
         opens: None,
@@ -238,7 +239,7 @@ fn mark_labels_name_the_marked_item() {
         kind,
         url: url.map(Into::into),
         head: "abc".into(),
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         stale: None,
         warnings: Vec::new(),
     };
@@ -269,7 +270,7 @@ fn workspace_rows_align_status_and_titles() {
         kind: None,
         url: None,
         head: "head".into(),
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         stale: Some(stale),
         warnings: Vec::new(),
     };
@@ -279,7 +280,7 @@ fn workspace_rows_align_status_and_titles() {
     let agent = |state| {
         Some(crate::model::AgentStatus {
             state,
-            since: 0,
+            since: UnixTime::from_seconds(0),
             prompt_cache_expires_at: None,
         })
     };

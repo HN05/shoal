@@ -66,6 +66,8 @@ fn arithmetic_saturates_and_elapsed_time_is_never_negative() {
         Duration::from_secs(60)
     );
     assert_eq!(time.duration_since(UnixTime::MAX), Duration::ZERO);
+    assert_eq!(UnixTime::from_unsigned_seconds(u64::MAX), UnixTime::MAX);
+    assert_eq!(UnixTime::from_seconds(-5).unsigned_seconds(), 0);
 }
 
 #[test]

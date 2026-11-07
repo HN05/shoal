@@ -16,7 +16,7 @@ macro_rules! log {
 pub(crate) use log;
 
 pub(crate) fn line(out: &mut impl Write, message: std::fmt::Arguments<'_>) {
-    let now = crate::time::local_seconds(crate::time::unix_seconds() as i64);
+    let now = crate::time::UnixTime::now().local_seconds();
     // One write per line keeps concurrent tasks from interleaving within it.
     let _ = out.write_all(format!("{now} {message}\n").as_bytes());
 }

@@ -1,5 +1,6 @@
 use super::*;
 use crate::reviews::{FindingId, ReviewState};
+use crate::time::UnixTime;
 
 fn finding(number: i64, path: &str, severity: Severity) -> Finding {
     Finding {
@@ -33,7 +34,7 @@ fn review(findings: Vec<Finding>) -> Review {
         failure: None,
         head: Some("0123456789abcdef".into()),
         base: Some("base".into()),
-        created_at: 1,
+        created_at: UnixTime::from_seconds(1),
         started_at: None,
         ended_at: None,
         summary: Some("One blocker.".into()),

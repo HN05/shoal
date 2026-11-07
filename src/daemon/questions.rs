@@ -356,7 +356,7 @@ fn insert(
             number.item,
             workspace_id,
             chat_id,
-            i64::try_from(crate::time::unix_seconds())?,
+            crate::time::UnixTime::now(),
             ask.question,
             ask.recommendation,
             ask.reason,
@@ -379,7 +379,7 @@ fn open_question(tx: &Transaction<'_>, number: ItemNumber) -> Result<Question> {
 fn store_closed(
     tx: &Transaction<'_>,
     question: &Question,
-    closed_at: i64,
+    closed_at: crate::time::UnixTime,
     withdrawn: bool,
 ) -> Result<()> {
     tx.execute(
@@ -401,7 +401,7 @@ fn store_answer(
     answer: String,
     message_id: Option<i64>,
 ) -> Result<()> {
-    let answered_at = i64::try_from(crate::time::unix_seconds())?;
+    let answered_at = crate::time::UnixTime::now();
     tx.execute(
         "UPDATE questions SET answer=?3,answered_at=?4,message_id=?5
             WHERE space_number=?1 AND number=?2",
@@ -486,7 +486,7 @@ pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
 /// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
 pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<ItemNumber>> {
-    let closed_at = i64::try_from(crate::time::unix_seconds())?;
+    let closed_at = crate::time::UnixTime::now();
     let mut numbers = tx
         .prepare(
             "UPDATE questions SET closed_at=?2
@@ -524,7 +524,7 @@ fn withdraw(
         shown.is_none_or(|shown| question.number == shown.number && question.is_same(shown)),
         format_args!("question {number}"),
     )?;
-    let closed_at = i64::try_from(crate::time::unix_seconds())?;
+    let closed_at = crate::time::UnixTime::now();
     store_closed(tx, &question, closed_at, true)?;
     question.closed_at = Some(closed_at);
     question.withdrawn = true;
@@ -627,7 +627,7 @@ fn close_in_chat(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<(Question, 
         &format!("WHERE {SPACE}=?1 AND q.in_chat AND q.answer IS NULL AND q.closed_at IS NULL"),
         [space_id],
     )?;
-    let closed_at = i64::try_from(crate::time::unix_seconds())?;
+    let closed_at = crate::time::UnixTime::now();
     open.into_iter()
         .map(|question| {
             store_closed(tx, &question, closed_at, true)?;

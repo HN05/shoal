@@ -319,7 +319,7 @@ impl ApprovalRequestExt for ApprovalRequest {
             lifetime,
             reason: reason.unwrap_or_default().into(),
             status: DecisionStatus::Pending,
-            created_at: crate::time::unix_seconds(),
+            created_at: crate::time::UnixTime::now(),
             decided_at: None,
             active: true,
             routed: false,
@@ -567,7 +567,7 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
     let new = request.status == DecisionStatus::Pending;
     if new {
         request.status = status;
-        request.decided_at = Some(crate::time::unix_seconds());
+        request.decided_at = Some(crate::time::UnixTime::now());
         write_record(tx, &request)?;
         events::record_approval(tx, EventKind::ApprovalDecided, &request)?;
     }

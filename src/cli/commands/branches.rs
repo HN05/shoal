@@ -5,7 +5,6 @@ use anyhow::{Result, bail, ensure};
 use crate::{
     cli::{context::Context, ui},
     model::{BranchTarget, KeptBranch},
-    time::local_seconds,
 };
 
 /// The kept branches, only those of the repository `repo` selects.
@@ -120,7 +119,7 @@ pub(super) fn lines(kept: &[KeptBranch]) -> Vec<String> {
                 "{:repository_width$}  {:branch_width$}  {commits}  last commit {}: {}",
                 branch.repository,
                 branch.branch,
-                local_seconds(branch.committed_at as i64),
+                branch.committed_at.local_seconds(),
                 branch.subject,
             )
         })

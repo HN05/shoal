@@ -3,6 +3,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
 use crate::daemon::workspace_files::Attacher;
 use crate::forge::items::link::Selection;
+use crate::time::UnixTime;
 
 fn sent_at(times: &[i64]) -> Vec<AgentMessage> {
     times
@@ -10,28 +11,36 @@ fn sent_at(times: &[i64]) -> Vec<AgentMessage> {
         .enumerate()
         .map(|(n, &created_at)| AgentMessage {
             id: i64::try_from(n).unwrap(),
-            created_at,
+            created_at: UnixTime::from_seconds(created_at),
             message: format!("message {n}"),
             attachments: Vec::new(),
         })
         .collect()
 }
 
+fn at(seconds: i64) -> UnixTime {
+    UnixTime::from_seconds(seconds)
+}
+
+fn secs(seconds: u64) -> Duration {
+    Duration::from_secs(seconds)
+}
+
 #[test]
 fn a_run_settles_once_none_arrives_for_the_window() {
     let run = sent_at(&[100, 103]);
-    assert_eq!(held_until(&run, 5, 103), Some(108));
-    assert_eq!(held_until(&run, 5, 108), None);
+    assert_eq!(held_until(&run, secs(5), at(103)), Some(at(108)));
+    assert_eq!(held_until(&run, secs(5), at(108)), None);
     // Without a window, each message is delivered at once.
-    assert_eq!(held_until(&run, 0, 103), None);
-    assert_eq!(held_until(&[], 5, 100), None);
+    assert_eq!(held_until(&run, secs(0), at(103)), None);
+    assert_eq!(held_until(&[], secs(5), at(100)), None);
 }
 
 #[test]
 fn a_steady_run_settles_at_most_six_windows_after_its_first_message() {
     let run = sent_at(&[100, 104, 108, 112, 116, 120, 124, 128]);
-    assert_eq!(held_until(&run, 5, 128), Some(130));
-    assert_eq!(held_until(&run, 5, 130), None);
+    assert_eq!(held_until(&run, secs(5), at(128)), Some(at(130)));
+    assert_eq!(held_until(&run, secs(5), at(130)), None);
 }
 
 /// A workspace whose repository holds messages for `settle` seconds.

@@ -2,6 +2,7 @@ use super::*;
 use crate::reviews::{
     Check, FindingId, FixCheck, Outcome, Reply, ReviewState, ReviewTarget, Severity,
 };
+use crate::time::UnixTime;
 
 fn finding(number: i64, outcome: Option<Outcome>, check: Option<Check>) -> Finding {
     Finding {
@@ -12,7 +13,7 @@ fn finding(number: i64, outcome: Option<Outcome>, check: Option<Check>) -> Findi
         title: format!("Problem {number}"),
         body: "It breaks.".into(),
         replies: vec![Reply {
-            created_at: 1,
+            created_at: UnixTime::from_seconds(1),
             body: "Only on empty input.".into(),
         }],
         outcome,
@@ -33,9 +34,9 @@ fn review(findings: Vec<Finding>) -> Review {
         failure: None,
         head: Some("0123456789abcdef".into()),
         base: Some("base".into()),
-        created_at: 1,
-        started_at: Some(1),
-        ended_at: Some(2),
+        created_at: UnixTime::from_seconds(1),
+        started_at: Some(UnixTime::from_seconds(1)),
+        ended_at: Some(UnixTime::from_seconds(2)),
         summary: Some("Two blockers.".into()),
         verdict: None,
         findings,

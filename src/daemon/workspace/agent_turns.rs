@@ -13,16 +13,17 @@ use crate::{
     model::Execution,
     process::{execution::Processes, identity as process},
     state::AgentState,
+    time::UnixTime,
 };
 
-/// An agent's turn state and when it began, in Unix seconds.
+/// An agent's turn state and when it began.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Turn {
     pub state: AgentState,
-    pub since: i64,
-    /// When an idle agent's prompt cache expires, in Unix seconds, for an AI
-    /// tool whose cache lifetime is known.
-    pub cache_expires_at: Option<i64>,
+    pub since: UnixTime,
+    /// When an idle agent's prompt cache expires, for an AI tool whose cache
+    /// lifetime is known.
+    pub cache_expires_at: Option<UnixTime>,
 }
 
 impl Turn {
@@ -33,7 +34,7 @@ impl Turn {
     /// Whether the agent is idle with no prompt cache left at `now`, so
     /// restoring it costs no more than its next turn would. An unknown cache
     /// lifetime counts as expired.
-    pub(crate) fn idle_without_cache(&self, now: i64) -> bool {
+    pub(crate) fn idle_without_cache(&self, now: UnixTime) -> bool {
         self.idle()
             && self
                 .cache_expires_at

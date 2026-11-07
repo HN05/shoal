@@ -256,13 +256,7 @@ impl Manager {
                 db.execute(
                     "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at)
                      VALUES (?1,?2,?3,?4,?5)",
-                    params![
-                        id,
-                        repository,
-                        workspace,
-                        job,
-                        crate::time::unix_seconds() as i64
-                    ],
+                    params![id, repository, workspace, job, crate::time::UnixTime::now()],
                 )?;
                 Ok(())
             })
@@ -287,7 +281,7 @@ impl Manager {
                 db.execute(
                     "UPDATE ci_jobs SET execution_id=?2,launched_at=coalesce(launched_at,?3)
                      WHERE id=?1",
-                    params![id, execution, crate::time::unix_seconds() as i64],
+                    params![id, execution, crate::time::UnixTime::now()],
                 )?;
                 Ok(())
             })

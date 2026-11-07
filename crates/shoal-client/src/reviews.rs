@@ -276,7 +276,7 @@ impl Finding {
 /// A discussion reply to a finding, which does not resolve it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reply {
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     pub body: String,
 }
 
@@ -315,12 +315,11 @@ pub struct Review {
     /// The commit it was compared against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
-    /// Unix seconds.
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub started_at: Option<i64>,
+    pub started_at: Option<crate::time::UnixTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ended_at: Option<i64>,
+    pub ended_at: Option<crate::time::UnixTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -347,9 +346,9 @@ pub enum Posted {
 }
 
 impl Review {
-    /// Seconds from start to end, once both are known.
-    pub fn duration(&self) -> Option<i64> {
-        Some(self.ended_at? - self.started_at?)
+    /// The time from start to end, once both are known.
+    pub fn duration(&self) -> Option<std::time::Duration> {
+        Some(self.ended_at?.duration_since(self.started_at?))
     }
 
     /// The findings no outcome resolves.

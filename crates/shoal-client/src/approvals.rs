@@ -268,8 +268,8 @@ pub struct ApprovalRequest {
     pub lifetime: Lifetime,
     pub reason: String,
     pub status: DecisionStatus,
-    pub created_at: u64,
-    pub decided_at: Option<u64>,
+    pub created_at: crate::time::UnixTime,
+    pub decided_at: Option<crate::time::UnixTime>,
     /// False for workspace grants retained after release.
     pub active: bool,
     /// Whether the request went up the workspace tree to find its decider.

@@ -276,7 +276,7 @@ fn insert(
     db.execute(
         "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,placed_by) VALUES (?1,?2,?3,?4,?5)
          ON CONFLICT(workspace_id,name) DO NOTHING",
-        params![id, name, reason, crate::time::unix_seconds() as i64, placed_by],
+        params![id, name, reason, crate::time::UnixTime::now(), placed_by],
     )?;
     Ok(())
 }

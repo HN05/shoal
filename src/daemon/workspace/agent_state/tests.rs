@@ -1,6 +1,7 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::RecordExt;
+use crate::time::UnixTime;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -67,7 +68,10 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         .await
         .unwrap();
     let again = report(AgentState::Working).await.unwrap();
-    assert_eq!(again.since, working.since - 60);
+    assert_eq!(
+        again.since,
+        working.since - std::time::Duration::from_secs(60)
+    );
     let waiting = report(AgentState::Waiting).await.unwrap();
     assert_eq!(waiting.state, AgentState::Waiting);
     assert!(waiting.since >= working.since);
@@ -333,7 +337,10 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
         .await
         .unwrap();
     assert_eq!(ended.state, AgentState::Idle);
-    assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 3600));
+    assert_eq!(
+        ended.prompt_cache_expires_at,
+        Some(ended.since + std::time::Duration::from_secs(3600))
+    );
     // Another idle report, such as an idle prompt's, keeps the expiry.
     let repeated = manager
         .set_agent_state(
@@ -373,7 +380,10 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
         )
         .await
         .unwrap();
-    assert_eq!(unknown.prompt_cache_expires_at, Some(unknown.since + 1800));
+    assert_eq!(
+        unknown.prompt_cache_expires_at,
+        Some(unknown.since + std::time::Duration::from_secs(1800))
+    );
 }
 
 #[tokio::test]
@@ -415,7 +425,10 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
         )
         .await
         .unwrap();
-    assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 300));
+    assert_eq!(
+        ended.prompt_cache_expires_at,
+        Some(ended.since + std::time::Duration::from_secs(300))
+    );
 }
 
 #[tokio::test]
@@ -452,7 +465,7 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
                     space: id.clone(),
                     state: AgentState::Working,
                     execution: None,
-                    at: 1,
+                    at: UnixTime::from_seconds(1),
                     prompt_cache_expires_at: None,
                     failed: false,
                 };

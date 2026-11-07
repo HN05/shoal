@@ -18,6 +18,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{agent_messages, log},
     state::{AgentState, TurnFailure},
+    time::UnixTime,
 };
 
 pub(super) mod unretried;
@@ -33,7 +34,7 @@ const RATE_LIMIT_MAX_DELAY_SECS: u64 = 60 * 60;
 const JITTER: f64 = 0.2;
 /// How long after a reset the upstream named the agent is asked, so the
 /// upstream has surely reset.
-const RESET_MARGIN_SECS: i64 = 30;
+const RESET_MARGIN: Duration = Duration::from_secs(30);
 /// How often the loop looks again without a retry to wait for.
 const IDLE_RECHECK: Duration = Duration::from_secs(60 * 60);
 
@@ -71,14 +72,14 @@ pub(super) fn follow_state(db: &Connection, workspace_id: &str, state: AgentStat
 }
 
 /// The wait before `attempt` for `failure`, spread by `spread` in `[0, 1)`.
-fn delay(failure: TurnFailure, attempt: u32, spread: f64) -> i64 {
+fn delay(failure: TurnFailure, attempt: u32, spread: f64) -> Duration {
     let maximum = match failure {
         TurnFailure::RateLimited => RATE_LIMIT_MAX_DELAY_SECS,
         _ => MAX_DELAY_SECS,
     };
     let doublings = attempt.saturating_sub(1).min(16);
     let base = FIRST_DELAY_SECS.saturating_mul(1 << doublings).min(maximum);
-    (base as f64 * (1.0 - JITTER + 2.0 * JITTER * spread)).round() as i64
+    Duration::from_secs((base as f64 * (1.0 - JITTER + 2.0 * JITTER * spread)).round() as u64)
 }
 
 /// A random spread in `[0, 1)`.
@@ -97,16 +98,14 @@ fn record_failure(
     workspace_id: &str,
     execution: &str,
     failure: TurnFailure,
-    now: i64,
+    now: UnixTime,
     spread: f64,
 ) -> Result<()> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let reset = upstream_reset(&tx, execution)?;
     let previous = previous_attempt(&tx, workspace_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
-    let due_at = reset.map_or(due_at, |reset| {
-        due_at.max(reset.saturating_add(RESET_MARGIN_SECS))
-    });
+    let due_at = reset.map_or(due_at, |reset| due_at.max(reset + RESET_MARGIN));
     save_retry(&tx, workspace_id, execution, failure, attempt, due_at)?;
     tx.commit()?;
     Ok(())
@@ -116,7 +115,7 @@ fn record_failure(
 /// until, and hold its pending turn retry until past it, together, so a
 /// failure recorded at the same time sees one or the other; `None` forgets
 /// it. Whether a pending retry was held.
-fn record_reset(db: &mut Connection, execution: &str, reset: Option<i64>) -> Result<bool> {
+fn record_reset(db: &mut Connection, execution: &str, reset: Option<UnixTime>) -> Result<bool> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let Some(reset) = reset else {
         forget_upstream_reset(&tx, execution)?;
@@ -131,7 +130,7 @@ fn record_reset(db: &mut Connection, execution: &str, reset: Option<i64>) -> Res
     let held = tx.execute(
         "UPDATE workspace_turn_retries SET due_at=MAX(due_at,?2)
          WHERE execution_id=?1 AND delivered=0",
-        params![execution, reset.saturating_add(RESET_MARGIN_SECS)],
+        params![execution, reset + RESET_MARGIN],
     )?;
     tx.commit()?;
     Ok(held > 0)
@@ -139,7 +138,7 @@ fn record_reset(db: &mut Connection, execution: &str, reset: Option<i64>) -> Res
 
 /// When the upstream of `execution`'s proxy last said it refuses requests
 /// until.
-fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<i64>> {
+fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<UnixTime>> {
     Ok(db
         .query_row(
             "SELECT resets_at FROM execution_upstream_resets WHERE execution_id=?1",
@@ -163,7 +162,7 @@ struct PreviousAttempt {
     execution: String,
     failure: TurnFailure,
     attempt: u32,
-    due_at: i64,
+    due_at: UnixTime,
     delivered: bool,
 }
 
@@ -192,9 +191,9 @@ fn next_attempt(
     previous: Option<PreviousAttempt>,
     execution: &str,
     failure: TurnFailure,
-    now: i64,
+    now: UnixTime,
     spread: f64,
-) -> (u32, i64) {
+) -> (u32, UnixTime) {
     let limited = |failure| failure == TurnFailure::RateLimited;
     let previous = previous.filter(|previous| {
         previous.execution == execution && limited(previous.failure) == limited(failure)
@@ -216,7 +215,7 @@ fn save_retry(
     execution: &str,
     failure: TurnFailure,
     attempt: u32,
-    due_at: i64,
+    due_at: UnixTime,
 ) -> Result<()> {
     db.execute(
         "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
@@ -246,7 +245,7 @@ struct Due {
 }
 
 /// The workspaces whose retry is due at `now`.
-fn due_workspaces(db: &Connection, now: i64) -> Result<Vec<String>> {
+fn due_workspaces(db: &Connection, now: UnixTime) -> Result<Vec<String>> {
     Ok(db
         .prepare(
             "SELECT workspace_id FROM workspace_turn_retries WHERE delivered=0 AND due_at<=?1",
@@ -256,7 +255,7 @@ fn due_workspaces(db: &Connection, now: i64) -> Result<Vec<String>> {
 }
 
 /// The workspace's retry when it is still due at `now`.
-fn due(db: &Connection, workspace_id: &str, now: i64) -> Result<Option<Due>> {
+fn due(db: &Connection, workspace_id: &str, now: UnixTime) -> Result<Option<Due>> {
     Ok(db
         .query_row(
             "SELECT r.failure,r.attempt,
@@ -286,20 +285,24 @@ struct Delivered {
     /// tried again after the first delay.
     failed: Vec<(String, anyhow::Error)>,
     /// When the next retry is due.
-    next: Option<i64>,
+    next: Option<UnixTime>,
 }
 
 /// Deliver each retry due at `now`, each workspace's on its own, so one
 /// that cannot be delivered, such as to a full message queue, holds up no
 /// other and waits the first delay again.
-fn deliver_due(db: &mut Connection, now: i64) -> Result<Delivered> {
+fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
     let mut queued = false;
     let mut failed = Vec::new();
     for workspace_id in due_workspaces(db, now)? {
         match deliver(db, &workspace_id, now) {
             Ok(delivered) => queued |= delivered,
             Err(error) => {
-                postpone(db, &workspace_id, now + FIRST_DELAY_SECS as i64)?;
+                postpone(
+                    db,
+                    &workspace_id,
+                    now + Duration::from_secs(FIRST_DELAY_SECS),
+                )?;
                 failed.push((workspace_id, error));
             }
         }
@@ -321,7 +324,7 @@ fn deliver_due(db: &mut Connection, now: i64) -> Result<Delivered> {
 /// delivered together, or drop a retry that may not be. One transaction
 /// checks and delivers, so a turn that starts meanwhile never receives a
 /// cancelled retry. Whether a message was queued.
-fn deliver(db: &mut Connection, workspace_id: &str, now: i64) -> Result<bool> {
+fn deliver(db: &mut Connection, workspace_id: &str, now: UnixTime) -> Result<bool> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let Some(due) = due(&tx, workspace_id, now)? else {
         return Ok(false);
@@ -344,7 +347,7 @@ fn deliver(db: &mut Connection, workspace_id: &str, now: i64) -> Result<bool> {
     Ok(due.deliverable)
 }
 
-fn postpone(db: &Connection, workspace_id: &str, due_at: i64) -> Result<()> {
+fn postpone(db: &Connection, workspace_id: &str, due_at: UnixTime) -> Result<()> {
     db.execute(
         "UPDATE workspace_turn_retries SET due_at=?2 WHERE workspace_id=?1 AND delivered=0",
         params![workspace_id, due_at],
@@ -393,7 +396,7 @@ impl Manager {
                 .await;
         }
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
-        let (now, spread) = (i64::try_from(crate::time::unix_seconds())?, spread());
+        let (now, spread) = (UnixTime::now(), spread());
         self.store
             .run(move |db| record_failure(db, &id, &execution, failure, now, spread))
             .await?;
@@ -407,7 +410,7 @@ impl Manager {
     pub(super) async fn record_upstream_reset(
         &self,
         execution: String,
-        reset: Option<i64>,
+        reset: Option<UnixTime>,
     ) -> Result<()> {
         if self
             .store
@@ -427,13 +430,12 @@ impl Manager {
     }
 
     /// Deliver the retries due now; when the next one is due.
-    pub(crate) async fn deliver_turn_retries(&self) -> Result<Option<i64>> {
-        self.deliver_turn_retries_at(i64::try_from(crate::time::unix_seconds())?)
-            .await
+    pub(crate) async fn deliver_turn_retries(&self) -> Result<Option<UnixTime>> {
+        self.deliver_turn_retries_at(UnixTime::now()).await
     }
 
     /// Deliver the retries due at `now`, as [`deliver_due`] does.
-    async fn deliver_turn_retries_at(&self, now: i64) -> Result<Option<i64>> {
+    async fn deliver_turn_retries_at(&self, now: UnixTime) -> Result<Option<UnixTime>> {
         let delivered = self.store.run(move |db| deliver_due(db, now)).await?;
         for (workspace, error) in &delivered.failed {
             log!("turn retry for {workspace} not delivered: {error:#}");
@@ -453,10 +455,9 @@ pub(crate) async fn run(manager: Arc<Manager>) {
             manager.deliver_turn_retries().await
         };
         let wait = match next {
-            Ok(Some(due)) => {
-                let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
-                Duration::from_secs(u64::try_from(due.saturating_sub(now)).unwrap_or(0).max(1))
-            }
+            Ok(Some(due)) => due
+                .duration_since(UnixTime::now())
+                .max(Duration::from_secs(1)),
             Ok(None) => IDLE_RECHECK,
             Err(error) => {
                 log!("turn retries: {error:#}");

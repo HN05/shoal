@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 
 #[test]
 fn the_add_row_adds_and_refuses_what_needs_a_file() {
@@ -30,7 +31,7 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         title: Some("Audit findings".into()),
         path: "/repo/.attachments/results/id/key/0/report.md".into(),
         bytes: 960,
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         attached_by: None,
         expires_at: None,
     };

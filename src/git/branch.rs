@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::{fsutil::off_runtime, git};
+use crate::{fsutil::off_runtime, git, time::UnixTime};
 
 /// Local and remote branch names that can conflict with a new local branch.
 pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
@@ -128,14 +128,14 @@ fn operation_on(common: PathBuf, name: &str) -> Result<bool> {
     Ok(false)
 }
 
-/// When `commit` was made, in Unix seconds, and its subject line.
-pub async fn commit_summary(repo: &Path, commit: &str) -> Result<(u64, String)> {
+/// When `commit` was made, and its subject line.
+pub async fn commit_summary(repo: &Path, commit: &str) -> Result<(UnixTime, String)> {
     let output = git::run(repo, &["log", "-1", "--format=%ct%x00%s", commit, "--"]).await?;
     let (time, subject) = output
         .trim_end_matches('\n')
         .split_once('\0')
         .context("git log printed no commit summary")?;
-    Ok((time.parse()?, subject.to_owned()))
+    Ok((UnixTime::from_seconds(time.parse()?), subject.to_owned()))
 }
 
 pub async fn rename(repo: &Path, from: &str, to: &str) -> Result<String> {

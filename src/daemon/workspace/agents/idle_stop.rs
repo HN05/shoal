@@ -33,7 +33,7 @@ impl Manager {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
         let turns = self.reported_turns().await?;
-        let now = i64::try_from(crate::time::unix_seconds())?;
+        let now = crate::time::UnixTime::now();
         let mut chosen = HashMap::new();
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
         for candidate in self.idle_candidates(&turns, now).await {
@@ -52,7 +52,7 @@ impl Manager {
         }
         if !chosen.is_empty() {
             let turns = self.agent_turns().await?;
-            let now = i64::try_from(crate::time::unix_seconds())?;
+            let now = crate::time::UnixTime::now();
             self.stop_idle(turns, chosen, now).await;
         }
         failed.into_result()
@@ -60,7 +60,11 @@ impl Manager {
 
     /// The running agents with a restore command that `turns` shows idle
     /// with no prompt cache left at `now`.
-    async fn idle_candidates(&self, turns: &HashMap<String, Turn>, now: i64) -> Vec<Candidate> {
+    async fn idle_candidates(
+        &self,
+        turns: &HashMap<String, Turn>,
+        now: crate::time::UnixTime,
+    ) -> Vec<Candidate> {
         self.executions
             .with_agents(|agents| {
                 agents
@@ -104,7 +108,7 @@ impl Manager {
         &self,
         mut turns: HashMap<String, Turn>,
         chosen: HashMap<String, Chosen>,
-        now: i64,
+        now: crate::time::UnixTime,
     ) {
         let stopped: Vec<StoppedAgent> = self
             .executions

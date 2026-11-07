@@ -331,9 +331,9 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&entry.id));
-    let past = crate::time::unix_seconds() as i64
-        - crate::daemon::workspace::agent_queue::START_GRACE.as_secs() as i64
-        - 1;
+    let past = crate::time::UnixTime::now()
+        - crate::daemon::workspace::agent_queue::START_GRACE
+        - std::time::Duration::from_secs(1);
     manager
         .store
         .run(move |db| {

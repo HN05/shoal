@@ -221,7 +221,7 @@ impl Manager {
         pulls: Pulls,
     ) -> Result<ReadyMarks> {
         let id = id.to_owned();
-        let created_at = i64::try_from(crate::time::unix_seconds())?;
+        let created_at = crate::time::UnixTime::now();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;

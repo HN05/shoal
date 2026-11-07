@@ -178,7 +178,7 @@ impl FileAccess {
         let report = AccessStall {
             directory: directory.clone(),
             path: path.to_owned(),
-            since: crate::time::unix_seconds(),
+            since: crate::time::UnixTime::now(),
             reason,
         };
         log!("{}", report.message());

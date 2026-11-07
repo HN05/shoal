@@ -161,8 +161,8 @@ fn render_sync(status: &WorktreeStatus, palette: Palette) {
     let Some(sync) = &status.sync else {
         return;
     };
-    let now = crate::time::unix_seconds() as i64;
-    let at = |unix: u64| crate::time::local_ago(unix as i64, now);
+    let now = crate::time::UnixTime::now();
+    let at = |time: crate::time::UnixTime| time.local_ago(now);
     outln!(
         "Last sync:     {}",
         sync.synced_at.map_or_else(|| "none".to_owned(), at)
@@ -404,10 +404,7 @@ fn render_pr_watch(status: &SpaceStatus, palette: Palette) {
 fn render_cleanup(status: &WorktreeStatus, palette: Palette) {
     outln!("Cleanup:       {}", status.cleanup_reason);
     if let Some(at) = status.cleanup_at {
-        outln!(
-            "Grace period:  ends {}",
-            crate::time::local_minutes(at as i64)
-        );
+        outln!("Grace period:  ends {}", at.local_minutes());
     }
     if let Some(error) = &status.cleanup_error {
         outln!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
@@ -488,20 +485,20 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
 
 /// A request the agent's proxy waits to retry as `work status` shows it.
 fn proxy_retry_label(retry: &crate::client::executions::ProxyRetry) -> String {
-    let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
+    let now = crate::time::UnixTime::now();
     format!(
         "{} (attempt {} failed), next attempt in {}s",
         retry.failure.describe(),
         retry.attempt,
-        retry.next_at.saturating_sub(now).max(0)
+        retry.next_at.duration_since(now).as_secs()
     )
 }
 
 /// When the idle agent's prompt cache expires, or expired, as `work status`
 /// shows it.
-fn prompt_cache_label(expires_at: i64) -> String {
-    let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
-    let at = crate::time::local_minutes(expires_at);
+fn prompt_cache_label(expires_at: crate::time::UnixTime) -> String {
+    let now = crate::time::UnixTime::now();
+    let at = expires_at.local_minutes();
     if expires_at > now {
         format!("expires at {at}")
     } else {
@@ -515,7 +512,7 @@ fn turn_retry_label(retry: &crate::client::executions::TurnRetry) -> String {
     if retry.delivered {
         format!("{failure} (attempt {attempt}), agent asked to continue")
     } else {
-        let due = crate::time::local_minutes(retry.due_at);
+        let due = retry.due_at.local_minutes();
         format!("{failure} (attempt {attempt}) at {due}")
     }
 }

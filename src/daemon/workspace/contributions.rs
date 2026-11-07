@@ -9,7 +9,7 @@ use crate::{
     daemon::{log, notifications::NotificationKind, store},
     git,
     model::Repository,
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 impl Manager {
@@ -42,7 +42,7 @@ impl Manager {
             return Ok(());
         }
         let grace = self.repository_settings(&repo.id).await?.cleanup.grace();
-        if unix_seconds() < self.claim_contribution_grace(&repo.id, grace).await? {
+        if UnixTime::now() < self.claim_contribution_grace(&repo.id, grace).await? {
             return Ok(());
         }
         if let Some(removal) = self.remove_finished_contribution(&repo.id).await? {

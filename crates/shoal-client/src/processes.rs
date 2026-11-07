@@ -65,6 +65,6 @@ pub struct Leftover {
     pub command: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directory: Option<PathBuf>,
-    /// Unix seconds when it started.
-    pub started_at: u64,
+    /// When it started.
+    pub started_at: crate::time::UnixTime,
 }

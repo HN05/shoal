@@ -233,7 +233,9 @@ async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
     // A turn ended after the sweep chose the agent.
     cache_expires_in(&manager, &workspace, 600).await;
     let turns = manager.agent_turns().await.unwrap();
-    manager.stop_idle(turns, chosen, unix_now()).await;
+    manager
+        .stop_idle(turns, chosen, crate::time::UnixTime::now())
+        .await;
     assert!(!*execution.stop.borrow());
 }
 
@@ -262,7 +264,9 @@ async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
             .await
             .unwrap();
     }
-    manager.stop_idle(turns, chosen, unix_now()).await;
+    manager
+        .stop_idle(turns, chosen, crate::time::UnixTime::now())
+        .await;
     assert!(!*execution.stop.borrow());
 }
 
@@ -299,7 +303,9 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
     let turns = manager.agent_turns().await.unwrap();
     // The wake claims the turn before it records it.
     assert!(manager.claim_woken_turn(&id).await);
-    manager.stop_idle(turns, chosen, unix_now()).await;
+    manager
+        .stop_idle(turns, chosen, crate::time::UnixTime::now())
+        .await;
     assert!(!*execution.stop.borrow());
 }
 
@@ -311,8 +317,4 @@ fn chosen_held(execution: &str, turns_started: u64) -> HashMap<String, Chosen> {
         turns_started,
     };
     HashMap::from([(execution.to_owned(), stop)])
-}
-
-fn unix_now() -> i64 {
-    i64::try_from(crate::time::unix_seconds()).unwrap()
 }

@@ -171,10 +171,10 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         );
     }
     if let Some(started) = review.started_at {
-        let took = review.duration().map_or_else(String::new, |seconds| {
-            format!(", took {}", duration(seconds))
-        });
-        outln!("Started:  {}{took}", crate::time::local_minutes(started));
+        let took = review
+            .duration()
+            .map_or_else(String::new, |took| format!(", took {}", duration(took)));
+        outln!("Started:  {}{took}", started.local_minutes());
     }
     if let Some(verdict) = review.verdict {
         outln!("Verdict:  {verdict}");
@@ -224,10 +224,7 @@ fn render_finding(finding: &Finding, palette: Palette) {
     outln!("    {}", finding.title);
     print_indented(&finding.body, 4);
     for reply in &finding.replies {
-        outln!(
-            "    Reply, {}:",
-            crate::time::local_minutes(reply.created_at)
-        );
+        outln!("    Reply, {}:", reply.created_at.local_minutes());
         print_indented(&reply.body, 6);
     }
     if let Some(check) = finding.check {
@@ -253,11 +250,11 @@ fn short(commit: &str) -> &str {
     &commit[..commit.len().min(12)]
 }
 
-/// Seconds as minutes and seconds, such as `3m 12s`.
-fn duration(seconds: i64) -> String {
-    match seconds {
-        ..60 => format!("{seconds}s"),
-        _ => format!("{}m {}s", seconds / 60, seconds % 60),
+/// A duration in minutes and seconds, such as `3m 12s`.
+fn duration(took: std::time::Duration) -> String {
+    match took.as_secs() {
+        seconds @ ..60 => format!("{seconds}s"),
+        seconds => format!("{}m {}s", seconds / 60, seconds % 60),
     }
 }
 

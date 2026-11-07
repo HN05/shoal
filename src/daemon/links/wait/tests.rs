@@ -1,6 +1,7 @@
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
+use crate::time::UnixTime;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -19,12 +20,17 @@ fn a_rate_limited_poll_waits_for_the_limit_but_at_least_the_interval() {
         })
         .context("GET issues/8")
     };
-    let (updates, interval) = limited_poll(Err(limit(1_600)), 1_000).unwrap();
+    let (updates, interval) =
+        limited_poll(Err(limit(1_600)), UnixTime::from_seconds(1_000)).unwrap();
     assert!(updates.is_empty());
     assert_eq!(interval, Duration::from_secs(600));
-    let (_, interval) = limited_poll(Err(limit(1_001)), 1_000).unwrap();
+    let (_, interval) = limited_poll(Err(limit(1_001)), UnixTime::from_seconds(1_000)).unwrap();
     assert_eq!(interval, POLL_INTERVAL);
-    let error = limited_poll(Err(anyhow::anyhow!("HTTP 500")), 1_000).unwrap_err();
+    let error = limited_poll(
+        Err(anyhow::anyhow!("HTTP 500")),
+        UnixTime::from_seconds(1_000),
+    )
+    .unwrap_err();
     assert_eq!(format!("{error:#}"), "HTTP 500");
 }
 
@@ -338,7 +344,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .queue_background_updates(
             &workspace.id,
             vec![("pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -413,7 +419,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
         .queue_background_updates(
             &chat.id,
             vec![("pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -477,7 +483,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         .queue_background_updates(
             &worker.id,
             vec![("worker-pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -544,7 +550,7 @@ async fn a_chats_wait_takes_activity_an_item_change_held_back() {
         .queue_background_updates(
             &chat.id,
             vec![("pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -582,7 +588,7 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .queue_background_updates(
             &workspace.id,
             vec![("pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -650,7 +656,7 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .queue_background_updates(
             &child.id,
             vec![("child-pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -733,7 +739,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
             .queue_background_updates(
                 &workspace.id,
                 vec![(url.into(), snapshot("first"))],
-                crate::time::unix_seconds(),
+                crate::time::UnixTime::now(),
             )
             .await
             .unwrap();
@@ -752,7 +758,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         BranchReport::ChangedOnBothSides,
     );
     let observation = vec![(child.branch.clone().unwrap(), changed)];
-    let now = crate::time::unix_seconds();
+    let now = crate::time::UnixTime::now();
     let queued = manager.queue_background_updates(&child.id, observation, now);
     queued.await.unwrap();
     let delivered = manager
@@ -861,7 +867,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
             .queue_background_updates(
                 &workspace.id,
                 vec![(url.into(), snapshot("first"))],
-                crate::time::unix_seconds(),
+                crate::time::UnixTime::now(),
             )
             .await
             .unwrap();
@@ -1297,7 +1303,7 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
             .queue_background_updates(
                 &workspace.id,
                 vec![("pr".into(), snapshot)],
-                crate::time::unix_seconds(),
+                crate::time::UnixTime::now(),
             )
             .await
             .unwrap();
@@ -1363,7 +1369,7 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
             .queue_background_updates(
                 &workspace.id,
                 vec![("pr".into(), checks_at("a", &checks))],
-                crate::time::unix_seconds(),
+                crate::time::UnixTime::now(),
             )
             .await
             .unwrap();
@@ -1441,8 +1447,13 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
     .unwrap();
     let all = Selection::default();
     let report = BranchReport::Conflicts;
-    let before =
-        manager.record_observed(&workspace.id, vec![("pr".into(), stale)], &all, report, 0);
+    let before = manager.record_observed(
+        &workspace.id,
+        vec![("pr".into(), stale)],
+        &all,
+        report,
+        UnixTime::from_seconds(0),
+    );
     assert!(before.await.unwrap().is_empty());
     let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
     assert!(observe(own, "closed").await.unwrap().is_empty());
@@ -1474,7 +1485,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
         .unwrap()
     };
     let all = Selection::default();
-    let observe = |snapshot: Snapshot, at: u64| {
+    let observe = |snapshot: Snapshot, at: UnixTime| {
         let observation = vec![("pr".into(), snapshot)];
         manager.record_observed(
             &workspace.id,
@@ -1484,7 +1495,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
             at,
         )
     };
-    let now = crate::time::unix_seconds();
+    let now = crate::time::UnixTime::now();
     assert!(
         observe(snapshot("feature", json!([])), now)
             .await
@@ -1507,9 +1518,9 @@ async fn edits_are_reported_except_the_workspaces_own() {
         .unwrap();
     // A poll that read the PR before Shoal retargeted it does not report
     // the old base, and the one after does not report the new one.
-    let stale = observe(snapshot("feature", json!([])), 0);
+    let stale = observe(snapshot("feature", json!([])), UnixTime::EPOCH);
     assert!(stale.await.unwrap().is_empty());
-    let later = crate::time::unix_seconds() + 1;
+    let later = UnixTime::now() + Duration::from_secs(1);
     assert!(
         observe(snapshot("main", json!([])), later)
             .await
@@ -1557,7 +1568,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
     let observe = |base: &str| {
         let observation = vec![("child-pr".into(), based(base))];
         // Each poll starts after the changes before it.
-        let later = crate::time::unix_seconds() + 1;
+        let later = UnixTime::now() + Duration::from_secs(1);
         manager.queue_background_updates(&child.id, observation, later)
     };
     let retarget = |from: &'static str, to: &'static str| {
@@ -1841,7 +1852,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .queue_background_updates(
             &child.id,
             vec![("child-pr".into(), snapshot("first"))],
-            crate::time::unix_seconds(),
+            crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
@@ -2671,7 +2682,7 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
     assert_eq!(polled().await.unwrap(), [("run".to_owned(), LinkKind::Ci)]);
     // The next poll queues it for the agent's hooks, which ends the polling.
     manager
-        .queue_background_updates(&id, finished, crate::time::unix_seconds())
+        .queue_background_updates(&id, finished, crate::time::UnixTime::now())
         .await
         .unwrap();
     assert!(polled().await.unwrap().is_empty());

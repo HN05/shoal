@@ -11,7 +11,7 @@ use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, LastSession, Record, StoppedAgent},
     model::{Chat, Execution, PresentSpace, RemovedWorkspace, Workspace},
-    time::unix_seconds,
+    time::UnixTime,
     transfer::{Manifest, Source},
 };
 
@@ -73,7 +73,7 @@ impl Manager {
             // An unreadable last session is not worth refusing the copy for.
             last_sessions: LastSession::all(&self.paths, &workspace.id).unwrap_or_default(),
             cause: EventCause::Manual,
-            removed_at: unix_seconds(),
+            removed_at: UnixTime::now(),
         };
         let repo = self.repository(&workspace.repository_id).await?;
         let mut manifest = Manifest::of(&repo, Source::Workspace(copied)).await?;
@@ -93,7 +93,7 @@ impl Manager {
     /// it reported last: those stopped, then those its executions run.
     async fn copied_agents(&self, workspace: &Workspace) -> Result<Vec<StoppedAgent>> {
         let mut agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
-        let now = unix_seconds();
+        let now = UnixTime::now();
         for execution in self.workspace_executions(&workspace.id).await? {
             if agents.iter().any(|agent| agent.execution == execution.id) {
                 continue;

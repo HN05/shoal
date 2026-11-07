@@ -1018,9 +1018,9 @@ impl Manager {
         }
     }
 
-    /// The Unix time of the workspace's last recorded activity; one without
-    /// any starts its idle period now.
-    pub(crate) async fn active_at(&self, id: &str) -> Result<u64> {
+    /// When the workspace was last recorded active; one without any starts
+    /// its idle period now.
+    pub(crate) async fn active_at(&self, id: &str) -> Result<crate::time::UnixTime> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -1028,12 +1028,11 @@ impl Manager {
                     "UPDATE workspaces SET active_at=unixepoch() WHERE id=?1 AND active_at IS NULL",
                     [&id],
                 )?;
-                let active_at: i64 = db.query_row(
+                Ok(db.query_row(
                     "SELECT active_at FROM workspaces WHERE id=?1",
                     [&id],
                     |row| row.get(0),
-                )?;
-                Ok(u64::try_from(active_at)?)
+                )?)
             })
             .await
     }

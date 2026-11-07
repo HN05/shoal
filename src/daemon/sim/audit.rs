@@ -11,7 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
     model::Workspace,
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 /// Operations on the client type [`CleanRequest`] that only the `shoal` command uses.
@@ -51,7 +51,7 @@ impl CleanRequestExt for CleanRequest {
     }
 
     fn record_outcome(&mut self, result: &Result<Allocation<Box<Simulator>>>) {
-        self.updated_at = unix_seconds();
+        self.updated_at = UnixTime::now();
         match result {
             Ok(Allocation::Granted(sim)) => {
                 self.status = CleanRequestStatus::Acquired;
@@ -114,7 +114,7 @@ impl Manager {
                 "clean request already completed or interrupted; inspect its history before retrying with a new request ID"
             );
             audit.status = CleanRequestStatus::Requested;
-            audit.updated_at = unix_seconds();
+            audit.updated_at = UnixTime::now();
             audit.attempts += 1;
             audit.error = None;
             audit
@@ -124,8 +124,8 @@ impl Manager {
                 workspace_name: workspace.name.to_string(),
                 repository_id: workspace.repository_id.clone(),
                 execution_id,
-                requested_at: unix_seconds(),
-                updated_at: unix_seconds(),
+                requested_at: UnixTime::now(),
+                updated_at: UnixTime::now(),
                 attempts: 1,
                 request: request.clone(),
                 status: CleanRequestStatus::Requested,

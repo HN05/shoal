@@ -14,7 +14,7 @@ use crate::{
         Checkpoint, CheckpointCause, RemovedWorkspace, Repository, RestoredCheckpoint, Workspace,
     },
     state::WorkspaceState,
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 impl Manager {
@@ -116,7 +116,7 @@ impl Manager {
             cause != CheckpointCause::Start && !self.archives_unsaved_files(workspace).await?;
         let message = format!("Shoal checkpoint of {}", workspace.name);
         let snapshot = git::checkpoint::snapshot(&workspace.path, &message, !files_omitted).await?;
-        let created_at = unix_seconds();
+        let created_at = UnixTime::now();
         Ok(Checkpoint {
             workspace_id: workspace.id.clone(),
             repository_id: workspace.repository_id.clone(),
@@ -128,7 +128,7 @@ impl Manager {
             commit: snapshot.commit,
             files_omitted,
             created_at,
-            expires_at: created_at + retention.as_secs(),
+            expires_at: created_at + retention,
         })
     }
 
@@ -474,7 +474,7 @@ pub(super) fn insert_numbered(tx: &rusqlite::Transaction, checkpoint: &Checkpoin
             record.workspace_id,
             number,
             record.repository_id,
-            record.expires_at as i64,
+            record.expires_at,
             serde_json::to_string(&record)?,
         ],
     )?;
@@ -489,7 +489,7 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
         params![
             checkpoint.workspace_id,
             checkpoint.number as i64,
-            checkpoint.expires_at as i64,
+            checkpoint.expires_at,
             serde_json::to_string(checkpoint)?,
         ],
     )? == 1)

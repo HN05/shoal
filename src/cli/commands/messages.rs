@@ -160,7 +160,7 @@ pub(super) async fn show(ctx: &Context, space: Option<SpaceSelector>) -> Result<
     ctx.show(&messages, |messages| {
         let palette = Palette::stdout(ctx.json);
         for message in messages {
-            let time = crate::time::local_minutes(message.created_at);
+            let time = message.created_at.local_minutes();
             let indent = " ".repeat(time.chars().count() + 2);
             outln!(
                 "{}  {}",
@@ -330,7 +330,7 @@ impl Inbox {
         let mut context = hook_context(&heading, self.kind, updates);
         if !updates.leftovers.is_empty() {
             let notice =
-                leftovers::notice(self.kind, &updates.leftovers, crate::time::unix_seconds());
+                leftovers::notice(self.kind, &updates.leftovers, crate::time::UnixTime::now());
             context = [context, notice]
                 .into_iter()
                 .filter(|part| !part.is_empty())

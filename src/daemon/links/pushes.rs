@@ -304,7 +304,7 @@ impl Manager {
             }
             _ => {
                 request.status = DecisionStatus::Approved;
-                request.decided_at = Some(crate::time::unix_seconds());
+                request.decided_at = Some(crate::time::UnixTime::now());
                 let message = format!(
                     "Approval {} to {} was approved: Shoal pushed it.",
                     request.number,

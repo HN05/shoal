@@ -16,7 +16,7 @@ use super::{
     Manager,
     capacity::{self, Activity, Agents},
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     config::{RunLimit, overload::Overload},
     daemon::notifications::NotificationKind,
@@ -314,7 +314,7 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
         "{} is already in the agent queue",
         request.name
     );
-    let now = crate::time::unix_seconds() as i64;
+    let now = UnixTime::now();
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
@@ -349,7 +349,7 @@ struct WaitingRestore {
 /// Record `restore` behind the work already waiting, returning its entry's
 /// ID. One already recorded keeps its place and waits again.
 fn record_waiting_restore(db: &rusqlite::Connection, restore: &WaitingRestore) -> Result<String> {
-    let now = crate::time::unix_seconds() as i64;
+    let now = UnixTime::now();
     let workspace = &restore.workspace;
     db.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id)
@@ -397,7 +397,7 @@ struct StartingEntry {
     /// The workspace it starts in, once known.
     workspace: Option<String>,
     /// When its holder was last seen.
-    seen_at: Option<i64>,
+    seen_at: Option<UnixTime>,
     /// The execution a restore resumes; a launch has none.
     execution: Option<String>,
 }
@@ -719,7 +719,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                let now = crate::time::unix_seconds() as i64;
+                let now = UnixTime::now();
                 let mut starts = Vec::new();
                 for id in admitted {
                     tx.execute(
@@ -903,10 +903,9 @@ impl Manager {
             unknown,
             starting,
         } = self.store.run(|db| persisted_slots(db)).await?;
-        let now = crate::time::unix_seconds() as i64;
-        let starting_since = |seen_at: Option<i64>| {
-            let since = now.saturating_sub(seen_at.unwrap_or(now)).max(0) as u64;
-            Activity::Starting(Duration::from_secs(since))
+        let now = UnixTime::now();
+        let starting_since = |seen_at: Option<UnixTime>| {
+            Activity::Starting(now.duration_since(seen_at.unwrap_or(now)))
         };
         let stopped = |workspace: String| (workspace, Activity::Stopped);
         for UnknownExecution { id, workspace } in unknown {
@@ -962,7 +961,7 @@ impl Manager {
     /// like a restore whose agent never registered, failed to start, so say so.
     async fn expire_starting_entries(&self) -> Result<()> {
         let held = self.agent_queue.held();
-        let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
+        let cutoff = UnixTime::now() - START_GRACE;
         let expired = self
             .store
             .run(move |db| expiry::expire_starts(db, &held, cutoff))
@@ -996,7 +995,7 @@ impl Manager {
     /// wrapper.
     async fn expire_orphaned_restores(&self) -> Result<()> {
         let connected = self.executions.connection_ids().await;
-        let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
+        let cutoff = UnixTime::now() - START_GRACE;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -1019,7 +1018,7 @@ impl Manager {
     /// Restart every starting launch's and restore's grace period, since no
     /// holder or wrapper could reconnect while the daemon was away.
     pub(crate) async fn refresh_starting_entries(&self) -> Result<()> {
-        let now = crate::time::unix_seconds() as i64;
+        let now = UnixTime::now();
         self.store
             .run(move |db| {
                 db.execute(
@@ -1138,7 +1137,7 @@ impl Manager {
     /// Drop a hold; the entry's grace period starts once none remain.
     pub(crate) async fn release_queue_hold(&self, id: &str) -> Result<()> {
         self.agent_queue.release(id);
-        let (id, now) = (id.to_owned(), crate::time::unix_seconds() as i64);
+        let (id, now) = (id.to_owned(), UnixTime::now());
         self.store
             .run(move |db| {
                 db.execute(
@@ -1346,7 +1345,7 @@ impl Manager {
     /// Start the grace period of `execution`'s restore, whose wrapper lost
     /// its connection and may reattach.
     pub(crate) async fn keep_restore_place(&self, execution: &str) {
-        let (execution, now) = (execution.to_owned(), crate::time::unix_seconds() as i64);
+        let (execution, now) = (execution.to_owned(), UnixTime::now());
         let kept = self
             .store
             .run(move |db| {

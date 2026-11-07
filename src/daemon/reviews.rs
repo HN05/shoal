@@ -390,8 +390,8 @@ fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<String>
     Ok(agent.name().to_owned())
 }
 
-fn now() -> i64 {
-    i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX)
+fn now() -> crate::time::UnixTime {
+    crate::time::UnixTime::now()
 }
 
 #[cfg(test)]

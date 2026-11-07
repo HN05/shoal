@@ -3,12 +3,12 @@ use anyhow::Result;
 use rusqlite::OptionalExtension;
 use std::time::Duration;
 
-use crate::{daemon::workspace::Manager, time::unix_seconds};
+use crate::{daemon::workspace::Manager, time::UnixTime};
 
 impl Manager {
     /// When the space's grace period ends, starting it now when none runs,
     /// and recording that this pass still wants to remove it.
-    pub(crate) async fn claim_grace(&self, id: &str, grace: Duration) -> Result<u64> {
+    pub(crate) async fn claim_grace(&self, id: &str, grace: Duration) -> Result<UnixTime> {
         self.claim(
             "INSERT INTO cleanup_grace(space_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
              ON CONFLICT(space_id) DO UPDATE SET claimed=1
@@ -20,7 +20,11 @@ impl Manager {
     }
 
     /// [`Self::claim_grace`] for removing a contribution repository.
-    pub(crate) async fn claim_contribution_grace(&self, id: &str, grace: Duration) -> Result<u64> {
+    pub(crate) async fn claim_contribution_grace(
+        &self,
+        id: &str,
+        grace: Duration,
+    ) -> Result<UnixTime> {
         self.claim(
             "INSERT INTO contribution_grace(repository_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
              ON CONFLICT(repository_id) DO UPDATE SET claimed=1
@@ -31,33 +35,32 @@ impl Manager {
         .await
     }
 
-    async fn claim(&self, statement: &'static str, id: &str, grace: Duration) -> Result<u64> {
+    async fn claim(&self, statement: &'static str, id: &str, grace: Duration) -> Result<UnixTime> {
         let id = id.to_owned();
-        let cleanup_at = (unix_seconds() as i64).saturating_add(grace.as_secs() as i64);
+        let cleanup_at = UnixTime::now() + grace;
         self.store
             .run(move |db| {
-                let cleanup_at: i64 =
+                Ok(
                     db.query_row(statement, rusqlite::params![id, cleanup_at], |row| {
                         row.get(0)
-                    })?;
-                Ok(cleanup_at as u64)
+                    })?,
+                )
             })
             .await
     }
 
     /// When automatic cleanup removes the space, while its grace period runs.
-    pub(crate) async fn cleanup_at(&self, id: &str) -> Result<Option<u64>> {
+    pub(crate) async fn cleanup_at(&self, id: &str) -> Result<Option<UnixTime>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                let cleanup_at: Option<i64> = db
+                Ok(db
                     .query_row(
                         "SELECT cleanup_at FROM cleanup_grace WHERE space_id=?1",
                         [id],
                         |row| row.get(0),
                     )
-                    .optional()?;
-                Ok(cleanup_at.map(|at| at as u64))
+                    .optional()?)
             })
             .await
     }

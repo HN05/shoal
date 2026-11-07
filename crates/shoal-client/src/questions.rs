@@ -31,19 +31,18 @@ pub struct Question {
     pub space_id: String,
     /// The space's current name.
     pub space: String,
-    /// Unix seconds.
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     #[serde(flatten)]
     pub ask: Ask,
     /// `None` while the question is open.
     pub answer: Option<String>,
-    pub answered_at: Option<i64>,
+    pub answered_at: Option<crate::time::UnixTime>,
     /// The agent message carrying the answer; delivering it deletes the question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<i64>,
-    /// Unix seconds `done` or withdrawal closed the unanswered question.
+    /// When `done` or withdrawal closed the unanswered question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub closed_at: Option<i64>,
+    pub closed_at: Option<crate::time::UnixTime>,
     /// Whether the asking agent closed it, needing no answer after all.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub withdrawn: bool,

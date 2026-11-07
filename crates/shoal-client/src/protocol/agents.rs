@@ -66,7 +66,7 @@ pub enum AgentMethod {
         workspace: SpaceSelector,
         execution: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        resets_at: Option<i64>,
+        resets_at: Option<crate::time::UnixTime>,
     },
     /// Whether a terminal shows the agent `execution` runs, which its
     /// wrapper reads from the place it runs in and reports again

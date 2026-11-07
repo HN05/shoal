@@ -37,7 +37,7 @@ pub(crate) fn queue(
     target: &ReviewTarget,
     agent: &str,
     model: &ModelChoice,
-    now: i64,
+    now: crate::time::UnixTime,
 ) -> Result<Queued> {
     if let Some((id, state)) = active(db, workspace_id)? {
         ensure!(
@@ -110,7 +110,7 @@ pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
 pub(crate) fn settle_interrupted(
     db: &Connection,
     kept: &[i64],
-    now: i64,
+    now: crate::time::UnixTime,
 ) -> Result<(Vec<i64>, usize)> {
     let mut failed = Vec::new();
     for id in kept {
@@ -155,7 +155,13 @@ pub(crate) fn running(db: &Connection) -> Result<Vec<i64>> {
 
 /// Move a queued review to running at `head`; false when it is no longer
 /// queued, as after a cancel.
-pub(crate) fn start(db: &Connection, id: i64, head: &str, base: &str, now: i64) -> Result<bool> {
+pub(crate) fn start(
+    db: &Connection,
+    id: i64,
+    head: &str,
+    base: &str,
+    now: crate::time::UnixTime,
+) -> Result<bool> {
     Ok(db.execute(
         "UPDATE reviews SET state='running',head=?2,base=?3,started_at=?4,waits_for_recovery=0
             WHERE id=?1 AND state='queued'",
@@ -171,7 +177,7 @@ pub(crate) fn finish(
     id: i64,
     reviewer: &str,
     output: &ReviewerOutput,
-    now: i64,
+    now: crate::time::UnixTime,
 ) -> Result<bool> {
     let tx = db.transaction()?;
     let finished = tx.execute(
@@ -229,7 +235,7 @@ pub(crate) fn fail(
     id: i64,
     reviewer: Option<&str>,
     reason: FailureReason,
-    now: i64,
+    now: crate::time::UnixTime,
 ) -> Result<bool> {
     Ok(db.execute(
         "UPDATE reviews SET state='failed',failure=?2,reviewer=?3,ended_at=?4
@@ -240,7 +246,12 @@ pub(crate) fn fail(
 
 /// Cancel an active review for a process of workspace `by`, if one asked;
 /// false when it already ended.
-pub(crate) fn cancel(db: &Connection, id: i64, by: Option<&str>, now: i64) -> Result<bool> {
+pub(crate) fn cancel(
+    db: &Connection,
+    id: i64,
+    by: Option<&str>,
+    now: crate::time::UnixTime,
+) -> Result<bool> {
     Ok(db.execute(
         "UPDATE reviews SET state='cancelled',cancelled_by=?2,ended_at=?3
             WHERE id=?1 AND state IN ('queued','running')",
@@ -269,7 +280,12 @@ pub(crate) fn set_posted(db: &Connection, id: i64, posted: &Posted) -> Result<()
 }
 
 /// Add a reply to finding `id`.
-pub(crate) fn reply(db: &Connection, id: FindingId, body: &str, now: i64) -> Result<()> {
+pub(crate) fn reply(
+    db: &Connection,
+    id: FindingId,
+    body: &str,
+    now: crate::time::UnixTime,
+) -> Result<()> {
     require_finding(db, id)?;
     db.execute(
         "INSERT INTO review_replies(review_id,number,created_at,body) VALUES (?1,?2,?3,?4)",

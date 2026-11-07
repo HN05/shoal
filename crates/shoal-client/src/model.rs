@@ -401,8 +401,8 @@ pub struct Checkpoint {
     pub commit: String,
     /// Unsaved files exceeded the archive limit and were not kept.
     pub files_omitted: bool,
-    pub created_at: u64,
-    pub expires_at: u64,
+    pub created_at: crate::time::UnixTime,
+    pub expires_at: crate::time::UnixTime,
 }
 
 /// A workspace `shoal work restore` returned to one of its checkpoints, and the
@@ -431,10 +431,10 @@ pub struct KeptBranch {
     pub branch: String,
     /// The commit removal left the branch on.
     pub head: String,
-    pub kept_at: u64,
+    pub kept_at: crate::time::UnixTime,
     /// Commits only this branch has.
     pub unpushed_commits: u64,
-    pub committed_at: u64,
+    pub committed_at: crate::time::UnixTime,
     pub subject: String,
 }
 
@@ -475,8 +475,8 @@ pub struct RemovedWorkspace {
     )]
     pub last_sessions: Vec<crate::executions::LastSession>,
     pub cause: crate::events::EventCause,
-    pub removed_at: u64,
-    pub expires_at: u64,
+    pub removed_at: crate::time::UnixTime,
+    pub expires_at: crate::time::UnixTime,
 }
 
 /// A workspace `shoal work restore` opened again from its removal record; the
@@ -497,7 +497,7 @@ pub struct ReviewMark {
     pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<String>,
     pub head: String,
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     /// Whether HEAD has moved since the mark; absent when HEAD was not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stale: Option<bool>,
@@ -556,11 +556,11 @@ pub struct SkippedPr {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentStatus {
     pub state: AgentState,
-    pub since: i64,
+    pub since: crate::time::UnixTime,
     /// When the prompt cache of an agent idle since a turn ended expires,
-    /// in Unix seconds, for an AI tool whose cache lifetime is known.
+    /// for an AI tool whose cache lifetime is known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_expires_at: Option<i64>,
+    pub prompt_cache_expires_at: Option<crate::time::UnixTime>,
 }
 
 /// A caller-named claim that a workspace is still in use.
@@ -569,7 +569,7 @@ pub struct WorkspaceHold {
     pub workspace_id: String,
     pub name: String,
     pub reason: Option<String>,
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     #[serde(default)]
     pub placed_by: HoldPlacer,
 }
@@ -851,10 +851,10 @@ pub struct WorktreeStatus {
     pub cleanup_error: Option<String>,
     /// Why automatic cleanup keeps this workspace now.
     pub cleanup_reason: CleanupReason,
-    /// Unix seconds when automatic cleanup removes the workspace, while its
-    /// grace period runs.
+    /// When automatic cleanup removes the workspace, while its grace period
+    /// runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cleanup_at: Option<u64>,
+    pub cleanup_at: Option<crate::time::UnixTime>,
     /// The retry of the agent's turn an API failure ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_retry: Option<crate::executions::TurnRetry>,
@@ -888,12 +888,12 @@ pub struct WorktreeStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckoutSync {
     pub repository_id: String,
-    /// Unix seconds when the default branch last followed its remote.
+    /// When the default branch last followed its remote.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub synced_at: Option<u64>,
-    /// Unix seconds since when every sync failed.
+    pub synced_at: Option<crate::time::UnixTime>,
+    /// Since when every sync failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub failing_since: Option<u64>,
+    pub failing_since: Option<crate::time::UnixTime>,
     /// The error of the last failed sync.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -1447,7 +1447,7 @@ pub struct Chat {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceRef>,
     pub pid: u32,
-    pub started_at: i64,
+    pub started_at: crate::time::UnixTime,
     /// Where it runs in a terminal host, when it runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
@@ -1780,7 +1780,7 @@ pub struct QueueEntry {
     pub state: QueueState,
     /// The 1-based place among waiting entries; `None` once starting.
     pub position: Option<usize>,
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     /// The workspace a starting launch opened, or a restore's own.
     pub workspace_id: Option<String>,
     /// The stopped execution a restore restores.

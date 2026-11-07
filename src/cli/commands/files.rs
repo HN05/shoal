@@ -47,7 +47,7 @@ pub(super) async fn list(
             }
             return;
         }
-        let now = crate::time::unix_seconds() as i64;
+        let now = crate::time::UnixTime::now();
         let rows = files.iter().map(|file| cells(file, now)).collect();
         for line in ui::aligned(rows, Palette::stdout(ctx.json)) {
             outln!("{line}");
@@ -76,7 +76,7 @@ pub(super) async fn add(
     )
     .await?;
     ctx.show(&added, |added| {
-        let now = crate::time::unix_seconds() as i64;
+        let now = crate::time::UnixTime::now();
         let rows = added.iter().map(|file| cells(file, now)).collect();
         for line in ui::aligned(rows, Palette::stdout(ctx.json)) {
             outln!("{line}");
@@ -172,19 +172,16 @@ async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> 
 
 /// The file's name, title, size, how it came, when, read at `now`, when a
 /// removed workspace's file is deleted, and Shoal's copy.
-fn cells(file: &AttachedFile, now: i64) -> [ui::Cell; 7] {
+fn cells(file: &AttachedFile, now: crate::time::UnixTime) -> [ui::Cell; 7] {
     let expiry = file
         .expires_at
-        .map(|expires_at| format!("until {}", crate::time::local_minutes(expires_at)));
+        .map(|expires_at| format!("until {}", expires_at.local_minutes()));
     [
         (file.name.clone(), Some(Style::Heading)),
         (file.title.clone().unwrap_or_default(), None),
         (ui::size_label(file.bytes), None),
         (source_label(file.source).into(), None),
-        (
-            crate::time::local_ago(file.created_at, now),
-            Some(Style::Muted),
-        ),
+        (file.created_at.local_ago(now), Some(Style::Muted)),
         (expiry.unwrap_or_default(), Some(Style::Warning)),
         (file.path.display().to_string(), Some(Style::Muted)),
     ]

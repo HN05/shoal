@@ -1,4 +1,5 @@
 use crate::execution::recovery::RecordExt;
+use crate::time::UnixTime;
 use std::{fs, path::PathBuf};
 
 use super::*;
@@ -76,7 +77,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         agent: "claude".into(),
         workspace: None,
         pid: 1,
-        started_at: 0,
+        started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir: None,
         root_dir: None,
@@ -231,7 +232,7 @@ fn manifest_with_sessions() -> Manifest {
     let agent = StoppedAgent {
         execution: "execution".into(),
         record,
-        stopped_at: 1,
+        stopped_at: UnixTime::from_seconds(1),
     };
     let last = LastSession {
         mode: "worker".into(),

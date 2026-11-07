@@ -48,7 +48,7 @@ struct Deleted {
 
 /// Delete the record of the stopped chat `id`, giving the user its unread
 /// messages and keeping its attached files until `expires_at`.
-fn delete(db: &mut Connection, id: &str, expires_at: i64) -> Result<Deleted> {
+fn delete(db: &mut Connection, id: &str, expires_at: crate::time::UnixTime) -> Result<Deleted> {
     let tx = db.transaction()?;
     ensure!(
         store::exists(

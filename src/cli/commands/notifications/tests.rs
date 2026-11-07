@@ -1,8 +1,9 @@
+use crate::time::UnixTime;
 #[test]
 fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
     let notification = crate::client::notifications::Notification {
         id: 1,
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         workspace: Some("fix-login".into()),
         kind: crate::client::notifications::NotificationKind::AgentExited,
         message: "claude exited\x07 with code 0\n".into(),
@@ -19,7 +20,7 @@ fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
 fn listed_notifications_name_the_files_sent_with_them() {
     let notification = crate::client::notifications::Notification {
         id: 1,
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         workspace: Some("fix-login".into()),
         kind: crate::client::notifications::NotificationKind::AgentMessage,
         message: "Which layout?".into(),

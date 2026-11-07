@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 
 #[test]
 fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
@@ -135,7 +136,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     assert_eq!(Record::load(path).unwrap().unwrap(), agents[0].record);
     assert_eq!(
         std::fs::metadata(path).unwrap().modified().unwrap(),
-        std::time::UNIX_EPOCH + std::time::Duration::from_secs(agents[0].stopped_at)
+        agents[0].stopped_at.system_time()
     );
 }
 
@@ -311,7 +312,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             stopped_by: None,
             stop: Some(Stop {
                 reason: Some("its terminal closed".into()),
-                at: Some(1_800_000_000),
+                at: Some(UnixTime::from_seconds(1_800_000_000)),
             }),
         }]
     );
@@ -363,10 +364,10 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         stop,
         Stop {
             reason: Some("critical memory pressure".into()),
-            at: Some(1_800_000_000),
+            at: Some(UnixTime::from_seconds(1_800_000_000)),
         }
     );
-    let at = crate::time::local_minutes(1_800_000_000);
+    let at = UnixTime::from_seconds(1_800_000_000).local_minutes();
     let prompt = resumed_prompt(Some(&stop), Some("handoff"));
     assert!(prompt.contains(&at), "{prompt}");
     assert!(prompt.contains("critical memory pressure"), "{prompt}");

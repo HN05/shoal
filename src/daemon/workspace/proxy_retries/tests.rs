@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
+use crate::time::UnixTime;
 use crate::{
     daemon::test_support::{manager, repository},
     state::TurnFailure,
@@ -37,7 +38,7 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
     let retry = ProxyRetry {
         failure: TurnFailure::Overloaded,
         attempt: 2,
-        next_at: 1_000,
+        next_at: UnixTime::from_seconds(1_000),
     };
     manager
         .report_proxy_retry(

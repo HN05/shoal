@@ -21,7 +21,7 @@ use self::health::Health;
 use crate::{
     daemon::{log, notifications::NotificationKind, workspace::Manager},
     model::{CheckoutSync, SyncedRepository},
-    time::{local_minutes, unix_seconds},
+    time::UnixTime,
 };
 
 mod health;
@@ -64,7 +64,7 @@ impl Syncs {
         self.lock()
             .entry(repository_id.to_owned())
             .or_default()
-            .record(error, Instant::now(), unix_seconds());
+            .record(error, Instant::now(), UnixTime::now());
     }
 
     /// Forget the repositories no longer registered.
@@ -261,9 +261,9 @@ impl Manager {
 }
 
 /// The notification for a repository whose syncs keep failing.
-fn failure_message(name: &str, failing_since: Option<u64>, error: &str) -> String {
+fn failure_message(name: &str, failing_since: Option<UnixTime>, error: &str) -> String {
     let since = failing_since.map_or_else(String::new, |since| {
-        format!(" since {}", local_minutes(since as i64))
+        format!(" since {}", since.local_minutes())
     });
     format!(
         "the default branch of {name} has not synced{since}: {error}; retry with shoal repo sync"

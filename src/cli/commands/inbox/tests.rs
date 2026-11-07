@@ -1,5 +1,6 @@
 use super::{Inbox, Item};
 use crate::cli::commands::inbox::ItemExt;
+use crate::time::UnixTime;
 use crate::{cli::output::Palette, model::CheckoutSync};
 
 #[test]
@@ -9,7 +10,7 @@ fn a_lone_sync_failure_names_its_repository() {
             sync: CheckoutSync {
                 repository_id: "r1".into(),
                 synced_at: None,
-                failing_since: Some(1),
+                failing_since: Some(UnixTime::from_seconds(1)),
                 error: Some("could not refresh main\nmore".into()),
             },
         }],
@@ -36,7 +37,7 @@ fn a_question_notes_its_recommendation_and_files() {
         number: crate::client::item_numbers::ItemNumber { space: 2, item: 3 },
         space_id: "w1".into(),
         space: "cache".into(),
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         ask: crate::client::questions::Ask {
             question: "Which layout?".into(),
             recommendation: "A".into(),

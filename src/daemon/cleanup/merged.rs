@@ -20,7 +20,7 @@ use crate::{
     model::{Chat, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 /// Retry an unchanged workspace whose removal failed after this long.
@@ -34,12 +34,12 @@ pub struct State {
     /// passing failure does not keep them. A file change makes the workspace
     /// wait for its idle period again.
     retained: HashMap<String, (u64, Instant)>,
-    /// The newest file change each workspace's last walk saw, in Unix seconds
-    /// and no later than that walk. Change times only move forward, so until
+    /// The newest file change each workspace's last walk saw, no later than
+    /// that walk. Change times only move forward, so until
     /// the idle period passes that change, another walk could only find the
     /// workspace in use; a modification time set into the future does not
     /// defer walks past it.
-    changed: HashMap<String, u64>,
+    changed: HashMap<String, UnixTime>,
 }
 
 impl State {
@@ -51,14 +51,14 @@ impl State {
     }
 
     /// Whether the last walk saw a file change after `deadline`.
-    fn changed_after(&self, id: &str, deadline: u64) -> bool {
+    fn changed_after(&self, id: &str, deadline: UnixTime) -> bool {
         self.changed
             .get(id)
             .is_some_and(|changed| *changed > deadline)
     }
 
     /// Remember the newest change a walk at `now` saw, no later than the walk.
-    fn remember_change(&mut self, id: &str, changed: u64, now: u64) {
+    fn remember_change(&mut self, id: &str, changed: UnixTime, now: UnixTime) {
         self.changed.insert(id.to_owned(), changed.min(now));
     }
 
@@ -75,14 +75,14 @@ impl State {
 /// One pass over every ready workspace, reading the processes in each from
 /// `users`, and every chat; a failure in one does not skip the others.
 pub async fn sweep(manager: &Manager, state: &mut State, users: &DirectoryUsers) -> Result<()> {
-    sweep_at(manager, state, unix_seconds(), users).await
+    sweep_at(manager, state, UnixTime::now(), users).await
 }
 
-/// A pass as of `now`, in Unix seconds.
+/// A pass as of `now`.
 async fn sweep_at(
     manager: &Manager,
     state: &mut State,
-    now: u64,
+    now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
@@ -107,13 +107,18 @@ async fn sweep_at(
 
 /// Remove `chat` once its agent has been stopped for the merged idle period
 /// and nothing keeps it.
-async fn sweep_chat(manager: &Manager, state: &mut State, chat: &Chat, now: u64) -> Result<()> {
+async fn sweep_chat(
+    manager: &Manager,
+    state: &mut State,
+    chat: &Chat,
+    now: UnixTime,
+) -> Result<()> {
     let settings = manager.chat_settings(chat).await?;
     let Some(delay) = settings.cleanup.merged.delay() else {
         return Ok(());
     };
     let idle = (manager.chat_stopped_at(&chat.id).await?)
-        .is_some_and(|stopped_at| stopped_at <= now.saturating_sub(delay.as_secs()));
+        .is_some_and(|stopped_at| stopped_at <= now - delay);
     if !idle {
         return Ok(());
     }
@@ -146,7 +151,7 @@ async fn sweep_workspace(
     manager: &Manager,
     state: &mut State,
     workspace: &Workspace,
-    now: u64,
+    now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<()> {
     let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await else {
@@ -196,7 +201,7 @@ async fn idle_candidate(
     manager: &Manager,
     state: &mut State,
     workspace: &Workspace,
-    now: u64,
+    now: UnixTime,
     users: &DirectoryUsers,
 ) -> Option<Snapshot> {
     let observed = async {
@@ -225,25 +230,29 @@ async fn idle_candidate(
     })
 }
 
-/// The time, in Unix seconds, after which any use keeps the workspace as of
+/// The time after which any use keeps the workspace as of
 /// `now`, or `None` when merged cleanup is disabled for it or recorded
 /// activity already keeps it.
-async fn idle_deadline(manager: &Manager, workspace: &Workspace, now: u64) -> Result<Option<u64>> {
+async fn idle_deadline(
+    manager: &Manager,
+    workspace: &Workspace,
+    now: UnixTime,
+) -> Result<Option<UnixTime>> {
     let settings = manager.workspace_settings(workspace).await?;
     let Some(delay) = settings.cleanup.merged.delay() else {
         return Ok(None);
     };
-    let deadline = now.saturating_sub(delay.as_secs());
+    let deadline = now - delay;
     Ok((manager.active_at(&workspace.id).await? <= deadline).then_some(deadline))
 }
 
 /// The snapshot of a merged candidate at `path` with `signals`, and the
-/// newest change its walk saw, in Unix seconds.
+/// newest change its walk saw.
 async fn walked_snapshot(
     path: PathBuf,
     git_dir: Option<PathBuf>,
     signals: u64,
-) -> Result<(Snapshot, u64)> {
+) -> Result<(Snapshot, UnixTime)> {
     let tree = tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref()))
         .await??;
     let snapshot = Snapshot {

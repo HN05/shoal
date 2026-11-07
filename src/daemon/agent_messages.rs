@@ -112,7 +112,7 @@ pub(crate) fn insert_delivered(
             VALUES (?1,?2,?3,?4,?5)",
         params![
             workspace_id,
-            i64::try_from(crate::time::unix_seconds())?,
+            crate::time::UnixTime::now(),
             message,
             attachments,
             wakes

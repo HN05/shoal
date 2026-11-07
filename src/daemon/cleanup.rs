@@ -28,6 +28,7 @@ use crate::{
     model::{Chat, CleanupReason, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,
+    time::UnixTime,
 };
 
 mod failures;
@@ -141,19 +142,19 @@ pub struct Tree {
     /// be set, unlike modification times, so two equal fingerprints mean no
     /// file changed between them.
     pub fingerprint: u64,
-    /// The newest change or modification time of any file, in Unix seconds.
-    pub changed: u64,
+    /// The newest change or modification time of any file.
+    pub changed: UnixTime,
 }
 
-/// The later of a file's change and modification times, in Unix seconds.
-pub fn change_time(metadata: &fs::Metadata) -> u64 {
-    metadata.ctime().max(metadata.mtime()).max(0) as u64
+/// The later of a file's change and modification times.
+pub fn change_time(metadata: &fs::Metadata) -> UnixTime {
+    UnixTime::from_seconds(metadata.ctime().max(metadata.mtime()))
 }
 
 /// Metadata only, including ignored files; never follow symlinks out of the tree.
 /// Git administrative storage is shared and inspected separately through HEAD.
 pub fn walk(root: &Path) -> Result<Tree> {
-    fn visit(path: &Path, hash: &mut DefaultHasher, changed: &mut u64) -> Result<()> {
+    fn visit(path: &Path, hash: &mut DefaultHasher, changed: &mut UnixTime) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
         path.hash(hash);
         metadata.len().hash(hash);
@@ -175,7 +176,7 @@ pub fn walk(root: &Path) -> Result<Tree> {
         Ok(())
     }
     let mut hash = DefaultHasher::new();
-    let mut changed = 0;
+    let mut changed = UnixTime::EPOCH;
     visit(root, &mut hash, &mut changed)?;
     Ok(Tree {
         fingerprint: hash.finish(),

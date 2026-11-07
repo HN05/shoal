@@ -5,7 +5,7 @@
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
 //! run there, and the forge's runner then stops it.
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use anyhow::Result;
 use rusqlite::params;
@@ -33,7 +33,7 @@ pub(crate) struct ClaimedJob {
     /// The execution running the forge's runner, once it started.
     pub execution_id: Option<String>,
     /// When that execution started.
-    pub launched_at: Option<i64>,
+    pub launched_at: Option<crate::time::UnixTime>,
     pub job: QueuedJob,
     /// The runner the forge registered for this job alone, if it did.
     pub runner_id: Option<u64>,
@@ -272,7 +272,7 @@ impl Manager {
     /// started yet has just started, so it keeps warming and holds back the
     /// next start until it runs.
     pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
-        let jobs: Vec<(String, Option<i64>, String)> = self
+        let jobs: Vec<(String, Option<crate::time::UnixTime>, String)> = self
             .store
             .run(|db| {
                 Ok(db
@@ -287,12 +287,12 @@ impl Manager {
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await?;
-        let now = crate::time::unix_seconds() as i64;
+        let now = crate::time::UnixTime::now();
         let mut activities = Vec::new();
         for (repository, since, job) in jobs {
             let job: QueuedJob = serde_json::from_str(&job)?;
             activities.push(Activity::Job {
-                age: Duration::from_secs(now.saturating_sub(since.unwrap_or(now)).max(0) as u64),
+                age: now.duration_since(since.unwrap_or(now)),
                 cost: self.job_cost(&repository, &job).await?,
             });
         }

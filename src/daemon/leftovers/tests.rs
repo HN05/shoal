@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 
 fn found(pid: u32, birth: &str) -> (Identity, Leftover) {
     let identity = Identity {
@@ -10,7 +11,7 @@ fn found(pid: u32, birth: &str) -> (Identity, Leftover) {
         pid,
         command: "sleep 300".into(),
         directory: None,
-        started_at: 0,
+        started_at: UnixTime::from_seconds(0),
     };
     (identity, leftover)
 }

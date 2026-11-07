@@ -349,7 +349,7 @@ impl Manager {
         let warnings = self.convention_warnings(&request, space, &item).await;
         request.warnings.extend(warnings);
         request.status = DecisionStatus::Approved;
-        request.decided_at = Some(crate::time::unix_seconds());
+        request.decided_at = Some(crate::time::UnixTime::now());
         request.url = Some(item.url.clone());
         let linked = if linked { " and linked" } else { "" };
         let message = format!(
@@ -661,7 +661,7 @@ impl Manager {
             None => String::new(),
         };
         request.status = DecisionStatus::Denied;
-        request.decided_at = Some(crate::time::unix_seconds());
+        request.decided_at = Some(crate::time::UnixTime::now());
         let reason = match &decision.reason {
             Some(reason) => format!(" Reason: {reason}"),
             None => String::new(),

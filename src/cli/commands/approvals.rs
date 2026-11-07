@@ -247,7 +247,7 @@ pub(super) async fn decide(
 pub(super) async fn decide_listed(
     ctx: &Context,
     number: ItemNumber,
-    created_at: u64,
+    created_at: crate::time::UnixTime,
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let request = list_requests(ctx, None)

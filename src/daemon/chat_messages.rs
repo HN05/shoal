@@ -280,7 +280,7 @@ fn insert(
             VALUES (?1,?2,?3,COALESCE(?4,(SELECT id FROM workspaces WHERE name=?3)),?5,?6,?7)",
         params![
             chat,
-            i64::try_from(crate::time::unix_seconds())?,
+            crate::time::UnixTime::now(),
             workspace,
             about.id,
             kind,

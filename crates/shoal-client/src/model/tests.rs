@@ -106,7 +106,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
         agent: "claude".into(),
         workspace: None,
         pid: 1,
-        started_at: 0,
+        started_at: crate::time::UnixTime::EPOCH,
         origin: None,
         tmp_dir: None,
         root_dir: None,

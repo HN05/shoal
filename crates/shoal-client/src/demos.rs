@@ -94,8 +94,7 @@ pub struct Running {
     pub workspace_id: String,
     pub workspace: String,
     pub execution_id: String,
-    /// Unix seconds.
-    pub started_at: u64,
+    pub started_at: crate::time::UnixTime,
     /// The demo's command has started; a start reports the demo only then.
     pub has_run: bool,
     /// Where a browser opens a web demo.

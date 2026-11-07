@@ -1,11 +1,12 @@
 use super::*;
+use crate::time::UnixTime;
 
 fn question(text: &str, in_chat: bool) -> Question {
     Question {
         number: crate::client::item_numbers::ItemNumber { space: 2, item: 3 },
         space_id: "w1".into(),
         space: "cache".into(),
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         ask: Ask {
             question: text.into(),
             recommendation: if in_chat {

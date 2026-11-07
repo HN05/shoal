@@ -20,7 +20,7 @@ fn mark(stale: bool) -> ReviewMark {
         kind: None,
         url: None,
         head: "abc".into(),
-        created_at: 0,
+        created_at: crate::time::UnixTime::EPOCH,
         stale: Some(stale),
         warnings: Vec::new(),
     }

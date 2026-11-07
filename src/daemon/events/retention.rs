@@ -2,18 +2,21 @@
 //! gone for its repository's `cleanup.restore.retention_days` after its
 //! removal, as its checkpoints and attached files do. A removal record or
 //! a removed chat's unexpired files keep them longer.
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use crate::daemon::{log, workspace::Manager};
+use crate::{
+    daemon::{log, workspace::Manager},
+    time::UnixTime,
+};
 
 /// A space that is gone, with its repository and when it went.
 struct Gone {
     id: String,
     repository_id: Option<String>,
-    removed_at: i64,
+    removed_at: UnixTime,
 }
 
 impl Manager {
@@ -27,26 +30,26 @@ impl Manager {
     /// The IDs of the `gone` spaces whose retention after their removal
     /// has passed, reading each repository's retention once.
     async fn expired(&self, gone: Vec<Gone>) -> Vec<String> {
-        let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
+        let now = UnixTime::now();
         let mut retention = HashMap::new();
         let mut expired = Vec::new();
         for space in gone {
             if !retention.contains_key(&space.repository_id) {
-                let seconds = self.retention(space.repository_id.as_deref()).await;
-                retention.insert(space.repository_id.clone(), seconds);
+                let kept = self.retention(space.repository_id.as_deref()).await;
+                retention.insert(space.repository_id.clone(), kept);
             }
             let kept = retention[&space.repository_id];
-            if space.removed_at.saturating_add(kept) <= now {
+            if space.removed_at + kept <= now {
                 expired.push(space.id);
             }
         }
         expired
     }
 
-    /// The seconds a removed space of `repository` keeps what it leaves:
+    /// How long a removed space of `repository` keeps what it leaves:
     /// its settings' retention, or the global setting's for a chat without a
     /// repository or when the repository's cannot be read.
-    async fn retention(&self, repository: Option<&str>) -> i64 {
+    async fn retention(&self, repository: Option<&str>) -> Duration {
         let settings = match repository {
             Some(id) => self.repository_settings(id).await,
             None => self.config().resolve(&Default::default()),
@@ -55,8 +58,9 @@ impl Manager {
             log!("events of removed spaces kept by the global retention: {error:#}");
             self.config().resolve(&Default::default())
         });
-        let seconds = settings.map_or(0, |settings| settings.cleanup.restore.retention().as_secs());
-        i64::try_from(seconds).unwrap_or(i64::MAX)
+        settings.map_or(Duration::ZERO, |settings| {
+            settings.cleanup.restore.retention()
+        })
     }
 }
 

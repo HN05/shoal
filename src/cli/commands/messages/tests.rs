@@ -1,5 +1,6 @@
 use super::*;
 use crate::forge::updates::{Update, UpdateKind};
+use crate::time::UnixTime;
 
 #[test]
 fn multi_line_messages_stay_one_entry() {
@@ -13,7 +14,7 @@ fn multi_line_messages_stay_one_entry() {
 fn attached_files_follow_the_message_text() {
     let message = |text: &str| AgentMessage {
         id: 1,
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
         message: text.into(),
         attachments: vec!["/repo/.attachments/w/k/0/shot.png".into()],
     };
@@ -94,7 +95,7 @@ fn hook_output_names_the_event_it_answers() {
         }],
         messages: vec![AgentMessage {
             id: 1,
-            created_at: 0,
+            created_at: UnixTime::from_seconds(0),
             message: "Stop the dev server".into(),
             attachments: Vec::new(),
         }],

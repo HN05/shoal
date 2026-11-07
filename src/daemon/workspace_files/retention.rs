@@ -1,7 +1,7 @@
 //! How long attached files stay: a workspace's files go with it, except its
 //! results, which stay as long as its removal record; a chat's stay for the
 //! same retention after it ends; and every file goes with its repository.
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use anyhow::{Result, ensure};
 
@@ -9,7 +9,7 @@ use super::{FilesHome, HomeKey, Space, records};
 use crate::{
     daemon::{log, workspace::Manager},
     model::{Repository, Workspace},
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 impl Manager {
@@ -44,7 +44,7 @@ impl Manager {
     /// repository's `cleanup.restore.retention_days`, as a removed
     /// workspace's results do, or the global setting's for a chat without a
     /// repository or when the repository's cannot be read.
-    pub(crate) async fn chat_files_expiry(&self, chat: &crate::model::Chat) -> i64 {
+    pub(crate) async fn chat_files_expiry(&self, chat: &crate::model::Chat) -> UnixTime {
         let settings = match self.chat_settings(chat).await {
             Ok(settings) => Ok(settings),
             Err(error) => {
@@ -55,9 +55,10 @@ impl Manager {
                 self.config().resolve(&Default::default())
             }
         };
-        let retention =
-            settings.map_or(0, |settings| settings.cleanup.restore.retention().as_secs());
-        i64::try_from(unix_seconds() + retention).unwrap_or(i64::MAX)
+        let retention = settings.map_or(Duration::ZERO, |settings| {
+            settings.cleanup.restore.retention()
+        });
+        UnixTime::now() + retention
     }
 
     /// Delete the files kept for removed workspaces and removed chats whose

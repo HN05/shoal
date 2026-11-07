@@ -105,7 +105,7 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
         "the restore of {} is already in the agent queue",
         restore.target.name
     );
-    let now = crate::time::unix_seconds() as i64;
+    let now = crate::time::UnixTime::now();
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,workspace_id,automatic)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11)

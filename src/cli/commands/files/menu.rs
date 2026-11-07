@@ -65,7 +65,7 @@ pub(super) async fn choose(
 
 /// One row per file, by its record, cut to fit the picker, then the add row.
 fn entries(files: &[AttachedFile]) -> ui::Entries {
-    let now = crate::time::unix_seconds() as i64;
+    let now = crate::time::UnixTime::now();
     let rows = files.iter().map(|file| cells(file, now)).collect();
     let limit = ui::picker_width().map(|width| WidthLimit { column: 6, width });
     let labels = ui::aligned_to(rows, Palette::picker(), limit);

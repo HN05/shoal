@@ -47,12 +47,12 @@ impl Manager {
     /// exits and its workspace goes. One that cannot be checked is checked
     /// again on the next pass.
     pub(crate) async fn release_idle_runners(&self) -> Result<()> {
-        let now = crate::time::unix_seconds() as i64;
+        let now = crate::time::UnixTime::now();
         for job in self.claimed_jobs().await? {
             let (Some(runner), Some(launched)) = (job.runner_id, job.launched_at) else {
                 continue;
             };
-            let waited = Duration::from_secs(now.saturating_sub(launched).max(0) as u64);
+            let waited = now.duration_since(launched);
             if waited < IDLE_AFTER || took_job(&self.job_directory(&job.id)) {
                 continue;
             }

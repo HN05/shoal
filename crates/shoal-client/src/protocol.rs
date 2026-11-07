@@ -852,8 +852,7 @@ pub struct AccessStall {
     pub directory: std::path::PathBuf,
     /// The path whose check stalled first.
     pub path: std::path::PathBuf,
-    /// Unix seconds.
-    pub since: u64,
+    pub since: crate::time::UnixTime,
     /// How the check stalled, such as `did not finish within 30s`.
     pub reason: String,
 }

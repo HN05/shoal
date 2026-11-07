@@ -2,6 +2,7 @@
 use std::{
     fmt,
     ops::{Add, Sub},
+    str::FromStr,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -23,29 +24,38 @@ impl UnixTime {
 
     /// The current time, or the epoch when the clock is before it.
     pub fn now() -> Self {
-        Self::from_duration(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default(),
-        )
+        Self::from_system_time(SystemTime::now())
     }
 
     pub const fn from_seconds(seconds: i64) -> Self {
         Self(seconds)
     }
 
-    /// The whole seconds of a time since the epoch, saturating at [`Self::MAX`].
-    pub fn from_duration(since_epoch: Duration) -> Self {
-        Self::EPOCH + since_epoch
-    }
-
     /// The whole seconds of `time`, or the epoch for a time before it.
     pub fn from_system_time(time: SystemTime) -> Self {
-        Self::from_duration(time.duration_since(UNIX_EPOCH).unwrap_or_default())
+        Self::EPOCH + time.duration_since(UNIX_EPOCH).unwrap_or_default()
     }
 
-    pub const fn seconds(self) -> i64 {
-        self.0
+    /// This time on the system clock, as file times take it.
+    pub fn system_time(self) -> SystemTime {
+        let seconds = Duration::from_secs(self.0.unsigned_abs());
+        if self.0 < 0 {
+            UNIX_EPOCH - seconds
+        } else {
+            UNIX_EPOCH + seconds
+        }
+    }
+
+    /// A time in the unsigned seconds of `shoal-forge`, which depends on no
+    /// crate that holds this type; saturating at [`Self::MAX`].
+    pub fn from_unsigned_seconds(seconds: u64) -> Self {
+        Self::EPOCH + Duration::from_secs(seconds)
+    }
+
+    /// This time in the unsigned seconds of `shoal-forge`; the epoch for a
+    /// time before it.
+    pub fn unsigned_seconds(self) -> u64 {
+        self.duration_since(Self::EPOCH).as_secs()
     }
 
     /// How long after `earlier` this is, or zero when it is not later.
@@ -132,6 +142,16 @@ impl fmt::Display for UnixTime {
     }
 }
 
+/// The seconds as [`Display`](fmt::Display) writes them, such as in a
+/// picker's row.
+impl FromStr for UnixTime {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        text.parse().map(Self)
+    }
+}
+
 #[cfg(feature = "rusqlite")]
 impl rusqlite::types::ToSql for UnixTime {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
@@ -144,26 +164,6 @@ impl rusqlite::types::FromSql for UnixTime {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         i64::column_result(value).map(Self)
     }
-}
-
-/// Whole Unix seconds, or zero when the clock is before the epoch.
-pub fn unix_seconds() -> u64 {
-    UnixTime::now().seconds() as u64
-}
-
-/// `YYYY-MM-DD HH:MM` in the local time zone.
-pub fn local_minutes(unix_seconds: i64) -> String {
-    UnixTime(unix_seconds).local_minutes()
-}
-
-/// `YYYY-MM-DD HH:MM:SS` in the local time zone.
-pub fn local_seconds(unix_seconds: i64) -> String {
-    UnixTime(unix_seconds).local_seconds()
-}
-
-/// See [`UnixTime::local_ago`].
-pub fn local_ago(unix_seconds: i64, now: i64) -> String {
-    UnixTime(unix_seconds).local_ago(UnixTime(now))
 }
 
 fn whole_seconds(duration: Duration) -> i64 {

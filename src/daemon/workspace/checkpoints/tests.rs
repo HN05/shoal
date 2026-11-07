@@ -46,7 +46,7 @@ impl Fixture {
         git(&self.workspace.path, args)
     }
 
-    async fn set_expiry(&self, number: u64, expires_at: i64) {
+    async fn set_expiry(&self, number: u64, expires_at: crate::time::UnixTime) {
         let id = self.workspace.id.clone();
         self.manager
             .store
@@ -91,7 +91,8 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
         .await
         .unwrap();
     assert_eq!(second.number, 2);
-    f.set_expiry(2, 1).await;
+    f.set_expiry(2, crate::time::UnixTime::from_seconds(1))
+        .await;
     manager.checkpoint_after_agent(&f.workspace.id).await;
     let numbers = async || {
         manager
@@ -246,7 +247,8 @@ async fn numbers_are_never_reused_after_checkpoints_expire() {
         .take_checkpoint(&"topic".into(), None)
         .await
         .unwrap();
-    f.set_expiry(second.number, 0).await;
+    f.set_expiry(second.number, crate::time::UnixTime::from_seconds(0))
+        .await;
     manager.expire_checkpoints().await.unwrap();
     let third = manager
         .take_checkpoint(&"topic".into(), None)
@@ -384,7 +386,8 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
         .unwrap();
 
     // An expired checkpoint goes with its ref.
-    f.set_expiry(first.number, 0).await;
+    f.set_expiry(first.number, crate::time::UnixTime::from_seconds(0))
+        .await;
     manager.expire_checkpoints().await.unwrap();
     let kept = [git::checkpoint::reference(&second.commit)];
     assert_eq!(checkpoint_refs(&f.checkout), kept);
@@ -443,8 +446,10 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
         })
         .await
         .unwrap();
-    f.set_expiry(start.number, 1).await;
-    f.set_expiry(later.number, 1).await;
+    f.set_expiry(start.number, crate::time::UnixTime::from_seconds(1))
+        .await;
+    f.set_expiry(later.number, crate::time::UnixTime::from_seconds(1))
+        .await;
     manager.expire_checkpoints().await.unwrap();
     let listed = manager
         .checkpoints(&"topic".into(), None)

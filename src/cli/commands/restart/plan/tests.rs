@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 use crate::{
     model::{AgentStatus, PendingRestart},
     state::WorkspaceState,
@@ -119,7 +120,7 @@ fn only_an_agents_own_report_makes_it_idle() {
     let mut shared_state = shared.clone();
     shared_state.agent_state = Some(AgentStatus {
         state: AgentState::Idle,
-        since: 0,
+        since: UnixTime::from_seconds(0),
         prompt_cache_expires_at: None,
     });
     let working = RunningAgent {

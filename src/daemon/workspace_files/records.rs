@@ -287,7 +287,11 @@ pub(super) fn forget_space(db: &mut Connection, space_id: &str) -> Result<()> {
 /// Keep the files of the chat `chat_id`, which keep its last name, until
 /// `expires_at`, and move those it was the parent of to its own parent, in
 /// the transaction that deletes the chat, before its row goes.
-pub(crate) fn keep_ended_chat(tx: &Transaction<'_>, chat_id: &str, expires_at: i64) -> Result<()> {
+pub(crate) fn keep_ended_chat(
+    tx: &Transaction<'_>,
+    chat_id: &str,
+    expires_at: crate::time::UnixTime,
+) -> Result<()> {
     tx.execute(
         "UPDATE workspace_files SET space=(SELECT name FROM chats WHERE id=?1)
             WHERE space_id=?1",

@@ -191,7 +191,7 @@ impl Manager {
             !self.agent_queue.suspended(),
             "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
         );
-        let started_at = i64::try_from(crate::time::unix_seconds())?;
+        let started_at = crate::time::UnixTime::now();
         // A place Shoal created for a workspace is the chat's now.
         if let Some(origin) = &origin {
             self.release_place(origin).await?;
@@ -486,18 +486,17 @@ impl Manager {
             .await
     }
 
-    /// When the chat `id`'s agent stopped, in Unix seconds, while it is
-    /// stopped.
-    pub(crate) async fn chat_stopped_at(&self, id: &str) -> Result<Option<u64>> {
+    /// When the chat `id`'s agent stopped, while it is stopped.
+    pub(crate) async fn chat_stopped_at(&self, id: &str) -> Result<Option<crate::time::UnixTime>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                let stopped_at: Option<Option<i64>> = db
+                let stopped_at = db
                     .query_row("SELECT stopped_at FROM chats WHERE id=?1", [id], |row| {
                         row.get(0)
                     })
                     .optional()?;
-                Ok(stopped_at.flatten().map(|at| at.max(0) as u64))
+                Ok(stopped_at.flatten())
             })
             .await
     }

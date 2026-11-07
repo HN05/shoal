@@ -1,5 +1,6 @@
 use super::*;
 use crate::reviews::{FailureReason, Finding, FindingId, ReviewTarget, Severity};
+use crate::time::UnixTime;
 
 fn review(state: ReviewState, findings: usize) -> Review {
     Review {
@@ -14,7 +15,7 @@ fn review(state: ReviewState, findings: usize) -> Review {
         failure: (state == ReviewState::Failed).then_some(FailureReason::RateLimit),
         head: None,
         base: None,
-        created_at: 1,
+        created_at: UnixTime::from_seconds(1),
         started_at: None,
         ended_at: None,
         summary: Some("Blocked on one bug.".into()),

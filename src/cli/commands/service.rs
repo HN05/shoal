@@ -201,9 +201,9 @@ fn status_message(status: &crate::protocol::DaemonStatus) -> String {
             n => format!(", {n} new notifications"),
         }
     );
-    let now = crate::time::unix_seconds() as i64;
+    let now = crate::time::UnixTime::now();
     for stall in &status.access_stalls {
-        let since = crate::time::local_ago(stall.since as i64, now);
+        let since = stall.since.local_ago(now);
         message.push_str(&format!("\n{} (since {since})", stall.message()));
     }
     if let Some(error) = &status.cleanup_error {

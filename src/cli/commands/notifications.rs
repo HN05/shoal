@@ -24,7 +24,7 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
     refuse_workspace_processes(ctx)?;
     let notifications = notifications::list(&ctx.paths, !all, limit).await?;
     ctx.show(&notifications, |notifications| {
-        let now = crate::time::unix_seconds() as i64;
+        let now = crate::time::UnixTime::now();
         let rows = notifications.iter().map(|n| cells(n, now)).collect();
         let lines = ui::aligned(rows, Palette::stdout(ctx.json));
         for (line, notification) in lines.iter().zip(notifications) {
@@ -127,7 +127,7 @@ pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Resu
         ctx.show(&notification, |notification| {
             outln!(
                 "{}",
-                render(notification, palette, crate::time::unix_seconds() as i64)
+                render(notification, palette, crate::time::UnixTime::now())
             );
         })?;
         if raise {
@@ -154,7 +154,7 @@ fn terminal_notification(notification: &Notification) -> String {
     format!("\x1b]9;{text}\x07")
 }
 
-fn render(notification: &Notification, palette: Palette, now: i64) -> String {
+fn render(notification: &Notification, palette: Palette, now: crate::time::UnixTime) -> String {
     let line = ui::aligned(vec![cells(notification, now)], palette).concat();
     with_files(&line, notification)
 }
@@ -172,12 +172,9 @@ fn with_files(line: &str, notification: &Notification) -> String {
 }
 
 /// When, read at `now`, the workspace, and the message.
-fn cells(notification: &Notification, now: i64) -> [ui::Cell; 3] {
+fn cells(notification: &Notification, now: crate::time::UnixTime) -> [ui::Cell; 3] {
     [
-        (
-            crate::time::local_ago(notification.created_at, now),
-            Some(Style::Muted),
-        ),
+        (notification.created_at.local_ago(now), Some(Style::Muted)),
         (
             notification.workspace.clone().unwrap_or_else(|| "-".into()),
             Some(Style::Heading),

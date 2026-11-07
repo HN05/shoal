@@ -8,23 +8,26 @@ use anyhow::Result;
 
 use super::AgentMessage;
 use crate::client::space_names::SpaceSelector;
-use crate::{daemon::workspace::Manager, model::Workspace};
+use crate::{daemon::workspace::Manager, model::Workspace, time::UnixTime};
 
 mod clock;
 pub(crate) use clock::SettleClock;
 
 /// A run is held at most this many settle windows after its first message,
 /// so a steady stream still arrives.
-const MAX_WINDOWS: i64 = 6;
+const MAX_WINDOWS: u32 = 6;
 
-/// The Unix second at which unread `messages` settle: `settle` seconds after
-/// the newest, at most [`MAX_WINDOWS`] windows after the oldest; `None` once
-/// they have settled at `now`.
-pub(crate) fn held_until(messages: &[AgentMessage], settle: u64, now: i64) -> Option<i64> {
-    let settle = i64::try_from(settle).ok()?;
+/// When unread `messages` settle: `settle` after the newest, at most
+/// [`MAX_WINDOWS`] windows after the oldest; `None` once they have settled at
+/// `now`.
+pub(crate) fn held_until(
+    messages: &[AgentMessage],
+    settle: Duration,
+    now: UnixTime,
+) -> Option<UnixTime> {
     let newest = messages.iter().map(|message| message.created_at).max()?;
     let oldest = messages.iter().map(|message| message.created_at).min()?;
-    let settles = (newest + settle).min(oldest + settle * MAX_WINDOWS);
+    let settles = (newest + settle).min(oldest + settle.saturating_mul(MAX_WINDOWS));
     (now < settles).then_some(settles)
 }
 
@@ -39,9 +42,9 @@ impl Manager {
         if messages.is_empty() {
             return Ok(None);
         }
-        let now = self.settle_clock.unix_seconds()?;
-        let settle = self.settle_seconds(workspace).await;
-        Ok(held_until(messages, settle, now).map(|until| Duration::from_secs(until.abs_diff(now))))
+        let now = self.settle_clock.now();
+        let settle = self.settle_window(workspace).await;
+        Ok(held_until(messages, settle, now).map(|until| until.duration_since(now)))
     }
 
     /// The workspace's unread messages once they have settled, waiting for
@@ -78,12 +81,12 @@ impl Manager {
     /// The workspace's settle window. A configuration that does not resolve
     /// holds nothing, since messages are how the user reaches the agent to
     /// fix it.
-    async fn settle_seconds(&self, workspace: &Workspace) -> u64 {
+    async fn settle_window(&self, workspace: &Workspace) -> Duration {
         match self.workspace_settings(workspace).await {
-            Ok(settings) => settings.messages.settle_seconds,
+            Ok(settings) => Duration::from_secs(settings.messages.settle_seconds),
             Err(error) => {
                 crate::daemon::log!("agent messages delivered unsettled: {error:#}");
-                0
+                Duration::ZERO
             }
         }
     }

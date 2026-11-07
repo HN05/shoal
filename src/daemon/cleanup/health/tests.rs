@@ -34,7 +34,7 @@ fn health_reports_failing_and_stalled_cleanup() {
     // Wall time runs on while the Mac sleeps; the monotonic clock does not.
     let moment = |seconds, slept| Moment {
         at: after(seconds),
-        unix: unix + seconds + slept,
+        unix: unix + Duration::from_secs(seconds + slept),
     };
     assert_eq!(health.problem(start), None);
     assert!(health.problem(start + STALLED_AFTER).is_some());
@@ -71,7 +71,7 @@ fn health_keeps_workspace_failures_to_their_workspace() {
     let start = health.started;
     let moment = |seconds| Moment {
         at: start.at + Duration::from_secs(seconds),
-        unix: start.unix + seconds,
+        unix: start.unix + Duration::from_secs(seconds),
     };
     let failed = failed("idle agents", Some("quay"), "bad config");
     let error = "idle agents: bad config";

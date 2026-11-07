@@ -140,9 +140,9 @@ fn default_mode() -> String {
 pub struct Stop {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    /// When its recovery record was saved, in Unix seconds.
+    /// When its recovery record was saved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<u64>,
+    pub at: Option<crate::time::UnixTime>,
 }
 
 /// An agent stopped in a removed workspace, which `shoal work restore` saves
@@ -151,9 +151,9 @@ pub struct Stop {
 pub struct StoppedAgent {
     pub execution: String,
     pub record: Record,
-    /// When its record was saved, in Unix seconds, which `shoal resume`
-    /// shows as its stop time.
-    pub stopped_at: u64,
+    /// When its record was saved, which `shoal resume` shows as its stop
+    /// time.
+    pub stopped_at: crate::time::UnixTime,
 }
 
 /// An agent that exited on its own before its assignment was done, which
@@ -254,8 +254,8 @@ pub struct TurnRetry {
     pub failure: TurnFailure,
     /// The attempt the retry makes or made, from 1.
     pub attempt: u32,
-    /// Unix seconds when the agent is asked to continue.
-    pub due_at: i64,
+    /// When the agent is asked to continue.
+    pub due_at: crate::time::UnixTime,
     /// Whether the agent was asked and its turn has not ended yet.
     pub delivered: bool,
 }
@@ -266,8 +266,8 @@ pub struct ProxyRetry {
     pub failure: TurnFailure,
     /// The attempt that failed, from 1.
     pub attempt: u32,
-    /// Unix seconds when the proxy tries again.
-    pub next_at: i64,
+    /// When the proxy tries again.
+    pub next_at: crate::time::UnixTime,
 }
 
 /// What `shoal resume --discard` forgot in a workspace.

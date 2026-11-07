@@ -10,7 +10,7 @@ use std::{
 use anyhow::Result;
 
 pub(crate) use crate::client::processes::Leftover;
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
     fsutil::off_runtime,
@@ -175,7 +175,7 @@ async fn described_leftovers(
         .map(|(_, process)| process.identity.pid)
         .collect();
     let described = described::describe(&pids).await?;
-    let now = crate::time::unix_seconds();
+    let now = UnixTime::now();
     let mut by_space: HashMap<String, Vec<(Identity, Leftover)>> = HashMap::new();
     for (space, process) in leftovers {
         if let Some(description) = described.get(&process.identity.pid) {
@@ -191,17 +191,17 @@ async fn described_leftovers(
 
 /// Operations on the client type [`Leftover`] that only the `shoal` command uses.
 trait LeftoverExt {
-    /// `process` as `description` shows it at `now`, in Unix seconds.
-    fn of(process: &Untracked, description: &described::Description, now: u64) -> Self;
+    /// `process` as `description` shows it at `now`.
+    fn of(process: &Untracked, description: &described::Description, now: UnixTime) -> Self;
 }
 
 impl LeftoverExt for Leftover {
-    fn of(process: &Untracked, description: &described::Description, now: u64) -> Self {
+    fn of(process: &Untracked, description: &described::Description, now: UnixTime) -> Self {
         Self {
             pid: process.identity.pid,
             command: description.command.chars().take(COMMAND_LIMIT).collect(),
             directory: process.directory.clone(),
-            started_at: now.saturating_sub(description.elapsed),
+            started_at: now - std::time::Duration::from_secs(description.elapsed),
         }
     }
 }

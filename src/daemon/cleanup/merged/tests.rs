@@ -6,7 +6,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{commit, git, manager, repository};
 use crate::{daemon::workspace_files::Attacher, execution::recovery, model::CleanupReason};
 
-const HOUR: u64 = 3600;
+const HOUR: Duration = Duration::from_secs(3600);
 
 struct Fixture {
     _root: tempfile::TempDir,
@@ -85,12 +85,12 @@ impl Fixture {
     }
 
     /// Run a pass `hours` from now and report whether the workspace remains.
-    async fn kept_after(&self, hours: u64) -> bool {
+    async fn kept_after(&self, hours: u32) -> bool {
         let mut state = State::default();
         sweep_at(
             &self.manager,
             &mut state,
-            unix_seconds() + hours * HOUR,
+            UnixTime::now() + hours * HOUR,
             &Default::default(),
         )
         .await
@@ -444,12 +444,12 @@ fn a_walk_sees_changes_of_nested_files_and_worktree_git_state() {
     fs::create_dir_all(git_dir.join("logs")).unwrap();
     // Future modification times, each newer than every change time the
     // fixture's own writes leave, so only reading that file reports it.
-    let now = unix_seconds();
+    let now = UnixTime::now();
     let changes = [
-        (tree.join("a/b/file"), now + 1000),
-        (git_dir.join("HEAD"), now + 2000),
-        (git_dir.join("index"), now + 3000),
-        (git_dir.join("logs/HEAD"), now + 4000),
+        (tree.join("a/b/file"), now + Duration::from_secs(1000)),
+        (git_dir.join("HEAD"), now + Duration::from_secs(2000)),
+        (git_dir.join("index"), now + Duration::from_secs(3000)),
+        (git_dir.join("logs/HEAD"), now + Duration::from_secs(4000)),
     ];
     for (path, modified) in changes {
         fs::write(&path, "").unwrap();
@@ -457,7 +457,7 @@ fn a_walk_sees_changes_of_nested_files_and_worktree_git_state() {
             .write(true)
             .open(&path)
             .unwrap()
-            .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(modified))
+            .set_modified(modified.system_time())
             .unwrap();
         assert_eq!(
             walk_with_git_state(&tree, Some(&git_dir)).unwrap().changed,
@@ -507,13 +507,13 @@ async fn a_recent_file_change_defers_walks_until_its_idle_period_passes() {
     f.squash_merge();
     f.age_out_activity().await;
     let mut state = State::default();
-    let now = unix_seconds();
+    let now = UnixTime::now();
     sweep_at(&f.manager, &mut state, now, &Default::default())
         .await
         .unwrap();
     let changed = state.changed[&f.workspace.id];
     assert!(changed + 4 * HOUR > now, "files changed just now");
-    assert!(state.changed_after(&f.workspace.id, changed - 1));
+    assert!(state.changed_after(&f.workspace.id, changed - Duration::from_secs(1)));
     assert!(!state.changed_after(&f.workspace.id, changed));
     sweep_at(&f.manager, &mut state, now + 5 * HOUR, &Default::default())
         .await
@@ -532,8 +532,8 @@ async fn a_future_modification_time_defers_walks_no_later_than_the_walk() {
     f.age_out_activity().await;
     let file = f.workspace.path.join("future");
     fs::write(&file, "").unwrap();
-    let now = unix_seconds();
-    let future = std::time::SystemTime::now() + std::time::Duration::from_secs(1000 * HOUR);
+    let now = UnixTime::now();
+    let future = std::time::SystemTime::now() + 1000 * HOUR;
     fs::File::options()
         .write(true)
         .open(&file)
@@ -570,7 +570,7 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
         .await
         .unwrap();
     let mut state = State::default();
-    let now = unix_seconds();
+    let now = UnixTime::now();
     // Running, it is in use.
     sweep_at(&manager, &mut state, now + 300 * HOUR, &Default::default())
         .await

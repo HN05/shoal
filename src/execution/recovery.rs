@@ -64,7 +64,7 @@ impl StopExt for Stop {
     fn describe(&self) -> String {
         let at = self
             .at
-            .map(|at| format!(" at {}", crate::time::local_minutes(at as i64)))
+            .map(|at| format!(" at {}", at.local_minutes()))
             .unwrap_or_default();
         let reason = self
             .reason
@@ -75,17 +75,11 @@ impl StopExt for Stop {
     }
 }
 
-/// When the file at `path` was last saved, in Unix seconds, which is when a
-/// saved agent stopped.
-pub(crate) fn saved_at(path: &Path) -> Option<u64> {
+/// When the file at `path` was last saved, which is when a saved agent
+/// stopped.
+pub(crate) fn saved_at(path: &Path) -> Option<crate::time::UnixTime> {
     let modified = std::fs::metadata(path).and_then(|metadata| metadata.modified());
-    Some(
-        modified
-            .ok()?
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()?
-            .as_secs(),
-    )
+    Some(crate::time::UnixTime::from_system_time(modified.ok()?))
 }
 
 /// What a restored session is told: why and when it stopped when known, to
@@ -676,8 +670,7 @@ pub(crate) fn save_stopped_agents(
 ) -> Result<()> {
     for agent in agents {
         let path = write_record(paths, workspace_id, &agent.execution, agent.record.clone())?;
-        let stopped = std::time::UNIX_EPOCH + std::time::Duration::from_secs(agent.stopped_at);
-        std::fs::File::open(path)?.set_modified(stopped)?;
+        std::fs::File::open(path)?.set_modified(agent.stopped_at.system_time())?;
     }
     Ok(())
 }

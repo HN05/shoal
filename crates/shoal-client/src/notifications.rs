@@ -88,8 +88,7 @@ states!(NotificationKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notification {
     pub id: i64,
-    /// Unix seconds.
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     /// Workspace name when the event happened; kept after removal.
     pub workspace: Option<String>,
     pub kind: NotificationKind,

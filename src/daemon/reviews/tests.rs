@@ -1,3 +1,4 @@
+use crate::time::UnixTime;
 use std::sync::Arc;
 
 use super::*;
@@ -301,7 +302,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
                 &ReviewTarget::Workspace,
                 "absent",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )
         })
         .await
@@ -309,7 +310,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
         .id();
     manager
         .store
-        .run(move |db| store::start(db, queued, "head", "base", 2))
+        .run(move |db| store::start(db, queued, "head", "base", UnixTime::from_seconds(2)))
         .await
         .unwrap();
     let checkout = manager
@@ -385,7 +386,7 @@ async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
                 &ReviewTarget::Workspace,
                 "absent",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )
         })
         .await
@@ -942,16 +943,16 @@ async fn finished_reviews(
                     &ReviewTarget::Workspace,
                     "absent",
                     &Default::default(),
-                    1,
+                    UnixTime::from_seconds(1),
                 )?
                 .id();
-                store::start(db, review, "head", "base", 2)?;
+                store::start(db, review, "head", "base", UnixTime::from_seconds(2))?;
                 let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
                     serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
                         "findings": [{"path": "a", "line": 1, "severity": "nit",
                             "title": "Long", "body": body}]}),
                 )?;
-                store::finish(db, review, "absent", &output, 3)?;
+                store::finish(db, review, "absent", &output, UnixTime::from_seconds(3))?;
                 ids.push(review);
             }
             Ok(ids)
@@ -1039,10 +1040,10 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
                 &ReviewTarget::Workspace,
                 "absent",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )?
             .id();
-            store::start(db, review, "head", "base", 2)?;
+            store::start(db, review, "head", "base", UnixTime::from_seconds(2))?;
             Ok(review)
         })
         .await
@@ -1094,10 +1095,10 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
                 &ReviewTarget::Workspace,
                 "absent",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )?
             .id();
-            store::start(db, review, "head", "base", 2)?;
+            store::start(db, review, "head", "base", UnixTime::from_seconds(2))?;
             Ok(review)
         })
         .await

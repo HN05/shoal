@@ -11,7 +11,7 @@ use crate::{
         notifications::{About, NotificationKind},
         workspace::Manager,
     },
-    time::{local_seconds, unix_seconds},
+    time::UnixTime,
 };
 
 /// A pass normally finishes within seconds; none for this long means the
@@ -30,26 +30,26 @@ pub struct Health {
 }
 
 /// A point in time measured both ways: the monotonic clock excludes sleep, so
-/// a Mac waking up does not look like a stalled loop, and the Unix seconds
-/// are what messages show.
+/// a Mac waking up does not look like a stalled loop, and the wall-clock time
+/// is what messages show.
 #[derive(Clone, Copy)]
 struct Moment {
     at: Instant,
-    unix: u64,
+    unix: UnixTime,
 }
 
 impl Moment {
     fn now() -> Self {
         Self {
             at: Instant::now(),
-            unix: unix_seconds(),
+            unix: UnixTime::now(),
         }
     }
 }
 
 /// Consecutive failed passes.
 struct Failure {
-    since: u64,
+    since: UnixTime,
     passes: u64,
     error: String,
     notified: bool,
@@ -73,7 +73,7 @@ impl Failure {
         format!(
             "Automatic cleanup failed {} consecutive passes since {}: {}",
             self.passes,
-            local_seconds(self.since as i64),
+            self.since.local_seconds(),
             self.error
         )
     }
@@ -163,11 +163,11 @@ impl Health {
         match self.finished {
             Some(finished) => format!(
                 "Automatic cleanup has not finished a pass since {}",
-                local_seconds(finished.unix as i64)
+                finished.unix.local_seconds()
             ),
             None => format!(
                 "Automatic cleanup has not finished a pass since the daemon started at {}",
-                local_seconds(self.started.unix as i64)
+                self.started.unix.local_seconds()
             ),
         }
     }

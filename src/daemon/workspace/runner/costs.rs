@@ -70,7 +70,7 @@ impl Manager {
                         repository,
                         workflow,
                         name,
-                        crate::time::unix_seconds() as i64,
+                        crate::time::UnixTime::now(),
                         cpu,
                         memory
                     ],

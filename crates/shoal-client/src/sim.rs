@@ -112,7 +112,7 @@ pub struct Simulator {
     pub lease_name: Option<String>,
     pub reason: Option<String>,
     pub state: SimulatorState,
-    pub last_used: u64,
+    pub last_used: crate::time::UnixTime,
     pub error: Option<String>,
     /// User apps counted at release; `None` when unknown.
     #[serde(default)]
@@ -209,8 +209,8 @@ pub struct CleanRequest {
     pub workspace_name: String,
     pub repository_id: String,
     pub execution_id: Option<String>,
-    pub requested_at: u64,
-    pub updated_at: u64,
+    pub requested_at: crate::time::UnixTime,
+    pub updated_at: crate::time::UnixTime,
     pub attempts: u64,
     pub request: SimRequest,
     pub status: CleanRequestStatus,

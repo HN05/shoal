@@ -6,6 +6,7 @@ use crate::daemon::{
     workspace::{ExecutionKind, identity},
     workspace_files::Attacher,
 };
+use crate::time::UnixTime;
 use std::sync::Arc;
 
 /// A manager with a cloned repository and one workspace under the default
@@ -592,7 +593,7 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
                     &crate::reviews::ReviewTarget::Workspace,
                     "claude",
                     &Default::default(),
-                    1,
+                    UnixTime::from_seconds(1),
                 )
             }
         })

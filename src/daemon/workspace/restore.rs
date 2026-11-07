@@ -17,7 +17,7 @@ use crate::{
         CheckpointCause, OpenedWorkspace, Relation, RemovedWorkspace, Repository,
         RestoredWorkspace, SpaceLinks, Workspace,
     },
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 impl Manager {
@@ -55,7 +55,7 @@ impl Manager {
             agents,
             last_sessions,
             cause,
-            removed_at: unix_seconds(),
+            removed_at: UnixTime::now(),
         };
         let record = removed.clone();
         self.store.run(move |db| self::record(db, &record)).await?;
@@ -239,7 +239,7 @@ impl Manager {
             .cleanup
             .restore
             .retention();
-        let expires_at = unix_seconds() + retention.as_secs();
+        let expires_at = UnixTime::now() + retention;
         let mut removed = RemovedWorkspace {
             repository_id: repo.id.clone(),
             expires_at,
@@ -457,7 +457,7 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
             removed.workspace_id,
             removed.repository_id,
             removed.name,
-            removed.expires_at as i64,
+            removed.expires_at,
             serde_json::to_string(removed)?,
         ],
     )?;
@@ -489,7 +489,7 @@ fn claim(db: &mut Connection, selector: &str) -> Result<Option<RemovedWorkspace>
     let Some(mut removed) = find(&tx, selector)? else {
         return Ok(None);
     };
-    let until = (unix_seconds() + RESTORE_CLAIM.as_secs()) as i64;
+    let until = UnixTime::now() + RESTORE_CLAIM;
     for table in ["removed_workspaces", "checkpoints"] {
         tx.execute(
             &format!(
@@ -506,8 +506,8 @@ fn claim(db: &mut Connection, selector: &str) -> Result<Option<RemovedWorkspace>
         params![removed.workspace_id, until],
     )?;
     tx.commit()?;
-    removed.expires_at = removed.expires_at.max(until as u64);
-    removed.checkpoint.expires_at = removed.checkpoint.expires_at.max(until as u64);
+    removed.expires_at = removed.expires_at.max(until);
+    removed.checkpoint.expires_at = removed.checkpoint.expires_at.max(until);
     Ok(Some(removed))
 }
 

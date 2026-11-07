@@ -187,15 +187,13 @@ pub struct AttachedFile {
     /// Shoal's copy.
     pub path: PathBuf,
     pub bytes: u64,
-    /// Unix seconds.
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     /// None for a file attached before Shoal recorded who attached it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached_by: Option<Attacher>,
-    /// When the file of a removed workspace or removed chat is deleted, in
-    /// Unix seconds.
+    /// When the file of a removed workspace or removed chat is deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<i64>,
+    pub expires_at: Option<crate::time::UnixTime>,
 }
 
 /// The files attached to `space`.

@@ -5,8 +5,9 @@ use crate::daemon::workspace::{
 };
 
 /// Make the claimed job `id` look launched `seconds` ago.
-async fn launched_ago(manager: &Manager, id: &str, seconds: i64) {
-    let (id, at) = (id.to_owned(), crate::time::unix_seconds() as i64 - seconds);
+async fn launched_ago(manager: &Manager, id: &str, seconds: u64) {
+    let at = crate::time::UnixTime::now() - std::time::Duration::from_secs(seconds);
+    let id = id.to_owned();
     manager
         .store
         .run(move |db| {

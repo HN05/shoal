@@ -29,6 +29,7 @@ use crate::{
     },
     model::{AgentStatus, ConflictCheck, PresentSpace, SpaceRef, Workspace},
     repository,
+    time::UnixTime,
 };
 
 pub(crate) use crate::client::links::Updates;
@@ -646,7 +647,7 @@ impl Manager {
             return Ok(pending);
         }
         drop(guard);
-        let observed_at = crate::time::unix_seconds();
+        let observed_at = UnixTime::now();
         let items = self.items_to_look_up(&space, items).await?;
         let items = self.item_activity(&space, items, selection).await;
         let mut observations = Vec::new();
@@ -685,7 +686,7 @@ impl Manager {
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
         report: BranchReport,
-        observed_at: u64,
+        observed_at: UnixTime,
     ) -> Result<Vec<Update>> {
         let updates = self
             .record_observed(id, observations, selection, report, observed_at)
@@ -807,11 +808,10 @@ impl Manager {
         let Some(limit) = rate_limited(error) else {
             return false;
         };
-        let until = i64::try_from(limit.until).unwrap_or(i64::MAX);
         let message = format!(
             "{} is limiting Shoal's requests until {}; polling waits until then",
             limit.host,
-            crate::time::local_minutes(until)
+            UnixTime::from_unsigned_seconds(limit.until).local_minutes()
         );
         self.notify(None, NotificationKind::ForgeLimited, message)
             .await;
@@ -841,7 +841,7 @@ impl Manager {
         if items.is_empty() {
             return Ok(());
         }
-        let observed_at = crate::time::unix_seconds();
+        let observed_at = UnixTime::now();
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
         let activity = self
@@ -924,7 +924,7 @@ impl Manager {
         &self,
         id: &str,
         observations: Vec<(String, Snapshot)>,
-        observed_at: u64,
+        observed_at: UnixTime,
     ) -> Result<()> {
         let all = Selection::default();
         // A background poll checks the branch only beside a linked PR.
@@ -975,7 +975,7 @@ impl Manager {
                     }
                     snapshot.normalize(
                         previous.as_ref().unwrap_or(&Snapshot::default()),
-                        crate::time::unix_seconds(),
+                        UnixTime::now().unsigned_seconds(),
                     );
                     if let Some(previous) = previous {
                         for update in previous.changes(&snapshot, &url) {
@@ -1102,7 +1102,7 @@ impl Manager {
         selection: &Selection,
     ) -> Result<Vec<Update>> {
         let report = BranchReport::Conflicts;
-        let now = crate::time::unix_seconds();
+        let now = UnixTime::now();
         self.record_observed(id, observations, selection, report, now)
             .await
     }
@@ -1115,7 +1115,7 @@ impl Manager {
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
         report: BranchReport,
-        observed_at: u64,
+        observed_at: UnixTime,
     ) -> Result<Vec<Update>> {
         let poll = Poll {
             selection: selection.clone(),
@@ -1194,8 +1194,8 @@ struct Poll {
     selection: Selection,
     /// What the poll's check of the workspace branch reports.
     report: BranchReport,
-    /// Unix seconds when the poll started.
-    observed_at: u64,
+    /// When the poll started.
+    observed_at: UnixTime,
 }
 
 /// Record `observations` from `poll` on the cursor of the space `id` in one
@@ -1221,7 +1221,7 @@ fn record_observations(
             continue;
         }
         let mut record = cursor_record(&tx, id, &url)?.unwrap_or_default();
-        updates.extend(record.observe(snapshot, &url, observed_at));
+        updates.extend(record.observe(snapshot, &url, observed_at.unsigned_seconds()));
         save_cursor_record(&tx, id, &url, &record)?;
     }
     tx.commit()?;
@@ -1789,8 +1789,7 @@ fn wake_messages_due(wakes: bool, hold: Option<Duration>, arming: bool) -> bool 
 
 /// Whether the agent `idle` reports idle has idled for `delay`.
 fn idled_for(idle: &AgentStatus, delay: Duration) -> bool {
-    let since = u64::try_from(idle.since).unwrap_or(0);
-    crate::time::unix_seconds().saturating_sub(since) >= delay.as_secs()
+    UnixTime::now().duration_since(idle.since) >= delay
 }
 
 /// When a watch with a timeout of `seconds` started now ends.
@@ -1823,7 +1822,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
             },
             None => poll().await,
         };
-        let (updates, interval) = limited_poll(polled, crate::time::unix_seconds())?;
+        let (updates, interval) = limited_poll(polled, UnixTime::now())?;
         if !updates.is_empty() {
             return Ok(Updates {
                 updates,
@@ -1850,17 +1849,20 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     }
 }
 
-/// The updates of a poll and how long to wait before the next one at `now`
-/// in Unix seconds: the poll interval, or until a forge that refused the
+/// The updates of a poll and how long to wait before the next one at `now`:
+/// the poll interval, or until a forge that refused the
 /// poll accepts requests.
-fn limited_poll(polled: Result<Vec<Update>>, now: u64) -> Result<(Vec<Update>, Duration)> {
+fn limited_poll(polled: Result<Vec<Update>>, now: UnixTime) -> Result<(Vec<Update>, Duration)> {
     match polled {
         Ok(updates) => Ok((updates, POLL_INTERVAL)),
         Err(error) => {
             let Some(limit) = rate_limited(&error) else {
                 return Err(error);
             };
-            Ok((Vec::new(), POLL_INTERVAL.max(limit.wait_from(now))))
+            Ok((
+                Vec::new(),
+                POLL_INTERVAL.max(limit.wait_from(now.unsigned_seconds())),
+            ))
         }
     }
 }

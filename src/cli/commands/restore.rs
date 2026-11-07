@@ -18,7 +18,6 @@ use crate::{
     },
     model::{Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace},
     state::WorkspaceState,
-    time::local_seconds,
 };
 
 /// `shoal work checkpoint`: keep the workspace's current state.
@@ -311,10 +310,10 @@ fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
             format!(
                 "{:width$}  {branch}  removed {} ({}), checkpoint {}, restorable until {}",
                 workspace.name,
-                local_seconds(workspace.removed_at as i64),
+                workspace.removed_at.local_seconds(),
                 workspace.cause,
                 workspace.checkpoint.number,
-                local_seconds(workspace.expires_at as i64),
+                workspace.expires_at.local_seconds(),
             )
         })
         .collect()
@@ -350,7 +349,7 @@ fn checkpoint_lines(checkpoints: &[Checkpoint]) -> Vec<String> {
             format!(
                 "{:>width$}  {}  {}  {}{name}{files}",
                 checkpoint.number,
-                local_seconds(checkpoint.created_at as i64),
+                checkpoint.created_at.local_seconds(),
                 cause_label(checkpoint.cause),
                 branch_label(checkpoint.branch.as_deref()),
             )

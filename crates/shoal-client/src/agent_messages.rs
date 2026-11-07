@@ -17,8 +17,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentMessage {
     pub id: i64,
-    /// Unix seconds.
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
     /// Empty when the message is only its attachments.
     pub message: String,
     /// Shoal's copies of the files attached to the message.

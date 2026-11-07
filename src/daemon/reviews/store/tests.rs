@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 use crate::{
     daemon::store::Store,
     reviews::{FixCheck, OutcomeKind, Severity, Verdict, output::NewFinding},
@@ -50,7 +51,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 model: Some("opus".into()),
                 effort: None,
             };
-            let first = queue(db, "work", &ReviewTarget::Workspace, "claude", &model, 1)?;
+            let first = queue(db, "work", &ReviewTarget::Workspace, "claude", &model, UnixTime::from_seconds(1))?;
             assert!(matches!(first, Queued::New(_)));
             assert_eq!(load(db, first.id())?.unwrap().model, model);
             let again = queue(
@@ -59,15 +60,15 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 &ReviewTarget::Workspace,
                 "codex",
                 &Default::default(),
-                2,
+                UnixTime::from_seconds(2),
             )?;
             assert_eq!(again, Queued::Existing(first.id()));
-            assert!(start(db, first.id(), "head", "base", 3)?);
+            assert!(start(db, first.id(), "head", "base", UnixTime::from_seconds(3))?);
             // A run protection stopped waits for healthy readings until the
             // review starts again.
             assert!(requeue(db, first.id())?);
             assert!(waits_for_recovery(db, first.id())?);
-            assert!(start(db, first.id(), "head", "base", 3)?);
+            assert!(start(db, first.id(), "head", "base", UnixTime::from_seconds(3))?);
             assert!(!waits_for_recovery(db, first.id())?);
             let refused = queue(
                 db,
@@ -75,14 +76,14 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
-                4,
+                UnixTime::from_seconds(4),
             );
             assert!(refused.is_err());
-            assert!(cancel(db, first.id(), Some("work"), 5)?);
+            assert!(cancel(db, first.id(), Some("work"), UnixTime::from_seconds(5))?);
             assert_eq!(cancelled_by(db, first.id())?.as_deref(), Some("work"));
-            assert!(!cancel(db, first.id(), None, 6)?);
+            assert!(!cancel(db, first.id(), None, UnixTime::from_seconds(6))?);
             assert!(matches!(
-                queue(db, "work", &ReviewTarget::Workspace, "claude", &Default::default(), 7)?,
+                queue(db, "work", &ReviewTarget::Workspace, "claude", &Default::default(), UnixTime::from_seconds(7))?,
                 Queued::New(id) if id > first.id()
             ));
             Ok(())
@@ -103,11 +104,17 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )?
             .id();
-            start(db, first, "one", "base", 2)?;
-            assert!(finish(db, first, "claude", &output(2, Vec::new()), 3)?);
+            start(db, first, "one", "base", UnixTime::from_seconds(2))?;
+            assert!(finish(
+                db,
+                first,
+                "claude",
+                &output(2, Vec::new()),
+                UnixTime::from_seconds(3)
+            )?);
             let finding = FindingId {
                 review: first,
                 number: 1,
@@ -116,7 +123,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 review: first,
                 number: 2,
             };
-            reply(db, finding, "Is this reachable?", 4)?;
+            reply(db, finding, "Is this reachable?", UnixTime::from_seconds(4))?;
             resolve(db, finding, Some(&Outcome::Fixed))?;
             let duplicate = Outcome::new(OutcomeKind::Duplicate, None, None, Some(finding))?;
             resolve(db, other, Some(&duplicate))?;
@@ -129,7 +136,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                         number: 9
                     },
                     "x",
-                    5
+                    UnixTime::from_seconds(5)
                 )
                 .is_err()
             );
@@ -140,10 +147,10 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 &ReviewTarget::Workspace,
                 "codex",
                 &Default::default(),
-                6,
+                UnixTime::from_seconds(6),
             )?
             .id();
-            start(db, second, "two", "base", 7)?;
+            start(db, second, "two", "base", UnixTime::from_seconds(7))?;
             let checked = vec![
                 Checked {
                     finding,
@@ -155,12 +162,18 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                     result: FixCheck::StillPresent,
                 },
             ];
-            assert!(finish(db, second, "claude", &output(0, checked), 8)?);
+            assert!(finish(
+                db,
+                second,
+                "claude",
+                &output(0, checked),
+                UnixTime::from_seconds(8)
+            )?);
 
             let review = load(db, first)?.unwrap();
             assert_eq!(review.workspace, "fix-login");
             assert_eq!(review.state, ReviewState::Finished);
-            assert_eq!(review.duration(), Some(1));
+            assert_eq!(review.duration(), Some(std::time::Duration::from_secs(1)));
             assert_eq!(review.findings[0].replies[0].body, "Is this reachable?");
             assert_eq!(
                 review.findings[0].check,
@@ -225,15 +238,21 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )?
             .id();
-            start(db, id, "head", "base", 2)?;
+            start(db, id, "head", "base", UnixTime::from_seconds(2))?;
             assert_eq!(requeue_running(db, &[])?, 1);
             let review = load(db, id)?.unwrap();
             assert_eq!((review.state, review.head), (ReviewState::Queued, None));
             assert_eq!(queued(db)?, [id]);
-            assert!(fail(db, id, Some("codex"), FailureReason::RateLimit, 3)?);
+            assert!(fail(
+                db,
+                id,
+                Some("codex"),
+                FailureReason::RateLimit,
+                UnixTime::from_seconds(3)
+            )?);
             let review = load(db, id)?.unwrap();
             assert_eq!(review.failure, Some(FailureReason::RateLimit));
             Ok(())
@@ -254,11 +273,17 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
-                1,
+                UnixTime::from_seconds(1),
             )?
             .id();
-            start(db, id, "head", "base", 2)?;
-            finish(db, id, "claude", &output(1, Vec::new()), 3)?;
+            start(db, id, "head", "base", UnixTime::from_seconds(2))?;
+            finish(
+                db,
+                id,
+                "claude",
+                &output(1, Vec::new()),
+                UnixTime::from_seconds(3),
+            )?;
             reply(
                 db,
                 FindingId {
@@ -266,7 +291,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
                     number: 1,
                 },
                 "Why?",
-                4,
+                UnixTime::from_seconds(4),
             )?;
             db.execute("DELETE FROM workspaces WHERE id='work'", [])?;
             let left: i64 = db.query_row(

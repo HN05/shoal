@@ -13,6 +13,7 @@ use crate::{
     process::{execution::Processes, identity::Scan},
     protocol::TurnEnd,
     state::{AgentState, ExecutionState, TurnFailure},
+    time::UnixTime,
 };
 
 pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
@@ -258,13 +259,13 @@ impl Manager {
             self.record_agent_session(&space, execution.as_deref(), session)
                 .await?;
         }
-        let now = i64::try_from(crate::time::unix_seconds())?;
+        let now = UnixTime::now();
         let report = Report {
             space: space.id().to_owned(),
             state,
             execution,
             at: now,
-            prompt_cache_expires_at: expiry(now, ending.prompt_cache)?,
+            prompt_cache_expires_at: ending.prompt_cache.map(|lifetime| now + lifetime),
             failed: ending.failed,
         };
         let saved = self.store.run(move |db| save(db, &report)).await?;
@@ -361,7 +362,7 @@ impl TurnEnding {
 
 /// The status of a report for a space that takes none, such as a chat
 /// whose agent stopped before the report arrived, which is not recorded.
-fn unrecorded(state: AgentState, now: i64) -> AgentStatus {
+fn unrecorded(state: AgentState, now: UnixTime) -> AgentStatus {
     AgentStatus {
         state,
         since: now,
@@ -374,18 +375,11 @@ struct Report {
     space: String,
     state: AgentState,
     execution: Option<String>,
-    /// When it arrived, in Unix seconds.
-    at: i64,
-    prompt_cache_expires_at: Option<i64>,
+    /// When it arrived.
+    at: UnixTime,
+    prompt_cache_expires_at: Option<UnixTime>,
     /// Whether a failure ended the agent's turn.
     failed: bool,
-}
-
-/// When a prompt cache that lives `lifetime` from `now` expires.
-fn expiry(now: i64, lifetime: Option<Duration>) -> Result<Option<i64>> {
-    lifetime
-        .map(|lifetime| Ok(now.saturating_add(i64::try_from(lifetime.as_secs())?)))
-        .transpose()
 }
 
 /// Record `report` with the turn retries it settles, in one transaction:

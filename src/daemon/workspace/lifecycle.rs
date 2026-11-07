@@ -1112,7 +1112,7 @@ impl Manager {
         self.check_access(&workspace.path, checked).await?;
         let grace = self.workspace_settings(workspace).await?.cleanup.grace();
         let cleanup_at = self.claim_grace(&workspace.id, grace).await?;
-        Ok(crate::time::unix_seconds() < cleanup_at)
+        Ok(crate::time::UnixTime::now() < cleanup_at)
     }
 
     /// Forget a workspace whose directory was deleted outside Shoal.

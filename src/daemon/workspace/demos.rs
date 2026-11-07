@@ -188,7 +188,7 @@ pub(super) fn record(
             execution,
             workspace,
             launch.name,
-            crate::time::unix_seconds() as i64,
+            crate::time::UnixTime::now(),
             serde_json::to_string(launch)?
         ],
     )?;
@@ -206,7 +206,7 @@ fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
-            row.get::<_, i64>(3)?,
+            row.get(3)?,
             row.get::<_, String>(4)?,
             row.get::<_, bool>(5)?,
         ))
@@ -218,7 +218,7 @@ fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
             workspace_id,
             workspace,
             execution_id,
-            started_at: started_at as u64,
+            started_at,
             has_run,
             url: launch.url(),
             launch,

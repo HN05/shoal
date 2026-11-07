@@ -1,3 +1,4 @@
+use crate::time::UnixTime;
 use anyhow::Result;
 
 use super::*;
@@ -145,7 +146,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
             execution: "e".into(),
             ends_turns,
             sent: Default::default(),
-            now: || 1_700_000_000,
+            now: || UnixTime::from_seconds(1_700_000_000),
         };
         reporter.run(events).await;
         assert_eq!(
@@ -175,7 +176,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
         execution: "e".into(),
         ends_turns: true,
         sent: Default::default(),
-        now: || 1_700_000_000,
+        now: || UnixTime::from_seconds(1_700_000_000),
     };
     reporter.run(events).await;
     assert_eq!(*methods.lock().unwrap(), ["report_turn_failure"]);
@@ -286,7 +287,7 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         execution: "e".into(),
         ends_turns: true,
         sent: Default::default(),
-        now: || 1_700_000_000,
+        now: || UnixTime::from_seconds(1_700_000_000),
     };
     reporter.run(events).await;
     // The failure took the retry away, so recovery clears the reset alone.
@@ -325,7 +326,7 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
         execution: "e".into(),
         ends_turns: false,
         sent: Default::default(),
-        now: || 1_700_000_000,
+        now: || UnixTime::from_seconds(1_700_000_000),
     };
     reporter.run(events).await;
     assert_eq!(
@@ -367,7 +368,7 @@ async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
         execution: "e".into(),
         ends_turns: false,
         sent: Default::default(),
-        now: || 1_700_000_000,
+        now: || UnixTime::from_seconds(1_700_000_000),
     };
     reporter.run(events).await;
     // The reset the daemon dropped goes again, and the retry it still shows

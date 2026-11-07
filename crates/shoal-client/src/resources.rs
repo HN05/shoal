@@ -183,7 +183,7 @@ pub struct ResourceLease {
     /// The pool member actually granted.
     pub resource: String,
     pub reason: Option<String>,
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

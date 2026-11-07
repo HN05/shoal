@@ -28,14 +28,14 @@ impl Manager {
     }
 
     /// Keep when the upstream of `execution`'s proxy refuses requests
-    /// until, Unix seconds such as a usage limit's reset, which a retry of
+    /// until, such as a usage limit's reset, which a retry of
     /// its agent's turn waits past; `None`, once it answers again, forgets
     /// it, so a later failure backs off as its own.
     pub async fn report_upstream_reset(
         &self,
         selector: &SpaceSelector,
         execution: String,
-        resets_at: Option<i64>,
+        resets_at: Option<crate::time::UnixTime>,
     ) -> Result<()> {
         self.workspace(selector).await?;
         self.record_upstream_reset(execution, resets_at).await

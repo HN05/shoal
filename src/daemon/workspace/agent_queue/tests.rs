@@ -506,7 +506,7 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
     let held = add(&manager, &repo, "held").await.entry.unwrap();
     add(&manager, &repo, "abandoned").await;
     manager.hold_queue_entry(&held.id).await.unwrap();
-    let past = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64 - 1;
+    let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
     manager
         .store
         .run(move |db| {
@@ -1087,7 +1087,7 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
     );
     // The second wrapper never reattaches; its restore expires and leaves
     // the recovery record to `shoal resume`.
-    let past = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64 - 1;
+    let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
     restarted
         .store
         .run(move |db| {
@@ -1349,7 +1349,7 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
         .entry
         .unwrap();
     // Its worker ended, as on a restart, before opening the workspace.
-    let past = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64 - 1;
+    let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
     manager
         .store
         .run(move |db| {

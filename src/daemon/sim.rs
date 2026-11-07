@@ -22,7 +22,7 @@ use crate::{
     daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
     model::Workspace,
     state::WorkspaceState,
-    time::unix_seconds,
+    time::UnixTime,
     validate,
 };
 
@@ -59,7 +59,7 @@ impl SimulatorExt for Simulator {
             lease_name: None,
             reason: None,
             state: SimulatorState::Creating,
-            last_used: unix_seconds(),
+            last_used: UnixTime::now(),
             error: None,
             installed_apps: Some(0),
         }
@@ -74,7 +74,7 @@ impl SimulatorExt for Simulator {
     }
 
     fn finish_boot(&mut self, workspace_id: String, result: &Result<()>) {
-        self.last_used = unix_seconds();
+        self.last_used = UnixTime::now();
         self.last_workspace_id = Some(workspace_id);
         match result {
             Ok(()) => self.state = SimulatorState::Leased,
@@ -550,7 +550,7 @@ impl Manager {
         sim.last_workspace_id = sim.workspace_id.take();
         sim.lease_name = None;
         sim.state = SimulatorState::Idle;
-        sim.last_used = unix_seconds();
+        sim.last_used = UnixTime::now();
         self.save_sim(&sim).await?;
         self.release_simulator_access(workspace.id, name).await?;
         Ok(())
@@ -585,7 +585,8 @@ impl Manager {
         let idle_seconds = self.config().machine.simulators.idle_seconds;
         for mut sim in self.list_simulators(None).await? {
             if sim.workspace_id.is_none()
-                && unix_seconds().saturating_sub(sim.last_used) >= idle_seconds
+                && UnixTime::now().duration_since(sim.last_used)
+                    >= std::time::Duration::from_secs(idle_seconds)
             {
                 self.delete_sim(&mut sim).await?;
             }

@@ -13,7 +13,7 @@ use crate::{
     git::{self, default_branch::DefaultBranchLookup},
     model::{BranchTarget, KeptBranch, Repository, Workspace},
     removal::RemovalResult,
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 /// A remembered branch, at the commit removal left it on.
@@ -22,7 +22,7 @@ struct Record {
     repository_id: String,
     branch: String,
     head: String,
-    kept_at: u64,
+    kept_at: UnixTime,
 }
 
 /// Where a kept branch's commits may also be.
@@ -80,7 +80,7 @@ impl Manager {
             repository_id: repo.id,
             branch,
             head,
-            kept_at: unix_seconds(),
+            kept_at: UnixTime::now(),
         })
         .await
     }
@@ -257,7 +257,7 @@ impl Manager {
                         record.repository_id,
                         record.branch,
                         record.head,
-                        record.kept_at as i64
+                        record.kept_at
                     ],
                 )?;
                 Ok(())
@@ -279,7 +279,7 @@ impl Manager {
                             repository_id: row.get(0)?,
                             branch: row.get(1)?,
                             head: row.get(2)?,
-                            kept_at: row.get::<_, i64>(3)?.max(0) as u64,
+                            kept_at: row.get(3)?,
                         })
                     })?
                     .collect::<rusqlite::Result<Vec<_>>>()?;

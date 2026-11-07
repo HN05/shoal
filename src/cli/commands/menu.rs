@@ -212,7 +212,7 @@ enum Row {
     /// may reuse the number.
     Approval {
         number: ItemNumber,
-        created_at: u64,
+        created_at: crate::time::UnixTime,
         workspace: String,
     },
     NeedsInput(String),
@@ -509,15 +509,12 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
 /// One aligned row per notification: when, its workspace, and the message,
 /// dimmed once read and cut to fit the picker.
 fn notification_labels(notifications: &[Notification]) -> Vec<String> {
-    let now = crate::time::unix_seconds() as i64;
+    let now = crate::time::UnixTime::now();
     let cells = notifications
         .iter()
         .map(|notification| {
             [
-                (
-                    crate::time::local_ago(notification.created_at, now),
-                    Some(Style::Muted),
-                ),
+                (notification.created_at.local_ago(now), Some(Style::Muted)),
                 (
                     notification.workspace.clone().unwrap_or_else(|| "-".into()),
                     Some(Style::Heading),

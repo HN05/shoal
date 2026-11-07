@@ -1,6 +1,6 @@
 use super::*;
 
-fn leftover(pid: u32, command: &str, started_at: u64) -> Leftover {
+fn leftover(pid: u32, command: &str, started_at: UnixTime) -> Leftover {
     Leftover {
         pid,
         command: command.into(),
@@ -15,12 +15,12 @@ fn a_notice_names_each_leftover_and_how_to_stop_them() {
         "target/debug/shoal run --workspace summary -- sh -c {}",
         "x".repeat(80)
     );
-    let now = 1_000_000;
+    let now = UnixTime::from_seconds(1_000_000);
     let several = notice(
         "workspace",
         &[
-            leftover(4121, &long, now - 41 * 60),
-            leftover(4125, "sh", now - 30),
+            leftover(4121, &long, now - Duration::from_secs(41 * 60)),
+            leftover(4125, "sh", now - Duration::from_secs(30)),
         ],
         now,
     );
@@ -30,7 +30,15 @@ fn a_notice_names_each_leftover_and_how_to_stop_them() {
     ] {
         assert!(several.contains(part), "{part:?} in {several}");
     }
-    let one = notice("chat", &[leftover(7, "sleep 300", now - 3 * 86_400)], now);
+    let one = notice(
+        "chat",
+        &[leftover(
+            7,
+            "sleep 300",
+            now - Duration::from_secs(3 * 86_400),
+        )],
+        now,
+    );
     for part in ["1 process from this chat", "sleep 300 (PID 7, 3 days)."] {
         assert!(one.contains(part), "{part:?} in {one}");
     }
@@ -38,9 +46,9 @@ fn a_notice_names_each_leftover_and_how_to_stop_them() {
 
 #[test]
 fn running_times_name_the_largest_whole_unit() {
-    assert_eq!(running_time(59), "under 1 min");
-    assert_eq!(running_time(60), "1 min");
-    assert_eq!(running_time(119 * 60), "119 min");
-    assert_eq!(running_time(5 * 3600), "5 h");
-    assert_eq!(running_time(50 * 3600), "2 days");
+    assert_eq!(running_time(Duration::from_secs(59)), "under 1 min");
+    assert_eq!(running_time(Duration::from_secs(60)), "1 min");
+    assert_eq!(running_time(Duration::from_secs(119 * 60)), "119 min");
+    assert_eq!(running_time(Duration::from_secs(5 * 3600)), "5 h");
+    assert_eq!(running_time(Duration::from_secs(50 * 3600)), "2 days");
 }

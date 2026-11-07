@@ -18,24 +18,24 @@ use crate::{
 fn waits_double_from_half_a_minute_to_a_quarter_hour_spread_a_fifth() {
     let failure = TurnFailure::ServerError;
     let waits: Vec<_> = (1..=8)
-        .map(|attempt| delay(failure, attempt, 0.5))
+        .map(|attempt| delay(failure, attempt, 0.5).as_secs())
         .collect();
     assert_eq!(waits, [30, 60, 120, 240, 480, 900, 900, 900]);
-    assert_eq!(delay(failure, 1, 0.0), 24);
-    assert_eq!(delay(failure, 1, 0.999_999), 36);
-    assert_eq!(delay(failure, u32::MAX, 0.5), 900);
+    assert_eq!(delay(failure, 1, 0.0).as_secs(), 24);
+    assert_eq!(delay(failure, 1, 0.999_999).as_secs(), 36);
+    assert_eq!(delay(failure, u32::MAX, 0.5).as_secs(), 900);
 }
 
 #[test]
 fn usage_limits_back_off_to_hourly_attempts_without_a_cap() {
     let failure = TurnFailure::RateLimited;
     let waits: Vec<_> = (1..=10)
-        .map(|attempt| delay(failure, attempt, 0.5))
+        .map(|attempt| delay(failure, attempt, 0.5).as_secs())
         .collect();
     assert_eq!(waits, [30, 60, 120, 240, 480, 960, 1920, 3600, 3600, 3600]);
-    assert_eq!(delay(failure, u32::MAX, 0.5), 3600);
-    assert_eq!(delay(failure, 10, 0.0), 2880);
-    assert_eq!(delay(failure, 10, 0.999_999), 4320);
+    assert_eq!(delay(failure, u32::MAX, 0.5).as_secs(), 3600);
+    assert_eq!(delay(failure, 10, 0.0).as_secs(), 2880);
+    assert_eq!(delay(failure, 10, 0.999_999).as_secs(), 4320);
 }
 
 /// A workspace whose connected `claude` agent runs in the returned
@@ -129,12 +129,19 @@ async fn report(manager: &Manager, workspace: &Workspace, execution: &str, state
 
 /// Make the pending retry due now and deliver it.
 /// Deliver every pending retry, however far off it is due.
-async fn deliver_now(manager: &Manager) -> Option<i64> {
-    manager.deliver_turn_retries_at(i64::MAX).await.unwrap()
+async fn deliver_now(manager: &Manager) -> Option<UnixTime> {
+    manager
+        .deliver_turn_retries_at(UnixTime::MAX)
+        .await
+        .unwrap()
 }
 
-fn now() -> i64 {
-    i64::try_from(crate::time::unix_seconds()).unwrap()
+fn now() -> UnixTime {
+    UnixTime::now()
+}
+
+fn secs(seconds: u64) -> Duration {
+    Duration::from_secs(seconds)
 }
 
 async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
@@ -159,14 +166,14 @@ async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() 
         (TurnFailure::Overloaded, 1, false)
     );
     assert!(
-        (before + 24..=after + 36).contains(&pending.due_at),
+        (before + secs(24)..=after + secs(36)).contains(&pending.due_at),
         "{pending:?}"
     );
     // A second report of the same failure, such as from a proxy, keeps it.
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     assert_eq!(retry(&manager, &workspace).await.unwrap(), pending);
     // Nothing is delivered before it is due.
-    let early = manager.deliver_turn_retries_at(pending.due_at - 1);
+    let early = manager.deliver_turn_retries_at(pending.due_at - secs(1));
     assert_eq!(early.await.unwrap(), Some(pending.due_at));
     assert!(messages(&manager, &workspace).await.is_empty());
 
@@ -247,14 +254,17 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     fail(&manager, &full, &full_execution, TurnFailure::Overloaded).await;
     fail(&manager, &open, &open_execution, TurnFailure::Overloaded).await;
     let at = now();
-    let next = manager.deliver_turn_retries_at(at + 3600).await.unwrap();
+    let next = manager
+        .deliver_turn_retries_at(at + secs(3600))
+        .await
+        .unwrap();
     assert_eq!(messages(&manager, &open).await.len(), 1);
     assert!(retry(&manager, &open).await.unwrap().delivered);
     // The full queue's retry waits the first delay again rather than
     // retrying at once.
     let deferred = retry(&manager, &full).await.unwrap();
     assert!(!deferred.delivered);
-    assert_eq!(deferred.due_at, at + 3600 + 30);
+    assert_eq!(deferred.due_at, at + secs(3600 + 30));
     assert_eq!(next, Some(deferred.due_at));
 }
 
@@ -323,7 +333,10 @@ async fn an_outage_is_retried_until_it_ends_without_a_cap() {
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     let pending = retry(&manager, &workspace).await.unwrap();
     assert_eq!((pending.attempt, pending.delivered), (21, false));
-    assert!(pending.due_at - now() <= 900 * 6 / 5, "{pending:?}");
+    assert!(
+        pending.due_at.duration_since(now()) <= secs(900 * 6 / 5),
+        "{pending:?}"
+    );
     assert!(manager.notifications(false, 10).await.unwrap().is_empty());
 }
 
@@ -332,7 +345,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
     // Resets far past any clock and long gone, so however slowly the test
     // runs, each wait is the reset's or the backoff's.
-    let reset = 4_000_000_000_000;
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
     // The proxy's report arrives first, as it does for Codex.
     manager
         .report_upstream_reset(
@@ -344,7 +357,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
         .unwrap();
     fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
     let pending = retry(&manager, &workspace).await.unwrap();
-    assert_eq!(pending.due_at, reset + RESET_MARGIN_SECS);
+    assert_eq!(pending.due_at, reset + RESET_MARGIN);
     assert_eq!(deliver_now(&manager).await, None);
 
     // The agent's own report arrives first, as Claude's may.
@@ -363,14 +376,14 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let held = retry(&manager, &other).await.unwrap();
     assert_eq!(
         (held.attempt, held.due_at),
-        (early.attempt, reset + RESET_MARGIN_SECS)
+        (early.attempt, reset + RESET_MARGIN)
     );
     // A reset that has passed holds nothing back.
     manager
         .report_upstream_reset(
             &SpaceSelector::from(&other.name),
             execution.clone(),
-            Some(0),
+            Some(UnixTime::EPOCH),
         )
         .await
         .unwrap();
@@ -405,7 +418,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
 #[tokio::test]
 async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
-    let reset = 4_000_000_000_000;
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
     manager
         .report_upstream_reset(
             &SpaceSelector::from(&workspace.name),
@@ -429,7 +442,7 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
 }
 
 /// The reset `execution`'s proxy reported, as the daemon keeps it.
-async fn stored_reset(manager: &Manager, execution: &str) -> Option<i64> {
+async fn stored_reset(manager: &Manager, execution: &str) -> Option<UnixTime> {
     let execution = execution.to_owned();
     manager
         .store
@@ -443,7 +456,7 @@ async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
     report(&manager, &workspace, &execution, AgentState::Idle).await;
     let (id, execution) = (workspace.id.clone(), execution.clone());
-    let reset = 4_000_000_000_000;
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
     let due_at = manager
         .store
         .run(move |db| {
@@ -451,22 +464,33 @@ async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
             // Each runs whole: the reset is kept before the failure is
             // recorded, so the retry reads it ...
             record_reset(db, &execution, Some(reset))?;
-            record_failure(db, &id, &execution, failure, 1000, 0.5)?;
+            record_failure(
+                db,
+                &id,
+                &execution,
+                failure,
+                UnixTime::from_seconds(1000),
+                0.5,
+            )?;
             let first = get(db, &id)?.context("retry after the reset")?.due_at;
             cancel(db, &id)?;
             record_reset(db, &execution, None)?;
             // ... or the failure is recorded first, and the reset holds it.
-            record_failure(db, &id, &execution, failure, 1000, 0.5)?;
+            record_failure(
+                db,
+                &id,
+                &execution,
+                failure,
+                UnixTime::from_seconds(1000),
+                0.5,
+            )?;
             assert!(get(db, &id)?.context("retry")?.due_at < reset);
             assert!(record_reset(db, &execution, Some(reset))?);
             let second = get(db, &id)?.context("held retry")?.due_at;
             Ok::<_, anyhow::Error>((first, second))
         })
         .await?;
-    assert_eq!(
-        due_at,
-        (reset + RESET_MARGIN_SECS, reset + RESET_MARGIN_SECS)
-    );
+    assert_eq!(due_at, (reset + RESET_MARGIN, reset + RESET_MARGIN));
     Ok(())
 }
 
@@ -480,9 +504,10 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
         .store
         .run(move |db| {
             let failure = TurnFailure::RateLimited;
-            let mut now = 1000;
+            let start = UnixTime::from_seconds(1000);
+            let mut now = start;
             // Drive the scheduling clock, without sleeping through usage limits.
-            while now < 1000 + 8 * 24 * 60 * 60 {
+            while now < start + secs(8 * 24 * 60 * 60) {
                 record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
                 let pending = get(db, &id)?.context("pending usage-limit retry")?;
                 assert!(pending.due_at > now);

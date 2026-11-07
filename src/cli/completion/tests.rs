@@ -1,5 +1,6 @@
 use super::*;
 use crate::test_support::install_test_script;
+use crate::time::UnixTime;
 use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
@@ -189,7 +190,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 agent: "codex".into(),
                 workspace: None,
                 pid: 1,
-                started_at: 0,
+                started_at: UnixTime::from_seconds(0),
                 origin: Some(Origin::created(HostName::Zmx, "chat-session".into())),
                 tmp_dir: None,
                 root_dir: None,
@@ -268,7 +269,7 @@ fn resume_completes_resumable_spaces() {
         agent: "claude".into(),
         workspace: None,
         pid: 1,
-        started_at: 0,
+        started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir: None,
         root_dir: None,

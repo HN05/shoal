@@ -164,7 +164,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
 
     // An expired record is not restorable even before the sweep deletes it.
     let id = workspace.id.clone();
-    let expires_at = removed.expires_at as i64;
+    let expires_at = removed.expires_at;
     manager
         .store
         .run(move |db| {
@@ -355,7 +355,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         .unwrap();
     // Both expire before a restore's claim would end.
     let id = workspace.id.clone();
-    let soon = (crate::time::unix_seconds() + RESTORE_CLAIM.as_secs() / 2) as i64;
+    let soon = crate::time::UnixTime::now() + RESTORE_CLAIM / 2;
     manager
         .store
         .run(move |db| {
@@ -373,7 +373,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         })
         .await
         .unwrap();
-    let floor = crate::time::unix_seconds() + RESTORE_CLAIM.as_secs();
+    let floor = crate::time::UnixTime::now() + RESTORE_CLAIM;
     let claimed = manager
         .claim_removed_workspace(&"topic".into())
         .await
@@ -384,7 +384,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
     assert_eq!(saved.expires_at, claimed.expires_at);
     assert_eq!(saved.checkpoint.expires_at, claimed.checkpoint.expires_at);
     let id = workspace.id.clone();
-    let checkpoint_expiry: i64 = manager
+    let checkpoint_expiry: crate::time::UnixTime = manager
         .store
         .run(move |db| {
             Ok(db.query_row(
@@ -395,7 +395,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         })
         .await
         .unwrap();
-    assert_eq!(checkpoint_expiry as u64, claimed.checkpoint.expires_at);
+    assert_eq!(checkpoint_expiry, claimed.checkpoint.expires_at);
     manager.restore_workspace(&"topic".into()).await.unwrap();
 }
 

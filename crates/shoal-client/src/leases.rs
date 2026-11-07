@@ -156,7 +156,7 @@ pub async fn simulator_catalog(
 }
 
 /// Up to `limit` audited simulator changes of `workspace`, or of every
-/// workspace, before the Unix time `before`.
+/// workspace, older than the audit ID `before`.
 pub async fn simulator_history(
     daemon: &impl Daemon,
     workspace: Option<SpaceSelector>,

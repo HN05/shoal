@@ -1,5 +1,6 @@
 use super::*;
 use crate::daemon::store::Store;
+use crate::time::UnixTime;
 
 async fn database() -> Result<(tempfile::TempDir, Store)> {
     let root = tempfile::tempdir()?;
@@ -46,7 +47,7 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
                  ('wrapper','restore','repo','wrapper','codex',NULL,NULL,'wrapper','starting',0,99,'workspace');",
             )?;
             let held = HashSet::from(["held".to_owned()]);
-            let failures = expire_starts(db, &held, 100)?;
+            let failures = expire_starts(db, &held, UnixTime::from_seconds(100))?;
             assert_eq!(failures.len(), 2);
             assert!(failures.contains(&FailedStart::UnopenedLaunch("launch".into())));
             assert!(failures.contains(&FailedStart::UnstartedRestore("restore".into())));
@@ -54,7 +55,7 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
                 remaining(db)?,
                 ["boundary", "held", "queued", "recent", "unseen", "wrapper"]
             );
-            assert!(expire_starts(db, &held, 100)?.is_empty());
+            assert!(expire_starts(db, &held, UnixTime::from_seconds(100))?.is_empty());
             Ok(())
         })
         .await
@@ -71,11 +72,14 @@ async fn a_failed_deletion_rolls_back_the_whole_expiry() -> Result<()> {
                  WHEN (SELECT count(*) FROM agent_queue) = 1
                  BEGIN SELECT RAISE(ABORT, 'expiry rejected'); END;",
             )?;
-            expire_starts(db, &HashSet::new(), 100)
+            expire_starts(db, &HashSet::new(), UnixTime::from_seconds(100))
                 .expect_err("expiry must fail on the second deletion");
             assert_eq!(remaining(db)?, ["launch", "opened", "restore"]);
             db.execute_batch("DROP TRIGGER fail_expiry;")?;
-            assert_eq!(expire_starts(db, &HashSet::new(), 100)?.len(), 2);
+            assert_eq!(
+                expire_starts(db, &HashSet::new(), UnixTime::from_seconds(100))?.len(),
+                2
+            );
             assert!(remaining(db)?.is_empty());
             Ok(())
         })

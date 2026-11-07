@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 
 // Reconstruct old schemas from a frozen pre-refactor snapshot, independently
 // of MIGRATIONS, so missing or misnumbered steps cannot fix their own fixture.
@@ -987,8 +988,8 @@ fn removal_snapshots_become_checkpoints_their_records_name() -> Result<()> {
             head: "aaaa".into(),
             commit: "bbbb".into(),
             files_omitted: true,
-            created_at: 100,
-            expires_at: 200,
+            created_at: UnixTime::from_seconds(100),
+            expires_at: UnixTime::from_seconds(200),
         }
     );
     let removed: String =
@@ -1528,7 +1529,7 @@ async fn migrates_semaphore_leases_and_definitions_from_version_eight() {
                 assert_eq!(leases.len(), 1);
                 assert_eq!(leases[0].id, "lease");
                 assert_eq!(leases[0].mode, crate::daemon::resources::LockMode::Permit);
-                assert_eq!(leases[0].created_at, 123);
+                assert_eq!(leases[0].created_at, UnixTime::from_seconds(123));
                 let json: String =
                     db.query_row("SELECT definition FROM resource_pools", [], |row| {
                         row.get(0)

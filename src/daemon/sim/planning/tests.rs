@@ -35,7 +35,7 @@ fn request() -> SimRequest {
     }
 }
 
-fn record(id: &str, apps: Option<usize>, last_used: u64) -> Simulator {
+fn record(id: &str, apps: Option<usize>, last_used: i64) -> Simulator {
     Simulator {
         id: id.into(),
         udid: Some(id.into()),
@@ -46,7 +46,7 @@ fn record(id: &str, apps: Option<usize>, last_used: u64) -> Simulator {
         lease_name: None,
         reason: None,
         state: SimulatorState::Idle,
-        last_used,
+        last_used: crate::time::UnixTime::from_seconds(last_used),
         error: None,
         installed_apps: apps,
     }

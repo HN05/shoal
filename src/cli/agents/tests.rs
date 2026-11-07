@@ -1,3 +1,4 @@
+use crate::time::UnixTime;
 use std::fs;
 
 use super::*;
@@ -47,7 +48,7 @@ fn chat(mode: &str, repository_id: Option<&str>, tmp_dir: Option<std::path::Path
         agent: "codex".into(),
         workspace: None,
         pid: 1,
-        started_at: 0,
+        started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir,
         root_dir: None,

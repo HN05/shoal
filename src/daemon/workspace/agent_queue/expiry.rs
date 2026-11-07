@@ -18,7 +18,7 @@ pub(super) enum FailedStart {
 pub(super) fn expire_starts(
     db: &mut Connection,
     held: &HashSet<String>,
-    cutoff: i64,
+    cutoff: crate::time::UnixTime,
 ) -> Result<Vec<FailedStart>> {
     let tx = db.transaction()?;
     let stale = tx

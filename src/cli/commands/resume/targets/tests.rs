@@ -1,5 +1,6 @@
 use super::*;
 use crate::model::Workspace;
+use crate::time::UnixTime;
 
 fn spaces() -> Spaces {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({
@@ -20,7 +21,7 @@ fn spaces() -> Spaces {
         agent: "claude".into(),
         workspace: None,
         pid: 1,
-        started_at: 0,
+        started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir: None,
         root_dir: None,

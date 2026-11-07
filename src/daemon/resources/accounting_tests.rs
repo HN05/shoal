@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 
 fn lease(scope: Scope, pool: &str, resource: &str, mode: LockMode) -> ResourceLease {
     ResourceLease {
@@ -11,7 +12,7 @@ fn lease(scope: Scope, pool: &str, resource: &str, mode: LockMode) -> ResourceLe
         name: "default".into(),
         resource: resource.into(),
         reason: None,
-        created_at: 0,
+        created_at: UnixTime::from_seconds(0),
     }
 }
 

@@ -3,7 +3,7 @@
 //! on when the next second begins.
 use std::time::Duration;
 
-use anyhow::Result;
+use crate::time::UnixTime;
 
 #[derive(Default)]
 pub(crate) struct SettleClock {
@@ -14,13 +14,13 @@ pub(crate) struct SettleClock {
 }
 
 impl SettleClock {
-    /// The current Unix second.
-    pub(super) fn unix_seconds(&self) -> Result<i64> {
+    /// The current time.
+    pub(super) fn now(&self) -> UnixTime {
         #[cfg(test)]
         if let Some(stopped) = &*self.stopped.lock().unwrap() {
-            return Ok(stopped.now);
+            return stopped.now;
         }
-        Ok(i64::try_from(crate::time::unix_seconds())?)
+        UnixTime::now()
     }
 
     /// Return once `duration`, in whole seconds, has passed.
@@ -44,13 +44,13 @@ impl SettleClock {
 
 #[cfg(test)]
 struct Stopped {
-    now: i64,
+    now: UnixTime,
     sleepers: Vec<Sleeper>,
 }
 
 #[cfg(test)]
 struct Sleeper {
-    end: i64,
+    end: UnixTime,
     wake: tokio::sync::oneshot::Sender<()>,
 }
 
@@ -59,7 +59,7 @@ impl SettleClock {
     /// Stop the clock at the current second; only [`Self::advance`] moves it
     /// after.
     pub(crate) fn stop(&self) {
-        let now = self.unix_seconds().unwrap();
+        let now = self.now();
         *self.stopped.lock().unwrap() = Some(Stopped {
             now,
             sleepers: Vec::new(),
@@ -98,7 +98,7 @@ impl SettleClock {
         {
             let mut stopped = self.stopped.lock().unwrap();
             let stopped = stopped.as_mut()?;
-            let end = stopped.now + i64::try_from(duration.as_secs()).unwrap();
+            let end = stopped.now + duration;
             stopped.sleepers.push(Sleeper { end, wake });
         }
         self.sleeping.notify_waiters();

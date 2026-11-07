@@ -1,4 +1,5 @@
 use super::*;
+use crate::time::UnixTime;
 
 fn demo(cmd: &[&str]) -> Demo {
     Demo {
@@ -101,7 +102,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
             workspace_id: "id".into(),
             workspace: "first".into(),
             execution_id: "execution".into(),
-            started_at: 0,
+            started_at: UnixTime::from_seconds(0),
             has_run: true,
             url: None,
             launch,

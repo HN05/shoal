@@ -9,7 +9,7 @@ use crate::{
         workspace_files::Attacher,
     },
     model::Workspace,
-    time::unix_seconds,
+    time::UnixTime,
 };
 
 /// A workspace whose repository gives cleanup a grace period that cannot
@@ -74,7 +74,7 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     fs::remove_file(&file).unwrap();
     manager.sweep_completed().await.unwrap();
     let cleanup_at = manager.cleanup_at(&workspace.id).await.unwrap().unwrap();
-    assert!(cleanup_at >= unix_seconds() + 599 * 60);
+    assert!(cleanup_at >= UnixTime::now() + std::time::Duration::from_secs(599 * 60));
     let status = manager
         .worktree_status(&SpaceSelector::id(&workspace.id))
         .await
@@ -149,7 +149,7 @@ async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
         .await
         .unwrap();
     sweep(&manager).await;
-    assert!(manager.cleanup_at(&workspace.id).await.unwrap().unwrap() > unix_seconds());
+    assert!(manager.cleanup_at(&workspace.id).await.unwrap().unwrap() > UnixTime::now());
     assert!(workspace.path.exists());
 }
 

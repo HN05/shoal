@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Error;
 use tokio::time::Instant;
 
-use crate::model::CheckoutSync;
+use crate::{model::CheckoutSync, time::UnixTime};
 
 /// A sync failing this long needs the user. Measured on the monotonic clock,
 /// which excludes sleep, so a Mac that wakes before its network does is not
@@ -15,16 +15,15 @@ const NEEDS_USER_AFTER: Duration = Duration::from_secs(30 * 60);
 #[derive(Default)]
 pub(super) struct Health {
     fetched: Option<Instant>,
-    /// Unix seconds.
-    synced_at: Option<u64>,
+    synced_at: Option<UnixTime>,
     failure: Option<Failure>,
 }
 
 /// Consecutive failed syncs.
 struct Failure {
     since: Instant,
-    /// `since` in Unix seconds, for display.
-    since_unix: u64,
+    /// `since` on the wall clock, for display.
+    since_unix: UnixTime,
     error: String,
     notified: bool,
 }
@@ -39,7 +38,7 @@ impl Health {
     }
 
     /// Record a finished sync and its error, if it failed.
-    pub(super) fn record(&mut self, error: Option<&Error>, now: Instant, unix: u64) {
+    pub(super) fn record(&mut self, error: Option<&Error>, now: Instant, unix: UnixTime) {
         let Some(error) = error else {
             self.synced_at = Some(unix);
             self.failure = None;

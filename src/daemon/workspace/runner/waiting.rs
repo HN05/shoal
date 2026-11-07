@@ -178,7 +178,7 @@ fn queue_job(db: &mut Connection, repository_id: &str, job: &QueuedJob) -> Resul
             repository_id,
             name,
             QueueState::Queued,
-            crate::time::unix_seconds() as i64,
+            crate::time::UnixTime::now(),
             serde_json::to_string(job)?,
         ],
     )?;

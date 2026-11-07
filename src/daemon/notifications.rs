@@ -143,7 +143,7 @@ pub(crate) fn insert(
         "INSERT INTO notifications(created_at,workspace,workspace_id,subject,kind,message,files)
             VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
-            i64::try_from(crate::time::unix_seconds())?,
+            crate::time::UnixTime::now(),
             about.name,
             about.id,
             about.subject,

@@ -727,7 +727,7 @@ fn session_label(path: &Path) -> String {
 fn stop_time(path: &Path) -> String {
     saved_at(path)
         .map(|stopped| {
-            let time = crate::time::local_minutes(stopped as i64);
+            let time = stopped.local_minutes();
             format!(", stopped {time}")
         })
         .unwrap_or_default()

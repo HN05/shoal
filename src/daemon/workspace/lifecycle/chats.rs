@@ -183,7 +183,7 @@ impl Manager {
             self.check_chat_removal(chat, removal).await?;
             let settings = self.chat_settings(chat).await?;
             let cleanup_at = self.claim_grace(&chat.id, settings.cleanup.grace()).await?;
-            if crate::time::unix_seconds() < cleanup_at {
+            if crate::time::UnixTime::now() < cleanup_at {
                 return Ok(false);
             }
         }

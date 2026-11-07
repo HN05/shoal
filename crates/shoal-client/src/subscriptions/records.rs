@@ -135,8 +135,8 @@ pub struct AgentActivity {
     pub state: ActivityState,
     /// The agent's name, such as `claude`, when known.
     pub agent: Option<String>,
-    /// Unix seconds since the state was reported, when known.
-    pub since: Option<i64>,
+    /// When the state was reported, when known.
+    pub since: Option<crate::time::UnixTime>,
 }
 
 /// An issue, PR or CI run a workspace links, with its state as the daemon
@@ -213,6 +213,5 @@ pub struct Message {
     pub text: String,
     /// Shoal's copies of the attached files.
     pub attachments: Vec<PathBuf>,
-    /// Unix seconds.
-    pub created_at: i64,
+    pub created_at: crate::time::UnixTime,
 }

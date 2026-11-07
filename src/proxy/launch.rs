@@ -1,6 +1,6 @@
 //! The proxy a tracked agent's wrapper runs, the key its requests name,
 //! and the reports it sends the daemon.
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use anyhow::Context;
 use anyhow::Result;
 
@@ -63,7 +63,7 @@ impl Running {
                 execution: execution.to_owned(),
                 ends_turns,
                 sent: Sent::default(),
-                now: crate::time::unix_seconds,
+                now: UnixTime::now,
             };
             self.reporting = Some(tokio::spawn(reporter.run(events)));
         }
@@ -204,8 +204,8 @@ pub(super) struct Reporter {
     /// shown and the same reset is not sent again; a report it did not take
     /// goes again with the next event.
     pub(super) sent: Sent,
-    /// The Unix second now, which reset and retry times count from.
-    pub(super) now: fn() -> u64,
+    /// The time now, which reset and retry times count from.
+    pub(super) now: fn() -> UnixTime,
 }
 
 /// What a [`Reporter`] last told the daemon.
@@ -213,8 +213,8 @@ pub(super) struct Reporter {
 pub(super) struct Sent {
     /// Whether it shows a retry the proxy waits to make.
     retry: bool,
-    /// The Unix second until which the upstream refuses requests.
-    reset: Option<i64>,
+    /// When the upstream refuses requests until.
+    reset: Option<UnixTime>,
 }
 
 impl Reporter {
@@ -303,22 +303,19 @@ impl Reporter {
         .await
     }
 
-    /// The Unix second `wait` from now, saturating rather than wrapping.
-    fn after(&self, wait: std::time::Duration) -> i64 {
-        let now = i64::try_from((self.now)()).unwrap_or(i64::MAX);
-        now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX))
+    /// The time `wait` from now.
+    fn after(&self, wait: std::time::Duration) -> UnixTime {
+        (self.now)() + wait
     }
 
-    /// Tell the daemon the upstream refuses requests until Unix second
-    /// `resets_at`, so a retry of the agent's turn, which the agent itself
+    /// Tell the daemon the upstream refuses requests until `resets_at`, so a retry of the agent's turn, which the agent itself
     /// may report, waits past it. The same reset, a second off for the time
     /// it took to arrive, is not sent again.
-    async fn reset(&mut self, resets_at: i64) {
-        if self
-            .sent
-            .reset
-            .is_some_and(|sent| sent.abs_diff(resets_at) <= 1)
-        {
+    async fn reset(&mut self, resets_at: UnixTime) {
+        let second = std::time::Duration::from_secs(1);
+        if self.sent.reset.is_some_and(|sent| {
+            sent.duration_since(resets_at) <= second && resets_at.duration_since(sent) <= second
+        }) {
             return;
         }
         let delivered = self

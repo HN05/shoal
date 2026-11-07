@@ -717,7 +717,7 @@ fn acquire_lease(
             .reason
             .or_else(|| settings.reason.clone())
             .or(definition.reason.clone()),
-        created_at: i64::try_from(crate::time::unix_seconds())?,
+        created_at: crate::time::UnixTime::now(),
     };
     insert_lease(&tx, &lease)?;
     repositories::record(&tx, &lease)?;
