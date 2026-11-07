@@ -9,6 +9,7 @@ use anyhow::{Context, Result, ensure};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::client::space_names::SpaceSelector;
+use crate::refusal::Reason;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     model::{Chat, HandedBack, PresentSpace, Repository, Workspace},
@@ -243,12 +244,18 @@ impl Manager {
         let Some(chat) = sender_chat else {
             return Attacher::User;
         };
-        match self.running_chat(&SpaceSelector::parse(chat)).await {
-            Ok(chat) => Attacher::Chat {
+        match self.chat(&SpaceSelector::parse(chat)).await {
+            Ok(chat) if chat.restore.is_none() => Attacher::Chat {
                 agent: chat.agent,
                 chat: chat.id,
             },
-            Err(_) => Attacher::User,
+            Ok(_) => Attacher::User,
+            Err(error) => {
+                if !matches!(Reason::of(&error), Some(Reason::NotFound)) {
+                    crate::daemon::log!("attaching chat unknown: {error:#}");
+                }
+                Attacher::User
+            }
         }
     }
 
