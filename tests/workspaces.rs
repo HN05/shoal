@@ -6187,9 +6187,9 @@ fn done_records_a_summary_that_status_shows() {
     fixture.add("audit");
     let refused = fixture.run(&["done", "audit", "--summary", "two\nlines"]);
     assert!(!refused.status.success());
-    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "audit"])["completion"].is_null());
     fixture.ok(&["done", "audit", "--summary", "No leak"]);
-    let status = fixture.ok(&["status", "audit"]);
+    let status = fixture.ok(&["work", "status", "audit"]);
     assert_eq!(status["completion"]["summary"], "No leak", "{status}");
 }
 
