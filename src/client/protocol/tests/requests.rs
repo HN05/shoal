@@ -97,7 +97,7 @@ const REQUESTS: &[&str] = &[
     r#"{"report_proxy_retry":{"workspace":"fix","execution":"e1","retry":{"failure":"overloaded","attempt":2,"next_at":1700000000}}}"#,
     r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
     r#"{"report_attached":{"workspace":"fix","execution":"e1","attached":true}}"#,
-    r#"{"await_agent_wake":{"workspace":"fix","due":true,"interrupted":"e1"}}"#,
+    r#"{"await_agent_wake":{"workspace":"fix","due":true,"hooked":"e1"}}"#,
     r#"{"workspace_agents":{"workspace":"fix"}}"#,
     r#"{"interrupt_turn":{"workspace":"fix","execution":"e1"}}"#,
     // Executions.

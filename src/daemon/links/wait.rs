@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use rusqlite::{OptionalExtension, params};
-use tokio::sync::Notify;
+use tokio::{sync::Notify, time::Instant};
 
 use self::{
     cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending},
@@ -37,6 +37,11 @@ mod wake_log;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
+/// How long no wait may run for an idle agent's updates before its wake hook
+/// counts as gone: longer than the hook waits between attempts of a wait
+/// that keeps failing.
+const UNWATCHED_WAKE_DELAY: Duration = Duration::from_secs(3 * 60);
+
 /// How many spaces the background poll reads at once, and how many of one
 /// space's items: each read runs curl processes, and a slow forge must not
 /// hold back every other space's poll.
@@ -55,8 +60,24 @@ const NO_LINKED_ITEMS: &str = "no linked items of the selected kind; register on
 /// The running wait of each workspace or chat, identified by its
 /// supersession signal. Waits share one cursor per item, so a newer wait
 /// supersedes the older one instead of competing for its updates.
-#[derive(Default, Clone)]
-pub(crate) struct ActiveWaits(Arc<Mutex<HashMap<String, Arc<Notify>>>>);
+#[derive(Clone)]
+pub(crate) struct ActiveWaits {
+    running: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+    /// When the last wait of each space ended.
+    ended: Arc<Mutex<HashMap<String, Instant>>>,
+    /// When the daemon began tracking waits, for a space none ran in since.
+    since: Instant,
+}
+
+impl Default for ActiveWaits {
+    fn default() -> Self {
+        Self {
+            running: Arc::default(),
+            ended: Arc::default(),
+            since: Instant::now(),
+        }
+    }
+}
 
 pub(crate) struct ActiveWait<'a> {
     waits: &'a ActiveWaits,
@@ -68,7 +89,7 @@ impl ActiveWaits {
     pub(crate) fn start(&self, workspace: &str) -> ActiveWait<'_> {
         let superseded = Arc::new(Notify::new());
         let older = self
-            .0
+            .running
             .lock()
             .expect("active waits lock")
             .insert(workspace.to_owned(), superseded.clone());
@@ -80,6 +101,16 @@ impl ActiveWaits {
             workspace: workspace.to_owned(),
             superseded,
         }
+    }
+
+    /// Whether no wait has run for the space `key` for `delay`.
+    fn unwatched_for(&self, key: &str, delay: Duration) -> bool {
+        let running = self.running.lock().expect("active waits lock");
+        if running.contains_key(key) {
+            return false;
+        }
+        let ended = self.ended.lock().expect("active waits lock");
+        ended.get(key).copied().unwrap_or(self.since).elapsed() >= delay
     }
 }
 
@@ -94,8 +125,8 @@ impl ActiveWaits {
         paths: &[Vec<String>],
         operation: impl FnOnce(&[String]) -> Result<()>,
     ) -> Result<()> {
-        let workspaces = workspaces.0.lock().expect("active waits lock");
-        let chats = chats.0.lock().expect("active waits lock");
+        let workspaces = workspaces.running.lock().expect("active waits lock");
+        let chats = chats.running.lock().expect("active waits lock");
         let waiting = |space: &String| workspaces.contains_key(space) || chats.contains_key(space);
         let unwatched = paths
             .iter()
@@ -109,7 +140,10 @@ impl ActiveWaits {
 #[cfg(test)]
 impl ActiveWaits {
     pub(crate) fn is_waiting(&self, key: &str) -> bool {
-        self.0.lock().expect("active waits lock").contains_key(key)
+        self.running
+            .lock()
+            .expect("active waits lock")
+            .contains_key(key)
     }
 }
 
@@ -121,15 +155,17 @@ impl ActiveWait<'_> {
     }
 
     pub(crate) fn is_current(&self) -> bool {
-        self.is_current_in(&self.waits.0.lock().expect("active waits lock"))
+        self.is_current_in(&self.waits.running.lock().expect("active waits lock"))
     }
 }
 
 impl Drop for ActiveWait<'_> {
     fn drop(&mut self) {
-        let mut waits = self.waits.0.lock().expect("active waits lock");
-        if self.is_current_in(&waits) {
-            waits.remove(&self.workspace);
+        let mut running = self.waits.running.lock().expect("active waits lock");
+        if self.is_current_in(&running) {
+            running.remove(&self.workspace);
+            let mut ended = self.waits.ended.lock().expect("active waits lock");
+            ended.insert(self.workspace.clone(), Instant::now());
         }
     }
 }
@@ -360,14 +396,14 @@ impl Manager {
     /// Return once whether the workspace's agent is idle with settled
     /// undelivered messages that wake it or queued updates matches `due`, so a launcher
     /// can prompt an agent that has no hook to wake it, then wait for it to
-    /// take them. With `interrupted`, the agent is due only while an
-    /// interrupt ended the last turn of that execution's agent, whose hook
-    /// wakes it otherwise.
+    /// take them. With `hooked`, that execution's agent has a hook that
+    /// wakes it, so it is due only while the hook cannot, as
+    /// [`Self::hook_cannot_wake`] says.
     pub async fn wait_agent_wake(
         &self,
         selector: &str,
         due: bool,
-        interrupted: Option<&str>,
+        hooked: Option<&str>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so a change in between still wakes.
@@ -381,7 +417,7 @@ impl Manager {
             let hold = self.message_hold(&workspace, &unread.messages).await?;
             let messages_due = wake_messages_due(unread.wakes, hold, due);
             if self
-                .agent_wake_due(&workspace, interrupted, messages_due, due)
+                .agent_wake_due(&workspace, hooked, messages_due, due)
                 .await?
                 == due
             {
@@ -459,16 +495,17 @@ impl Manager {
     }
 
     /// Whether the workspace's idle agent is due a wake: `messages_due`, or
-    /// updates as [`Self::wake_updates_due`] counts them when `arming`.
+    /// updates as [`Self::wake_updates_due`] counts them when `arming`, and
+    /// the hook of the agent the `hooked` execution runs cannot wake it.
     async fn agent_wake_due(
         &self,
         workspace: &Workspace,
-        interrupted: Option<&str>,
+        hooked: Option<&str>,
         messages_due: bool,
         arming: bool,
     ) -> Result<bool> {
-        if let Some(execution) = interrupted
-            && !self.turn_interrupted(execution).await
+        if let Some(execution) = hooked
+            && !self.hook_cannot_wake(&workspace.id, execution).await
         {
             return Ok(false);
         }
@@ -481,6 +518,15 @@ impl Manager {
             return Ok(false);
         }
         Ok(messages_due || self.wake_updates_due(workspace.clone(), arming).await?)
+    }
+
+    /// Whether the hook that wakes the agent `execution` runs in the
+    /// workspace `id` cannot: an interrupt ended its last turn, after which
+    /// the hook does not run, or no wait for the workspace's updates has run
+    /// for [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait.
+    async fn hook_cannot_wake(&self, id: &str, execution: &str) -> bool {
+        self.turn_interrupted(execution).await
+            || self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY)
     }
 
     /// The unread messages once one that wakes an idle agent is queued.

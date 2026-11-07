@@ -1,8 +1,9 @@
 //! Waking an idle agent no hook of its own wakes: Codex, which has no hook
-//! that can start its turn, and Claude Code after an interrupted turn, which
-//! its wake hook does not follow. While it is idle so with undelivered
-//! updates, the wrapper types a fixed prompt into the terminal session it
-//! runs in, and the prompt's `UserPromptSubmit` hook delivers them.
+//! that can start its turn, and Claude Code where its wake hook cannot:
+//! after an interrupted turn, which the hook does not follow, or once the
+//! hook has stopped waiting. While it is idle so with undelivered updates,
+//! the wrapper types a fixed prompt into the terminal session it runs in,
+//! and the prompt's `UserPromptSubmit` hook delivers them.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -53,7 +54,7 @@ pub(super) fn session(
 pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, wake: Wake) -> Waker {
     let paths = paths.clone();
     let workspace = plan.workspace.id.clone();
-    let interrupted = (wake.when == PromptWake::AfterInterrupt).then(|| plan.id.clone());
+    let hooked = (wake.when == PromptWake::WhenHookCannot).then(|| plan.id.clone());
     Waker(tokio::spawn(async move {
         // A host that needs the instance refuses prompts without it.
         let session = match wake.session.clone().pinned().await {
@@ -64,7 +65,7 @@ pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, wake: Wake) -> Waker {
             }
         };
         prompt_when_due(
-            |due| await_wake(&paths, &workspace, due, interrupted.clone()),
+            |due| await_wake(&paths, &workspace, due, hooked.clone()),
             || session.submit(WAKE_PROMPT),
         )
         .await
@@ -92,12 +93,12 @@ where
     }
 }
 
-/// Wait until whether the agent is idle with updates matches `due`, after an
-/// interrupted turn of `interrupted` when given, waiting out a restarting or
-/// failing daemon.
-async fn await_wake(paths: &Paths, workspace: &str, due: bool, interrupted: Option<String>) {
+/// Wait until whether the agent is idle with updates matches `due`, where
+/// the hook of the agent the `hooked` execution runs cannot wake it when
+/// given, waiting out a restarting or failing daemon.
+async fn await_wake(paths: &Paths, workspace: &str, due: bool, hooked: Option<String>) {
     loop {
-        match request(paths, workspace, due, interrupted.clone()).await {
+        match request(paths, workspace, due, hooked.clone()).await {
             Ok(()) => return,
             Err(_) => tokio::time::sleep(RETRY_INTERVAL).await,
         }
@@ -108,16 +109,11 @@ async fn await_wake(paths: &Paths, workspace: &str, due: bool, interrupted: Opti
 /// failure does not spin.
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
-async fn request(
-    paths: &Paths,
-    workspace: &str,
-    due: bool,
-    interrupted: Option<String>,
-) -> Result<()> {
+async fn request(paths: &Paths, workspace: &str, due: bool, hooked: Option<String>) -> Result<()> {
     let method = AgentMethod::AwaitAgentWake {
         workspace: workspace.to_owned(),
         due,
-        interrupted,
+        hooked,
     };
     let (_stream, body) = connection::open(paths, method).await?;
     body.into_result().map(drop)

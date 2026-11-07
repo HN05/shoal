@@ -14,7 +14,7 @@ fn prompt_wakes_follow_how_each_integration_wakes() {
     );
     assert_eq!(
         prompt_wake(IntegrationKind::Claude),
-        Some(PromptWake::AfterInterrupt)
+        Some(PromptWake::WhenHookCannot)
     );
     assert_eq!(prompt_wake(IntegrationKind::None), None);
 }

@@ -313,9 +313,10 @@ pub(crate) fn prompt_cache(
 pub(crate) enum PromptWake {
     /// Whenever it idles: no hook of its own starts its turn.
     Always,
-    /// While it idles after an interrupted turn, after which the hook that
-    /// wakes it otherwise does not run.
-    AfterInterrupt,
+    /// While it idles where the hook that wakes it otherwise cannot: after
+    /// an interrupted turn, which the hook does not follow, or once no hook
+    /// has waited for its updates for a few minutes.
+    WhenHookCannot,
 }
 
 /// When the wrapper of an agent with integration `kind` wakes it by typing
@@ -324,8 +325,8 @@ pub(crate) fn prompt_wake(kind: IntegrationKind) -> Option<PromptWake> {
     let integration = integration(kind);
     match integration.wakes() {
         Wake::Prompt => Some(PromptWake::Always),
-        Wake::Hook if integration.interrupt_key().is_some() => Some(PromptWake::AfterInterrupt),
-        Wake::Hook | Wake::Never => None,
+        Wake::Hook => Some(PromptWake::WhenHookCannot),
+        Wake::Never => None,
     }
 }
 

@@ -22,12 +22,12 @@ pub(super) async fn handle(
         AgentMethod::AwaitAgentWake {
             workspace,
             due,
-            interrupted,
+            hooked,
         } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
                 manager
-                    .wait_agent_wake(&workspace, due, interrupted.as_deref())
+                    .wait_agent_wake(&workspace, due, hooked.as_deref())
                     .await?;
                 Ok(Body::Ok)
             }));

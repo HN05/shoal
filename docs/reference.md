@@ -4967,7 +4967,8 @@ messages or activity on this workspace's issues and PRs.` into the session and
 submits it, once until Codex starts another turn, and its prompt hook delivers
 them. Claude Code's wake hook does not follow a turn
 `shoal stop --interrupt` ended, so Shoal wakes a Claude Code in one the same
-way while it idles after one. Text typed but not yet sent in that prompt is sent with it. Codex runs the hooks only after you trust them in Codex's
+way while it idles after one, and while it idles with updates after no wait
+for them has run for three minutes, as when its wake hook has ended. Text typed but not yet sent in that prompt is sent with it. Codex runs the hooks only after you trust them in Codex's
 hook review. The hook reads the event from stdin and prints nothing when there
 is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can

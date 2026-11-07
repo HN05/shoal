@@ -77,13 +77,14 @@ pub enum AgentMethod {
     },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`; with
-    /// `interrupted`, only while an interrupt ended the last turn of the
-    /// agent that execution runs, which its hook does not wake then.
+    /// `hooked`, the execution whose agent a hook of its own wakes, only
+    /// while that hook cannot: after an interrupt ended its last turn, or
+    /// once no wait for the workspace's updates has run for a few minutes.
     AwaitAgentWake {
         workspace: String,
         due: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        interrupted: Option<String>,
+        hooked: Option<String>,
     },
     /// The agents connected in the workspace, with their turns and places.
     WorkspaceAgents {

@@ -1779,7 +1779,12 @@ has no hook that can start a turn, so its tracked wrapper types a fixed prompt
 into the zmx session, Rex block or Herdr pane it runs in once Codex is idle with updates, at most once
 per idle stretch, and the prompt's hook delivers them. Claude Code's wake hook
 does not run after an interrupted turn, so its wrapper prompts it the same way
-while it idles after one. Besides that prompt, Shoal writes to an agent's
+while it idles after one, and also once no wait for its updates has run for
+three minutes, longer than the hook waits between attempts, since an idle agent
+whose hook ended for any reason would otherwise wait for the user. The daemon
+logs how a wake hook's wait ends without updates, and the hook reports the
+reasons only it sees, such as its agent's exit or a signal, so a missed wake
+can be traced. Besides that prompt, Shoal writes to an agent's
 terminal only the interrupt key `shoal stop --interrupt` sends and the fixed
 prompt with which `shoal resume` continues the interrupted turn: the daemon
 never does, the prompts carry no forge text, and they are appended to anything

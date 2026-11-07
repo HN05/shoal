@@ -163,7 +163,7 @@ async fn a_newer_wait_supersedes_the_older_one_per_workspace() {
     drop(older);
     assert!(newer.is_current());
     drop(newer);
-    assert!(!waits.0.lock().unwrap().contains_key("one"));
+    assert!(!waits.is_waiting("one"));
 }
 
 #[tokio::test]
@@ -1103,6 +1103,42 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
         .await
         .unwrap();
     finish(taken).await;
+}
+
+#[tokio::test]
+async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "wake".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&workspace.id, crate::state::AgentState::Idle, None, None)
+        .await
+        .unwrap();
+    let due = async || {
+        manager
+            .agent_wake_due(&workspace, Some("e1"), true, true)
+            .await
+            .unwrap()
+    };
+    // Its hook waits for the updates once its turn ends.
+    assert!(!due().await);
+    tokio::time::pause();
+    tokio::time::advance(UNWATCHED_WAKE_DELAY).await;
+    assert!(due().await);
+    let running = manager.item_waits.start(&workspace.id);
+    tokio::time::advance(UNWATCHED_WAKE_DELAY).await;
+    assert!(!due().await);
+    drop(running);
+    assert!(!due().await);
+    tokio::time::advance(UNWATCHED_WAKE_DELAY).await;
+    assert!(due().await);
 }
 
 /// An open PR at `head` with `checks` by name and state, `pending` unfinished.
