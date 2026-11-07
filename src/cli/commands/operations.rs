@@ -4,17 +4,19 @@
 //! errors the command handled before.
 mod worker;
 
+use std::io::Write;
+
 use anyhow::Result;
 use tokio::signal::unix::{SignalKind, signal};
 
 use crate::{
-    cli::context::Context,
+    cli::{context::Context, progress::Spinner},
     client::approvals::Undecided,
     client::operations::{Followed, Following},
     execution::SetupVerificationFailure,
     protocol::{
         RemoteError,
-        operations::{Ended, Failure, OperationSpec, Outcome, Progress, Stream},
+        operations::{Ended, Failure, OperationSpec, Outcome, Progress, Step, Stream},
     },
 };
 pub(super) use worker::{Reporter, run as worker};
@@ -62,28 +64,33 @@ where
     T::try_from(follow(ctx, id).await?)
 }
 
-/// Show operation `id`'s output until it ends, returning how it did. An
-/// interrupt or termination cancels it, as it stopped the work when the
-/// command ran it; a second one stops following and leaves it running.
+/// Show operation `id`'s output, below a spinner naming its step, until it
+/// ends, returning how it did. An interrupt or termination cancels it, as
+/// it stopped the work when the command ran it; a second one stops
+/// following and leaves it running.
 async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut following = Following::open(&ctx.paths, id.clone(), 0).await?;
+    let mut spinner = Spinner::stderr(ctx.json, doing(None));
     let mut cancelled = false;
     loop {
         let followed = tokio::select! {
             followed = following.next() => followed?,
             _ = interrupt.recv() => {
+                spinner.clear();
                 cancelled = cancel(ctx, &id, cancelled).await?;
                 continue;
             }
             _ = terminate.recv() => {
+                spinner.clear();
                 cancelled = cancel(ctx, &id, cancelled).await?;
                 continue;
             }
+            () = spinner.tick() => continue,
         };
         match followed {
-            Followed::Event(event) => show(ctx, event.progress),
+            Followed::Event(event) => show(ctx, &mut spinner, event.progress),
             Followed::Ended(Ended::Succeeded(outcome)) => return Ok(*outcome),
             Followed::Ended(Ended::Failed(failure)) => return Err(error(failure)),
         }
@@ -103,15 +110,30 @@ async fn cancel(ctx: &Context, id: &str, cancelled: bool) -> Result<bool> {
 }
 
 /// Show an output line where the command showed it, keeping stdout for
-/// the result with `--json`; steps show nothing.
-fn show(ctx: &Context, progress: Progress) {
-    match progress {
-        Progress::Output {
-            stream: Stream::Stdout,
-            line,
-        } if !ctx.json => outln!("{line}"),
-        Progress::Output { line, .. } => eprintln!("{line}"),
-        Progress::Step { .. } => {}
+/// the result with `--json`, and a step as the spinner's message.
+fn show(ctx: &Context, spinner: &mut Spinner<impl Write>, progress: Progress) {
+    let (stream, line) = match progress {
+        Progress::Step { step } => return spinner.set_message(doing(Some(step))),
+        Progress::Output { stream, line } => (stream, line),
+    };
+    spinner.clear();
+    match stream {
+        Stream::Stdout if !ctx.json => outln!("{line}"),
+        _ => eprintln!("{line}"),
+    }
+}
+
+/// What an operation does after reporting `step`, or before its first.
+fn doing(step: Option<Step>) -> &'static str {
+    match step {
+        None => "Starting",
+        Some(Step::SetupStarted) => "Running setup",
+        Some(Step::Ready | Step::PrLinked) => "Preparing workspace",
+        Some(Step::PostSetupStarted) => "Running post-setup hook",
+        Some(Step::PushStarted) => "Pushing",
+        Some(Step::MergeStarted) => "Merging",
+        Some(Step::UnmergeStarted) => "Undoing merge",
+        Some(Step::AgentQueued | Step::Pushed) => "Finishing",
     }
 }
 
