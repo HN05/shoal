@@ -260,12 +260,17 @@ fn checks_saved_in_forge_casings_match_the_same_checks() {
         "checks": {
             "rust": {"name": "rust", "state": "SUCCESS", "revision": "1", "complete": true},
             "lint": {"name": "lint", "state": "Pending", "revision": "1", "complete": false},
+            "deploy": {"name": "deploy", "state": "EXPECTED", "revision": "1", "complete": false},
         },
     }))
     .unwrap();
     assert!(saved.checks_pending());
     let mut next = saved.clone();
-    for (name, state) in [("rust", CheckState::Success), ("lint", CheckState::Pending)] {
+    for (name, state) in [
+        ("rust", CheckState::Success),
+        ("lint", CheckState::Pending),
+        ("deploy", CheckState::Expected),
+    ] {
         let check = Check {
             name: name.into(),
             state,

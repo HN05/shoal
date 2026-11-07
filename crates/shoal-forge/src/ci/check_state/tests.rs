@@ -8,6 +8,7 @@ fn saved_states_read_in_every_casing() {
         ("Success", CheckState::Success),
         ("SUCCESS", CheckState::Success),
         ("TIMED_OUT", CheckState::TimedOut),
+        ("EXPECTED", CheckState::Expected),
         ("in_progress", CheckState::InProgress),
     ] {
         assert_eq!(read(text), Some(state));

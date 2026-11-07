@@ -15,6 +15,9 @@ states!(
         /// approval.
         Waiting => "waiting",
         Requested => "requested",
+        /// A required commit status no one has reported yet, as GitHub's
+        /// GraphQL API reported it.
+        Expected => "expected",
         /// Finished without a conclusion.
         Completed => "completed",
         Success => "success",
@@ -45,7 +48,12 @@ impl CheckState {
     pub fn complete(self) -> bool {
         !matches!(
             self,
-            Self::Pending | Self::Queued | Self::InProgress | Self::Waiting | Self::Requested
+            Self::Pending
+                | Self::Queued
+                | Self::InProgress
+                | Self::Waiting
+                | Self::Requested
+                | Self::Expected
         )
     }
 
