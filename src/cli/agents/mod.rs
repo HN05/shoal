@@ -317,7 +317,11 @@ enum NamedRun {
 }
 
 /// Whether `shoal <name>` launches an agent rather than a configured command.
-pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<bool> {
+pub(super) async fn is_agent(
+    ctx: &Context,
+    name: &str,
+    workspace: Option<&SpaceSelector>,
+) -> Result<bool> {
     Ok(!matches!(
         classify(ctx, name, workspace).await?,
         NamedRun::Command
@@ -327,7 +331,11 @@ pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>)
 /// Agents are those the targeted workspace's settings resolve, else this
 /// machine's config; outside every workspace, also a repository's own,
 /// which runs in a workspace defining it, as a repository's command does.
-async fn classify(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<NamedRun> {
+async fn classify(
+    ctx: &Context,
+    name: &str,
+    workspace: Option<&SpaceSelector>,
+) -> Result<NamedRun> {
     if added(name).is_some() {
         return Ok(NamedRun::Agent);
     }
@@ -379,13 +387,16 @@ async fn defining_workspaces(ctx: &Context, name: &str) -> Vec<crate::model::Wor
 
 /// The workspace `workspace` names, else the one running a command would
 /// select: the current directory's, then the caller's scope.
-async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<ConfigTarget>> {
+async fn agent_target(
+    ctx: &Context,
+    workspace: Option<&SpaceSelector>,
+) -> Result<Option<ConfigTarget>> {
     if let Some(workspace) = workspace {
         // A selector that does not resolve is the command's own error.
-        let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.to_owned()).await;
+        let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.clone()).await;
         return Ok(workspace
             .ok()
-            .map(|id| ConfigTarget::Workspace(SpaceSelector::id(&id))));
+            .map(|selected| ConfigTarget::Workspace(SpaceSelector::parse(&selected))));
     }
     // Without a daemon there is no workspace context, only the machine's.
     let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
@@ -400,10 +411,10 @@ async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<C
 pub(super) async fn run_named(
     ctx: &Context,
     name: &str,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = match classify(ctx, name, workspace.as_deref()).await? {
+    let workspace = match classify(ctx, name, workspace.as_ref()).await? {
         NamedRun::Command => return configured::run(ctx, name, workspace, args).await,
         NamedRun::Agent => workspace,
         NamedRun::Elsewhere(defining) => {
@@ -412,7 +423,9 @@ pub(super) async fn run_named(
                 "{name} is an agent only some repositories define; run it in one of their \
                  workspaces or name one with --workspace"
             );
-            Some(ui::pick_workspace(ctx, defining, "workspace").await?)
+            Some(SpaceSelector::id(
+                &ui::pick_workspace(ctx, defining, "workspace").await?,
+            ))
         }
     };
     launch::shortcut(

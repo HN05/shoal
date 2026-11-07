@@ -14,10 +14,12 @@ use crate::{
 
 /// The space `space` names, else the current chat or workspace, else a
 /// picked one: a running chat's ID, or else a workspace.
-async fn selected(ctx: &Context, space: Option<String>) -> Result<Selected> {
+async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
+        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&space))
+            .await?
+        {
             Some(PresentSpace::Chat(chat)) => Selected::Chat(chat.id),
             _ => Selected::Workspace(space),
         },
@@ -29,7 +31,10 @@ enum Selected {
     Workspace(String),
 }
 
-pub(in crate::cli::commands) async fn undone(ctx: &Context, space: Option<String>) -> Result<i32> {
+pub(in crate::cli::commands) async fn undone(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let withdrawn = assignments::undo_done(&ctx.paths, SpaceSelector::parse(&space)).await?;
     ctx.emit(
@@ -56,7 +61,7 @@ pub(in crate::cli::commands) struct Done {
 /// a chat only records it, since it has no branch or demos.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     options: Done,
 ) -> Result<i32> {
     let selected = selected(ctx, space).await?;

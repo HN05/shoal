@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -17,6 +18,11 @@ use crate::{
 
 /// The workspace argument that names the previous workspace.
 pub const PREVIOUS: &str = "-";
+
+/// Whether `selector` is `-`, which names the previous space.
+pub fn is_previous(selector: &SpaceSelector) -> bool {
+    matches!(selector, SpaceSelector::IdOrName(text) if text == PREVIOUS)
+}
 
 /// The history `attach -` reads, which every command that shows a
 /// workspace's or a chat's agent session here keeps.
@@ -165,7 +171,8 @@ pub async fn record_chat_attach(ctx: &Context, selector: &str) {
     let Ok(chats) = crate::client::chats::list(&ctx.paths).await else {
         return;
     };
-    let named = |chat: &&Chat| chat.id == selector || chat.name == selector;
+    let selected = SpaceSelector::parse(selector);
+    let named = |chat: &&Chat| selected.selects(&chat.id, &chat.name, chat.number);
     if let Some(chat) = chats.iter().find(named) {
         let _ = History::update(&ctx.paths, |history| history.record(ATTACH, &chat.id));
     }
@@ -180,7 +187,7 @@ async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bo
         return;
     };
     let Some(target) = WorkspaceContext::from_directory(&workspaces, None).resolve(
-        Some(selector),
+        Some(&SpaceSelector::parse(selector)),
         false,
         ScopeOrder::AfterDirectory,
     ) else {

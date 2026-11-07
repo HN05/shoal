@@ -143,7 +143,7 @@ pub(super) async fn check_add_creation(
         base: creation.base.clone(),
         git_profile: creation.git_profile.clone(),
         path: creation.path.clone(),
-        parent: parent.as_deref().map(SpaceSelector::id),
+        parent: parent.as_deref().map(SpaceSelector::parse),
         options: creation.options,
     };
     crate::client::workspaces::check_creation(&ctx.paths, planned).await

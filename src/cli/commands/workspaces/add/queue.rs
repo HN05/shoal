@@ -26,11 +26,9 @@ pub(super) async fn after_dependencies(
     let repo = target.repository(ctx).await?;
     let mut dependencies = Vec::new();
     for input in after {
-        dependencies.push(match IssueInput::parse(input) {
-            IssueInput::Number | IssueInput::Url => {
-                Dependency::Issue(issues::url(ctx, repo, input).await?)
-            }
-            IssueInput::Invalid => Dependency::Work(input.clone()),
+        dependencies.push(match names_issue(input) {
+            true => Dependency::Issue(issues::url(ctx, repo, input).await?),
+            false => Dependency::Work(input.clone()),
         });
     }
     crate::client::workspaces::check_dependencies(
@@ -40,6 +38,13 @@ pub(super) async fn after_dependencies(
     )
     .await?;
     Ok(dependencies)
+}
+
+/// Whether an `--after` value names an issue, by number or URL, as `shoal
+/// start` takes one: unlike every other space argument, a bare number here
+/// is an issue, never a space's number.
+pub(super) fn names_issue(input: &str) -> bool {
+    IssueInput::parse(input) != IssueInput::Invalid
 }
 
 /// Admit the plan's agent, if any, to the agent queue: a start takes its

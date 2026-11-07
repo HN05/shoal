@@ -2,6 +2,7 @@
 //! Shoal saved, which share one namespace of names.
 use anyhow::{Result, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
     model::{Chat, PresentSpace, Spaces},
@@ -24,7 +25,7 @@ pub(super) enum Target {
 /// The space `selector` names among `spaces`: a stopped chat or a workspace.
 /// A running chat has nothing to resume.
 pub(super) fn resolve(spaces: &Spaces, selector: String) -> Result<Target> {
-    match spaces.find(&selector) {
+    match spaces.find(&SpaceSelector::parse(&selector)) {
         Some(PresentSpace::Workspace(workspace)) => Ok(Target::Workspace(workspace.id)),
         Some(PresentSpace::Chat(chat)) if chat.restore.is_some() => Ok(Target::Chat(chat)),
         Some(PresentSpace::Chat(chat)) => bail!("chat {} is running; nothing to resume", chat.name),

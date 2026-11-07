@@ -27,7 +27,8 @@ pub(super) async fn run(
     if targets.all {
         return stop_all(ctx).await;
     }
-    if let [selector] = targets.space.as_slice()
+    // A number always names a space, never a queued launch.
+    if let [SpaceSelector::IdOrName(selector)] = targets.space.as_slice()
         && let Some(code) = agent_queue::remove_new(ctx, selector).await?
     {
         return Ok(code);
@@ -101,7 +102,7 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
 /// one picked. They are not saved for `shoal resume`.
 pub(super) async fn processes(
     ctx: &Context,
-    selectors: Vec<String>,
+    selectors: Vec<SpaceSelector>,
     selection: Selection,
 ) -> Result<i32> {
     // Unlike what ends a space, a stop of its processes may take the chat it
@@ -138,9 +139,8 @@ async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
     let workspaces: Vec<String> = selectors
         .iter()
         .filter(|selector| {
-            !chats
-                .iter()
-                .any(|chat| &&chat.id == selector || &&chat.name == selector)
+            let selected = SpaceSelector::parse(selector);
+            !(chats.iter()).any(|chat| selected.selects(&chat.id, &chat.name, chat.number))
         })
         .cloned()
         .collect();

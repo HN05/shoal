@@ -19,18 +19,18 @@ use crate::{
 /// the repository's, else every one, newest first.
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     repository: Option<String>,
 ) -> Result<i32> {
     if repository.is_none()
-        && let Some(chat) = super::chat(ctx, workspace.as_deref()).await?
+        && let Some(chat) = super::chat(ctx, workspace.as_ref()).await?
     {
         let reviews = super::chat_reviews(ctx, &chat).await?;
         ctx.show(&reviews, |reviews| render_list(reviews, ctx.json))?;
         return Ok(0);
     }
     let workspace = match (workspace, &repository) {
-        (Some(workspace), _) => Some(workspace),
+        (Some(workspace), _) => Some(workspace.to_string()),
         (None, Some(_)) => None,
         (None, None) => ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly)
             .await
@@ -42,7 +42,7 @@ pub(in crate::cli::commands) async fn list(
     };
     let reviews = reviews::list(
         &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::id),
+        workspace.as_deref().map(SpaceSelector::parse),
         repository,
     )
     .await?;
@@ -55,10 +55,15 @@ pub(in crate::cli::commands) async fn list(
 pub(in crate::cli::commands) async fn view(
     ctx: &Context,
     id: Option<i64>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review = reviews::show(&ctx.paths, workspace.as_deref().map(SpaceSelector::id), id).await?;
+    let review = reviews::show(
+        &ctx.paths,
+        workspace.as_deref().map(SpaceSelector::parse),
+        id,
+    )
+    .await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -70,13 +75,17 @@ pub(in crate::cli::commands) async fn view(
 pub(in crate::cli::commands) async fn watch(
     ctx: &Context,
     id: Option<i64>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
     let executable = Executable::current();
-    let id = reviews::await_ended(&ctx.paths, workspace.as_deref().map(SpaceSelector::id), id)
-        .await
-        .map_err(|error| executable.resume_or(error, arguments))?;
+    let id = reviews::await_ended(
+        &ctx.paths,
+        workspace.as_deref().map(SpaceSelector::parse),
+        id,
+    )
+    .await
+    .map_err(|error| executable.resume_or(error, arguments))?;
     let review = reviews::show(&ctx.paths, None, Some(id)).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
@@ -94,7 +103,7 @@ pub(in crate::cli::commands) async fn latest(ctx: &Context, workspace: &str) -> 
 async fn selected(
     ctx: &Context,
     id: Option<i64>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<Option<String>> {
     Ok(match id {
         Some(_) => None,

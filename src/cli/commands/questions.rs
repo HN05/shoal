@@ -47,7 +47,7 @@ async fn show(ctx: &Context, question: Question) -> Result<i32> {
 
 pub(super) async fn ask(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     ask: Ask,
     attach: Vec<String>,
     wait: bool,
@@ -85,7 +85,7 @@ pub(super) async fn ask(
 }
 
 /// Mark the caller's agent's turn as asking the user in its conversation.
-pub(super) async fn ask_in_chat(ctx: &Context, space: Option<String>) -> Result<i32> {
+pub(super) async fn ask_in_chat(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
     questions::ask_in_chat(&ctx.paths, SpaceSelector::parse(&space)).await?;
     ctx.emit(
@@ -97,7 +97,13 @@ pub(super) async fn ask_in_chat(ctx: &Context, space: Option<String>) -> Result<
 
 /// Continue an earlier `ask --wait` for question `item` of `space`, which
 /// asks `ask`.
-pub(super) async fn resume(ctx: &Context, space: String, item: u32, ask: Ask) -> Result<i32> {
+pub(super) async fn resume(
+    ctx: &Context,
+    space: SpaceSelector,
+    item: u32,
+    ask: Ask,
+) -> Result<i32> {
+    let space = space.to_string();
     let question = await_answer(ctx, &space, Asked { item, ask }, true).await?;
     print_answer(ctx, space, &question).await?;
     Ok(0)
@@ -160,8 +166,8 @@ fn resume_arguments(space: &str, item: u32) -> Vec<OsString> {
     replace_option(arguments, "--resume", &item.to_string())
 }
 
-pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
-    let listing = questions::list(&ctx.paths, space.as_deref().map(SpaceSelector::id)).await?;
+pub(super) async fn list(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
+    let listing = questions::list(&ctx.paths, space).await?;
     if ctx.interactive_output() && !listing.questions.is_empty() {
         let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;

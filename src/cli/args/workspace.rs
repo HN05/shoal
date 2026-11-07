@@ -4,6 +4,7 @@ use std::{ffi::OsString, path::PathBuf};
 use clap::Subcommand;
 
 use crate::cli::{args::item_reference, list_status};
+use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -46,7 +47,7 @@ pub enum WorkspaceCommand {
         /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
         /// resource.
         #[arg(value_name = "TARGET")]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Number, URL, or resource name after pr, issue, ci or resource.
         #[arg(value_parser = item_reference)]
         item: Option<String>,
@@ -54,12 +55,12 @@ pub enum WorkspaceCommand {
     /// Enter a workspace, or use - for the one you were in before.
     ///
     /// Omit the workspace to open the picker, even inside a workspace.
-    Cd { workspace: Option<String> },
+    Cd { workspace: Option<SpaceSelector> },
     /// Open a workspace in an editor.
     ///
     /// Runs the configured `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path.
     Edit {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Arguments forwarded to the editor.
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -69,7 +70,7 @@ pub enum WorkspaceCommand {
     /// The app runs untracked: Shoal gives it no instructions, scope or
     /// model, and cleanup does not see its activity.
     Open {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// The app to open the workspace in: claude (macOS), codex or t3;
         /// defaults to app.default, else the only one installed, else a
         /// picker.
@@ -88,7 +89,7 @@ pub use crate::config::repo::DesktopApp;
 pub enum WorkCommand {
     /// Export the environment for processes started in a workspace.
     Env {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Revoke a previously exported scope token.
         #[arg(long)]
         revoke: Option<String>,
@@ -115,7 +116,7 @@ pub enum WorkCommand {
     /// instead.
     #[command(allow_missing_positional = true)]
     Rename {
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// A workspace's title of at most 40 characters on one line, or a
         /// chat's name, free among workspaces and running chats.
         #[arg(required_unless_present = "request")]
@@ -127,7 +128,7 @@ pub enum WorkCommand {
     },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.
     Checkpoint {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Describe the checkpoint in shoal work restore's list, in at most 200 characters.
         #[arg(long)]
         name: Option<String>,
@@ -138,14 +139,14 @@ pub enum WorkCommand {
     /// picks one of its checkpoints; with a checkpoint number as well, returns to it after
     /// keeping the current state in a new checkpoint. Without a terminal, the choices are listed.
     Restore {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[arg(requires = "workspace")]
         checkpoint: Option<u64>,
     },
     /// Run or retry workspace setup and the post-setup hook.
     Setup {
         /// Workspace to use; defaults to the current workspace or picker.
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Accept a failed setup as it is and mark the verified workspace ready.
         #[arg(long)]
         skip: bool,

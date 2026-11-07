@@ -28,7 +28,7 @@ use crate::{
 pub(super) async fn acquire(
     ctx: &Context,
     kind: AcquireKind,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     match kind {
@@ -144,7 +144,7 @@ impl fmt::Display for Held {
 pub(super) async fn release(
     ctx: &Context,
     kind: Option<ReleaseKind>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(ReleaseKind::Hold { name }) = kind {

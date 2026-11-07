@@ -3,6 +3,7 @@ use anyhow::{Context as _, Result, ensure};
 use sha2::{Digest as _, Sha256};
 
 use super::{about, ensure_scope_token, list_requests, show_request, submit};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::approvals::Decision,
@@ -19,9 +20,10 @@ use crate::{
 /// highlighted one in place, with the outcome shown in the list.
 pub(super) async fn pick_and_open(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     requests: Vec<ApprovalRequest>,
 ) -> Result<i32> {
+    let space = space.as_ref().map(ToString::to_string);
     let row = choose(ctx, space.as_deref(), requests)?;
     let request = displayed(ctx, &row).await?;
     show_request(ctx, Box::new(request)).await
@@ -32,6 +34,7 @@ pub(in crate::cli::commands) async fn print_rows(
     ctx: &Context,
     space: Option<String>,
 ) -> Result<i32> {
+    let space = space.as_deref().map(SpaceSelector::parse);
     for (id, label) in listed_rows(list_requests(ctx, space).await?)? {
         outln!("{}", ui::picker_line(&id, &label));
     }

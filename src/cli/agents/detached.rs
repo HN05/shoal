@@ -304,7 +304,7 @@ pub(super) async fn start_chat(
     }
     // This process holds the chat until the session runs, which is not in
     // this terminal.
-    let parent = parent.as_deref().map(SpaceSelector::id);
+    let parent = parent.as_deref().map(SpaceSelector::parse);
     let new = crate::client::chats::NewChat {
         name: chat_name,
         agent: name,

@@ -42,7 +42,7 @@ pub(super) enum Reviewer {
 pub(super) enum Target {
     /// A workspace's changes, or a chat's linked PR, which `post` applies to.
     Space {
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         post: Option<bool>,
     },
     Pull {
@@ -57,30 +57,33 @@ impl Target {
     /// A URL in the workspace position names a PR; `--repo` and posting
     /// apply only to PRs.
     pub fn new(
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         pr: Option<String>,
         repository: Option<String>,
         post: Option<bool>,
     ) -> Result<Self> {
-        let input = match (pr, workspace) {
+        let url = workspace.as_ref().map(ToString::to_string);
+        let url = url.filter(|input| IssueInput::parse(input) == IssueInput::Url);
+        let input = match (pr, url) {
             (Some(input), _) => input,
-            (None, Some(input)) if IssueInput::parse(&input) == IssueInput::Url => {
-                match Link::parse(&input)?.target {
-                    LinkTarget::Pr => input,
-                    LinkTarget::Issue => {
-                        bail!(
-                            "shoal review run takes a workspace or a PR; settle an issue's plan with shoal start --mode plan --issue {input}"
-                        )
-                    }
-                    LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
+            (None, Some(input)) => match Link::parse(&input)?.target {
+                LinkTarget::Pr => input,
+                LinkTarget::Issue => {
+                    bail!(
+                        "shoal review run takes a workspace or a PR; settle an issue's plan with shoal start --mode plan --issue {input}"
+                    )
                 }
-            }
-            (None, space) => {
+                LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
+            },
+            (None, None) => {
                 ensure!(
                     repository.is_none(),
                     "--repo selects the repository of a PR; pass --pr or a URL"
                 );
-                return Ok(Target::Space { space, post });
+                return Ok(Target::Space {
+                    space: workspace,
+                    post,
+                });
             }
         };
         Ok(Target::Pull {
@@ -130,7 +133,15 @@ pub(super) async fn start(
                     "--post and --no-post apply to PR reviews; workspace reviews stay local"
                 );
                 let subject = Subject::Changes;
-                run(ctx, Some(workspace), reviewer, subject, model, args).await
+                run(
+                    ctx,
+                    Some(SpaceSelector::parse(&workspace)),
+                    reviewer,
+                    subject,
+                    model,
+                    args,
+                )
+                .await
             }
         },
         Target::Pull {
@@ -240,7 +251,15 @@ async fn pull_request(
     if pull.fork {
         let workspace = fork_pull_workspace(ctx, repo, &pull).await?;
         let subject = Subject::Pull { pull, post };
-        return run(ctx, Some(workspace), reviewer, subject, model, args).await;
+        return run(
+            ctx,
+            Some(SpaceSelector::parse(&workspace)),
+            reviewer,
+            subject,
+            model,
+            args,
+        )
+        .await;
     }
     let owner = crate::client::workspaces::list(&ctx.paths)
         .await?
@@ -299,7 +318,15 @@ async fn pull_request(
         }
     };
     let subject = Subject::Pull { pull, post };
-    run(ctx, Some(workspace), reviewer, subject, model, args).await
+    run(
+        ctx,
+        Some(SpaceSelector::parse(&workspace)),
+        reviewer,
+        subject,
+        model,
+        args,
+    )
+    .await
 }
 
 /// The workspace at a commit a fork PR's review reads: the one at its head,
@@ -317,7 +344,7 @@ async fn fork_pull_workspace(
     let new = NewWorkspace {
         parent: crate::cli::ui::current_chat(&None)
             .as_deref()
-            .map(SpaceSelector::id),
+            .map(SpaceSelector::parse),
         options: CreationOptions {
             skip_setup: true,
             ..Default::default()
@@ -375,7 +402,7 @@ pub(in crate::cli::commands) async fn fetch_pull_branch(
 
 async fn run(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     reviewer: Reviewer,
     subject: Subject,
     model: ModelChoice,
@@ -420,7 +447,8 @@ async fn run(
             if matches!(subject, Subject::Pull { .. }) {
                 ensure_at_pull_head(ctx, &workspace).await?;
             }
-            super::super::configured::run(ctx, MANUAL, Some(workspace), args).await
+            super::super::configured::run(ctx, MANUAL, Some(SpaceSelector::parse(&workspace)), args)
+                .await
         }
     }
 }

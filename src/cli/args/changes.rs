@@ -3,6 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, item_reference},
@@ -15,7 +16,7 @@ pub enum BranchCommand {
     /// Rename a workspace's Git branch and derived workspace name.
     #[command(allow_missing_positional = true)]
     Rename {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// New literal Git branch name.
         branch: String,
     },
@@ -24,7 +25,7 @@ pub enum BranchCommand {
     Base {
         #[command(subcommand)]
         command: Option<BaseCommand>,
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
 }
 
@@ -36,12 +37,12 @@ pub enum BaseCommand {
         /// Workspace name or branch in the same repository; omit to choose one.
         base: Option<String>,
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Remove the recorded base workspace.
     Clear {
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
 }
 
@@ -54,7 +55,7 @@ pub enum ChangesCommand {
         command: BranchCommand,
     },
     /// Show changes since the branch's fork point.
-    Diff { workspace: Option<String> },
+    Diff { workspace: Option<SpaceSelector> },
     /// Check whether the branch merges cleanly into another branch.
     ///
     /// Compares committed HEAD with the target: by default the base workspace's
@@ -64,7 +65,7 @@ pub enum ChangesCommand {
         target: Option<String>,
         /// Workspace to check; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Review a workspace's committed changes or a PR, and answer the findings.
     Review {
@@ -88,7 +89,7 @@ pub enum ChangesCommand {
     },
     /// Merge this workspace into the default branch, then optionally push it.
     Merge {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Push the default branch to its upstream after merging, overriding [merge] push.
         #[arg(long, overrides_with = "no_push")]
         push: bool,
@@ -99,7 +100,7 @@ pub enum ChangesCommand {
         confirmation: ConfirmationArgs,
     },
     /// Undo this workspace's latest merge into the default branch while it is unpushed.
-    Unmerge { workspace: Option<String> },
+    Unmerge { workspace: Option<SpaceSelector> },
 }
 
 #[derive(Debug, Subcommand)]
@@ -111,7 +112,7 @@ pub enum ReviewCommand {
     /// arrive as a message.
     Run {
         /// Space to review, a workspace's changes or a chat's linked PR, or a PR URL.
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
         #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "space", value_parser = item_reference)]
         pr: Option<String>,
@@ -141,7 +142,7 @@ pub enum ReviewCommand {
         /// Space whose reviews to list, a workspace or a chat, whose reviews
         /// are those of its linked PRs; defaults to the current workspace or
         /// chat, else every review.
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// List the reviews of this registered repository's workspaces.
         #[arg(short = 'r', long = "repo", conflicts_with = "space")]
         repository: Option<String>,
@@ -153,7 +154,7 @@ pub enum ReviewCommand {
         /// Space, a workspace or chat, whose review to cancel; defaults to
         /// the current workspace or chat, or a picker.
         #[arg(short = 's', long, conflicts_with = "id")]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Reply to a finding without resolving it.
     Reply {
@@ -196,7 +197,7 @@ pub enum PrCommand {
     Open {
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[command(flatten)]
         pull: OpenPullArgs,
     },
@@ -336,7 +337,7 @@ pub enum IssueCommand {
         /// Space, a workspace or chat, that opens it; defaults to the current
         /// workspace or chat, or a picker.
         #[arg(short = 's', long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Open it in another repository: OWNER/NAME on the space's forge, or
         /// a repository URL on any forge.
         #[arg(short = 'r', long, value_name = "REPOSITORY")]
@@ -449,7 +450,7 @@ pub struct ItemSelector {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long, conflicts_with = "repo")]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
     #[command(flatten)]
     pub repo: RegisteredRepo,
 }
@@ -473,7 +474,7 @@ pub struct RevertedPr {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long)]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
 }
 
 // What a new PR is opened with.

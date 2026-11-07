@@ -33,7 +33,7 @@ pub(super) use directory::ExportDirectory;
 /// picker opens.
 pub(super) async fn export(
     ctx: &Context,
-    names: Vec<String>,
+    names: Vec<SpaceSelector>,
     file: PathBuf,
     yes: bool,
 ) -> Result<i32> {
@@ -59,9 +59,10 @@ pub(super) async fn export(
     let named = names.into_iter().next();
     // The export ends its space, so it never takes the chat it runs in.
     let selector = ui::select_other_space(ctx, named, Fallback::CurrentDirectory).await?;
-    let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
-        .await?
-        .with_context(|| format!("no space {selector}"))?;
+    let space =
+        crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&selector))
+            .await?
+            .with_context(|| format!("no space {selector}"))?;
     let exported = export_space(ctx, space, yes, &output).await?;
     output.report(ctx, &exported)
 }
@@ -83,13 +84,14 @@ pub(super) async fn export_all(
 /// offers without names.
 pub(super) async fn selected_spaces(
     ctx: &Context,
-    names: Vec<String>,
+    names: Vec<SpaceSelector>,
 ) -> Result<Vec<PresentSpace>> {
     let mut spaces = Vec::new();
     for selector in ui::select_spaces(ctx, names, true).await? {
-        let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
-            .await?
-            .with_context(|| format!("no space {selector}"))?;
+        let space =
+            crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&selector))
+                .await?
+                .with_context(|| format!("no space {selector}"))?;
         spaces.push(space);
     }
     Ok(spaces)
@@ -209,10 +211,14 @@ impl Output {
 }
 
 /// Export the removed workspace `selector` names, which needs no removal.
-async fn export_removed(ctx: &Context, selector: &str, output: &Output) -> Result<ExportedSpace> {
+async fn export_removed(
+    ctx: &Context,
+    selector: &SpaceSelector,
+    output: &Output,
+) -> Result<ExportedSpace> {
     let exported = crate::client::transfer::export(
         &ctx.paths,
-        SpaceSelector::parse(selector),
+        selector.clone(),
         UnsavedWork::default(),
         output.file(),
     )

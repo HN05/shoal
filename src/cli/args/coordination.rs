@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use clap::{Args, Subcommand};
 
 use crate::client::item_numbers::ItemNumber;
+use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -15,7 +16,7 @@ pub enum CoordinationCommand {
         command: Option<MessagesCommand>,
         /// Space, a workspace or chat, whose messages to read; defaults to the
         /// current workspace or chat, or a picker.
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Run as an agent hook: read the hook event on stdin, print new
         /// messages as additional context, and never fail the agent.
         #[arg(long, conflicts_with = "space")]
@@ -38,7 +39,7 @@ pub enum CoordinationCommand {
         command: Option<FilesCommand>,
         /// Space, a workspace or chat; defaults to the current workspace or
         /// chat, or a picker.
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Print only the paths of Shoal's copies, one per line.
         #[arg(long)]
         path: bool,
@@ -52,7 +53,7 @@ pub enum CoordinationCommand {
     Done {
         /// Space, a workspace or chat, whose work is finished; defaults to
         /// the current workspace or chat, or a picker.
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Request cleanup even when [cleanup.done] enabled is false; preserve dirty or unpushed work.
         #[arg(long, conflicts_with = "undo")]
         cleanup: bool,
@@ -86,7 +87,7 @@ pub enum FilesCommand {
         /// Space, a workspace or chat, to use; defaults to the current workspace
         /// or chat, or a picker.
         #[arg(short = 's', long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Delete the attached files of a space; asks first when an agent or
     /// command runs there.
@@ -97,7 +98,7 @@ pub enum FilesCommand {
         /// Space, a workspace or chat, to use; defaults to the current workspace
         /// or chat, or a picker.
         #[arg(short = 's', long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Delete the files of every workspace without a running agent or
         /// command, and of every removed chat.
         #[arg(short = 'A', long, conflicts_with_all = ["space", "files"])]
@@ -113,7 +114,7 @@ pub struct QuestionsArgs {
     pub number: Option<ItemNumber>,
     /// List questions from this space, a workspace or chat.
     #[arg(short = 's', long, conflicts_with = "number")]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
     /// Send an answer or choice number.
     #[arg(long, requires = "number", conflicts_with = "withdraw")]
     pub answer: Option<String>,
@@ -141,7 +142,7 @@ pub enum MessagesCommand {
         /// Space, a workspace or chat, to send to; defaults to the current
         /// workspace or chat, or a picker.
         #[arg(short = 's', long, conflicts_with_all = ["all", "repository"])]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// Send to every running agent of the workspaces and chats, such as
         /// to tell them the network works again.
         #[arg(short = 'A', long, conflicts_with = "repository")]
@@ -185,7 +186,7 @@ pub struct QuestionAskArgs {
     /// Space, a workspace or chat, whose agents ask; defaults to the current
     /// workspace or chat, or a picker.
     #[arg(short = 's', long)]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
     /// The workspace the wait of an earlier release names when an upgrade
     /// hands it over to this one.
     #[arg(
@@ -194,7 +195,7 @@ pub struct QuestionAskArgs {
         conflicts_with = "space",
         requires = "resume"
     )]
-    pub handed_over: Option<String>,
+    pub handed_over: Option<SpaceSelector>,
     /// Continue waiting for the question with this number within the
     /// space, as the installed release does after an upgrade restarted the
     /// daemon.

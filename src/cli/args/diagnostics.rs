@@ -1,4 +1,5 @@
 //! Arguments of `shoal alerts`.
+use crate::client::space_names::SpaceSelector;
 use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
@@ -41,7 +42,7 @@ pub enum AlertsCommand {
         /// Space, a workspace or chat, the notification names; defaults to
         /// the current workspace or chat, or a picker.
         #[arg(short = 's', long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Delete all notifications, including unread ones.
     Clear,
@@ -52,6 +53,6 @@ pub enum AlertsCommand {
         /// Space, a workspace or chat, that sent it; defaults to the current
         /// workspace or chat, or a picker.
         #[arg(short = 's', long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
 }

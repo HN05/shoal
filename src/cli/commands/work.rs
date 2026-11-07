@@ -2,6 +2,7 @@
 use anyhow::Result;
 
 use crate::cli::{args::workspace::WorkCommand, context::Context};
+use crate::client::space_names::SpaceSelector;
 
 use super::{restore, workspaces};
 
@@ -24,7 +25,13 @@ pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
         } => rename::rename(ctx, space, title).await,
         // Only --request leaves out the title, and its single argument
         // takes the title's place.
-        WorkCommand::Rename { space, title, .. } => rename::request(ctx, title.or(space)).await,
+        WorkCommand::Rename { space, title, .. } => {
+            rename::request(
+                ctx,
+                title.map(|title| SpaceSelector::parse(&title)).or(space),
+            )
+            .await
+        }
         WorkCommand::Checkpoint { workspace, name } => {
             restore::checkpoint(ctx, workspace, name).await
         }

@@ -1,4 +1,5 @@
 //! Arguments of `shoal config`, `shoal update` and `shoal daemon`.
+use crate::client::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -47,7 +48,7 @@ pub enum ConfigCommand {
     },
     /// Show effective repository settings and the layer each value came from.
     Show {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Show this repository's settings in its registered checkout instead of a workspace's.
         #[arg(short = 'r', long = "repo", conflicts_with = "workspace")]
         repository: Option<String>,

@@ -16,7 +16,7 @@ use crate::{
 pub(super) async fn run(
     ctx: &Context,
     command: Option<BaseCommand>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let (workspace, change) = match command {
         Some(BaseCommand::Set { base, workspace }) => (workspace, Some(Change::Set(base))),
@@ -60,12 +60,11 @@ enum Change {
 }
 
 fn find<'a>(workspaces: &'a [Workspace], selector: &str) -> Result<&'a Workspace> {
+    let selected = SpaceSelector::parse(selector);
     workspaces
         .iter()
-        .find(|w| w.id == selector || w.name == selector)
-        .ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}")).into()
-        })
+        .find(|w| selected.selects(&w.id, &w.name, w.number))
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
 }
 
 /// Choose another workspace of the same repository as the base.

@@ -24,7 +24,7 @@ use crate::{
 /// or any written to a directory, go to a file each in it.
 pub(in super::super) async fn export_copy(
     ctx: &Context,
-    names: Vec<String>,
+    names: Vec<SpaceSelector>,
     file: PathBuf,
     checkpoint: Option<u64>,
 ) -> Result<i32> {

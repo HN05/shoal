@@ -31,7 +31,7 @@ const NO_REPOSITORY: &str =
 /// user picks.
 pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     repo: Option<String>,
     item: Option<&str>,
 ) -> Result<ItemContext> {
@@ -46,7 +46,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     }
     if space.is_some() || ui::current_chat(&space).is_some() {
         let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
-        return space_context(ctx, space).await;
+        return space_context(ctx, SpaceSelector::parse(&space)).await;
     }
     if let Some(context) = current_context(ctx).await? {
         return Ok(context);
@@ -56,13 +56,13 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     }
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
-    space_context(ctx, space).await
+    space_context(ctx, SpaceSelector::parse(&space)).await
 }
 
 /// The context of the workspace or running chat `space` names.
 pub(in crate::cli::commands) async fn space_context(
     ctx: &Context,
-    space: String,
+    space: SpaceSelector,
 ) -> Result<ItemContext> {
     Ok(
         match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
@@ -70,7 +70,7 @@ pub(in crate::cli::commands) async fn space_context(
             Some(PresentSpace::Workspace(workspace)) => {
                 ItemContext::Workspace(SpaceSelector::id(&workspace.id))
             }
-            None => ItemContext::Workspace(SpaceSelector::parse(&space)),
+            None => ItemContext::Workspace(space),
         },
     )
 }
@@ -108,7 +108,7 @@ async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
 /// since `--link` assigns the issue to one.
 pub(in crate::cli::commands) async fn select_open_context(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     repo: Option<String>,
 ) -> Result<(ItemContext, Option<String>)> {
     if space.is_none()
@@ -141,7 +141,8 @@ async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
     let Some(chat) = ui::current_chat(&None) else {
         return Ok(false);
     };
-    let space = crate::client::workspaces::present_space(&ctx.paths, &chat).await?;
+    let space =
+        crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&chat)).await?;
     Ok(matches!(space, Some(PresentSpace::Chat(chat)) if chat.repository_id.is_none()))
 }
 

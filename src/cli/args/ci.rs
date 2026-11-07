@@ -3,6 +3,7 @@
 use clap::{Args, Subcommand};
 
 use crate::cli::args::item_reference;
+use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -65,7 +66,7 @@ pub struct Subject {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long, conflicts_with = "repo")]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
     #[command(flatten)]
     pub repo: crate::cli::args::changes::RegisteredRepo,
 }
@@ -76,7 +77,7 @@ pub struct ListArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long, conflicts_with = "repo")]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
     /// Branch whose runs to list; defaults to the workspace's branch, in a
     /// chat its linked PR's head, or else the repository's default branch.
     #[arg(long)]
@@ -105,7 +106,7 @@ pub struct RunArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or else the picker unless a URL names the workflow.
     #[arg(short = 's', long, conflicts_with = "repo")]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
     /// Branch to run on; defaults to the branch a workflow file's URL names,
     /// then the workspace's, the only one workspace processes may run on, or
     /// else, as in a chat, the repository's default branch; a chat's agent

@@ -118,8 +118,8 @@ pub fn command() -> Command {
             leaf = child;
         }
         typed.need = Need::of_matches(&path, leaf);
-        typed.workspace = value(leaf, "workspace")
-            .or_else(|| value(leaf, "space"))
+        typed.workspace = space_value(leaf, "workspace")
+            .or_else(|| space_value(leaf, "space"))
             .or_else(|| {
                 leaf.try_get_many::<OsString>("")
                     .ok()
@@ -129,11 +129,11 @@ pub fn command() -> Command {
                     .and_then(|arg| arg.to_str().map(str::to_owned))
             });
         typed.named = leaf
-            .try_get_many::<String>("workspace")
+            .try_get_many::<SpaceSelector>("workspace")
             .ok()
             .flatten()
-            .or_else(|| leaf.try_get_many::<String>("space").ok().flatten())
-            .map(|names| names.cloned().collect())
+            .or_else(|| leaf.try_get_many::<SpaceSelector>("space").ok().flatten())
+            .map(|names| names.map(ToString::to_string).collect())
             .unwrap_or_default();
         typed.pool = value(leaf, "pool");
         typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
@@ -165,6 +165,12 @@ pub fn command() -> Command {
 
 fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
     matches.try_get_one::<String>(id).ok().flatten().cloned()
+}
+
+/// The text of the space argument `id`, as typed.
+fn space_value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
+    let selector = matches.try_get_one::<SpaceSelector>(id).ok().flatten();
+    selector.map(ToString::to_string)
 }
 
 /// Attach live completers to the arguments that name daemon-managed objects.
@@ -332,7 +338,7 @@ impl Typed {
                 let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
                 let workspace = context
                     .resolve(
-                        self.workspace.as_deref(),
+                        self.workspace.as_deref().map(SpaceSelector::parse).as_ref(),
                         env::workspace_scoped(),
                         ScopeOrder::AfterDirectory,
                     )
@@ -529,7 +535,7 @@ impl Typed {
     fn workspace<'a>(&self, workspaces: &'a [Workspace]) -> Option<&'a Workspace> {
         let cwd = std::env::current_dir().ok();
         WorkspaceContext::from_directory(workspaces, cwd.as_deref()).resolve(
-            self.workspace.as_deref(),
+            self.workspace.as_deref().map(SpaceSelector::parse).as_ref(),
             env::workspace_scoped(),
             ScopeOrder::AfterDirectory,
         )

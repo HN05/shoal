@@ -26,7 +26,7 @@ use crate::{
 
 pub(super) async fn open_pr(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     options: PullOptions,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
@@ -115,7 +115,7 @@ async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
 
 pub(super) async fn open_issue(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     issue: NewIssue,
     repository: Option<String>,
     link: bool,

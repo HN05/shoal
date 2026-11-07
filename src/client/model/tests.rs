@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::forge::items::link::LinkKind;
 
 #[test]
@@ -85,9 +86,10 @@ fn linked_items_know_their_repository() {
 }
 
 #[test]
-fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
+fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({
         "id": "w1",
+        "number": 3,
         "repository_id": "repo",
         "name": "worker",
         "path": "/worker",
@@ -95,9 +97,9 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
         "state": "ready",
     }))
     .unwrap();
-    let chat = |id: &str, name: &str, restore| Chat {
+    let chat = |id: &str, number, name: &str, restore| Chat {
         mode: "chat".into(),
-        number: 1,
+        number,
         id: id.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
@@ -120,16 +122,22 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
     let spaces = Spaces {
         workspaces: vec![workspace],
         chats: vec![
-            chat("c1", "talk", None),
-            chat("c2", "saved", Some(crate::state::ChatRestore::Resume)),
+            chat("c1", 1, "talk", None),
+            chat("c2", 2, "saved", Some(crate::state::ChatRestore::Resume)),
         ],
     };
-    let found = |selector| spaces.find(selector).map(|space| space.name().to_owned());
+    let found = |selector: &str| {
+        let space = spaces.find(&SpaceSelector::parse(selector));
+        space.map(|space| space.name().to_owned())
+    };
     assert_eq!(found("w1").as_deref(), Some("worker"));
     assert_eq!(found("worker").as_deref(), Some("worker"));
+    assert_eq!(found("3").as_deref(), Some("worker"));
     assert_eq!(found("c1").as_deref(), Some("talk"));
+    assert_eq!(found("2").as_deref(), Some("saved"));
     assert_eq!(found("saved").as_deref(), Some("saved"));
-    assert!(spaces.find("missing").is_none());
+    assert_eq!(found("4"), None);
+    assert_eq!(found("missing"), None);
 }
 
 #[test]

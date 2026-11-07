@@ -4,6 +4,7 @@
 use anyhow::{Result, ensure};
 
 use crate::client::space_names::SpaceSelector;
+use crate::model::PresentSpace;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -28,11 +29,15 @@ pub(super) enum Listing {
 }
 
 /// Show the files of the workspace or chat as `listing` asks.
-pub(super) async fn list(ctx: &Context, space: Option<String>, listing: Listing) -> Result<i32> {
+pub(super) async fn list(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    listing: Listing,
+) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let files = crate::client::files::list(&ctx.paths, SpaceSelector::parse(&space)).await?;
     if listing == Listing::Menu && ctx.interactive_output() {
-        return menu::choose(ctx, space, &files).await;
+        return menu::choose(ctx, SpaceSelector::parse(&space), &files).await;
     }
     let paths = listing == Listing::Paths;
     ctx.show(&files, |files| {
@@ -56,7 +61,11 @@ pub(super) async fn list(ctx: &Context, space: Option<String>, listing: Listing)
 
 /// Attach copies of `files` to the workspace or chat, checking each before
 /// a workspace is picked.
-pub(super) async fn add(ctx: &Context, space: Option<String>, files: Vec<String>) -> Result<i32> {
+pub(super) async fn add(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    files: Vec<String>,
+) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let added = crate::client::files::add(
@@ -103,7 +112,7 @@ pub(super) async fn remove(
     }
     let deleted = crate::client::files::remove(
         &ctx.paths,
-        space.as_deref().map(SpaceSelector::id),
+        space.as_deref().map(SpaceSelector::parse),
         names,
         ids,
     )
@@ -151,18 +160,14 @@ async fn confirmation(ctx: &Context, space: Option<&str>) -> Result<Option<Strin
 /// The name of the workspace where an agent or command runs, or of the
 /// running chat, that `selector` names.
 async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    if let Some(listed) = workspaces
-        .iter()
-        .find(|listed| listed.id == selector || listed.name == selector)
-    {
-        return Ok(listed.running.then(|| listed.name.to_string()));
-    }
-    Ok(crate::client::chats::list(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|chat| chat.id == selector || chat.name == selector)
-        .map(|chat| chat.name.into()))
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    Ok(match spaces.find(&SpaceSelector::parse(selector)) {
+        Some(PresentSpace::Workspace(workspace)) => {
+            workspace.running.then(|| workspace.name.to_string())
+        }
+        Some(PresentSpace::Chat(chat)) => chat.restore.is_none().then(|| chat.name.into()),
+        None => None,
+    })
 }
 
 /// The file's name, title, size, how it came, when, read at `now`, when a

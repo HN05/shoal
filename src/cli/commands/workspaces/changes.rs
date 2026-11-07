@@ -14,7 +14,7 @@ use crate::{
 
 pub(in crate::cli::commands) async fn diff(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let base =
@@ -41,7 +41,7 @@ fn diff_untracked(path: &Path, command: &[OsString]) -> Result<i32> {
 
 pub(in crate::cli::commands) async fn conflicts(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     target: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;

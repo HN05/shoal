@@ -26,7 +26,7 @@ use crate::{
 /// turn of an agent with integration `ends_turn` when one is named.
 pub(super) async fn run(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
@@ -37,7 +37,7 @@ pub(super) async fn run(
 
 async fn report_state(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
@@ -71,7 +71,7 @@ pub(super) async fn start_woken_turn(ctx: &Context, space: String) -> Result<boo
 /// integration cannot read reports an unknown failure.
 pub(super) async fn turn_failed(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     integration: IntegrationKind,
 ) -> Result<i32> {
     let reported = report_turn_failure(ctx, space, integration).await;
@@ -81,7 +81,7 @@ pub(super) async fn turn_failed(
 
 async fn report_turn_failure(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     integration: IntegrationKind,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;

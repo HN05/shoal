@@ -34,7 +34,11 @@ pub(super) struct Split {
     pub options: CreationOptions,
 }
 
-pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) -> Result<i32> {
+pub(super) async fn run(
+    ctx: &Context,
+    workspace: Option<SpaceSelector>,
+    split: Split,
+) -> Result<i32> {
     // A supplied branch fails before the parent picker opens.
     if let Some(branch) = &split.branch {
         crate::git::check_branch_name(None, branch).await?;
@@ -73,7 +77,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
 /// repository, or the copied one's.
 pub(super) async fn at_commit(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     base: Option<String>,
     copy: CopyArgs,
     options: CreationOptions,
@@ -89,7 +93,7 @@ pub(super) async fn at_commit(
     let created = crate::client::workspaces::create_at_commit(
         &ctx.paths,
         repository,
-        parent.as_deref().map(SpaceSelector::id),
+        parent.as_deref().map(SpaceSelector::parse),
         start,
         options,
     )
@@ -106,7 +110,7 @@ pub(super) async fn at_commit(
 /// current one, and none.
 async fn commit_owner(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     copied: Option<String>,
 ) -> Result<(crate::repository::Selector, Option<String>)> {
     match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
@@ -114,7 +118,10 @@ async fn commit_owner(
             let repository = crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .into_iter()
-                .find(|workspace| workspace.id == parent || workspace.name == parent)
+                .find(|workspace| {
+                    let parent = SpaceSelector::parse(&parent);
+                    parent.selects(&workspace.id, &workspace.name, workspace.number)
+                })
                 .map(|workspace| workspace.repository_id)
                 .ok_or_else(|| {
                     Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}"))

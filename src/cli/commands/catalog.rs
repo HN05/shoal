@@ -13,11 +13,12 @@ use crate::cli::{
     ui::{self, Fallback},
 };
 use crate::client::output::{Output, catalog::Catalog};
+use crate::client::space_names::SpaceSelector;
 
 pub(super) async fn show(
     ctx: &Context,
     kind: Option<CatalogKind>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     match kind {

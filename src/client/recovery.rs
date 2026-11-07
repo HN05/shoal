@@ -71,14 +71,17 @@ pub async fn checkpoint(
 
 /// Every checkpoint of `workspace`, read page by page; `None` when the
 /// workspace has none to restore.
-pub async fn checkpoints(daemon: &impl Daemon, workspace: &str) -> Result<Option<Vec<Checkpoint>>> {
+pub async fn checkpoints(
+    daemon: &impl Daemon,
+    workspace: &SpaceSelector,
+) -> Result<Option<Vec<Checkpoint>>> {
     let mut checkpoints = Vec::new();
     loop {
         let after = checkpoints
             .last()
             .map(|checkpoint: &Checkpoint| checkpoint.number);
         let method = RecoveryMethod::Checkpoints {
-            workspace: SpaceSelector::parse(workspace),
+            workspace: workspace.clone(),
             after,
         };
         let Some(page) = request::<Option<Vec<Checkpoint>>>(daemon, method).await? else {

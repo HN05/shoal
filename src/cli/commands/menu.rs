@@ -595,10 +595,12 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
     let space = row.space().map(str::to_owned);
     ensure!(space.is_some(), "select a space for this action");
     if let Some(chat) = chat_name(ctx, space.as_deref()).await? {
-        return Ok(Choice::Run(Box::new(chat_command(ctx, key, chat).await?)));
+        return Ok(Choice::Run(Box::new(
+            chat_command(ctx, key, SpaceSelector::parse(&chat)).await?,
+        )));
     }
     Ok(Choice::Run(Box::new(
-        workspace_command(ctx, key, space).await?,
+        workspace_command(ctx, key, space.as_deref().map(SpaceSelector::parse)).await?,
     )))
 }
 
@@ -609,7 +611,7 @@ async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
         return Ok(None);
     };
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, id).await? {
+        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::id(id)).await? {
             Some(PresentSpace::Chat(chat)) => Some(chat.name.into()),
             _ => None,
         },
@@ -618,7 +620,7 @@ async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
 
 /// What `key` does to the chat `chat`: only attaching, viewing its items
 /// and removing it act on a chat.
-async fn chat_command(ctx: &Context, key: Key, chat: String) -> Result<Command> {
+async fn chat_command(ctx: &Context, key: Key, chat: SpaceSelector) -> Result<Command> {
     let chat = Some(chat);
     Ok(match key {
         Key::Delete => Command::Lifecycle(LifecycleCommand::Rm {
@@ -655,11 +657,13 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         }
         // A chat attaches by its name.
         Row::NeedsInput(space) => Command::Sessions(SessionsCommand::Attach {
-            target: Some(chat_name(ctx, Some(&space)).await?.unwrap_or(space)),
+            target: Some(SpaceSelector::parse(
+                &chat_name(ctx, Some(&space)).await?.unwrap_or(space),
+            )),
             session: None,
         }),
         Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
-            space: Some(workspace),
+            space: Some(SpaceSelector::parse(&workspace)),
             item: None,
         }),
         Row::Ready {
@@ -669,7 +673,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             items: ItemArgs {
                 kind_or_url: Some(url),
                 item: None,
-                space: Some(space),
+                space: Some(SpaceSelector::parse(&space)),
             },
             repo: Default::default(),
             no_comments: false,
@@ -681,18 +685,18 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         Row::Ready { space, url: None } => match chat_name(ctx, Some(&space)).await? {
             // A chat marked itself, so its agent says what is ready.
             Some(chat) => Command::Sessions(SessionsCommand::Attach {
-                target: Some(chat),
+                target: Some(SpaceSelector::parse(&chat)),
                 session: None,
             }),
             None => Command::Workspace(WorkspaceCommand::Status {
-                space: Some(space),
+                space: Some(SpaceSelector::parse(&space)),
                 item: None,
             }),
         },
         Row::Demo { workspace, name } => Command::Sessions(SessionsCommand::Demo {
             command: None,
             name: Some(name),
-            workspace: Some(workspace),
+            workspace: Some(SpaceSelector::parse(&workspace)),
         }),
         Row::Untracked(path) => Command::Workspace(WorkspaceCommand::Work {
             command: Some(WorkCommand::Adopt {
@@ -714,12 +718,12 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             }),
         }),
         Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {
-            workspace: Some(workspace),
+            workspace: Some(SpaceSelector::parse(&workspace)),
         }),
         Row::Notification(name) => {
             ensure!(!name.is_empty(), "the notification names no workspace");
             Command::Workspace(WorkspaceCommand::Cd {
-                workspace: Some(name),
+                workspace: Some(SpaceSelector::parse(&name)),
             })
         }
         Row::Add => add(),
@@ -735,7 +739,11 @@ fn add() -> Command {
 }
 
 /// What `key` does to `workspace`.
-async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -> Result<Command> {
+async fn workspace_command(
+    ctx: &Context,
+    key: Key,
+    workspace: Option<SpaceSelector>,
+) -> Result<Command> {
     Ok(match key {
         Key::Enter => Command::Workspace(WorkspaceCommand::Cd { workspace }),
         Key::Delete => Command::Lifecycle(LifecycleCommand::Rm {
@@ -770,7 +778,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
 
 /// View one of the issues and PRs the space `workspace` names links, or
 /// open it in the browser, as chosen.
-async fn view_command(ctx: &Context, space: Option<String>) -> Result<Command> {
+async fn view_command(ctx: &Context, space: Option<SpaceSelector>) -> Result<Command> {
     let space = space.context("select a space to view its issues and PRs")?;
     let (items, kind) = linked_items(ctx, &space).await?;
     ensure!(!items.is_empty(), "the {kind} links no issue or PR");
@@ -794,8 +802,11 @@ async fn view_command(ctx: &Context, space: Option<String>) -> Result<Command> {
 /// only ones `shoal view` reads for it: a workspace's worktree's, or a chat's
 /// registered checkout's, and none for a chat without a repository, which
 /// links nothing; with the space's kind.
-async fn linked_items(ctx: &Context, space: &str) -> Result<(Vec<LinkedItem>, &'static str)> {
-    let unknown = || Refusal::new(Reason::NotFound, format!("unknown space: {space}"));
+async fn linked_items(
+    ctx: &Context,
+    space: &SpaceSelector,
+) -> Result<(Vec<LinkedItem>, &'static str)> {
+    let unknown = || Refusal::new(Reason::NotFound, format!("no space {space}"));
     let (links, path, kind) = match crate::client::workspaces::present_space(&ctx.paths, space)
         .await?
     {
@@ -884,15 +895,12 @@ const APPS: [(&str, DesktopApp); 3] = [
     ("t3", DesktopApp::T3),
 ];
 
-async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
+async fn execute_command(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<Command> {
     let target = workspace
         .clone()
         .context("select a workspace to execute in")?;
-    let settings = crate::client::workspaces::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::parse(&target)),
-    )
-    .await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let agents = agents::names(&settings)
         .into_iter()

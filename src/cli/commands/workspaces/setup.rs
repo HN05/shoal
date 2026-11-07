@@ -56,7 +56,7 @@ fn become_setup(setup_cmd: &Path) -> anyhow::Error {
 
 pub(in crate::cli::commands) async fn setup(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection =
@@ -77,7 +77,7 @@ pub(in crate::cli::commands) async fn setup(
 /// worktree verifies and no setup process remains.
 pub(in crate::cli::commands) async fn skip_setup(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace =

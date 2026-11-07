@@ -3,6 +3,7 @@ use std::ffi::OsString;
 
 use clap::Subcommand;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, SpaceTargets},
@@ -96,10 +97,10 @@ pub enum SessionsCommand {
     /// chat, else offers a picker. The session of an agent Shoal stopped
     /// until its automatic restore is not offered.
     Attach {
-        /// Workspace or running chat, by name; `-` for the one whose session
-        /// this terminal last detached from.
+        /// Workspace or running chat, by number, name or ID; `-` for the one
+        /// whose session this terminal last detached from.
         #[arg(id = "workspace", value_name = "TARGET")]
-        target: Option<String>,
+        target: Option<SpaceSelector>,
         /// Session to attach when the workspace has several.
         #[arg(long)]
         session: Option<String>,
@@ -117,7 +118,7 @@ pub enum SessionsCommand {
         /// Workspace whose demos to offer; defaults to the current workspace,
         /// otherwise every workspace.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
 }
 
@@ -184,7 +185,7 @@ pub enum DemoCommand {
         queue: bool,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// The command to run instead of the configured one.
         #[arg(last = true)]
         command: Vec<OsString>,
@@ -194,14 +195,14 @@ pub enum DemoCommand {
         name: Option<String>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// List configured and running demos.
     Ls {
         /// Workspace to list; defaults to the current workspace, otherwise
         /// the running demos of every workspace.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Print what a running demo shows.
     Screen {
@@ -211,7 +212,7 @@ pub enum DemoCommand {
         lines: usize,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Type text into a running demo, such as $'q' or $'\r' for Enter.
     Send {
@@ -219,6 +220,6 @@ pub enum DemoCommand {
         keys: String,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
 }

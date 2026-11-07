@@ -31,11 +31,9 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     let selector =
         ui::select_workspace(ctx, args.copy.flatten(), Fallback::CurrentDirectory).await?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let live = workspaces.into_iter().find(|workspace| {
-        workspace.id == selector
-            || workspace.name == selector
-            || workspace.number.to_string() == selector
-    });
+    let selected = SpaceSelector::parse(&selector);
+    let live = (workspaces.into_iter())
+        .find(|workspace| selected.selects(&workspace.id, &workspace.name, workspace.number));
     let (workspace, repository, named) = match live {
         Some(workspace) => (
             workspace.id,
@@ -62,7 +60,7 @@ async fn removed(ctx: &Context, selector: String) -> Result<(String, String, Str
     let removed = crate::client::removal::removed(&ctx.paths).await?;
     let removed = removed
         .into_iter()
-        .find(|removed| removed.workspace_id == selector || removed.name == selector)
+        .find(|removed| SpaceSelector::parse(&selector).names(&removed.workspace_id, &removed.name))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
     let named = removed.checkpoint.branch.unwrap_or(removed.name.into());
     Ok((removed.workspace_id, removed.repository_id, named))

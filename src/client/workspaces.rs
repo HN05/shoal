@@ -40,8 +40,11 @@ pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
     })
 }
 
-/// The workspace or chat `selector` names, by ID or name.
-pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
+/// The workspace or chat `selector` names, by number, ID or name.
+pub async fn present_space(
+    daemon: &impl Daemon,
+    selector: &SpaceSelector,
+) -> Result<Option<PresentSpace>> {
     Ok(spaces(daemon).await?.find(selector))
 }
 

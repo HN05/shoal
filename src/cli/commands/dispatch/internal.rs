@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::internal::InternalCommand,
@@ -30,16 +31,37 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             state,
             ends_turn,
             space,
-        } => agent_state::run(&ctx, space, state, ends_turn).await,
+        } => {
+            agent_state::run(
+                &ctx,
+                space.as_deref().map(SpaceSelector::parse),
+                state,
+                ends_turn,
+            )
+            .await
+        }
         InternalCommand::TurnFailed { integration, space } => {
-            agent_state::turn_failed(&ctx, space, integration).await
+            agent_state::turn_failed(
+                &ctx,
+                space.as_deref().map(SpaceSelector::parse),
+                integration,
+            )
+            .await
         }
         InternalCommand::Wake {
             agent,
             space,
             handed_over,
             resume,
-        } => messages::wake(&ctx, agent, space.or(handed_over), resume).await,
+        } => {
+            messages::wake(
+                &ctx,
+                agent,
+                space.as_deref().map(SpaceSelector::parse).or(handed_over),
+                resume,
+            )
+            .await
+        }
         InternalCommand::SubagentStart => subagents::start(&ctx).await,
         InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
         InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,

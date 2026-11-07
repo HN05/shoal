@@ -39,6 +39,7 @@ use crate::cli::args::{
     sessions::SessionsCommand,
     workspace::{WorkCommand, WorkspaceCommand},
 };
+use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -90,7 +91,7 @@ pub enum Command {
         name: Option<String>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[arg(last = true)]
         args: Vec<OsString>,
     },

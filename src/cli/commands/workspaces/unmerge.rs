@@ -25,7 +25,7 @@ use crate::{
 /// Undo the latest local merge of `workspace`'s branch into the default branch.
 pub(in crate::cli::commands) async fn unmerge(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     match operations::run(

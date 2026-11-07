@@ -10,7 +10,7 @@ use crate::{
         context::Context,
         installed::{arguments, replace_option, with_flag, without_option},
     },
-    client::links::Updates,
+    client::{links::Updates, space_names::SpaceSelector},
     installed::Executable,
     protocol::WakeEnd,
 };
@@ -25,11 +25,11 @@ use crate::{
 pub(in crate::cli::commands) async fn wake(
     ctx: &Context,
     agent: u32,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     resumed: bool,
 ) -> Result<i32> {
     let mut wait = WakeWait {
-        space,
+        space: space.map(|space| space.to_string()),
         inbox: None,
         restarted: resumed,
     };
@@ -79,7 +79,7 @@ async fn report_end(ctx: &Context, wait: &WakeWait, ended: WakeEnd) {
                     .space
             }
         };
-        let space = crate::client::space_names::SpaceSelector::parse(&space);
+        let space = SpaceSelector::parse(&space);
         crate::client::agents::report_wake_end(&ctx.paths, space, ended).await
     };
     let limit = crate::agents::hooks::MESSAGE_DAEMON_LIMIT;

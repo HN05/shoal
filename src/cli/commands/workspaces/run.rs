@@ -16,7 +16,7 @@ use crate::{
 
 pub(in crate::cli::commands) async fn exec(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     command: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -28,7 +28,7 @@ const EDIT: &str = "edit";
 
 pub(in crate::cli::commands) async fn edit(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -38,7 +38,7 @@ pub(in crate::cli::commands) async fn edit(
     )
     .await?;
     if settings.commands.contains_key(EDIT) {
-        return configured::run(ctx, EDIT, Some(workspace), args).await;
+        return configured::run(ctx, EDIT, Some(SpaceSelector::parse(&workspace)), args).await;
     }
     let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(

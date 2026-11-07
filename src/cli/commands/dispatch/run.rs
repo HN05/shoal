@@ -7,11 +7,12 @@ use crate::cli::{
     commands::{configured, workspaces},
     context::Context,
 };
+use crate::client::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn run(
     ctx: Context,
     name: Option<String>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     args: Vec<OsString>,
 ) -> Result<i32> {
     match name {
@@ -26,7 +27,7 @@ pub(in crate::cli::commands) async fn custom(ctx: Context, words: Vec<OsString>)
     // An undefined name fails before its arguments are parsed, so that neither
     // help nor an argument error presents it as a command.
     let named = configured::named_workspace(&words);
-    let definition = if agents::is_agent(&ctx, &name, named.as_deref()).await? {
+    let definition = if agents::is_agent(&ctx, &name, named.as_ref()).await? {
         None
     } else {
         Some(configured::definition(&ctx, &name, named).await?)

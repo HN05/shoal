@@ -18,7 +18,7 @@ use crate::{
 
 pub(super) async fn attach(
     ctx: &Context,
-    target: Option<String>,
+    target: Option<SpaceSelector>,
     session: Option<String>,
 ) -> Result<i32> {
     ensure!(
@@ -71,14 +71,16 @@ impl Target {
     /// whose session this terminal last left running; without one, the
     /// current workspace, else the current checkout's only running chat,
     /// else a picker of the workspaces and chats with sessions.
-    async fn resolve(ctx: &Context, name: Option<String>) -> Result<Self> {
+    async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Self> {
         let chats = crate::client::chats::list(&ctx.paths).await?;
-        if name.as_deref() == Some(recent::PREVIOUS) {
+        if name.as_ref().is_some_and(recent::is_previous) {
             let id = recent::previous_space(ctx, &chats).await?;
             return Self::space(ctx, chats, id).await;
         }
         if let Some(name) = name {
-            return match chats.into_iter().find(|chat| chat.name == name) {
+            return match (chats.into_iter())
+                .find(|chat| name.selects(&chat.id, &chat.name, chat.number))
+            {
                 Some(chat) => Ok(Self::Chat(Box::new(chat))),
                 None => Self::workspace(ctx, Some(name), Fallback::CurrentDirectory).await,
             };
@@ -93,7 +95,11 @@ impl Target {
         Self::picked(ctx, chats).await
     }
 
-    async fn workspace(ctx: &Context, name: Option<String>, fallback: Fallback) -> Result<Self> {
+    async fn workspace(
+        ctx: &Context,
+        name: Option<SpaceSelector>,
+        fallback: Fallback,
+    ) -> Result<Self> {
         let id = ui::choose_workspace(ctx, name, fallback).await?;
         Self::inspected(ctx, id).await
     }

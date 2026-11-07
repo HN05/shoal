@@ -35,7 +35,7 @@ pub(super) async fn run(
     ctx: &Context,
     command: Option<DemoCommand>,
     name: Option<String>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     // Without its token, the daemon would answer a workspace process as the user.
     ensure!(
@@ -128,7 +128,7 @@ struct Chosen {
 
 async fn start(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     name: Option<String>,
     overrides: Overrides,
     queue: bool,
@@ -317,7 +317,11 @@ async fn not_started(launch: &Launch) -> anyhow::Error {
     )
 }
 
-async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) -> Result<i32> {
+async fn stop(
+    ctx: &Context,
+    workspace: Option<SpaceSelector>,
+    name: Option<String>,
+) -> Result<i32> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
         .await?
@@ -361,7 +365,7 @@ async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) 
     demos::stop(&ctx.paths, SpaceSelector::id(&workspace.id), name).await
 }
 
-async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<i32> {
     let workspace = scope(ctx, workspace).await?;
     let configured = match &workspace {
         Some(workspace) => {
@@ -428,7 +432,11 @@ fn listing_rows(listing: &Listing, palette: Palette) -> Vec<String> {
     ui::aligned(rows, palette)
 }
 
-async fn open(ctx: &Context, name: Option<String>, workspace: Option<String>) -> Result<i32> {
+async fn open(
+    ctx: &Context,
+    name: Option<String>,
+    workspace: Option<SpaceSelector>,
+) -> Result<i32> {
     ensure!(ctx.interactive(), "opening a demo requires a terminal");
     let workspace = scope(ctx, workspace).await?;
     let demos = running(ctx, workspace.as_ref()).await?;
@@ -494,7 +502,12 @@ async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()
     Ok(())
 }
 
-async fn screen(ctx: &Context, workspace: Option<String>, name: &str, lines: usize) -> Result<i32> {
+async fn screen(
+    ctx: &Context,
+    workspace: Option<SpaceSelector>,
+    name: &str,
+    lines: usize,
+) -> Result<i32> {
     let demo = named(ctx, workspace, name).await?;
     let screen = terminal::demo_screen(&demo.launch).await?;
     let text = last_lines(&screen, lines).unwrap_or_default();
@@ -506,7 +519,12 @@ async fn screen(ctx: &Context, workspace: Option<String>, name: &str, lines: usi
     Ok(0)
 }
 
-async fn send(ctx: &Context, workspace: Option<String>, name: &str, keys: &str) -> Result<i32> {
+async fn send(
+    ctx: &Context,
+    workspace: Option<SpaceSelector>,
+    name: &str,
+    keys: &str,
+) -> Result<i32> {
     let demo = named(ctx, workspace, name).await?;
     terminal::send_demo_keys(&demo.launch, keys).await?;
     ctx.emit(&format!("Sent to demo {name}"), Sent { sent: true })?;
@@ -514,7 +532,7 @@ async fn send(ctx: &Context, workspace: Option<String>, name: &str, keys: &str) 
 }
 
 /// The running demo `name` of the workspace given or chosen.
-async fn named(ctx: &Context, workspace: Option<String>, name: &str) -> Result<Running> {
+async fn named(ctx: &Context, workspace: Option<SpaceSelector>, name: &str) -> Result<Running> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
         .await?
@@ -541,7 +559,7 @@ fn find(demos: Vec<Running>, name: &str, workspace: Option<&Workspace>) -> Resul
 
 /// The workspace whose demos to show: the one named, the current one, a
 /// workspace process's own, or `None` for every workspace.
-async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Workspace>> {
+async fn scope(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<Option<Workspace>> {
     let id = match workspace {
         Some(selector) => Some(ui::explicit_workspace(ctx, selector).await?),
         // A workspace process selects as start and stop do: the directory's

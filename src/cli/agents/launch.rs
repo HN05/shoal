@@ -23,7 +23,7 @@ use crate::{
 /// directory's or a picked one.
 pub(super) async fn shortcut_workspace(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<Workspace> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     Ok(
@@ -38,7 +38,7 @@ pub(super) async fn shortcut_workspace(
 pub(super) async fn shortcut(
     ctx: &Context,
     agent: Agent,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     subject: Option<templates::Subject>,
     args: Vec<OsString>,
     options: LaunchOptions,

@@ -59,3 +59,12 @@ fn an_agent_waiting_for_work_queues() {
     };
     assert!(!options.starts_now(&plan(&[]), None, true));
 }
+
+#[test]
+fn after_takes_a_bare_number_as_an_issue_and_text_as_work() {
+    assert!(super::queue::names_issue("42"));
+    assert!(super::queue::names_issue(
+        "https://forge.example/team/repo/issues/42"
+    ));
+    assert!(!super::queue::names_issue("fix-login"));
+}

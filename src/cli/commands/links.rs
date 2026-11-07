@@ -33,7 +33,7 @@ use crate::{
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = super::items::space_context(ctx, space.clone()).await?;
+    let context = super::items::space_context(ctx, SpaceSelector::parse(&space)).await?;
     let selection = resolve_kind(ctx, context, selection).await?;
     Ok((space, selection))
 }
@@ -97,7 +97,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = super::items::space_context(ctx, space.clone()).await?;
+    let context = super::items::space_context(ctx, SpaceSelector::parse(&space)).await?;
     let selected = resolve_kind(ctx, context.clone(), selected).await?;
     let (kind, input) = match selected {
         Selection {
@@ -250,7 +250,8 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
 /// `chat`.
 async fn space_kind(ctx: &Context, space: &str) -> Result<&'static str> {
     Ok(
-        (crate::client::workspaces::present_space(&ctx.paths, space).await?)
+        (crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(space))
+            .await?)
             .map_or("workspace", |space| space.kind()),
     )
 }

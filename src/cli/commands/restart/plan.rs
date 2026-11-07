@@ -199,7 +199,7 @@ async fn in_order(
 ) -> Result<Vec<PresentSpace>> {
     let mut ordered: Vec<PresentSpace> = Vec::new();
     for selector in selected {
-        let space = match spaces.find(&selector) {
+        let space = match spaces.find(&SpaceSelector::parse(&selector)) {
             Some(space) => space,
             None => {
                 let inspection =

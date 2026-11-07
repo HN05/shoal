@@ -1615,32 +1615,16 @@ pub struct Spaces {
 }
 
 impl Spaces {
-    /// The space `selector` names, by ID or name, else by number.
-    pub fn find_numbered(&self, selector: &str) -> Option<PresentSpace> {
-        self.find(selector).or_else(|| {
-            let number: u32 = selector.parse().ok()?;
-            let workspace = self.workspaces.iter().find(|w| w.number == number);
-            if let Some(workspace) = workspace {
-                return Some(PresentSpace::Workspace(workspace.clone()));
-            }
-            let chat = self.chats.iter().find(|chat| chat.number == number);
-            chat.map(|chat| PresentSpace::Chat(chat.clone()))
-        })
-    }
-
-    /// The space `selector` names, by ID or name.
-    pub fn find(&self, selector: &str) -> Option<PresentSpace> {
-        let named = |id: &str, name: &str| id == selector || name == selector;
-        let workspace = self
-            .workspaces
-            .iter()
-            .find(|workspace| named(&workspace.id, &workspace.name));
+    /// The space `selector` names, by number, ID or name.
+    pub fn find(&self, selector: &SpaceSelector) -> Option<PresentSpace> {
+        let workspace = (self.workspaces.iter())
+            .find(|workspace| selector.selects(&workspace.id, &workspace.name, workspace.number));
         if let Some(workspace) = workspace {
             return Some(PresentSpace::Workspace(workspace.clone()));
         }
         self.chats
             .iter()
-            .find(|chat| named(&chat.id, &chat.name))
+            .find(|chat| selector.selects(&chat.id, &chat.name, chat.number))
             .map(|chat| PresentSpace::Chat(chat.clone()))
     }
 

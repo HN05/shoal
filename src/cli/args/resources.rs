@@ -1,4 +1,5 @@
 //! Arguments of commands for leases and shared resources.
+use crate::client::space_names::SpaceSelector;
 use clap::{Args, Subcommand, ValueEnum};
 
 #[derive(Debug, Subcommand)]
@@ -10,7 +11,7 @@ pub enum ResourcesCommand {
         kind: AcquireKind,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long, global = true)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Release every lease, every lease of one kind, or a selected lease.
     Release {
@@ -18,14 +19,14 @@ pub enum ResourcesCommand {
         kind: Option<ReleaseKind>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long, global = true)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Show leases and usage for every kind, or one.
     Leases {
         kind: Option<LeaseKind>,
         /// Workspace to show; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Show every managed workspace.
         #[arg(short = 'A', long, conflicts_with = "workspace")]
         all: bool,
@@ -35,7 +36,7 @@ pub enum ResourcesCommand {
         kind: Option<CatalogKind>,
         /// Workspace whose configuration to show; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Show recorded requests for a kind.
     History {
@@ -65,7 +66,7 @@ pub enum HistoryKind {
     Sim {
         /// Workspace to show; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// Show every managed workspace.
         #[arg(short = 'A', long, conflicts_with = "workspace")]
         all: bool,

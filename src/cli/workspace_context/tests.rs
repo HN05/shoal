@@ -39,10 +39,13 @@ fn workspace(name: &str, path: &Path) -> Workspace {
 }
 
 #[test]
-fn explicit_names_and_ids_win_and_misses_do_not_fall_back() {
+fn explicit_numbers_names_and_ids_win_and_misses_do_not_fall_back() {
     let workspaces = [
         workspace("own", Path::new("/unused")),
-        workspace("explicit", Path::new("/elsewhere")),
+        Workspace {
+            number: 2,
+            ..workspace("explicit", Path::new("/elsewhere"))
+        },
     ];
     let context = WorkspaceContext {
         workspaces: &workspaces,
@@ -50,13 +53,21 @@ fn explicit_names_and_ids_win_and_misses_do_not_fall_back() {
     };
     for order in [ScopeOrder::BeforeDirectory, ScopeOrder::AfterDirectory] {
         for scoped in [false, true] {
-            for selector in ["explicit", "id-explicit"] {
+            for selector in ["explicit", "id-explicit", "2"] {
                 assert_eq!(
-                    context.resolve(Some(selector), scoped, order).unwrap().id,
+                    context
+                        .resolve(Some(&selector.into()), scoped, order)
+                        .unwrap()
+                        .id,
                     "id-explicit"
                 );
             }
-            assert!(context.resolve(Some("missing"), scoped, order).is_none());
+            assert!(
+                context
+                    .resolve(Some(&"missing".into()), scoped, order)
+                    .is_none()
+            );
+            assert!(context.resolve(Some(&"3".into()), scoped, order).is_none());
         }
     }
 }

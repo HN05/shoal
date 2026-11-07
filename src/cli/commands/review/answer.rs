@@ -14,13 +14,21 @@ use crate::{
 
 /// Cancel review `id`, else the space's queued or running one: a chat's is
 /// that of one of its linked PRs.
-pub(super) async fn cancel(ctx: &Context, id: Option<i64>, space: Option<String>) -> Result<i32> {
+pub(super) async fn cancel(
+    ctx: &Context,
+    id: Option<i64>,
+    space: Option<SpaceSelector>,
+) -> Result<i32> {
     let (workspace, id) = match id {
         Some(id) => (None, Some(id)),
         None => cancelled(ctx, space).await?,
     };
-    let review =
-        reviews::cancel(&ctx.paths, workspace.as_deref().map(SpaceSelector::id), id).await?;
+    let review = reviews::cancel(
+        &ctx.paths,
+        workspace.as_deref().map(SpaceSelector::parse),
+        id,
+    )
+    .await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
 }
@@ -28,7 +36,10 @@ pub(super) async fn cancel(ctx: &Context, id: Option<i64>, space: Option<String>
 /// What a cancellation without an ID names: a workspace, whose queued or
 /// running review the daemon finds, or the queued or running review of a
 /// chat's linked PRs.
-async fn cancelled(ctx: &Context, space: Option<String>) -> Result<(Option<String>, Option<i64>)> {
+async fn cancelled(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+) -> Result<(Option<String>, Option<i64>)> {
     Ok(match super::select(ctx, space).await? {
         super::Space::Chat(chat) => (None, Some(active_review(ctx, &chat).await?)),
         super::Space::Workspace(workspace) => (Some(workspace), None),

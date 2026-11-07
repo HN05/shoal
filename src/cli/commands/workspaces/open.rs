@@ -19,7 +19,7 @@ use crate::{
 /// to the named desktop app, else the one [`default_app`] gives.
 pub(in crate::cli::commands) async fn open(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     name: Option<DesktopApp>,
     args: Vec<OsString>,
 ) -> Result<i32> {

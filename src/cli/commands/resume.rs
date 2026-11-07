@@ -57,7 +57,14 @@ pub async fn select(
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
         ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
-            run(ctx, workspace.clone(), execution, discard, focus).await
+            run(
+                ctx,
+                SpaceSelector::parse(workspace),
+                execution,
+                discard,
+                focus,
+            )
+            .await
         }
         ([], Some([workspace])) => {
             queue_workspace(ctx, workspace.clone(), execution, queuing).await
@@ -372,7 +379,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
 /// background for it, as the workspace's, before anything runs there.
 pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets) {
     if let [workspace] = targets.space.as_slice() {
-        terminal::record_owned_here(ctx, host, workspace).await;
+        terminal::record_owned_here(ctx, host, &workspace.to_string()).await;
     }
 }
 
@@ -380,7 +387,7 @@ pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets)
 /// background for it, once the one workspace `targets` names is done.
 pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &SpaceTargets) {
     if let [workspace] = targets.space.as_slice() {
-        terminal::close_background_place_when_done(ctx, host, workspace).await;
+        terminal::close_background_place_when_done(ctx, host, &workspace.to_string()).await;
     }
 }
 
@@ -389,7 +396,7 @@ pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &Spac
 /// terminal when `here`, otherwise where it stopped or in the background.
 pub async fn run(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     execution: Option<String>,
     discard: bool,
     here: bool,
@@ -397,8 +404,7 @@ pub async fn run(
     if discard {
         return discard_work(ctx, workspace, execution).await;
     }
-    let mut inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
@@ -448,10 +454,12 @@ pub async fn run(
 
 /// Forget the workspace's stopped work and last sessions, only
 /// `execution`'s when given.
-async fn discard_work(ctx: &Context, workspace: String, execution: Option<String>) -> Result<i32> {
-    let discarded =
-        assignments::discard_stopped_work(&ctx.paths, SpaceSelector::parse(&workspace), execution)
-            .await?;
+async fn discard_work(
+    ctx: &Context,
+    workspace: SpaceSelector,
+    execution: Option<String>,
+) -> Result<i32> {
+    let discarded = assignments::discard_stopped_work(&ctx.paths, workspace, execution).await?;
     let forgotten = DiscardedWork {
         discarded: discarded.executions,
         chats: Vec::new(),
@@ -834,7 +842,7 @@ async fn start_sessions(
             Ok(Started::Here) => {
                 // Boxed, since `run` calls back into this function.
                 let id = Some(id.clone());
-                return Box::pin(run(ctx, workspace.id.clone(), id, false, true)).await;
+                return Box::pin(run(ctx, SpaceSelector::id(&workspace.id), id, false, true)).await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Err(error) => {

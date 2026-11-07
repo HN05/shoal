@@ -73,7 +73,7 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
+pub(super) async fn withdraw(ctx: &Context, space: Option<SpaceSelector>, id: i64) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let withdrawn = notifications::withdraw(&ctx.paths, SpaceSelector::parse(&space), id).await?;
     ctx.emit(
@@ -85,7 +85,7 @@ pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> R
 
 pub(super) async fn send(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     message: String,
     attach: Vec<String>,
 ) -> Result<i32> {

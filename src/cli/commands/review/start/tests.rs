@@ -1,11 +1,12 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 
 #[test]
 fn urls_and_the_pr_flag_select_a_pr_and_forge_options_require_one() {
     let url = "https://forge.example/team/repo/pulls/7";
     for (workspace, pr) in [(Some(url), None), (None, Some("7"))] {
         let target = Target::new(
-            workspace.map(String::from),
+            workspace.map(SpaceSelector::parse),
             pr.map(String::from),
             Some("repo".into()),
             Some(false),

@@ -30,7 +30,7 @@ use crate::{
 /// sensitive files it changed too.
 pub(in crate::cli::commands) async fn merge(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     push: Option<bool>,
     yes: bool,
 ) -> Result<i32> {

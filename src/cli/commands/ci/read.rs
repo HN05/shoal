@@ -2,6 +2,7 @@
 //! logs of failed ones.
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::items::ItemArgs,
@@ -54,7 +55,7 @@ async fn open(ctx: &Context, context: Option<ItemContext>, run: String) -> Resul
 /// The newest runs `filter` selects, or those on the head of the PR `pr`.
 pub(super) async fn list(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     repo: Option<String>,
     pr: Option<String>,
     filter: RunFilter,

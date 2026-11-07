@@ -2,6 +2,7 @@
 use clap::{Args, Subcommand};
 
 use crate::cli::args::{ConfirmationArgs, SpaceTargets, transfer::MoveCommand};
+use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -49,7 +50,7 @@ pub enum LifecycleCommand {
     /// confirmation, asked once for every space.
     Rm {
         #[arg(value_name = "SPACE")]
-        space: Vec<String>,
+        space: Vec<SpaceSelector>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },

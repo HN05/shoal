@@ -313,7 +313,7 @@ async fn start_add_workspace(
         base,
         path,
         git_profile,
-        parent: parent.as_deref().map(SpaceSelector::id),
+        parent: parent.as_deref().map(SpaceSelector::parse),
         options,
         issue: issue.map(|issue| issue.url.clone()),
         pr,

@@ -7,6 +7,7 @@ mod read;
 use anyhow::Result;
 
 pub(super) use self::read::{render_run, view};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::ci::CiCommand,
@@ -46,7 +47,7 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
 /// fall back to the picker; a URL names its repository and needs neither.
 async fn input_context(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     repo: Option<String>,
     input: Option<&str>,
 ) -> Result<Option<ItemContext>> {

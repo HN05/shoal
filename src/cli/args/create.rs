@@ -3,6 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, ModelArgs, item_reference},
@@ -48,7 +49,7 @@ pub enum CreateCommand {
         /// Parent workspace; defaults to the current workspace or picker, or
         /// with --no-branch to none outside a workspace.
         #[arg(short = 'w', long)]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[command(flatten)]
         copy: CopyArgs,
         #[command(flatten)]
@@ -79,11 +80,11 @@ pub struct StartArgs {
         value_name = "WORKSPACE",
         conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
-    pub in_workspace: Option<Option<String>>,
+    pub in_workspace: Option<Option<SpaceSelector>>,
     /// The space the new one goes below, by name or number; defaults to the
     /// space this runs in, else none.
     #[arg(long, value_name = "SPACE")]
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     /// Run in this terminal instead of a new tab or detached session.
     #[arg(short = 'H', long)]
     pub here: bool,
@@ -180,7 +181,7 @@ pub struct CopyArgs {
     /// untracked ones included; without a value, the current workspace, else
     /// a picker. Conflicts with --base.
     #[arg(long, num_args = 0..=1, value_name = "WORKSPACE", conflicts_with = "base")]
-    pub copy: Option<Option<String>>,
+    pub copy: Option<Option<SpaceSelector>>,
     /// Start from this checkpoint of the --copy workspace, live or removed,
     /// instead of its current files; shoal work restore <workspace> lists
     /// them.

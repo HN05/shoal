@@ -82,7 +82,7 @@ pub(super) async fn history(
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
     let entries = leases::simulator_history(
         &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::id),
+        workspace.as_deref().map(SpaceSelector::parse),
         limit,
         before,
     )
@@ -120,7 +120,7 @@ pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimReques
 pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
     let overview =
-        leases::simulators(&ctx.paths, workspace.as_deref().map(SpaceSelector::id)).await?;
+        leases::simulators(&ctx.paths, workspace.as_deref().map(SpaceSelector::parse)).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;

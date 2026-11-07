@@ -92,7 +92,7 @@ pub(super) fn reload_message(message: String, reloaded: bool) -> String {
 
 pub(super) async fn show(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     repository: Option<String>,
 ) -> Result<i32> {
     let target = match repository {
@@ -130,9 +130,9 @@ pub(super) fn reference(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget> {
+async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<ConfigTarget> {
     if let Some(workspace) = explicit {
-        return Ok(ConfigTarget::Workspace(SpaceSelector::parse(&workspace)));
+        return Ok(ConfigTarget::Workspace(workspace));
     }
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let scoped = env::workspace_scoped();

@@ -23,7 +23,7 @@ use crate::{
 /// `shoal work checkpoint`: keep the workspace's current state.
 pub(super) async fn checkpoint(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     name: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -50,7 +50,7 @@ pub(super) async fn checkpoint(
 /// terminal, the choices are listed instead.
 pub(super) async fn run(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     checkpoint: Option<u64>,
 ) -> Result<i32> {
     let scoped = crate::env::inherits_scope(&ctx.paths.state);
@@ -88,14 +88,14 @@ async fn choose_removed(ctx: &Context) -> Result<i32> {
         .zip(removed_lines(&removed))
         .collect();
     let workspace = ui::pick(ctx, "Removed workspace> ", entries)?;
-    reopen(ctx, workspace).await
+    reopen(ctx, SpaceSelector::id(&workspace)).await
 }
 
 /// Return the workspace to the checkpoint the user picks, or list its
 /// checkpoints when there is no terminal or none to pick.
 async fn choose_checkpoint(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     checkpoints: Vec<Checkpoint>,
 ) -> Result<i32> {
     if checkpoints.is_empty() || !ctx.interactive() {
@@ -115,15 +115,19 @@ async fn choose_checkpoint(
 
 /// Every checkpoint of an existing workspace, requested page by page;
 /// `None` when no workspace matches.
-async fn checkpoints(ctx: &Context, workspace: &str) -> Result<Option<Vec<Checkpoint>>> {
+async fn checkpoints(ctx: &Context, workspace: &SpaceSelector) -> Result<Option<Vec<Checkpoint>>> {
     recovery::checkpoints(&ctx.paths, workspace).await
 }
 
-async fn restore_checkpoint(ctx: &Context, workspace: String, checkpoint: u64) -> Result<i32> {
+async fn restore_checkpoint(
+    ctx: &Context,
+    workspace: SpaceSelector,
+    checkpoint: u64,
+) -> Result<i32> {
     let restored: RestoredCheckpoint = ctx
         .progress(
             "Restoring checkpoint",
-            recovery::restore_checkpoint(&ctx.paths, SpaceSelector::parse(&workspace), checkpoint),
+            recovery::restore_checkpoint(&ctx.paths, workspace, checkpoint),
         )
         .await?;
     let files = if restored.checkpoint.files_omitted {
@@ -144,11 +148,11 @@ async fn restore_checkpoint(ctx: &Context, workspace: String, checkpoint: u64) -
 }
 
 /// Open a removed workspace again from its removal record.
-async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
+async fn reopen(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
     let restored = ctx
         .progress(
             "Restoring workspace",
-            crate::client::removal::restore(&ctx.paths, SpaceSelector::parse(&workspace)),
+            crate::client::removal::restore(&ctx.paths, workspace),
         )
         .await?;
     finish_reopen(ctx, *restored, "Restored", false).await

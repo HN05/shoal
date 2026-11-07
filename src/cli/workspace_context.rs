@@ -1,6 +1,7 @@
 //! Noninteractive workspace selection over a captured directory context.
 use std::path::Path;
 
+use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 
 #[derive(Clone, Copy)]
@@ -39,15 +40,14 @@ impl<'a> WorkspaceContext<'a> {
     /// without fetching a list; completion requires a known name or ID here.
     pub fn resolve(
         &self,
-        explicit: Option<&str>,
+        explicit: Option<&SpaceSelector>,
         scoped: bool,
         order: ScopeOrder,
     ) -> Option<&'a Workspace> {
         if let Some(selector) = explicit {
-            return self
-                .workspaces
-                .iter()
-                .find(|workspace| workspace.name == selector || workspace.id == selector);
+            return (self.workspaces.iter()).find(|workspace| {
+                selector.selects(&workspace.id, &workspace.name, workspace.number)
+            });
         }
         let scope = || scoped.then(|| self.workspaces.first()).flatten();
         match order {

@@ -19,7 +19,7 @@ const TITLE_REQUEST: &str = "The user asks you to retitle this workspace: name t
 
 pub(in crate::cli::commands) async fn title(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     title: String,
 ) -> Result<i32> {
     // Refuse an invalid title before a picker asks for the workspace.
@@ -67,7 +67,7 @@ async fn relabel(ctx: &Context, retitled: &RetitledWorkspace) -> Result<()> {
 /// would wait unread until removal, so that is refused.
 pub(in crate::cli::commands) async fn request_title(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let selector = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let (workspace, agents) = turns::agents_of(ctx, selector).await?;

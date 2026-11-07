@@ -3,6 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{cli::commands, sessions::HostName, workers};
 
 #[derive(Debug, Subcommand)]
@@ -80,7 +81,7 @@ pub enum InternalCommand {
             conflicts_with = "space",
             requires = "resume"
         )]
-        handed_over: Option<String>,
+        handed_over: Option<SpaceSelector>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.
         #[arg(long, hide = true)]

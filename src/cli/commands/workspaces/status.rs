@@ -19,10 +19,11 @@ use crate::{
 
 pub(in crate::cli::commands) async fn status(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     item: Option<String>,
 ) -> Result<i32> {
-    let Some(target) = status_target(space.as_deref(), item)? else {
+    let first = space.as_ref().map(ToString::to_string);
+    let Some(target) = status_target(first.as_deref(), item)? else {
         let space = ui::select_space_here(ctx, space).await?;
         let status = status_view(ctx, space).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;

@@ -94,7 +94,9 @@ enum Reverting {
 impl Reverting {
     /// The workspace or running chat `space` names.
     async fn of(ctx: &Context, space: String) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
+        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&space))
+            .await?
+        {
             Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat)),
             _ => {
                 let workspace = crate::client::workspaces::verify(
@@ -187,7 +189,7 @@ async fn start_workspace(
 ) -> Result<StartedWorkspace> {
     let new = NewWorkspace {
         base,
-        parent: chat.as_deref().map(SpaceSelector::id),
+        parent: chat.as_deref().map(SpaceSelector::parse),
         ..NewWorkspace::new(Selector::Value(repository), WorkspaceStart::Name(name))
     };
     operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await

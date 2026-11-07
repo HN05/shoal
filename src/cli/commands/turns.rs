@@ -19,7 +19,7 @@ use crate::{
 
 /// `shoal stop --interrupt`: cancel the running turns of the agents in the
 /// `selected` workspaces, leaving agents without one alone.
-pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i32> {
+pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
     let selected = ui::select_workspaces(ctx, selected).await?;
     if crate::env::inherits_scope(&ctx.paths.state) {
         super::stop::ensure_below(ctx, &selected).await?;

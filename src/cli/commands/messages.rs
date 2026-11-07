@@ -26,7 +26,7 @@ use crate::{
 /// Who `shoal messages send` reaches.
 pub(super) enum Recipients {
     /// The agents of the named space, else the current one or a picked one.
-    Space(Option<String>),
+    Space(Option<SpaceSelector>),
     /// Every running agent of the workspaces and chats.
     All,
     /// Every running agent of the named repository's workspaces and chats,
@@ -55,7 +55,7 @@ pub(super) async fn send(
 
 async fn send_to_space(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
@@ -153,7 +153,7 @@ fn message_text(
     }
 }
 
-pub(super) async fn show(ctx: &Context, space: Option<String>) -> Result<i32> {
+pub(super) async fn show(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let inbox = Inbox::named(ctx, &space).await?;
     let messages = inbox.messages(ctx).await?;
@@ -285,7 +285,9 @@ impl Inbox {
 
     /// The inbox of the workspace or running chat `space` names.
     async fn named(ctx: &Context, space: &str) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, space).await? {
+        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(space))
+            .await?
+        {
             Some(space) => Ok(Self {
                 kind: space.kind(),
                 space: space.id().to_owned(),

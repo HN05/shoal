@@ -18,7 +18,7 @@ use crate::{
 
 pub(in crate::cli::commands) async fn environment(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     revoke: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;

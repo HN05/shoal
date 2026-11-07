@@ -21,6 +21,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{agent::Agent, forge::IssueInput};
 
 #[derive(Debug, Default, Args)]
@@ -34,7 +35,7 @@ pub struct ConfirmationArgs {
 // `--all`.
 #[derive(Debug, Default)]
 pub struct WorkspaceScope {
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceSelector>,
     /// All workspaces.
     pub all: bool,
 }
@@ -44,7 +45,7 @@ pub struct WorkspaceScope {
 #[derive(Debug, Default, Args)]
 pub struct SpaceTargets {
     #[arg(value_name = "SPACE")]
-    pub space: Vec<String>,
+    pub space: Vec<SpaceSelector>,
     /// All workspaces.
     #[arg(short = 'A', long, conflicts_with = "space")]
     pub all: bool,
@@ -64,7 +65,7 @@ pub struct BodyArgs {
 /// The arguments of `shoal <name>`, a configured command or AI tool.
 #[derive(Debug, clap::Parser)]
 pub struct Invocation {
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceSelector>,
     #[arg(last = true)]
     pub args: Vec<std::ffi::OsString>,
 }

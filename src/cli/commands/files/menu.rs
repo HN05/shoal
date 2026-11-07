@@ -4,6 +4,7 @@
 use anyhow::{Context as _, Result, ensure};
 
 use super::{add, cells, remove};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -34,7 +35,11 @@ const BINDINGS: &[(&str, &str, FileAction)] = &[
 ];
 
 /// Pick one of the space's `files`, or the add row, and act on it.
-pub(super) async fn choose(ctx: &Context, space: String, files: &[AttachedFile]) -> Result<i32> {
+pub(super) async fn choose(
+    ctx: &Context,
+    space: SpaceSelector,
+    files: &[AttachedFile],
+) -> Result<i32> {
     let picked = ui::pick_with_keys(ctx, "File> ", entries(files), KeyBindings(BINDINGS))?;
     match resolve_action(picked.action, &picked.id)? {
         FileAction::Add => {

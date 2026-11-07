@@ -8,6 +8,7 @@ use super::{
     Cell, Entries, chat_entries, pick, pick_many, picker_width, require_argument, rows_with_status,
     status_cell,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -57,7 +58,7 @@ pub(in crate::cli) fn current_directory() -> io::Result<Option<std::path::PathBu
 
 pub async fn select_workspace(
     ctx: &Context,
-    explicit: Option<String>,
+    explicit: Option<SpaceSelector>,
     fallback: Fallback,
 ) -> Result<String> {
     let workspace = choose_workspace(ctx, explicit, fallback).await?;
@@ -68,7 +69,10 @@ pub async fn select_workspace(
 /// The workspace `explicit` names, else the current one, else one picked
 /// among the ready workspaces, as a command that needs a ready workspace
 /// offers them.
-pub async fn select_ready_workspace(ctx: &Context, explicit: Option<String>) -> Result<String> {
+pub async fn select_ready_workspace(
+    ctx: &Context,
+    explicit: Option<SpaceSelector>,
+) -> Result<String> {
     let workspace = match resolve_workspace(ctx, explicit, Fallback::CurrentDirectory).await? {
         Resolution::Workspace(id) => id,
         Resolution::Picker(mut workspaces) => {
@@ -84,7 +88,7 @@ pub async fn select_ready_workspace(ctx: &Context, explicit: Option<String>) -> 
 /// history for a command that records it once it has acted.
 pub async fn choose_workspace(
     ctx: &Context,
-    explicit: Option<String>,
+    explicit: Option<SpaceSelector>,
     fallback: Fallback,
 ) -> Result<String> {
     Ok(match resolve_workspace(ctx, explicit, fallback).await? {
@@ -95,7 +99,7 @@ pub async fn choose_workspace(
 
 /// The workspaces a command that acts on several takes: those named, each
 /// once and in order, otherwise the current one, otherwise those picked.
-pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
+pub async fn select_workspaces(ctx: &Context, names: Vec<SpaceSelector>) -> Result<Vec<String>> {
     let mut selected = named_workspaces(ctx, names).await?;
     if selected.is_empty() {
         selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
@@ -117,7 +121,7 @@ pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<
 /// for a chat or the daemon's refusal.
 pub async fn select_spaces(
     ctx: &Context,
-    names: Vec<String>,
+    names: Vec<SpaceSelector>,
     stopped_chats: bool,
 ) -> Result<Vec<String>> {
     let mut selected = named_workspaces(ctx, names).await?;
@@ -145,7 +149,7 @@ pub async fn select_spaces(
 /// The workspace IDs `names` select, each once and in order, so a workspace
 /// named both by its name and by its ID is acted on once. A name no
 /// workspace has stays as given, for the daemon to refuse.
-async fn named_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
+async fn named_workspaces(ctx: &Context, names: Vec<SpaceSelector>) -> Result<Vec<String>> {
     if names.is_empty() {
         return Ok(Vec::new());
     }
@@ -153,10 +157,11 @@ async fn named_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<Strin
     let context = WorkspaceContext::from_directory(&workspaces, None);
     let mut selected = Vec::new();
     for name in names {
-        let selector = explicit_workspace(ctx, name).await?;
-        let workspace = context
-            .resolve(Some(&selector), false, ScopeOrder::AfterDirectory)
-            .map_or(selector, |workspace| workspace.id.clone());
+        let workspace = match recent::is_previous(&name) {
+            true => recent::previous(ctx).await?,
+            false => (context.resolve(Some(&name), false, ScopeOrder::AfterDirectory))
+                .map_or_else(|| name.to_string(), |workspace| workspace.id.clone()),
+        };
         if !selected.contains(&workspace) {
             selected.push(workspace);
         }
@@ -165,11 +170,11 @@ async fn named_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<Strin
 }
 
 /// The workspace an explicit argument names, where `-` is the previous one.
-pub async fn explicit_workspace(ctx: &Context, selector: String) -> Result<String> {
-    if selector == recent::PREVIOUS {
+pub async fn explicit_workspace(ctx: &Context, selector: SpaceSelector) -> Result<String> {
+    if recent::is_previous(&selector) {
         recent::previous(ctx).await
     } else {
-        Ok(selector)
+        Ok(selector.to_string())
     }
 }
 
@@ -194,7 +199,7 @@ pub async fn select_workspace_filter(
 /// anywhere.
 pub async fn select_stopped_spaces(
     ctx: &Context,
-    names: Vec<String>,
+    names: Vec<SpaceSelector>,
     saved: &[Chat],
 ) -> Result<Option<Vec<String>>> {
     if !names.is_empty() {
@@ -316,7 +321,7 @@ enum Resolution {
 
 async fn resolve_workspace(
     ctx: &Context,
-    explicit: Option<String>,
+    explicit: Option<SpaceSelector>,
     fallback: Fallback,
 ) -> Result<Resolution> {
     if let Some(selector) = explicit {
@@ -395,7 +400,7 @@ pub async fn pick_workspace(
 /// caller's own space takes the chat wherever its directory is.
 pub async fn select_space(
     ctx: &Context,
-    explicit: Option<String>,
+    explicit: Option<SpaceSelector>,
     fallback: Fallback,
 ) -> Result<String> {
     match current_chat(&explicit) {
@@ -409,7 +414,7 @@ pub async fn select_space(
 /// workspace containing the current directory comes before the chat, so a
 /// chat in a workspace's worktree, which reads that workspace without
 /// changing it, gets the workspace.
-pub async fn select_space_here(ctx: &Context, explicit: Option<String>) -> Result<String> {
+pub async fn select_space_here(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<String> {
     match current_chat(&explicit) {
         Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Any).await,
         None => select_other_space(ctx, explicit, Fallback::CurrentDirectory).await,
@@ -448,7 +453,7 @@ async fn current_workspace_or_chat(
 /// workspace `fallback` chooses or a picker decides.
 pub async fn select_other_space(
     ctx: &Context,
-    explicit: Option<String>,
+    explicit: Option<SpaceSelector>,
     fallback: Fallback,
 ) -> Result<String> {
     let space = match resolve_workspace(ctx, explicit, fallback).await? {
@@ -464,7 +469,7 @@ pub async fn select_other_space(
 
 /// The chat this process runs in, outside any workspace, when no space is
 /// `explicit`.
-pub fn current_chat(explicit: &Option<String>) -> Option<String> {
+pub fn current_chat(explicit: &Option<SpaceSelector>) -> Option<String> {
     if explicit.is_some() {
         return None;
     }

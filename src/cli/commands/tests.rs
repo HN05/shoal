@@ -179,12 +179,12 @@ fn a_resumed_watch_names_its_space_or_an_earlier_releases_workspace() {
     assert!(parse(&["--resume"]).is_err());
     assert_eq!(
         parse(&["--resume", "--space", "work"]).unwrap(),
-        (Some("work".to_owned()), None)
+        (Some("work".into()), None)
     );
     // The wait of an earlier release hands itself over this way.
     assert_eq!(
         parse(&["--resume", "--workspace", "work"]).unwrap(),
-        (None, Some("work".to_owned()))
+        (None, Some("work".into()))
     );
     assert!(parse(&["--resume", "--workspace", "work", "--space", "other"]).is_err());
 }
@@ -210,7 +210,7 @@ fn an_earlier_releases_review_watch_hands_over_its_workspace_unchanged() {
         panic!("expected watch command");
     };
     assert!(items.selects_review() && !resume);
-    assert_eq!(handed_over.as_deref(), Some("work"));
+    assert_eq!(handed_over, Some("work".into()));
 }
 
 #[test]
@@ -231,12 +231,12 @@ fn a_resumed_question_wait_names_its_space_or_an_earlier_releases_workspace() {
     };
     assert_eq!(
         parse(&["--space", "work", "--resume", "3"]).unwrap(),
-        (Some("work".to_owned()), None, Some(3))
+        (Some("work".into()), None, Some(3))
     );
     // The wait of an earlier release hands itself over this way.
     assert_eq!(
         parse(&["--workspace", "work", "--resume", "3"]).unwrap(),
-        (None, Some("work".to_owned()), Some(3))
+        (None, Some("work".into()), Some(3))
     );
     assert!(parse(&["--workspace", "work"]).is_err());
     assert!(parse(&["--resume", "3"]).is_err());
@@ -272,7 +272,7 @@ fn a_resumed_wake_names_its_space_or_an_earlier_releases_workspace() {
     // The wake hook of an earlier release hands its wait over this way.
     assert_eq!(
         parse(&["--workspace", "work", "--resume"]).unwrap(),
-        (None, Some("work".to_owned()))
+        (None, Some("work".into()))
     );
     assert!(parse(&["--workspace", "work"]).is_err());
 }

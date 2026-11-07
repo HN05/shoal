@@ -2,6 +2,7 @@
 //! a workspace or chat.
 use clap::{Args, Subcommand, ValueEnum};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{cli::args::item_reference, model::Relation};
 
 #[derive(Debug, Subcommand)]
@@ -34,7 +35,7 @@ pub enum ItemsCommand {
         /// hands it over to this one: an item watch with `--resume`, a
         /// review watch with its arguments unchanged.
         #[arg(long = "workspace", hide = true, conflicts_with = "space")]
-        handed_over: Option<String>,
+        handed_over: Option<SpaceSelector>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.
         #[arg(long, hide = true, requires = "watching_space")]
@@ -95,7 +96,7 @@ pub struct RelationArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long)]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
 }
 
 impl RelationArgs {
@@ -130,7 +131,7 @@ pub struct ItemArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long)]
-    pub space: Option<String>,
+    pub space: Option<SpaceSelector>,
 }
 
 impl ItemArgs {

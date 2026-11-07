@@ -329,7 +329,7 @@ pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
+pub(super) async fn list(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     let requests = list_requests(ctx, space.clone()).await?;
     if ctx.interactive_output() && !requests.is_empty() {
         return picker::pick_and_open(ctx, space, requests).await;
@@ -347,9 +347,9 @@ pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
 
 pub(super) async fn list_requests(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
 ) -> Result<Vec<ApprovalRequest>> {
-    approvals::list(&ctx.paths, space.as_deref().map(SpaceSelector::id)).await
+    approvals::list(&ctx.paths, space).await
 }
 
 /// What a request asks for, and why when its agent said.

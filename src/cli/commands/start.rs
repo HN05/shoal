@@ -34,7 +34,7 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         "workspace processes start agents only with their scope token"
     );
     if let Some(parent) = &args.parent {
-        args.parent = Some(space_id(ctx, parent).await?);
+        args.parent = Some(SpaceSelector::id(&space_id(ctx, parent).await?));
     }
     ensure_copy_fits(&args)?;
     match start_of(ctx, &mut args).await? {
@@ -91,11 +91,11 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
     .collect()
 }
 
-/// The ID of the space `selector` names, by ID, name or number.
-async fn space_id(ctx: &Context, selector: &str) -> Result<String> {
+/// The ID of the space `selector` names, by number, ID or name.
+async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
     let space = crate::client::workspaces::spaces(&ctx.paths)
         .await?
-        .find_numbered(selector);
+        .find(selector);
     Ok(space
         .with_context(|| format!("no space {selector}"))?
         .id()
@@ -296,7 +296,8 @@ async fn checked_repository(
         false,
     )?;
     let issue = issue.flatten();
-    let parent = args.parent.as_deref();
+    let parent = args.parent.as_ref().map(ToString::to_string);
+    let parent = parent.as_deref();
     let selector =
         workspaces::check_target(ctx, repository.clone(), issue.as_deref(), parent).await?;
     let named = Some(selector.value().to_owned());
@@ -402,10 +403,21 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         None => None,
     };
     let copy = super::copies::source(ctx, args.copy).await?;
-    let copied = copy.as_ref().map(|copy| copy.source.workspace.to_string());
     let (parent, agent, fork) = match args.fork {
-        true => fork_from(ctx, copied, args.parent, args.agent).await?,
-        false => (args.parent, args.agent, None),
+        true => {
+            fork_from(
+                ctx,
+                copy.as_ref().map(|copy| copy.source.workspace.clone()),
+                args.parent,
+                args.agent,
+            )
+            .await?
+        }
+        false => (
+            args.parent.map(|parent| parent.to_string()),
+            args.agent,
+            None,
+        ),
     };
     // A copy goes in the copied workspace's repository unless one is named,
     // which the daemon refuses when it is another.
@@ -465,13 +477,17 @@ fn ensure_copy_fits(args: &StartArgs) -> Result<()> {
 /// one forked from the parent's agent goes below that workspace.
 async fn fork_from(
     ctx: &Context,
-    copied: Option<String>,
-    parent: Option<String>,
+    copied: Option<SpaceSelector>,
+    parent: Option<SpaceSelector>,
     agent: Option<Agent>,
 ) -> Result<(Option<String>, Option<Agent>, Option<String>)> {
     if copied.is_some() {
         let (_, agent, session) = forked(ctx, copied, agent).await?;
-        return Ok((parent, Some(agent), Some(session)));
+        return Ok((
+            parent.map(|parent| parent.to_string()),
+            Some(agent),
+            Some(session),
+        ));
     }
     let (parent, agent, session) = forked(ctx, parent, agent).await?;
     Ok((Some(parent), Some(agent), Some(session)))
@@ -483,7 +499,7 @@ async fn fork_from(
 /// is refused before anything is created.
 async fn forked(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     agent: Option<Agent>,
 ) -> Result<(String, Agent, String)> {
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -561,7 +577,7 @@ fn chat_options(args: &mut StartArgs) -> chat::Options {
         fork: args.fork_session,
         restore: args.restore.take(),
         handoff: args.handoff.take(),
-        parent: args.parent.take(),
+        parent: args.parent.take().map(|parent| parent.to_string()),
     }
 }
 

@@ -17,10 +17,11 @@ use crate::{
 
 pub(in crate::cli::commands) async fn remove(
     ctx: &Context,
-    names: Vec<String>,
+    names: Vec<SpaceSelector>,
     yes: bool,
 ) -> Result<i32> {
-    if let [selector] = names.as_slice()
+    // A number always names a space, never a queued launch.
+    if let [SpaceSelector::IdOrName(selector)] = names.as_slice()
         && let Some(code) = agent_queue::remove(ctx, selector).await?
     {
         return Ok(code);
@@ -50,7 +51,7 @@ fn named_chats(spaces: &Spaces, names: Vec<String>) -> (Vec<Chat>, Vec<String>) 
     let mut chats: Vec<Chat> = Vec::new();
     let mut others = Vec::new();
     for name in names {
-        match spaces.find(&name) {
+        match spaces.find(&SpaceSelector::parse(&name)) {
             Some(PresentSpace::Chat(chat)) => {
                 if !chats.iter().any(|named| named.id == chat.id) {
                     chats.push(chat);

@@ -32,7 +32,7 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;
     let layers = listing_layers(ctx, workspace).await?;
     let definitions = Stack::new(&global, &layers).named(|config| &config.commands);
@@ -76,7 +76,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 /// An explicit workspace takes precedence over the current directory.
-async fn listing_layers(ctx: &Context, workspace: Option<String>) -> Result<ConfigLayers> {
+async fn listing_layers(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<ConfigLayers> {
     if workspace.is_some() {
         let workspace =
             ui::select_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await?;
@@ -113,7 +113,7 @@ pub(super) fn command_name(words: &[OsString]) -> Result<String> {
 
 /// The workspace `shoal <name>` names, read past help flags and argument
 /// errors so that the name is checked before either is reported.
-pub(super) fn named_workspace(words: &[OsString]) -> Option<String> {
+pub(super) fn named_workspace(words: &[OsString]) -> Option<SpaceSelector> {
     let help = clap::Arg::new("help")
         .short('h')
         .long("help")
@@ -124,13 +124,15 @@ pub(super) fn named_workspace(words: &[OsString]) -> Option<String> {
         .ignore_errors(true)
         .try_get_matches_from(words)
         .ok()?
-        .get_one::<String>("workspace")
+        .get_one::<SpaceSelector>("workspace")
         .cloned()
 }
 
 /// The workspace and arguments of `shoal <name>`; `None` once help has been
 /// printed.
-pub(super) fn invocation(words: Vec<OsString>) -> Result<Option<(Option<String>, Vec<OsString>)>> {
+pub(super) fn invocation(
+    words: Vec<OsString>,
+) -> Result<Option<(Option<SpaceSelector>, Vec<OsString>)>> {
     match Invocation::try_parse_from(words) {
         Ok(invocation) => Ok(Some((invocation.workspace, invocation.args))),
         Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp => {
@@ -145,7 +147,7 @@ pub(super) fn invocation(words: Vec<OsString>) -> Result<Option<(Option<String>,
 pub(super) enum Definition {
     /// The global configuration: the named or current workspace runs it, else
     /// the one picked.
-    Global(Option<String>),
+    Global(Option<SpaceSelector>),
     /// The named or current workspace's configuration.
     Workspace(String),
     /// Only these other workspaces define it; the user picks one.
@@ -157,7 +159,7 @@ pub(super) enum Definition {
 pub(super) async fn definition(
     ctx: &Context,
     name: &str,
-    named: Option<String>,
+    named: Option<SpaceSelector>,
 ) -> Result<Definition> {
     if defined_globally(ctx, name)? {
         return Ok(Definition::Global(named));
@@ -205,15 +207,21 @@ async fn running_workspaces(ctx: &Context) -> Result<Vec<Workspace>> {
 async fn selected_workspace<'a>(
     ctx: &Context,
     workspaces: &'a [Workspace],
-    named: Option<String>,
+    named: Option<SpaceSelector>,
 ) -> Result<Option<&'a Workspace>> {
     let Some(selector) = named else {
         return current_workspace(workspaces);
     };
-    let selector = ui::explicit_workspace(ctx, selector).await?;
-    Ok(workspaces
-        .iter()
-        .find(|known| known.id == selector || known.name == selector))
+    let selector = match recent::is_previous(&selector) {
+        true => SpaceSelector::id(&recent::previous(ctx).await?),
+        false => selector,
+    };
+    let spaces = crate::client::model::Spaces {
+        workspaces: workspaces.to_vec(),
+        chats: Vec::new(),
+    };
+    let found = spaces.find(&selector);
+    Ok(found.and_then(|space| workspaces.iter().find(|known| known.id == space.id())))
 }
 
 /// The workspace of the current directory, else the caller's scope.
@@ -254,7 +262,7 @@ async fn defining_workspaces(
 pub(crate) async fn run(
     ctx: &Context,
     name: &str,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let definition = definition(ctx, name, workspace).await?;

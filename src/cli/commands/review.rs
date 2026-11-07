@@ -2,6 +2,7 @@
 //! them, and answer their findings.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::changes::ReviewCommand,
@@ -69,10 +70,12 @@ enum Space {
 
 /// The space `space` names, else the current workspace or the chat this
 /// runs in, else one the user picks.
-async fn select(ctx: &Context, space: Option<String>) -> Result<Space> {
+async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &selected).await? {
+        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&selected))
+            .await?
+        {
             Some(PresentSpace::Chat(chat)) => Space::Chat(Box::new(chat)),
             _ => Space::Workspace(selected),
         },
@@ -81,11 +84,11 @@ async fn select(ctx: &Context, space: Option<String>) -> Result<Space> {
 
 /// The running chat `space` names, else the chat this runs in when `space`
 /// names nothing and the current directory is in no workspace below it.
-async fn chat(ctx: &Context, space: Option<&str>) -> Result<Option<Chat>> {
+async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Chat>> {
     let named = match space {
-        Some(space) => space.to_owned(),
+        Some(space) => space.clone(),
         None if ui::current_chat(&None).is_some() => {
-            ui::select_space(ctx, None, Fallback::CurrentDirectory).await?
+            SpaceSelector::id(&ui::select_space(ctx, None, Fallback::CurrentDirectory).await?)
         }
         None => return Ok(None),
     };

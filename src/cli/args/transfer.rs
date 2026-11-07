@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use clap::{Args, Subcommand};
 
 use crate::cli::args::ConfirmationArgs;
+use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -55,7 +56,7 @@ pub enum MoveCommand {
 #[derive(Debug, Args)]
 pub struct ExportArgs {
     #[arg(conflicts_with = "all", value_name = "SPACE")]
-    pub space: Vec<String>,
+    pub space: Vec<SpaceSelector>,
     /// Export every workspace and chat of the repository --repo names.
     #[arg(short = 'A', long, requires = "repository")]
     pub all: bool,
@@ -106,7 +107,7 @@ pub struct SshArgs {
     /// SSH destination: a host, user@host or a ~/.ssh/config alias.
     pub host: String,
     #[arg(conflicts_with = "all", value_name = "SPACE")]
-    pub space: Vec<String>,
+    pub space: Vec<SpaceSelector>,
     /// Move every workspace and chat of the repository --repo names.
     #[arg(short = 'A', long, requires = "repository")]
     pub all: bool,

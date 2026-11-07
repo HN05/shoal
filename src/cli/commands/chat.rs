@@ -122,7 +122,7 @@ pub(super) async fn root_dir(ctx: &Context) -> Result<PathBuf> {
 /// the current one, else one picked among the ready workspaces.
 pub(super) async fn start_in_workspace(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     subject: Subject,
     options: Options,
 ) -> Result<i32> {
@@ -177,7 +177,7 @@ async fn check_parent(
     crate::client::chats::check_parent(
         &ctx.paths,
         repository,
-        workspace.as_deref().map(SpaceSelector::id),
+        workspace.as_deref().map(SpaceSelector::parse),
         parent.to_owned(),
     )
     .await
@@ -200,19 +200,20 @@ async fn on_issue(
 
 /// The workspace `selector` names, else the current one, else one picked
 /// among the ready workspaces.
-async fn chosen_workspace(ctx: &Context, selector: Option<String>) -> Result<Workspace> {
+async fn chosen_workspace(ctx: &Context, selector: Option<SpaceSelector>) -> Result<Workspace> {
     let id = ui::select_ready_workspace(ctx, selector).await?;
     hosting_workspace(ctx, &id).await
 }
 
-/// The workspace `selector` names, by ID or name, refused before anything
-/// is asked unless a chat may run in it; the daemon checks again.
+/// The workspace `selector` names, by number, ID or name, refused before
+/// anything is asked unless a chat may run in it; the daemon checks again.
 pub(super) async fn hosting_workspace(ctx: &Context, selector: &str) -> Result<Workspace> {
+    let selected = SpaceSelector::parse(selector);
     let workspace = crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
-        .find(|workspace| workspace.id == selector || workspace.name == selector)
-        .with_context(|| format!("no workspace {selector}"))?;
+        .find(|workspace| selected.selects(&workspace.id, &workspace.name, workspace.number))
+        .with_context(|| format!("no space {selector}"))?;
     ensure_hosts_chat(&workspace)?;
     Ok(workspace)
 }
@@ -621,7 +622,7 @@ pub(super) async fn launch(
         return Ok(Started::Exited(0));
     }
     agents::trust_chat(ctx, &settings, agent.name(), repo.registered(), home).await;
-    let parent = parent.as_deref().map(SpaceSelector::id);
+    let parent = parent.as_deref().map(SpaceSelector::parse);
     let new = crate::client::chats::NewChat {
         name: &name,
         agent: agent.name(),
