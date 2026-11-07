@@ -138,8 +138,6 @@ struct RestoreCommand<'a> {
     name: &'a str,
     workspace: &'a Workspace,
     prompt: &'a std::ffi::OsStr,
-    /// The mode the agent started in, which decides its directories.
-    mode: &'a str,
     model_args: Vec<OsString>,
     /// The arguments that give the agent its mode's rules again, which only
     /// its built-in resume arguments carry.
@@ -172,14 +170,8 @@ impl RestoreCommand<'_> {
         args.extend(self.model_args);
         args.extend(self.instruction_args);
         args.extend(
-            crate::agents::workspace_args(
-                self.paths,
-                self.settings,
-                self.name,
-                self.workspace,
-                self.mode,
-            )
-            .await?,
+            crate::agents::workspace_args(self.paths, self.settings, self.name, self.workspace)
+                .await?,
         );
         let takes_field = self
             .settings
@@ -289,7 +281,6 @@ impl Recovery {
             name: &name,
             workspace,
             prompt: std::ffi::OsStr::new(&message),
-            mode: restored.mode,
             // A restore runs with what the agent ran with, or not at all, so
             // the record stays for once its templates take the values again.
             model_args: crate::agents::model_args(&settings, &name, restored.model)?,

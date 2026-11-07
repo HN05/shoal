@@ -1644,9 +1644,10 @@ otherwise keeps the forked session's directory.
 `{directory}`, so a sandbox or a setting such as Claude Code's
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent.dirs`
 entry for every agent and chat, for a workspace's agent the repository's
-workspaces directory, where `shoal split` puts children and its [temporary
-directory](#temporary-directories) lies, and for a chat its temporary directory, plus the
-directory of the config a [setup](#set-up-config) agent writes. An empty list gives none.
+workspaces directory, where `shoal split` puts children, its [temporary
+directory](#temporary-directories) and the local config lie, and for a chat its temporary
+directory, plus the global config's directory for a [setup](#set-up-config) chat. An empty
+list gives none.
 `review` runs a [local review](#local-reviews) once, without a session: the
 launcher's words before `{args}`, or all of them, followed by these arguments,
 which name the prompt `{prompt}` and the output schema as a file, `{schema}`, or
@@ -2682,8 +2683,8 @@ mentions a committed or local config the repository has.
   beside it, named by paths relative to that directory, commits nothing and
   tests the setup script with `work setup` in its own worktree. Its `shoal done` removes the workspace and its empty branch.
 
-Every launch and restore of the agent gets the local config's `.shoal`
-directory, created when missing, as another working directory. The agent is
+The agent writes the local config through the repository directory, which
+every workspace agent has as another working directory. The agent is
 `--agent`, else `agent.default`, else one chosen from the agent picker;
 arguments after `--` go to the agent.
 

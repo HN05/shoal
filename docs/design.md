@@ -1549,9 +1549,9 @@ likewise starts one agent, in the built-in `setup` mode in a workspace on the
 `shoal-setup` branch, which drafts the repository config and then asks the user
 whether to commit it, so it arrives as a reviewable commit that every clone
 shares, or, for a repository that won't take that file or settings for one user,
-to save it as the local config in the repository directory's `.shoal/`. The mode
-gives the agent that directory as another working directory on every launch, so
-one agent serves both answers; a local result applies as soon as it is saved,
+to save it as the local config in the repository directory's `.shoal/`. Every
+workspace agent already works in that repository directory, so one agent
+serves both answers; a local result applies as soon as it is saved,
 the agent tests it in its own worktree and its `done` removes the workspace and
 its empty branch. `setup` takes the rules and reach of a base mode and adds only
 its instructions, so config cannot change what it does. `config setup` starts

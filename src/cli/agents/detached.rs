@@ -48,7 +48,7 @@ pub(super) async fn start(
     } = launch;
     crate::agents::ensure_available(&name, &settings)?;
     let model_args = model_args(app, &settings, &name, &model)?;
-    let directories = workspace_dir_args(ctx, app, &settings, &workspace, &mode).await;
+    let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
     let directories = [model_args, directories].concat();
     let (prompt, args) = workspace_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
@@ -242,16 +242,15 @@ fn instruction_args(
 }
 
 /// The arguments that give `app`'s agent the directories a workspace's agent
-/// in `mode` works in, when it takes arguments.
+/// works in, when it takes arguments.
 async fn workspace_dir_args(
     ctx: &Context,
     app: &dyn App,
     settings: &Effective,
     workspace: &Workspace,
-    mode: &str,
 ) -> Vec<OsString> {
     if app.takes_agent_args() {
-        crate::agents::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace, mode).await
+        crate::agents::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace).await
     } else {
         Vec::new()
     }

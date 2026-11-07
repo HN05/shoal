@@ -97,7 +97,6 @@ async fn command(
         prompt,
         args,
         fork,
-        mode,
         ..
     } = launch;
     let (args, prompt) = input(
@@ -107,7 +106,7 @@ async fn command(
         prompt.clone(),
         [
             model_args,
-            crate::agents::workspace_args(&ctx.paths, settings, name, workspace, mode).await?,
+            crate::agents::workspace_args(&ctx.paths, settings, name, workspace).await?,
         ]
         .concat(),
         args.clone(),

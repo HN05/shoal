@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use super::{agent_integration, delivery, hook_args};
 use crate::{
     agent::ModelChoice,
-    config::{self, Effective, modes, templates},
+    config::{Effective, modes, templates},
     fsutil,
     model::Workspace,
     paths::Paths,
@@ -84,41 +84,33 @@ pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>
     command.splice(at..at, options);
 }
 
-/// What a workspace's agent `name` in `mode` runs with besides its
-/// instructions, prompt and forwarded arguments: Shoal's hooks and
-/// [`workspace_dir_args`].
+/// What a workspace's agent `name` runs with besides its instructions, prompt
+/// and forwarded arguments: Shoal's hooks and [`workspace_dir_args`].
 pub(crate) async fn workspace_args(
     paths: &Paths,
     settings: &Effective,
     name: &str,
     workspace: &Workspace,
-    mode: &str,
 ) -> Result<Vec<OsString>> {
     let proxied = settings.proxy(name).is_some();
     let mut args = hook_args(settings.integration(name), workspace.into(), proxied)?;
-    args.extend(workspace_dir_args(paths, settings, name, workspace, mode).await);
+    args.extend(workspace_dir_args(paths, settings, name, workspace).await);
     Ok(args)
 }
 
-/// The arguments that give a workspace's agent `name` in `mode` the
-/// configured agent directories and the repository's workspaces directory
-/// as other working directories, so it may also work in the child
-/// workspaces it splits there and in its temporary directory; in setup
-/// mode also the directory of the repository's local config, which it may
-/// write.
+/// The arguments that give a workspace's agent `name` the configured agent
+/// directories and the repository's workspaces directory as other working
+/// directories, so it may also work in the child workspaces it splits
+/// there, in its temporary directory and, in setup mode, on the local
+/// config beside them.
 pub(crate) async fn workspace_dir_args(
     paths: &Paths,
     settings: &Effective,
     name: &str,
     workspace: &Workspace,
-    mode: &str,
 ) -> Vec<OsString> {
     let workspaces_dir = workspaces_dir(paths, workspace).await;
-    let config_dir = (workspaces_dir.as_deref())
-        .filter(|_| mode == modes::SETUP)
-        .and_then(|directory| launch_config_dir(&config::repo::local_config_path(directory)));
-    let extra: Vec<_> = workspaces_dir.into_iter().chain(config_dir).collect();
-    dir_args(settings, name, &paths.home, &extra)
+    dir_args(settings, name, &paths.home, workspaces_dir.as_slice())
 }
 
 /// The directory of the config file `file`, created when missing and
