@@ -97,16 +97,28 @@ fn keep_backup(path: &Path, backup: &Path) -> std::io::Result<bool> {
 }
 
 /// The global config's writes, which hold its edit lock.
-impl Config {
+pub(crate) trait ConfigExt: Sized {
     /// Write a fresh template, first moving any existing file to
     /// `config.toml.backup` (replacing an older backup). Returns the path and
     /// the backup, if one was made.
-    pub fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
+    fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)>;
+
+    /// Apply `changes` together, saving only when the result is valid.
+    fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)>;
+
+    fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)>;
+
+    /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
+    /// rather than while its file is moved aside.
+    fn load_settled(paths: &Paths) -> Result<Self>;
+}
+
+impl ConfigExt for Config {
+    fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
         Self::install_named(paths, "default")
     }
 
-    /// Apply `changes` together, saving only when the result is valid.
-    pub fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+    fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
         edit(Self::path(paths), changes, |edited| {
             Self::parse(edited, paths)
                 .map(drop)
@@ -114,7 +126,7 @@ impl Config {
         })
     }
 
-    pub fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
+    fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
         let text = PACKAGED
             .iter()
             .find(|(candidate, _)| *candidate == name)
@@ -126,9 +138,7 @@ impl Config {
         replace(path, text)
     }
 
-    /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
-    /// rather than while its file is moved aside.
-    pub fn load_settled(paths: &Paths) -> Result<Self> {
+    fn load_settled(paths: &Paths) -> Result<Self> {
         let _lock = lock(&Self::path(paths))?;
         Self::load(paths)
     }

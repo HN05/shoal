@@ -293,15 +293,27 @@ struct RegisteredExecution {
     stop: watch::Receiver<bool>,
 }
 
-impl ExecutionKind {
-    pub fn start_timeout(self) -> Duration {
+/// Operations on the client type [`ExecutionKind`] that only the `shoal` command uses.
+pub(crate) trait ExecutionKindExt {
+    fn start_timeout(self) -> Duration;
+
+    /// Apply the kind's lifecycle checks in the registration transaction.
+    fn reserve(
+        self,
+        tx: &Transaction<'_>,
+        workspace_id: &str,
+        parent_execution: Option<&str>,
+    ) -> Result<()>;
+}
+
+impl ExecutionKindExt for ExecutionKind {
+    fn start_timeout(self) -> Duration {
         match self {
             Self::Command => timing::EXECUTION_START_TIMEOUT,
             Self::Merge | Self::Unmerge | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
         }
     }
 
-    /// Apply the kind's lifecycle checks in the registration transaction.
     fn reserve(
         self,
         tx: &Transaction<'_>,

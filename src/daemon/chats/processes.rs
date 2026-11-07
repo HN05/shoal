@@ -2,6 +2,7 @@
 //! identity, those its process started, and the members of the process group
 //! it leads, except a workspace's, such as an execution a command in the
 //! chat started, which goes on without it.
+use crate::process::identity::IdentityExt;
 use anyhow::{Result, bail};
 
 use crate::process::identity::{self, Identity};

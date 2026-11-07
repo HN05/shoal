@@ -12,6 +12,8 @@ use crate::daemon::{
     workspace::StopRequest,
     workspace_files::Attacher,
 };
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 use std::{fs, future::Future};
 
 mod agent_restart;

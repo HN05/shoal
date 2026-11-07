@@ -1,5 +1,6 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
+use crate::paths::PathsExt;
 mod acquisition;
 mod agent_queue;
 mod agent_state;
@@ -97,7 +98,15 @@ use crate::{
     paths::Paths,
 };
 
-impl<T> WorkspaceOverviewResult<T> {
+/// Operations on the client type [`WorkspaceOverviewResult`] that only the
+/// `shoal` command uses.
+trait OverviewResultExt {
+    fn failed(workspace: crate::model::Workspace, error: impl std::fmt::Display) -> Self;
+
+    fn is_failed(&self) -> bool;
+}
+
+impl<T> OverviewResultExt for WorkspaceOverviewResult<T> {
     fn failed(workspace: crate::model::Workspace, error: impl std::fmt::Display) -> Self {
         Self::Failed {
             workspace: Box::new(workspace),

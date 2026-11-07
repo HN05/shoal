@@ -1,6 +1,7 @@
 //! Long-lived execution connections: the daemon side of the wrapper protocol.
 //! The wrapper reports its child and completion; the daemon relays stop and
 //! recovery controls and records the outcome.
+use crate::daemon::workspace::agents::ProtectionExt;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};

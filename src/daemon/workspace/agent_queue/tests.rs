@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::workspace::agents::ProtectionExt;
 use crate::{
     daemon::{
         agent_queue::tests::STARTED,

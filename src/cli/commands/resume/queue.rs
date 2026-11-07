@@ -40,9 +40,14 @@ pub(super) async fn queue_all(
     Ok(if queued.failed.is_empty() { 0 } else { 1 })
 }
 
-impl Queued {
+/// Operations on the client type [`Queued`] that only the `shoal` command uses.
+pub(crate) trait QueuedExt {
     /// What the user reads once restores are queued, `None` without any.
-    pub(in crate::cli::commands) fn summary(&self) -> Option<String> {
+    fn summary(&self) -> Option<String>;
+}
+
+impl QueuedExt for Queued {
+    fn summary(&self) -> Option<String> {
         let starting = (self.queued.iter()).all(|entry| entry.state == QueueState::Starting);
         (!self.queued.is_empty()).then(|| summary(self.queued.len(), starting))
     }

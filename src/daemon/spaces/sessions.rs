@@ -1,5 +1,6 @@
 //! The agent sessions a space's agents reported, which clients find the
 //! files of; the daemon never reads them.
+use crate::execution::recovery::LastSessionExt;
 use std::collections::BTreeSet;
 
 use anyhow::Result;

@@ -1,5 +1,6 @@
 //! What the daemon knows of workspaces' agents: running, queued, or stopped
 //! with a session to restore.
+use crate::execution::recovery::LastSessionExt;
 use std::collections::HashMap;
 
 use anyhow::Result;

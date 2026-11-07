@@ -19,25 +19,35 @@ use std::{
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
 
-impl Identity {
+/// Operations on the client type [`Identity`] that only the `shoal` command uses.
+pub(crate) trait IdentityExt {
     /// The unique ID that live processes' parent links can name: one recorded
     /// in this boot.
+    fn lineage_root(&self) -> Option<u64>;
+
+    /// Whether the process ran in an earlier boot, so it has ended. One whose
+    /// record does not name its boot may run in this one.
+    fn of_earlier_boot(&self) -> bool;
+
+    /// This identity as recorded in `boot`.
+    #[cfg(test)]
+    fn recorded_in(self, boot: &str) -> Self;
+}
+
+impl IdentityExt for Identity {
     fn lineage_root(&self) -> Option<u64> {
         let unique = self.unique.as_ref()?;
         (Some(&unique.boot) == boot_session()).then_some(unique.id)
     }
 
-    /// Whether the process ran in an earlier boot, so it has ended. One whose
-    /// record does not name its boot may run in this one.
-    pub fn of_earlier_boot(&self) -> bool {
+    fn of_earlier_boot(&self) -> bool {
         recorded_boot(self)
             .zip(current_boot())
             .is_some_and(|(then, now)| then != now)
     }
 
-    /// This identity as recorded in `boot`.
     #[cfg(test)]
-    pub(crate) fn recorded_in(self, boot: &str) -> Self {
+    fn recorded_in(self, boot: &str) -> Self {
         #[cfg(target_os = "linux")]
         let identity = {
             let start = self.birth.split_once(':').map_or("", |(_, start)| start);
@@ -1436,9 +1446,14 @@ fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
         .collect())
 }
 
-impl Identity {
+/// How [`Identity`]s compare by age.
+pub(crate) trait IdentityAge {
     /// A process born before the wrapper cannot be one of its descendants.
-    pub fn not_older_than(&self, wrapper: &Identity) -> bool {
+    fn not_older_than(&self, wrapper: &Identity) -> bool;
+}
+
+impl IdentityAge for Identity {
+    fn not_older_than(&self, wrapper: &Identity) -> bool {
         let Some((own_prefix, own_end)) = self.birth.rsplit_once(':') else {
             return true;
         };

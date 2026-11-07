@@ -6,6 +6,8 @@ use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
 use crate::client::space_names::SpaceSelector;
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
     client::recovery::ReconcileOptions,
@@ -1083,7 +1085,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 }
 
 mod chats;
-mod queue;
+pub(super) mod queue;
 mod targets;
 
 #[cfg(test)]

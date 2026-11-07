@@ -460,16 +460,23 @@ fn skip_failed<T>(workspace: &Workspace, observed: Result<Option<T>>) -> Option<
     })
 }
 
-impl ManualCleanup {
+/// Operations on the client type [`ManualCleanup`] that only the `shoal` command uses.
+trait ManualCleanupExt {
     /// A dry run lists why it keeps each space, and a request naming spaces
     /// says why it kept those.
+    fn keep(&mut self, space: String, reason: CleanupReason, named: bool);
+
+    /// Record that removing the space `space` failed with `error`.
+    fn retain(&mut self, space: String, error: &anyhow::Error);
+}
+
+impl ManualCleanupExt for ManualCleanup {
     fn keep(&mut self, space: String, reason: CleanupReason, named: bool) {
         if self.dry_run || named {
             self.kept.push(Kept { space, reason });
         }
     }
 
-    /// Record that removing the space `space` failed with `error`.
     fn retain(&mut self, space: String, error: &anyhow::Error) {
         self.retained.push(Retained {
             space,
@@ -478,7 +485,18 @@ impl ManualCleanup {
     }
 }
 
-impl Pick {
+/// Operations on the client type [`Pick`] that only the `shoal` command uses.
+trait PickExt {
+    fn covers(&self, name: &str, id: &str) -> bool;
+
+    /// Fails for a name none of `items`, as `(name, id)` pairs, has.
+    fn ensure_known<'a>(
+        &self,
+        items: impl Iterator<Item = (&'a str, &'a str)> + Clone,
+    ) -> Result<()>;
+}
+
+impl PickExt for Pick {
     fn covers(&self, name: &str, id: &str) -> bool {
         match self {
             Self::None => false,
@@ -487,7 +505,6 @@ impl Pick {
         }
     }
 
-    /// Fails for a name none of `items`, as `(name, id)` pairs, has.
     fn ensure_known<'a>(
         &self,
         items: impl Iterator<Item = (&'a str, &'a str)> + Clone,

@@ -1,4 +1,5 @@
 //! Deterministic simulator decisions over snapshots; no persistence or simctl calls.
+use crate::daemon::sim::SimulatorExt;
 use anyhow::{Result, bail, ensure};
 
 use super::{Profile, SimConfig, SimRequest, Simulator, SimulatorState, simctl::Inventory};

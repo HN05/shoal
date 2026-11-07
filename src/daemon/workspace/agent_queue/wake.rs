@@ -1,6 +1,8 @@
 //! What wakes a queued restore: sustained healthy readings for an agent
 //! protection stopped mid-turn, an update for one stopped between turns,
 //! which has nothing to do until then, unless `shoal resume` asked for it.
+use crate::daemon::workspace::agents::ProtectionExt;
+use crate::execution::recovery::RecordExt;
 use std::collections::HashSet;
 
 use anyhow::Result;

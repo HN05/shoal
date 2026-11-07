@@ -1,4 +1,5 @@
 //! Caller-named claims of workspace use, independent of assignment completion.
+use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 

@@ -1,5 +1,7 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::workspace::agents::ProtectionExt;
+use crate::execution::recovery::RecordExt;
 use crate::{
     daemon::{
         notifications::NotificationKind,

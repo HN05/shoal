@@ -1,5 +1,6 @@
 //! Issue and PR actions the daemon carries out for a workspace, so its
 //! scope rules apply and each change reaches the event journal.
+use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result, bail};
 
 use super::{

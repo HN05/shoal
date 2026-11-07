@@ -12,9 +12,24 @@ use crate::{
     sessions::Origin,
 };
 
-impl Need {
+/// Operations on the client type [`Need`] that only the `shoal` command uses.
+pub(crate) trait NeedExt: Sized {
     /// The need of the built-in command at `path`, such as `["release", "hold"]`; `None` for other names, which run configured commands.
-    pub fn of(path: &[&str]) -> Option<Self> {
+    fn of(path: &[&str]) -> Option<Self>;
+
+    /// The need of the command at `path`; configured commands need a ready
+    /// workspace to run in.
+    fn of_command(path: &[&str]) -> Self;
+
+    /// What a picker reports when no workspace is left to offer.
+    fn none_offered(self) -> &'static str;
+
+    /// Flags that change the operation also change which workspaces it offers.
+    fn of_matches(path: &[&str], matches: &clap::ArgMatches) -> Option<Self>;
+}
+
+impl NeedExt for Need {
+    fn of(path: &[&str]) -> Option<Self> {
         Some(match path {
             ["attach"] => Self::Session,
             ["cd"] => Self::Directory,
@@ -51,14 +66,11 @@ impl Need {
         })
     }
 
-    /// The need of the command at `path`; configured commands need a ready
-    /// workspace to run in.
-    pub fn of_command(path: &[&str]) -> Self {
+    fn of_command(path: &[&str]) -> Self {
         Self::of(path).unwrap_or(Self::Ready)
     }
 
-    /// What a picker reports when no workspace is left to offer.
-    pub fn none_offered(self) -> &'static str {
+    fn none_offered(self) -> &'static str {
         match self {
             Self::Session => "no workspace or chat has an agent session",
             Self::Running => "nothing is running in any workspace",
@@ -77,8 +89,7 @@ impl Need {
         }
     }
 
-    /// Flags that change the operation also change which workspaces it offers.
-    pub fn of_matches(path: &[&str], matches: &clap::ArgMatches) -> Option<Self> {
+    fn of_matches(path: &[&str], matches: &clap::ArgMatches) -> Option<Self> {
         let flag = |name| matches.try_get_one::<bool>(name).ok().flatten() == Some(&true);
         // Untracked processes do not need a running agent or command.
         if path == ["stop"] && (flag("processes") || flag("leftovers")) {

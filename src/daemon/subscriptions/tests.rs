@@ -47,6 +47,8 @@ fn changes_name_each_new_changed_and_removed_record() {
 
 mod streams {
     use crate::client::space_names::SpaceSelector;
+    use crate::daemon::approvals::ApprovalRequestExt;
+    use crate::execution::recovery::LastSessionExt;
     use crate::{
         client::{
             connection::Connector,

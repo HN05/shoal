@@ -3,6 +3,7 @@
 //! stopped it, and finishes normally when recovery is cancelled or a restart
 //! leaves the agent to a new wrapper. Failed ownership checks never authorize
 //! a replacement process.
+use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::{

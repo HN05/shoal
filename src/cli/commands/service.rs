@@ -1,4 +1,5 @@
 //! CLI OS-service administration, including offline/protocol-upgrade handling.
+use crate::config_file::ConfigExt;
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};

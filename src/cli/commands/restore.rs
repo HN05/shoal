@@ -1,5 +1,6 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
+use crate::cli::commands::resume::queue::QueuedExt;
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, ensure};
@@ -185,9 +186,18 @@ pub(super) async fn finish_reopen(
     Ok(0)
 }
 
-impl Reopened {
+/// Operations on the client type [`Reopened`] that only the `shoal` command uses.
+pub(crate) trait ReopenedExt {
     /// The report of the reopening, which `action` begins.
-    pub(super) fn message(&self, ctx: &Context, action: &str) -> String {
+    fn message(&self, ctx: &Context, action: &str) -> String;
+
+    /// Queue the restores of the agents the removal stopped, warning when
+    /// that fails, since `shoal resume` still restores them.
+    async fn queue_agents(&mut self, ctx: &Context);
+}
+
+impl ReopenedExt for Reopened {
+    fn message(&self, ctx: &Context, action: &str) -> String {
         let Self {
             workspace, removed, ..
         } = self;
@@ -222,9 +232,7 @@ impl Reopened {
         )
     }
 
-    /// Queue the restores of the agents the removal stopped, warning when
-    /// that fails, since `shoal resume` still restores them.
-    pub(super) async fn queue_agents(&mut self, ctx: &Context) {
+    async fn queue_agents(&mut self, ctx: &Context) {
         let executions: BTreeSet<String> = self
             .removed
             .agents

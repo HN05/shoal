@@ -1,4 +1,5 @@
 use super::{Inbox, Item};
+use crate::cli::commands::inbox::ItemExt;
 use crate::{cli::output::Palette, model::CheckoutSync};
 
 #[test]

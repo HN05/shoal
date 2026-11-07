@@ -2,6 +2,7 @@
 //! restart of the machine ends every process. The daemon forgets them,
 //! keeping the recovery records they saved for `shoal resume`, and the session
 //! of an agent that saved none as one of its workspace's last sessions.
+use crate::process::identity::IdentityExt;
 use anyhow::Result;
 
 use super::{Manager, store};

@@ -19,7 +19,12 @@ use crate::{
     tmp_dirs::Layout,
 };
 
-impl Selection {
+/// Operations on the client type [`Selection`] that only the `shoal` command uses.
+trait SelectionExt {
+    fn takes(self, process: &Untracked) -> bool;
+}
+
+impl SelectionExt for Selection {
     fn takes(self, process: &Untracked) -> bool {
         match self {
             Self::Processes => true,

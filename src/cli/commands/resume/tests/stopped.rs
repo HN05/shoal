@@ -1,5 +1,6 @@
 //! Resuming stopped work through `shoal resume`, against the overload
 //! tests' fixture daemon.
+use crate::execution::recovery::LastSessionExt;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;

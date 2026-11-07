@@ -1,6 +1,7 @@
 //! Removal records: every removal of an existing worktree takes a checkpoint
 //! and records what `shoal work restore` needs to reopen the workspace, until the
 //! record expires.
+use crate::execution::recovery::LastSessionExt;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};

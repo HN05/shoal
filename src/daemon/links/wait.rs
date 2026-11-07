@@ -1719,8 +1719,17 @@ fn activity_ended(db: &rusqlite::Connection, id: &str, url: &str, done: bool) ->
     Ok(record.is_some_and(|record| record.snapshot.activity_ended(done)))
 }
 
-impl Updates {
-    pub(crate) fn superseded() -> Self {
+/// Operations on the client type [`Updates`] that only the `shoal` command uses.
+pub(crate) trait UpdatesExt {
+    fn superseded() -> Self;
+
+    fn timed_out() -> Self;
+
+    fn messages(messages: Vec<AgentMessage>) -> Self;
+}
+
+impl UpdatesExt for Updates {
+    fn superseded() -> Self {
         Self {
             updates: Vec::new(),
             messages: Vec::new(),
@@ -1740,7 +1749,7 @@ impl Updates {
         }
     }
 
-    pub(crate) fn messages(messages: Vec<AgentMessage>) -> Self {
+    fn messages(messages: Vec<AgentMessage>) -> Self {
         Self {
             updates: Vec::new(),
             messages,

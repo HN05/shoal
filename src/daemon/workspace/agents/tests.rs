@@ -6,6 +6,8 @@ use crate::daemon::{
     workspace::ExecutionKind,
     workspace_files::Attacher,
 };
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 use futures_util::FutureExt;
 
 #[tokio::test]

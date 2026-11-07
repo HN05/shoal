@@ -2,6 +2,7 @@
 //! on a terminal: an fzf list per view that Tab cycles, reloading its rows
 //! from `shoal internal menu-rows`. Each view binds only the keys that mean
 //! something there. A selection plus key becomes an ordinary [`Command`].
+use crate::cli::commands::inbox::ItemExt;
 use std::{
     os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},

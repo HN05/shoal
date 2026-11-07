@@ -1,6 +1,7 @@
 //! Revert a merged PR of a space's repository: through a forge that opens
 //! the revert itself, or by reading what reverting its merge with Git in a
 //! new workspace needs.
+use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Result, bail, ensure};
 
 use super::{proposals::OpenOutcome, space::LinkSpace};

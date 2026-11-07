@@ -1,5 +1,6 @@
 //! `shoal move export`: end spaces here, removing workspaces and stopping
 //! chats' agents, and write each to a file, or to standard output.
+use crate::transfer::ManifestExt;
 use std::{
     io::Write,
     path::{Path, PathBuf},

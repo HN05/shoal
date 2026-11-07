@@ -1,6 +1,7 @@
 //! `shoal queue move` of a running agent: its wrapper stops it as after a
 //! protection stop and restores it in the same terminal once the agent queue
 //! starts its restore, which needs only a free slot.
+use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, bail, ensure};
 
 use super::{Agent, Manager};

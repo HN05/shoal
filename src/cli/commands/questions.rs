@@ -1,4 +1,5 @@
 //! Record questions and let the user inspect, answer or withdraw them.
+use crate::daemon::questions::QuestionExt;
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};

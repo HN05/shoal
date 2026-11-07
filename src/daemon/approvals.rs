@@ -24,16 +24,23 @@ pub(crate) use crate::client::approvals::{
     SimulatorSpecification, Specification, Target, Undecided, UnmergeSpecification,
 };
 
-impl Target {
+/// Operations on the client type [`Target`] that only the `shoal` command uses.
+pub(crate) trait TargetExt {
     /// Whether the request proposes a forge write the user may edit before
     /// approving, rather than granting access.
-    pub fn is_proposal(&self) -> bool {
-        matches!(self, Self::IssueOpen | Self::PrOpen | Self::Push)
-    }
+    fn is_proposal(&self) -> bool;
 
     /// Whether a coordinator decides the request only while it holds a grant
     /// for the same thing. A hold grants nothing a coordinator could hold, so
     /// the nearest one decides it.
+    fn needs_grant(&self) -> bool;
+}
+
+impl TargetExt for Target {
+    fn is_proposal(&self) -> bool {
+        matches!(self, Self::IssueOpen | Self::PrOpen | Self::Push)
+    }
+
     fn needs_grant(&self) -> bool {
         !matches!(self, Self::Hold(_))
     }
@@ -261,8 +268,35 @@ fn reusable_grant(db: &Connection, request: &ApprovalRequest) -> Result<bool> {
     }))
 }
 
-impl ApprovalRequest {
-    pub fn new(
+/// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
+pub(crate) trait ApprovalRequestExt {
+    fn new(
+        owner: &str,
+        target: Target,
+        name: &str,
+        specification: Specification,
+        lifetime: Lifetime,
+        reason: Option<&str>,
+    ) -> Self;
+
+    /// Whether `other` is this request as recorded, though its decision may
+    /// differ: the same key, workspace, target, settings, reason and time.
+    fn is_same(&self, other: &ApprovalRequest) -> bool;
+
+    /// What the user is told about a request no coordinator decides,
+    /// including how to approve it.
+    fn notification(&self) -> String;
+
+    /// What its decider is told about a withdrawn request whose
+    /// notification was already shown.
+    fn withdrawal_notification(&self) -> String;
+
+    /// The agent message naming a decision and what the requesting agent does next.
+    fn decision_message(&self) -> String;
+}
+
+impl ApprovalRequestExt for ApprovalRequest {
+    fn new(
         owner: &str,
         target: Target,
         name: &str,
@@ -294,8 +328,6 @@ impl ApprovalRequest {
         }
     }
 
-    /// Whether `other` is this request as recorded, though its decision may
-    /// differ: the same key, workspace, target, settings, reason and time.
     fn is_same(&self, other: &ApprovalRequest) -> bool {
         self.number == other.number
             && self.key == other.key
@@ -308,8 +340,6 @@ impl ApprovalRequest {
             && self.created_at == other.created_at
     }
 
-    /// What the user is told about a request no coordinator decides,
-    /// including how to approve it.
     fn notification(&self) -> String {
         format!(
             "approval {}: {}{}; approve with shoal approvals --approve {}",
@@ -320,8 +350,6 @@ impl ApprovalRequest {
         )
     }
 
-    /// What its decider is told about a withdrawn request whose
-    /// notification was already shown.
     fn withdrawal_notification(&self) -> String {
         format!(
             "approval {}: {} was withdrawn; no decision needed",
@@ -330,7 +358,6 @@ impl ApprovalRequest {
         )
     }
 
-    /// The agent message naming a decision and what the requesting agent does next.
     fn decision_message(&self) -> String {
         let next = match self.status {
             DecisionStatus::Approved => "retry the command that requested it",

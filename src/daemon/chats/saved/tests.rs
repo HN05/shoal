@@ -1,4 +1,5 @@
 use crate::client::space_names::SpaceSelector;
+use crate::process::identity::IdentityExt;
 use crate::{
     daemon::{
         events::EventItem,

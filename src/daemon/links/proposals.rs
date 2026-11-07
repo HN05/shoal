@@ -1,6 +1,8 @@
 //! Issues and PRs a repository's `[permissions]` makes scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
+use crate::daemon::approvals::ApprovalRequestExt;
+use crate::daemon::approvals::proposals::ProposalExt;
 use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::BTreeSet,
@@ -36,8 +38,13 @@ use crate::{
     model::Workspace,
 };
 
-impl OpenOutcome {
-    pub fn opened(opened: Opened) -> Self {
+/// Operations on the client type [`OpenOutcome`] that only the `shoal` command uses.
+pub(crate) trait OpenOutcomeExt {
+    fn opened(opened: Opened) -> Self;
+}
+
+impl OpenOutcomeExt for OpenOutcome {
+    fn opened(opened: Opened) -> Self {
         Self::Opened(Box::new(opened))
     }
 }

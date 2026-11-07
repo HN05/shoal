@@ -52,11 +52,16 @@ pub(crate) trait Host: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-impl Origin {
+/// Operations on the client type [`Origin`] that only the `shoal` command uses.
+pub(crate) trait OriginExt {
     /// What names the server holding the place among its host's servers,
     /// as the host reads its data; empty for a host with one server. Places
     /// of different servers may share an ID.
-    pub fn server(&self) -> String {
+    fn server(&self) -> String;
+}
+
+impl OriginExt for Origin {
+    fn server(&self) -> String {
         host(self.host)
             .map(|host| host.server(&self.data))
             .unwrap_or_default()

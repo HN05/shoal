@@ -1,6 +1,8 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{install_test_script, manager, repository};
+use crate::daemon::workspace::agents::ProtectionExt;
+use crate::execution::recovery::RecordExt;
 use std::{fs, future::Future, sync::Arc};
 
 async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {

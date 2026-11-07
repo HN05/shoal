@@ -1,6 +1,9 @@
 //! `shoal move import`: continue spaces from the packages `shoal move
 //! export` wrote: open workspaces again and start chats that resume their
 //! sessions.
+use crate::cli::commands::restore::ReopenedExt;
+use crate::transfer::ManifestExt;
+use crate::transfer::PackagedWorkspaceExt;
 use std::{
     collections::BTreeSet,
     io::BufReader,

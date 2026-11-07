@@ -1,4 +1,5 @@
 use super::*;
+use crate::daemon::approvals::ApprovalRequestExt;
 use crate::daemon::approvals::{
     DecisionStatus, Lifetime, PortSpecification, Specification, Target,
 };

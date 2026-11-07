@@ -1,6 +1,7 @@
 //! Key the records of places Shoal created by the server that holds each,
 //! which the host names in the record's data: Herdr numbers each session's
 //! panes from the start.
+use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 

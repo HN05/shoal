@@ -1,3 +1,4 @@
+use crate::git::existing_branch::BranchExt;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::client::space_names::SpaceSelector;

@@ -1,3 +1,4 @@
+use crate::execution::recovery::LastSessionExt;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result};

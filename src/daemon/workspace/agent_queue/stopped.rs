@@ -5,6 +5,8 @@
 //! agent registers, or while waiting once what it restores is gone, as after
 //! `shoal resume --now` or a discard. A restart's restore starts at once, in
 //! the slot its agent kept.
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 use std::{
     collections::{BTreeMap, HashSet},
     path::PathBuf,

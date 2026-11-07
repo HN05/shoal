@@ -1,5 +1,9 @@
 //! Choosing the workspace a command acts on: the named one, the current
 //! one, or one from a picker.
+use crate::cli::availability::NeedExt;
+use crate::cli::list_status::ListStatusExt;
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 use std::{collections::HashSet, io};
 
 use anyhow::{Result, ensure};

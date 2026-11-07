@@ -2,6 +2,9 @@
 //! executions, and startup reconciles them from their recovery records.
 use super::*;
 use crate::client::space_names::SpaceSelector;
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
+use crate::process::identity::IdentityExt;
 use crate::{
     execution::recovery::{Record, Stage, record_path},
     model::{Execution, Workspace},

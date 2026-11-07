@@ -1,6 +1,7 @@
 //! Opening an issue for a workspace or a chat, or from a registered
 //! checkout, in its repository or another one, or recording it for the
 //! user's approval where the repository asks for that.
+use crate::daemon::links::proposals::OpenOutcomeExt;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};

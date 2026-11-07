@@ -3,6 +3,8 @@
 //! agents with their sessions and the sessions' files; a workspace's also
 //! holds its removal record and a Git bundle of its checkpoint, and a chat's
 //! its name.
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 use std::{
     collections::BTreeSet,
     io::{BufRead, Read, Write},
@@ -181,10 +183,29 @@ fn open_session_file(source: &SessionSource) -> Result<(std::fs::File, u64)> {
     Ok((file, size))
 }
 
-impl Manifest {
+/// Operations on the client type [`Manifest`] that only the `shoal` command uses.
+pub(crate) trait ManifestExt: Sized {
     /// The package of `source`, a space of `repo`, without its session
     /// files.
-    pub async fn of(repo: &Repository, source: Source) -> Result<Self> {
+    async fn of(repo: &Repository, source: Source) -> Result<Self>;
+
+    /// The space's name.
+    fn name(&self) -> &str;
+
+    /// The agents to import on `machine`, without their sessions on
+    /// another. Each agent with a session keeps it as `keep_sessions` says,
+    /// otherwise on the exporting machine or when the package carries its
+    /// files; on another machine, it keeps no place or waiting wrapper there.
+    /// Every other agent starts a new session. A copy's agents start from
+    /// forks of their sessions, in no place of the original's.
+    fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions;
+
+    /// Whether the export carries the files of `session`.
+    fn carries(&self, session: &str) -> bool;
+}
+
+impl ManifestExt for Manifest {
+    async fn of(repo: &Repository, source: Source) -> Result<Self> {
         let remote_url = crate::repository::remote_url_from_source(&repo.source).await?;
         let machine = crate::process::machine::id();
         let (space, sessions) = match source {
@@ -221,21 +242,14 @@ impl Manifest {
         })
     }
 
-    /// The space's name.
-    pub fn name(&self) -> &str {
+    fn name(&self) -> &str {
         match &self.space {
             Space::Workspace(packaged) => &packaged.workspace.name,
             Space::Chat(packaged) => &packaged.name,
         }
     }
 
-    /// The agents to import on `machine`, without their sessions on
-    /// another. Each agent with a session keeps it as `keep_sessions` says,
-    /// otherwise on the exporting machine or when the package carries its
-    /// files; on another machine, it keeps no place or waiting wrapper there.
-    /// Every other agent starts a new session. A copy's agents start from
-    /// forks of their sessions, in no place of the original's.
-    pub fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions {
+    fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions {
         let Some(sessions) = &self.sessions else {
             return match &self.space {
                 Space::Workspace(packaged) => Sessions {
@@ -291,7 +305,6 @@ impl Manifest {
         }
     }
 
-    /// Whether the export carries the files of `session`.
     fn carries(&self, session: &str) -> bool {
         self.session_files
             .iter()
@@ -299,10 +312,18 @@ impl Manifest {
     }
 }
 
-impl PackagedWorkspace {
+/// Operations on the client type [`PackagedWorkspace`] that only the `shoal` command uses.
+pub(crate) trait PackagedWorkspaceExt: Sized {
     /// The package of `removed`, a workspace of the repository at `repo`:
     /// a bundle unless the default branch the importer fetches already has
     /// the checkpoint.
+    async fn of(repo: &Path, removed: RemovedWorkspace) -> Result<Self>;
+
+    /// The removal record to import, whose agents have `sessions`.
+    fn workspace_with(&self, sessions: Sessions) -> RemovedWorkspace;
+}
+
+impl PackagedWorkspaceExt for PackagedWorkspace {
     async fn of(repo: &Path, removed: RemovedWorkspace) -> Result<Self> {
         let commit = removed.checkpoint.commit.clone();
         let shared = shared_commit(repo).await?;
@@ -317,8 +338,7 @@ impl PackagedWorkspace {
         })
     }
 
-    /// The removal record to import, whose agents have `sessions`.
-    pub fn workspace_with(&self, sessions: Sessions) -> RemovedWorkspace {
+    fn workspace_with(&self, sessions: Sessions) -> RemovedWorkspace {
         RemovedWorkspace {
             agents: sessions.agents,
             last_sessions: sessions.last_sessions,

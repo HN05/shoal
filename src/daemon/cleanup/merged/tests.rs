@@ -1,3 +1,4 @@
+use crate::execution::recovery::RecordExt;
 use std::{fs, sync::Arc};
 
 use super::*;
