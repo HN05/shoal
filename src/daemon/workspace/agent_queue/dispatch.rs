@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 
 use super::{
-    Grant, dependencies, expiry,
+    dependencies, expiry,
     limits::{Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
 };
@@ -40,6 +40,33 @@ struct WaitingWork {
     /// The executions of the stopped agents whose restore the daemon starts,
     /// which hold no slot until it is admitted.
     stopped: HashSet<String>,
+}
+
+impl WaitingWork {
+    /// Whether `admitted` holds an entry whose work is of `kind`.
+    fn admits(&self, admitted: &[String], kind: fn(&Work) -> bool) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| kind(&entry.work) && admitted.contains(&entry.id))
+    }
+
+    /// The execution and wake of each restore in `admitted` that a waiting
+    /// wrapper carries out.
+    fn admitted_restores<'a>(
+        &'a self,
+        admitted: &'a [String],
+    ) -> impl Iterator<Item = &'a (String, Wake)> {
+        admitted.iter().filter_map(|id| self.restores.get(id))
+    }
+
+    /// Whether `admitted` holds an entry that waited for healthy readings: a
+    /// restore of an agent stopped mid-turn or a one-shot run protection
+    /// stopped.
+    fn needs_recovery(&self, admitted: &[String]) -> bool {
+        self.admitted_restores(admitted)
+            .any(|(_, wake)| *wake == Wake::Recovery)
+            || self.admits(admitted, |work| *work == Work::OneShot { after_stop: true })
+    }
 }
 
 /// The executions of the `waiting` restores that wait for an update or only
@@ -88,60 +115,67 @@ impl Manager {
         if self.agent_queue.suspended() {
             return Ok(false);
         }
-        let WaitingWork {
-            entries: mut waiting,
-            restores,
-            stopped,
-        } = self.waiting_work().await?;
-        let bases = self.hold_back_dependents(&mut waiting).await?;
-        if waiting.is_empty() {
+        let mut work = self.waiting_work().await?;
+        let bases = self.hold_back_dependents(&mut work.entries).await?;
+        if work.entries.is_empty() {
             return Ok(false);
         }
-        let repositories = waiting
+        let published = self.overload_recovery.published();
+        let admitted = self.fitting_entries(&work, published.is_some()).await?;
+        let Some(admitted) = self.grant_admission(&work, admitted, published) else {
+            return Ok(false);
+        };
+        let starts = self.mark_starting(admitted, bases).await?;
+        self.start_launches(starts, caller).await
+    }
+
+    /// The entries of `work` that fit beside the slots in use, where
+    /// `recovered` says whether healthy readings are published.
+    async fn fitting_entries(&self, work: &WaitingWork, recovered: bool) -> Result<Vec<String>> {
+        let repositories = work
+            .entries
             .iter()
             .map(|entry| entry.repository.clone())
             .collect();
-        let mut dormant = dormant_restores(&waiting, &restores);
-        dormant.extend(stopped);
+        let mut dormant = dormant_restores(&work.entries, &work.restores);
+        dormant.extend(work.stopped.iter().cloned());
         let slots = self.occupied_slots(&dormant).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(repositories, &slots, &jobs).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
-        let published = self.overload_recovery.published();
-        let admitted = admit(&occupied, &waiting, &limits, published.is_some());
-        if waiting
-            .iter()
-            .any(|entry| matches!(entry.work, Work::Job { .. }) && admitted.contains(&entry.id))
-        {
+        Ok(admit(&occupied, &work.entries, &limits, recovered))
+    }
+
+    /// Grant the `admitted` entries of `work` their start: wake the runners
+    /// for a CI job, let each restore's waiting agent go and give one-shot
+    /// runs their slots, using up the recovery epoch `published` for those
+    /// that waited for healthy readings. Return the entries left to mark
+    /// starting, or none when a stop, reload or unsafe reading withdrew the
+    /// readings since; the pass it wakes decides again.
+    fn grant_admission(
+        &self,
+        work: &WaitingWork,
+        admitted: Vec<String>,
+        published: Option<u64>,
+    ) -> Option<Vec<String>> {
+        if work.admits(&admitted, |work| matches!(work, Work::Job { .. })) {
             self.runners.wake();
         }
-        let (recovered, woken): (Vec<_>, Vec<_>) = admitted
-            .iter()
-            .filter_map(|id| restores.get(id))
-            .partition(|(_, wake)| *wake == Wake::Recovery);
-        let resumed_oneshot = waiting.iter().any(|entry| {
-            entry.work == (Work::OneShot { after_stop: true }) && admitted.contains(&entry.id)
-        });
-        if !recovered.is_empty() || resumed_oneshot {
-            // A stop, reload or unsafe reading since the check withdrew the
-            // readings; the pass it wakes decides again.
-            let Some(epoch) = published.and_then(|epoch| self.overload_recovery.consume(epoch))
-            else {
-                return Ok(false);
-            };
-            self.grant_restores(&recovered, Grant::Recovery(epoch));
-        }
-        for (execution, wake) in woken {
-            if let Some(grant) = wake.grant() {
+        let epoch = match work.needs_recovery(&admitted) {
+            true => Some(published.and_then(|epoch| self.overload_recovery.consume(epoch))?),
+            false => None,
+        };
+        for (execution, wake) in work.admitted_restores(&admitted) {
+            if let Some(grant) = wake.grant(epoch) {
                 self.agent_queue.grant_restore(execution, grant);
             }
         }
-        let admitted = admitted
-            .into_iter()
-            .filter(|id| !self.agent_queue.admit_oneshot(id))
-            .collect();
-        let starts = self.mark_starting(admitted, bases).await?;
-        self.start_launches(starts, caller).await
+        Some(
+            admitted
+                .into_iter()
+                .filter(|id| !self.agent_queue.admit_oneshot(id))
+                .collect(),
+        )
     }
 
     /// The queued entries in order, each restore with whether its agent
@@ -219,13 +253,6 @@ impl Manager {
             restores,
             stopped,
         })
-    }
-
-    /// Grant the admitted restores of `restores`, by execution.
-    fn grant_restores(&self, restores: &[&(String, Wake)], grant: Grant) {
-        for (execution, _) in restores {
-            self.agent_queue.grant_restore(execution, grant);
-        }
     }
 
     /// Take the launches whose dependencies are not complete out of `waiting`,

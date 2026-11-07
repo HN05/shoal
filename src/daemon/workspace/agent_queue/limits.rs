@@ -89,11 +89,11 @@ pub(crate) enum Wake {
 }
 
 impl Wake {
-    /// What admits a restore with this wake, unless it needs the healthy
-    /// readings of a recovery epoch.
-    pub(super) fn grant(self) -> Option<Grant> {
+    /// What admits a restore with this wake: the recovery `epoch` its
+    /// healthy readings used up, when it needs them.
+    pub(super) fn grant(self, epoch: Option<u64>) -> Option<Grant> {
         match self {
-            Wake::Recovery => None,
+            Wake::Recovery => epoch.map(Grant::Recovery),
             Wake::Update { .. } => Some(Grant::Update),
             Wake::Slot => Some(Grant::Queue),
         }
