@@ -30,11 +30,12 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-#[derive(Debug, Default, Args)]
+// The workspace a listing covers, from its command's `--workspace` and
+// `--all`.
+#[derive(Debug, Default)]
 pub struct WorkspaceScope {
     pub workspace: Option<String>,
     /// All workspaces.
-    #[arg(short = 'A', long, conflicts_with = "workspace")]
     pub all: bool,
 }
 
