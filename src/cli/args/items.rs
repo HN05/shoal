@@ -94,7 +94,7 @@ pub struct RelationArgs {
     pub args: Vec<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
-    #[arg(long)]
+    #[arg(short = 's', long)]
     pub space: Option<String>,
 }
 
@@ -129,7 +129,7 @@ pub struct ItemArgs {
     pub item: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
-    #[arg(long)]
+    #[arg(short = 's', long)]
     pub space: Option<String>,
 }
 

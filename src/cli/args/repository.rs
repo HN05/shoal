@@ -30,7 +30,7 @@ pub struct RepositoryArgs {
     /// Read another repository: a registered repository's name, OWNER/NAME
     /// on the current repository's forge, or a repository URL on any forge;
     /// defaults to the current workspace's or checkout's repository.
-    #[arg(long, value_name = "REPOSITORY")]
+    #[arg(short = 'r', long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
 }
 
@@ -50,7 +50,7 @@ pub struct ApiArgs {
     /// name: a registered repository's name, OWNER/NAME on the current
     /// repository's forge, or a repository URL on any forge; defaults to the
     /// current workspace's or checkout's repository.
-    #[arg(long, value_name = "REPOSITORY")]
+    #[arg(short = 'r', long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
 }
 
@@ -67,7 +67,7 @@ pub struct DownloadArgs {
     /// name, OWNER/NAME on the current repository's forge, or a repository
     /// URL on any forge; defaults to the current workspace's or checkout's
     /// repository.
-    #[arg(long, value_name = "REPOSITORY")]
+    #[arg(short = 'r', long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
 }
 
@@ -133,13 +133,13 @@ pub enum RepoCommand {
         #[arg(long)]
         local: bool,
         /// Run the local setup's chat in this terminal instead of a new tab or detached session.
-        #[arg(long, requires = "local")]
+        #[arg(short = 'H', long, requires = "local")]
         here: bool,
         /// Name of the local setup's chat; defaults to <repo>-setup.
         #[arg(long, requires = "local")]
         name: Option<String>,
         /// Agent to start; defaults to agent.default, otherwise a picker.
-        #[arg(long, value_parser = AgentParser)]
+        #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,
         #[command(flatten)]
         model: ModelArgs,

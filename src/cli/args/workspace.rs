@@ -11,10 +11,10 @@ pub enum WorkspaceCommand {
     /// List what needs you: questions, approvals, agents needing input, failures and ready work.
     Inbox {
         /// List only this registered repository's items.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
         /// Print the list instead of opening the picker, as filters and JSON do.
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         print: bool,
     },
     /// List ongoing work, or manage a workspace.
@@ -26,13 +26,13 @@ pub enum WorkspaceCommand {
         #[arg(long)]
         chats: bool,
         /// List only this registered repository's workspaces, chats and agents.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
         /// List only workspaces, chats and agents with this status; repeat or separate with commas.
         #[arg(long, value_delimiter = ',')]
         status: Vec<list_status::ListStatus>,
         /// Print the list instead of opening the picker, as filters and JSON do.
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         print: bool,
     },
     /// Show a space's activity and issue and PR state, and a workspace's
@@ -98,7 +98,7 @@ pub enum WorkCommand {
         /// Existing worktree root; files and Git settings are preserved, setup is skipped.
         path: PathBuf,
         /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
         /// Copy the work into a new worktree under the repository's Shoal directory.
         #[arg(long)]

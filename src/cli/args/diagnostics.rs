@@ -10,7 +10,7 @@ pub enum DiagnosticsCommand {
         #[command(subcommand)]
         command: Option<AlertsCommand>,
         /// Include notifications already shown.
-        #[arg(long, conflicts_with = "follow")]
+        #[arg(short = 'A', long, conflicts_with = "follow")]
         all: bool,
         /// Keep printing new notifications as the daemon records them.
         #[arg(long)]
@@ -40,7 +40,7 @@ pub enum AlertsCommand {
         attach: Vec<String>,
         /// Space, a workspace or chat, the notification names; defaults to
         /// the current workspace or chat, or a picker.
-        #[arg(long)]
+        #[arg(short = 's', long)]
         space: Option<String>,
     },
     /// Delete all notifications, including unread ones.
@@ -51,7 +51,7 @@ pub enum AlertsCommand {
         id: i64,
         /// Space, a workspace or chat, that sent it; defaults to the current
         /// workspace or chat, or a picker.
-        #[arg(long)]
+        #[arg(short = 's', long)]
         space: Option<String>,
     },
 }

@@ -57,10 +57,10 @@ pub struct ExportArgs {
     #[arg(conflicts_with = "all", value_name = "SPACE")]
     pub space: Vec<String>,
     /// Export every workspace and chat of the repository --repo names.
-    #[arg(long, requires = "repository")]
+    #[arg(short = 'A', long, requires = "repository")]
     pub all: bool,
     /// Repository whose spaces --all exports.
-    #[arg(long = "repo", requires = "all")]
+    #[arg(short = 'r', long = "repo", requires = "all")]
     pub repository: Option<String>,
     /// File to write, or a directory to write a file per space in, which several spaces
     /// and --all need; defaults to standard output.
@@ -85,7 +85,7 @@ pub struct ImportArgs {
     /// Export files or directories of them; defaults to standard input.
     pub files: Vec<PathBuf>,
     /// Repository to import into, when it does not share the exported repository's origin.
-    #[arg(long = "repo")]
+    #[arg(short = 'r', long = "repo")]
     pub repository: Option<String>,
     /// Continue every stopped agent's session, such as one whose files were copied by hand;
     /// refused for a copy, whose agents start from forks.
@@ -108,10 +108,10 @@ pub struct SshArgs {
     #[arg(conflicts_with = "all", value_name = "SPACE")]
     pub space: Vec<String>,
     /// Move every workspace and chat of the repository --repo names.
-    #[arg(long, requires = "repository")]
+    #[arg(short = 'A', long, requires = "repository")]
     pub all: bool,
     /// Repository whose spaces --all moves.
-    #[arg(long = "repo", requires = "all")]
+    #[arg(short = 'r', long = "repo", requires = "all")]
     pub repository: Option<String>,
     /// Leave the spaces running here and copy them, which the other machine opens as new
     /// spaces: a workspace at a new checkpoint on a branch of its own, or a chat from a fork of

@@ -89,7 +89,7 @@ pub enum Command {
         /// Configured command; omit it to execute the arguments after -- directly.
         name: Option<String>,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,

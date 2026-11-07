@@ -29,7 +29,7 @@ pub enum ConfigCommand {
         #[arg(required = true, num_args = 2.., value_names = ["KEY", "VALUE"])]
         assignments: Vec<String>,
         /// Edit this repository's local config instead of the global file.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
     },
     /// Remove config keys or tables, falling back to lower layers or defaults.
@@ -37,14 +37,14 @@ pub enum ConfigCommand {
         #[arg(required = true)]
         keys: Vec<String>,
         /// Edit this repository's local config instead of the global file.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
     },
     /// Show effective repository settings and the layer each value came from.
     Show {
         workspace: Option<String>,
         /// Show this repository's settings in its registered checkout instead of a workspace's.
-        #[arg(long = "repo", conflicts_with = "workspace")]
+        #[arg(short = 'r', long = "repo", conflicts_with = "workspace")]
         repository: Option<String>,
     },
     /// Print the command and configuration reference for this release.

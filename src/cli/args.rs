@@ -34,7 +34,7 @@ pub struct ConfirmationArgs {
 pub struct WorkspaceScope {
     pub workspace: Option<String>,
     /// All workspaces.
-    #[arg(long, conflicts_with = "workspace")]
+    #[arg(short = 'A', long, conflicts_with = "workspace")]
     pub all: bool,
 }
 
@@ -45,7 +45,7 @@ pub struct SpaceTargets {
     #[arg(value_name = "SPACE")]
     pub space: Vec<String>,
     /// All workspaces.
-    #[arg(long, conflicts_with = "space")]
+    #[arg(short = 'A', long, conflicts_with = "space")]
     pub all: bool,
 }
 

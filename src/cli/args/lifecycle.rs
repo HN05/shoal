@@ -88,7 +88,7 @@ pub enum CleanupKind {
     Branches {
         names: Vec<String>,
         /// Delete every kept branch.
-        #[arg(long, conflicts_with = "names")]
+        #[arg(short = 'A', long, conflicts_with = "names")]
         all: bool,
     },
     /// Empty the shared caches of repositories without running executions.
@@ -102,7 +102,7 @@ pub struct CleanupArgs {
     #[arg(long, global = true)]
     pub dry_run: bool,
     /// Only this repository's spaces, kept branches and caches, by name or ID.
-    #[arg(long, global = true)]
+    #[arg(short = 'r', long, global = true)]
     pub repo: Option<String>,
     /// Delete kept branches without asking.
     #[arg(short = 'y', long, global = true)]

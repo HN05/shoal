@@ -4,6 +4,7 @@ use crate::{
     cli::args::{create::CreateCommand, items::ItemsCommand},
     model::Relation,
 };
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Whether `args` resolve to JSON output under the `SHOAL_OUTPUT` `setting`.
 fn resolves_json(args: &[&str], setting: Option<&str>) -> anyhow::Result<bool> {
@@ -352,4 +353,49 @@ fn a_kept_export_narrows_to_a_checkpoint_of_one_space() {
     let all = ["--repo", "app", "--all", "--keep", "-o", "d"];
     assert!(parse(&all).is_ok());
     assert!(parse(&[&all[..], &["--checkpoint", "3"]].concat()).is_err());
+}
+
+#[test]
+fn each_short_flag_stands_for_one_long_flag_everywhere() {
+    let mut root = <Cli as clap::CommandFactory>::command();
+    // Checks every command, deferred arguments included: two flags of one
+    // command never share a letter.
+    root.clone().debug_assert();
+    let _ = root.render_usage();
+    let mut commands = built_in_commands(&root, &[]);
+    commands.push((Vec::new(), root));
+    // Shoal runs the hidden commands and flags; people do not type them.
+    let hidden: BTreeSet<_> = (commands.iter())
+        .filter(|(_, command)| command.is_hide_set())
+        .map(|(path, _)| path.clone())
+        .collect();
+    let mut longs_of = BTreeMap::<char, BTreeSet<&str>>::new();
+    let mut shorts_of = BTreeMap::<&str, BTreeSet<Option<char>>>::new();
+    for (path, command) in &commands {
+        let typed = !(1..=path.len()).any(|end| hidden.contains(&path[..end]));
+        for arg in command.get_arguments() {
+            let Some(long) = arg.get_long() else { continue };
+            if let Some(short) = arg.get_short() {
+                longs_of.entry(short).or_default().insert(long);
+            }
+            if typed && !arg.is_hide_set() {
+                shorts_of.entry(long).or_default().insert(arg.get_short());
+            }
+        }
+    }
+    let shared: Vec<_> = longs_of
+        .iter()
+        .filter(|(_, longs)| longs.len() > 1)
+        .collect();
+    assert!(
+        shared.is_empty(),
+        "letters with several long flags: {shared:?}"
+    );
+    let partial: Vec<_> = (shorts_of.iter())
+        .filter(|(_, shorts)| shorts.len() > 1)
+        .collect();
+    assert!(
+        partial.is_empty(),
+        "flags without their letter in some commands: {partial:?}"
+    );
 }

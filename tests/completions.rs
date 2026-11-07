@@ -180,6 +180,11 @@ fn agents_without_installed_executables_are_not_completed() {
             &["claude", "claude-direct"],
             &["codex"],
         ),
+        (
+            vec!["shoal", "start", "-a", "c"],
+            &["claude", "claude-direct"],
+            &["codex"],
+        ),
         // Launch profiles run their base's launcher.
         (
             vec!["shoal", "start", "--agent", "droid-"],

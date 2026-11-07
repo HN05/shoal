@@ -9,7 +9,7 @@ pub enum ResourcesCommand {
         #[command(subcommand)]
         kind: AcquireKind,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long, global = true)]
+        #[arg(short = 'w', long, global = true)]
         workspace: Option<String>,
     },
     /// Release every lease, every lease of one kind, or a selected lease.
@@ -17,24 +17,24 @@ pub enum ResourcesCommand {
         #[command(subcommand)]
         kind: Option<ReleaseKind>,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long, global = true)]
+        #[arg(short = 'w', long, global = true)]
         workspace: Option<String>,
     },
     /// Show leases and usage for every kind, or one.
     Leases {
         kind: Option<LeaseKind>,
         /// Workspace to show; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
         /// Show every managed workspace.
-        #[arg(long, conflicts_with = "workspace")]
+        #[arg(short = 'A', long, conflicts_with = "workspace")]
         all: bool,
     },
     /// Show configuration and available inventory for every kind, or one.
     Catalog {
         kind: Option<CatalogKind>,
         /// Workspace whose configuration to show; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
     /// Show recorded requests for a kind.
@@ -64,10 +64,10 @@ pub enum HistoryKind {
     /// Review clean-device requests, including failed and busy requests.
     Sim {
         /// Workspace to show; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
         /// Show every managed workspace.
-        #[arg(long, conflicts_with = "workspace")]
+        #[arg(short = 'A', long, conflicts_with = "workspace")]
         all: bool,
         #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=50))]
         limit: u32,
@@ -151,7 +151,7 @@ pub enum AcquireKind {
         #[arg(long)]
         member: Option<String>,
         /// Lock mode (defaults to permit for semaphores, write for rwlocks).
-        #[arg(long, value_enum)]
+        #[arg(short = 'm', long, value_enum)]
         mode: Option<crate::client::resources::LockMode>,
         #[command(flatten)]
         lease: LeaseOptions,

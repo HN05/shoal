@@ -35,12 +35,12 @@ pub enum BaseCommand {
     Set {
         /// Workspace name or branch in the same repository; omit to choose one.
         base: Option<String>,
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
     /// Remove the recorded base workspace.
     Clear {
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
 }
@@ -63,7 +63,7 @@ pub enum ChangesCommand {
         /// Branch or commit to merge into.
         target: Option<String>,
         /// Workspace to check; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
     /// Review a workspace's committed changes or a PR, and answer the findings.
@@ -116,7 +116,7 @@ pub enum ReviewCommand {
         #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "space", value_parser = item_reference)]
         pr: Option<String>,
         /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
         /// Post the review on the PR, overriding [review] post.
         #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
@@ -128,7 +128,7 @@ pub enum ReviewCommand {
         #[arg(long, conflicts_with_all = ["agent", "model", "effort"])]
         manual: bool,
         /// Review with this agent, overriding [review] agent.
-        #[arg(long, value_parser = AgentParser)]
+        #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,
         #[command(flatten)]
         model: ModelArgs,
@@ -143,7 +143,7 @@ pub enum ReviewCommand {
         /// chat, else every review.
         space: Option<String>,
         /// List the reviews of this registered repository's workspaces.
-        #[arg(long = "repo", conflicts_with = "space")]
+        #[arg(short = 'r', long = "repo", conflicts_with = "space")]
         repository: Option<String>,
     },
     /// Cancel a queued or running review; defaults to the space's.
@@ -152,7 +152,7 @@ pub enum ReviewCommand {
         id: Option<i64>,
         /// Space, a workspace or chat, whose review to cancel; defaults to
         /// the current workspace or chat, or a picker.
-        #[arg(long, conflicts_with = "id")]
+        #[arg(short = 's', long, conflicts_with = "id")]
         space: Option<String>,
     },
     /// Reply to a finding without resolving it.
@@ -176,7 +176,7 @@ pub enum ReviewCommand {
         #[arg(long)]
         reason: Option<String>,
         /// The issue whose work fixes it (deferred).
-        #[arg(long, value_parser = item_reference)]
+        #[arg(short = 'i', long, value_parser = item_reference)]
         issue: Option<String>,
         /// The finding it repeats (duplicate).
         #[arg(long, value_name = "FINDING")]
@@ -195,7 +195,7 @@ pub enum PrCommand {
     /// Push the workspace branch, open a PR for it or find its open PR, and link it.
     Open {
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
         #[command(flatten)]
         pull: OpenPullArgs,
@@ -294,7 +294,7 @@ pub enum PrCommand {
         #[command(flatten)]
         item: ItemSelector,
         /// How to take in the base's commits.
-        #[arg(long, value_enum, default_value = "merge")]
+        #[arg(short = 'X', long, value_enum, default_value = "merge")]
         method: crate::forge::items::action::UpdateMethod,
     },
     /// Merge a PR with your own login, now or once its checks pass;
@@ -303,7 +303,7 @@ pub enum PrCommand {
         #[command(flatten)]
         item: ItemSelector,
         /// How to merge.
-        #[arg(long, value_enum, required_unless_present = "cancel_auto")]
+        #[arg(short = 'X', long, value_enum, required_unless_present = "cancel_auto")]
         method: Option<crate::forge::items::action::MergeMethod>,
         /// Delete the PR's branch on the forge after merging.
         #[arg(long)]
@@ -335,11 +335,11 @@ pub enum IssueCommand {
     Open {
         /// Space, a workspace or chat, that opens it; defaults to the current
         /// workspace or chat, or a picker.
-        #[arg(long)]
+        #[arg(short = 's', long)]
         space: Option<String>,
         /// Open it in another repository: OWNER/NAME on the space's forge, or
         /// a repository URL on any forge.
-        #[arg(long, value_name = "REPOSITORY")]
+        #[arg(short = 'r', long, value_name = "REPOSITORY")]
         repo: Option<String>,
         /// Issue title.
         #[arg(long)]
@@ -423,7 +423,7 @@ pub struct ListArgs {
     /// Search another repository: a registered repository's name, OWNER/NAME
     /// on the current repository's forge, or a repository URL on any forge;
     /// defaults to the current workspace's or checkout's repository.
-    #[arg(long, value_name = "REPOSITORY")]
+    #[arg(short = 'r', long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
     /// Which items to list; closed includes merged PRs.
     #[arg(long, value_enum, default_value_t = crate::forge::items::list::StateFilter::Open)]
@@ -448,7 +448,7 @@ pub struct ItemSelector {
     pub item: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
-    #[arg(long, conflicts_with = "repo")]
+    #[arg(short = 's', long, conflicts_with = "repo")]
     pub space: Option<String>,
     #[command(flatten)]
     pub repo: RegisteredRepo,
@@ -460,7 +460,7 @@ pub struct ItemSelector {
 pub struct RegisteredRepo {
     /// Act in this registered repository without a workspace, named by name,
     /// ID, path or remote URL; workspace processes act only in their own.
-    #[arg(id = "repo", long = "repo", value_name = "REPOSITORY")]
+    #[arg(id = "repo", short = 'r', long = "repo", value_name = "REPOSITORY")]
     pub name: Option<String>,
 }
 
@@ -472,7 +472,7 @@ pub struct RevertedPr {
     pub item: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
-    #[arg(long)]
+    #[arg(short = 's', long)]
     pub space: Option<String>,
 }
 

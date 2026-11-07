@@ -9,7 +9,7 @@ pub struct ApprovalsArgs {
     pub number: Option<ItemNumber>,
     /// List requests and grants for this space; a chat's are the requests
     /// it decides.
-    #[arg(long, conflicts_with_all = ["number", "approval_action"])]
+    #[arg(short = 's', long, conflicts_with_all = ["number", "approval_action"])]
     pub space: Option<String>,
     /// Approve the recorded settings, or open a proposed issue or PR.
     #[arg(long, group = "approval_action")]

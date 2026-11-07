@@ -43,7 +43,7 @@ pub enum CoordinationCommand {
         #[arg(long)]
         path: bool,
         /// Print the list instead of opening the picker on a terminal.
-        #[arg(long, conflicts_with = "path")]
+        #[arg(short = 'p', long, conflicts_with = "path")]
         print: bool,
     },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
@@ -85,7 +85,7 @@ pub enum FilesCommand {
         files: Vec<String>,
         /// Space, a workspace or chat, to use; defaults to the current workspace
         /// or chat, or a picker.
-        #[arg(long)]
+        #[arg(short = 's', long)]
         space: Option<String>,
     },
     /// Delete the attached files of a space; asks first when an agent or
@@ -96,11 +96,11 @@ pub enum FilesCommand {
         files: Vec<String>,
         /// Space, a workspace or chat, to use; defaults to the current workspace
         /// or chat, or a picker.
-        #[arg(long)]
+        #[arg(short = 's', long)]
         space: Option<String>,
         /// Delete the files of every workspace without a running agent or
         /// command, and of every removed chat.
-        #[arg(long, conflicts_with_all = ["space", "files"])]
+        #[arg(short = 'A', long, conflicts_with_all = ["space", "files"])]
         all: bool,
         #[command(flatten)]
         confirmation: crate::cli::args::ConfirmationArgs,
@@ -112,7 +112,7 @@ pub struct QuestionsArgs {
     /// Question number, such as 3.2; omit to choose an open question.
     pub number: Option<ItemNumber>,
     /// List questions from this space, a workspace or chat.
-    #[arg(long, conflicts_with = "number")]
+    #[arg(short = 's', long, conflicts_with = "number")]
     pub space: Option<String>,
     /// Send an answer or choice number.
     #[arg(long, requires = "number", conflicts_with = "withdraw")]
@@ -140,17 +140,17 @@ pub enum MessagesCommand {
         attach: Vec<String>,
         /// Space, a workspace or chat, to send to; defaults to the current
         /// workspace or chat, or a picker.
-        #[arg(long, conflicts_with_all = ["all", "repository"])]
+        #[arg(short = 's', long, conflicts_with_all = ["all", "repository"])]
         space: Option<String>,
         /// Send to every running agent of the workspaces and chats, such as
         /// to tell them the network works again.
-        #[arg(long, conflicts_with = "repository")]
+        #[arg(short = 'A', long, conflicts_with = "repository")]
         all: bool,
         /// Send to every running agent of this repository's workspaces and
         /// chats, such as to have them rebase onto a fix on its default
         /// branch; without a value, the current repository, else a picker.
         /// Put the message before a --repo without a value.
-        #[arg(long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
+        #[arg(short = 'r', long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
         repository: Option<Option<String>>,
     },
 }
@@ -184,7 +184,7 @@ pub struct QuestionAskArgs {
     pub wait: bool,
     /// Space, a workspace or chat, whose agents ask; defaults to the current
     /// workspace or chat, or a picker.
-    #[arg(long)]
+    #[arg(short = 's', long)]
     pub space: Option<String>,
     /// The workspace the wait of an earlier release names when an upgrade
     /// hands it over to this one.

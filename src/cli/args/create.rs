@@ -39,7 +39,7 @@ pub enum CreateCommand {
         #[arg(long, conflicts_with_all = ["branch", "issue"])]
         no_branch: bool,
         /// Derive the branch name from a forge issue number or URL and link the issue.
-        #[arg(long, value_parser = item_reference)]
+        #[arg(short = 'i', long, value_parser = item_reference)]
         issue: Option<String>,
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its
         /// upstream); the parent's branch stacks the child on it.
@@ -47,7 +47,7 @@ pub enum CreateCommand {
         base: Option<String>,
         /// Parent workspace; defaults to the current workspace or picker, or
         /// with --no-branch to none outside a workspace.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
         #[command(flatten)]
         copy: CopyArgs,
@@ -63,7 +63,7 @@ pub struct StartArgs {
     /// labelled [issue] planned_label or plan_label answers with worker or
     /// plan when the arguments ask for neither kind of space; else chat with
     /// --chat or --in, else worker.
-    #[arg(long)]
+    #[arg(short = 'm', long)]
     pub mode: Option<String>,
     /// Start in a chat, whatever the mode's kind.
     #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
@@ -85,18 +85,18 @@ pub struct StartArgs {
     #[arg(long, value_name = "SPACE")]
     pub parent: Option<String>,
     /// Run in this terminal instead of a new tab or detached session.
-    #[arg(long)]
+    #[arg(short = 'H', long)]
     pub here: bool,
     /// Give the new tab or session the terminal, overriding the `focus` setting;
     /// its agent starts now, as with --now.
-    #[arg(long, conflicts_with = "here")]
+    #[arg(short = 'f', long, conflicts_with = "here")]
     pub focus: bool,
     /// Registered repository, or an issue, PR or branch URL; defaults to the
     /// current checkout or workspace, else a picker.
     #[arg(value_parser = item_reference)]
     pub repository: Option<String>,
     /// Repository for an issue number or a pasted link.
-    #[arg(long = "repo")]
+    #[arg(short = 'r', long = "repo")]
     pub repository_override: Option<String>,
     /// Git branch name; a portable workspace name is derived from it.
     pub branch: Option<String>,
@@ -106,7 +106,7 @@ pub struct StartArgs {
     /// The forge issue number or URL the agent starts on; a workspace's name
     /// derives from it. Without a value in plan mode, offers the open issues
     /// labelled [issue] plan_label.
-    #[arg(long, num_args = 0..=1, value_parser = item_reference)]
+    #[arg(short = 'i', long, num_args = 0..=1, value_parser = item_reference)]
     pub issue: Option<Option<String>>,
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
@@ -121,7 +121,7 @@ pub struct StartArgs {
     pub git_profile: Option<String>,
     /// Agent to start, a built-in agent or a configured command; defaults to
     /// agent.default, otherwise a picker.
-    #[arg(long, value_parser = AgentParser)]
+    #[arg(short = 'a', long, value_parser = AgentParser)]
     pub agent: Option<Agent>,
     /// Start the agent from a fork of the session of the parent workspace's
     /// agent, or with --copy of the copied workspace's, so it begins with
@@ -222,18 +222,18 @@ impl From<CreationArgs> for crate::protocol::CreationOptions {
 #[derive(Debug, Args)]
 pub struct ContributeArgs {
     /// Run in this terminal instead of a new tab or detached session.
-    #[arg(long)]
+    #[arg(short = 'H', long)]
     pub here: bool,
     /// Give the new tab or session the terminal, overriding the `focus` setting;
     /// its agent starts now, as with --now.
-    #[arg(long, conflicts_with = "here")]
+    #[arg(short = 'f', long, conflicts_with = "here")]
     pub focus: bool,
     /// Repository URL, or an issue, PR or branch URL.
     pub target: String,
     /// Git branch name; a portable workspace name is derived from it.
     pub branch: Option<String>,
     /// Start a built-in agent or a configured command after worktree creation.
-    #[arg(long, value_parser = AgentParser)]
+    #[arg(short = 'a', long, value_parser = AgentParser)]
     pub agent: Option<Agent>,
     /// Start the agent now even when max_agents is reached, instead of queuing it.
     #[arg(long)]

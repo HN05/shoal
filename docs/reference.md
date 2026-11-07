@@ -333,7 +333,7 @@ a launch a workspace process started waiting for a slot, have no session to save
 from the queue and reports them in `cancelled`; `shoal resume` does not bring them back. One
 already starting is left to its agent. Naming a queued agent of a new workspace instead of a
 workspace removes it from the queue, as `shoal rm` does.
-Several workspaces, or `--all` for every ready or failed workspace with a running
+Several workspaces, or `-A`/`--all` for every ready or failed workspace with a running
 execution, a pending restore or a queued agent waiting to start in it, stop in parallel, reporting each failure without keeping the others running.
 A stop whose wrappers do not finish in time fails naming each execution it
 waited on and its step: not started, still running, or verifying after exit.
@@ -471,7 +471,7 @@ restore instead, a workspace's last session included, and the daemon starts each
 at once regardless of the limits; resume reports the entries as a resume without
 `--now` does, and `--json` emits them. When no host can start them in the
 background, such a resume, with or without `--now`, is refused before anything
-is restored, naming `--focus` to restore one agent here. `--focus` restores one agent in the current terminal at once,
+is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores one agent in the current terminal at once,
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
@@ -636,7 +636,7 @@ its label. Scoped callers may title their own workspace.
 refused while no agent runs there.
 
 `shoal start <link>` recognizes issue, PR and branch URLs. Links select the single
-registered repository with the same origin; `--repo` selects one explicitly and
+registered repository with the same origin; `-r`/`--repo` selects one explicitly and
 must match the link. An unregistered remote offers interactive registration,
 otherwise lookup fails with the `shoal repo add` command to run. Lookups use your
 [forge login](#forges).
@@ -648,7 +648,7 @@ Numbers use `--repo`, the current registered checkout or workspace, then an
 interactive repository picker. An existing association
 reopens its workspace; otherwise the derived local branch reopens as `--existing`
 would. Lookup and ownership failures create nothing. The command starts
-`--agent`, else the configured `agent.default`, else an interactive agent picker.
+`-a`/`--agent`, else the configured `agent.default`, else an interactive agent picker.
 Choosing “No agent” creates the workspace without a launch. The issue prompt
 names the issue's number, title and URL, includes its description when it has
 one, and points to `shoal view` for comments and later edits; options after
@@ -670,7 +670,7 @@ GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 `/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
-`start [<repository>] --issue <number-or-url>` remains available with an optional
+`start [<repository>] --issue <number-or-url>`, or `-i`, remains available with an optional
 branch name, finds the repository of an omitted `<repository>` as numbers and
 links do, and launches an agent only with `--agent`.
 
@@ -681,7 +681,7 @@ shoal repo rename my-project new-name
 shoal repo ls
 shoal repo                               # Interactive repository menu
 shoal start my-project fix-login
-shoal start my-project fix-api --agent codex -- "Fix the API timeout"
+shoal start my-project fix-api -a codex -- "Fix the API timeout"
 shoal start https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
@@ -745,7 +745,7 @@ where Enter shows one with `shoal view` and Ctrl-O opens it in the browser with
 `shoal view --web`, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
 opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
-`shoal work --print`, like a filter, `--json` or output that is not a terminal,
+`shoal work` with `-p`/`--print`, like a filter, `--json` or output that is not a terminal,
 prints the list instead: your own workspaces first, then each running [chat](#chats)
 with its agent, followed by the workspaces it opened; `work --chats`
 lists only the chats. `work --repo <repository>`, with or without
@@ -771,7 +771,7 @@ workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
 with [`shoal work adopt`](#adopting-a-worktree), shows `shoal daemon status`
 for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
-workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
+workspace and Ctrl-A adds one. `shoal inbox` with `-p`/`--print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
 `kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo`,
 `untracked`, `cleanup` or `sync_failed`) with its `question`, `request`, `workspace`, `demo`,
@@ -785,7 +785,9 @@ registers a path or URL, Ctrl-R renames, Ctrl-O shows the local config, Ctrl-D d
 repository and omit it use the one of the current registered checkout or
 workspace, then a repository picker.
 
-Commands acting on one workspace use an explicit target, otherwise the caller's
+Commands acting on one workspace use an explicit target, given as an argument or
+with `-w`/`--workspace`, or `-s`/`--space` for a command that also acts on chats,
+otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
 interactive fzf picker; a deleted current directory provides no workspace context.
 The picker leaves out workspaces without what the command acts on, such as an
@@ -812,7 +814,7 @@ line passes it. Leaving a picker without a choice exits with status 130
 and no message, and a command whose output reader closes early, such as `head`,
 exits with status 141 and no message. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. A command that accepts
-`--all` lists it as the last picker entry, "All workspaces", and as the first
+`-A`/`--all` lists it as the last picker entry, "All workspaces", and as the first
 completion of its workspace argument. `config show` checks the
 registered checkout before the picker, as described below.
 `shoal start` offers repositories in most-recently-used order, then
@@ -1148,7 +1150,7 @@ as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
 [Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
-`--here` on `shoal start`, `contribute` and `repo setup --local`
+`-H`/`--here` on `shoal start`, `contribute` and `repo setup --local`
 runs the launch in this terminal instead of a new tab or detached session,
 whatever the host. An agent that `start` or `contribute` then starts runs as
 these launches do, in a zmx session attached here on a terminal; a chat runs in
@@ -1213,7 +1215,7 @@ precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
 `terminal.focus` overrides this for tabs and zmx sessions alike, and
-`shoal start --focus` focuses one launch and starts it at once, as `--now` does.
+`shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does.
 `enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
 overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
 a Herdr pane as a plain terminal:
@@ -1988,7 +1990,7 @@ shoal config set agent.max_running none --repo docs # No repository limit
 shoal start <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal start <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal start <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
-shoal resume --all                            # Queues the restore of every stopped agent
+shoal resume -A                               # Queues the restore of every stopped agent
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
 shoal queue start api                         # Starts a waiting entry now regardless of the limits
 shoal queue move api 1                        # Moves an entry to position 1; without a position, pick its place
@@ -2230,7 +2232,7 @@ these modes:
 | `plan` | chat | `work`, `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
 | `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
 
-`shoal start` starts every new agent, in the mode `--mode` names, and in the
+`shoal start` starts every new agent, in the mode `-m`/`--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says
 otherwise; `worker` always starts in a workspace, and config that gives it
 another kind is refused. Without `--mode`, a terminal offers the modes in a
@@ -3852,12 +3854,12 @@ required_labels = ["area/", "type/"] # Default: []
 ```
 
 `shoal pr` and `shoal issue` change an item of the repository of the space they
-run in, a workspace or chat, or the one `--space` names: the number or URL given,
+run in, a workspace or chat, or the one `-s`/`--space` names: the number or URL given,
 otherwise the space's linked issue or only linked PR. A chat acts in its
 repository's registered checkout, and an issue it opens is recorded as opened
 there, or with `--link` assigned to it. Outside a space they act on the
 repository of the registered checkout they run in, as its agent account, and take
-only a number or URL. `--repo`, instead of `--space`, names a registered
+only a number or URL. `-r`/`--repo`, instead of `--space`, names a registered
 repository by name, ID, path or remote URL to act on the same way from anywhere,
 so a client acting as the user needs no workspace; outside a space and a
 checkout, an issue or PR URL of a registered repository selects that repository
@@ -3930,7 +3932,7 @@ rebasing onto it; workspace processes may update, and then pull the branch
 before pushing again. GitHub refuses the update when the head moved since Shoal
 read it, GitLab only rebases and does so after answering, and Bitbucket cannot
 update a branch.
-`merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
+`merge` takes `-X`/`--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `--auto` has the forge merge the PR that way once its required checks and
 approvals pass, merging now when they already do: GitHub's auto-merge,
@@ -5005,7 +5007,7 @@ shoal files rm --all                      # Delete the files of every idle works
 copy's path, Ctrl-O opens it in the application the desktop chooses and prints
 its path, Ctrl-D deletes that copy as `rm` does, and Ctrl-A, or Enter on the
 add row, asks for a file to add. Workspace processes cannot open files.
-`--print`, like `--json`, `--path` or output that is not a
+`-p`/`--print`, like `--json`, `--path` or output that is not a
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent with `shoal messages send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
@@ -5546,7 +5548,7 @@ only pending PR proposals and push requests prevent idle cleanup.
 ### Shared readers and exclusive writers
 
 Set `kind = "rwlock"` on a standalone resource or pool member and acquire with
-`--mode read` or `--mode write` (new rwlock leases default to write; semaphores
+`-m`/`--mode` `read` or `write` (new rwlock leases default to write; semaphores
 use `permit`). Readers coexist and share one pool slot, freed by the last
 release; a writer excludes everyone. Capacity must be 1. Repeating a lease
 name returns its mode; changing mode requires release first, and there is no

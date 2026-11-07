@@ -36,7 +36,7 @@ pub enum SessionsCommand {
         now: bool,
         /// Restore one agent in this terminal at once, regardless of the
         /// agent limits.
-        #[arg(long, conflicts_with_all = ["discard", "all"])]
+        #[arg(short = 'f', long, conflicts_with_all = ["discard", "all"])]
         focus: bool,
         /// The queue entry whose slot the restored agent takes, for the
         /// daemon's start of a queued restore.
@@ -60,7 +60,7 @@ pub enum SessionsCommand {
         #[command(flatten)]
         targets: SpaceTargets,
         /// Restart only agents of this name, such as claude.
-        #[arg(long, value_parser = AgentParser)]
+        #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Restart each agent once its turn ends.
         #[arg(long)]
@@ -82,10 +82,10 @@ pub enum SessionsCommand {
         #[command(subcommand)]
         command: Option<QueueCommand>,
         /// List only this registered repository's entries.
-        #[arg(long = "repo")]
+        #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
         /// Print the list instead of opening the picker, as filters and JSON do.
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         print: bool,
     },
     /// Attach this terminal to a workspace's or chat's agent session; Ctrl-\ detaches.
@@ -116,7 +116,7 @@ pub enum SessionsCommand {
         name: Option<String>,
         /// Workspace whose demos to offer; defaults to the current workspace,
         /// otherwise every workspace.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
 }
@@ -183,7 +183,7 @@ pub enum DemoCommand {
         #[arg(long)]
         queue: bool,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
         /// The command to run instead of the configured one.
         #[arg(last = true)]
@@ -193,14 +193,14 @@ pub enum DemoCommand {
     Stop {
         name: Option<String>,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
     /// List configured and running demos.
     Ls {
         /// Workspace to list; defaults to the current workspace, otherwise
         /// the running demos of every workspace.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
     /// Print what a running demo shows.
@@ -210,7 +210,7 @@ pub enum DemoCommand {
         #[arg(long, default_value_t = 50)]
         lines: usize,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
     /// Type text into a running demo, such as $'q' or $'\r' for Enter.
@@ -218,7 +218,7 @@ pub enum DemoCommand {
         name: String,
         keys: String,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         workspace: Option<String>,
     },
 }

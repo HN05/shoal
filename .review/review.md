@@ -400,7 +400,9 @@ instead of the PR delivery guidance below.
   `resume --focus` keeps an unscoped caller's in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
-  old name kept after a rename.
+  old name kept after a rename. A short form is not an alias, but its letter
+  stands for one long flag in every command that defines it; flag a letter
+  that means another flag elsewhere or is missing where that flag is defined.
 - Commands follow the grammar `AGENTS.md` states: a verb that acts the same way
   on every linked kind is top-level, `shoal <verb> [kind] [item]`, and every
   other action goes under its kind's group. Flag a group subcommand that

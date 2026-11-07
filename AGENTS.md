@@ -63,7 +63,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   terminal directly, and a new kind of prompt or picker goes there, built on
   the existing ones, so every command looks and behaves the same.
 - Give each command, flag and value one name: no clap aliases, and a rename
-  drops the old name.
+  drops the old name. A short form is not an alias: a flag people type often
+  gets a letter, which stands for that long flag in every command that defines
+  it and for no other.
 - A verb that acts the same way on every kind a workspace links (issues, PRs
   and CI runs) is a top-level command, `shoal <verb> [kind] [item]`, that acts
   on everything linked when both are omitted: `view`, `view ci 2765`,

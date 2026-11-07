@@ -64,7 +64,7 @@ pub struct Subject {
     pub pr: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
-    #[arg(long, conflicts_with = "repo")]
+    #[arg(short = 's', long, conflicts_with = "repo")]
     pub space: Option<String>,
     #[command(flatten)]
     pub repo: crate::cli::args::changes::RegisteredRepo,
@@ -75,7 +75,7 @@ pub struct Subject {
 pub struct ListArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
-    #[arg(long, conflicts_with = "repo")]
+    #[arg(short = 's', long, conflicts_with = "repo")]
     pub space: Option<String>,
     /// Branch whose runs to list; defaults to the workspace's branch, in a
     /// chat its linked PR's head, or else the repository's default branch.
@@ -104,7 +104,7 @@ pub struct RunArgs {
     pub workflow: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or else the picker unless a URL names the workflow.
-    #[arg(long, conflicts_with = "repo")]
+    #[arg(short = 's', long, conflicts_with = "repo")]
     pub space: Option<String>,
     /// Branch to run on; defaults to the branch a workflow file's URL names,
     /// then the workspace's, the only one workspace processes may run on, or
