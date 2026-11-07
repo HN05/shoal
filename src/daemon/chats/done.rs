@@ -10,7 +10,7 @@ use crate::{
         cleanup::SpaceFailures,
         notifications::{About, NotificationKind},
         questions,
-        spaces::removal::Cleanup,
+        spaces::removal_notices::Cleanup,
         workspace::{
             Manager,
             done::{CompletedAncestor, push_completion_details},

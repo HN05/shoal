@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::spaces::removal::Cleanup,
+    daemon::spaces::removal_notices::Cleanup,
     model::{Chat, SpaceKind, Workspace},
 };
 

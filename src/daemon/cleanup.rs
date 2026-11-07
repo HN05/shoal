@@ -21,7 +21,7 @@ pub(crate) use crate::client::cleanup::{
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        caches::Emptying, events::EventCause, file_access, log, spaces::removal::Cleanup,
+        caches::Emptying, events::EventCause, file_access, log, spaces::removal_notices::Cleanup,
         workspace::Manager,
     },
     fsutil::off_runtime,

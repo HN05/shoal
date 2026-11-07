@@ -1648,7 +1648,7 @@ impl Manager {
             })?;
             removed.extend(below);
             if removal.announces_children() {
-                let cleanup = crate::daemon::spaces::removal::Cleanup::Parent(parent);
+                let cleanup = crate::daemon::spaces::removal_notices::Cleanup::Parent(parent);
                 self.announce_removal(&child, cleanup, &Ok(())).await?;
             }
             removed.push(child.name);

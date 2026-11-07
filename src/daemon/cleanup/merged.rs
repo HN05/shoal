@@ -16,7 +16,7 @@ use tokio::time::Instant;
 use super::{Rule, Snapshot, Tree, change_time};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{events::EventCause, log, spaces::removal::Cleanup, workspace::Manager},
+    daemon::{events::EventCause, log, spaces::removal_notices::Cleanup, workspace::Manager},
     model::{Chat, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,

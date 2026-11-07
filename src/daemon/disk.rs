@@ -17,7 +17,7 @@ use tokio::time::Instant;
 use super::{
     caches::Emptying,
     notifications::NotificationKind,
-    spaces::removal::Cleanup,
+    spaces::removal_notices::Cleanup,
     warnings::{self, Signal, Warnings},
     workspace::{Manager, Protection, agent_queue::OneShotStop},
 };

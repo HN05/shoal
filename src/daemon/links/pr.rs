@@ -10,7 +10,7 @@ use crate::{
         events::{self, EventKind},
         forge_hosts::ForgeHosts,
         links::space::LinkSpace,
-        spaces::removal::Cleanup,
+        spaces::removal_notices::Cleanup,
         store,
         workspace::{Manager, PrGuard},
     },

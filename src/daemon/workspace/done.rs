@@ -9,7 +9,7 @@ use crate::{
     config::Effective,
     daemon::{
         events::EventCause, item_numbers::ItemNumber, notifications::NotificationKind, questions,
-        spaces::removal::Cleanup, store, workspace_files::Attacher,
+        spaces::removal_notices::Cleanup, store, workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
     model::{Completion, HandedBack, Workspace},
