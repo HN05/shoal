@@ -2,11 +2,26 @@ use std::process::Command;
 
 use super::*;
 
+/// Which `-Z` options the stand-in rustc takes.
+#[derive(Clone, Copy)]
+enum Rustc {
+    /// Only for the crates `RUSTC_BOOTSTRAP` names.
+    Stable,
+    /// Unless `RUSTC_BOOTSTRAP=-1`.
+    Nightly,
+    /// None.
+    WithoutFlag,
+}
+
 /// Runs the prepared wrapper in a workspace root, around a stand-in rustc
-/// that prints its arguments and `RUSTC_BOOTSTRAP`, and refuses `-Z`
-/// options unless `known` and unless `RUSTC_BOOTSTRAP` allows them for the
-/// crate. `{root}` in `args` stands for the root's path.
-fn run(bootstrap: Option<&str>, known: bool, args: &[&str]) -> String {
+/// that prints its arguments and `RUSTC_BOOTSTRAP`, and takes `-Z` options
+/// as `rustc` does. `{root}` in `args` stands for the root's path.
+fn run(bootstrap: Option<&str>, compiler: Rustc, args: &[&str]) -> String {
+    let kind = match compiler {
+        Rustc::Stable => "stable",
+        Rustc::Nightly => "nightly",
+        Rustc::WithoutFlag => "without",
+    };
     let root = tempfile::tempdir().unwrap();
     let root_path = root.path().canonicalize().unwrap();
     prepare(root.path()).unwrap();
@@ -22,8 +37,11 @@ for argument in "$@"; do
 done
 for argument in "$@"; do
   case $argument in -Z*)
-    [ {known} = true ] || exit 1
-    case ",${{RUSTC_BOOTSTRAP-}}," in *,1,*|*,"$crate",*) ;; *) exit 1 ;; esac ;;
+    case {kind},${{RUSTC_BOOTSTRAP-}}, in
+      without,*|*,-1,) exit 1 ;;
+      nightly,*|stable,1,|stable,"$crate",*|stable,*,"$crate",*) ;;
+      *) exit 1 ;;
+    esac ;;
   esac
 done
 case " $* " in *' --print=sysroot '*) exit 0 ;; esac
@@ -58,33 +76,42 @@ const CRATE: &[&str] = &["--crate-name", "demo", "src/lib.rs"];
 fn the_wrapper_maps_the_working_directory_for_the_crate_it_builds() {
     let mapped = "--crate-name\ndemo\nsrc/lib.rs\n-Zremap-cwd-prefix=.\n";
     assert_eq!(
-        run(None, true, CRATE),
+        run(None, Rustc::Stable, CRATE),
         format!("RUSTC_BOOTSTRAP=demo\n{mapped}-Zallow-features=\n"),
         "the crate the wrapper names gets the flag and no unstable features"
     );
     assert_eq!(
-        run(Some("other"), true, CRATE),
+        run(Some("other"), Rustc::Stable, CRATE),
         format!("RUSTC_BOOTSTRAP=other,demo\n{mapped}-Zallow-features=\n")
     );
     assert_eq!(
-        run(Some("1"), true, CRATE),
+        run(Some("1"), Rustc::Stable, CRATE),
         format!("RUSTC_BOOTSTRAP=1\n{mapped}"),
         "a crate already granted keeps its features"
     );
     assert_eq!(
-        run(Some("other,demo"), true, CRATE),
+        run(Some("other,demo"), Rustc::Stable, CRATE),
         format!("RUSTC_BOOTSTRAP=other,demo\n{mapped}")
+    );
+    assert_eq!(
+        run(None, Rustc::Nightly, CRATE),
+        format!("RUSTC_BOOTSTRAP=unset\n{mapped}"),
+        "a rustc that takes the flag keeps its features"
     );
 }
 
 #[test]
 fn the_wrapper_passes_the_output_directory_relative_to_the_workspace() {
     let built = |out_dir: &str| {
-        run(None, true, &["--crate-name", "demo", "--out-dir", out_dir])
-            .lines()
-            .nth(4)
-            .unwrap()
-            .to_owned()
+        run(
+            None,
+            Rustc::Stable,
+            &["--crate-name", "demo", "--out-dir", out_dir],
+        )
+        .lines()
+        .nth(4)
+        .unwrap()
+        .to_owned()
     };
     assert_eq!(built("{root}/target/debug/deps"), "target/debug/deps");
     assert_eq!(
@@ -97,23 +124,30 @@ fn the_wrapper_passes_the_output_directory_relative_to_the_workspace() {
 fn the_wrapper_passes_through_what_it_cannot_map() {
     let unchanged = "--crate-name\ndemo\nsrc/lib.rs\n";
     assert_eq!(
-        run(Some("-1"), true, CRATE),
+        run(Some("-1"), Rustc::Stable, CRATE),
         format!("RUSTC_BOOTSTRAP=-1\n{unchanged}"),
         "a refusal of unstable flags wins"
     );
     assert_eq!(
-        run(None, false, CRATE),
+        run(None, Rustc::WithoutFlag, CRATE),
         format!("RUSTC_BOOTSTRAP=unset\n{unchanged}"),
         "a rustc without the flag builds as usual"
     );
     assert_eq!(
-        run(Some("other"), false, CRATE),
+        run(Some("other"), Rustc::WithoutFlag, CRATE),
         format!("RUSTC_BOOTSTRAP=other\n{unchanged}"),
         "and keeps the RUSTC_BOOTSTRAP it was given"
     );
-    assert_eq!(run(None, true, &["-vV"]), "RUSTC_BOOTSTRAP=unset\n-vV\n");
     assert_eq!(
-        run(None, true, &["-", "--crate-name", "___", "--print=cfg"]),
+        run(None, Rustc::Stable, &["-vV"]),
+        "RUSTC_BOOTSTRAP=unset\n-vV\n"
+    );
+    assert_eq!(
+        run(
+            None,
+            Rustc::Stable,
+            &["-", "--crate-name", "___", "--print=cfg"]
+        ),
         "RUSTC_BOOTSTRAP=unset\n-\n--crate-name\n___\n--print=cfg\n",
         "target queries see a stable compiler"
     );
