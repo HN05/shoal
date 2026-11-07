@@ -498,11 +498,13 @@ fn recorded_places_keep_the_server_their_data_names() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn migrates_every_recorded_version_to_the_same_schema() -> Result<()> {
+/// Upgrade each recorded version whose remainder by `MIGRATION_TESTS` is
+/// `remainder` and check that it reaches the current schema once and stays
+/// there when migrated again.
+fn migrates_recorded_versions_to_the_same_schema(remainder: i64) -> Result<()> {
     let expected = schema_snapshot(&historical_database(SCHEMA_VERSION)?)?;
     assert_eq!(MIGRATIONS.last().unwrap().0, SCHEMA_VERSION);
-    for version in 0..=SCHEMA_VERSION {
+    for version in (0..=SCHEMA_VERSION).filter(|version| version % MIGRATION_TESTS == remainder) {
         let mut db = historical_database(version)?;
         migrate(&mut db).with_context(|| format!("upgrade from version {version}"))?;
         assert_eq!(schema_snapshot(&db)?, expected, "from version {version}");
@@ -524,6 +526,31 @@ fn migrates_every_recorded_version_to_the_same_schema() -> Result<()> {
         assert_eq!(schema_snapshot(&db)?, expected);
     }
     Ok(())
+}
+
+/// Spread the recorded versions over one test per remainder, which run in
+/// parallel; together they upgrade every version.
+macro_rules! migration_tests {
+    ($($test:ident: $remainder:literal,)*) => {
+        const MIGRATION_TESTS: i64 = [$($remainder),*].len() as i64;
+        $(
+            #[test]
+            fn $test() -> Result<()> {
+                migrates_recorded_versions_to_the_same_schema($remainder)
+            }
+        )*
+    };
+}
+
+migration_tests! {
+    migrates_versions_0_mod_8_to_the_same_schema: 0,
+    migrates_versions_1_mod_8_to_the_same_schema: 1,
+    migrates_versions_2_mod_8_to_the_same_schema: 2,
+    migrates_versions_3_mod_8_to_the_same_schema: 3,
+    migrates_versions_4_mod_8_to_the_same_schema: 4,
+    migrates_versions_5_mod_8_to_the_same_schema: 5,
+    migrates_versions_6_mod_8_to_the_same_schema: 6,
+    migrates_versions_7_mod_8_to_the_same_schema: 7,
 }
 
 #[test]
