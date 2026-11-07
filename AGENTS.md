@@ -13,6 +13,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - Implement incrementally: CLI/daemon, workspaces, ports, simulators, lifecycle
   polish, then filesystem restrictions.
 - The daemon owns shared state. Keep terminal I/O in the execution wrapper.
+- A store operation that needs a transaction runs in `Store::write`, or in
+  `Store::read` when it only reads; one that opens its own on `Store::run`
+  says why.
 - Treat function abstraction as a correctness requirement and a review gate.
   Every function must stay at one abstraction level: orchestration calls named
   domain operations, and helpers own lower-level implementation details. If a

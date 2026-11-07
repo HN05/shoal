@@ -609,6 +609,8 @@ configured command for another agent, plus proven child
 - Persistence: SQLite work stays on its dedicated thread, with one connection and
   a bounded queue. Shutdown drains admitted operations before releasing ownership;
   cancellation or failure never replays a closure that may have committed.
+  Flag a `Store::run` operation that opens its own transaction where
+  `Store::write` or `Store::read` fits, or without saying why.
   Closed Shoal enums with matching display and wire names share
   explicit spellings through one macro and reject unknown values. Opening persistence
   only migrates schema; daemon startup
