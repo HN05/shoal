@@ -216,13 +216,14 @@ impl Manager {
         }
     }
 
-    /// Record that process `pid`, which the process of the space
-    /// `stopped_by` started, could not restore the chat `id`, failing with
-    /// `error`: the chat waits for `shoal resume` again, if that process had
-    /// taken it over, so the end of the process does not end it, stopped by
-    /// that space, or by the one whose restart of it is in progress, as the
-    /// daemon restores the chat for it, and the user, who may not see where
-    /// it ran, learns why.
+    /// Record that process `pid` could not restore the chat `id`, failing
+    /// with `error`: the chat waits for `shoal resume` again, if that
+    /// process had taken it over, so the end of the process does not end it,
+    /// and the user, who may not see where it ran, learns why.
+    ///
+    /// The space `stopped_by`, whose process started `pid`, stopped the chat;
+    /// else the one whose restart of it is in progress, since the daemon's
+    /// own `shoal resume` for that restart has no scope.
     pub async fn return_to_saved(
         &self,
         id: &str,
