@@ -401,7 +401,7 @@ builds share the runner-mounted `/ci-target` through
 --branch main`) and rewrites one evergreen `tracking` issue, found by the marker comment
 in its body, with `cargo audit` and `cargo outdated` findings. It is never a
 required check; findings do not fail it, a tool that could not run does.
-`.forgejo/workflows/flaky.yml` runs `cargo test` repeatedly on `main` every
+`.forgejo/workflows/flaky.yml` runs `cargo nextest run` repeatedly on `main` every
 night (and on `shoal ci run flaky.yml --branch main`) and rewrites the evergreen
 `Flaky test report` issue with every test that failed; a failure fails the run.
 The run log keeps each failed test's output for the issue that fixes it.

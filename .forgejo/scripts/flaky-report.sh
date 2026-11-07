@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
-# Run `cargo test` repeatedly and print the Markdown body of the evergreen
-# flaky-test report on stdout. flaky.yml runs it nightly on main and hands the
-# body to publish-report.sh; it also runs from a checkout. Each failed test's
-# captured output goes to stderr, so the run log keeps it after the round logs
-# are gone.
+# Run `cargo nextest run` repeatedly and print the Markdown body of the
+# evergreen flaky-test report on stdout. flaky.yml runs it nightly on main and
+# hands the body to publish-report.sh; it also runs from a checkout. Each failed
+# test's captured output goes to stderr, so the run log keeps it after the round
+# logs are gone.
 #
 #   flaky-report.sh <rounds>
 #
@@ -11,11 +11,11 @@
 #   0  every round passed
 #   1  a test failed in some round; the body lists it
 #   2  a round failed without a failing test to account for it (the build
-#      broke, or a test binary crashed or was killed); the body says so
+#      broke, or nextest itself failed or was stopped); the body says so
 # Publish the body first in every case, then fail the job.
 #
-# Optional: RUN_URL and SOURCE are linked in the footer; CARGO_TEST_ARGS is
-# passed to every `cargo test`.
+# Optional: RUN_URL and SOURCE are linked in the footer; NEXTEST_ARGS is
+# passed to every `cargo nextest run`.
 # Backticks in printf formats are Markdown, not command substitutions.
 # shellcheck disable=SC2016
 set -eu
@@ -29,47 +29,28 @@ ROUNDS=$1
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-# Whether a round's cargo status is more than its failed tests explain: no
-# binary reported results, cargo itself was stopped, no test failed, or a test
-# binary ended other than as libtest does for failed tests (exit status 101,
-# which cargo also exits with), as when it crashed or was killed. Test helper
-# processes print their own libtest lines into the log, so each binary's end
-# is read from cargo's diagnostic for it rather than from summaries.
-#   round_broken <log> <cargo status>
-round_broken() {
-  grep -q '^test result: ' "$1" || return 0
-  [ "$2" -ne 0 ] || return 1
-  [ "$2" -eq 101 ] || return 0
-  grep -q '^test .* \.\.\. FAILED$' "$1" || return 0
-  grep "^ *process didn't exit successfully: " "$1" | grep -qv '(exit status: 101)$'
+# Nextest's line for each test that ended, `STATUS [time] (n/total) binary
+# test`: a failure is every status but PASS and LEAK, which passed. SLOW and
+# TERMINATING lines carry no count. awk reads it from the environment, which
+# keeps its backslashes.
+FINISHED='^ *[A-Z][A-Z0-9-]* \[[^]]*\] \( *[0-9]+/[0-9]+\) '
+export FINISHED
+
+# Every test that failed in a round's log once, as `binary test`.
+#   failed_tests <log>
+failed_tests() {
+  grep -E "$FINISHED" "$1" | grep -Ev '^ *(PASS|LEAK) ' |
+    sed -E 's/^[^)]*\) //' | sort -u
 }
 
-# The end of each part of a broken round's log that broke it: a test binary
-# that ended abnormally, with its last tests and signal, or an error without
-# test results, such as the build's. The end of the log too, where cargo
-# stopped, when cargo itself was stopped or nothing else explains the round.
-#   print_round_errors <log> <cargo status>
-print_round_errors() {
-  stopped=0
-  [ "$2" -eq 0 ] || [ "$2" -eq 101 ] || stopped=1
-  awk -v keep=100 -v stopped="$stopped" '
-    function flush(  i) {
-      if (abnormal || (failed && !summary)) {
-        if (n > keep) print "[" n - keep " earlier lines omitted]"
-        for (i = n > keep ? n - keep + 1 : 1; i <= n; i++) print lines[i % keep]
-        shown = 1
-      }
-      n = 0; abnormal = 0; failed = 0; summary = 0
-    }
-    /^ *(Running|Doc-tests) / { flush() }
-    { lines[++n % keep] = $0 }
-    /^ *process didn\047t exit successfully: / && !/\(exit status: 101\)$/ { abnormal = 1 }
-    /^error/ { failed = 1 }
-    /^test result: / { summary = 1 }
-    END {
-      if (stopped || !shown) { failed = 1; summary = 0 }
-      flush()
-    }' "$1"
+# Whether a round's nextest status is more than its failed tests explain:
+# nextest exits with 100 when tests failed, and with other statuses when the
+# build broke or nextest itself failed or was stopped.
+#   round_broken <log> <nextest status>
+round_broken() {
+  [ "$2" -ne 0 ] || return 1
+  [ "$2" -eq 100 ] || return 0
+  [ -z "$(failed_tests "$1")" ]
 }
 
 broken=0
@@ -80,40 +61,42 @@ while [ "$round" -le "$ROUNDS" ]; do
   # Failures are the findings; the status only tells whether something else broke.
   status=0
   # shellcheck disable=SC2086
-  CARGO_TERM_COLOR=never cargo test --locked --no-fail-fast ${CARGO_TEST_ARGS:-} \
+  CARGO_TERM_COLOR=never cargo nextest run --locked --profile ci --no-fail-fast ${NEXTEST_ARGS:-} \
     >"$log" 2>&1 || status=$?
   if round_broken "$log" "$status"; then
     broken=$((broken + 1))
-    echo "round $round of $ROUNDS broke: cargo exited with status $status" >&2
-    echo "::group::round $round errors" >&2
-    print_round_errors "$log" "$status" >&2
+    echo "round $round of $ROUNDS broke: nextest exited with status $status" >&2
+    echo "::group::round $round end of log" >&2
+    tail -n 100 "$log" >&2
     echo "::endgroup::" >&2
   fi
-  # Every failed test once per round; helper processes print their own lines.
-  sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "$log" | sort -u >"$WORK/failed-$round"
-  # The first line of each failed test's panic message.
+  failed_tests "$log" >"$WORK/failed-$round"
+  # The first line of each failed test's first panic message, from the
+  # output nextest prints, indented, after the test's line.
   awk '
-    /^thread .* panicked at / {
-      name = $0
-      sub(/^thread \047/, "", name)
-      sub(/\047.*/, "", name)
+    $0 ~ ENVIRON["FINISHED"] {
+      test = $0
+      sub(/^[^)]*\) /, "", test)
+      next
+    }
+    test != "" && !(test in seen) && /^    thread .* panicked at / {
       where = $0
       sub(/.* panicked at /, "", where)
       sub(/:$/, "", where)
       getline message
-      if (!(name in seen)) {
-        seen[name] = 1
-        printf "%s\t%s: %s\n", name, where, message
-      }
+      sub(/^    /, "", message)
+      seen[test] = 1
+      printf "%s\t%s: %s\n", test, where, message
     }' "$log" >>"$WORK/panics"
   echo "round $round of $ROUNDS: $(grep -c . "$WORK/failed-$round" || true) failed" >&2
   if [ -s "$WORK/failed-$round" ]; then
     echo "::group::round $round failure output" >&2
-    # Every captured section up to its binary's summary, each one bounded.
+    # The summary repeats every failed test's output; each one bounded.
     awk -v max=200 '
-      /^---- .* std(out|err) ----$/ { printing = 1; lines = 0; print; next }
-      /^failures:$/ { printing = 0 }
-      printing {
+      /^ *Summary \[/ { printing = 1 }
+      !printing { next }
+      $0 ~ ENVIRON["FINISHED"] { lines = 0; print; next }
+      {
         if (++lines <= max) print
         else if (lines == max + 1) print "[output truncated]"
       }' "$log" >&2
@@ -125,10 +108,10 @@ done
 cat "$WORK"/failed-* | sort | uniq -c | sort -rn >"$WORK/counts"
 
 printf '%s\n' "$MARKER"
-printf 'Nightly stress run: `cargo test` %s times on `main` at %s.\n\n' \
+printf 'Nightly stress run: `cargo nextest run` %s times on `main` at %s.\n\n' \
   "$ROUNDS" "$(git rev-parse --short HEAD 2>/dev/null || echo 'an unknown commit')"
 if [ "$broken" -gt 0 ]; then
-  printf '> [!WARNING]\n> %s of %s rounds failed without a failing test to account for it: the build broke, or a test binary crashed or was killed. The run log says why.\n\n' \
+  printf '> [!WARNING]\n> %s of %s rounds failed without a failing test to account for it: the build broke, or nextest itself failed or was stopped. The run log says why.\n\n' \
     "$broken" "$ROUNDS"
 fi
 if [ -s "$WORK/counts" ]; then

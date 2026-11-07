@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Rounds of `cargo test`; each takes about as long as ci.yml's test step.
+  # Rounds of `cargo nextest run`; each takes about as long as ci.yml's test step.
   ROUNDS: "10"
 
 jobs:
