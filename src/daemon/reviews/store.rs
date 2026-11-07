@@ -6,8 +6,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use crate::{
     agent::ModelChoice,
     reviews::{
-        Check, FailureReason, Finding, FindingId, Outcome, Posted, Reply, Review, ReviewState,
-        ReviewStatus, ReviewTarget,
+        Check, FailureReason, Finding, FindingId, Outcome, Posted, Reply, Review, ReviewId,
+        ReviewState, ReviewStatus, ReviewTarget,
         output::{Checked, ReviewerOutput},
     },
 };
@@ -16,13 +16,13 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Queued {
     /// A new review.
-    New(i64),
+    New(ReviewId),
     /// The workspace's review that was already queued.
-    Existing(i64),
+    Existing(ReviewId),
 }
 
 impl Queued {
-    pub(crate) fn id(self) -> i64 {
+    pub(crate) fn id(self) -> ReviewId {
         match self {
             Self::New(id) | Self::Existing(id) => id,
         }
@@ -61,11 +61,14 @@ pub(crate) fn queue(
             now
         ],
     )?;
-    Ok(Queued::New(db.last_insert_rowid()))
+    Ok(Queued::New(ReviewId(db.last_insert_rowid())))
 }
 
 /// The workspace's queued or running review.
-pub(crate) fn active(db: &Connection, workspace_id: &str) -> Result<Option<(i64, ReviewState)>> {
+pub(crate) fn active(
+    db: &Connection,
+    workspace_id: &str,
+) -> Result<Option<(ReviewId, ReviewState)>> {
     Ok(db
         .query_row(
             "SELECT id,state FROM reviews WHERE workspace_id=?1 AND state IN ('queued','running')",
@@ -76,7 +79,7 @@ pub(crate) fn active(db: &Connection, workspace_id: &str) -> Result<Option<(i64,
 }
 
 /// The queued or running reviews of the repository's workspaces.
-pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<i64>> {
+pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<ReviewId>> {
     Ok(db
         .prepare(
             "SELECT reviews.id FROM reviews JOIN workspaces ON workspaces.id=workspace_id
@@ -87,7 +90,7 @@ pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<i64>
 }
 
 /// Every queued review, oldest first.
-pub(crate) fn queued(db: &Connection) -> Result<Vec<i64>> {
+pub(crate) fn queued(db: &Connection) -> Result<Vec<ReviewId>> {
     Ok(db
         .prepare("SELECT id FROM reviews WHERE state='queued' ORDER BY id")?
         .query_map([], |row| row.get(0))?
@@ -96,7 +99,7 @@ pub(crate) fn queued(db: &Connection) -> Result<Vec<i64>> {
 
 /// Queue again the reviews a daemon stop interrupted, which start over,
 /// except those in `kept`, whose runs could not be cleaned up.
-pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
+pub(crate) fn requeue_running(db: &Connection, kept: &[ReviewId]) -> Result<usize> {
     Ok(db.execute(
         "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL
             WHERE state='running' AND id NOT IN (SELECT value FROM json_each(?1))",
@@ -109,9 +112,9 @@ pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
 /// it failed and how many it queued.
 pub(crate) fn settle_interrupted(
     db: &Connection,
-    kept: &[i64],
+    kept: &[ReviewId],
     now: crate::time::UnixTime,
-) -> Result<(Vec<i64>, usize)> {
+) -> Result<(Vec<ReviewId>, usize)> {
     let mut failed = Vec::new();
     for id in kept {
         if fail(db, *id, None, FailureReason::ExecutionFailed, now)? {
@@ -123,7 +126,7 @@ pub(crate) fn settle_interrupted(
 
 /// Queue running review `id` again after protection stopped its run, to wait
 /// for healthy readings; false when it is no longer running.
-pub(crate) fn requeue(db: &Connection, id: i64) -> Result<bool> {
+pub(crate) fn requeue(db: &Connection, id: ReviewId) -> Result<bool> {
     Ok(db.execute(
         "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL,
             waits_for_recovery=1
@@ -134,7 +137,7 @@ pub(crate) fn requeue(db: &Connection, id: i64) -> Result<bool> {
 
 /// Whether queued review `id` waits for healthy readings, as one protection
 /// stopped does until it starts again.
-pub(crate) fn waits_for_recovery(db: &Connection, id: i64) -> Result<bool> {
+pub(crate) fn waits_for_recovery(db: &Connection, id: ReviewId) -> Result<bool> {
     Ok(db
         .query_row(
             "SELECT waits_for_recovery FROM reviews WHERE id=?1",
@@ -146,7 +149,7 @@ pub(crate) fn waits_for_recovery(db: &Connection, id: i64) -> Result<bool> {
 }
 
 /// The reviews that are running.
-pub(crate) fn running(db: &Connection) -> Result<Vec<i64>> {
+pub(crate) fn running(db: &Connection) -> Result<Vec<ReviewId>> {
     Ok(db
         .prepare("SELECT id FROM reviews WHERE state='running' ORDER BY id")?
         .query_map([], |row| row.get(0))?
@@ -157,7 +160,7 @@ pub(crate) fn running(db: &Connection) -> Result<Vec<i64>> {
 /// queued, as after a cancel.
 pub(crate) fn start(
     db: &Connection,
-    id: i64,
+    id: ReviewId,
     head: &str,
     base: &str,
     now: crate::time::UnixTime,
@@ -174,7 +177,7 @@ pub(crate) fn start(
 /// workspace. False when the review is no longer running.
 pub(crate) fn finish(
     db: &mut Connection,
-    id: i64,
+    id: ReviewId,
     reviewer: &str,
     output: &ReviewerOutput,
     now: crate::time::UnixTime,
@@ -212,7 +215,7 @@ pub(crate) fn finish(
 
 /// Record a check of an earlier finding of the same workspace that is
 /// resolved `fixed`; checks of other findings are ignored.
-fn record_check(db: &Connection, id: i64, checked: &Checked) -> Result<()> {
+fn record_check(db: &Connection, id: ReviewId, checked: &Checked) -> Result<()> {
     db.execute(
         "UPDATE review_findings SET check_result=?3,checked_by=?4
             WHERE review_id=?1 AND number=?2 AND json_extract(outcome,'$.outcome')='fixed'
@@ -232,7 +235,7 @@ fn record_check(db: &Connection, id: i64, checked: &Checked) -> Result<()> {
 /// End an active review as failed for `reason`; false when it already ended.
 pub(crate) fn fail(
     db: &Connection,
-    id: i64,
+    id: ReviewId,
     reviewer: Option<&str>,
     reason: FailureReason,
     now: crate::time::UnixTime,
@@ -248,7 +251,7 @@ pub(crate) fn fail(
 /// false when it already ended.
 pub(crate) fn cancel(
     db: &Connection,
-    id: i64,
+    id: ReviewId,
     by: Option<&str>,
     now: crate::time::UnixTime,
 ) -> Result<bool> {
@@ -260,7 +263,7 @@ pub(crate) fn cancel(
 }
 
 /// The workspace whose process cancelled the review.
-pub(crate) fn cancelled_by(db: &Connection, id: i64) -> Result<Option<String>> {
+pub(crate) fn cancelled_by(db: &Connection, id: ReviewId) -> Result<Option<String>> {
     Ok(db
         .query_row(
             "SELECT cancelled_by FROM reviews WHERE id=?1",
@@ -271,7 +274,7 @@ pub(crate) fn cancelled_by(db: &Connection, id: i64) -> Result<Option<String>> {
         .flatten())
 }
 
-pub(crate) fn set_posted(db: &Connection, id: i64, posted: &Posted) -> Result<()> {
+pub(crate) fn set_posted(db: &Connection, id: ReviewId, posted: &Posted) -> Result<()> {
     db.execute(
         "UPDATE reviews SET posted=?2 WHERE id=?1",
         params![id, serde_json::to_string(posted)?],
@@ -338,14 +341,14 @@ const COLUMNS: &str = "reviews.id,workspace_id,workspaces.name,target,agent,revi
     failure,head,base,created_at,started_at,ended_at,summary,verdict,posted,reviews.model";
 
 /// Review `id` with its findings.
-pub(crate) fn load(db: &Connection, id: i64) -> Result<Option<Review>> {
+pub(crate) fn load(db: &Connection, id: ReviewId) -> Result<Option<Review>> {
     load_record(db, id)?
         .map(|review| with_findings(db, review))
         .transpose()
 }
 
 /// Review `id` without its findings.
-fn load_record(db: &Connection, id: i64) -> Result<Option<Review>> {
+fn load_record(db: &Connection, id: ReviewId) -> Result<Option<Review>> {
     Ok(db
         .query_row(
             &format!(
@@ -387,7 +390,7 @@ pub(crate) fn finished_at(
     workspace_id: &str,
     head: &str,
 ) -> Result<Option<Review>> {
-    let id: Option<i64> = db.query_row(
+    let id: Option<ReviewId> = db.query_row(
         "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state='finished'",
         params![workspace_id, head],
         |row| row.get(0),
@@ -418,7 +421,7 @@ pub(crate) fn latest_status(db: &Connection, workspace_id: &str) -> Result<Optio
     Ok(Some((&review).into()))
 }
 
-fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<i64>> {
+fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<ReviewId>> {
     Ok(db.query_row(
         "SELECT MAX(id) FROM reviews WHERE workspace_id=?1",
         [workspace_id],
@@ -428,8 +431,8 @@ fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<i64>> {
 
 /// The workspace's reviews before `id` that returned findings, oldest
 /// first: the history a new review receives.
-pub(crate) fn earlier(db: &Connection, workspace_id: &str, id: i64) -> Result<Vec<Review>> {
-    let ids: Vec<i64> = db
+pub(crate) fn earlier(db: &Connection, workspace_id: &str, id: ReviewId) -> Result<Vec<Review>> {
+    let ids: Vec<ReviewId> = db
         .prepare(
             "SELECT id FROM reviews WHERE workspace_id=?1 AND id<?2 AND state='finished'
                 ORDER BY id",
@@ -483,7 +486,7 @@ fn with_findings(db: &Connection, mut review: Review) -> Result<Review> {
 }
 
 /// Review `id`'s findings without their replies.
-fn findings(db: &Connection, id: i64) -> Result<Vec<Finding>> {
+fn findings(db: &Connection, id: ReviewId) -> Result<Vec<Finding>> {
     db.prepare(
         "SELECT number,severity,path,line,title,body,outcome,check_result,checked_by
             FROM review_findings WHERE review_id=?1 ORDER BY number",
@@ -518,7 +521,7 @@ const REPLIES: &str =
     "SELECT number,created_at,body FROM review_replies WHERE review_id=?1 ORDER BY id";
 
 /// Add the replies of review `id` to its `findings`.
-fn add_replies(db: &Connection, id: i64, findings: &mut [Finding]) -> Result<()> {
+fn add_replies(db: &Connection, id: ReviewId, findings: &mut [Finding]) -> Result<()> {
     let mut replies = db.prepare(REPLIES)?;
     for reply in replies.query_map([id], |row| {
         Ok((

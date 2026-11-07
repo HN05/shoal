@@ -101,10 +101,48 @@ states!(
     }
 );
 
+/// A review's ID, which the daemon numbers from 1 and the protocol and the
+/// store carry as an integer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ReviewId(pub i64);
+
+impl fmt::Display for ReviewId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl FromStr for ReviewId {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        text.parse()
+            .ok()
+            .filter(|id| *id > 0)
+            .map(Self)
+            .with_context(|| format!("{text:?} is not a review ID; reviews are numbers"))
+    }
+}
+
+#[cfg(feature = "rusqlite")]
+impl rusqlite::types::ToSql for ReviewId {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "rusqlite")]
+impl rusqlite::types::FromSql for ReviewId {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        i64::column_result(value).map(Self)
+    }
+}
+
 /// A finding by its review and its number there, written `<review>.<n>`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FindingId {
-    pub review: i64,
+    pub review: ReviewId,
     pub number: i64,
 }
 
@@ -124,7 +162,7 @@ impl FromStr for FindingId {
                 review: review.parse().ok()?,
                 number: number.parse().ok()?,
             };
-            (id.review > 0 && id.number > 0).then_some(id)
+            (id.number > 0).then_some(id)
         };
         parse().with_context(|| {
             format!("{text:?} is not a finding; findings are <review>.<n>, such as 17.2")
@@ -285,13 +323,13 @@ pub struct Reply {
 pub struct Check {
     pub result: FixCheck,
     /// The review that checked it.
-    pub review: i64,
+    pub review: ReviewId,
 }
 
 /// One review: what it covers, who ran it, how it ended and its findings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Review {
-    pub id: i64,
+    pub id: ReviewId,
     pub workspace_id: String,
     /// The workspace's name.
     pub workspace: String,
@@ -384,7 +422,7 @@ impl Review {
 /// A workspace's latest review as lists show it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewStatus {
-    pub id: i64,
+    pub id: ReviewId,
     pub state: ReviewState,
     /// [`Review::status`].
     pub status: String,
@@ -446,7 +484,7 @@ pub async fn run(
 pub async fn cancel(
     daemon: &impl Daemon,
     workspace: Option<SpaceSelector>,
-    id: Option<i64>,
+    id: Option<ReviewId>,
 ) -> Result<Review> {
     reassembled(daemon, ReviewMethod::CancelReview { workspace, id }).await
 }
@@ -468,7 +506,7 @@ pub async fn list(
 pub async fn show(
     daemon: &impl Daemon,
     workspace: Option<SpaceSelector>,
-    id: Option<i64>,
+    id: Option<ReviewId>,
 ) -> Result<Review> {
     reassembled(daemon, ReviewMethod::ShowReview { workspace, id }).await
 }
@@ -478,13 +516,13 @@ pub async fn show(
 pub async fn await_ended(
     daemon: &impl Daemon,
     workspace: Option<SpaceSelector>,
-    id: Option<i64>,
-) -> Result<i64> {
+    id: Option<ReviewId>,
+) -> Result<ReviewId> {
     let method = || ReviewMethod::AwaitReview {
         workspace: workspace.clone(),
         id,
     };
-    i64::try_from(await_reply(daemon, method, false).await?)
+    ReviewId::try_from(await_reply(daemon, method, false).await?)
 }
 
 /// Reply `body` to `finding`.

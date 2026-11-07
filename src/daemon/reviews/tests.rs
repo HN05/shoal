@@ -559,7 +559,7 @@ async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
         .unwrap();
     let kept = std::fs::read_to_string(&path).unwrap();
     let missing = FindingId {
-        review: 999,
+        review: ReviewId(999),
         number: 1,
     };
     fixture
@@ -930,7 +930,7 @@ async fn finished_reviews(
     workspace: &str,
     count: usize,
     body: &str,
-) -> Vec<i64> {
+) -> Vec<ReviewId> {
     let (id, body) = (workspace.to_owned(), body.to_owned());
     manager
         .store
@@ -1104,7 +1104,8 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
         .await
         .unwrap();
     // The second run's review went with its workspace.
-    let runs = [stuck, stuck + 1].map(|id| manager.paths.reviews().join(id.to_string()));
+    let runs =
+        [stuck, ReviewId(stuck.0 + 1)].map(|id| manager.paths.reviews().join(id.to_string()));
     for run in &runs {
         std::fs::create_dir_all(run.join("checkout")).unwrap();
         std::fs::write(run.join("repository"), &repository).unwrap();
@@ -1120,7 +1121,7 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
     assert!(runs.iter().all(|run| run.join("checkout").exists()));
     // Until a restart, the repository stays held and the slots used.
     let held = manager.reviews.checkouts.lock().unwrap().clone();
-    let both = [stuck, stuck + 1].map(|id| {
+    let both = [stuck, ReviewId(stuck.0 + 1)].map(|id| {
         let held = HeldCheckout {
             repository: repository.clone(),
             kept: true,

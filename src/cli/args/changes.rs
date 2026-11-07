@@ -7,7 +7,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, item_reference},
-    reviews::{FindingId, OutcomeKind},
+    reviews::{FindingId, OutcomeKind, ReviewId},
 };
 
 #[derive(Debug, Subcommand)]
@@ -151,7 +151,7 @@ pub enum ReviewCommand {
     /// Cancel a queued or running review; defaults to the space's.
     Cancel {
         /// Review ID.
-        id: Option<i64>,
+        id: Option<ReviewId>,
         /// Space, a workspace or chat, whose review to cancel; defaults to
         /// the current workspace or chat, or a picker.
         #[arg(short = 's', long, conflicts_with = "id")]

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
-use crate::reviews::{FindingId, Outcome, ReviewTarget};
+use crate::reviews::{FindingId, Outcome, ReviewId, ReviewTarget};
 use crate::space_names::SpaceSelector;
 
 /// Requests about local reviews and the answers to their findings. Reviews
@@ -24,7 +24,7 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        id: Option<i64>,
+        id: Option<ReviewId>,
     },
     /// Reviews of the workspaces, newest first: of one workspace, of a
     /// repository's, or of all, in as many frames as they need.
@@ -39,7 +39,7 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        id: Option<i64>,
+        id: Option<ReviewId>,
     },
     /// Long-lived: the ID of review `id`, else of the workspace's latest,
     /// once it ends.
@@ -47,7 +47,7 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        id: Option<i64>,
+        id: Option<ReviewId>,
     },
     /// `workspace` is the finding's, which scope checks fill in.
     ReplyToFinding {

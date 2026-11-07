@@ -8,7 +8,7 @@ use tokio::sync::watch;
 use crate::{
     daemon::oneshot::{self, AgentCommand},
     reviews::{
-        FailureReason,
+        FailureReason, ReviewId,
         output::{self, ResultFormat, ReviewerOutput},
     },
 };
@@ -24,7 +24,7 @@ pub(super) struct Files {
 
 impl Files {
     /// The review whose run these are, named by their directory.
-    pub fn review(&self) -> Option<i64> {
+    pub fn review(&self) -> Option<ReviewId> {
         self.directory.file_name()?.to_str()?.parse().ok()
     }
 

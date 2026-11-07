@@ -9,14 +9,14 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     model::Chat,
-    reviews::{FindingId, Outcome},
+    reviews::{FindingId, Outcome, ReviewId},
 };
 
 /// Cancel review `id`, else the space's queued or running one: a chat's is
 /// that of one of its linked PRs.
 pub(super) async fn cancel(
     ctx: &Context,
-    id: Option<i64>,
+    id: Option<ReviewId>,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
     let (workspace, id) = match id {
@@ -39,7 +39,7 @@ pub(super) async fn cancel(
 async fn cancelled(
     ctx: &Context,
     space: Option<SpaceSelector>,
-) -> Result<(Option<String>, Option<i64>)> {
+) -> Result<(Option<String>, Option<ReviewId>)> {
     Ok(match super::select(ctx, space).await? {
         super::Space::Chat(chat) => (None, Some(active_review(ctx, &chat).await?)),
         super::Space::Workspace(workspace) => (Some(workspace), None),
@@ -47,7 +47,7 @@ async fn cancelled(
 }
 
 /// The ID of the queued or running review of the chat's linked PRs.
-async fn active_review(ctx: &Context, chat: &Chat) -> Result<i64> {
+async fn active_review(ctx: &Context, chat: &Chat) -> Result<ReviewId> {
     let reviews = super::chat_reviews(ctx, chat).await?;
     let active = (reviews.into_iter())
         .find(|review| review.state.is_active())

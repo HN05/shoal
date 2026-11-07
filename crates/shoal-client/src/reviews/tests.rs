@@ -6,7 +6,7 @@ fn findings_are_review_and_number() {
     assert_eq!(
         id,
         FindingId {
-            review: 17,
+            review: ReviewId(17),
             number: 2
         }
     );
@@ -18,10 +18,23 @@ fn findings_are_review_and_number() {
 }
 
 #[test]
+fn review_ids_are_positive_integers() {
+    assert_eq!("17".parse::<ReviewId>().unwrap(), ReviewId(17));
+    assert_eq!(serde_json::to_string(&ReviewId(17)).unwrap(), "17");
+    assert_eq!(
+        serde_json::from_str::<ReviewId>("17").unwrap(),
+        ReviewId(17)
+    );
+    for text in ["0", "-1", "a", "17.2"] {
+        assert!(text.parse::<ReviewId>().is_err(), "{text}");
+    }
+}
+
+#[test]
 fn every_outcome_carries_exactly_its_data() {
     let reason = || Some("the caller checks it".to_owned());
     let of = Some(FindingId {
-        review: 3,
+        review: ReviewId(3),
         number: 1,
     });
     assert_eq!(
@@ -60,7 +73,7 @@ fn every_outcome_carries_exactly_its_data() {
 fn outcomes_are_tagged_with_their_data() {
     let outcome = Outcome::Duplicate {
         of: FindingId {
-            review: 3,
+            review: ReviewId(3),
             number: 1,
         },
     };
@@ -82,7 +95,10 @@ fn outcomes_are_tagged_with_their_data() {
 #[test]
 fn status_counts_findings_by_severity() {
     let finding = |number, severity| Finding {
-        id: FindingId { review: 1, number },
+        id: FindingId {
+            review: ReviewId(1),
+            number,
+        },
         severity,
         path: "src/a.rs".into(),
         line: 1,

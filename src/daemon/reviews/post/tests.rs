@@ -1,10 +1,13 @@
 use super::*;
-use crate::reviews::{FindingId, ReviewState};
+use crate::reviews::{FindingId, ReviewId, ReviewState};
 use crate::time::UnixTime;
 
 fn finding(number: i64, path: &str, severity: Severity) -> Finding {
     Finding {
-        id: FindingId { review: 9, number },
+        id: FindingId {
+            review: ReviewId(9),
+            number,
+        },
         severity,
         path: path.into(),
         line: 7,
@@ -18,7 +21,7 @@ fn finding(number: i64, path: &str, severity: Severity) -> Finding {
 
 fn review(findings: Vec<Finding>) -> Review {
     Review {
-        id: 9,
+        id: ReviewId(9),
         workspace_id: "work".into(),
         workspace: "fix-login".into(),
         target: ReviewTarget::Pr {

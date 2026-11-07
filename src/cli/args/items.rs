@@ -3,7 +3,7 @@
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::client::space_names::SpaceSelector;
-use crate::{cli::args::item_reference, model::Relation};
+use crate::{cli::args::item_reference, model::Relation, reviews::ReviewId};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -147,13 +147,7 @@ impl ItemArgs {
     }
 
     /// The review ID a review selection names.
-    pub fn review_id(&self) -> anyhow::Result<Option<i64>> {
-        self.item
-            .as_deref()
-            .map(|id| {
-                id.parse()
-                    .map_err(|_| anyhow::anyhow!("{id:?} is not a review ID; reviews are numbers"))
-            })
-            .transpose()
+    pub fn review_id(&self) -> anyhow::Result<Option<ReviewId>> {
+        self.item.as_deref().map(str::parse).transpose()
     }
 }

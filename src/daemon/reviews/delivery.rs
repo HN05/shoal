@@ -9,7 +9,7 @@ use crate::{
         log,
         workspace::{Manager, Source},
     },
-    reviews::{AUTOMATED_NOTE, Review, ReviewState, severity_counts},
+    reviews::{AUTOMATED_NOTE, Review, ReviewId, ReviewState, severity_counts},
     validate::MAX_AGENT_MESSAGE_LEN,
 };
 
@@ -17,7 +17,7 @@ impl Manager {
     /// Deliver review `id`, which has ended: to the workspace's agents,
     /// unless a process of the workspace cancelled it, and as a notice to
     /// its coordinator.
-    pub(super) async fn deliver_review(&self, id: i64) {
+    pub(super) async fn deliver_review(&self, id: ReviewId) {
         let loaded = self
             .store
             .run(move |db| Ok((store::load(db, id)?, store::cancelled_by(db, id)?)))

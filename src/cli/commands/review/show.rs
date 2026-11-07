@@ -12,7 +12,7 @@ use crate::{
         ui::{self, Fallback},
     },
     installed::Executable,
-    reviews::{Finding, Posted, Review, ReviewState, ReviewTarget, Severity},
+    reviews::{Finding, Posted, Review, ReviewId, ReviewState, ReviewTarget, Severity},
 };
 
 /// List the reviews of the space, a chat's those of its linked PRs, else
@@ -54,7 +54,7 @@ pub(in crate::cli::commands) async fn list(
 /// latest.
 pub(in crate::cli::commands) async fn view(
     ctx: &Context,
-    id: Option<i64>,
+    id: Option<ReviewId>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
@@ -74,7 +74,7 @@ pub(in crate::cli::commands) async fn view(
 /// from the installed binary.
 pub(in crate::cli::commands) async fn watch(
     ctx: &Context,
-    id: Option<i64>,
+    id: Option<ReviewId>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
@@ -102,7 +102,7 @@ pub(in crate::cli::commands) async fn latest(ctx: &Context, workspace: &str) -> 
 /// The workspace a request without a review ID names.
 async fn selected(
     ctx: &Context,
-    id: Option<i64>,
+    id: Option<ReviewId>,
     workspace: Option<SpaceSelector>,
 ) -> Result<Option<String>> {
     Ok(match id {

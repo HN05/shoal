@@ -1,12 +1,15 @@
 use super::*;
 use crate::reviews::{
-    Check, FindingId, FixCheck, Outcome, Reply, ReviewState, ReviewTarget, Severity,
+    Check, FindingId, FixCheck, Outcome, Reply, ReviewId, ReviewState, ReviewTarget, Severity,
 };
 use crate::time::UnixTime;
 
 fn finding(number: i64, outcome: Option<Outcome>, check: Option<Check>) -> Finding {
     Finding {
-        id: FindingId { review: 4, number },
+        id: FindingId {
+            review: ReviewId(4),
+            number,
+        },
         severity: Severity::Blocker,
         path: "src/a.rs".into(),
         line: 9,
@@ -23,7 +26,7 @@ fn finding(number: i64, outcome: Option<Outcome>, check: Option<Check>) -> Findi
 
 fn review(findings: Vec<Finding>) -> Review {
     Review {
-        id: 4,
+        id: ReviewId(4),
         workspace_id: "work".into(),
         workspace: "fix-login".into(),
         target: ReviewTarget::Workspace,
@@ -49,7 +52,7 @@ fn review(findings: Vec<Finding>) -> Review {
 fn earlier_findings_carry_their_replies_outcomes_and_checks() {
     let checked = Check {
         result: FixCheck::StillPresent,
-        review: 5,
+        review: ReviewId(5),
     };
     let reviews = [review(vec![
         finding(1, Some(Outcome::Fixed), None),

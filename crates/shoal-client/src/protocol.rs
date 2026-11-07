@@ -668,7 +668,7 @@ response_bodies! {
     Question(crate::questions::Question),
     Questions(crate::questions::Listing),
     ReviewPieces(Vec<ReviewPiece>),
-    ReviewId(i64),
+    ReviewId(crate::reviews::ReviewId),
     Notification(Notification),
     Sent(crate::notifications::Sent),
     EventItem(EventItem),

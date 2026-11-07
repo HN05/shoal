@@ -4,7 +4,7 @@ use crate::time::UnixTime;
 
 fn review(state: ReviewState, findings: usize) -> Review {
     Review {
-        id: 17,
+        id: ReviewId(17),
         workspace_id: "work".into(),
         workspace: "fix-login".into(),
         target: ReviewTarget::Workspace,
@@ -22,7 +22,10 @@ fn review(state: ReviewState, findings: usize) -> Review {
         verdict: None,
         findings: (1..=findings as i64)
             .map(|number| Finding {
-                id: FindingId { review: 17, number },
+                id: FindingId {
+                    review: ReviewId(17),
+                    number,
+                },
                 severity: if number == 1 {
                     Severity::Blocker
                 } else {

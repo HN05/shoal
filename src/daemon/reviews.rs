@@ -11,7 +11,7 @@ use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     agent::Agent,
     config::Effective,
-    reviews::{FindingId, Outcome, Review, ReviewTarget},
+    reviews::{FindingId, Outcome, Review, ReviewId, ReviewTarget},
 };
 
 mod delivery;
@@ -30,10 +30,10 @@ pub(crate) struct Reviews {
     /// Wakes the scheduler when a review is queued.
     queued: tokio::sync::Notify,
     /// Stops each review that has started to run.
-    cancels: std::sync::Mutex<HashMap<i64, std::sync::Arc<watch::Sender<bool>>>>,
+    cancels: std::sync::Mutex<HashMap<ReviewId, std::sync::Arc<watch::Sender<bool>>>>,
     /// The repository of each review whose checkout, a worktree of it, may
     /// exist, which outlives the review's records when its workspace goes.
-    checkouts: std::sync::Mutex<HashMap<i64, HeldCheckout>>,
+    checkouts: std::sync::Mutex<HashMap<ReviewId, HeldCheckout>>,
     /// Counts the runs that ended, for waits on one.
     ended: watch::Sender<u64>,
 }
@@ -52,7 +52,7 @@ impl Default for Reviews {
 impl Reviews {
     /// Record that review `id` may have a checkout of `repository` until the
     /// returned value is dropped, once it is removed.
-    fn hold_checkout(&self, id: i64, repository: &str) -> CheckoutHold<'_> {
+    fn hold_checkout(&self, id: ReviewId, repository: &str) -> CheckoutHold<'_> {
         self.checkouts.lock().unwrap().insert(
             id,
             HeldCheckout {
@@ -85,7 +85,7 @@ struct HeldCheckout {
 /// A review's possible checkout, until it is removed.
 struct CheckoutHold<'a> {
     reviews: &'a Reviews,
-    id: i64,
+    id: ReviewId,
 }
 
 impl CheckoutHold<'_> {
@@ -137,7 +137,7 @@ impl Manager {
     pub async fn cancel_review(
         &self,
         selector: Option<&SpaceSelector>,
-        id: Option<i64>,
+        id: Option<ReviewId>,
         by: Option<String>,
     ) -> Result<Review> {
         let id = match (id, selector) {
@@ -159,7 +159,7 @@ impl Manager {
     }
 
     /// The ID of the workspace's queued or running review.
-    async fn active_review(&self, selector: &SpaceSelector) -> Result<i64> {
+    async fn active_review(&self, selector: &SpaceSelector) -> Result<ReviewId> {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         let active = self.store.run(move |db| store::active(db, &id)).await?;
@@ -169,7 +169,7 @@ impl Manager {
     }
 
     /// Review `id` in full, marked outdated once its workspace's HEAD moved.
-    pub async fn review(&self, id: i64) -> Result<Review> {
+    pub async fn review(&self, id: ReviewId) -> Result<Review> {
         let review = self.store.run(move |db| store::load(db, id)).await?;
         let mut review = review.with_context(|| format!("review {id} does not exist"))?;
         self.annotate_reviews(std::slice::from_mut(&mut review))
@@ -220,7 +220,7 @@ impl Manager {
     }
 
     /// Review `id` once it is neither queued nor running.
-    pub async fn await_review(&self, id: i64) -> Result<Review> {
+    pub async fn await_review(&self, id: ReviewId) -> Result<Review> {
         let mut changed = self.store.watch_changes();
         let mut ended = self.reviews.ended.subscribe();
         loop {
@@ -279,13 +279,13 @@ impl Manager {
     }
 
     /// Review `id` as stored, without what its workspace says of it.
-    async fn stored_review(&self, id: i64) -> Result<Review> {
+    async fn stored_review(&self, id: ReviewId) -> Result<Review> {
         let review = self.store.run(move |db| store::load(db, id)).await?;
         review.with_context(|| format!("review {id} does not exist"))
     }
 
     /// The workspace review `id` is of.
-    pub(crate) async fn review_workspace(&self, id: i64) -> Result<String> {
+    pub(crate) async fn review_workspace(&self, id: ReviewId) -> Result<String> {
         let review = self.store.run(move |db| store::load(db, id)).await?;
         Ok(review
             .with_context(|| format!("review {id} does not exist"))?

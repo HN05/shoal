@@ -1,7 +1,11 @@
 use super::*;
+use crate::reviews::ReviewId;
 
 fn id(number: i64) -> FindingId {
-    FindingId { review: 7, number }
+    FindingId {
+        review: ReviewId(7),
+        number,
+    }
 }
 
 fn listed(number: i64, reason: &str) -> FalsePositive {

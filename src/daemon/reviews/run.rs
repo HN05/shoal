@@ -20,7 +20,7 @@ use crate::{
         workspace::{Manager, agent_queue::OneShotSlot},
     },
     model::Workspace,
-    reviews::{FailureReason, Review, ReviewState, ReviewTarget},
+    reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
 };
 
 /// Start every queued review, now and whenever one is queued; each then
@@ -81,7 +81,7 @@ struct Commits {
 impl Manager {
     /// Run queued review `id` to its end. A failure to prepare it fails it,
     /// as the reviewer could not run.
-    async fn run_review(&self, id: i64) {
+    async fn run_review(&self, id: ReviewId) {
         loop {
             let (cancel, mut cancelled) = watch::channel(false);
             let cancel = Arc::new(cancel);
@@ -107,7 +107,7 @@ impl Manager {
 
     /// Fail review `id`, which could not be prepared: for its repository's
     /// unreadable false positives, else as its reviewer could not run.
-    async fn fail_unprepared(&self, id: i64, error: anyhow::Error) {
+    async fn fail_unprepared(&self, id: ReviewId, error: anyhow::Error) {
         log!("review {id}: {error:#}");
         let reason = match error.downcast_ref::<super::false_positives::Unreadable>() {
             Some(_) => FailureReason::InvalidFalsePositives,
@@ -131,7 +131,7 @@ impl Manager {
     /// that waits for healthy readings.
     async fn review_once(
         &self,
-        id: i64,
+        id: ReviewId,
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Pass> {
@@ -167,7 +167,7 @@ impl Manager {
     }
 
     /// Review `id` while it is queued.
-    async fn queued_review(&self, id: i64) -> Result<Option<Review>> {
+    async fn queued_review(&self, id: ReviewId) -> Result<Option<Review>> {
         let review = self.store.run(move |db| store::load(db, id)).await?;
         Ok(review.filter(|review| review.state == ReviewState::Queued))
     }
@@ -177,7 +177,7 @@ impl Manager {
     /// cancel or the workspace's removal recorded the review's end.
     async fn await_slot(
         &self,
-        id: i64,
+        id: ReviewId,
         workspace: &Workspace,
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
@@ -202,7 +202,7 @@ impl Manager {
 
     /// Record that review `id` started on `commits`; false when it is no
     /// longer queued.
-    async fn start_review(&self, id: i64, commits: &Commits) -> Result<bool> {
+    async fn start_review(&self, id: ReviewId, commits: &Commits) -> Result<bool> {
         let (head, base, now) = (commits.head.clone(), commits.base.clone(), UnixTime::now());
         self.store
             .run(move |db| store::start(db, id, &head, &base, now))
@@ -210,7 +210,7 @@ impl Manager {
     }
 
     /// The files of review `id`'s run.
-    fn run_files(&self, id: i64) -> Files {
+    fn run_files(&self, id: ReviewId) -> Files {
         Files {
             directory: self.paths.reviews().join(id.to_string()),
         }
@@ -304,7 +304,7 @@ impl Manager {
     /// stopped by protection, and its review is queued again.
     async fn record_end(
         &self,
-        id: i64,
+        id: ReviewId,
         workspace: &Workspace,
         reviewer: &str,
         ended: Ended,
@@ -453,7 +453,7 @@ impl Manager {
         for run in &kept {
             self.hold_unreconciled_run(*run).await;
         }
-        let ids: Vec<i64> = kept.iter().map(|run| run.id).collect();
+        let ids: Vec<ReviewId> = kept.iter().map(|run| run.id).collect();
         let now = UnixTime::now();
         let (failed, requeued) = self
             .store
@@ -535,7 +535,7 @@ impl Manager {
 /// A run a stopped daemon left that recovery could not remove.
 #[derive(Clone, Copy)]
 struct Unreconciled {
-    id: i64,
+    id: ReviewId,
     /// Whether its reviewer's processes may still run.
     left_running: bool,
 }
@@ -544,7 +544,7 @@ struct Unreconciled {
 /// reviewer `left_running` processes keeps all three, as does a run that
 /// could not be removed its checkout, until a restarted daemon removes them.
 async fn release_run(
-    id: i64,
+    id: ReviewId,
     files: &Files,
     checkout: CheckoutHold<'_>,
     slot: OneShotSlot<'_>,
