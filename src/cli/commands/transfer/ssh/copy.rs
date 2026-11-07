@@ -2,7 +2,7 @@
 //! opens each as a new space, leaving them running here.
 use anyhow::Result;
 
-use super::{super::export, Remote, arrived};
+use super::{super::export, Remote, arrived, summary};
 use crate::client::output::transfer::{Copies, Imported};
 use crate::{
     cli::{context::Context, ui},
@@ -33,16 +33,7 @@ pub(super) async fn copy_spaces(
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    let (copied, failed) = report.counts();
-    let summary = match (copied, failed) {
-        (1, 0) => String::new(),
-        (_, 0) => format!("Copied {copied} spaces to {}", remote.host),
-        _ => format!(
-            "Copied {copied} of {} spaces to {}; {failed} failed",
-            copied + failed,
-            remote.host
-        ),
-    };
+    let summary = summary("Copied", &remote.host, report.counts());
     report.finish(ctx, &summary, |copied, failed| Copies { copied, failed })
 }
 

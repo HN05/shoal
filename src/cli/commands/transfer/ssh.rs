@@ -72,17 +72,22 @@ async fn move_spaces(
             Err(error) => report.failed(ctx, &name, &error),
         }
     }
-    let (moved, failed) = report.counts();
-    let summary = match (moved, failed) {
-        (1, 0) => String::new(),
-        (_, 0) => format!("Moved {moved} spaces to {}", remote.host),
-        _ => format!(
-            "Moved {moved} of {} spaces to {}; {failed} failed",
-            moved + failed,
-            remote.host
-        ),
-    };
+    let summary = summary("Moved", &remote.host, report.counts());
     report.finish(ctx, &summary, |moved, failed| Moves { moved, failed })
+}
+
+/// The summary of a batch that `verb` names, such as `Moved`, to `host`,
+/// which acted on `done` spaces and failed on `failed`; none for one space
+/// whose own line says it all.
+fn summary(verb: &str, host: &str, (done, failed): (usize, usize)) -> String {
+    match (done, failed) {
+        (1, 0) => String::new(),
+        (_, 0) => format!("{verb} {done} spaces to {host}"),
+        _ => format!(
+            "{verb} {done} of {} spaces to {host}; {failed} failed",
+            done + failed
+        ),
+    }
 }
 
 /// Where a space went on `host`, whose import reported `imported`: a
