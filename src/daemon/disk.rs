@@ -281,8 +281,13 @@ async fn free_space(
         {
             continue;
         }
-        let Some(snapshot) = super::cleanup::candidate(manager, workspace, &users).await else {
-            continue;
+        let snapshot = match super::cleanup::candidate(manager, workspace, &users).await {
+            Ok(Some(snapshot)) => snapshot,
+            Ok(None) => continue,
+            Err(error) => {
+                log!("disk space cleanup skipped {}: {error:#}", workspace.name);
+                continue;
+            }
         };
         let removal = manager
             .remove_for_disk_space(&SpaceSelector::id(&workspace.id), snapshot)

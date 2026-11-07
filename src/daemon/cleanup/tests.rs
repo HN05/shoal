@@ -251,7 +251,13 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
             since: Instant::now() - Duration::from_secs(3600),
         },
     );
-    sweep(&manager, &mut timers).await.unwrap();
+    // The pass fails only in the workspace with the invalid record.
+    let failed = sweep(&manager, &mut timers).await.unwrap_err();
+    assert!(failed.general().is_none(), "{failed}");
+    assert_eq!(
+        failed.spaces().map(|(id, ..)| id).collect::<Vec<_>>(),
+        [invalid.id.as_str()]
+    );
     assert!(invalid.path.exists());
     assert!(!merged.path.exists());
     assert!(!idle.path.exists());
@@ -270,7 +276,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         .await
         .unwrap();
     assert_eq!(stored, record);
-    sweep(&manager, &mut timers).await.unwrap();
+    sweep(&manager, &mut timers).await.unwrap_err();
     let notifications = manager.notifications(true, 100).await.unwrap();
     let failures: Vec<_> = notifications
         .iter()

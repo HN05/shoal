@@ -155,7 +155,7 @@ async fn sweep_workspace(
     now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<()> {
-    let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await else {
+    let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await? else {
         return Ok(());
     };
     let removal = manager
@@ -185,31 +185,24 @@ async fn idle_candidate(
     workspace: &Workspace,
     now: UnixTime,
     users: &DirectoryUsers,
-) -> Option<Snapshot> {
-    let observed = async {
-        let Some(deadline) = idle_deadline(manager, workspace, now).await? else {
-            return Ok(None);
-        };
-        if state.changed_after(&workspace.id, deadline)
-            || !manager.default_branch_fresh(&workspace.repository_id).await
-        {
-            return Ok(None);
-        }
-        let Some((path, signals)) = manager.merged_signals(&workspace.id, users).await? else {
-            return Ok(None);
-        };
-        if state.waits(&workspace.id, signals) {
-            return Ok(None);
-        }
-        let (snapshot, changed) = walked_snapshot(path, workspace.git_dir.clone(), signals).await?;
-        state.remember_change(&workspace.id, changed, now);
-        Ok((changed <= deadline).then_some(snapshot))
+) -> Result<Option<Snapshot>> {
+    let Some(deadline) = idle_deadline(manager, workspace, now).await? else {
+        return Ok(None);
+    };
+    if state.changed_after(&workspace.id, deadline)
+        || !manager.default_branch_fresh(&workspace.repository_id).await
+    {
+        return Ok(None);
     }
-    .await;
-    observed.unwrap_or_else(|error: anyhow::Error| {
-        log!("merged cleanup skipped {}: {error:#}", workspace.name);
-        None
-    })
+    let Some((path, signals)) = manager.merged_signals(&workspace.id, users).await? else {
+        return Ok(None);
+    };
+    if state.waits(&workspace.id, signals) {
+        return Ok(None);
+    }
+    let (snapshot, changed) = walked_snapshot(path, workspace.git_dir.clone(), signals).await?;
+    state.remember_change(&workspace.id, changed, now);
+    Ok((changed <= deadline).then_some(snapshot))
 }
 
 /// The time after which any use keeps the workspace as of

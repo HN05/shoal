@@ -37,6 +37,7 @@ mod health;
 mod kept_branches;
 mod merged;
 
+use failures::LoggedFailures;
 pub(crate) use failures::{SpaceFailures, SweepFailures};
 pub(crate) use health::CleanupHealth;
 
@@ -328,9 +329,10 @@ async fn sweep_workspace(
         remove_deleted(manager, workspace).await;
         return Ok(());
     }
-    let Some((delay, signals)) = observe(manager, workspace, users).await else {
+    let observed = observe(manager, workspace, users).await;
+    let Ok(Some((delay, signals))) = observed else {
         timers.idle.remove(&workspace.id);
-        return Ok(());
+        return observed.map(drop);
     };
     // Each pass compares only the signals; Git state is inspected and the
     // tree walked when the timer starts and again when it expires.
@@ -340,9 +342,10 @@ async fn sweep_workspace(
         Expiry::Restart => None,
         Expiry::Expired(snapshot) => Some(snapshot),
     };
-    let Some(snapshot) = candidate(manager, workspace, users).await else {
+    let snapshot = candidate(manager, workspace, users).await;
+    let Ok(Some(snapshot)) = snapshot else {
         timers.idle.remove(&workspace.id);
-        return Ok(());
+        return snapshot.map(drop);
     };
     if started != Some(snapshot) {
         timers.start(&workspace.id, snapshot, now);
@@ -369,22 +372,18 @@ async fn idle_delay(manager: &Manager, workspace: &Workspace) -> Result<Option<D
 }
 
 /// The idle delay and timer signals of a ready workspace nothing recorded
-/// and no process keeps; `None` when something does, its idle cleanup is
-/// disabled, or its config cannot be read.
+/// and no process keeps; `None` when something does or its idle cleanup is
+/// disabled.
 async fn observe(
     manager: &Manager,
     workspace: &Workspace,
     users: &DirectoryUsers,
-) -> Option<(Duration, u64)> {
-    let observed = async {
-        let Some(delay) = idle_delay(manager, workspace).await? else {
-            return Ok(None);
-        };
-        let signals = manager.idle_timer_signals(&workspace.id, users).await?;
-        Ok(signals.map(|signals| (delay, signals)))
-    }
-    .await;
-    skip_failed(workspace, observed)
+) -> Result<Option<(Duration, u64)>> {
+    let Some(delay) = idle_delay(manager, workspace).await? else {
+        return Ok(None);
+    };
+    let signals = manager.idle_timer_signals(&workspace.id, users).await?;
+    Ok(signals.map(|signals| (delay, signals)))
 }
 
 /// The full snapshot of an idle cleanup candidate, with the processes in
@@ -393,22 +392,11 @@ pub(super) async fn candidate(
     manager: &Manager,
     workspace: &Workspace,
     users: &DirectoryUsers,
-) -> Option<Snapshot> {
-    let observed = async {
-        if idle_delay(manager, workspace).await?.is_none() {
-            return Ok(None);
-        }
-        manager.swept_snapshot(&workspace.id, users).await
+) -> Result<Option<Snapshot>> {
+    if idle_delay(manager, workspace).await?.is_none() {
+        return Ok(None);
     }
-    .await;
-    skip_failed(workspace, observed)
-}
-
-fn skip_failed<T>(workspace: &Workspace, observed: Result<Option<T>>) -> Option<T> {
-    observed.unwrap_or_else(|error| {
-        log!("auto cleanup skipped {}: {error:#}", workspace.name);
-        None
-    })
+    manager.swept_snapshot(&workspace.id, users).await
 }
 
 /// Operations on the client type [`ManualCleanup`] that only the `shoal` command uses.
@@ -717,11 +705,12 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
 
 pub async fn run(manager: Arc<Manager>) {
     let mut timers = Timers::default();
+    let mut logged = LoggedFailures::default();
     loop {
         {
             let _operation = manager.gates.operation().await;
             let result = sweep(&manager, &mut timers).await;
-            if let Err(failed) = &result {
+            if let Some(failed) = logged.new_failures(&result) {
                 log!("auto cleanup: {failed}");
             }
             manager.record_sweep(result).await;

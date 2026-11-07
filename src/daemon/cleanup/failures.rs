@@ -120,5 +120,21 @@ impl fmt::Display for SweepFailures {
     }
 }
 
+/// The failures of the pass before, which repeat on every pass until fixed,
+/// so that the log has each once.
+#[derive(Debug, Default)]
+pub(super) struct LoggedFailures(Option<String>);
+
+impl LoggedFailures {
+    /// The failures of a pass with `result` to log: none when they are
+    /// those of the pass before.
+    pub(super) fn new_failures(&mut self, result: &Result<(), SweepFailures>) -> Option<String> {
+        let failed = result.as_ref().err().map(ToString::to_string);
+        let repeated = failed == self.0;
+        self.0.clone_from(&failed);
+        failed.filter(|_| !repeated)
+    }
+}
+
 #[cfg(test)]
 mod tests;
