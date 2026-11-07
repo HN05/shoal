@@ -367,17 +367,18 @@ count a test's daemons and commands, but not processes that outlive it.
 ## CI
 
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
-`rust` job (the required check) runs `cargo fmt --check`, clippy, `cargo test`
-and the Python release-script tests; a PR whose only `area/` label is
+`rust` job (the required check) runs `cargo fmt --check`, clippy,
+`cargo nextest run` with the `ci` profile, `cargo test --doc` and the Python
+release-script tests; a PR whose only `area/` label is
 `area/docs` skips them, as do the release workflow's PR and version commit,
 which `scripts/release.py` validates itself. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
 Its `rust` job and `flaky.yml`'s job, which build, run with `runs-on: shoal` on
 Shoal runners; the jobs that only query the forge stay on Docker. A Shoal runner
 is any Linux or macOS machine whose Shoal has `runner.enabled` for this
-repository, with Rust at `rust-version`, which the jobs check, with clippy and rustfmt, and
-the tools the tests spawn installed on the host (those
-`.forgejo/ci-image/Containerfile` installs; on Linux, which alone checks the
+repository, with Rust at `rust-version`, which the jobs check, with clippy, rustfmt and
+cargo-nextest, which the jobs also check, and the tools the tests spawn installed on
+the host (those `.forgejo/ci-image/Containerfile` installs; on Linux, which alone checks the
 musl build, cargo-zigbuild, Zig and the host's musl Rust target). The test
 fixtures' daemons commit SQLite with fsync under `TMPDIR`, which Shoal puts in
 the repository directory; where that disk stalls on fsync, the machine's local

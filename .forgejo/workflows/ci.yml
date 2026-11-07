@@ -183,9 +183,15 @@ jobs:
             cargo check --locked --manifest-path "$manifest"
           done
 
-      - name: cargo test
+      # Nextest runs the tests of every binary in one pool; doc tests are
+      # libtest's alone. .config/nextest.toml has the ci profile.
+      - name: cargo nextest run
         if: env.DOCS_ONLY != 'true'
-        run: cargo test --locked
+        run: cargo nextest run --locked --profile ci
+
+      - name: cargo test --doc
+        if: env.DOCS_ONLY != 'true'
+        run: cargo test --doc --locked
 
       # Distributed Linux binaries link musl, whose libc types differ from
       # GNU's: the shipped code must compile against them. Only a Linux runner
