@@ -333,7 +333,8 @@ Agents waiting in the [agent queue](#agent-queue) to start in a stopped workspac
 a launch a workspace process started waiting for a slot, have no session to save, so the stop removes them
 from the queue and reports them in `cancelled`; `shoal resume` does not bring them back. One
 already starting is left to its agent. Naming a queued agent of a new workspace instead of a
-workspace removes it from the queue, as `shoal rm` does.
+workspace removes it from the queue, as `shoal rm` does; a number always names a space,
+since a queued agent has none.
 Several workspaces, or `-A`/`--all` for every ready or failed workspace with a running
 execution, a pending restore or a queued agent waiting to start in it, stop in parallel, reporting each failure without keeping the others running.
 A stop whose wrappers do not finish in time fails naming each execution it
@@ -738,7 +739,11 @@ Branches and paths are in `shoal status`.
 Every space, a workspace or a [chat](#chats), has a number no other space
 holds, the smallest free when it is created; it stays through renames and
 stops, and a later space may take it once the space is removed. `shoal status`
-shows it, and `--json` gives it as `number`.
+shows it, and `--json` gives it as `number`. Every argument that takes a space
+selects it by that number, its name or its ID, so `shoal attach 3` and
+`--space 3` name space 3; a removed workspace has no number and is named by
+name or ID. `--after` is the one argument where a bare number names an issue
+instead.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
 the diff, Ctrl-V lists the workspace's linked issues and PRs in its repository,
@@ -2094,7 +2099,8 @@ done cancels a pending one, and resuming or discarding the agent another way
 removes it.
 
 `--after` names work the launch waits for: a workspace or queued agent of the
-repository, or an issue number or URL; repeat it for more. An issue launch also
+repository by name or ID, or an issue number or URL, so a bare number is an
+issue; repeat it for more. An issue launch also
 waits for the open issues its forge records as blocking it: Forgejo and GitHub
 issue dependencies and GitLab "is blocked by" links; when the forge cannot list
 them, such as with dependencies turned off, Shoal warns and the agent does not
@@ -2330,8 +2336,11 @@ remotes or unrelated local branches fail. A ready Shoal workspace reopens withou
 setup/hooks or refresh; other checkouts block creation, including checked-out `main`.
 Full `refs/heads/...` and `refs/remotes/...` selectors disambiguate names.
 The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, drops
-leading `-_`, truncates to 64 characters, and falls back to `workspace`. Globally
-colliding names fail. Commands use this name or ID. Directories default to the repository's
+leading `-_`, truncates to 64 characters, and falls back to `workspace`; a name
+that would be all digits takes the prefix `workspace-`, as a branch `123` gives
+`workspace-123`, since a number selects a space. A name given with `--name` or
+`shoal work rename` cannot be all digits. Globally colliding names fail. Commands
+use this name, the space's number or its ID. Directories default to the repository's
 Shoal workspace directory;
 `start --path <dir>` selects an exact new directory for this workspace only (relative
 to the current directory; `~/` allowed). Existing paths and overlaps with Shoal
@@ -5050,7 +5059,7 @@ them, with when they go, and deletes them with `rm`. A chat's files outlive
 the chat the same way: they stay for `cleanup.restore.retention_days` after it
 is removed, listed under its last name. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
-the workspace's or chat's name or ID; run from a chat's agent outside any workspace, `shoal files`, `add`
+the workspace's or chat's number, name or ID, a removed one's by name or ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.
 `--json` gives each as a record with `workspace` or `chat`, the name of what it
 is attached to, `source`, `path`, `bytes`, `title` when it has one, and

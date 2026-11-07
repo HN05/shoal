@@ -594,7 +594,8 @@ distinguish negative answers from command failures; failed checks stop branch
 selection, refresh, and removal with the Git diagnostic.
 
 New-branch creation accepts literal Git branch names and derives a portable,
-globally unique workspace name and directory from them; a normalization collision
+globally unique workspace name and directory from them, prefixed `workspace-`
+where it would be all digits, since a number selects a space; a normalization collision
 fails without
 touching existing work. Branch conflicts get numeric suffixes on the blocking
 component only, never changing the workspace name. Names reserved by the Worktrunk
@@ -2546,7 +2547,13 @@ one namespace, so what applies to both is named for
 the space, and the flag that selects one is `--space`. Each space also has a
 number, the smallest no other space holds when it is recorded, from one
 sequence across repositories, so it stays short to type and read; it lasts as
-long as the space, survives renames and stops, and is freed when the space goes. A chat owns attached
+long as the space, survives renames and stops, and is freed when the space goes.
+Every argument that takes a space selects it by number, name or ID, through
+one resolver in the daemon and one in the client, so a name is never all
+digits: a name someone gives is refused, and a derived one takes its kind as a
+prefix. A number selects only a space that exists, never a removed workspace
+or a queued launch. `--after` is the exception: it names dependencies, where
+a bare number stays an issue, as `shoal start` takes one. A chat owns attached
 files as a workspace does, since its
 agent hands the user reports and pages too; they stay for the same retention
 after the chat is removed, as a chat has no worktree to clean up and its files

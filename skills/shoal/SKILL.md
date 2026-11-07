@@ -22,8 +22,12 @@ worktree resolves the workspace from its directory, without scope or lifecycle
 tracking; `shoal work` lists the workspaces with their `path`. Leases need a
 managed workspace.
 
-Approval requests and questions are numbered `S.N`: the number of the space
-that asked, then the item's own, such as `3.2`.
+Every space has a number, which `shoal work` and `shoal status` show. A
+command that takes a space selects it by that number, its name or its ID:
+`shoal attach 3`, `--space 3`. Space names are never all digits, so
+`shoal work rename` refuses one. A removed workspace has no number. Approval
+requests and questions are numbered `S.N`: the number of the space that asked,
+then the item's own, such as `3.2`.
 
 A chat in a workspace's worktree (`shoal start --in <workspace>`) reads that
 workspace and changes nothing there: `shoal diff`, `shoal conflicts`,
@@ -68,7 +72,8 @@ own agent from a fork of its session, so it needs only its task after `--`.
 agent's queue entry. The daemon starts queued agents as `max_agents` allows
 (`state: queued`, `position`); `shoal queue` lists entries and `--now` starts
 one regardless. `--after <workspace|queued agent|issue>` (repeatable) holds an
-agent until that work is done, and an issue's agent also waits for the issues
+agent until that work is done, where a bare number is an issue and a workspace
+is named by name or ID, and an issue's agent also waits for the issues
 its forge records as blocking it; the agent then starts on the done workspace's
 branch, and `waiting_for` lists what it still waits for. A Happy agent reports
 its launch (`execution_id`, `pid`, `log`); `prompt_delivered: false` means the
