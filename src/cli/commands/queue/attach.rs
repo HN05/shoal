@@ -19,13 +19,21 @@ use crate::{
 const WAIT: Duration = Duration::from_secs(120);
 const POLL: Duration = Duration::from_millis(200);
 
+/// Refuse to attach to the entry `selector` names when it is a CI job,
+/// which has no session, before anything starts it.
+pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()> {
+    let entries = agent_queue::entries(ctx).await?;
+    let job = entries.iter().find(|entry| {
+        entry.kind == QueueKind::Job && (entry.id == selector || entry.name == selector)
+    });
+    match job {
+        Some(job) => bail!("{} is a CI job, which has no session to attach", job.name),
+        None => Ok(()),
+    }
+}
+
 /// Attach to the session of the started `entry`'s agent once it has one.
 pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
-    ensure!(
-        entry.kind != QueueKind::Job,
-        "{} is a CI job, which has no session to attach",
-        entry.name
-    );
     let workspace = session_workspace(ctx, entry).await?;
     sessions::attach(ctx, Some(SpaceSelector::id(&workspace)), None).await
 }

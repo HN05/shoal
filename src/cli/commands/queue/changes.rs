@@ -16,6 +16,9 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) ->
     );
     ensure!(!attach || ctx.interactive(), "--attach requires a terminal");
     let entry = selection::selected(ctx, entry, "Start> ").await?;
+    if attach {
+        super::attach::require_session(ctx, &entry).await?;
+    }
     let entry = queue::start(&ctx.paths, entry).await?;
     ctx.emit(
         &format!("Starting {} from the agent queue", entry.name),
