@@ -43,6 +43,9 @@ async fn session_workspace(ctx: &Context, entry: &QueueEntry) -> Result<String> 
         if let Some(opened) = current.as_ref().and_then(QueueEntry::workspace) {
             workspace = Some(opened.to_owned());
         }
+        if workspace.is_none() && current.is_none() {
+            workspace = opened_workspace(ctx, entry).await?;
+        }
         match &workspace {
             Some(id) if sessions::has_session(ctx, id).await? => return Ok(id.clone()),
             None if current.is_none() => {
@@ -58,4 +61,17 @@ async fn session_workspace(ctx: &Context, entry: &QueueEntry) -> Result<String> 
         );
         tokio::time::sleep(POLL).await;
     }
+}
+
+/// The ID of the workspace the launch `entry` opened, found by its name in
+/// its repository once its agent took the entry out of the queue before a
+/// poll saw the workspace it recorded.
+async fn opened_workspace(ctx: &Context, entry: &QueueEntry) -> Result<Option<String>> {
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    Ok(workspaces
+        .into_iter()
+        .find(|workspace| {
+            workspace.repository_id == entry.repository_id && workspace.name == entry.name
+        })
+        .map(|workspace| workspace.id))
 }
