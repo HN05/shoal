@@ -481,8 +481,8 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
 
 #[test]
 fn apps_read_forge_items_through_the_daemon() {
-    use shoal::client::forge::items::link::{ItemKind, LinkKind, Selection};
-    use shoal::client::{
+    use shoal_client::forge::items::link::{ItemKind, LinkKind, Selection};
+    use shoal_client::{
         connection::Connector, forge_reads, output::view::Shown, paths::Paths,
         protocol::ItemContext, views,
     };

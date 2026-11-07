@@ -20,7 +20,8 @@ specific code, and any other code is the daemon's, as it sent it. A command
 that waits on an approval it requested is not an error: it exits 2 with
 `code: "approval_pending"` or `"approval_denied"` on stdout. A Rust program
 reads every command's JSON, the error included, with the types of the
-[library's](#apps) `shoal::client::output`.
+[`shoal-client`](#apps) library's
+[`output`](../crates/shoal-client/src/output.rs) module.
 
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
@@ -111,7 +112,7 @@ without an installed service offers to run `shoal daemon install` in an interact
 current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
-[configs/default.toml](../configs/default.toml), which states every default,
+[default.toml](../crates/shoal-client/configs/default.toml), which states every default,
 never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
@@ -579,15 +580,14 @@ which is why `[idle_stop]` is opt-in.
 
 ### Apps
 
-Apps other than the CLI, such as Quay, use Shoal's protocol through the `shoal`
-library, a git tag of a Shoal release built without its default features,
-which hold the CLI and the daemon:
+Apps other than the CLI, such as Quay, use Shoal's protocol through the
+`shoal-client` library, from a git tag of a Shoal release, with no features:
 
 ```toml
-shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>", default-features = false }
+shoal-client = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>" }
 ```
 
-`shoal::client` holds every request the CLI makes, each a function of the
+`shoal_client` holds every request the CLI makes, each a function of the
 module for its subject, such as `questions::ask` or `leases::acquire_port`,
 returning its reply's types; `connection` sends them to the daemon a
 `Connector` names, and `subscriptions`
@@ -2239,16 +2239,16 @@ these modes:
 
 | Mode | Kind | Rules | Instructions |
 |---|---|---|---|
-| `worker` | workspace | `work`, `worker` | [implement the subject](../src/client/config/modes/worker.md) |
+| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-client/src/config/modes/worker.md) |
 | `chat` | chat | `work`, `chat` | none |
-| `plan` | chat | `work`, `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
-| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
+| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-client/src/config/modes/plan.md) |
+| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-client/src/config/rules/orchestrate.md) | none |
 
 The built-in `setup` mode is apart from these: [`repo setup` and `config
 setup`](#set-up-config) start it, and a space records it as its mode. It takes
 the kind, reach and rules of `worker` in a workspace and of `orchestrate` in a
 chat without a repository, as config sets them, and [its own
-instructions](../src/client/config/modes/setup.md) after its subject. Config
+instructions](../crates/shoal-client/src/config/modes/setup.md) after its subject. Config
 cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
 errors that ask for another name, and `shoal start --mode setup` is refused.
 
@@ -2270,7 +2270,7 @@ instead of the picker. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal work status`, `shoal inbox`, the queue and the menu name a
-mode other than `worker` for a workspace or `chat` for a chat. The built-in [`work` rule](../src/client/config/rules/work.md)
+mode other than `worker` for a workspace or `chat` for a chat. The built-in [`work` rule](../crates/shoal-client/src/config/rules/work.md)
 holds the practices of Shoal's workflow. A user's own modes may list it or
 leave it out, and a `rules/work.md` or `[rules.work]` replaces or extends it as
 for any rule. `review` holds the style of a [local review](#local-reviews), and
@@ -2297,12 +2297,12 @@ An agent is told, in order: the [`shoal` skill](#agent-skill-outside-project-rep
 which describes Shoal's commands; the facts of its space; the space rules; its
 mode's rules; and its subject with its mode's instructions. Every agent's system
 text, in any mode, starts with Shoal's guidance: the facts of the kind of space
-it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
-[chat in the checkout](../src/client/config/templates/facts/checkout_chat.md),
-a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md)
-or a [chat without a repository](../src/client/config/templates/facts/root_chat.md),
+it runs in, a [workspace](../crates/shoal-client/src/config/templates/facts/workspace.md), a
+[chat in the checkout](../crates/shoal-client/src/config/templates/facts/checkout_chat.md),
+a [chat in a workspace's worktree](../crates/shoal-client/src/config/templates/facts/workspace_chat.md)
+or a [chat without a repository](../crates/shoal-client/src/config/templates/facts/root_chat.md),
 which describe the space and state no practices; then the
-[space rules](../src/client/config/templates/space_rules.md), to load the
+[space rules](../crates/shoal-client/src/config/templates/space_rules.md), to load the
 `shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` once its work is
 done, to name its space with `shoal work rename`, and to run each `shoal`
 command as its own shell call, writing the files it reads with file tools. Its
@@ -2322,7 +2322,7 @@ prompt through Happy's delivery path (or as the first message when there is no
 subject). Desktop handoffs receive neither. User prompt arguments are preserved.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
-[review template](../src/client/config/templates/review.md), its task,
+[review template](../crates/shoal-client/src/config/templates/review.md), its task,
 read-only rules, output contract and treatment of history, which no layer
 replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
 `{path}`, the review's checkout, and `{base}`, the commit it compares against,

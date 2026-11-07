@@ -82,14 +82,14 @@ for delivering a PR, under Committing near the end, decide when work is done.
   records stay in the daemon. What one forge does its own way belongs in its
   `Backend` implementation, never in a match on the forge kind, and reading an
   issue, PR or run by its kind goes through `ForgeRepo`'s one operation for it.
-- Apps use Shoal's protocol through the library's one public module,
-  `shoal::client`, with no compatibility promise: the protocol changes freely
-  and only the exact version match protects a client. The CLI and apps share
-  that module's connection and client-side logic: the CLI sends each daemon
-  request through a named operation of the client module for its subject and
-  never builds one itself. What the CLI alone needs, such as parsing,
-  prompting and printing, stays in `cli`, and the library builds without the
-  default `cli` feature.
+- Apps use Shoal's protocol through the `shoal-client` crate, with no
+  compatibility promise: the protocol changes freely and only the exact
+  version match protects a client. The CLI and apps share that crate's
+  connection and client-side logic: the CLI sends each daemon request through
+  a named operation of the client module for its subject and never builds one
+  itself. What the CLI alone needs, such as parsing, prompting and printing,
+  stays in `cli`, and `shoal-client` depends on no Shoal crate but
+  `shoal-forge`, `shoal-subprocess` and `shoal-config-derive`.
 - Modules under `cli` serve only the CLI. Code that the daemon, the execution
   wrapper, the proxy or the workers use, directly or through code they call,
   lives in a top-level module named for what it does, outside `cli`; nothing

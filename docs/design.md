@@ -53,10 +53,10 @@ frame is sent in pages, each frame but the last marked as continued; streamed
 listings send their frames, then `ok`; the daemon answers any other reply that
 would not fit with an error saying so.
 The protocol is the one protocol for the CLI and for apps. Apps use it through
-`shoal::client`, the library's one public module, which holds the requests and
-responses with the types they carry, the connection the CLI makes, and the
-client-side logic the CLI shares with apps; the CLI and the daemon stay private
-to the crate, behind the default `cli` feature. Commands print only the
+the `shoal-client` library, which holds the requests and responses with the
+types they carry, the connection the CLI makes, and the client-side logic the
+CLI shares with apps; the CLI and the daemon are the binary-only `shoal`
+package, which depends on it. Commands print only the
 library's types with `--json`, which a development build checks read back, so
 a program that runs `shoal --json` parses the output with them. The protocol
 keeps no
@@ -69,7 +69,7 @@ operations, below, whose ID a client follows for typed progress, then a result
 or a typed failure. A subscription sends a snapshot of the records of its
 topics, then each record that changed or was removed, comparing again after
 each stored change, until its scope token is revoked; a daemon restart closes
-it and `shoal::client` subscribes again and reports the new snapshot as a
+it and `shoal_client` subscribes again and reports the new snapshot as a
 resync.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
@@ -111,7 +111,7 @@ asked for it goes. The worker acts with the caller's scope and, from the CLI, it
 environment without the secrets an agent launch exported, and runs the same tracked executions and hooks the CLI ran, under
 the same checks; what it and its processes write becomes the operation's output,
 and it reports typed steps and its end. The CLI starts an operation and follows
-it through `shoal::client`, as an app does, showing its output where it showed
+it through `shoal_client`, as an app does, showing its output where it showed
 it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps open a
 workspace and start its preparation through one request, `StartWorkspace` or
 `StartSplit`: it refuses an agent that cannot run or an issue that is not open
@@ -426,7 +426,7 @@ has no head channel, so every Homebrew installation runs a CI-signed release.
 leaves Homebrew installations to Homebrew, so one package manager owns each
 installation. A shared release-target table drives cross-builds,
 archive names and Homebrew platform selectors.
-Named configuration templates in `configs/` are embedded at build time, so
+Named configuration templates in `crates/shoal-client/configs/` are embedded at build time, so
 installation needs no source checkout or network access.
 Shoal owns the generated formula. One Forgejo Actions workflow releases: it
 bumps versions, validates, creates and merges a version PR under normal branch
@@ -1695,7 +1695,7 @@ succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
 tracking or scope. A host runs Shoal's tracked agents, chats and demos and shows
 them, as zmx, Herdr, Rex, tmux and Zellij do; an external app, such as Quay, is a UI that is
-not a host and reads and acts on Shoal's state through `shoal::client`. It holds
+not a host and reads and acts on Shoal's state through `shoal_client`. It holds
 a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
 Happy sessions are an optional integration behind a default Cargo feature and
@@ -2736,7 +2736,7 @@ Copying several spaces needs no such check, since a copy removes nothing: one
 that cannot be copied is reported and the rest are copied.
 Agent conversations are the agent tools' private files, which Shoal never
 reads or changes. Shoal tells clients where they are without reading them: the
-daemon reports the sessions a space's agents reported, and `shoal::client`
+daemon reports the sessions a space's agents reported, and `shoal_client`
 finds each one's files by ID where its tool keeps them, under the client's
 environment or one the repository's agents ran with, as an export does. An
 export copies each reported session's files unread, and an import puts them at the

@@ -143,3 +143,6 @@ impl ConfigExt for Config {
         Self::load(paths)
     }
 }
+
+#[cfg(test)]
+mod tests;

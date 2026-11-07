@@ -16,12 +16,15 @@ libc = "0.2"
 rusqlite = "0.40.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+shoal-client = { path = "crates/shoal-client" }
 shoal-config-derive = { path = "crates/shoal-config-derive" }
 shoal-forge = { path = "crates/shoal-forge" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
 tempfile = "3"
 tokio = "1"
+toml = "1.1.6"
+toml_edit = "0.25"
 uuid = "1.26.1"
 
 [package]
@@ -34,8 +37,7 @@ license.workspace = true
 
 [features]
 default = ["cli", "happy", "proxy"]
-# The `shoal` command, which runs the CLI and the daemon. Without it the crate
-# builds only `shoal::client`.
+# The `shoal` command, which runs the CLI and the daemon.
 cli = [
     "dep:clap",
     "dep:clap_complete",
@@ -47,6 +49,8 @@ cli = [
     "dep:tempfile",
     "dep:rustix",
     "dep:zbus",
+    "shoal-client/clap",
+    "shoal-client/rusqlite",
     "shoal-forge/clap",
     "shoal-forge/rusqlite",
     "tokio/rt-multi-thread",
@@ -80,6 +84,7 @@ rusqlite = { workspace = true, features = ["bundled"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = { version = "0.11", optional = true }
+shoal-client.workspace = true
 shoal-config-derive.workspace = true
 shoal-forge.workspace = true
 shoal-proxy = { workspace = true, optional = true }
@@ -87,8 +92,8 @@ shoal-subprocess.workspace = true
 socket2 = { version = "0.6", optional = true }
 tempfile = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "sync", "time"] }
-toml = "1.1.6"
-toml_edit = "0.25"
+toml.workspace = true
+toml_edit.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -97,6 +102,7 @@ rustix = { version = "1", features = ["fs"], optional = true }
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy"], optional = true }
 
 [dev-dependencies]
+shoal-client = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 

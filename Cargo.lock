@@ -1163,6 +1163,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shoal-client",
  "shoal-config-derive",
  "shoal-forge",
  "shoal-proxy",
@@ -1174,6 +1175,28 @@ dependencies = [
  "toml_edit",
  "uuid",
  "zbus",
+]
+
+[[package]]
+name = "shoal-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "futures-util",
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shoal-config-derive",
+ "shoal-forge",
+ "shoal-subprocess",
+ "tempfile",
+ "tokio",
+ "toml",
+ "toml_edit",
+ "uuid",
 ]
 
 [[package]]
