@@ -21334,9 +21334,9 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
 }
 
 /// Every workspace agent's prompt starts with Shoal's guidance, which spans
-/// these lines.
+/// these lines and ends with the space rules.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
-const GUIDANCE_END: &str = "Name your space with `shoal work rename` once you know what it is for.";
+const SPACE_RULES: &str = include_str!("../src/client/config/templates/space_rules.md");
 /// The built-in `work` rule, which the built-in modes list right after the
 /// guidance.
 const WORK_RULE: &str = include_str!("../src/client/config/rules/work.md");
@@ -21344,7 +21344,8 @@ const WORK_RULE: &str = include_str!("../src/client/config/rules/work.md");
 /// Where the guidance that starts at `start` in `text` ends, with the
 /// built-in `work` rule when it follows.
 fn guidance_end(text: &str, start: usize) -> Option<usize> {
-    let end = start + text[start..].find(GUIDANCE_END)? + GUIDANCE_END.len();
+    let rules = SPACE_RULES.trim_end();
+    let end = start + text[start..].find(rules)? + rules.len();
     let work = format!("\n\n{}", WORK_RULE.trim_end());
     Some(if text[end..].starts_with(&work) {
         end + work.len()

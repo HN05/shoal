@@ -2274,7 +2274,8 @@ or a [chat without a repository](../src/client/config/templates/facts/root_chat.
 which describe the space and state no practices; then the
 [space rules](../src/client/config/templates/space_rules.md), to load the
 `shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` once its work is
-done and to name its space with `shoal work rename`. Its
+done, to name its space with `shoal work rename`, and to run each `shoal`
+command as its own shell call, writing the files it reads with file tools. Its
 mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
 message is its subject, an issue or the prompt it was given, worded the same in
 every mode, followed by its mode's instructions; without a subject it has no
