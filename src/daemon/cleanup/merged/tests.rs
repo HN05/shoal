@@ -139,46 +139,55 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
 }
 
 #[tokio::test]
-async fn saved_work_keeps_idle_and_unmerged_workspaces_only() {
-    for agent in [false, true] {
-        let f = Fixture::new().await;
-        f.unlink_issue().await;
-        let directory = f.manager.paths.workspace_state(&f.workspace.id);
-        fs::create_dir_all(&directory).unwrap();
-        let (name, record) = if agent {
-            (
-                "saved.recovery.json",
-                r#"{"agent":"claude","stage":"stopped"}"#,
-            )
-        } else {
-            ("saved.command.json", r#"{"argv":["cargo","test"]}"#)
-        };
-        fs::write(directory.join(name), record).unwrap();
-        assert_eq!(
-            f.manager.cleanup_candidacy(&f.workspace.id).await.unwrap(),
-            Err(CleanupReason::Recovering)
-        );
-        assert!(f.kept_after(24).await, "unmerged saved work stays");
-        f.squash_merge();
-        assert_eq!(
-            f.manager.cleanup_candidacy(&f.workspace.id).await.unwrap(),
-            Err(CleanupReason::Recovering),
-            "idle cleanup still keeps saved work after merging"
-        );
-        let report = super::super::on_request(
-            &f.manager,
-            true,
-            &super::super::Selection {
-                spaces: super::super::Pick::All,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(report.removed, std::slice::from_ref(&f.workspace.name));
-        assert!(report.kept.is_empty());
-        assert!(!f.kept_after(5).await);
-    }
+async fn a_saved_command_keeps_idle_and_unmerged_workspaces_only() {
+    saved_work_keeps_idle_and_unmerged_workspaces_only(
+        "saved.command.json",
+        r#"{"argv":["cargo","test"]}"#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn a_saved_agent_keeps_idle_and_unmerged_workspaces_only() {
+    saved_work_keeps_idle_and_unmerged_workspaces_only(
+        "saved.recovery.json",
+        r#"{"agent":"claude","stage":"stopped"}"#,
+    )
+    .await;
+}
+
+/// Save `record` as the workspace's state file `name` and check that only a
+/// requested cleanup removes the workspace, merged or not.
+async fn saved_work_keeps_idle_and_unmerged_workspaces_only(name: &str, record: &str) {
+    let f = Fixture::new().await;
+    f.unlink_issue().await;
+    let directory = f.manager.paths.workspace_state(&f.workspace.id);
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join(name), record).unwrap();
+    assert_eq!(
+        f.manager.cleanup_candidacy(&f.workspace.id).await.unwrap(),
+        Err(CleanupReason::Recovering)
+    );
+    assert!(f.kept_after(24).await, "unmerged saved work stays");
+    f.squash_merge();
+    assert_eq!(
+        f.manager.cleanup_candidacy(&f.workspace.id).await.unwrap(),
+        Err(CleanupReason::Recovering),
+        "idle cleanup still keeps saved work after merging"
+    );
+    let report = super::super::on_request(
+        &f.manager,
+        true,
+        &super::super::Selection {
+            spaces: super::super::Pick::All,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.removed, std::slice::from_ref(&f.workspace.name));
+    assert!(report.kept.is_empty());
+    assert!(!f.kept_after(5).await);
 }
 
 #[tokio::test]
