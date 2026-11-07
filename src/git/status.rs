@@ -290,10 +290,11 @@ pub(crate) async fn trial_merge_tree(
     Ok(Some(stdout.trim().to_owned()))
 }
 
+/// Whether `revision` records `tree`, given with or without Git's newline.
 async fn records_tree(repo: &Path, revision: &str, tree: &str) -> bool {
     super::verify_revision(repo, &format!("{revision}^{{tree}}"), run)
         .await
-        .is_ok_and(|other| other == tree)
+        .is_ok_and(|other| other.trim() == tree.trim())
 }
 
 #[cfg(test)]

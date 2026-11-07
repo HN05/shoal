@@ -130,3 +130,17 @@ async fn merged_into_sees_merges_squashes_and_rebases() {
         assert!(!merged(target).await, "{target}");
     }
 }
+
+#[tokio::test]
+async fn a_ref_records_the_tree_head_state_reads() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    fs::write(repo.join("one"), "one\n").unwrap();
+    commit(&repo, "one");
+    // Another commit with HEAD's tree, which HEAD's history does not reach.
+    let copy = git(&repo, &["commit-tree", "HEAD^{tree}", "-m", "copy"]);
+    git(&repo, &["update-ref", "refs/heads/copy", copy.trim()]);
+    let tree = crate::git::head_state(&repo).await.unwrap().tree;
+    assert!(super::records_tree(&repo, "copy", &tree).await);
+    assert!(!super::records_tree(&repo, "main~1", &tree).await);
+}

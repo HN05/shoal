@@ -75,3 +75,34 @@ async fn checkout_dirs_tell_a_linked_worktree_from_its_main_checkout() {
         }
     );
 }
+
+#[tokio::test]
+async fn head_state_names_the_tree_and_no_branch_when_detached() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(&repo, &["checkout", "-q", "-b", "feature/x"]);
+    let commit = revision(&repo, "HEAD", run)
+        .await
+        .unwrap()
+        .trim()
+        .to_owned();
+    let tree = revision(&repo, "HEAD^{tree}", run)
+        .await
+        .unwrap()
+        .trim()
+        .to_owned();
+    let on_branch = head_state(&repo).await.unwrap();
+    assert_eq!(
+        on_branch,
+        HeadState {
+            commit: commit.clone(),
+            tree: tree.clone(),
+            branch: Some("feature/x".to_owned()),
+        }
+    );
+    // A branch named HEAD makes the name HEAD ambiguous, but not HEAD itself.
+    git(&repo, &["update-ref", "refs/heads/HEAD", "HEAD"]);
+    assert_eq!(head_state(&repo).await.unwrap(), on_branch);
+    git(&repo, &["checkout", "-q", "--detach"]);
+    assert_eq!(head_state(&repo).await.unwrap().branch, None);
+}

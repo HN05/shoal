@@ -39,6 +39,31 @@ pub async fn head_and_branch(repo: &Path) -> Result<(String, Option<String>)> {
     parse_head_and_branch(&output)
 }
 
+/// The commit HEAD names, its tree, and the branch it is on.
+#[derive(Debug, PartialEq, Eq)]
+pub struct HeadState {
+    pub commit: String,
+    pub tree: String,
+    /// `None` when HEAD is detached.
+    pub branch: Option<String>,
+}
+
+/// HEAD's commit and tree come from one Git run, its branch from another:
+/// `rev-parse --symbolic-full-name HEAD` fails once a branch is named `HEAD`.
+pub async fn head_state(repo: &Path) -> Result<HeadState> {
+    let output = run(repo, &["rev-parse", "HEAD^{tree}", "HEAD"]).await?;
+    let mut lines = output.lines();
+    let tree = lines.next().context("git rev-parse printed no tree")?;
+    let commit = lines.next().context("git rev-parse printed no commit")?;
+    let branch = current_branch(repo).await?;
+    let branch = branch.trim_end_matches('\n');
+    Ok(HeadState {
+        commit: commit.to_owned(),
+        tree: tree.to_owned(),
+        branch: (!branch.is_empty()).then(|| branch.to_owned()),
+    })
+}
+
 /// Git prints `HEAD` as the name of a detached HEAD, and nothing when it
 /// could not read the name, which leaves the branch unknown rather than
 /// detached.

@@ -158,13 +158,16 @@ async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> 
         return Ok(());
     }
     let path = &check.workspace.path;
-    let head = git::resolve_commit(path, "HEAD", git::run).await?;
+    let git::HeadState {
+        commit,
+        tree,
+        branch,
+    } = git::head_state(path).await?;
     let changed = !git::status::porcelain(path).await?.is_empty();
     check.starting_files = changed && holds_starting_files(&check.workspace).await?;
     check.dirty = changed && !check.starting_files;
-    check.branch = checked_out_branch(path).await?;
-    check.head = Some(head);
-    let tree = git::status::head_tree(path).await?;
+    check.branch = branch;
+    check.head = Some(commit);
     // The default branch may be absent locally (workspaces created from another ref).
     let default_refs = match default_branch {
         Some(name) => git::status::default_refs(path, name).await?,
