@@ -66,15 +66,15 @@ pub(crate) fn operation(
     let only = |operation| Ok((operation, vec![job.name.clone()]));
     if let (Location::GitHub { run, .. }, CiAction::Rerun) = (location, action) {
         // GitHub reruns only finished runs.
-        let pending = jobs
+        let unfinished = jobs
             .iter()
             .filter(in_run(run))
-            .find(|other| other.state.pending());
-        if let Some(pending) = pending {
+            .find(|other| other.state.unfinished());
+        if let Some(unfinished) = unfinished {
             bail!(
                 "check {} is still {} in the same workflow run; wait for it or cancel it before rerunning {}",
-                pending.name,
-                pending.state,
+                unfinished.name,
+                unfinished.state,
                 job.name
             );
         }

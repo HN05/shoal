@@ -86,15 +86,15 @@ pub(crate) fn operation(
     let run = Operation::ForgejoRun { run_number, action };
     match action {
         CiAction::Rerun if selected.iter().filter(in_run).count() > 1 => {
-            if let Some(pending) = jobs
+            if let Some(unfinished) = jobs
                 .iter()
                 .filter(in_run)
-                .find(|other| other.state.pending())
+                .find(|other| other.state.unfinished())
             {
                 bail!(
                     "check {} is still {} in the same workflow run; wait for it or cancel it before rerunning {}",
-                    pending.name,
-                    pending.state,
+                    unfinished.name,
+                    unfinished.state,
                     job.name
                 );
             }

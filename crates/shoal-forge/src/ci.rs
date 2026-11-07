@@ -57,7 +57,7 @@ states!(
 
 impl JobState {
     /// Whether the job or run has yet to finish.
-    pub(crate) fn pending(self) -> bool {
+    pub(crate) fn unfinished(self) -> bool {
         matches!(self, Self::Waiting | Self::Running)
     }
 }
@@ -107,7 +107,7 @@ impl CiAction {
     pub(crate) fn applies_to(self) -> (fn(JobState) -> bool, &'static str) {
         match self {
             Self::Rerun => (|state| state == JobState::Failed, "failed"),
-            Self::Cancel => (JobState::pending, "running or waiting"),
+            Self::Cancel => (JobState::unfinished, "running or waiting"),
         }
     }
 }
