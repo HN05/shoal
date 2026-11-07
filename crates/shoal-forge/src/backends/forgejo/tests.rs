@@ -55,9 +55,10 @@ fn searches_go_through_the_issue_list_for_either_kind() {
 
 #[test]
 fn forgejo_statuses_need_every_status_and_known_states() {
-    let combined = json!({"total_count": 2, "statuses": [
+    let combined = json!({"total_count": 3, "statuses": [
         {"context": "ci / rust", "status": "success"},
-        {"context": "review", "status": "pending"}
+        {"context": "review", "status": "pending", "description": "Has started running"},
+        {"context": "ci / docs", "status": "pending", "description": "Waiting to run"}
     ]});
     assert_eq!(
         statuses(&combined).unwrap(),
@@ -70,6 +71,10 @@ fn forgejo_statuses_need_every_status_and_known_states() {
                 name: "review".into(),
                 state: "Pending"
             },
+            RestCheck {
+                name: "ci / docs".into(),
+                state: "Waiting"
+            },
         ]
     );
     assert!(
@@ -77,7 +82,7 @@ fn forgejo_statuses_need_every_status_and_known_states() {
             .unwrap()
             .is_empty()
     );
-    let partial = json!({"total_count": 3, "statuses": combined["statuses"]});
+    let partial = json!({"total_count": 4, "statuses": combined["statuses"]});
     assert!(statuses(&partial).is_err());
     let unknown = json!({"total_count": 1, "statuses": [{"context": "x", "status": "later"}]});
     assert!(statuses(&unknown).is_err());

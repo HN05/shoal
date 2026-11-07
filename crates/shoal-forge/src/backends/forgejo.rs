@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
-mod actions;
+pub(crate) mod actions;
 mod organization;
 mod review;
 mod reviewers;
@@ -1111,6 +1111,7 @@ fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
                 .as_str()
                 .context("Forgejo CI status has no context")?;
             let state = match status["status"].as_str() {
+                Some("pending") if actions::status_waits(status) => "Waiting",
                 Some("pending") => "Pending",
                 Some("success") => "Success",
                 Some("failure") => "Failure",

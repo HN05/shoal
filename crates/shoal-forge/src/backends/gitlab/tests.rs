@@ -126,7 +126,8 @@ fn statuses_keep_the_newest_of_each_name_in_shared_states() {
         {"id": 3, "name": "rust", "status": "running"},
         {"id": 2, "name": "lint", "status": "failed", "allow_failure": true},
         {"id": 4, "name": "deploy", "status": "manual"},
-        {"id": 5, "name": "external", "status": "canceled"}
+        {"id": 5, "name": "external", "status": "canceled"},
+        {"id": 6, "name": "docs", "status": "pending"}
     ]);
     let checks = statuses(listed.as_array().unwrap()).unwrap();
     assert_eq!(
@@ -136,6 +137,7 @@ fn statuses_keep_the_newest_of_each_name_in_shared_states() {
             .collect::<Vec<_>>(),
         [
             ("deploy", "Skipped"),
+            ("docs", "Waiting"),
             ("external", "Cancelled"),
             ("lint", "Warning"),
             ("rust", "Pending")
@@ -266,10 +268,12 @@ fn retried_jobs_report_their_newest_attempt() {
         json!({"id": 9, "name": "rust", "status": "running", "target_url": "new"}),
         json!({"id": 8, "name": "docs", "status": "canceled"}),
         json!({"id": 10, "name": "deploy", "status": "waiting_for_callback"}),
+        json!({"id": 11, "name": "audit", "status": "pending"}),
     ];
     assert_eq!(
         latest_checks(&gitlab).unwrap(),
         [
+            ("audit".into(), JobState::Waiting, String::new()),
             ("deploy".into(), JobState::Running, String::new()),
             ("docs".into(), JobState::Failed, String::new()),
             ("rust".into(), JobState::Running, "new".into())

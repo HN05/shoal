@@ -32,7 +32,8 @@ pub(crate) fn state(value: &Value) -> Result<JobState> {
                 Some("failure" | "timed_out" | "cancelled" | "startup_failure"),
             ) => JobState::Failed,
             (Some("completed"), _) => JobState::Finished,
-            (Some(_), _) => JobState::Running,
+            (Some("in_progress"), _) => JobState::Running,
+            (Some(_), _) => JobState::Waiting,
             (None, _) => bail!("GitHub run or job has no status"),
         },
     )
@@ -65,14 +66,15 @@ pub(crate) fn operation(
     let only = |operation| Ok((operation, vec![job.name.clone()]));
     if let (Location::GitHub { run, .. }, CiAction::Rerun) = (location, action) {
         // GitHub reruns only finished runs.
-        let running = jobs
+        let pending = jobs
             .iter()
             .filter(in_run(run))
-            .find(|other| other.state == JobState::Running);
-        if let Some(running) = running {
+            .find(|other| other.state.pending());
+        if let Some(pending) = pending {
             bail!(
-                "check {} is still running in the same workflow run; wait for it or cancel it before rerunning {}",
-                running.name,
+                "check {} is still {} in the same workflow run; wait for it or cancel it before rerunning {}",
+                pending.name,
+                pending.state,
                 job.name
             );
         }

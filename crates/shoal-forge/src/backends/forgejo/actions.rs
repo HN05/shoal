@@ -86,14 +86,15 @@ pub(crate) fn operation(
     let run = Operation::ForgejoRun { run_number, action };
     match action {
         CiAction::Rerun if selected.iter().filter(in_run).count() > 1 => {
-            if let Some(running) = jobs
+            if let Some(pending) = jobs
                 .iter()
                 .filter(in_run)
-                .find(|other| other.state == JobState::Running)
+                .find(|other| other.state.pending())
             {
                 bail!(
-                    "check {} is still running in the same workflow run; wait for it or cancel it before rerunning {}",
-                    running.name,
+                    "check {} is still {} in the same workflow run; wait for it or cancel it before rerunning {}",
+                    pending.name,
+                    pending.state,
                     job.name
                 );
             }
@@ -210,11 +211,21 @@ pub(crate) async fn run_id_for(
 /// The state of a run or job from its status.
 pub(crate) fn state(status: &Value) -> Result<JobState> {
     Ok(match status.as_str() {
-        Some("waiting" | "running" | "blocked" | "unknown") => JobState::Running,
+        Some("waiting" | "blocked") => JobState::Waiting,
+        Some("running" | "unknown") => JobState::Running,
         Some("failure" | "cancelled") => JobState::Failed,
         Some("success" | "skipped") => JobState::Finished,
         status => anyhow::bail!("unknown Forgejo Actions status {status:?}"),
     })
+}
+
+/// Whether a pending commit status reports a Forgejo Actions job that no
+/// runner has taken, which only its description tells.
+pub(crate) fn status_waits(status: &Value) -> bool {
+    matches!(
+        status["description"].as_str(),
+        Some("Waiting to run" | "Blocked by required conditions")
+    )
 }
 
 /// The one run a list filtered by `number` holds.

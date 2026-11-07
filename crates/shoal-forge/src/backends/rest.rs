@@ -18,8 +18,8 @@ use crate::{
     updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
 };
 
-/// A CI check in the states every REST forge is mapped to; `Pending` is the
-/// only incomplete one.
+/// A CI check in the states every REST forge is mapped to; `Waiting`, for a
+/// job no runner has taken, and `Pending` are the incomplete ones.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RestCheck {
     pub name: String,

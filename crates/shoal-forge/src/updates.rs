@@ -612,7 +612,7 @@ impl Snapshot {
                 .into_iter()
                 .map(|check| {
                     let entry = Check {
-                        complete: check.state != "Pending",
+                        complete: !matches!(check.state, "Pending" | "Waiting"),
                         state: check.state.into(),
                         name: check.name.clone(),
                         revision: head.clone(),

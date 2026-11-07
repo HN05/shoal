@@ -26,6 +26,7 @@ fn actions_select_named_checks_in_their_state_or_every_ci_job() {
         job("lint", JobState::Finished, gitlab),
         job("rust", JobState::Finished, gitlab),
         job("external", JobState::Failed, None),
+        job("audit", JobState::Waiting, gitlab),
     ];
     assert_eq!(
         names(select(&jobs, CiAction::Rerun, &[]).unwrap()),
@@ -33,7 +34,7 @@ fn actions_select_named_checks_in_their_state_or_every_ci_job() {
     );
     assert_eq!(
         names(select(&jobs, CiAction::Cancel, &[]).unwrap()),
-        ["docs"]
+        ["docs", "audit"]
     );
     assert_eq!(
         names(select(&jobs, CiAction::Rerun, &["rust".into()]).unwrap()),
@@ -42,7 +43,7 @@ fn actions_select_named_checks_in_their_state_or_every_ci_job() {
     assert!(select(&jobs, CiAction::Rerun, &["lint".into()]).is_err());
     assert!(select(&jobs, CiAction::Cancel, &["other".into()]).is_err());
     assert!(select(&jobs, CiAction::Rerun, &["external".into()]).is_err());
-    assert!(select(&jobs[2..], CiAction::Rerun, &[]).is_err());
+    assert!(select(&jobs[2..5], CiAction::Rerun, &[]).is_err());
 }
 
 #[test]
@@ -72,8 +73,13 @@ fn github_reruns_several_failed_jobs_of_a_run_together() {
     assert_eq!(checks, ["rust"]);
     let (planned, _) = operations(&GitHub, &jobs, &jobs[4..5], CiAction::Cancel).unwrap();
     assert_eq!(planned, [post("actions/runs/3/cancel")]);
-    // A run with a running job refuses reruns until it finishes.
+    // A run with a running or waiting job refuses reruns until it finishes.
     assert!(operations(&GitHub, &jobs, &jobs[5..], CiAction::Rerun).is_err());
+    let waiting = [
+        job("test", JobState::Waiting, github(3, 31)),
+        jobs[5].clone(),
+    ];
+    assert!(operations(&GitHub, &waiting, &waiting[1..], CiAction::Rerun).is_err());
 }
 
 #[test]

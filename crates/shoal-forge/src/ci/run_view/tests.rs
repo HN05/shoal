@@ -127,13 +127,25 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         &run,
         100,
         &json!([{"id": 1, "name": "audit", "status": "success", "run_id": 9331},
-                {"id": 2, "name": "report", "status": "failure", "run_id": 9331}]),
+                {"id": 2, "name": "report", "status": "failure", "run_id": 9331},
+                {"id": 3, "name": "rust", "status": "waiting", "run_id": 9331, "task_id": 0},
+                {"id": 4, "name": "docs", "status": "blocked", "run_id": 9331},
+                {"id": 5, "name": "lint", "status": "running", "run_id": 9331}]),
     )?;
     assert_eq!(
         jobs[1].url.as_deref(),
         Some("https://codeberg.org/team/repo/actions/runs/2765/jobs/101")
     );
-    assert_eq!(jobs[1].state, JobState::Failed);
+    assert_eq!(
+        jobs.iter().map(|job| job.state).collect::<Vec<_>>(),
+        [
+            JobState::Finished,
+            JobState::Failed,
+            JobState::Waiting,
+            JobState::Waiting,
+            JobState::Running
+        ]
+    );
     Ok(())
 }
 

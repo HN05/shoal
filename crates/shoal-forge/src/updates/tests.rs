@@ -414,6 +414,7 @@ fn rest_checks_are_distinct_and_wake_when_they_complete() {
         &[
             ("review/default", "Success"),
             ("rust", "Pending"),
+            ("docs", "Waiting"),
             ("deploy", "Skipped"),
         ],
     );

@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use super::{
     LoginHint,
-    forgejo::{draft_prefix, draft_title},
+    forgejo::{actions, draft_prefix, draft_title},
 };
 use crate::{
     ForgeRepo,
@@ -495,6 +495,9 @@ pub(crate) fn commit_statuses(combined: &Value, dialect: Dialect) -> Result<Vec<
         .iter()
         .map(|status| {
             let state = match status[field].as_str() {
+                Some("pending") if dialect == Dialect::Forgejo && actions::status_waits(status) => {
+                    JobState::Waiting
+                }
                 Some("pending") => JobState::Running,
                 Some("failure" | "error") => JobState::Failed,
                 Some("success" | "warning" | "skipped") => JobState::Finished,

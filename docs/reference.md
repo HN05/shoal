@@ -836,7 +836,8 @@ workspace's changes since its fork point and what it holds, its agent sessions,
 each session its agents reported with the path of its transcript on this machine,
 whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
-conflicts, each CI check's result, the CI runs on an open PR's head that
+conflicts, each CI check's result, which is `waiting` while no runner has taken
+its job where the forge tells that apart, the CI runs on an open PR's head that
 [wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
 reviewer's latest approval or change request. A failed lookup reports its error
 on that item without failing the command. Status counts the space's open
@@ -4305,7 +4306,7 @@ shoal ci run deps.yml                    # start a workflow run on the workspace
 shoal ci run deps.yml --branch main --input level=full
 shoal ci run https://github.com/team/tool/actions/workflows/ci.yml   # a workflow by its link
 shoal ci rerun                           # rerun every failed job on the linked PR's head
-shoal ci cancel --pr 12 --check rust     # cancel one running check of PR 12
+shoal ci cancel --pr 12 --check rust     # cancel one running or waiting check of PR 12
 shoal ci rerun 2765 --failed             # rerun a run's failed jobs
 shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
@@ -4371,7 +4372,8 @@ merging does; processes inside a workspace read, link and act only on runs of
 its own repository.
 
 Without a run, `shoal ci rerun` reruns failed jobs on the current head of the
-linked PR or the one `--pr` names, and `shoal ci cancel` cancels running ones:
+linked PR or the one `--pr` names, and `shoal ci cancel` cancels running or
+waiting ones:
 every such CI job, leaving other providers' checks alone, or each repeated
 `--check` by the name `shoal view` shows, which must be a CI job in that state.
 The daemon uses the forge's job API as the agent account and records an
@@ -4387,7 +4389,8 @@ selected, which waits until none of them runs, and Forgejo cancels each check's
 run.
 `--json` returns `url`, `action` and the `checks` acted on.
 
-`shoal view ci` shows a run's state (`running`, `failed` or `finished`),
+`shoal view ci` shows a run's state (`waiting` until a runner takes a job,
+`running`, `failed` or `finished`),
 branch, workflow and jobs, and the log tails of its failed jobs as `shoal view`
 shows a PR's; `--job` shows only that job's log, in any state, and `--job-id`
 the log of the job with that ID when several share a name. A number after `ci`

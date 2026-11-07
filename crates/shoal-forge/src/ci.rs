@@ -45,14 +45,22 @@ pub(crate) struct Job {
 }
 
 states!(
-    /// Whether a CI job or run is still running and, once it finished,
-    /// whether it failed.
+    /// Whether a CI job or run waits for a runner, is running or, once it
+    /// finished, whether it failed.
     JobState {
         Failed => "failed",
+        Waiting => "waiting",
         Running => "running",
         Finished => "finished",
     }
 );
+
+impl JobState {
+    /// Whether the job or run has yet to finish.
+    pub(crate) fn pending(self) -> bool {
+        matches!(self, Self::Waiting | Self::Running)
+    }
+}
 
 /// A CI job in the repository, by the IDs its forge acts on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,11 +103,11 @@ pub struct Plan {
 }
 
 impl CiAction {
-    /// The state of the jobs the action applies to.
-    pub(crate) fn applies_to(self) -> (JobState, &'static str) {
+    /// Whether the action applies to a job in a state, and those states.
+    pub(crate) fn applies_to(self) -> (fn(JobState) -> bool, &'static str) {
         match self {
-            Self::Rerun => (JobState::Failed, "failed"),
-            Self::Cancel => (JobState::Running, "running"),
+            Self::Rerun => (|state| state == JobState::Failed, "failed"),
+            Self::Cancel => (JobState::pending, "running or waiting"),
         }
     }
 }
@@ -192,11 +200,11 @@ pub(crate) fn id(text: &str) -> Option<u64> {
 /// name, or every CI job it applies to. Other providers' checks have no job
 /// Shoal can act on.
 fn select(jobs: &[Job], action: CiAction, names: &[String]) -> Result<Vec<Job>> {
-    let (state, described) = action.applies_to();
+    let (applies, described) = action.applies_to();
     if names.is_empty() {
         let selected = jobs
             .iter()
-            .filter(|job| job.state == state && job.location.is_some())
+            .filter(|job| applies(job.state) && job.location.is_some())
             .cloned()
             .collect::<Vec<_>>();
         ensure!(
@@ -216,7 +224,7 @@ fn select(jobs: &[Job], action: CiAction, names: &[String]) -> Result<Vec<Job>> 
             named.clone().next().is_some(),
             "check {name} was not found on the PR's current head"
         );
-        let matching = named.filter(|job| job.state == state).collect::<Vec<_>>();
+        let matching = named.filter(|job| applies(job.state)).collect::<Vec<_>>();
         ensure!(!matching.is_empty(), "check {name} is not {described}");
         ensure!(
             matching.iter().all(|job| job.location.is_some()),

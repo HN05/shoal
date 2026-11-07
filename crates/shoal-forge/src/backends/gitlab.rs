@@ -1192,16 +1192,8 @@ fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
             .context("GitLab status has no name")?;
         let id = status["id"].as_u64().context("GitLab status has no ID")?;
         let state = match status["status"].as_str() {
-            Some(
-                "created"
-                | "waiting_for_resource"
-                | "preparing"
-                | "pending"
-                | "running"
-                | "scheduled"
-                | "canceling"
-                | "waiting_for_callback",
-            ) => "Pending",
+            Some("created" | "waiting_for_resource" | "pending" | "scheduled") => "Waiting",
+            Some("preparing" | "running" | "canceling" | "waiting_for_callback") => "Pending",
             Some("success") => "Success",
             Some("failed") if status["allow_failure"] == true => "Warning",
             Some("failed") => "Failure",
@@ -1339,15 +1331,8 @@ fn labels(labels: &Value) -> Vec<String> {
 /// The state a commit status, pipeline or job reports.
 fn status_state(status: &Value) -> Result<JobState> {
     Ok(match status.as_str() {
-        Some(
-            "created"
-            | "waiting_for_resource"
-            | "preparing"
-            | "pending"
-            | "running"
-            | "scheduled"
-            | "waiting_for_callback",
-        ) => JobState::Running,
+        Some("created" | "waiting_for_resource" | "pending" | "scheduled") => JobState::Waiting,
+        Some("preparing" | "running" | "waiting_for_callback") => JobState::Running,
         Some("failed" | "canceled") => JobState::Failed,
         Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
         state => bail!("unknown GitLab CI state {state:?}"),
