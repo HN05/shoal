@@ -99,6 +99,40 @@ async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
     assert_eq!(manager.chat_stopped_by(&chat.id).await.unwrap(), None);
 }
 
+/// A restore that fails leaves the chat stopped by whoever restored it,
+/// whoever stopped it before.
+#[tokio::test]
+async fn a_failed_restore_stops_the_chat_for_its_restorer() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = named_chat(root.path(), &manager, "retried").await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    UNRESUMABLE.lock().unwrap().push(chat.name.clone());
+    let coordinator = Some("coordinator");
+    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.map(str::to_owned));
+    assert!(restart.await.is_err());
+    process.wait().unwrap();
+    let fail_restore = |stopped_by| {
+        let manager = &manager;
+        let id = &chat.id;
+        async move {
+            let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+            let pid = restoring.id();
+            manager.restore_chat(id, pid, None, false).await.unwrap();
+            (manager.return_to_saved(id, pid, "failed", stopped_by))
+                .await
+                .unwrap();
+            restoring.kill();
+            manager.chat_stopped_by(id).await.unwrap()
+        }
+    };
+
+    assert_eq!(fail_restore(None).await, None);
+    assert_eq!(fail_restore(coordinator).await.as_deref(), coordinator);
+}
+
 #[tokio::test]
 async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
     let (root, manager) = manager().await;

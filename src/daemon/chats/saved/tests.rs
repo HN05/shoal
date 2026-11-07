@@ -222,7 +222,7 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
         .unwrap();
 
     manager
-        .return_to_saved(&chat.id, restoring_pid, "the agent is not installed")
+        .return_to_saved(&chat.id, restoring_pid, "the agent is not installed", None)
         .await
         .unwrap();
     restoring.kill();
@@ -246,7 +246,7 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
         .unwrap();
     assert!(
         manager
-            .return_to_saved(&chat.id, 1, "unused")
+            .return_to_saved(&chat.id, 1, "unused", None)
             .await
             .is_err()
     );
@@ -260,7 +260,7 @@ async fn a_restore_that_failed_before_taking_the_chat_tells_the_user() {
     process.wait().unwrap();
 
     manager
-        .return_to_saved(&chat.id, std::process::id(), "no such repository")
+        .return_to_saved(&chat.id, std::process::id(), "no such repository", None)
         .await
         .unwrap();
 

@@ -51,7 +51,10 @@ pub(super) async fn handle(
         } => Body::Chat(manager.restore_chat(&chat, pid, origin, hands_over).await?),
         ChatMethod::CheckChatRestore { .. } => Body::Ok,
         ChatMethod::SaveChat { chat, pid, error } => {
-            manager.return_to_saved(&chat, pid, &error).await?;
+            let stopped_by = caller.map(|caller| caller.space_id.as_str());
+            manager
+                .return_to_saved(&chat, pid, &error, stopped_by)
+                .await?;
             Body::Ok
         }
         ChatMethod::RemoveChat { chat, children } => {

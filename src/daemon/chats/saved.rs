@@ -208,7 +208,7 @@ impl Manager {
                 let id = chat.id.clone();
                 let owner = self.root_dir_owner();
                 let (_, released) = (self.store)
-                    .run(move |db| resave(db, &owner, &id, pid))
+                    .run(move |db| resave(db, &owner, &id, pid, None))
                     .await?;
                 self.ask_user_about(&released).await;
                 Err(error)
@@ -216,15 +216,23 @@ impl Manager {
         }
     }
 
-    /// Record that process `pid` could not restore the chat `id`, failing
-    /// with `error`: the chat waits for `shoal resume` again, if that
-    /// process had taken it over, so the end of the process does not end
-    /// it, and the user, who may not see where it ran, learns why.
-    pub async fn return_to_saved(&self, id: &str, pid: u32, error: &str) -> Result<()> {
+    /// Record that process `pid`, which the process of the space
+    /// `stopped_by` started, could not restore the chat `id`, failing with
+    /// `error`: the chat waits for `shoal resume` again, if that process had
+    /// taken it over, so the end of the process does not end it, stopped by
+    /// that space, and the user, who may not see where it ran, learns why.
+    pub async fn return_to_saved(
+        &self,
+        id: &str,
+        pid: u32,
+        error: &str,
+        stopped_by: Option<&str>,
+    ) -> Result<()> {
         let chat = id.to_owned();
         let owner = self.root_dir_owner();
+        let stopped_by = stopped_by.map(str::to_owned);
         let (saved, released) = (self.store)
-            .run(move |db| resave(db, &owner, &chat, pid))
+            .run(move |db| resave(db, &owner, &chat, pid, stopped_by.as_deref()))
             .await?;
         self.ask_user_about(&released).await;
         self.notify_restore_failed(&saved, error).await;
@@ -341,19 +349,26 @@ fn live_unique_id(process: &Identity) -> Result<Option<String>> {
 }
 
 /// Mark the chat `id` saved for `shoal resume` while it runs as process
-/// `pid`, and refuse it once it runs as another, returning it with the
-/// requests it decided, given back to the user.
+/// `pid`, stopped by the process of the space `stopped_by`, and refuse it
+/// once it runs as another, returning it with the requests it decided, given
+/// back to the user. A chat `pid` never took over keeps its stopper.
 fn resave(
     db: &mut Connection,
     owner: &std::path::Path,
     id: &str,
     pid: u32,
+    stopped_by: Option<&str>,
 ) -> Result<(Chat, Vec<ApprovalRequest>)> {
     let tx = db.transaction()?;
     tx.execute(
         "UPDATE chats SET restore=?3,stopped_at=unixepoch(),saved=1
          WHERE id=?1 AND pid=?2 AND restore IS NULL",
         params![id, pid, ChatRestore::Resume],
+    )?;
+    // Also once a failure inside the restore saved it again.
+    tx.execute(
+        "UPDATE chats SET stopped_by=?3 WHERE id=?1 AND pid=?2",
+        params![id, pid, stopped_by],
     )?;
     let chat = recorded(&tx, owner)?
         .into_iter()
@@ -414,7 +429,7 @@ fn restore(db: &mut Connection, owner: &std::path::Path, restored: &Restored) ->
     ensure_place_free(&tx, repository, restored.workspace.as_deref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
-            unique_id=?6
+            unique_id=?6,stopped_by=NULL
          WHERE id=?1 AND restore IS NOT NULL",
         params![
             restored.id,
