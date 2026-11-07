@@ -9249,108 +9249,136 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership() {
+fn a_failed_simulator_creation_retains_its_audit_and_ownership() {
+    simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("create");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_failed_simulator_shutdown_retains_its_audit_and_ownership() {
+    simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("shutdown");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_failed_simulator_erase_retains_its_audit_and_ownership() {
+    simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("erase");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_failed_simulator_boot_retains_its_audit_and_ownership() {
+    simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("bootstatus");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_failed_simulator_eviction_retains_its_audit_and_ownership() {
+    simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("delete");
+}
+
+/// Fail the simulator command `failure` during a clean acquisition and check
+/// the audit and ownership the database held when the command ran.
+#[cfg(target_os = "macos")]
+fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership(failure: &str) {
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
-    for failure in ["create", "shutdown", "erase", "bootstatus", "delete"] {
-        let mut fixture = Fixture::with_tools(Some(&config), true);
-        let workspace = fixture.add("worker");
-        let previous = if failure == "create" {
-            None
-        } else {
-            let sim = fixture.ok(&["acquire", "sim", "--workspace", "worker"]);
-            fixture.ok(&[
-                "release",
-                "sim",
-                "--name",
-                "default",
-                "--workspace",
-                "worker",
-            ]);
-            Some(sim)
-        };
-        fs::write(fixture.root.path().join("sim-observe-db"), "").unwrap();
-        fs::write(fixture.root.path().join("sim-fail"), failure).unwrap();
-        let profile = if failure == "delete" {
-            "tablet"
-        } else {
-            "phone"
-        };
-        let output = fixture.run(&[
-            "acquire",
+    let mut fixture = Fixture::with_tools(Some(&config), true);
+    let workspace = fixture.add("worker");
+    let previous = if failure == "create" {
+        None
+    } else {
+        let sim = fixture.ok(&["acquire", "sim", "--workspace", "worker"]);
+        fixture.ok(&[
+            "release",
             "sim",
+            "--name",
+            "default",
             "--workspace",
             "worker",
-            "--profile",
-            profile,
-            "--clean",
-            "--reason",
-            "Test persistent mutation ordering",
         ]);
-        assert!(!output.status.success(), "{failure}: {output:?}");
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("injected"),
-            "{output:?}"
-        );
-        let events =
-            fs::read_to_string(fixture.root.path().join("sim-persistence-events")).unwrap();
-        let events: Vec<Value> = events
-            .lines()
-            .map(|line| serde_json::from_str(line).unwrap())
-            .collect();
-        let event = events
-            .iter()
-            .find(|event| event["command"] == failure)
-            .unwrap();
-        let saved = &event["simulators"][0];
-        let audit = &event["simulator_clean_requests"][0];
-        assert_eq!(audit["status"], "requested");
-        assert_eq!(audit["workspace_id"], workspace["id"]);
-        if failure == "delete" {
-            assert_eq!(saved["id"], previous.as_ref().unwrap()["id"]);
-            assert_eq!(saved["state"], "idle");
-            assert_eq!(audit["action"], "create_after_eviction");
-            assert_eq!(audit["evicted"][0]["id"], saved["id"]);
-            assert_eq!(audit["evicted"][0]["udid"], event["args"][0]);
+        Some(sim)
+    };
+    fs::write(fixture.root.path().join("sim-observe-db"), "").unwrap();
+    fs::write(fixture.root.path().join("sim-fail"), failure).unwrap();
+    let profile = if failure == "delete" {
+        "tablet"
+    } else {
+        "phone"
+    };
+    let output = fixture.run(&[
+        "acquire",
+        "sim",
+        "--workspace",
+        "worker",
+        "--profile",
+        profile,
+        "--clean",
+        "--reason",
+        "Test persistent mutation ordering",
+    ]);
+    assert!(!output.status.success(), "{failure}: {output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("injected"),
+        "{output:?}"
+    );
+    let events = fs::read_to_string(fixture.root.path().join("sim-persistence-events")).unwrap();
+    let events: Vec<Value> = events
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let event = events
+        .iter()
+        .find(|event| event["command"] == failure)
+        .unwrap();
+    let saved = &event["simulators"][0];
+    let audit = &event["simulator_clean_requests"][0];
+    assert_eq!(audit["status"], "requested");
+    assert_eq!(audit["workspace_id"], workspace["id"]);
+    if failure == "delete" {
+        assert_eq!(saved["id"], previous.as_ref().unwrap()["id"]);
+        assert_eq!(saved["state"], "idle");
+        assert_eq!(audit["action"], "create_after_eviction");
+        assert_eq!(audit["evicted"][0]["id"], saved["id"]);
+        assert_eq!(audit["evicted"][0]["udid"], event["args"][0]);
+    } else {
+        assert_eq!(saved["state"], "booting");
+        assert_eq!(saved["workspace_id"], workspace["id"]);
+        assert_eq!(saved["lease_name"], "default");
+        assert_eq!(audit["simulator_id"], saved["id"]);
+        assert_eq!(audit["udid"], saved["udid"]);
+        if failure == "create" {
+            assert!(saved["udid"].is_null());
+            assert_eq!(audit["action"], "create");
+            assert_eq!(
+                event["args"][0],
+                format!("shoal-{}", saved["id"].as_str().unwrap())
+            );
         } else {
-            assert_eq!(saved["state"], "booting");
-            assert_eq!(saved["workspace_id"], workspace["id"]);
-            assert_eq!(saved["lease_name"], "default");
-            assert_eq!(audit["simulator_id"], saved["id"]);
-            assert_eq!(audit["udid"], saved["udid"]);
-            if failure == "create" {
-                assert!(saved["udid"].is_null());
-                assert_eq!(audit["action"], "create");
-                assert_eq!(
-                    event["args"][0],
-                    format!("shoal-{}", saved["id"].as_str().unwrap())
-                );
-            } else {
-                assert_eq!(saved["udid"], event["args"][0]);
-                assert_eq!(audit["action"], "erase");
-                assert_eq!(audit["erase_completed"], failure == "bootstatus");
-            }
+            assert_eq!(saved["udid"], event["args"][0]);
+            assert_eq!(audit["action"], "erase");
+            assert_eq!(audit["erase_completed"], failure == "bootstatus");
         }
-        let retained = fixture.ok(&["leases", "sim", "--all"])["simulators"][0].clone();
-        assert_eq!(retained["id"], saved["id"]);
-        assert_eq!(retained["workspace_id"], saved["workspace_id"]);
-        assert_eq!(
-            retained["state"],
-            if failure == "delete" {
-                "idle"
-            } else {
-                "failed"
-            }
-        );
-        assert_eq!(
-            fixture.ok(&["history", "sim", "--all"])[0]["status"],
-            "failed"
-        );
-        fixture.restart();
-        assert_eq!(
-            fixture.ok(&["leases", "sim", "--all"])["simulators"][0],
-            retained
-        );
     }
+    let retained = fixture.ok(&["leases", "sim", "--all"])["simulators"][0].clone();
+    assert_eq!(retained["id"], saved["id"]);
+    assert_eq!(retained["workspace_id"], saved["workspace_id"]);
+    assert_eq!(
+        retained["state"],
+        if failure == "delete" {
+            "idle"
+        } else {
+            "failed"
+        }
+    );
+    assert_eq!(
+        fixture.ok(&["history", "sim", "--all"])[0]["status"],
+        "failed"
+    );
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["leases", "sim", "--all"])["simulators"][0],
+        retained
+    );
 }
 
 const RESOURCE_CONFIG: &str = r#"
@@ -23564,128 +23592,144 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 }
 
 #[test]
-fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
-    for cleanup in [false, true] {
-        let mut fixture = Fixture::with_config(Some(&format!(
-            "[cleanup.auto]\nenabled=false\n[cleanup.done]\nenabled={cleanup}\n"
-        )));
-        let hook = install_done_hook(&fixture);
-        set_repository_toml(
-            &fixture,
-            &format!("hooks.post_done = '{}'\n", hook.display()),
+fn multiple_prs_keep_a_done_workspace_without_done_cleanup() {
+    multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(false);
+}
+
+#[test]
+fn multiple_prs_clean_up_only_after_every_merge() {
+    multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(true);
+}
+
+/// Merge a done workspace's PRs one by one, with done cleanup enabled when
+/// `cleanup`: the workspace goes only after every merge, and stays without
+/// done cleanup.
+fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: bool) {
+    let mut fixture = Fixture::with_config(Some(&format!(
+        "[cleanup.auto]\nenabled=false\n[cleanup.done]\nenabled={cleanup}\n"
+    )));
+    let hook = install_done_hook(&fixture);
+    set_repository_toml(
+        &fixture,
+        &format!("hooks.post_done = '{}'\n", hook.display()),
+    );
+    let workspace = fixture.add("multi");
+    fixture.add_github_origin();
+    let head = git(
+        Path::new(workspace["path"].as_str().unwrap()),
+        &["rev-parse", "HEAD"],
+    );
+    let earlier = "e".repeat(40);
+    let prs = std::cell::RefCell::new(serde_json::Map::new());
+    let write_pr = |fixture: &Fixture, number: u64, state: &str, commit: &str| {
+        let pull = format!("repos/team/project/pulls/{number}");
+        let mut prs = prs.borrow_mut();
+        prs.insert(
+            format!("GET {pull}"),
+            serde_json::json!({"body": {"number": number, "title": "PR",
+                "state": if state == "open" { "open" } else { "closed" },
+                "merged": state == "merged", "labels": [],
+                "head": {"ref": "multi"}, "base": {"ref": "main"}}}),
         );
-        let workspace = fixture.add("multi");
-        fixture.add_github_origin();
-        let head = git(
-            Path::new(workspace["path"].as_str().unwrap()),
-            &["rev-parse", "HEAD"],
+        prs.insert(
+            format!("GET {pull}/commits?per_page=100&page=1"),
+            serde_json::json!({"body": [{"sha": commit}]}),
         );
-        let earlier = "e".repeat(40);
-        let prs = std::cell::RefCell::new(serde_json::Map::new());
-        let write_pr = |fixture: &Fixture, number: u64, state: &str, commit: &str| {
-            let pull = format!("repos/team/project/pulls/{number}");
-            let mut prs = prs.borrow_mut();
-            prs.insert(
-                format!("GET {pull}"),
-                serde_json::json!({"body": {"number": number, "title": "PR",
-                    "state": if state == "open" { "open" } else { "closed" },
-                    "merged": state == "merged", "labels": [],
-                    "head": {"ref": "multi"}, "base": {"ref": "main"}}}),
-            );
-            prs.insert(
-                format!("GET {pull}/commits?per_page=100&page=1"),
-                serde_json::json!({"body": [{"sha": commit}]}),
-            );
-            fixture.script_github(&prs);
-        };
-        write_pr(&fixture, 1, "open", &earlier);
-        write_pr(&fixture, 2, "open", head.trim());
-        fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
-        fixture.ok(&["link", "pr", "2", "assigned", "--space", "multi"]);
-        fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
-        assert_eq!(
-            fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["urls"]
-                .as_array()
-                .unwrap()
-                .len(),
-            2
-        );
-        // Scoped cancellation selects one PR and preserves the other.
-        fixture.ok(&[
-            "run",
-            "--workspace",
-            "multi",
-            "--",
-            support::shoal_binary(),
-            "--json",
-            "unlink",
-            "pr",
-            "2",
-            "assigned",
-        ]);
-        assert_eq!(
-            fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["url"],
-            "https://github.com/team/project/pull/1"
-        );
-        fixture.ok(&[
-            "run",
-            "--workspace",
-            "multi",
-            "--",
-            support::shoal_binary(),
-            "--json",
-            "link",
-            "pr",
-            "2",
-            "assigned",
-        ]);
-        fixture.ok(&["done", "multi"]);
-        write_pr(&fixture, 1, "merged", &earlier);
-        write_pr(&fixture, 2, "closed", head.trim());
-        let root = fixture.root.path().to_owned();
-        let queries = root.join("forge/requests.jsonl");
-        fs::write(&queries, "").unwrap();
-        fixture.restart();
-        wait_until("second PR queried", || {
-            fs::read_to_string(&queries)
-                .unwrap()
-                .contains("GET repos/team/project/pulls/2\"")
+        fixture.script_github(&prs);
+    };
+    write_pr(&fixture, 1, "open", &earlier);
+    write_pr(&fixture, 2, "open", head.trim());
+    fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
+    fixture.ok(&["link", "pr", "2", "assigned", "--space", "multi"]);
+    fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
+    assert_eq!(
+        fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["urls"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    // Scoped cancellation selects one PR and preserves the other.
+    fixture.ok(&[
+        "run",
+        "--workspace",
+        "multi",
+        "--",
+        support::shoal_binary(),
+        "--json",
+        "unlink",
+        "pr",
+        "2",
+        "assigned",
+    ]);
+    assert_eq!(
+        fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["url"],
+        "https://github.com/team/project/pull/1"
+    );
+    fixture.ok(&[
+        "run",
+        "--workspace",
+        "multi",
+        "--",
+        support::shoal_binary(),
+        "--json",
+        "link",
+        "pr",
+        "2",
+        "assigned",
+    ]);
+    fixture.ok(&["done", "multi"]);
+    write_pr(&fixture, 1, "merged", &earlier);
+    write_pr(&fixture, 2, "closed", head.trim());
+    let root = fixture.root.path().to_owned();
+    let queries = root.join("forge/requests.jsonl");
+    fs::write(&queries, "").unwrap();
+    fixture.restart();
+    wait_until("second PR queried", || {
+        fs::read_to_string(&queries)
+            .unwrap()
+            .contains("GET repos/team/project/pulls/2\"")
+    });
+    assert!(fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"].is_null());
+    write_pr(&fixture, 2, "merged", head.trim());
+    fixture.restart();
+    if cleanup {
+        wait_removed(&fixture, "multi");
+    } else {
+        wait_until("confirmed merges", || {
+            fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
         });
-        assert!(fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"].is_null());
-        write_pr(&fixture, 2, "merged", head.trim());
+        let state = fixture.ok(&["work", "status", "multi"]);
+        assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
+        fixture.ok(&["alerts"]);
+        // A changed default must not change a kept assignment.
+        fs::write(
+            root.join(".config/shoal/config.toml"),
+            "[cleanup.auto]\nenabled=false\n[cleanup.done]\nenabled=true\n",
+        )
+        .unwrap();
         fixture.restart();
-        if cleanup {
-            wait_removed(&fixture, "multi");
-        } else {
-            wait_until("confirmed merges", || {
-                fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
-            });
-            let state = fixture.ok(&["work", "status", "multi"]);
-            assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
-            fixture.ok(&["alerts"]);
-            // A changed default must not change a kept assignment.
-            fs::write(
-                root.join(".config/shoal/config.toml"),
-                "[cleanup.auto]\nenabled=false\n[cleanup.done]\nenabled=true\n",
-            )
-            .unwrap();
-            fixture.restart();
-            assert_eq!(
-                fixture.ok(&["work", "status", "multi"])["completion"]["cleanup"],
-                false
-            );
-        }
-        let db = rusqlite::Connection::open(root.join("state/state.db")).unwrap();
-        let count: i64 = db.query_row("SELECT count(*) FROM notifications WHERE kind='workspace_done' AND workspace='multi'", [], |row| row.get(0)).unwrap();
-        assert_eq!(count, 1);
         assert_eq!(
-            fs::read_to_string(root.join("done-events"))
-                .unwrap()
-                .lines()
-                .count(),
-            1
+            fixture.ok(&["work", "status", "multi"])["completion"]["cleanup"],
+            false
         );
     }
+    let db = rusqlite::Connection::open(root.join("state/state.db")).unwrap();
+    let count: i64 = db
+        .query_row(
+            "SELECT count(*) FROM notifications WHERE kind='workspace_done' AND workspace='multi'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(
+        fs::read_to_string(root.join("done-events"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -29450,36 +29494,60 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
 }
 
 #[test]
-fn failed_demo_handoffs_only_close_the_original_known_session() -> anyhow::Result<()> {
+fn failed_demo_handoffs_close_the_unchanged_session() -> anyhow::Result<()> {
+    failed_demo_handoffs_only_close_the_original_known_session("same")
+}
+
+#[test]
+fn failed_demo_handoffs_keep_a_session_with_another_pid() -> anyhow::Result<()> {
+    failed_demo_handoffs_only_close_the_original_known_session("pid")
+}
+
+#[test]
+fn failed_demo_handoffs_keep_a_session_created_again() -> anyhow::Result<()> {
+    failed_demo_handoffs_only_close_the_original_known_session("created")
+}
+
+#[test]
+fn failed_demo_handoffs_leave_a_session_that_is_gone() -> anyhow::Result<()> {
+    failed_demo_handoffs_only_close_the_original_known_session("gone")
+}
+
+#[test]
+fn failed_demo_handoffs_keep_a_session_of_unknown_creation() -> anyhow::Result<()> {
+    failed_demo_handoffs_only_close_the_original_known_session("unknown")
+}
+
+/// Fail a demo's handoff at each stage after the fake zmx changed its session
+/// as `after` names, and check that only the session it started is killed.
+fn failed_demo_handoffs_only_close_the_original_known_session(after: &str) -> anyhow::Result<()> {
     for stage in ["set", "send"] {
-        for after in ["same", "pid", "created", "gone", "unknown"] {
-            let fixture = Fixture::new();
-            fixture.add("failed");
-            let home = fixture.root.path();
-            install_test_script(
-                home.join("bin/zmx"),
-                include_str!("fixtures/zmx_handoff.py"),
-            );
-            let output = fixture
-                .command()
-                .env("HANDOFF_FAIL", stage)
-                .env("HANDOFF_AFTER", after)
-                .args(["demo", "start", "--workspace", "failed", "--", "true"])
-                .output()?;
-            assert!(!output.status.success(), "{stage}/{after}: {output:?}");
-            let calls: Vec<Vec<String>> = fs::read_to_string(home.join("handoff-calls.jsonl"))?
-                .lines()
-                .map(serde_json::from_str)
-                .collect::<serde_json::Result<_>>()?;
-            let killed = calls
-                .iter()
-                .any(|call| call.first().is_some_and(|command| command == "kill"));
-            assert_eq!(killed, after == "same", "{stage}/{after}: {calls:?}");
-            assert_eq!(
-                home.join("handoff-session.json").exists(),
-                !matches!(after, "same" | "gone")
-            );
-        }
+        let fixture = Fixture::new();
+        fixture.add("failed");
+        let home = fixture.root.path();
+        install_test_script(
+            home.join("bin/zmx"),
+            include_str!("fixtures/zmx_handoff.py"),
+        );
+        let output = fixture
+            .command()
+            .env("HANDOFF_FAIL", stage)
+            .env("HANDOFF_AFTER", after)
+            .args(["demo", "start", "--workspace", "failed", "--", "true"])
+            .output()?;
+        assert!(!output.status.success(), "{stage}/{after}: {output:?}");
+        let calls: Vec<Vec<String>> = fs::read_to_string(home.join("handoff-calls.jsonl"))?
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<serde_json::Result<_>>()?;
+        let killed = calls
+            .iter()
+            .any(|call| call.first().is_some_and(|command| command == "kill"));
+        assert_eq!(killed, after == "same", "{stage}/{after}: {calls:?}");
+        assert_eq!(
+            home.join("handoff-session.json").exists(),
+            !matches!(after, "same" | "gone")
+        );
     }
     Ok(())
 }
