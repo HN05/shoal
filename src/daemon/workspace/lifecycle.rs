@@ -18,8 +18,8 @@ use crate::{
     model::{CleanupReason, SpaceKind, SpaceRef, Workspace},
     process,
     removal::{
-        self, BranchOutcome, IdleRestore, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult,
-        UnsavedWork,
+        self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, NOTHING, RemovalCheck,
+        RemovalResult, UnsavedWork,
     },
     state::WorkspaceState,
 };
@@ -446,7 +446,8 @@ impl Manager {
     ) -> Result<RemovalCheck> {
         let mut check = self
             .check_removal(selector, InspectionPolicy::GitOnly)
-            .await?;
+            .await?
+            .check;
         check.children = self.spaces_taken_with(&check.workspace.id).await?;
         check.children.reverse();
         for child in &check.children {
@@ -457,7 +458,7 @@ impl Manager {
             }
         }
         if include_changes && check.dirty {
-            check.load_changed_files().await?;
+            removal::load_changed_files(&mut check).await?;
             check.unsaved_files_archived = self.archives_unsaved_files(&check.workspace).await?;
         }
         Ok(check)
@@ -467,7 +468,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         policy: InspectionPolicy,
-    ) -> Result<RemovalCheck> {
+    ) -> Result<Inspection> {
         let workspace = self.workspace(selector).await?;
         let executions = self.cleanup_executions(&workspace.id, &[]).await?;
         self.inspect_removal(workspace, policy, executions).await
@@ -478,7 +479,7 @@ impl Manager {
         workspace: Workspace,
         policy: InspectionPolicy,
         executions: CleanupExecutions,
-    ) -> Result<RemovalCheck> {
+    ) -> Result<Inspection> {
         if off_runtime::exists(&workspace.path).await? {
             self.verify_worktree(&workspace).await?;
         }
@@ -762,7 +763,7 @@ impl Manager {
             return Ok(Err(reason));
         }
         let signals = self.current_signals(id, &check.workspace.path).await?;
-        Ok(Ok((check.workspace.path, signals)))
+        Ok(Ok((check.check.workspace.path, signals)))
     }
 
     /// [`Self::merged_candidate`], inspected under [`Manager::check_access`].
@@ -814,7 +815,7 @@ impl Manager {
             return Ok(None);
         }
         let signals = self.current_signals(id, &check.workspace.path).await?;
-        Ok(Some((check.workspace.path, signals)))
+        Ok(Some((check.check.workspace.path, signals)))
     }
 
     /// The path and signals of a merged cleanup candidate, with the
@@ -1456,7 +1457,7 @@ impl Manager {
         removal: Removal<'_>,
         stage: Stage,
         cancelled: &[IdleRestore],
-    ) -> Result<RemovalCheck> {
+    ) -> Result<Inspection> {
         let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
         let check = self
             .inspect_removal(
@@ -1699,7 +1700,7 @@ impl Manager {
 /// counts as preserved while the worktree is still on it, and its files
 /// always go by force.
 fn worktrunk_removal_options(
-    check: &RemovalCheck,
+    check: &Inspection,
     unsaved: &UnsavedWork,
 ) -> (FileRemoval, BranchRemoval) {
     let own_branch = check.workspace.branch.is_some()
