@@ -3178,8 +3178,9 @@ directories of their own. For each crate it builds, the wrapper adds
 `-Zremap-cwd-prefix=.`, which leaves rustc's options the same in every
 directory. It also adds the crate to `RUSTC_BOOTSTRAP`, which lets stable
 rustc take that flag for that crate alone, with `-Zallow-features=` so the
-crate still uses no unstable feature. Dependencies and Cargo's target
-queries, which the wrapper passes through unchanged, see a stable compiler. rustc also regenerates all of a crate's code when its
+crate still uses no unstable feature. Dependencies, which Cargo builds without
+the wrapper, and Cargo's target queries, which it passes through unchanged,
+see a stable compiler. rustc also regenerates all of a crate's code when its
 output directory moves, so the wrapper passes `--out-dir` relative to the
 workspace root when it lies inside it. Debug info of the workspace's crates
 records `.` as their working directory. The wrapper leaves rustc's arguments unchanged under
