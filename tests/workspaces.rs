@@ -16161,9 +16161,9 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     );
     let second: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(second["updates"].as_array().unwrap().len(), 2);
-    assert_eq!(second["updates"][0]["message"], "review: SUCCESS");
+    assert_eq!(second["updates"][0]["message"], "review: success");
     // The check has no Actions job; tests/forge.rs covers the log it adds.
-    assert_eq!(second["updates"][1]["message"], "rust: FAILURE");
+    assert_eq!(second["updates"][1]["message"], "rust: failure");
     // A conflict is reported once a second poll sees it at the same commits.
     let third = fixture.ok(&["watch", "pr", "--space", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
@@ -16429,7 +16429,7 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
     let updates = watched["updates"].as_array().unwrap();
     assert_eq!(updates.len(), 2);
     assert_eq!(updates[0]["kind"], "comment");
-    assert_eq!(updates[1]["message"], "rust: Success");
+    assert_eq!(updates[1]["message"], "rust: success");
     assert_eq!(updates[0]["url"], "https://forge.example/team/repo/pulls/7");
     let inspection = fixture.ok(&["work", "status", "items"]);
     assert!(inspection["pr_cleanup"].is_null());
@@ -16539,7 +16539,7 @@ fn pr_wait_reads_forgejo_ci_and_conflicts_from_the_api() {
         updates[0]["message"]
             .as_str()
             .unwrap()
-            .starts_with("rust: Failure; log unavailable:")
+            .starts_with("rust: failure; log unavailable:")
     );
     // Forgejo also shows a PR it is still checking as not mergeable, so the
     // conflict waits for a second poll.
@@ -16614,12 +16614,12 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     script_api(home, &status, &checks("failure"));
     let third = fixture.ok(&["watch", "pr", "--space", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 2, "{third}");
-    assert_eq!(third["updates"][0]["message"], "review/default: Success");
+    assert_eq!(third["updates"][0]["message"], "review/default: success");
     assert!(
         third["updates"][1]["message"]
             .as_str()
             .unwrap()
-            .starts_with("rust: Failure; log unavailable:")
+            .starts_with("rust: failure; log unavailable:")
     );
     let fourth = fixture.ok(&["watch", "pr", "--space", "watch"]);
     assert_eq!(fourth["updates"].as_array().unwrap().len(), 1, "{fourth}");

@@ -136,11 +136,11 @@ fn statuses_keep_the_newest_of_each_name_in_shared_states() {
             .map(|check| (check.name.as_str(), check.state))
             .collect::<Vec<_>>(),
         [
-            ("deploy", "Skipped"),
-            ("docs", "Waiting"),
-            ("external", "Cancelled"),
-            ("lint", "Warning"),
-            ("rust", "Pending")
+            ("deploy", CheckState::Skipped),
+            ("docs", CheckState::Waiting),
+            ("external", CheckState::Cancelled),
+            ("lint", CheckState::Warning),
+            ("rust", CheckState::Pending)
         ]
     );
     assert!(statuses(&[json!({"id": 1, "name": "x", "status": "later"})]).is_err());

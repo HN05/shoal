@@ -5,8 +5,12 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, ci::approval::WaitingRun,
-    items::item::ItemState, updates::Snapshot,
+    ForgeRepo,
+    account::Account,
+    backends::Backend,
+    ci::{approval::WaitingRun, check_state::CheckState},
+    items::item::ItemState,
+    updates::Snapshot,
 };
 
 crate::state::states!(PrState {
@@ -56,28 +60,7 @@ pub struct PrStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckResult {
     pub name: String,
-    /// The forge's result, lowercased, such as `success` or `in_progress`.
-    pub result: String,
-}
-
-impl CheckResult {
-    /// Whether the check ran and failed, so its job may have a log worth
-    /// reading; a cancelled check was stopped rather than failing.
-    pub fn failed(&self) -> bool {
-        matches!(
-            self.result.as_str(),
-            "failure" | "error" | "timed_out" | "startup_failure"
-        )
-    }
-
-    /// Whether the check finished and passed; any other finished result,
-    /// such as a cancelled one, may need attention.
-    pub fn passed(&self) -> bool {
-        matches!(
-            self.result.as_str(),
-            "success" | "neutral" | "skipped" | "warning"
-        )
-    }
+    pub result: CheckState,
 }
 
 impl PrStatus {

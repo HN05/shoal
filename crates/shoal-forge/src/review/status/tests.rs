@@ -1,19 +1,6 @@
 use super::*;
 
 #[test]
-fn checks_that_ran_and_failed_are_failed() {
-    let failed = |result: &str| {
-        CheckResult {
-            name: "rust".into(),
-            result: result.into(),
-        }
-        .failed()
-    };
-    assert!(failed("failure"));
-    assert!(!failed("cancelled"));
-}
-
-#[test]
 fn rate_limited_checks_are_reported_as_unread() {
     let snapshot = Snapshot {
         limited: Some(crate::transport::limits::RateLimited {

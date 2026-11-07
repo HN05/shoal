@@ -8,6 +8,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, LoginHint},
+    ci::check_state::CheckState,
     items::{
         issue::require_open,
         item::{Current, Item, ItemState},
@@ -18,12 +19,11 @@ use crate::{
     updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
 };
 
-/// A CI check in the states every REST forge is mapped to; `Waiting`, for a
-/// job no runner has taken, and `Pending` are the incomplete ones.
+/// A CI check, by its name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RestCheck {
     pub name: String,
-    pub state: &'static str,
+    pub state: CheckState,
 }
 
 /// What the forges reached through their REST APIs each read their own way,

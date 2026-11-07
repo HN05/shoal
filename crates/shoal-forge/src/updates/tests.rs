@@ -7,9 +7,11 @@ fn activity_changes_report_finished_checks_without_waiting_for_the_set() {
     let mut pending = Snapshot::default();
     let check = |name: &str, complete: bool| Check {
         name: name.into(),
-        state: if complete { "success" } else { "pending" }.into(),
+        state: match complete {
+            true => CheckState::Success,
+            false => CheckState::Pending,
+        },
         revision: "1".into(),
-        complete,
     };
     pending.checks.insert("rust".into(), check("rust", false));
     pending
@@ -233,6 +235,29 @@ fn comments_saved_without_authors_match_the_same_comments_with_them() {
 }
 
 #[test]
+fn checks_saved_in_forge_casings_match_the_same_checks() {
+    let saved: Snapshot = serde_json::from_value(json!({
+        "comments": {}, "conflict": null, "state": "open", "errors": {}, "head": "1",
+        "checks": {
+            "rust": {"name": "rust", "state": "SUCCESS", "revision": "1", "complete": true},
+            "lint": {"name": "lint", "state": "Pending", "revision": "1", "complete": false},
+        },
+    }))
+    .unwrap();
+    assert!(saved.checks_pending());
+    let mut next = saved.clone();
+    for (name, state) in [("rust", CheckState::Success), ("lint", CheckState::Pending)] {
+        let check = Check {
+            name: name.into(),
+            state,
+            revision: "1".into(),
+        };
+        next.checks.insert(name.into(), check);
+    }
+    assert!(saved.changes(&next, "pr").is_empty());
+}
+
+#[test]
 fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
     let verdicts = |pairs: &[(&str, &str)]| {
         let mut snapshot = Snapshot::new("open");
@@ -389,15 +414,15 @@ fn issue_closure_and_reopening_have_item_messages() {
 }
 
 /// An open Forgejo PR at `head` with `conflict` and `checks` recorded.
-fn rest_snapshot(head: &str, conflict: bool, checks: &[(&str, &'static str)]) -> Snapshot {
+fn rest_snapshot(head: &str, conflict: bool, checks: &[(&str, CheckState)]) -> Snapshot {
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": !conflict,
             "head": {"ref": "topic", "sha": head}, "base": {"ref": "main"}});
     let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
     let checks = checks
         .iter()
-        .map(|(name, state)| RestCheck {
-            name: (*name).into(),
+        .map(|&(name, state)| RestCheck {
+            name: name.into(),
             state,
         })
         .collect();
@@ -412,10 +437,10 @@ fn rest_checks_are_distinct_and_wake_when_they_complete() {
         "rev-1",
         true,
         &[
-            ("review/default", "Success"),
-            ("rust", "Pending"),
-            ("docs", "Waiting"),
-            ("deploy", "Skipped"),
+            ("review/default", CheckState::Success),
+            ("rust", CheckState::Pending),
+            ("docs", CheckState::Waiting),
+            ("deploy", CheckState::Skipped),
         ],
     );
     snapshot.normalize(&rest_snapshot("rev-1", true, &[]), 1000);
@@ -432,21 +457,24 @@ fn rest_checks_are_distinct_and_wake_when_they_complete() {
         "rev-1",
         true,
         &[
-            ("review/default", "Success"),
-            ("rust", "Failure"),
-            ("deploy", "Skipped"),
+            ("review/default", CheckState::Success),
+            ("rust", CheckState::Failure),
+            ("deploy", CheckState::Skipped),
         ],
     );
     let updates = snapshot.changes(&next, "pr");
     assert_eq!(updates.len(), 1);
-    assert_eq!(updates[0].message, "rust: Failure");
-    assert_eq!(updates[0].check.as_ref().unwrap().result, "failure");
+    assert_eq!(updates[0].message, "rust: failure");
+    assert_eq!(
+        updates[0].check.as_ref().unwrap().result,
+        CheckState::Failure
+    );
 }
 
 #[test]
 fn rest_same_conclusion_on_a_new_head_wakes_again() {
-    let first = rest_snapshot("revision-one", false, &[("rust", "Success")]);
-    let second = rest_snapshot("revision-two", false, &[("rust", "Success")]);
+    let first = rest_snapshot("revision-one", false, &[("rust", CheckState::Success)]);
+    let second = rest_snapshot("revision-two", false, &[("rust", CheckState::Success)]);
     let updates = first.changes(&second, "pr");
     assert_eq!(updates.len(), 1);
     assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
@@ -454,7 +482,7 @@ fn rest_same_conclusion_on_a_new_head_wakes_again() {
 
 #[test]
 fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
-    let before = rest_snapshot("rev-1", true, &[("review", "Success")]);
+    let before = rest_snapshot("rev-1", true, &[("review", CheckState::Success)]);
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": false,
             "head": {"ref": "topic", "sha": "rev-1"}, "base": {"ref": "main"}});
@@ -476,7 +504,7 @@ fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
     );
     assert!(updates[2].message.contains("no status available"));
     assert!(failed.changes(&failed, "pr").is_empty());
-    let mut recovered = rest_snapshot("rev-1", true, &[("review", "Success")]);
+    let mut recovered = rest_snapshot("rev-1", true, &[("review", CheckState::Success)]);
     recovered
         .comments
         .insert("discussion:1".into(), "new finding".into());
@@ -609,15 +637,14 @@ fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
     for (key, revision) in [("old", "1"), ("new", "2")] {
         let check = Check {
             name: key.into(),
-            state: "failure".into(),
+            state: CheckState::Failure,
             revision: revision.into(),
-            complete: true,
         };
         snapshot.checks.insert(key.into(), check);
     }
     snapshot.errors.insert("CI".into(), "timed out".into());
     let checks: Vec<_> = snapshot.head_checks().collect();
-    assert_eq!(checks, [("new", "failure", true)]);
+    assert_eq!(checks, [("new", CheckState::Failure)]);
     assert_eq!(snapshot.errors().collect::<Vec<_>>(), [("CI", "timed out")]);
 }
 

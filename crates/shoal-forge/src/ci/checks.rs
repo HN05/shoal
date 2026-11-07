@@ -113,7 +113,7 @@ impl ForgeRepo {
                 .iter()
                 .filter_map(|details| details.pr.as_ref())
                 .flat_map(|pr| &pr.checks)
-                .filter(|check| check.failed())
+                .filter(|check| check.result.failed())
                 .map(|check| check.name.clone())
                 .collect();
             for name in failed {

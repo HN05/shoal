@@ -32,7 +32,7 @@ impl Manager {
         for index in 0..updates.len() {
             let update = &updates[index];
             let Some(check) = &update.check else { continue };
-            if !check.failed()
+            if !check.result.failed()
                 || !self
                     .pull_forge(&update.url)
                     .await

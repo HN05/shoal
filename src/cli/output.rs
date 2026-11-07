@@ -15,7 +15,7 @@ use crate::{
         sim::SimulatorState,
     },
     execution::SetupVerificationFailure,
-    forge::review::status::ReviewState,
+    forge::{ci::check_state::CheckState, review::status::ReviewState},
     protocol::{ErrorCode, RemoteError},
     refusal::Reason,
     state::{ExecutionState, WorkspaceState},
@@ -227,13 +227,12 @@ impl Palette {
         )
     }
 
-    /// Forges spell check results differently; color the common ones.
-    pub fn check_result(self, result: &str) -> String {
+    pub fn check_result(self, result: CheckState) -> String {
         self.paint(
             match result {
-                "success" => Style::Success,
-                "failure" | "error" | "timed_out" | "action_required" => Style::Error,
-                "pending" | "queued" | "in_progress" | "expected" | "waiting" => Style::Warning,
+                CheckState::Success => Style::Success,
+                result if result.failed() || result == CheckState::ActionRequired => Style::Error,
+                result if !result.complete() => Style::Warning,
                 _ => Style::Muted,
             },
             result,

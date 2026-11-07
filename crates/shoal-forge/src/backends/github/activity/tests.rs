@@ -43,11 +43,10 @@ fn checks_keep_the_keys_states_and_revisions_gh_reported() {
          "created_at": "2026-10-01T11:00:00Z"},
     ]));
     let checks = snapshot(json!(true), &runs, &statuses).checks;
-    let check = |name: &str, state: &str, revision: &str, complete| Check {
+    let check = |name: &str, state, revision: &str| Check {
         name: name.into(),
-        state: state.into(),
+        state,
         revision: revision.into(),
-        complete,
     };
     // As `gh pr view --json statusCheckRollup` reported them.
     let expected = [
@@ -55,27 +54,24 @@ fn checks_keep_the_keys_states_and_revisions_gh_reported() {
             ":deploy",
             check(
                 "deploy",
-                "SUCCESS",
+                CheckState::Success,
                 r#""abc":null:"2026-10-01T11:00:00Z""#,
-                true,
             ),
         ),
         (
             "https://github.com/team/project/actions/runs/1/job/2:rust",
             check(
                 "rust",
-                "FAILURE",
+                CheckState::Failure,
                 r#""abc":"2026-10-01T10:05:00Z":"2026-10-01T10:00:00Z""#,
-                true,
             ),
         ),
         (
             "review/1:review",
             check(
                 "review",
-                "IN_PROGRESS",
+                CheckState::InProgress,
                 r#""abc":null:"2026-10-01T10:00:00Z""#,
-                false,
             ),
         ),
     ];
@@ -114,7 +110,7 @@ fn completed_checks_wake_individually_while_other_checks_run() {
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
         [UpdateKind::CiCompleted, UpdateKind::MergeConflict]
     );
-    assert_eq!(updates[0].message, "review: SUCCESS");
+    assert_eq!(updates[0].message, "review: success");
     assert!(observed.changes(&observed, "pr").is_empty());
 
     checks[0]["status"] = json!("completed");
@@ -122,7 +118,7 @@ fn completed_checks_wake_individually_while_other_checks_run() {
     let next = snapshot(json!(false), &runs(checks), &pending);
     let updates = observed.changes(&next, "pr");
     assert_eq!(updates.len(), 1);
-    assert_eq!(updates[0].message, "rust: FAILURE");
+    assert_eq!(updates[0].message, "rust: failure");
     assert!(check_runs("abc", &json!({"total_count": 2, "check_runs": []})).is_err());
 }
 

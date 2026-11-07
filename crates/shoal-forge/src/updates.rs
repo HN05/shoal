@@ -9,6 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, rest::RestCheck},
+    ci::check_state::CheckState,
     items::{
         item::{Current, ItemState},
         link::LinkKind,
@@ -147,9 +148,8 @@ pub(crate) struct MergeRevision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Check {
     pub(crate) name: String,
-    pub(crate) state: String,
+    pub(crate) state: CheckState,
     pub(crate) revision: String,
-    pub(crate) complete: bool,
 }
 
 /// A local merge of `head` into `base`; `conflict` reports its conflicts
@@ -229,14 +229,11 @@ impl Snapshot {
             );
         }
         for (id, check) in &next.checks {
-            if check.complete && self.checks.get(id) != Some(check) {
+            if check.state.complete() && self.checks.get(id) != Some(check) {
                 emit(
                     UpdateKind::CiCompleted,
                     format!("{}: {}", check.name, check.state),
-                    Some(crate::review::status::CheckResult {
-                        name: check.name.clone(),
-                        result: check.state.to_ascii_lowercase(),
-                    }),
+                    Some(check.result()),
                 );
             }
         }
@@ -389,13 +386,13 @@ impl Snapshot {
         &self.head
     }
 
-    /// Each check that ran on the head commit: its name, state and whether
-    /// it finished. Failures kept from an earlier head are left out.
-    pub fn head_checks(&self) -> impl Iterator<Item = (&str, &str, bool)> {
+    /// Each check that ran on the head commit, by name. Failures kept from
+    /// an earlier head are left out.
+    pub fn head_checks(&self) -> impl Iterator<Item = (&str, CheckState)> {
         self.checks
             .values()
             .filter(|check| self.head.is_empty() || check.revision == self.head)
-            .map(|check| (check.name.as_str(), check.state.as_str(), check.complete))
+            .map(|check| (check.name.as_str(), check.state))
     }
 
     /// Each source the observation could not read, such as CI checks, and why.
@@ -416,7 +413,7 @@ impl Snapshot {
 
     /// Whether a check on the head commit has not finished.
     pub(crate) fn checks_pending(&self) -> bool {
-        self.checks.values().any(|check| !check.complete)
+        self.checks.values().any(|check| !check.state.complete())
     }
 
     /// Take `state` as already seen, even before a first observation, whose
@@ -612,8 +609,7 @@ impl Snapshot {
                 .into_iter()
                 .map(|check| {
                     let entry = Check {
-                        complete: !matches!(check.state, "Pending" | "Waiting"),
-                        state: check.state.into(),
+                        state: check.state,
                         name: check.name.clone(),
                         revision: head.clone(),
                     };
@@ -646,13 +642,17 @@ impl Snapshot {
 
     /// The checks as a PR status reports them.
     pub(crate) fn check_results(&self) -> Vec<CheckResult> {
-        self.checks
-            .values()
-            .map(|check| CheckResult {
-                name: check.name.clone(),
-                result: check.state.to_ascii_lowercase(),
-            })
-            .collect()
+        self.checks.values().map(Check::result).collect()
+    }
+}
+
+impl Check {
+    /// The check as a PR status reports it.
+    fn result(&self) -> CheckResult {
+        CheckResult {
+            name: self.name.clone(),
+            result: self.state,
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::updates::UpdateKind;
+use crate::{ci::check_state::CheckState, review::status::CheckResult, updates::UpdateKind};
 
 /// An open PR at `head` with `checks` by name and state, `pending` unfinished.
 fn snapshot(head: &str, checks: &[(&str, &str)]) -> Snapshot {
@@ -27,7 +27,7 @@ fn completed(name: &str, result: &str) -> Update {
         delivery: String::new(),
         check: Some(CheckResult {
             name: name.into(),
-            result: result.into(),
+            result: CheckState::parse(result).unwrap(),
         }),
         workspace: None,
     }

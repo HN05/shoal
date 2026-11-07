@@ -28,6 +28,7 @@ use crate::{
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
         approval::RUNS_PAGE,
+        check_state::CheckState,
         checks::{CheckLog, plain},
         run::NewRun,
         run_action::{Run, RunOperation},
@@ -1111,13 +1112,13 @@ fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
                 .as_str()
                 .context("Forgejo CI status has no context")?;
             let state = match status["status"].as_str() {
-                Some("pending") if actions::status_waits(status) => "Waiting",
-                Some("pending") => "Pending",
-                Some("success") => "Success",
-                Some("failure") => "Failure",
-                Some("warning") => "Warning",
-                Some("skipped") => "Skipped",
-                Some("error") => "Error",
+                Some("pending") if actions::status_waits(status) => CheckState::Waiting,
+                Some("pending") => CheckState::Pending,
+                Some("success") => CheckState::Success,
+                Some("failure") => CheckState::Failure,
+                Some("warning") => CheckState::Warning,
+                Some("skipped") => CheckState::Skipped,
+                Some("error") => CheckState::Error,
                 _ => anyhow::bail!("unknown Forgejo CI state"),
             };
             Ok(RestCheck {

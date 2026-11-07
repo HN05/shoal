@@ -236,10 +236,10 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
 fn checks(observed: &Snapshot) -> Vec<Check> {
     observed
         .head_checks()
-        .map(|(name, state, complete)| Check {
+        .map(|(name, state)| Check {
             name: name.into(),
-            state: state.into(),
-            complete,
+            state,
+            complete: state.complete(),
         })
         .collect()
 }

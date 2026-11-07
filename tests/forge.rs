@@ -3549,7 +3549,7 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
             .unwrap();
         let message = ci["message"].as_str().unwrap();
         match outcome {
-            "external" => assert_eq!(message, "rust: Failure"),
+            "external" => assert_eq!(message, "rust: failure"),
             "available" => assert!(message.contains("Main Test"), "{message}"),
             _ => assert!(message.contains("404"), "{message}"),
         }
@@ -3671,8 +3671,8 @@ fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
             .to_owned()
     };
     let rust = message("rust");
-    assert!(rust.starts_with("rust: TIMED_OUT"), "{rust}");
-    assert_eq!(message("deploy"), "deploy: FAILURE");
+    assert!(rust.starts_with("rust: timed_out"), "{rust}");
+    assert_eq!(message("deploy"), "deploy: failure");
     assert_eq!(result["updates"].as_array().unwrap().len(), 2, "{result}");
 }
 

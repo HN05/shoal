@@ -12,6 +12,7 @@ use crate::{
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, JobState, Location, Operation, check,
+        check_state::CheckState,
         checks::plain,
         id,
         run::NewRun,
@@ -1192,14 +1193,18 @@ fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
             .context("GitLab status has no name")?;
         let id = status["id"].as_u64().context("GitLab status has no ID")?;
         let state = match status["status"].as_str() {
-            Some("created" | "waiting_for_resource" | "pending" | "scheduled") => "Waiting",
-            Some("preparing" | "running" | "canceling" | "waiting_for_callback") => "Pending",
-            Some("success") => "Success",
-            Some("failed") if status["allow_failure"] == true => "Warning",
-            Some("failed") => "Failure",
-            Some("canceled") => "Cancelled",
+            Some("created" | "waiting_for_resource" | "pending" | "scheduled") => {
+                CheckState::Waiting
+            }
+            Some("preparing" | "running" | "canceling" | "waiting_for_callback") => {
+                CheckState::Pending
+            }
+            Some("success") => CheckState::Success,
+            Some("failed") if status["allow_failure"] == true => CheckState::Warning,
+            Some("failed") => CheckState::Failure,
+            Some("canceled") => CheckState::Cancelled,
             // A manual job waits for someone to start it, which CI cannot.
-            Some("skipped" | "manual") => "Skipped",
+            Some("skipped" | "manual") => CheckState::Skipped,
             state => bail!("unknown GitLab CI state {state:?}"),
         };
         if latest.get(name).is_none_or(|(newest, _)| *newest < id) {

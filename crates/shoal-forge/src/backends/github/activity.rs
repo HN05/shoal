@@ -9,6 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::branch_pull,
+    ci::check_state::CheckState,
     items::{
         item::{Current, ItemState},
         link::ItemKind,
@@ -158,7 +159,7 @@ fn check_runs(head: &str, response: &Value) -> Result<Vec<(String, Check)>> {
                 .filter(|conclusion| !conclusion.is_empty())
                 .unwrap_or(status);
             let revision = revision(head, &run["completed_at"], &run["started_at"]);
-            let check = rolled_up(&run["name"], state, revision, status == "completed")?;
+            let check = rolled_up(&run["name"], state, revision)?;
             Ok((check_key(&run["details_url"], &check), check))
         })
         .collect()
@@ -178,25 +179,24 @@ fn commit_statuses(head: &str, combined: &Value) -> Result<Vec<(String, Check)>>
             let state = status["state"]
                 .as_str()
                 .context("commit status has no state")?;
-            let complete = matches!(state, "success" | "failure" | "error");
             let revision = revision(head, &Value::Null, &status["created_at"]);
-            let check = rolled_up(&status["context"], state, revision, complete)?;
+            let check = rolled_up(&status["context"], state, revision)?;
             Ok((check_key(&status["target_url"], &check), check))
         })
         .collect()
 }
 
-/// A check named `name` in `state`, upper-cased as GraphQL reports it.
-fn rolled_up(name: &Value, state: &str, revision: String, complete: bool) -> Result<Check> {
+/// A check named `name` in `state`.
+fn rolled_up(name: &Value, state: &str, revision: String) -> Result<Check> {
     let name = name
         .as_str()
         .filter(|name| !name.is_empty())
         .context("CI check has no name")?;
     Ok(Check {
         name: name.into(),
-        state: state.to_ascii_uppercase(),
+        state: CheckState::parse(state)
+            .with_context(|| format!("unknown GitHub check state {state}"))?,
         revision,
-        complete,
     })
 }
 

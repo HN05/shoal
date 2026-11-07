@@ -2,10 +2,7 @@
 //! pending, so its agent wakes when a check fails or every check has passed.
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    review::status::CheckResult,
-    updates::{Snapshot, Update},
-};
+use crate::updates::{Snapshot, Update};
 
 /// The passing checks of a head commit that are not delivered yet.
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,16 +25,22 @@ impl HeldPasses {
             snapshot.head().clone_into(&mut self.head);
             self.updates.clear();
         }
-        let failed = observed
-            .iter()
-            .any(|update| update.check.as_ref().is_some_and(|check| !check.passed()));
+        let failed = observed.iter().any(|update| {
+            update
+                .check
+                .as_ref()
+                .is_some_and(|check| !check.result.passed())
+        });
         if failed || !snapshot.checks_pending() {
             let mut delivered = std::mem::take(&mut self.updates);
             delivered.extend(observed);
             return delivered;
         }
         let (passes, delivered) = observed.into_iter().partition::<Vec<_>, _>(|update| {
-            update.check.as_ref().is_some_and(CheckResult::passed)
+            update
+                .check
+                .as_ref()
+                .is_some_and(|check| check.result.passed())
         });
         self.updates.extend(passes);
         delivered

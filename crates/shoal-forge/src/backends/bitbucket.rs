@@ -14,6 +14,7 @@ use crate::{
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
+        check_state::CheckState,
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
@@ -947,15 +948,15 @@ fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
             .unwrap_or(key);
         let updated = status["updated_on"].as_str().unwrap_or_default();
         let state = match status["state"].as_str() {
-            Some("INPROGRESS") => "Pending",
-            Some("SUCCESSFUL") => "Success",
-            Some("FAILED") => "Failure",
-            Some("STOPPED") => "Cancelled",
+            Some("INPROGRESS") => CheckState::Pending,
+            Some("SUCCESSFUL") => CheckState::Success,
+            Some("FAILED") => CheckState::Failure,
+            Some("STOPPED") => CheckState::Cancelled,
             state => bail!("unknown Bitbucket build state {state:?}"),
         };
         if latest
             .get(key)
-            .is_none_or(|(newest, _, _): &(&str, &str, &str)| *newest < updated)
+            .is_none_or(|(newest, _, _): &(&str, &str, CheckState)| *newest < updated)
         {
             latest.insert(key, (updated, name, state));
         }

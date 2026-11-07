@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     approvals::ApprovalRequest,
-    forge::items::link::LinkKind,
+    forge::{ci::check_state::CheckState, items::link::LinkKind},
     model::{Relation, Repository, Workspace},
     notifications::Notification,
     questions::Question,
@@ -176,8 +176,7 @@ pub struct ReportedSessions {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Check {
     pub name: String,
-    /// The forge's state, such as `success`, `failure` or `pending`.
-    pub state: String,
+    pub state: CheckState,
     /// Whether the check finished.
     pub complete: bool,
 }

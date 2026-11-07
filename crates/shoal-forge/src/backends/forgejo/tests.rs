@@ -65,15 +65,15 @@ fn forgejo_statuses_need_every_status_and_known_states() {
         [
             RestCheck {
                 name: "ci / rust".into(),
-                state: "Success"
+                state: CheckState::Success
             },
             RestCheck {
                 name: "review".into(),
-                state: "Pending"
+                state: CheckState::Pending
             },
             RestCheck {
                 name: "ci / docs".into(),
-                state: "Waiting"
+                state: CheckState::Waiting
             },
         ]
     );

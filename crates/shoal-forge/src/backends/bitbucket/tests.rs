@@ -133,7 +133,10 @@ fn statuses_keep_the_newest_of_each_key() {
             .iter()
             .map(|check| (check.name.as_str(), check.state))
             .collect::<Vec<_>>(),
-        [("Pipeline", "Pending"), ("deploy", "Cancelled")]
+        [
+            ("Pipeline", CheckState::Pending),
+            ("deploy", CheckState::Cancelled)
+        ]
     );
     assert!(statuses(&[json!({"key": "x", "state": "LATER"})]).is_err());
 }

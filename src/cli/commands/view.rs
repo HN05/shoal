@@ -280,7 +280,7 @@ fn render_pr(url: &str, state: &str, pr: &PrDetails, palette: Palette) {
     }
     outln!("Checks:   {}", pr.checks.len());
     for check in &pr.checks {
-        outln!("  {}: {}", check.name, palette.check_result(&check.result));
+        outln!("  {}: {}", check.name, palette.check_result(check.result));
     }
     if !pr.waiting_runs.is_empty() {
         let line = ci::waiting_runs_line(url, pr.waiting_runs.len());

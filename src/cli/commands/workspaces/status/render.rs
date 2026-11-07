@@ -468,11 +468,7 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
         outln!("  Checks:      {}", pr.checks.len());
     }
     for check in &pr.checks {
-        outln!(
-            "    {}: {}",
-            check.name,
-            palette.check_result(&check.result)
-        );
+        outln!("    {}: {}", check.name, palette.check_result(check.result));
     }
     if !pr.waiting_runs.is_empty() {
         let line = ci::waiting_runs_line(&pr.url, pr.waiting_runs.len());
