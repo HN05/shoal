@@ -1,7 +1,9 @@
-//! The plan of a queued agent start, which the queue keeps as JSON in
-//! [`QueueRequest::plan`] until the `queue-start` worker carries it out.
-//! Entries queued by an earlier version still start, so the format only
-//! gains fields with defaults.
+//! The plan of a queued agent start, which everything that queues one and
+//! the `queue-start` worker that carries it out agree on. The queue keeps it
+//! as JSON in [`QueueRequest::plan`] until the worker runs; the protocol
+//! calls live in [`crate::client::queue`] and the daemon's runner in
+//! `daemon::queued_starts`. Entries queued by an earlier version still
+//! start, so the format only gains fields with defaults.
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;

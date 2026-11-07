@@ -33,8 +33,8 @@ use self::{
     target::resolve_add_target,
 };
 use crate::{
-    agent_queue::{AddPlan, Creation},
     cli::{context::Context, ui::ModeChoice},
+    start_plan::{AddPlan, Creation},
 };
 
 /// How `shoal start` runs once its workspace is planned.

@@ -4,8 +4,8 @@ use anyhow::{Context as _, Result};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent_queue::queued_agent_request, agents::check_queued_launch, daemon::workspace::Manager,
-    model::QueueEntry, protocol::operations::QueuedLaunch,
+    agents::check_queued_launch, daemon::workspace::Manager, model::QueueEntry,
+    protocol::operations::QueuedLaunch, start_plan::queued_agent_request,
 };
 
 impl Manager {

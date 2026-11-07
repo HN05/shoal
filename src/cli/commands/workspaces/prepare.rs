@@ -8,7 +8,6 @@ use super::environment::configured_environment;
 use super::link_pull::link_or_warn;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent_queue::queued_agent_request,
     agents::check_queued_launch,
     cli::{
         commands::operations::{Failed, Reporter},
@@ -22,6 +21,7 @@ use crate::{
         ConfigTarget,
         operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     },
+    start_plan::queued_agent_request,
     state::WorkspaceState,
 };
 

@@ -5,7 +5,6 @@
 mod stdout;
 
 mod agent_git;
-mod agent_queue;
 mod agents;
 mod build;
 mod caches;
@@ -33,6 +32,7 @@ mod seed;
 mod service;
 mod sessions;
 mod shell;
+mod start_plan;
 mod terminal;
 #[cfg(test)]
 mod test_support;

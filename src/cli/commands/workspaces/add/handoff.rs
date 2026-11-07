@@ -3,9 +3,9 @@ use anyhow::Result;
 
 use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target::AddTarget};
 use crate::{
-    agent_queue::AddPlan,
     cli::{commands::issues, context::Context, terminal},
     protocol::ConfigTarget,
+    start_plan::AddPlan,
 };
 
 /// Start `plan` beside this terminal, focused or in the background, unless

@@ -11,7 +11,6 @@ use super::{
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    agent_queue::{CopyCreation, Creation},
     cli::{
         args::create::StartArgs,
         context::Context,
@@ -24,6 +23,7 @@ use crate::{
     },
     model::{AgentSession, SpaceKind},
     protocol::ConfigTarget,
+    start_plan::{CopyCreation, Creation},
 };
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {

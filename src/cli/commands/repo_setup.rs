@@ -11,13 +11,13 @@ use anyhow::{Context as _, Result};
 use super::{repositories, workspaces};
 use crate::{
     agent::{Agent, ModelChoice},
-    agent_queue::Creation,
     cli::{agents, context::Context, ui::ModeChoice},
     config::modes,
     git,
     model::Repository,
     protocol::ConfigTarget,
     repository,
+    start_plan::Creation,
 };
 
 /// The branch the setup agent works on, whose workspace a later setup

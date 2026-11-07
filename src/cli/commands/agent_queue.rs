@@ -7,9 +7,9 @@ use super::listing::ListFilter;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{queue, space_names::SpaceName};
 use crate::{
-    agent_queue::AddPlan,
     cli::{context::Context, output::Palette, ui},
     model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    start_plan::AddPlan,
     state::{QueueKind, QueueState},
     terminal,
 };

@@ -10,7 +10,6 @@ use tokio::sync::OnceCell;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent_queue::AddPlan,
     cli::{
         commands::{
             issues::{self, Issue},
@@ -22,6 +21,7 @@ use crate::{
     model::Workspace,
     protocol::ItemContext,
     sessions::{HostName, Origin},
+    start_plan::AddPlan,
     terminal::{Configured, Host, Options, PlaceName, Places, names_places},
 };
 

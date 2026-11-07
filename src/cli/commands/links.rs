@@ -9,7 +9,6 @@ use crate::client::output::workspaces::Registered;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    agent_queue::Creation,
     cli::{
         args::items::{ItemArgs, RelationArgs},
         client,
@@ -26,6 +25,7 @@ use crate::{
     git,
     model::{ReadyMarks, Relation, Repository, ReviewMark},
     protocol::{ItemContext, PullHead},
+    start_plan::Creation,
 };
 
 /// The space and the items selected in it, with the kind of a bare number

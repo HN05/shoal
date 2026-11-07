@@ -3,7 +3,6 @@ use anyhow::Result;
 
 use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target::AddTarget};
 use crate::{
-    agent_queue::AddPlan,
     cli::{
         client::{self},
         commands::{agent_queue, issues},
@@ -11,6 +10,7 @@ use crate::{
     },
     forge::IssueInput,
     model::Dependency,
+    start_plan::AddPlan,
 };
 
 /// The work `--after` names, refused before any prompt when the repository

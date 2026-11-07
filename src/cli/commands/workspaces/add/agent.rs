@@ -5,10 +5,10 @@ use anyhow::Result;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    agent_queue::{Creation, ResolvedAddAgent},
     cli::{agents, context::Context, terminal},
     model::Workspace,
     protocol::ConfigTarget,
+    start_plan::{Creation, ResolvedAddAgent},
 };
 
 pub(in crate::cli::commands) enum AgentLaunch {

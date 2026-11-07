@@ -7,7 +7,6 @@ use anyhow::Result;
 use super::{AddOptions, target::AddTarget};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent_queue::{AddPlan, Creation, ResolvedAddAgent},
     cli::{
         commands::{issues, repositories},
         context::Context,
@@ -15,6 +14,7 @@ use crate::{
     env, git,
     model::Repository,
     protocol::ItemContext,
+    start_plan::{AddPlan, Creation, ResolvedAddAgent},
     terminal::PlaceName,
 };
 use crate::{client::space_names::SpaceName, model::SpaceKind};

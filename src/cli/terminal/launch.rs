@@ -14,13 +14,13 @@ use super::{
     sessions::{left_open, report_detach},
 };
 use crate::{
-    agent_queue::AddPlan,
     cli::{commands::issues::Issue, context::Context, recent},
     config::Effective,
     env,
     execution::TrackedAgent,
     model::{Repository, Workspace},
     sessions::Origin,
+    start_plan::AddPlan,
     terminal::{
         Attaches, Beside, Configured, Host, Owner, Places, Start, current, current_origin,
         enabled_host, names_places,

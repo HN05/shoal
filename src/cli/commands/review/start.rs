@@ -281,7 +281,7 @@ async fn pull_request(
         }
         None => {
             let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
-            let creation = crate::agent_queue::Creation {
+            let creation = crate::start_plan::Creation {
                 existing: Some(git::remote_ref("origin", &pull.head)),
                 base: Some(tracking),
                 pr: Some(pull.url.clone()),

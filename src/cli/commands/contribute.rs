@@ -6,13 +6,13 @@ use anyhow::Result;
 use super::{links, workspaces::AddOptions};
 use crate::{
     agent::Agent,
-    agent_queue::Creation,
     agents,
     cli::{args::create::ContributeArgs, context::Context, output::Palette, ui},
     config::{Config, repo::ConfigLayers},
     forge::items::link::Link,
     git,
     model::Repository,
+    start_plan::Creation,
 };
 
 /// Register the repository a repository URL, or an issue, PR or branch link

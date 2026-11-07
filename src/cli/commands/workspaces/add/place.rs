@@ -10,7 +10,6 @@ use super::finish::{holding, report_queued_in};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    agent_queue::{AddPlan, ResolvedAddAgent},
     cli::{
         agents,
         commands::{agent_queue, workspaces::prepare::queue_in_workspace},
@@ -19,6 +18,7 @@ use crate::{
     },
     model::{QueueEntry, Workspace},
     protocol::{ConfigTarget, operations::QueuedLaunch},
+    start_plan::{AddPlan, ResolvedAddAgent},
 };
 
 /// The launch of the agent that starts in this process.

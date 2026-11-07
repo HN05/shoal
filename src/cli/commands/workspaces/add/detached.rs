@@ -14,7 +14,6 @@ use super::{
     target::AddTarget,
 };
 use crate::{
-    agent_queue::AddPlan,
     cli::{
         agents,
         commands::{agent_queue, issues},
@@ -23,6 +22,7 @@ use crate::{
     },
     config::Effective,
     model::Dependency,
+    start_plan::AddPlan,
 };
 
 /// Whether the plan's agent starts detached: always for a scoped caller,

@@ -1,6 +1,6 @@
 use super::AddOptions;
 use crate::{
-    agent_queue::AddPlan, model::Workspace, protocol::operations::QueuedLaunch,
+    model::Workspace, protocol::operations::QueuedLaunch, start_plan::AddPlan,
     state::WorkspaceState,
 };
 

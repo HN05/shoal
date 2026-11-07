@@ -4,7 +4,6 @@ use anyhow::{Result, ensure};
 
 use super::target::AddTarget;
 use crate::{
-    agent_queue::Creation,
     cli::{
         client::{self},
         commands::{issues, links},
@@ -14,6 +13,7 @@ use crate::{
     forge::items::{link::ItemKind, list::Search},
     git::{self},
     protocol::ItemContext,
+    start_plan::Creation,
     state::WorkspaceState,
 };
 

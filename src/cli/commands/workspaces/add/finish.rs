@@ -12,7 +12,6 @@ use super::{
 use crate::client::operations::NewWorkspace;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent_queue::{AddPlan, Creation, ResolvedAddAgent},
     cli::{
         agents,
         commands::{
@@ -30,6 +29,7 @@ use crate::{
             OperationSpec, Preparation, Prepared, QueuedLaunch, StartedWorkspace, WorkspaceStart,
         },
     },
+    start_plan::{AddPlan, Creation, ResolvedAddAgent},
     state::QueueState,
 };
 
