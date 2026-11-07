@@ -2,7 +2,10 @@
 use anyhow::Result;
 
 use super::{changes, listing, selection};
-use crate::cli::{context::Context, ui};
+use crate::{
+    cli::{context::Context, ui},
+    state::QueueKind,
+};
 
 /// What the menu does with the entry it picks.
 #[derive(Clone, Copy)]
@@ -23,13 +26,11 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     let entry = selection::pick_entry(ctx, &waiting, "Queue> ").await?;
     let mut actions = vec![(Action::Move, "Move"), (Action::Cancel, "Cancel")];
     if !crate::env::inherits_scope(&ctx.paths.state) {
-        actions.splice(
-            0..0,
-            [
-                (Action::Start, "Start now"),
-                (Action::StartAttached, "Start and attach"),
-            ],
-        );
+        actions.insert(0, (Action::Start, "Start now"));
+        // A CI job runs without a session.
+        if entry.kind != QueueKind::Job {
+            actions.insert(1, (Action::StartAttached, "Start and attach"));
+        }
     }
     let action = ui::pick_choice(ctx, &format!("{}> ", entry.name), &actions)?;
     let entry = Some(entry.id);
