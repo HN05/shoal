@@ -79,6 +79,53 @@ pub async fn git_dir(repo: &Path) -> Result<PathBuf> {
     off_runtime::canonicalize(Path::new(dir.trim())).await
 }
 
+/// Where Git finds the checkout at a path, canonical, from one Git run.
+#[derive(Debug, PartialEq, Eq)]
+pub struct CheckoutDirs {
+    /// The root of its working tree.
+    pub root: PathBuf,
+    /// The Git directory every worktree of the repository shares.
+    pub common_dir: PathBuf,
+    /// The checkout's own Git directory: the common one for a main
+    /// checkout, its admin directory for a linked worktree.
+    pub git_dir: PathBuf,
+}
+
+pub async fn checkout_dirs(repo: &Path) -> Result<CheckoutDirs> {
+    let output = run(
+        repo,
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--show-toplevel",
+            "--git-common-dir",
+            "--git-dir",
+        ],
+    )
+    .await?;
+    let [root, common_dir, git_dir] = parse_checkout_dirs(&output)?;
+    Ok(CheckoutDirs {
+        root: off_runtime::canonicalize(&root).await?,
+        common_dir: off_runtime::canonicalize(&common_dir).await?,
+        git_dir: off_runtime::canonicalize(&git_dir).await?,
+    })
+}
+
+/// The three paths `rev-parse` prints, one per line, in the order asked.
+fn parse_checkout_dirs(output: &str) -> Result<[PathBuf; 3]> {
+    let mut lines = output.lines().map(PathBuf::from);
+    let mut next = |what| {
+        lines
+            .next()
+            .with_context(|| format!("git rev-parse printed no {what}"))
+    };
+    Ok([
+        next("worktree root")?,
+        next("common directory")?,
+        next("Git directory")?,
+    ])
+}
+
 pub async fn metadata_path(
     repo: &Path,
     name: &str,

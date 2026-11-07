@@ -338,13 +338,15 @@ pub(super) async fn is_seed_worktree(repo: &Repository, layout: &Layout) -> Resu
     if !real || layout.ensure_owned().is_err() {
         return Ok(false);
     }
-    let reached = git::worktree_root(&worktree)
-        .await
-        .is_ok_and(|root| fs::canonicalize(root.trim()).ok() == fs::canonicalize(&worktree).ok());
-    if !reached || git::common_dir(&worktree).await? != git::common_dir(&repo.path).await? {
+    let Ok(dirs) = git::checkout_dirs(&worktree).await else {
+        return Ok(false);
+    };
+    if fs::canonicalize(&worktree).ok().as_ref() != Some(&dirs.root)
+        || dirs.common_dir != git::common_dir(&repo.path).await?
+    {
         return Ok(false);
     }
-    let owner = identity::marked_owner(&git::git_dir(&worktree).await?)?;
+    let owner = identity::marked_owner(&dirs.git_dir)?;
     Ok(owner == Some(layout.worktree_owner()))
 }
 

@@ -224,24 +224,21 @@ impl Manager {
     async fn linked_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
         let repo = self.repository(&workspace.repository_id).await?;
         // Verify this is still the checkout Shoal created before any deletion.
-        let root = git::worktree_root(&workspace.path).await?;
+        let actual = git::checkout_dirs(&workspace.path).await?;
         ensure!(
-            off_runtime::canonicalize(Path::new(root.trim())).await?
-                == off_runtime::canonicalize(&workspace.path).await?,
+            actual.root == off_runtime::canonicalize(&workspace.path).await?,
             "workspace path no longer points to its worktree root"
         );
         let expected = git::common_dir(&repo.path).await?;
-        let actual = git::common_dir(&workspace.path).await?;
         ensure!(
-            expected == actual,
+            expected == actual.common_dir,
             "workspace now belongs to a different repository"
         );
-        let actual_git_dir = git::git_dir(&workspace.path).await?;
         ensure!(
-            actual_git_dir != actual,
+            actual.git_dir != actual.common_dir,
             "workspace was replaced by a main repository checkout"
         );
-        Ok(actual_git_dir)
+        Ok(actual.git_dir)
     }
 
     /// Mark the worktree's admin directory as this workspace's and record its

@@ -37,3 +37,41 @@ fn head_and_branch_without_a_name_for_head_is_unknown() {
         ("abc".to_owned(), None)
     );
 }
+
+#[tokio::test]
+async fn checkout_dirs_tell_a_linked_worktree_from_its_main_checkout() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let linked = root.path().join("linked");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "topic",
+            linked.to_str().unwrap(),
+        ],
+    );
+    std::fs::create_dir(linked.join("sub")).unwrap();
+    let main = checkout_dirs(&repo).await.unwrap();
+    let common = std::fs::canonicalize(repo.join(".git")).unwrap();
+    assert_eq!(
+        main,
+        CheckoutDirs {
+            root: std::fs::canonicalize(&repo).unwrap(),
+            common_dir: common.clone(),
+            git_dir: common.clone(),
+        }
+    );
+    let worktree = checkout_dirs(&linked.join("sub")).await.unwrap();
+    assert_eq!(
+        worktree,
+        CheckoutDirs {
+            root: std::fs::canonicalize(&linked).unwrap(),
+            common_dir: common.clone(),
+            git_dir: common.join("worktrees/linked"),
+        }
+    );
+}
