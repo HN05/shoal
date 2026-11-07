@@ -11,31 +11,42 @@ use anyhow::{Result, ensure};
 
 pub(crate) use crate::client::paths::{DEFAULT_STATE, Paths, SESSION_LOG, SESSION_PROMPT};
 
-impl Paths {
+/// Operations on the client type [`Paths`] that only the `shoal` command uses.
+pub(crate) trait PathsExt: Sized {
     /// [`Paths::new`] for this build, refusing the user's state directory
     /// in a development build.
-    pub fn of_command(state: Option<PathBuf>) -> Result<Self> {
+    fn of_command(state: Option<PathBuf>) -> Result<Self>;
+
+    /// [`Paths::state_dir`] for this build, as [`Self::of_command`] refuses it.
+    fn command_state_dir(state: Option<PathBuf>) -> Result<PathBuf>;
+
+    /// The push helper's launcher, held for one tracked agent launch.
+    fn push_gate_directory(&self) -> std::io::Result<tempfile::TempDir>;
+
+    /// Secret tool launchers, held for one tracked agent launch.
+    fn secret_tools_directory(&self) -> std::io::Result<tempfile::TempDir>;
+}
+
+impl PathsExt for Paths {
+    fn of_command(state: Option<PathBuf>) -> Result<Self> {
         let paths = Self::new(state)?;
         refuse_user_state(&paths.state)?;
         Ok(paths)
     }
 
-    /// [`Paths::state_dir`] for this build, as [`Self::of_command`] refuses it.
-    pub fn command_state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
+    fn command_state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
         let state = Self::state_dir(state)?;
         refuse_user_state(&state)?;
         Ok(state)
     }
 
-    /// The push helper's launcher, held for one tracked agent launch.
-    pub fn push_gate_directory(&self) -> std::io::Result<tempfile::TempDir> {
+    fn push_gate_directory(&self) -> std::io::Result<tempfile::TempDir> {
         tempfile::Builder::new()
             .prefix("push-gate-")
             .tempdir_in(&self.state)
     }
 
-    /// Secret tool launchers, held for one tracked agent launch.
-    pub fn secret_tools_directory(&self) -> std::io::Result<tempfile::TempDir> {
+    fn secret_tools_directory(&self) -> std::io::Result<tempfile::TempDir> {
         tempfile::Builder::new()
             .prefix("secret-tools-")
             .tempdir_in(&self.state)

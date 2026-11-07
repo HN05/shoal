@@ -1,4 +1,5 @@
 //! Cooperative TCP port reservations owned by a worktree.
+use crate::daemon::approvals::ApprovalRequestExt;
 pub(crate) use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, TransactionBehavior, params};

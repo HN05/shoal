@@ -16,26 +16,52 @@ use crate::{
     forge::{items::action::Edit, items::attach::Attachment},
 };
 
-impl ApprovalRequest {
+/// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
+pub(crate) trait ProposalExt {
     /// The proposed issue, for an issue proposal.
-    pub fn proposed_issue(&self) -> Option<&IssueSpecification> {
+    fn proposed_issue(&self) -> Option<&IssueSpecification>;
+
+    /// The proposed PR, for a PR proposal.
+    fn proposed_pull(&self) -> Option<&PullSpecification>;
+
+    /// The push approval runs: a push request's, or a PR proposal's that
+    /// pushes the branch first.
+    fn pending_push(&self) -> Option<&PushSpecification>;
+
+    /// The files the proposal attaches, its duplicates' included.
+    fn attachments(&self) -> Vec<&Attachment>;
+
+    /// The findings of duplicates an issue proposal has yet to post.
+    fn findings(&self) -> &[Finding];
+
+    /// What is left to do to an item approval posted.
+    fn follow_up(&self) -> Option<&Edit>;
+
+    fn set_follow_up(&mut self, follow_up: Option<Edit>);
+
+    /// Forget the first finding once it is posted.
+    fn finding_posted(&mut self);
+
+    /// Apply the user's edits to the proposed title and description.
+    fn edit(&mut self, decision: &ProposalDecision);
+}
+
+impl ProposalExt for ApprovalRequest {
+    fn proposed_issue(&self) -> Option<&IssueSpecification> {
         match &self.specification {
             Specification::Issue(issue) => Some(issue),
             _ => None,
         }
     }
 
-    /// The proposed PR, for a PR proposal.
-    pub fn proposed_pull(&self) -> Option<&PullSpecification> {
+    fn proposed_pull(&self) -> Option<&PullSpecification> {
         match &self.specification {
             Specification::Pull(pull) => Some(pull),
             _ => None,
         }
     }
 
-    /// The push approval runs: a push request's, or a PR proposal's that
-    /// pushes the branch first.
-    pub fn pending_push(&self) -> Option<&PushSpecification> {
+    fn pending_push(&self) -> Option<&PushSpecification> {
         match &self.specification {
             Specification::Push(push) => Some(push),
             Specification::Pull(pull) => pull.push.as_ref(),
@@ -43,8 +69,7 @@ impl ApprovalRequest {
         }
     }
 
-    /// The files the proposal attaches, its duplicates' included.
-    pub fn attachments(&self) -> Vec<&Attachment> {
+    fn attachments(&self) -> Vec<&Attachment> {
         match &self.specification {
             Specification::Issue(issue) => issue
                 .issue
@@ -57,14 +82,12 @@ impl ApprovalRequest {
         }
     }
 
-    /// The findings of duplicates an issue proposal has yet to post.
-    pub fn findings(&self) -> &[Finding] {
+    fn findings(&self) -> &[Finding] {
         self.proposed_issue()
             .map_or(&[], |issue| issue.duplicates.as_slice())
     }
 
-    /// What is left to do to an item approval posted.
-    pub fn follow_up(&self) -> Option<&Edit> {
+    fn follow_up(&self) -> Option<&Edit> {
         match &self.specification {
             Specification::Issue(issue) => issue.follow_up.as_ref(),
             Specification::Pull(pull) => pull.follow_up.as_ref(),
@@ -72,7 +95,7 @@ impl ApprovalRequest {
         }
     }
 
-    pub fn set_follow_up(&mut self, follow_up: Option<Edit>) {
+    fn set_follow_up(&mut self, follow_up: Option<Edit>) {
         match &mut self.specification {
             Specification::Issue(issue) => issue.follow_up = follow_up,
             Specification::Pull(pull) => pull.follow_up = follow_up,
@@ -80,8 +103,7 @@ impl ApprovalRequest {
         }
     }
 
-    /// Forget the first finding once it is posted.
-    pub fn finding_posted(&mut self) {
+    fn finding_posted(&mut self) {
         if let Specification::Issue(issue) = &mut self.specification
             && !issue.duplicates.is_empty()
         {
@@ -89,8 +111,7 @@ impl ApprovalRequest {
         }
     }
 
-    /// Apply the user's edits to the proposed title and description.
-    pub fn edit(&mut self, decision: &ProposalDecision) {
+    fn edit(&mut self, decision: &ProposalDecision) {
         let (title, body) = match &mut self.specification {
             Specification::Issue(issue) => (&mut issue.issue.title, &mut issue.issue.body),
             Specification::Pull(pull) => (&mut pull.pull.title, &mut pull.pull.body),

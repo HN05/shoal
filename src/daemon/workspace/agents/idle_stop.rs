@@ -1,6 +1,7 @@
 //! Stop idle agents to free memory, saving each as protection does so that an
 //! update restores it. Only an agent whose prompt cache has expired stops,
 //! since restoring one rewrites its cache.
+use crate::daemon::workspace::agents::ProtectionExt;
 use std::collections::HashMap;
 
 use anyhow::Result;

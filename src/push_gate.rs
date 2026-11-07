@@ -4,6 +4,7 @@
 //! workspace repository's remotes to the `shoal::` transport, so Git hands
 //! every push to them to Shoal's remote helper, which asks the daemon before
 //! it pushes. Fetches keep their URLs.
+use crate::paths::PathsExt;
 use std::{
     ffi::{OsStr, OsString},
     os::unix::fs::PermissionsExt,

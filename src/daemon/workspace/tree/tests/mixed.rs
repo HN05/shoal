@@ -1,6 +1,7 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},

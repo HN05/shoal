@@ -189,8 +189,13 @@ async fn described_leftovers(
     Ok(by_space)
 }
 
-impl Leftover {
+/// Operations on the client type [`Leftover`] that only the `shoal` command uses.
+trait LeftoverExt {
     /// `process` as `description` shows it at `now`, in Unix seconds.
+    fn of(process: &Untracked, description: &described::Description, now: u64) -> Self;
+}
+
+impl LeftoverExt for Leftover {
     fn of(process: &Untracked, description: &described::Description, now: u64) -> Self {
         Self {
             pid: process.identity.pid,

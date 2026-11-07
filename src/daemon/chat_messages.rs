@@ -2,6 +2,7 @@
 //! user. Like agent messages, delivery deletes them; a chat removed before
 //! receiving them gives them to the user as the notifications they would
 //! have been.
+use crate::daemon::links::wait::UpdatesExt;
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 

@@ -4,6 +4,7 @@
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
 //! has stopped syncing.
+use crate::daemon::questions::QuestionExt;
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -259,9 +260,33 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
     waiting.chain(finished).collect()
 }
 
-impl Item {
+/// Operations on the client type [`Item`] that only the `shoal` command uses.
+pub(crate) trait ItemExt {
     /// The workspace or chat it belongs to.
-    pub(in crate::cli) fn space_id(&self) -> &str {
+    fn space_id(&self) -> &str;
+
+    /// The repository that owns a proposed issue, which outlives the
+    /// workspace that proposed it, or an untracked worktree.
+    fn repository_id(&self) -> Option<&str>;
+
+    /// What the row names: its space, marked when a proposal outlived it,
+    /// an untracked worktree's directory, or the repository whose sync
+    /// failed, which the repository column leaves out when every row shares
+    /// it. Repositories are `(id, name)` pairs.
+    fn name(&self, repositories: &[(String, String)]) -> String;
+
+    /// What kind of item it is, with a question's or request's number.
+    fn kind(&self) -> Cell;
+
+    /// What the item asks or reports: the question, the access requested
+    /// and why, the failure, or the marked item with the issue's title.
+    fn text(&self) -> String;
+
+    fn note(&self) -> String;
+}
+
+impl ItemExt for Item {
+    fn space_id(&self) -> &str {
         match self {
             Self::Question { question } => &question.space_id,
             Self::Approval { request } => &request.space_id,
@@ -276,8 +301,6 @@ impl Item {
         }
     }
 
-    /// The repository that owns a proposed issue, which outlives the
-    /// workspace that proposed it, or an untracked worktree.
     fn repository_id(&self) -> Option<&str> {
         match self {
             Self::Approval { request } => request.repository_id.as_deref(),
@@ -287,10 +310,6 @@ impl Item {
         }
     }
 
-    /// What the row names: its space, marked when a proposal outlived it,
-    /// an untracked worktree's directory, or the repository whose sync
-    /// failed, which the repository column leaves out when every row shares
-    /// it. Repositories are `(id, name)` pairs.
     fn name(&self, repositories: &[(String, String)]) -> String {
         let name: &str = match self {
             Self::Question { question } => &question.space,
@@ -317,7 +336,6 @@ impl Item {
         name.to_owned()
     }
 
-    /// What kind of item it is, with a question's or request's number.
     fn kind(&self) -> Cell {
         let (label, style) = match self {
             Self::Question { question } => {
@@ -349,8 +367,6 @@ impl Item {
         (label.into(), Some(style))
     }
 
-    /// What the item asks or reports: the question, the access requested
-    /// and why, the failure, or the marked item with the issue's title.
     fn text(&self) -> String {
         let title = |w: &Workspace| w.links.issue_title.clone().unwrap_or_default();
         match self {

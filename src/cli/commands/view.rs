@@ -74,7 +74,12 @@ async fn view(
     Ok(i32::from(views.iter().any(Shown::failed)))
 }
 
-impl Shown {
+/// Operations on the client type [`Shown`] that only the `shoal` command uses.
+trait ShownExt {
+    fn failed(&self) -> bool;
+}
+
+impl ShownExt for Shown {
     fn failed(&self) -> bool {
         match self {
             Self::Item(view) => view.details.is_none(),

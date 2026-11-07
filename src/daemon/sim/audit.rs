@@ -14,9 +14,21 @@ use crate::{
     time::unix_seconds,
 };
 
-impl CleanRequest {
+/// Operations on the client type [`CleanRequest`] that only the `shoal` command uses.
+pub(crate) trait CleanRequestExt {
     /// Record an idle device about to be deleted to make room.
-    pub(super) fn record_eviction(&mut self, sim: &Simulator) {
+    fn record_eviction(&mut self, sim: &Simulator);
+
+    /// Record the device the request will use and how it becomes clean.
+    fn record_selection(&mut self, sim: &Simulator, needs_reset: bool);
+
+    /// Record how the allocation ended. Only a busy outcome, including a
+    /// pending approval, lets the same request ID retry.
+    fn record_outcome(&mut self, result: &Result<Allocation<Box<Simulator>>>);
+}
+
+impl CleanRequestExt for CleanRequest {
+    fn record_eviction(&mut self, sim: &Simulator) {
         self.evicted.push(EvictedDevice {
             id: sim.id.clone(),
             udid: sim.udid.clone(),
@@ -25,8 +37,7 @@ impl CleanRequest {
         self.action = Some(CleanAction::CreateAfterEviction);
     }
 
-    /// Record the device the request will use and how it becomes clean.
-    pub(super) fn record_selection(&mut self, sim: &Simulator, needs_reset: bool) {
+    fn record_selection(&mut self, sim: &Simulator, needs_reset: bool) {
         self.simulator_id = Some(sim.id.clone());
         self.udid = sim.udid.clone();
         self.apps_removed = needs_reset.then_some(sim.installed_apps).flatten();
@@ -39,8 +50,6 @@ impl CleanRequest {
         }
     }
 
-    /// Record how the allocation ended. Only a busy outcome, including a
-    /// pending approval, lets the same request ID retry.
     fn record_outcome(&mut self, result: &Result<Allocation<Box<Simulator>>>) {
         self.updated_at = unix_seconds();
         match result {

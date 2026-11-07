@@ -1,5 +1,6 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
+use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use std::{
     collections::{HashMap, HashSet},
@@ -35,56 +36,88 @@ mod restart;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Outcome, Renewals, Restart, Restarts, forget_ended_renewals, restarted};
 
-impl Protection {
+/// Operations on the client type [`Protection`] that only the `shoal` command uses.
+pub(crate) trait ProtectionExt {
     /// Memory or CPU pressure.
-    pub(crate) fn load(reason: &str) -> Self {
+    fn load(reason: &str) -> Self;
+
+    /// `shoal restart`, whose wrapper restores the agent once its processes
+    /// stop. Wrappers handle it as any protection stop they restore.
+    fn restart() -> Self;
+
+    fn is_restart(&self) -> bool;
+
+    /// `shoal queue move` of a running agent, whose wrapper waits for the
+    /// agent queue to start its restore. Wrappers handle it as any
+    /// protection stop they restore.
+    fn queue_move() -> Self;
+
+    fn is_queue_move(&self) -> bool;
+
+    /// An idle agent of a done workspace whose cleanup is held, which Shoal
+    /// stops to free memory.
+    fn idle_held() -> Self;
+
+    /// An idle agent whose prompt cache expired, which Shoal stops to free
+    /// memory under `[idle_stop]`.
+    fn idle_expired() -> Self;
+
+    /// An idle stop for `reason`, whose restore waits for an update. Wrappers
+    /// handle it as any protection stop they restore.
+    fn idle(reason: &str) -> Self;
+
+    /// Whether Shoal stopped the agent for being idle, not for load.
+    fn is_idle(&self) -> bool;
+
+    /// Whether `[overload.recovery]` decides its restore, as for a stop that
+    /// load or disk space caused; `shoal queue move` and idle stops restore
+    /// whatever it says.
+    fn follows_overload_recovery(&self) -> bool;
+
+    /// Whether a done assignment cancels its restore. An idle stop's restore
+    /// waits for an update all the same, since the agent ran until Shoal
+    /// stopped it.
+    fn ends_with_assignment(&self) -> bool;
+}
+
+impl ProtectionExt for Protection {
+    fn load(reason: &str) -> Self {
         Self {
             reason: reason.into(),
             resumes_when: crate::protocol::default_resumes_when(),
         }
     }
 
-    /// `shoal restart`, whose wrapper restores the agent once its processes
-    /// stop. Wrappers handle it as any protection stop they restore.
-    pub(crate) fn restart() -> Self {
+    fn restart() -> Self {
         Self {
             reason: RESTART_REASON.into(),
             resumes_when: "its processes stop".into(),
         }
     }
 
-    pub(crate) fn is_restart(&self) -> bool {
+    fn is_restart(&self) -> bool {
         self.reason == RESTART_REASON
     }
 
-    /// `shoal queue move` of a running agent, whose wrapper waits for the
-    /// agent queue to start its restore. Wrappers handle it as any
-    /// protection stop they restore.
-    pub(crate) fn queue_move() -> Self {
+    fn queue_move() -> Self {
         Self {
             reason: MOVE_REASON.into(),
             resumes_when: "the agent queue starts it".into(),
         }
     }
 
-    pub(crate) fn is_queue_move(&self) -> bool {
+    fn is_queue_move(&self) -> bool {
         self.reason == MOVE_REASON
     }
 
-    /// An idle agent of a done workspace whose cleanup is held, which Shoal
-    /// stops to free memory.
-    pub(crate) fn idle_held() -> Self {
+    fn idle_held() -> Self {
         Self::idle(IDLE_HELD_REASON)
     }
 
-    /// An idle agent whose prompt cache expired, which Shoal stops to free
-    /// memory under `[idle_stop]`.
-    pub(crate) fn idle_expired() -> Self {
+    fn idle_expired() -> Self {
         Self::idle(IDLE_EXPIRED_REASON)
     }
 
-    /// An idle stop for `reason`, whose restore waits for an update. Wrappers
-    /// handle it as any protection stop they restore.
     fn idle(reason: &str) -> Self {
         Self {
             reason: reason.into(),
@@ -92,22 +125,15 @@ impl Protection {
         }
     }
 
-    /// Whether Shoal stopped the agent for being idle, not for load.
-    pub(crate) fn is_idle(&self) -> bool {
+    fn is_idle(&self) -> bool {
         [IDLE_HELD_REASON, IDLE_EXPIRED_REASON].contains(&self.reason.as_str())
     }
 
-    /// Whether `[overload.recovery]` decides its restore, as for a stop that
-    /// load or disk space caused; `shoal queue move` and idle stops restore
-    /// whatever it says.
-    pub(crate) fn follows_overload_recovery(&self) -> bool {
+    fn follows_overload_recovery(&self) -> bool {
         !self.is_queue_move() && !self.is_idle()
     }
 
-    /// Whether a done assignment cancels its restore. An idle stop's restore
-    /// waits for an update all the same, since the agent ran until Shoal
-    /// stopped it.
-    pub(crate) fn ends_with_assignment(&self) -> bool {
+    fn ends_with_assignment(&self) -> bool {
         !self.is_idle()
     }
 }

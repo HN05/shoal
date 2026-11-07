@@ -1,3 +1,4 @@
+use crate::execution::recovery::RecordExt;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;

@@ -1,3 +1,4 @@
+use crate::config_file::ConfigExt;
 use anyhow::{Context as _, Result, ensure};
 
 use crate::client::output::config::{Edited, Reference};

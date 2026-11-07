@@ -1,6 +1,7 @@
 //! Packages of spaces for `shoal move`: the daemon removes a space here,
 //! stopping a chat's agent first, or copies one that keeps running, and
 //! writes what continues it on another machine.
+use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
 
 use crate::client::space_names::SpaceSelector;

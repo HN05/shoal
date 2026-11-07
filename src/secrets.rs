@@ -1,5 +1,6 @@
 //! Secrets that user-configured commands fetch for tracked agents. Shoal keeps
 //! the commands, never the values.
+use crate::paths::PathsExt;
 use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::BTreeSet,

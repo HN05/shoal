@@ -1,6 +1,7 @@
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
+use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         test_support::{global_config, manager},

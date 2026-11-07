@@ -1,6 +1,7 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
 use crate::client::space_names::SpaceSelector;
+use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         chats::NewChat,

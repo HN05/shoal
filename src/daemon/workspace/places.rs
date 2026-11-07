@@ -1,5 +1,6 @@
 //! Where executions run in terminal hosts, as their wrappers report it, and
 //! the places Shoal created for workspaces, which it closes with them.
+use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 

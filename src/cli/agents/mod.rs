@@ -2,6 +2,8 @@
 //! picking one, `shoal <name>`, launching one from a command in a
 //! workspace or a chat, handing a workspace to a desktop app, and the trust
 //! and session files those launches prepare.
+use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::RecordExt;
 mod desktop;
 mod detached;
 mod launch;

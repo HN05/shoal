@@ -1,4 +1,6 @@
 //! Review daemon-owned approval requests and render allocation decisions.
+use crate::daemon::approvals::TargetExt;
+use crate::daemon::approvals::proposals::ProposalExt;
 use anyhow::{Context as _, Result, ensure};
 use serde_json::Value;
 

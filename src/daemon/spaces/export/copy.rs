@@ -1,6 +1,8 @@
 //! Copies of spaces that keep running: a workspace at a checkpoint with its
 //! agents and the sessions they reported, or a chat with its session, which
 //! `shoal move import` opens as a new space whose agents start from forks.
+use crate::execution::recovery::LastSessionExt;
+use crate::transfer::ManifestExt;
 use anyhow::{Result, ensure};
 
 use super::Prepared;

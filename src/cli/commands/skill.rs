@@ -1,4 +1,5 @@
 //! User-level skill delivery; no daemon, repository, or agent process is needed.
+use crate::paths::PathsExt;
 mod record;
 
 use crate::client::output::{

@@ -1,4 +1,5 @@
 use super::{Ending, Updates, ending};
+use crate::daemon::links::wait::UpdatesExt;
 
 #[test]
 fn only_a_wait_that_ends_without_updates_is_logged() {

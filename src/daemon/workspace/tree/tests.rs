@@ -1,4 +1,6 @@
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::approvals::ApprovalRequestExt;
+use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},

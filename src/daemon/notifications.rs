@@ -15,9 +15,19 @@ use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFi
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
 
-impl NotificationKind {
+/// Operations on the client type [`NotificationKind`] that only the `shoal` command uses.
+trait NotificationKindExt {
     /// Whether the agent of an ancestor coordinating the workspace's work
     /// receives this event instead of the user, and from whom.
+    fn coordination(self) -> Option<Source>;
+
+    /// Polled operations repeat identical events every retry or sweep, and
+    /// agents may repeat a message; those collapse into one unread
+    /// notification; completed events remain distinct.
+    fn collapses(self) -> bool;
+}
+
+impl NotificationKindExt for NotificationKind {
     fn coordination(self) -> Option<Source> {
         match self {
             Self::AgentExited | Self::AgentStopped | Self::TurnFailed => Some(Source::Daemon),
@@ -29,9 +39,6 @@ impl NotificationKind {
         }
     }
 
-    /// Polled operations repeat identical events every retry or sweep, and
-    /// agents may repeat a message; those collapse into one unread
-    /// notification; completed events remain distinct.
     fn collapses(self) -> bool {
         !matches!(
             self,

@@ -36,8 +36,16 @@ const LISTING_BUDGET: usize = crate::protocol::MAX_FRAME - 1024;
 /// of its workspace ends it.
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
-impl Ask {
-    pub fn validate(&self) -> Result<()> {
+/// Operations on the client type [`Ask`] that only the `shoal` command uses.
+trait AskExt {
+    fn validate(&self) -> Result<()>;
+
+    /// The answer an agent receives: a choice number names that choice.
+    fn resolve(&self, answer: &str) -> Result<String>;
+}
+
+impl AskExt for Ask {
+    fn validate(&self) -> Result<()> {
         for (field, value) in [
             ("question", Some(&self.question)),
             ("recommendation", Some(&self.recommendation)),
@@ -57,7 +65,6 @@ impl Ask {
         Ok(())
     }
 
-    /// The answer an agent receives: a choice number names that choice.
     fn resolve(&self, answer: &str) -> Result<String> {
         if let Ok(number) = answer.trim().parse::<usize>()
             && !self.choices.is_empty()
@@ -85,25 +92,52 @@ fn validate_answer(answer: &str) -> Result<()> {
     Ok(())
 }
 
-impl Question {
+/// Operations on the client type [`Question`] that only the `shoal` command uses.
+pub(crate) trait QuestionExt {
     /// The question on one line, as listings and notifications show it: a
     /// question asked in the chat may span lines.
-    pub fn one_line(&self) -> String {
-        self.ask.question.replace(['\n', '\t'], " ")
-    }
+    fn one_line(&self) -> String;
 
     /// The answer the agent recommends; a question asked in the chat has
     /// none.
-    pub fn recommendation(&self) -> Option<&str> {
+    fn recommendation(&self) -> Option<&str>;
+
+    fn is_open(&self) -> bool;
+
+    /// Refuse an answer to a question that is answered or closed.
+    fn ensure_open(&self) -> Result<()>;
+
+    /// Whether `other` is this question as asked, though it may since be
+    /// answered: the same space, ask and time.
+    fn is_same(&self, other: &Question) -> bool;
+
+    /// What the user is told about a new question, including how to answer it.
+    /// It is cut to the length of other messages, so a batch of notifications
+    /// still fits one response.
+    fn notification(&self) -> String;
+
+    /// What the user, or the coordinating agent, is told about a withdrawn
+    /// question whose notification was already shown.
+    fn withdrawal_notification(&self) -> String;
+
+    /// The agent message carrying `answer`; it names the question it answers.
+    fn answer_message(&self, answer: &str) -> String;
+}
+
+impl QuestionExt for Question {
+    fn one_line(&self) -> String {
+        self.ask.question.replace(['\n', '\t'], " ")
+    }
+
+    fn recommendation(&self) -> Option<&str> {
         (!self.in_chat).then_some(self.ask.recommendation.as_str())
     }
 
-    pub fn is_open(&self) -> bool {
+    fn is_open(&self) -> bool {
         self.answer.is_none() && self.closed_at.is_none()
     }
 
-    /// Refuse an answer to a question that is answered or closed.
-    pub fn ensure_open(&self) -> Result<()> {
+    fn ensure_open(&self) -> Result<()> {
         ensure!(
             self.answer.is_none(),
             "question {} is already answered",
@@ -122,17 +156,12 @@ impl Question {
         Ok(())
     }
 
-    /// Whether `other` is this question as asked, though it may since be
-    /// answered: the same space, ask and time.
     fn is_same(&self, other: &Question) -> bool {
         self.space_id == other.space_id
             && self.ask == other.ask
             && self.created_at == other.created_at
     }
 
-    /// What the user is told about a new question, including how to answer it.
-    /// It is cut to the length of other messages, so a batch of notifications
-    /// still fits one response.
     fn notification(&self) -> String {
         let mut text = format!(
             "question {} (answer with shoal questions {}): {}",
@@ -146,8 +175,6 @@ impl Question {
         crate::validate::shorten(text, crate::validate::MAX_MESSAGE_LEN)
     }
 
-    /// What the user, or the coordinating agent, is told about a withdrawn
-    /// question whose notification was already shown.
     fn withdrawal_notification(&self) -> String {
         crate::validate::shorten(
             format!(
@@ -159,7 +186,6 @@ impl Question {
         )
     }
 
-    /// The agent message carrying `answer`; it names the question it answers.
     fn answer_message(&self, answer: &str) -> String {
         if self.in_chat {
             return format!(
@@ -174,10 +200,15 @@ impl Question {
     }
 }
 
-impl Ask {
+/// The [`Ask`] of a question an agent asks in its chat.
+trait AskFromChat {
     /// What an agent asks in its chat: its turn's final `message`, kept to
     /// the length and characters of agent messages. Without one, as from an
     /// agent whose hook does not pass it, the question points to the chat.
+    fn in_chat(message: Option<&str>) -> Self;
+}
+
+impl AskFromChat for Ask {
     fn in_chat(message: Option<&str>) -> Self {
         let text: String = message
             .unwrap_or_default()

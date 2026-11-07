@@ -1,5 +1,7 @@
 //! Exclusive, worktree-owned Xcode simulator leases. Claims are persisted
 //! before every simctl mutation so interrupted work can be reconciled.
+use crate::daemon::approvals::ApprovalRequestExt;
+use crate::daemon::sim::audit::CleanRequestExt;
 pub mod audit;
 mod planning;
 pub(crate) mod records;
@@ -24,8 +26,28 @@ use crate::{
     validate,
 };
 
-impl Simulator {
+/// Operations on the client type [`Simulator`] that only the `shoal` command uses.
+trait SimulatorExt {
     /// An unclaimed record for a device simctl has not created yet.
+    fn new(profile: Profile) -> Self;
+
+    /// Take ownership for a lease; persist it before any simctl mutation.
+    fn claim(&mut self, workspace_id: &str, request: SimRequest);
+
+    /// Lease a booted device, or mark a failed boot while keeping the claim.
+    fn finish_boot(&mut self, workspace_id: String, result: &Result<()>);
+
+    fn is_leased_by(&self, workspace_id: &str, name: &str) -> bool;
+
+    fn device<'a>(&self, inventory: &'a Inventory) -> Option<&'a simctl::Device>;
+
+    fn is_booted(&self, inventory: &Inventory) -> bool;
+
+    /// Eviction cost; unknown counts sort last.
+    fn app_cost(&self) -> usize;
+}
+
+impl SimulatorExt for Simulator {
     fn new(profile: Profile) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -43,7 +65,6 @@ impl Simulator {
         }
     }
 
-    /// Take ownership for a lease; persist it before any simctl mutation.
     fn claim(&mut self, workspace_id: &str, request: SimRequest) {
         self.workspace_id = Some(workspace_id.to_owned());
         self.lease_name = Some(request.name);
@@ -52,7 +73,6 @@ impl Simulator {
         self.error = None;
     }
 
-    /// Lease a booted device, or mark a failed boot while keeping the claim.
     fn finish_boot(&mut self, workspace_id: String, result: &Result<()>) {
         self.last_used = unix_seconds();
         self.last_workspace_id = Some(workspace_id);
@@ -78,7 +98,6 @@ impl Simulator {
         self.device(inventory).is_some_and(|d| d.state.is_booted())
     }
 
-    /// Eviction cost; unknown counts sort last.
     fn app_cost(&self) -> usize {
         self.installed_apps.unwrap_or(usize::MAX)
     }

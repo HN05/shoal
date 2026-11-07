@@ -1,3 +1,4 @@
+use crate::execution::recovery::RecordExt;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::client::space_names::SpaceSelector;

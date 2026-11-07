@@ -1,6 +1,7 @@
 //! How text shows a space's status: a workspace's adds what needs its
 //! worktree.
 use super::StatusView;
+use crate::cli::list_status::ListStatusExt;
 use crate::{
     cli::{
         commands::{base, ci, links, resources, split},

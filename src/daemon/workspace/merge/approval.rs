@@ -1,6 +1,7 @@
 //! The user's approval of a scoped merge or unmerge: requesting it for the
 //! commit and push a merge plans or the merge an unmerge undoes, and refusing
 //! a merge's once the branch moved.
+use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail};
 
 use crate::{

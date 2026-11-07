@@ -5,8 +5,13 @@ use crate::git;
 pub(crate) use crate::model::Branch;
 use std::path::Path;
 
-impl Branch {
-    pub fn selector(&self) -> String {
+/// Operations on the client type [`Branch`] that only the `shoal` command uses.
+pub(crate) trait BranchExt {
+    fn selector(&self) -> String;
+}
+
+impl BranchExt for Branch {
+    fn selector(&self) -> String {
         match &self.remote {
             Some(remote) => git::remote_ref(remote, &self.name),
             None => git::local_ref(&self.name),

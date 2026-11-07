@@ -1,5 +1,6 @@
 //! Branch allocation, existing-branch workspaces and default-branch refreshes
 //! against workspace records. Adoption is explicit.
+use crate::git::existing_branch::BranchExt;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};

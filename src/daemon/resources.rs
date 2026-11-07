@@ -1,4 +1,5 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
+use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -25,8 +26,13 @@ use crate::{
     validate,
 };
 
-impl ResourceLease {
+/// Operations on the client type [`ResourceLease`] that only the `shoal` command uses.
+trait ResourceLeaseExt {
     /// Leases record the member's kind through their mode and repository binding.
+    fn kind(&self) -> ResourceKind;
+}
+
+impl ResourceLeaseExt for ResourceLease {
     fn kind(&self) -> ResourceKind {
         match (&self.repository, self.mode) {
             (Some(_), _) => ResourceKind::Repo,
@@ -235,9 +241,16 @@ fn grouped_usage<'a>(
     pools
 }
 
-impl ResourceConfig {
+/// Operations on the client type [`ResourceConfig`] that only the `shoal` command uses.
+trait ResourceConfigExt {
     /// The lock mode this member grants for `requested`, or `None` when the
     /// mode does not apply to its kind.
+    fn mode(&self, requested: Option<LockMode>) -> Option<LockMode>;
+
+    fn can_acquire(&self, mode: LockMode, used: Usage, pool_available: u32) -> bool;
+}
+
+impl ResourceConfigExt for ResourceConfig {
     fn mode(&self, requested: Option<LockMode>) -> Option<LockMode> {
         match (self.kind, requested) {
             (ResourceKind::Semaphore, None | Some(LockMode::Permit)) => Some(LockMode::Permit),

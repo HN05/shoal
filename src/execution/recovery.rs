@@ -44,16 +44,23 @@ pub(crate) struct Recovery {
     pub proxy: Option<crate::proxy::Proxy>,
 }
 
-impl Stop {
+/// Operations on the client type [`Stop`] that only the `shoal` command uses.
+trait StopExt {
     /// The stop of the agent `record`, saved at `path`, keeps.
-    pub(crate) fn of(record: &Record, path: &Path) -> Self {
+    fn of(record: &Record, path: &Path) -> Self;
+
+    /// The sentence telling the restored agent about the stop.
+    fn describe(&self) -> String;
+}
+
+impl StopExt for Stop {
+    fn of(record: &Record, path: &Path) -> Self {
         Self {
             reason: record.stop_reason.clone(),
             at: saved_at(path),
         }
     }
 
-    /// The sentence telling the restored agent about the stop.
     fn describe(&self) -> String {
         let at = self
             .at
@@ -403,8 +410,37 @@ pub(crate) enum Restorer {
     Queue(BTreeMap<String, String>),
 }
 
-impl Record {
+/// Operations on the client type [`Record`] that only the `shoal` command uses.
+pub(crate) trait RecordExt: Sized {
     /// The record of `agent`, stopped for `reason`.
+    fn new(
+        agent: &super::TrackedAgent,
+        reason: Option<&str>,
+        stage: Stage,
+        origin: Option<Origin>,
+    ) -> Self;
+
+    /// This record, saved at `path`, as the last session of execution `id`,
+    /// which keeps its agent, session, place and stop.
+    fn into_last_session(self, id: String, path: &Path) -> LastSession;
+
+    /// Whether the agent stopped between turns, with no work in flight. One
+    /// whose turn is unknown counts as interrupted mid-turn.
+    fn between_turns(&self) -> bool;
+
+    /// This record where neither its session nor its place exists, such as
+    /// on another machine, and no wrapper waits to restore it.
+    fn moved(self) -> Self;
+
+    /// This record on another machine, where its place does not exist and no
+    /// wrapper waits to restore it, but its session may.
+    fn elsewhere(self) -> Self;
+
+    /// Read a saved record, `None` once it is consumed.
+    fn load(path: &Path) -> Result<Option<Self>>;
+}
+
+impl RecordExt for Record {
     fn new(
         agent: &super::TrackedAgent,
         reason: Option<&str>,
@@ -426,9 +462,7 @@ impl Record {
         }
     }
 
-    /// This record, saved at `path`, as the last session of execution `id`,
-    /// which keeps its agent, session, place and stop.
-    pub(crate) fn into_last_session(self, id: String, path: &Path) -> LastSession {
+    fn into_last_session(self, id: String, path: &Path) -> LastSession {
         let stop = Stop::of(&self, path);
         LastSession {
             execution: id,
@@ -444,15 +478,11 @@ impl Record {
         }
     }
 
-    /// Whether the agent stopped between turns, with no work in flight. One
-    /// whose turn is unknown counts as interrupted mid-turn.
-    pub(crate) fn between_turns(&self) -> bool {
+    fn between_turns(&self) -> bool {
         self.turn == Some(AgentState::Idle)
     }
 
-    /// This record where neither its session nor its place exists, such as
-    /// on another machine, and no wrapper waits to restore it.
-    pub(crate) fn moved(self) -> Self {
+    fn moved(self) -> Self {
         Self {
             session: None,
             moved: true,
@@ -460,9 +490,7 @@ impl Record {
         }
     }
 
-    /// This record on another machine, where its place does not exist and no
-    /// wrapper waits to restore it, but its session may.
-    pub(crate) fn elsewhere(self) -> Self {
+    fn elsewhere(self) -> Self {
         Self {
             origin: None,
             waiting: None,
@@ -470,8 +498,7 @@ impl Record {
         }
     }
 
-    /// Read a saved record, `None` once it is consumed.
-    pub(crate) fn load(path: &Path) -> Result<Option<Self>> {
+    fn load(path: &Path) -> Result<Option<Self>> {
         match std::fs::read(path) {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .map(Some)
@@ -784,9 +811,33 @@ pub(crate) fn forget_session(paths: &Paths, workspace_id: &str, id: &str) -> Res
     consume(&session_path(paths, workspace_id, id))
 }
 
-impl LastSession {
+/// Operations on the client type [`LastSession`] that only the `shoal` command uses.
+pub(crate) trait LastSessionExt: Sized {
     /// This session where it is not available, which starts a new one.
-    pub(crate) fn moved(self) -> Self {
+    fn moved(self) -> Self;
+
+    fn path(paths: &Paths, workspace_id: &str, execution: &str) -> PathBuf;
+
+    /// Save execution `id` of `agent` as one of the workspace's last
+    /// sessions.
+    fn save(paths: &Paths, workspace_id: &str, agent: &super::TrackedAgent, id: &str)
+    -> Result<()>;
+
+    /// Save this as one of the workspace's last sessions.
+    fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()>;
+
+    /// Read the last session saved at `path`, `None` once it is consumed.
+    fn load(path: &Path) -> Result<Option<Self>>;
+
+    /// The workspace's last sessions; an unreadable one is left out.
+    fn all(paths: &Paths, workspace_id: &str) -> Result<Vec<Self>>;
+
+    /// Forget every last session of the workspace.
+    fn forget_all(paths: &Paths, workspace_id: &str) -> Result<()>;
+}
+
+impl LastSessionExt for LastSession {
+    fn moved(self) -> Self {
         Self {
             session: None,
             moved: true,
@@ -795,15 +846,13 @@ impl LastSession {
         }
     }
 
-    pub(crate) fn path(paths: &Paths, workspace_id: &str, execution: &str) -> PathBuf {
+    fn path(paths: &Paths, workspace_id: &str, execution: &str) -> PathBuf {
         paths
             .workspace_state(workspace_id)
             .join(format!("{execution}{LAST_SESSION_SUFFIX}"))
     }
 
-    /// Save execution `id` of `agent` as one of the workspace's last
-    /// sessions.
-    pub(crate) fn save(
+    fn save(
         paths: &Paths,
         workspace_id: &str,
         agent: &super::TrackedAgent,
@@ -824,8 +873,7 @@ impl LastSession {
         .write(paths, workspace_id)
     }
 
-    /// Save this as one of the workspace's last sessions.
-    pub(crate) fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()> {
+    fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()> {
         std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
         crate::fsutil::replace_atomically(
             &Self::path(paths, workspace_id, &self.execution),
@@ -838,8 +886,7 @@ impl LastSession {
         Ok(())
     }
 
-    /// Read the last session saved at `path`, `None` once it is consumed.
-    pub(crate) fn load(path: &Path) -> Result<Option<Self>> {
+    fn load(path: &Path) -> Result<Option<Self>> {
         let execution = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -859,8 +906,7 @@ impl LastSession {
         }
     }
 
-    /// The workspace's last sessions; an unreadable one is left out.
-    pub(crate) fn all(paths: &Paths, workspace_id: &str) -> Result<Vec<Self>> {
+    fn all(paths: &Paths, workspace_id: &str) -> Result<Vec<Self>> {
         Ok(Saved::load(paths, workspace_id)?
             .sessions
             .iter()
@@ -868,8 +914,7 @@ impl LastSession {
             .collect())
     }
 
-    /// Forget every last session of the workspace.
-    pub(crate) fn forget_all(paths: &Paths, workspace_id: &str) -> Result<()> {
+    fn forget_all(paths: &Paths, workspace_id: &str) -> Result<()> {
         for (_, path) in Saved::load(paths, workspace_id)?.sessions {
             consume(&path)?;
         }

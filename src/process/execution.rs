@@ -1,5 +1,6 @@
 //! Combine native process evidence for one execution. Callers decide whether
 //! uncertainty permits repair, ordinary stopping, or explicit manual removal.
+use crate::process::identity::IdentityAge;
 use anyhow::Result;
 use std::path::Path;
 

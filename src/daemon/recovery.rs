@@ -17,7 +17,15 @@ pub(crate) use crate::client::recovery::{
 #[cfg(test)]
 mod tests;
 
-impl Report {
+/// Operations on the client type [`Report`] that only the `shoal` command uses.
+trait ReportExt {
+    fn new(workspace: Workspace) -> Self;
+
+    /// A report for a workspace whose reconciliation itself failed.
+    fn failed(workspace: Workspace, error: &anyhow::Error) -> Self;
+}
+
+impl ReportExt for Report {
     fn new(workspace: Workspace) -> Self {
         Self {
             workspace,
@@ -29,7 +37,6 @@ impl Report {
         }
     }
 
-    /// A report for a workspace whose reconciliation itself failed.
     fn failed(workspace: Workspace, error: &anyhow::Error) -> Self {
         let mut report = Self::new(workspace);
         report.issues.push(format!("{error:#}"));

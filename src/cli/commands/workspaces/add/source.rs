@@ -1,4 +1,5 @@
 //! What an interactive addition starts from: a new or existing branch, an issue or a PR.
+use crate::git::existing_branch::BranchExt;
 use anyhow::{Result, ensure};
 
 use super::target::AddTarget;

@@ -1,6 +1,8 @@
 //! `shoal move root`: move every repository directory into a new `root_dir`.
 use super::super::resume::Stopped;
+use crate::cli::commands::resume::queue::QueuedExt;
 use crate::client::output::resume::Queued;
+use crate::config_file::ConfigExt;
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},

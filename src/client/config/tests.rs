@@ -1,4 +1,5 @@
 use super::*;
+use crate::config_file::ConfigExt;
 
 const TEMPLATE: &str = include_str!("../../../configs/default.toml");
 

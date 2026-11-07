@@ -5,6 +5,7 @@
 //! `shoal resume` restores it. Survivors and incomplete evidence keep the
 //! execution, are checked again, and only they notify the user. Executions
 //! of an earlier boot need no evidence.
+use crate::execution::recovery::RecordExt;
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;

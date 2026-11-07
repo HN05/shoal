@@ -1,5 +1,6 @@
 //! Access grants for approval-gated secrets. The daemon records the decision;
 //! the CLI fetches the value only after the daemon confirms it.
+use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 
 pub(crate) use crate::client::secrets::{CatalogSecret, SecretCatalog, SecretGrant, SecretRequest};

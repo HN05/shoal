@@ -2,6 +2,7 @@
 //! approval: whether one is held, recording it, and pushing what the user
 //! approved in an operation whose end decides the request, opening the PR a
 //! proposal held back with it.
+use crate::daemon::approvals::proposals::ProposalExt;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};

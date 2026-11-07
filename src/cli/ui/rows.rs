@@ -1,5 +1,6 @@
 //! The labels pickers and lists show: aligned rows of workspaces, agent
 //! launches and repositories, with their status cells.
+use crate::cli::list_status::ListStatusExt;
 use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;

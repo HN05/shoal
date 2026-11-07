@@ -3,8 +3,17 @@
 use crate::cli::output::{Palette, Style};
 pub(crate) use crate::client::list_status::*;
 
-impl ListStatus {
-    pub fn style(self) -> Style {
+/// Operations on the client type [`ListStatus`] that only the `shoal` command uses.
+pub(crate) trait ListStatusExt {
+    fn style(self) -> Style;
+
+    /// A one-column marker for what the status asks of the user, whose shape
+    /// stays readable without color.
+    fn marker(self, palette: Palette) -> String;
+}
+
+impl ListStatusExt for ListStatus {
+    fn style(self) -> Style {
         match self {
             Self::Failed => Style::Error,
             Self::Ready => Style::Success,
@@ -26,9 +35,7 @@ impl ListStatus {
         }
     }
 
-    /// A one-column marker for what the status asks of the user, whose shape
-    /// stays readable without color.
-    pub fn marker(self, palette: Palette) -> String {
+    fn marker(self, palette: Palette) -> String {
         let group = self.group();
         let style = match group {
             Group::YourTurn => Style::Attention,
