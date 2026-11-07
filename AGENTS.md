@@ -351,7 +351,7 @@ command against a foreground daemon in a temporary home and lists where the time
 went; `--help` shows its options. It builds the `profiling` cargo profile,
 release code with symbols for samplers such as samply. `SHOAL_PROFILE=1` makes a
 Shoal process print a `profile` line to stderr for each daemon call, daemon
-request and subprocess run. It is a contributor tool, so the user documentation
+request, daemon startup step and subprocess run. It is a contributor tool, so the user documentation
 leaves it out.
 
 `python3 scripts/profile_tests.py suite` runs each test binary as `cargo test`

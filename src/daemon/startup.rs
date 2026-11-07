@@ -74,6 +74,7 @@ impl Startup {
             name,
             since: Instant::now(),
         };
+        let _span = crate::profile::span("startup", || name.to_owned());
         log::when_slow(&format!("startup step {name}"), work).await
     }
 
