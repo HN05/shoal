@@ -767,7 +767,11 @@ pub(super) async fn chosen(ctx: &Context, repository: Option<String>) -> Result<
 }
 
 /// `--agent`, else `agent.default`, else a picker of the installed agents.
-fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
+pub(super) fn chat_agent(
+    ctx: &Context,
+    settings: &Effective,
+    agent: Option<Agent>,
+) -> Result<Agent> {
     match named_agent(settings, agent)? {
         Some(agent) => Ok(agent),
         None => pick_agent(ctx, settings),

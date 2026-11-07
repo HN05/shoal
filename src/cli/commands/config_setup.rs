@@ -9,17 +9,23 @@ use super::chat;
 use crate::{
     cli::{args::service::ConfigSetupArgs, context::Context},
     config::{Config, modes, templates::Subject},
+    protocol::ConfigTarget,
 };
 
 /// Start the setup chat, writing the packaged default config first when
-/// there is none.
+/// there is none and the agent is settled.
 pub(super) async fn start(ctx: &Context, args: ConfigSetupArgs) -> Result<i32> {
+    // Chosen before the config is written, so a refused agent leaves none.
+    let settings = crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Global).await?;
+    let agent = chat::chat_agent(ctx, &settings, args.agent)?;
+    let model = args.model.into();
+    chat::check_model(&settings, &agent, &model)?;
     let config = installed_config(ctx)?;
     let options = chat::Options {
-        agent: args.agent,
+        agent: Some(agent),
         place: chat::ChatPlace::here(args.here),
         name: args.name,
-        model: args.model.into(),
+        model,
         args: args.args,
         session: args.session,
         fork: false,
