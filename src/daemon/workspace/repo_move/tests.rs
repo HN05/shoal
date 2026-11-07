@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support,
@@ -461,9 +462,10 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![file.into()],
+            Done {
+                results: vec![file.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await?;
@@ -702,9 +704,10 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await?;

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -2524,9 +2525,10 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            true,
-            vec![],
+            Done {
+                integrated: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

@@ -1,5 +1,6 @@
 use super::notifications::NotificationKind;
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{
@@ -1050,9 +1051,7 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1084,9 +1083,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await

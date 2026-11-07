@@ -243,9 +243,10 @@ async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
     crate::client::assignments::mark_done(
         &ctx.paths,
         SpaceSelector::parse(&space),
-        true,
-        false,
-        Vec::new(),
+        crate::client::assignments::Done {
+            cleanup: true,
+            ..Default::default()
+        },
         None,
     )
     .await

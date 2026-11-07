@@ -54,8 +54,13 @@ pub(super) async fn remove(ctx: &Context) -> Result<i32> {
         // Its subagent may already have finished it.
         Some(child) if done_at_head(ctx, child).await? => Ok(0),
         Some(child) => {
-            super::workspaces::done(ctx, Some(SpaceSelector::id(&child.id)), Default::default())
-                .await
+            super::workspaces::done(
+                ctx,
+                Some(SpaceSelector::id(&child.id)),
+                Default::default(),
+                false,
+            )
+            .await
         }
         // Already removed, so nothing is left to clean up.
         None => Ok(0),

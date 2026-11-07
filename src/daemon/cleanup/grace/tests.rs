@@ -1,3 +1,4 @@
+use crate::client::assignments::Done;
 use std::{fs, sync::Arc};
 
 use crate::client::space_names::SpaceSelector;
@@ -60,9 +61,7 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -107,9 +106,7 @@ async fn pr_cleanup_waits_for_the_grace_period() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -128,9 +125,7 @@ async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -148,9 +143,7 @@ async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await

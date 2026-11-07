@@ -44,38 +44,26 @@ pub(in crate::cli::commands) async fn undone(
     Ok(0)
 }
 
-/// How `shoal done` records the completion, and what it leaves running.
-#[derive(Default)]
-pub(in crate::cli::commands) struct Done {
-    /// Request cleanup even when `[cleanup.done] enabled` is false.
-    pub cleanup: bool,
-    /// Another branch has HEAD's work under other commits.
-    pub integrated: bool,
-    pub keep_demos: bool,
-    /// The files to hand back, checked before anything is picked or
-    /// stopped.
-    pub results: Vec<crate::client::files::NewFile>,
-}
-
-/// Stop the workspace's demos unless `keep_demos`, then record completion;
-/// a chat only records it, since it has no branch or demos.
+/// Stop the workspace's demos unless `keep_demos`, then record `done`; a
+/// chat only records it, since it has no branch or demos.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
     space: Option<SpaceSelector>,
-    options: Done,
+    done: assignments::Done,
+    keep_demos: bool,
 ) -> Result<i32> {
     let selected = selected(ctx, space).await?;
     let space = match &selected {
         Selected::Chat(chat) => {
             anyhow::ensure!(
-                !options.integrated && !options.keep_demos,
+                !done.integrated && !keep_demos,
                 "a chat has no branch or demos; --integrated and --keep-demos apply to workspaces"
             );
             chat.clone()
         }
         Selected::Workspace(workspace) => {
             // Before completion, whose cleanup may remove the workspace at once.
-            if !options.keep_demos {
+            if !keep_demos {
                 stop_demos(ctx, workspace).await?;
             }
             workspace.clone()
@@ -84,9 +72,7 @@ pub(in crate::cli::commands) async fn done(
     let completion = assignments::mark_done(
         &ctx.paths,
         SpaceSelector::parse(&space),
-        options.cleanup,
-        options.integrated,
-        options.results,
+        done,
         crate::env::chat(),
     )
     .await?;

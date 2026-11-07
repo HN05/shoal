@@ -237,9 +237,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .unwrap();
     let mut done = AssignmentMethod::MarkDone {
         space: SpaceSelector::parse(&grandchild.name),
-        cleanup: false,
-        integrated: false,
-        results: vec![],
+        done: Default::default(),
         sender_chat: None,
     };
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut done)

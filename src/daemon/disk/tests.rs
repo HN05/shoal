@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
@@ -259,9 +260,10 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

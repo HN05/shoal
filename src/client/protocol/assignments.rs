@@ -6,18 +6,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssignmentMethod {
-    /// Record the work of a workspace or running chat as done. For a
-    /// workspace, `cleanup` requests cleanup even when `[cleanup.done]
-    /// enabled` is false and `integrated` records that another branch has
-    /// HEAD's work under other commits; a chat has neither. `results` are
-    /// files to hand back by absolute path, which the daemon copies.
+    /// Record the work of a workspace or running chat as done.
     MarkDone {
         space: SpaceSelector,
-        cleanup: bool,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        integrated: bool,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        results: Vec<crate::client::files::NewFile>,
+        #[serde(flatten)]
+        done: crate::client::assignments::Done,
         /// The chat whose agent sends the request, which attaches them.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sender_chat: Option<String>,

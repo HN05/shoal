@@ -28,7 +28,7 @@ pub(crate) use records::{
 use layout::{Kept, Layout};
 
 pub(crate) use crate::client::files::{
-    AttachedFile, Attacher, FileSource, NewFile, SentFile, check_path, check_results, check_sent,
+    AttachedFile, Attacher, FileSource, NewFile, SentFile, check_path, check_sent,
     missing_selection,
 };
 #[cfg(test)]

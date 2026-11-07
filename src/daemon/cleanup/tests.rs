@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace_files::Attacher;
 
@@ -166,9 +167,10 @@ async fn failed_step_does_not_skip_later_steps() {
     manager
         .mark_done(
             &SpaceSelector::id(&done.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -322,9 +324,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -876,9 +876,10 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
         manager
             .mark_done(
                 &SpaceSelector::id(&done.id),
-                true,
-                false,
-                vec![],
+                Done {
+                    cleanup: true,
+                    ..Done::default()
+                },
                 &Attacher::User,
             )
             .await
@@ -1006,9 +1007,10 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -1127,9 +1129,10 @@ async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -1276,7 +1279,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     );
     let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
     manager
-        .mark_chat_done(&chat.id, false, Vec::new(), &Attacher::User)
+        .mark_chat_done(&chat.id, Done::default(), &Attacher::User)
         .await
         .unwrap();
     // A save to come back on its own keeps it, as a queued agent does.
@@ -1358,7 +1361,14 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
         .unwrap();
     assert!(manager.pr_registration(&chat.id).await.unwrap().is_some());
     manager
-        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .mark_chat_done(
+            &chat.id,
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
+            &Attacher::User,
+        )
         .await
         .unwrap();
 
@@ -1423,7 +1433,14 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
         .await
         .unwrap();
     let completion = manager
-        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .mark_chat_done(
+            &chat.id,
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
@@ -1451,7 +1468,14 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     manager
-        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .mark_chat_done(
+            &chat.id,
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
+            &Attacher::User,
+        )
         .await
         .unwrap();
     process.kill();
@@ -1476,7 +1500,14 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
     );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     manager
-        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .mark_chat_done(
+            &chat.id,
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // A question asked after the completion keeps the chat.

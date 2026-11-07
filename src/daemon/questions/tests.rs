@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -687,9 +688,10 @@ async fn done_closes_open_questions_for_good() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

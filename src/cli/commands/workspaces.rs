@@ -26,7 +26,7 @@ pub(in crate::cli) use add::{execute_add, item_context, start_queued};
 pub(super) use adopt::adopt;
 pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};
-pub(super) use done::{Done, done, undone};
+pub(super) use done::{done, undone};
 pub(in crate::cli) use environment::agent_environment;
 pub(super) use environment::environment;
 pub(super) use link_pull::link_pull;

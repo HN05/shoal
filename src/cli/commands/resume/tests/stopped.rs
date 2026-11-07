@@ -1,5 +1,6 @@
 //! Resuming stopped work through `shoal resume`, against the overload
 //! tests' fixture daemon.
+use crate::client::assignments::Done;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;
@@ -357,9 +358,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await

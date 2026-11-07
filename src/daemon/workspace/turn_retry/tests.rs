@@ -1,3 +1,4 @@
+use crate::client::assignments::Done;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -213,9 +214,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     manager
         .mark_done(
             &SpaceSelector::from(&workspace.name),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await

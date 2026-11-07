@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -148,9 +149,7 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     manager
         .mark_done(
             &SpaceSelector::id(&done.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -385,9 +384,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
     manager
         .mark_done(
             &SpaceSelector::id(&finished.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await

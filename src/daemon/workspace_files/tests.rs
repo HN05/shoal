@@ -1,3 +1,4 @@
+use crate::client::assignments::Done;
 use std::time::Duration;
 
 use super::{Attacher, FileSource};
@@ -200,9 +201,10 @@ async fn results_name_the_agent_that_handed_them_back() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &attacher,
         )
         .await
@@ -385,9 +387,10 @@ async fn titles_stay_with_their_files_until_a_new_one() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![titled(&report, "Audit findings")],
+            Done {
+                results: vec![titled(&report, "Audit findings")],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -593,9 +596,10 @@ async fn results_outlive_removal_as_long_as_its_record() {
     let completion = manager
         .mark_done(
             &SpaceSelector::id(&child.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -700,9 +704,10 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
     manager
         .mark_done(
             &SpaceSelector::id(&bottom.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -777,9 +782,10 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
     manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -838,9 +844,10 @@ async fn a_completion_hands_back_a_bounded_number_of_files() {
     let done = manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            results,
+            Done {
+                results,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await;
@@ -857,9 +864,10 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
     manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -971,9 +979,10 @@ async fn handing_back_a_changed_file_completes_again() {
     let first = manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            vec![report.clone().into()],
+            Done {
+                results: vec![report.clone().into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -982,9 +991,10 @@ async fn handing_back_a_changed_file_completes_again() {
     let again = manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            vec![report.clone().into()],
+            Done {
+                results: vec![report.clone().into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await;
@@ -993,9 +1003,10 @@ async fn handing_back_a_changed_file_completes_again() {
     let revised = manager
         .mark_done(
             &SpaceSelector::id(&audit.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

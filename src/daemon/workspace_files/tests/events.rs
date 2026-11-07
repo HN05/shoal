@@ -1,4 +1,5 @@
 use super::{Attacher, FileSource, chat, workspace};
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::events::{EventItem, FileEventDetails, FileEventKind},
@@ -72,9 +73,10 @@ async fn every_route_records_one_added_event_per_file() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![shot.into()],
+            Done {
+                results: vec![shot.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -162,9 +164,10 @@ async fn every_deletion_records_one_removed_event_per_file() {
         manager
             .mark_done(
                 &SpaceSelector::id(&audit.id),
-                false,
-                false,
-                vec![file(result)],
+                Done {
+                    results: vec![file(result)],
+                    ..Done::default()
+                },
                 &Attacher::User,
             )
             .await
@@ -185,9 +188,10 @@ async fn every_deletion_records_one_removed_event_per_file() {
     manager
         .mark_done(
             &SpaceSelector::id(&child.id),
-            false,
-            false,
-            vec![file("kept.md")],
+            Done {
+                results: vec![file("kept.md")],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

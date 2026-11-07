@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -1289,9 +1290,10 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
     manager
         .mark_done(
             &SpaceSelector::id(&bottom.id),
-            false,
-            false,
-            vec![report.into()],
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

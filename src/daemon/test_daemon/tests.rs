@@ -127,9 +127,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
     let app = daemon.connector();
     let done = AssignmentMethod::MarkDone {
         space: SpaceSelector::id(&workspace.id),
-        cleanup: false,
-        integrated: false,
-        results: Vec::new(),
+        done: Default::default(),
         sender_chat: None,
     };
     let completion: Completion = connection::request(&app, done).await.unwrap();

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -474,9 +475,7 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1499,9 +1498,7 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -27,9 +28,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -44,9 +43,10 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -64,9 +64,10 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                true,
-                false,
-                vec![],
+                Done {
+                    cleanup: true,
+                    ..Done::default()
+                },
                 &Attacher::User
             )
             .await
@@ -83,9 +84,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
         manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                false,
-                false,
-                vec![],
+                Done::default(),
                 &Attacher::User
             )
             .await
@@ -100,9 +99,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
         !manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                false,
-                false,
-                vec![],
+                Done::default(),
                 &Attacher::User
             )
             .await
@@ -113,9 +110,10 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
         manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                true,
-                false,
-                vec![],
+                Done {
+                    cleanup: true,
+                    ..Done::default()
+                },
                 &Attacher::User
             )
             .await
@@ -125,9 +123,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     let kept = manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -166,9 +162,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -176,9 +170,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -201,9 +193,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -214,9 +204,10 @@ async fn repeating_an_unchanged_completion_is_refused() {
         manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                true,
-                false,
-                vec![],
+                Done {
+                    cleanup: true,
+                    ..Done::default()
+                },
                 &Attacher::User
             )
             .await
@@ -228,9 +219,10 @@ async fn repeating_an_unchanged_completion_is_refused() {
     let newer = manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -268,9 +260,7 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -279,9 +269,7 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -320,9 +308,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -341,9 +327,10 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     reopened
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -362,9 +349,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -375,9 +360,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -410,9 +393,10 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     reopened
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -447,9 +431,7 @@ async fn completion_rechecks_work_after_removal_hooks() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -489,9 +471,10 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -510,9 +493,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     // Another workspace's commands do not wait for the removal.
     bounded(manager.mark_done(
         &SpaceSelector::id(&other.id),
-        false,
-        false,
-        vec![],
+        Done::default(),
         &Attacher::User,
     ))
     .await
@@ -539,9 +520,10 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -618,9 +600,7 @@ async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -690,9 +670,10 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -721,9 +702,7 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
     let completed = manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -768,9 +747,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -834,9 +811,7 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -860,9 +835,7 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -873,9 +846,10 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
     let completion = manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            true,
-            vec![],
+            Done {
+                integrated: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -900,9 +874,10 @@ async fn an_integrated_completion_retains_dirty_and_newer_work() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            true,
-            vec![],
+            Done {
+                integrated: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -932,9 +907,10 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            true,
-            vec![],
+            Done {
+                integrated: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -942,9 +918,7 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
     let completion = manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1050,9 +1024,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            false,
-            false,
-            Vec::new(),
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1124,9 +1096,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            false,
-            false,
-            Vec::new(),
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1164,9 +1134,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            false,
-            false,
-            Vec::new(),
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1177,9 +1145,10 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            true,
-            false,
-            Vec::new(),
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -1194,9 +1163,10 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     manager
         .mark_done(
             &SpaceSelector::id(&parent.id),
-            true,
-            false,
-            Vec::new(),
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
@@ -1237,9 +1207,7 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
     manager
         .mark_done(
             &SpaceSelector::id(&other.id),
-            false,
-            false,
-            Vec::new(),
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -1311,8 +1279,10 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
     manager
         .mark_chat_done(
             &chat.id,
-            true,
-            Vec::new(),
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &crate::daemon::workspace_files::Attacher::User,
         )
         .await
@@ -1377,8 +1347,10 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
     manager
         .mark_chat_done(
             &chat.id,
-            true,
-            Vec::new(),
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &crate::daemon::workspace_files::Attacher::User,
         )
         .await

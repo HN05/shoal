@@ -36,17 +36,11 @@ pub(super) async fn handle(
         } => Body::ReviewMarks(manager.clear_ready(&space, selection, draft).await?),
         AssignmentMethod::MarkDone {
             space,
-            cleanup,
-            integrated,
-            results,
+            done,
             sender_chat,
         } => {
             let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
-            Body::Completion(
-                manager
-                    .mark_space_done(&space, cleanup, integrated, results, &attacher)
-                    .await?,
-            )
+            Body::Completion(manager.mark_space_done(&space, done, &attacher).await?)
         }
     }))
 }

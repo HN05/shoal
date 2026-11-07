@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -66,9 +67,7 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     manager
         .mark_done(
             &SpaceSelector::id(&api.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -83,9 +82,7 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     manager
         .mark_done(
             &SpaceSelector::id(&api.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -168,9 +165,7 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
     manager
         .mark_done(
             &SpaceSelector::id(&fix.id),
-            false,
-            false,
-            vec![],
+            Done::default(),
             &Attacher::User,
         )
         .await
@@ -213,9 +208,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
         manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                false,
-                false,
-                vec![],
+                Done::default(),
                 &Attacher::User,
             )
             .await

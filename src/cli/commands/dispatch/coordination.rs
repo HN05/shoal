@@ -127,17 +127,14 @@ pub(in crate::cli::commands) async fn run(
             if undo {
                 workspaces::undone(&ctx, space).await
             } else {
-                let options = workspaces::Done {
+                let done = crate::client::assignments::Done {
                     cleanup,
                     integrated,
-                    keep_demos,
-                    results: {
-                        let results = messages::attachments(&attach)?;
-                        crate::client::files::check_results(&results)?;
-                        results
-                    },
+                    results: messages::attachments(&attach)?,
                 };
-                workspaces::done(&ctx, space, options).await
+                // Before anything is picked or stopped.
+                done.check()?;
+                workspaces::done(&ctx, space, done, keep_demos).await
             }
         }
     }

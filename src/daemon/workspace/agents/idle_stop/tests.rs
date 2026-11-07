@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -76,9 +77,10 @@ async fn agent(
         manager
             .mark_done(
                 &SpaceSelector::id(&workspace.id),
-                true,
-                false,
-                Vec::new(),
+                Done {
+                    cleanup: true,
+                    ..Done::default()
+                },
                 &Attacher::User,
             )
             .await

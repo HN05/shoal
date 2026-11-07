@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -262,9 +263,10 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await

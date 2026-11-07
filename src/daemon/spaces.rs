@@ -1,13 +1,10 @@
 //! Spaces: workspaces and chats, which share one namespace of IDs and names,
 //! so a request naming a space acts on whichever of them it names.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 
-use super::{
-    workspace::Manager,
-    workspace_files::{Attacher, NewFile},
-};
+use super::{workspace::Manager, workspace_files::Attacher};
 use crate::{
-    client::space_names::SpaceSelector,
+    client::{assignments::Done, space_names::SpaceSelector},
     config::Effective,
     daemon::notifications::NotificationKind,
     model::{Completion, PresentSpace, SpaceKind},
@@ -33,35 +30,18 @@ impl Manager {
     }
 
     /// Record the work of the workspace or running chat `selector` names as
-    /// done, as [`Self::mark_done`] or [`Self::mark_chat_done`] does; only a
-    /// workspace has the branch `integrated` is about.
+    /// done, as [`Self::mark_done`] or [`Self::mark_chat_done`] does.
     pub async fn mark_space_done(
         &self,
         selector: &SpaceSelector,
-        cleanup: bool,
-        integrated: bool,
-        results: Vec<NewFile>,
+        done: Done,
         attacher: &Attacher,
     ) -> Result<Completion> {
         match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
-                (self.mark_done(
-                    &SpaceSelector::id(&workspace.id),
-                    cleanup,
-                    integrated,
-                    results,
-                    attacher,
-                ))
-                .await
+                (self.mark_done(&SpaceSelector::id(&workspace.id), done, attacher)).await
             }
-            PresentSpace::Chat(chat) => {
-                ensure!(
-                    !integrated,
-                    "a chat has no branch; integrated applies to workspaces"
-                );
-                self.mark_chat_done(&chat.id, cleanup, results, attacher)
-                    .await
-            }
+            PresentSpace::Chat(chat) => self.mark_chat_done(&chat.id, done, attacher).await,
         }
     }
 

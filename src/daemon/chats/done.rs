@@ -5,6 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
+    client::assignments::Done,
     daemon::{
         cleanup::{SpaceFailures, notify_chat_removal},
         notifications::{About, NotificationKind},
@@ -13,34 +14,35 @@ use crate::{
             Manager,
             done::{CompletedAncestor, push_closed_and_results},
         },
-        workspace_files::{self, Attacher, NewFile},
+        workspace_files::Attacher,
     },
     model::{Chat, Completion, PresentSpace},
 };
 
 impl Manager {
-    /// Record the running chat `selector` names as done at its checkout's
-    /// HEAD, with copies of the files `results` handed back, attached by
+    /// Record `done` for the running chat `selector` names at its
+    /// checkout's HEAD, with copies of the files it hands back attached by
     /// `attacher`; its open questions close, as a finished workspace's do.
-    /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is
-    /// false.
     pub async fn mark_chat_done(
         &self,
         selector: &str,
-        cleanup: bool,
-        results: Vec<NewFile>,
+        done: Done,
         attacher: &Attacher,
     ) -> Result<Completion> {
-        workspace_files::check_results(&results)?;
+        done.check()?;
+        ensure!(
+            !done.integrated,
+            "a chat has no branch; integrated applies to workspaces"
+        );
         let chat = self.done_chat(selector).await?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let settings = self.chat_settings(&chat).await?;
         let head = self.chat_head(&chat).await?;
         let space = PresentSpace::Chat(chat.clone()).into();
-        let results = self.keep_results(&space, results, attacher).await?;
+        let results = self.keep_results(&space, done.results, attacher).await?;
         let completion = Completion {
             head,
-            cleanup: cleanup || settings.cleanup.done.enabled,
+            cleanup: done.cleanup || settings.cleanup.done.enabled,
             integrated: false,
             results,
             error: None,

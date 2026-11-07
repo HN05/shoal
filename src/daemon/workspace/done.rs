@@ -4,7 +4,7 @@ use rusqlite::OptionalExtension;
 use std::path::{Path, PathBuf};
 
 use super::{GuardMode, Manager, ResourceGuard};
-use crate::client::space_names::SpaceSelector;
+use crate::client::{assignments::Done, space_names::SpaceSelector};
 use crate::{
     config::Effective,
     daemon::{
@@ -63,50 +63,48 @@ impl Manager {
         Ok(completion)
     }
 
-    /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is false;
-    /// `integrated` records that another branch has HEAD's work under other
-    /// commits; copies of the files `results` are handed back, attached by
-    /// `attacher`, which the workspace's attached files keep after its
-    /// removal.
+    /// Record `done` at the workspace's HEAD. Copies of the files it hands
+    /// back are attached by `attacher`, and the workspace's attached files
+    /// keep them after its removal.
     pub async fn mark_done(
         &self,
         selector: &SpaceSelector,
-        cleanup: bool,
-        integrated: bool,
-        results: Vec<crate::daemon::workspace_files::NewFile>,
+        done: Done,
         attacher: &Attacher,
     ) -> Result<Completion> {
-        crate::daemon::workspace_files::check_results(&results)?;
+        done.check()?;
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         // A workspace at a commit holds no assignment of its own.
         workspace.require_branch("shoal done")?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
-        let results = (self.keep_results(&workspace.clone().into(), results, attacher)).await?;
-        self.record_done(&workspace, head, cleanup, integrated, results)
-            .await
+        let results =
+            (self.keep_results(&workspace.clone().into(), done.results, attacher)).await?;
+        let completion = Completion {
+            head,
+            cleanup: done.cleanup,
+            integrated: done.integrated,
+            results,
+            error: None,
+        };
+        self.record_done(&workspace, completion).await
     }
 
-    /// Caller holds the workspace's PR gate and has verified ownership and
-    /// this HEAD.
+    /// Record `completion`, with cleanup also when the workspace's settings
+    /// request it. Caller holds the workspace's PR gate and has verified
+    /// ownership and the completion's HEAD.
     async fn record_done(
         &self,
         workspace: &Workspace,
-        head: String,
-        cleanup: bool,
-        integrated: bool,
-        results: Vec<HandedBack>,
+        completion: Completion,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let hook = self.done_hook(workspace, &settings).await?;
         self.verify_worktree(workspace).await?;
         let completion = Completion {
-            head,
-            cleanup: cleanup || settings.cleanup.done.enabled,
-            integrated,
-            results,
-            error: None,
+            cleanup: completion.cleanup || settings.cleanup.done.enabled,
+            ..completion
         };
         let persisted = self.persist_completion(&workspace.id, &completion).await?;
         // Rerunning the hook is the one effect a repeated done may have left.

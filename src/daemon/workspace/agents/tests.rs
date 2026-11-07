@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     ports::PortRequest,
@@ -88,9 +89,10 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            true,
-            false,
-            vec![],
+            Done {
+                cleanup: true,
+                ..Done::default()
+            },
             &Attacher::User,
         )
         .await
