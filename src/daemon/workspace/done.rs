@@ -9,7 +9,7 @@ use crate::{
     config::Effective,
     daemon::{
         events::EventCause, item_numbers::ItemNumber, notifications::NotificationKind, questions,
-        store, workspace_files::Attacher,
+        spaces::removal::Cleanup, store, workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
     model::{Completion, HandedBack, Workspace},
@@ -261,30 +261,13 @@ impl Manager {
             }
             return Ok(());
         }
-        match self.cleanup_completed(&workspace).await {
-            Ok(true) => {
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::SpaceRemoved,
-                    super::removal_notice(
-                        &workspace.name,
-                        "removed after the assignment was marked done",
-                    ),
-                )
-                .await
-            }
-            Ok(false) => {}
-            Err(error) => {
-                let cause = self.completion_cause(&workspace.id).await?;
-                self.record_retained(&workspace.id, cause, &error).await?;
-                self.record_completion_error(&workspace.id, &error).await?;
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::CleanupFailed,
-                    format!("completion cleanup retained the workspace: {error:#}"),
-                )
-                .await;
-            }
+        let removal = self.cleanup_completed(&workspace).await;
+        if matches!(removal, Ok(false)) {
+            return Ok(());
+        }
+        (self.announce_removal(&workspace, Cleanup::Completion, &removal)).await?;
+        if let Err(error) = &removal {
+            self.record_completion_error(&workspace.id, error).await?;
         }
         Ok(())
     }
@@ -305,7 +288,7 @@ impl Manager {
             .await
     }
 
-    pub(super) async fn completion_cause(&self, id: &str) -> Result<EventCause> {
+    pub(crate) async fn completion_cause(&self, id: &str) -> Result<EventCause> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

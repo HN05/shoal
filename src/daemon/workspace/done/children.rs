@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{events::EventCause, notifications::NotificationKind},
+    daemon::spaces::removal::Cleanup,
     model::{Chat, SpaceKind, Workspace},
 };
 
@@ -103,31 +103,13 @@ impl Manager {
         if !workspace.children.is_empty() || self.keep_reason(&workspace.id).await?.is_some() {
             return Ok(());
         }
-        let (kind, message) = match self
+        let removal = self
             .remove_under_completed(&SpaceSelector::id(&workspace.id), ancestor)
-            .await
-        {
-            Ok(false) => return Ok(()),
-            Ok(true) => (
-                NotificationKind::SpaceRemoved,
-                super::super::removal_notice(
-                    &workspace.name,
-                    &format!("removed after {} was marked done", ancestor.name()),
-                ),
-            ),
-            Err(error) => {
-                self.record_retained(&workspace.id, EventCause::ParentCompletion, &error)
-                    .await?;
-                (
-                    NotificationKind::CleanupFailed,
-                    format!(
-                        "cleanup after {} was marked done retained the workspace: {error:#}",
-                        ancestor.name()
-                    ),
-                )
-            }
-        };
-        self.notify(Some(&workspace.name), kind, message).await;
-        Ok(())
+            .await;
+        if matches!(removal, Ok(false)) {
+            return Ok(());
+        }
+        let cleanup = Cleanup::AncestorCompletion(ancestor.name());
+        self.announce_removal(workspace, cleanup, &removal).await
     }
 }

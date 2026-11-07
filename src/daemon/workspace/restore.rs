@@ -443,11 +443,6 @@ pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Resul
     git::checkpoint::apply(worktree, &files.snapshot).await
 }
 
-/// A removal notification that says how to undo it.
-pub(crate) fn removal_notice(workspace: &str, removal: &str) -> String {
-    format!("{removal}; restore it with shoal work restore {workspace}")
-}
-
 /// Persist a removal record, replacing one an earlier attempt left.
 fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
     db.execute(

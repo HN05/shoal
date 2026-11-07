@@ -16,8 +16,8 @@ use tokio::time::Instant;
 
 use super::{
     caches::Emptying,
-    events::EventCause,
     notifications::NotificationKind,
+    spaces::removal::Cleanup,
     warnings::{self, Signal, Warnings},
     workspace::{Manager, Protection, agent_queue::OneShotStop},
 };
@@ -284,39 +284,18 @@ async fn free_space(
         let Some(snapshot) = super::cleanup::candidate(manager, workspace, &users).await else {
             continue;
         };
-        let (kind, message) = match manager
+        let removal = manager
             .remove_for_disk_space(&SpaceSelector::id(&workspace.id), snapshot)
-            .await
-        {
-            Ok(()) => {
-                log!("disk space cleanup removed {}", workspace.name);
-                (
-                    NotificationKind::SpaceRemoved,
-                    crate::daemon::workspace::removal_notice(
-                        &workspace.name,
-                        &format!("removed by disk space cleanup; {}", filesystem.describe()),
-                    ),
-                )
-            }
-            Err(error) => {
-                // A full disk can fail this write too; the notice still goes out.
-                if let Err(recording) = manager
-                    .record_retained(&workspace.id, EventCause::DiskSpace, &error)
-                    .await
-                {
-                    log!(
-                        "disk space cleanup could not record retaining {}: {recording:#}",
-                        workspace.name
-                    );
-                }
-                log!("disk space cleanup retained {}: {error:#}", workspace.name);
-                (
-                    NotificationKind::CleanupFailed,
-                    format!("disk space cleanup retained the workspace: {error:#}"),
-                )
-            }
-        };
-        manager.notify(Some(&workspace.name), kind, message).await;
+            .await;
+        let described = filesystem.describe();
+        let cleanup = Cleanup::DiskSpace(&described);
+        // A full disk can fail recording the retention; the notice still goes out.
+        if let Err(recording) = manager.announce_removal(workspace, cleanup, &removal).await {
+            log!(
+                "disk space cleanup could not record retaining {}: {recording:#}",
+                workspace.name
+            );
+        }
         filesystem.free = available(&filesystem.path)?;
     }
     Ok(())

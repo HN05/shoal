@@ -21,7 +21,7 @@ pub(crate) use crate::client::cleanup::{
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        caches::Emptying, events::EventCause, file_access, log, notifications::NotificationKind,
+        caches::Emptying, events::EventCause, file_access, log, spaces::removal::Cleanup,
         workspace::Manager,
     },
     fsutil::off_runtime,
@@ -301,35 +301,9 @@ async fn sweep_chat(manager: &Manager, timers: &mut Timers, chat: &Chat) -> Resu
         return Ok(());
     }
     timers.idle.remove(&chat.id);
-    notify_chat_removal(manager, chat, "idle cleanup", removal).await;
-    Ok(())
-}
-
-/// Tell the user that `cleanup` removed `chat`, or why it kept it.
-pub(crate) async fn notify_chat_removal(
-    manager: &Manager,
-    chat: &Chat,
-    cleanup: &str,
-    removal: Result<bool>,
-) {
-    let about = crate::daemon::notifications::About::space(&chat.name, &chat.id);
-    let (kind, message) = match removal {
-        Ok(_) => {
-            log!("{cleanup} removed chat {}", chat.name);
-            (
-                NotificationKind::SpaceRemoved,
-                format!("chat removed by {cleanup}"),
-            )
-        }
-        Err(error) => {
-            log!("{cleanup} retained chat {}: {error:#}", chat.name);
-            (
-                NotificationKind::CleanupFailed,
-                format!("{cleanup} retained the chat: {error:#}"),
-            )
-        }
-    };
-    manager.notify_about(about, kind, message).await;
+    manager
+        .announce_removal(chat, Cleanup::Idle, &removal)
+        .await
 }
 
 async fn sweep_workspace(
@@ -381,32 +355,7 @@ async fn sweep_workspace(
         return Ok(());
     }
     timers.idle.remove(&workspace.id);
-    let (kind, message, recorded) = match removal {
-        Ok(_) => {
-            log!("auto cleanup removed {}", workspace.name);
-            (
-                NotificationKind::SpaceRemoved,
-                crate::daemon::workspace::removal_notice(
-                    &workspace.name,
-                    "removed by idle cleanup",
-                ),
-                Ok(()),
-            )
-        }
-        Err(error) => {
-            log!("auto cleanup retained {}: {error:#}", workspace.name);
-            let recorded = manager
-                .record_retained(&workspace.id, EventCause::Idle, &error)
-                .await;
-            (
-                NotificationKind::CleanupFailed,
-                format!("idle cleanup retained the workspace: {error:#}"),
-                recorded,
-            )
-        }
-    };
-    manager.notify(Some(&workspace.name), kind, message).await;
-    recorded
+    (manager.announce_removal(workspace, Cleanup::Idle, &removal)).await
 }
 
 /// The idle delay of a ready workspace, or `None` when idle cleanup is
@@ -757,35 +706,13 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
             return;
         }
     }
-    let (kind, message) = match manager
+    let removal = manager
         .remove_deleted(&SpaceSelector::id(&workspace.id))
-        .await
-    {
-        Ok(_) => {
-            log!("forgot deleted worktree {}", workspace.name);
-            (
-                NotificationKind::SpaceRemoved,
-                "forgotten after its directory was deleted; branch retained".to_owned(),
-            )
-        }
-        Err(error) => {
-            if let Err(record_error) = manager
-                .record_retained(&workspace.id, EventCause::MissingDirectory, &error)
-                .await
-            {
-                log!(
-                    "record retained workspace {}: {record_error:#}",
-                    workspace.name
-                );
-            }
-            log!("deleted worktree {} retained: {error:#}", workspace.name);
-            (
-                NotificationKind::CleanupFailed,
-                format!("deleted worktree retained: {error:#}"),
-            )
-        }
-    };
-    manager.notify(Some(&workspace.name), kind, message).await;
+        .await;
+    let announced = manager.announce_removal(workspace, Cleanup::DeletedWorktree, &removal);
+    if let Err(error) = announced.await {
+        log!("record retained workspace {}: {error:#}", workspace.name);
+    }
 }
 
 pub async fn run(manager: Arc<Manager>) {

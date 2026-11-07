@@ -105,6 +105,7 @@ pub(crate) fn space_kind(db: &rusqlite::Connection, id: &str) -> Result<Option<S
 
 mod export;
 mod find;
+pub(crate) mod removal;
 mod selection;
 pub(crate) use selection::selected;
 mod sessions;

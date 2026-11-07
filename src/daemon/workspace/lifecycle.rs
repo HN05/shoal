@@ -1648,12 +1648,8 @@ impl Manager {
             })?;
             removed.extend(below);
             if removal.announces_children() {
-                self.notify(
-                    Some(&child.name),
-                    crate::daemon::notifications::NotificationKind::SpaceRemoved,
-                    super::removal_notice(&child.name, &format!("removed with {parent}")),
-                )
-                .await;
+                let cleanup = crate::daemon::spaces::removal::Cleanup::Parent(parent);
+                self.announce_removal(&child, cleanup, &Ok(())).await?;
             }
             removed.push(child.name);
         }

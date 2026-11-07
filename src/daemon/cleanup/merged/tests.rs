@@ -4,7 +4,11 @@ use std::{fs, sync::Arc};
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{commit, git, manager, repository};
-use crate::{daemon::workspace_files::Attacher, execution::recovery, model::CleanupReason};
+use crate::{
+    daemon::{notifications::NotificationKind, workspace_files::Attacher},
+    execution::recovery,
+    model::CleanupReason,
+};
 
 const HOUR: Duration = Duration::from_secs(3600);
 

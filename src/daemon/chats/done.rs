@@ -7,9 +7,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::{
     client::assignments::Done,
     daemon::{
-        cleanup::{SpaceFailures, notify_chat_removal},
+        cleanup::SpaceFailures,
         notifications::{About, NotificationKind},
         questions,
+        spaces::removal::Cleanup,
         workspace::{
             Manager,
             done::{CompletedAncestor, push_completion_details},
@@ -105,10 +106,10 @@ impl Manager {
             return Ok(());
         }
         let removal = self.remove_completed_chat(&chat, &completion).await;
-        if !matches!(removal, Ok(false)) {
-            notify_chat_removal(self, &chat, "completion cleanup", removal).await;
+        if matches!(removal, Ok(false)) {
+            return Ok(());
         }
-        Ok(())
+        (self.announce_removal(&chat, Cleanup::Completion, &removal)).await
     }
 
     /// Remove `chat` for its completed `ancestor` once its grace period
@@ -125,11 +126,11 @@ impl Manager {
             return Ok(());
         }
         let removal = self.remove_chat_under_completed(chat, ancestor).await;
-        if !matches!(removal, Ok(false)) {
-            let cleanup = format!("cleanup after {} was marked done", ancestor.name());
-            notify_chat_removal(self, chat, &cleanup, removal).await;
+        if matches!(removal, Ok(false)) {
+            return Ok(());
         }
-        Ok(())
+        let cleanup = Cleanup::AncestorCompletion(ancestor.name());
+        self.announce_removal(chat, cleanup, &removal).await
     }
 
     /// Withdraw the completion the chat `id` recorded.

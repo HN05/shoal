@@ -5,13 +5,12 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
 pub(crate) use crate::client::links::pr::{Action, Registration, RegistrationKind};
-use crate::daemon::log;
 use crate::{
     daemon::{
         events::{self, EventKind},
         forge_hosts::ForgeHosts,
         links::space::LinkSpace,
-        notifications::NotificationKind,
+        spaces::removal::Cleanup,
         store,
         workspace::{Manager, PrGuard},
     },
@@ -316,15 +315,10 @@ impl Manager {
             Ok(Some(registration)) => registration,
             Ok(None) => return Ok(()),
             Err(error) => {
-                self.record_retained(&workspace.id, crate::daemon::events::EventCause::Pr, &error)
-                    .await?;
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::CleanupFailed,
-                    format!("PR cleanup retained the workspace: {error:#}"),
-                )
-                .await;
-                return Ok(());
+                let cleanup = Cleanup::Pr {
+                    acknowledged: false,
+                };
+                return (self.announce_removal(workspace, cleanup, &Err::<(), _>(error))).await;
             }
         };
         // A base stays until its stacked workspaces moved; a failure retries next sweep.
@@ -373,44 +367,15 @@ impl Manager {
             {
                 return Ok(false);
             }
-            if !self
-                .remove_merged(&SpaceSelector::id(&workspace.id), &head)
-                .await?
-            {
-                return Ok(false);
-            }
-            log!("PR cleanup removed {}", workspace.name);
-            Ok(true)
+            self.remove_merged(&SpaceSelector::id(&workspace.id), &head)
+                .await
         }
         .await;
-        match &result {
-            Ok(true) => {
-                let cause = match registration.kind {
-                    RegistrationKind::Watch { .. } => {
-                        "removed after all watched pull requests merged"
-                    }
-                    RegistrationKind::Acknowledgement { .. } => {
-                        "removed after the merge acknowledgement"
-                    }
-                };
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::SpaceRemoved,
-                    crate::daemon::workspace::removal_notice(&workspace.name, cause),
-                )
-                .await;
-            }
-            Ok(false) => {}
-            Err(error) => {
-                self.record_retained(&workspace.id, crate::daemon::events::EventCause::Pr, error)
-                    .await?;
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::CleanupFailed,
-                    format!("PR cleanup retained the workspace: {error:#}"),
-                )
-                .await;
-            }
+        if !matches!(result, Ok(false)) {
+            let acknowledged =
+                matches!(registration.kind, RegistrationKind::Acknowledgement { .. });
+            let cleanup = Cleanup::Pr { acknowledged };
+            self.announce_removal(workspace, cleanup, &result).await?;
         }
         registration.error = result.err().map(|error| format!("{error:#}"));
         self.save_registration(&workspace.id, &registration).await?;

@@ -68,7 +68,6 @@ pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
 pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
-pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
 
 pub(crate) use tree::{

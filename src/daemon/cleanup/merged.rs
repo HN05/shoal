@@ -16,7 +16,7 @@ use tokio::time::Instant;
 use super::{Rule, Snapshot, Tree, change_time};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{events::EventCause, log, notifications::NotificationKind, workspace::Manager},
+    daemon::{events::EventCause, log, spaces::removal::Cleanup, workspace::Manager},
     model::{Chat, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,
@@ -143,8 +143,9 @@ async fn sweep_chat(
                 .insert(chat.id.clone(), (snapshot.signals, Instant::now()));
         }
     }
-    super::notify_chat_removal(manager, chat, "merged cleanup", removal).await;
-    Ok(())
+    manager
+        .announce_removal(chat, Cleanup::Merged, &removal)
+        .await
 }
 
 async fn sweep_workspace(
@@ -157,40 +158,21 @@ async fn sweep_workspace(
     let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await else {
         return Ok(());
     };
-    let (kind, message, recorded) = match manager
+    let removal = manager
         .remove_merged_idle(&SpaceSelector::id(&workspace.id), snapshot)
-        .await
-    {
+        .await;
+    match &removal {
         Ok(false) => return Ok(()),
         Ok(true) => {
-            log!("merged cleanup removed {}", workspace.name);
             state.retained.remove(&workspace.id);
-            (
-                NotificationKind::SpaceRemoved,
-                crate::daemon::workspace::removal_notice(
-                    &workspace.name,
-                    "removed by merged cleanup",
-                ),
-                Ok(()),
-            )
         }
-        Err(error) => {
-            log!("merged cleanup retained {}: {error:#}", workspace.name);
+        Err(_) => {
             state
                 .retained
                 .insert(workspace.id.clone(), (snapshot.signals, Instant::now()));
-            let recorded = manager
-                .record_retained(&workspace.id, EventCause::Merged, &error)
-                .await;
-            (
-                NotificationKind::CleanupFailed,
-                format!("merged cleanup retained the workspace: {error:#}"),
-                recorded,
-            )
         }
-    };
-    manager.notify(Some(&workspace.name), kind, message).await;
-    recorded
+    }
+    (manager.announce_removal(workspace, Cleanup::Merged, &removal)).await
 }
 
 /// The snapshot of a merged workspace idle for its configured period, or

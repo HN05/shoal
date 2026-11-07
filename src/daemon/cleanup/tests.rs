@@ -1,7 +1,7 @@
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
-use crate::daemon::workspace_files::Attacher;
+use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
 
 #[test]
 fn changed_signals_restart_timer_and_expiry_returns_its_snapshot() {
