@@ -4,7 +4,11 @@ use anyhow::{Result, ensure};
 
 use super::selection;
 use crate::client::queue;
-use crate::{cli::context::Context, model::QueuePlace, state::QueueKind};
+use crate::{
+    cli::context::Context,
+    model::{QueueEntry, QueuePlace},
+    state::QueueKind,
+};
 
 /// `shoal queue start`: start the entry now, regardless of the limits, and
 /// with `attach` attach this terminal to its agent's session.
@@ -15,7 +19,9 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) ->
         "start queued agents outside scoped executions"
     );
     ensure!(!attach || ctx.interactive(), "--attach requires a terminal");
-    let entry = selection::selected(ctx, entry, "Start> ").await?;
+    // A CI job runs without a session to attach.
+    let offered = |queued: &QueueEntry| !attach || queued.kind != QueueKind::Job;
+    let entry = selection::selected_among(ctx, entry, "Start> ", offered).await?;
     if attach {
         super::attach::require_session(ctx, &entry).await?;
     }

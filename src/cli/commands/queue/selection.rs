@@ -27,10 +27,22 @@ pub(super) async fn selected(
     selector: Option<String>,
     prompt: &str,
 ) -> Result<String> {
+    selected_among(ctx, selector, prompt, |_| true).await
+}
+
+/// The entry `selector` names, or one picked among the waiting entries
+/// `offered` keeps.
+pub(super) async fn selected_among(
+    ctx: &Context,
+    selector: Option<String>,
+    prompt: &str,
+    offered: impl Fn(&QueueEntry) -> bool,
+) -> Result<String> {
     if let Some(selector) = selector {
         return Ok(selector);
     }
-    let waiting = waiting(ctx).await?;
+    let mut waiting = waiting(ctx).await?;
+    waiting.retain(|entry| offered(entry));
     ensure!(!waiting.is_empty(), "no agents wait in the queue");
     ui::require_argument(ctx, "queue entry", "entry")?;
     Ok(pick_entry(ctx, &waiting, prompt).await?.id)
