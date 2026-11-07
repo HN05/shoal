@@ -2679,9 +2679,8 @@ mentions a committed or local config the repository has.
   commits them and opens a PR.
 - **Save locally** writes the repository's
   [local config](#store-repository-config-outside-git) and the scripts it runs
-  beside it, named by paths relative to that directory, commits nothing, runs
-  `daemon reload` and tests the setup script with `work setup` in its own
-  worktree. Its `shoal done` removes the workspace and its empty branch.
+  beside it, named by paths relative to that directory, commits nothing and
+  tests the setup script with `work setup` in its own worktree. Its `shoal done` removes the workspace and its empty branch.
 
 Every launch and restore of the agent gets the local config's `.shoal`
 directory, created when missing, as another working directory. The agent is

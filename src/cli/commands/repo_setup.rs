@@ -123,8 +123,7 @@ fn subject(name: &str, local_config: &Path) -> String {
          it, naming them by paths relative to that directory; `setup.seed` stays \
          relative to the worktree. The committed config still applies beneath the local \
          config option by option, so write only what it lacks or must change. Commit \
-         nothing. Run `shoal daemon reload`, then test the setup script with \
-         `shoal work setup` in this worktree: the local config applies to every \
+         nothing, and test the setup script with `shoal work setup` in this worktree: the local config applies to every \
          workspace of the repository. Finish with `shoal done`, which removes this \
          workspace and its branch."
     )
