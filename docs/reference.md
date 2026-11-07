@@ -5290,7 +5290,10 @@ workspace's open questions, and `withdraw` closes one of them: answers to a clos
 question are refused, waits on it fail, and `shoal done --undo` does not reopen it.
 Withdrawing deletes the question's `question_asked` notification while it is
 unread, and otherwise raises `question_withdrawn`. A closed question keeps its
-number until its space goes.
+number until its space goes. `--json` gives a question's `status`: `open`;
+`answered`, with `answer`, `answered_at` and, while the message carrying the
+answer waits, its `message_id`; `closed`, with `closed_at`; or `withdrawn`,
+with `withdrawn_at`.
 
 ### Leases
 
