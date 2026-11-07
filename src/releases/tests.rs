@@ -60,3 +60,20 @@ fn a_replacement_runs_the_release_itself_when_it_cannot_be_copied() {
         Some(&installed.into_os_string())
     );
 }
+
+#[test]
+fn a_bare_program_runs_as_it_is_without_a_copy() {
+    let temp = tempfile::tempdir().unwrap();
+    let releases = Releases::new(temp.path().join("releases"));
+    let executable = temp.path().join("shoal");
+    fs::write(&executable, "build").unwrap();
+    let invoked = Invoked::at(executable.clone());
+
+    let replacement = Replacement::of(Some(&releases), executable.clone(), &invoked).unwrap();
+
+    assert_eq!(replacement.program, executable);
+    assert_eq!(
+        variable(&replacement, env::RELEASE_LOCKS),
+        Some(&OsString::new())
+    );
+}

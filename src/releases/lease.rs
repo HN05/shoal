@@ -24,12 +24,12 @@ const ATTEMPTS: usize = 3;
 
 impl Releases {
     /// A locked copy of the bundle whose main program `executable`, or the
-    /// file it links to, is.
-    pub(crate) fn lease(&self, executable: &Path) -> io::Result<Lease> {
+    /// file it links to, is; none for a program outside a bundle.
+    pub(crate) fn lease(&self, executable: &Path) -> io::Result<Option<Lease>> {
         let executable = &fs::canonicalize(executable)?;
-        let bundle = crate::fsutil::app_bundle(executable).ok_or_else(|| {
-            io::Error::other(format!("{} is not in an app bundle", executable.display()))
-        })?;
+        let Some(bundle) = crate::fsutil::app_bundle(executable) else {
+            return Ok(None);
+        };
         let copy = self.root.join(copy_name(bundle, executable)?);
         let program = Path::new(bundle.file_name().unwrap_or_default())
             .join(executable.strip_prefix(bundle).map_err(io::Error::other)?);
@@ -38,10 +38,10 @@ impl Releases {
                 self.create(bundle, &copy)?;
             }
             if let Some(lock) = lock_shared(&copy)? {
-                return Ok(Lease {
+                return Ok(Some(Lease {
                     lock,
                     executable: copy.join(&program),
-                });
+                }));
             }
         }
         Err(io::Error::other(format!(
@@ -77,6 +77,13 @@ impl Releases {
             Err(error) => Err(error),
         }
     }
+}
+
+/// Whether `executable`, or the file it links to, is the main program of an
+/// app bundle.
+pub(super) fn in_bundle(executable: &Path) -> bool {
+    fs::canonicalize(executable)
+        .is_ok_and(|executable| crate::fsutil::app_bundle(&executable).is_some())
 }
 
 /// The copy's name: the bundle's version and the start of its main program's

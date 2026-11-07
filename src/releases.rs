@@ -56,22 +56,24 @@ pub(crate) struct Replacement {
 impl Replacement {
     /// Run a copy of the release whose main program is `executable`, started
     /// through `invoked`; `executable` itself, after a warning that names the
-    /// failure, when the copy fails.
+    /// failure, when the copy fails. A program outside a bundle keeps its
+    /// grants by its path, which no upgrade removes, so it needs no copy.
     pub(crate) fn of(
         releases: Option<&Releases>,
         executable: PathBuf,
         invoked: &Invoked,
     ) -> io::Result<Self> {
         let lease = match releases.map(|releases| releases.lease(&executable)) {
-            Some(Ok(lease)) => Some(lease),
+            Some(Ok(lease)) => lease,
             Some(Err(error)) => {
                 warn_uncopied(&executable, &error);
                 None
             }
-            None => {
+            None if lease::in_bundle(&executable) => {
                 warn_uncopied(&executable, &"the state directory is unknown");
                 None
             }
+            None => None,
         };
         let locks: Vec<RawFd> = inherited::locks()
             .chain(lease.iter().map(|lease| lease.lock.as_raw_fd()))
