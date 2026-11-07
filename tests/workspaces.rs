@@ -4867,7 +4867,7 @@ try:
     if mode in ('interrupt', 'stop'):
         import json
         workspace = pathlib.Path(json.loads(subprocess.check_output(
-            [binary, '--json', 'status', 'terminal'], text=True))['workspace']['path'])
+            [binary, '--json', 'work', 'status', 'terminal'], text=True))['workspace']['path'])
         deadline = time.monotonic() + 10
         while not (workspace / 'raw-ready').exists():
             assert child.poll() is None, child.communicate()
@@ -5083,7 +5083,7 @@ fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
         install_test_script_with_mode(
             &stub,
             r#"#!/bin/sh
-"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json status "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
+"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json work status "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
 test -f tracked || exit 98
 test -z "$SHOAL_SHELL_DIRECTIVE" || exit 97
 printf '%s\n' "$PWD" "$SHOAL_WORKSPACE" "$@"
@@ -13686,7 +13686,7 @@ fn setup_cmd_resolves_worktree_paths_and_runs_before_agents() {
 printf 'setup output\n'
 printf '%s' "$PWD" > setup-cwd
 printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
-"$SHOAL_TEST_BIN" --json status > during-setup.json || exit 91
+"$SHOAL_TEST_BIN" --json work status > during-setup.json || exit 91
 "#,
     );
     commit_resource_config(&fixture.repo, &format!("setup.command = {script:?}\n"));
@@ -20708,7 +20708,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         .arg(concat!(
             r#""$0" internal agent-state idle >/dev/null && "#,
             r#""$0" internal wake --agent "$1"; woke=$?; "#,
-            r#""$0" status --json && exit "$woke""#
+            r#""$0" work status --json && exit "$woke""#
         ))
         .arg(support::shoal_binary())
         .arg(std::process::id().to_string())
@@ -21216,7 +21216,7 @@ fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
         .args(["run", "--workspace", "cached", "--", "sh", "-c"])
         .arg(concat!(
             r#""$0" internal agent-state idle --ends-turn claude >/dev/null && "#,
-            r#""$0" status --json"#
+            r#""$0" work status --json"#
         ))
         .arg(support::shoal_binary())
         .env("CLAUDE_CODE_PROMPT_CACHE_TTL", "5m")
@@ -21247,7 +21247,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     let output = fixture
         .command()
         .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
-        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" --json status"#)
+        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" --json work status"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
@@ -21295,7 +21295,7 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
         .arg(concat!(
             r#"cd "$1/locked/inside" && chmod 000 "$1/locked" && "#,
             r#""$0" internal agent-state waiting >/dev/null; reported=$?; "#,
-            r#"chmod 755 "$1/locked" && cd "$1" && "$0" --json status && exit $reported"#
+            r#"chmod 755 "$1/locked" && cd "$1" && "$0" --json work status && exit $reported"#
         ))
         .arg(support::shoal_binary())
         .arg(outside.path())
