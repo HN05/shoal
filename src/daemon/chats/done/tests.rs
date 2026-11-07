@@ -78,7 +78,10 @@ async fn an_invalid_chat_summary_is_refused_before_anything_is_recorded() {
     let chat = chat(&manager, root.path(), &process).await;
     let report = root.path().join("report.md");
     std::fs::write(&report, "findings").unwrap();
-    for summary in ["two\nlines".to_owned(), "x".repeat(513)] {
+    for summary in [
+        "two\nlines".to_owned(),
+        "x".repeat(crate::validate::MAX_MESSAGE_LEN + 1),
+    ] {
         let done = Done {
             results: vec![report.clone().into()],
             ..summarized(&summary)

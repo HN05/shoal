@@ -1455,7 +1455,10 @@ async fn an_invalid_summary_is_refused_before_anything_is_recorded() {
     let (_root, manager, workspace) = fixture().await;
     let report = workspace.path.join("report.md");
     fs::write(&report, "findings").unwrap();
-    for summary in ["two\nlines".to_owned(), "x".repeat(513)] {
+    for summary in [
+        "two\nlines".to_owned(),
+        "x".repeat(crate::validate::MAX_MESSAGE_LEN + 1),
+    ] {
         let done = Done {
             summary: Some(summary),
             results: vec![report.clone().into()],
