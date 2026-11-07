@@ -153,7 +153,12 @@ pub fn set_inherited(fd: std::os::fd::RawFd, inherited: bool) -> anyhow::Result<
 /// on Linux, it keeps an installation symlink instead of resolving into a
 /// versioned directory, so a later run of it reaches an upgraded binary.
 /// Once that path names another binary, it is the file this process runs.
+/// A process started from a release copy was started through the path the
+/// process it replaced handed it.
 pub fn invoked_executable() -> io::Result<PathBuf> {
+    if let Some(invoked) = crate::releases::invoked() {
+        return Ok(invoked.path.clone());
+    }
     // macOS's `current_exe` is the path as started, so it would follow a
     // replaced symlink too; the kernel's path for the image does not.
     let current = match crate::process::identity::executable(std::process::id()) {
@@ -336,23 +341,10 @@ pub fn replace_atomically(path: &Path, contents: &[u8], options: ReplaceOptions)
 pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        use std::os::unix::ffi::OsStrExt as _;
-        // clone(2) flag: clone a symlink itself instead of its target.
-        const CLONE_NOFOLLOW: u32 = 0x0001;
-        let source = std::ffi::CString::new(source.as_os_str().as_bytes())?;
-        let target = std::ffi::CString::new(destination.as_os_str().as_bytes())?;
-        tokio::task::spawn_blocking(move || {
-            // SAFETY: both arguments are NUL-terminated paths that outlive the call.
-            let status =
-                unsafe { libc::clonefile(source.as_ptr(), target.as_ptr(), CLONE_NOFOLLOW) };
-            if status == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        })
-        .await?
-        .with_context(|| format!("clone {}", destination.display()))
+        let (from, to) = (source.to_owned(), destination.to_owned());
+        tokio::task::spawn_blocking(move || clone_file(&from, &to))
+            .await?
+            .with_context(|| format!("clone {}", destination.display()))
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -373,6 +365,39 @@ pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()>
         result
             .map(drop)
             .with_context(|| format!("clone {}", destination.display()))
+    }
+}
+
+/// Clone `source`, a file or directory tree, to the missing `destination`
+/// as [`clone_tree`] does on macOS, or copy it where it cannot be cloned, as
+/// on another volume. A failed copy removes what it wrote.
+pub fn clone_or_copy(source: &Path, destination: &Path) -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    if clone_file(source, destination).is_ok() {
+        return Ok(());
+    }
+    let copied = copy_entry(source, destination);
+    if copied.is_err() {
+        let _ = remove_existing(destination);
+    }
+    copied
+}
+
+/// clonefile(2) of `source` to the missing `destination`, which clones a
+/// directory with everything in it.
+#[cfg(target_os = "macos")]
+fn clone_file(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::unix::ffi::OsStrExt as _;
+    // clone(2) flag: clone a symlink itself instead of its target.
+    const CLONE_NOFOLLOW: u32 = 0x0001;
+    let source = std::ffi::CString::new(source.as_os_str().as_bytes())?;
+    let target = std::ffi::CString::new(destination.as_os_str().as_bytes())?;
+    // SAFETY: both arguments are NUL-terminated paths that outlive the call.
+    let status = unsafe { libc::clonefile(source.as_ptr(), target.as_ptr(), CLONE_NOFOLLOW) };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
 

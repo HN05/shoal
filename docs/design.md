@@ -483,6 +483,19 @@ wrapper runs, whatever started it. Only certificate-signed builds claim, since
 an ad-hoc build's grant lasts one build and test builds would prompt. A process
 that replaces itself with another program, such as `internal launch` or
 `chat`, never claims: that program would take the responsibility over.
+A wrapper replaces itself with a copy of its bundle rather than the bundle
+itself: Homebrew removes the previous version seconds after an upgrade, and
+macOS then denies the accesses of the agents whose wrappers still run it. The
+copy lives at `<state>/releases/<version>-<hash>/`, cloned where the
+filesystem allows, with `<hash>` from the main program's SHA-256, so two
+builds of one version never share one; since grants follow the bundle's
+identifier and requirement, it uses the existing grant. Each wrapper holds a
+shared lock on the copy's `lock` file, beside the bundle, and the cleanup sweep
+removes a copy it can lock exclusively, including one of the installed release,
+which the next wrapper copies again. The wrapper hands the copy the path it was
+started through and that file's identity, so it still finds the installed
+release and sees an upgrade. A copy that fails leaves the wrapper running its
+release, with a warning.
 
 ## Workspaces and Git
 

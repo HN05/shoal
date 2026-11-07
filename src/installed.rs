@@ -13,7 +13,16 @@ pub(crate) struct Executable {
 }
 
 impl Executable {
+    /// The binary this process was started through. A release copy takes
+    /// the file the process it replaced was started through as it was then,
+    /// so an upgrade during the replacement shows too.
     pub(crate) fn current() -> Self {
+        if let Some(invoked) = crate::releases::invoked() {
+            return Self {
+                path: Some(invoked.path.clone()),
+                identity: invoked.identity,
+            };
+        }
         match crate::fsutil::invoked_executable() {
             Ok(path) => Self::at(path),
             Err(_) => Self {

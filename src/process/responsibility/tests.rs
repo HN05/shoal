@@ -5,18 +5,26 @@ use std::{
 };
 
 use super::macos::{Attributes, Image};
-use crate::env;
+use crate::{
+    env,
+    releases::{Invoked, Replacement},
+};
 
 unsafe extern "C" {
     fn responsibility_get_pid_responsible_for_pid(pid: libc::pid_t) -> libc::pid_t;
 }
 
 #[test]
-fn image_restarts_this_binary_marked_as_claimed() {
-    let image = Image::current().unwrap();
+fn image_runs_the_replacement_with_its_variables_marked_as_claimed() {
+    let program = std::env::current_exe().unwrap();
+    let invoked = Invoked::at(program.clone());
+    let replacement = Replacement::of(None, program.clone(), &invoked).unwrap();
+    let image = Image::of(&replacement).unwrap();
 
-    let program = std::env::current_exe().unwrap().into_os_string().into_vec();
-    assert_eq!(image.program.as_bytes(), program);
+    assert_eq!(
+        image.program.as_bytes(),
+        program.into_os_string().into_vec()
+    );
     let args: Vec<_> = std::env::args_os().map(OsStringExt::into_vec).collect();
     let image_args: Vec<_> = image
         .args
@@ -26,6 +34,14 @@ fn image_restarts_this_binary_marked_as_claimed() {
     assert_eq!(image_args, args);
     let marker = format!("{}=1", env::RESPONSIBILITY_CLAIMED);
     assert_eq!(image.vars.last().unwrap().to_str().unwrap(), marker);
+    let handed = format!("{}=", env::RELEASE_INVOKED);
+    assert!(
+        image
+            .vars
+            .iter()
+            .any(|var| var.to_bytes().starts_with(handed.as_bytes())),
+        "the replacement's variables are handed on"
+    );
     assert!(image.vars.len() > 1, "the environment is kept");
 }
 

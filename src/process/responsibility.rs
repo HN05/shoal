@@ -6,22 +6,26 @@
 //! program by itself, so a restarted agent asks for Claude Code's own grant.
 //! An execution wrapper outlives what it starts, so it claims responsibility
 //! and everything it runs uses Shoal's grant.
+use crate::releases::Releases;
 
 /// Make this process responsible for itself and everything it starts, by
-/// replacing it with its own binary, started without its starter's
-/// responsibility. Grants for an ad-hoc signed build last only as long as that
-/// build, so such builds keep their starter's. Only for processes that never
-/// replace themselves with another program, which would take over the
-/// responsibility and ask for its own grants.
+/// replacing it with a copy of its release in `releases`, or with its own
+/// binary when the copy fails, started without its starter's responsibility.
+/// Grants for an ad-hoc signed build last only as long as that build, so such
+/// builds keep their starter's. Only for processes that never replace
+/// themselves with another program, which would take over the responsibility
+/// and ask for its own grants.
 ///
 /// # Safety
 /// Call before any other thread exists.
-pub unsafe fn claim() {
+pub unsafe fn claim(releases: Option<Releases>) {
     #[cfg(target_os = "macos")]
     // SAFETY: the caller guarantees no other thread exists.
     unsafe {
-        macos::claim()
+        macos::claim(releases.as_ref())
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = releases;
 }
 
 #[cfg(target_os = "macos")]
@@ -33,20 +37,47 @@ mod macos {
         ptr,
     };
 
-    use crate::env;
+    use crate::{
+        env,
+        releases::{Invoked, Releases, Replacement},
+    };
 
-    pub(super) unsafe fn claim() {
+    pub(super) unsafe fn claim(releases: Option<&Releases>) {
         // SAFETY: the caller guarantees no other thread reads the environment.
         if unsafe { take_claimed() }
             || !crate::process::code_signing::own_signature_has_certificate()
         {
             return;
         }
-        let error = match Image::current() {
+        let error = replace(releases);
+        eprintln!("warning: macOS privacy access follows the app that started Shoal: {error}");
+    }
+
+    /// Replace this process with a copy of its release, responsible for
+    /// itself. Returns only on failure.
+    fn replace(releases: Option<&Releases>) -> io::Error {
+        let replacement = running_binary().and_then(|executable| {
+            let invoked = Invoked::at(crate::fsutil::invoked_executable()?);
+            Replacement::of(releases, executable, &invoked)
+        });
+        // The replacement holds the copy's lock open until the exec.
+        let replacement = match replacement {
+            Ok(replacement) => replacement,
+            Err(error) => return error,
+        };
+        match Image::of(&replacement) {
             Ok(image) => image.replace_disclaimed(),
             Err(error) => error,
-        };
-        eprintln!("warning: macOS privacy access follows the app that started Shoal: {error}");
+        }
+    }
+
+    /// The file this process runs: the kernel's path for its image, since
+    /// `current_exe` is the path as started, such as an installation symlink.
+    fn running_binary() -> io::Result<std::path::PathBuf> {
+        match crate::process::identity::executable(std::process::id()) {
+            Some(path) => Ok(path),
+            None => std::env::current_exe(),
+        }
     }
 
     unsafe extern "C" {
@@ -68,7 +99,8 @@ mod macos {
         claimed
     }
 
-    /// This process's binary, arguments and environment, marked as claimed.
+    /// The replacement's program with this process's arguments and
+    /// environment, the replacement's variables, marked as claimed.
     pub(super) struct Image {
         pub(super) program: CString,
         pub(super) args: Vec<CString>,
@@ -76,13 +108,18 @@ mod macos {
     }
 
     impl Image {
-        pub(super) fn current() -> io::Result<Self> {
-            let program = CString::new(std::env::current_exe()?.into_os_string().into_vec())?;
+        pub(super) fn of(replacement: &Replacement) -> io::Result<Self> {
+            let program = CString::new(replacement.program.clone().into_os_string().into_vec())?;
             let args = std::env::args_os()
                 .map(|arg| CString::new(arg.into_vec()))
                 .collect::<Result<_, _>>()?;
+            let handed = replacement
+                .variables
+                .iter()
+                .map(|(name, value)| (name.into(), value.clone()));
             let vars = std::env::vars_os()
-                .map(|(name, value)| {
+                .chain(handed)
+                .map(|(name, value): (std::ffi::OsString, std::ffi::OsString)| {
                     let mut var = name.into_vec();
                     var.push(b'=');
                     var.extend(value.into_vec());

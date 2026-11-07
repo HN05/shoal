@@ -54,14 +54,19 @@ fn main() {
         .var(env::COMPLETE)
         .complete();
     let mut cli = Cli::from_args();
+    // SAFETY: no other threads exist before the runtime starts.
+    unsafe { releases::take_inherited() };
     if cli
         .command
         .as_ref()
         .is_some_and(cli::Command::wraps_execution)
     {
+        let releases = paths::Paths::new(cli.state_dir.clone())
+            .ok()
+            .map(|paths| releases::Releases::new(paths.releases()));
         // SAFETY: no other threads exist before the runtime starts, and the
         // startup variables removed below still reach the replacement.
-        unsafe { process::responsibility::claim() };
+        unsafe { process::responsibility::claim(releases) };
     }
     cli.daemon_handoff = daemon::handoff::Handoff::take().unwrap_or_else(|error| {
         eprintln!("error: {error:#}");

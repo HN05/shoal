@@ -24,6 +24,16 @@ pub const ENDS_SESSION: &str = "SHOAL_ENDS_SESSION";
 /// responsible for macOS privacy access; removed at startup.
 #[cfg(target_os = "macos")]
 pub const RESPONSIBILITY_CLAIMED: &str = "SHOAL_RESPONSIBILITY_CLAIMED";
+/// The path a wrapper that replaced itself with a release copy was started
+/// through, which the copy takes as its own; removed at startup.
+pub const RELEASE_INVOKED: &str = "SHOAL_RELEASE_INVOKED";
+/// The identity, as JSON, of the file at [`RELEASE_INVOKED`] when the wrapper
+/// replaced itself, so the copy sees an upgrade that came after; removed at
+/// startup.
+pub const RELEASE_INVOKED_IDENTITY: &str = "SHOAL_RELEASE_INVOKED_IDENTITY";
+/// Colon-separated descriptors of the release copy locks a wrapper holds,
+/// which it keeps open across replacing itself; removed at startup.
+pub const RELEASE_LOCKS: &str = "SHOAL_RELEASE_LOCKS";
 /// The chat whose agent this process runs under; workspaces opened here belong
 /// to that chat.
 pub const CHAT: &str = "SHOAL_CHAT";
