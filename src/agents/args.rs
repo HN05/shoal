@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use super::{agent_integration, delivery, hook_args};
 use crate::{
     agent::ModelChoice,
-    config::{Effective, modes, templates},
+    config::{self, Effective, modes, templates},
     fsutil,
     model::Workspace,
     paths::Paths,
@@ -84,32 +84,58 @@ pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>
     command.splice(at..at, options);
 }
 
-/// What a workspace's agent `name` runs with besides its instructions, prompt
-/// and forwarded arguments: Shoal's hooks and [`workspace_dir_args`].
+/// What a workspace's agent `name` in `mode` runs with besides its
+/// instructions, prompt and forwarded arguments: Shoal's hooks and
+/// [`workspace_dir_args`].
 pub(crate) async fn workspace_args(
     paths: &Paths,
     settings: &Effective,
     name: &str,
     workspace: &Workspace,
+    mode: &str,
 ) -> Result<Vec<OsString>> {
     let proxied = settings.proxy(name).is_some();
     let mut args = hook_args(settings.integration(name), workspace.into(), proxied)?;
-    args.extend(workspace_dir_args(paths, settings, name, workspace).await);
+    args.extend(workspace_dir_args(paths, settings, name, workspace, mode).await);
     Ok(args)
 }
 
-/// The arguments that give a workspace's agent `name` the configured agent
-/// directories and the repository's workspaces directory as other working
-/// directories, so it may also work in the child workspaces it splits there
-/// and in its temporary directory.
+/// The arguments that give a workspace's agent `name` in `mode` the
+/// configured agent directories and the repository's workspaces directory
+/// as other working directories, so it may also work in the child
+/// workspaces it splits there and in its temporary directory; in setup
+/// mode also the directory of the repository's local config, which it may
+/// write.
 pub(crate) async fn workspace_dir_args(
     paths: &Paths,
     settings: &Effective,
     name: &str,
     workspace: &Workspace,
+    mode: &str,
 ) -> Vec<OsString> {
     let workspaces_dir = workspaces_dir(paths, workspace).await;
-    dir_args(settings, name, &paths.home, workspaces_dir.as_deref())
+    let config_dir = (workspaces_dir.as_deref())
+        .filter(|_| mode == modes::SETUP)
+        .and_then(|directory| launch_config_dir(&config::repo::local_config_path(directory)));
+    let extra: Vec<_> = workspaces_dir.into_iter().chain(config_dir).collect();
+    dir_args(settings, name, &paths.home, &extra)
+}
+
+/// The directory of the config file `file`, created when missing and
+/// resolved as agents compare paths, so a setup agent may write there.
+pub(crate) fn writable_config_dir(file: &Path) -> Result<PathBuf> {
+    let directory = file.parent().context("the config file has no directory")?;
+    std::fs::create_dir_all(directory)
+        .and_then(|()| std::fs::canonicalize(directory))
+        .with_context(|| format!("create {}", directory.display()))
+}
+
+/// [`writable_config_dir`] for a launch, which starts without it, with a
+/// warning, when it cannot be created.
+fn launch_config_dir(file: &Path) -> Option<PathBuf> {
+    writable_config_dir(file)
+        .map_err(|error| eprintln!("warning: the agent may not write its config: {error:#}"))
+        .ok()
 }
 
 /// The arguments that give agent `name` the configured agent directories as
@@ -129,12 +155,15 @@ pub(crate) fn dir_args(
     settings: &Effective,
     name: &str,
     home: &Path,
-    extra: Option<&Path>,
+    extra: &[PathBuf],
 ) -> Vec<OsString> {
     let mut args = agent_dir_args(settings, name, home);
-    if let Some(directory) = extra {
-        args.extend(settings.launch(name).arguments.add_dir_args(directory));
-    }
+    let arguments = &settings.launch(name).arguments;
+    args.extend(
+        extra
+            .iter()
+            .flat_map(|directory| arguments.add_dir_args(directory)),
+    );
     args
 }
 

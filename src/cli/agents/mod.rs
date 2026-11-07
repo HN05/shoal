@@ -125,8 +125,6 @@ pub(in crate::cli) struct ChatLaunch {
     pub instructions: String,
     /// The task the chat starts on before the user speaks, if any.
     pub opening: Option<String>,
-    /// Other working directories the chat's task needs, beside its own.
-    pub directories: Vec<PathBuf>,
     /// The model and effort it runs with.
     pub model: ModelChoice,
     pub args: Vec<OsString>,
@@ -425,22 +423,6 @@ pub(super) async fn run_named(
     .await
 }
 
-/// The requested agent, else the configured `agent.default`, else a picker.
-pub(super) async fn default_agent(
-    ctx: &Context,
-    target: ConfigTarget,
-    agent: Option<Agent>,
-) -> Result<Option<Agent>> {
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
-    match agent.or(settings.agent.default.clone()) {
-        Some(agent) => {
-            ensure_available(agent.name(), &settings)?;
-            Ok(Some(agent))
-        }
-        None => pick_default_agent(ctx, &settings),
-    }
-}
-
 /// The picker standing in for a missing `agent.default`.
 pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
@@ -573,27 +555,19 @@ pub(in crate::cli) fn fork_args(
 }
 
 /// The arguments that give agent `name` of `chat` the configured agent
-/// directories, the chat's temporary directory and `directories` as other
-/// working directories.
+/// directories and the chat's temporary directory as other working
+/// directories.
 pub(in crate::cli) fn chat_dir_args(
     settings: &Effective,
     name: &str,
     home: &Path,
     chat: &Chat,
-    directories: &[PathBuf],
 ) -> Vec<OsString> {
     let tmp_dir = chat
         .tmp_dir
         .as_ref()
         .map(|directory| std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone()));
-    let mut args = dir_args(settings, name, home, tmp_dir.as_deref());
-    let arguments = &settings.launch(name).arguments;
-    args.extend(
-        directories
-            .iter()
-            .flat_map(|directory| arguments.add_dir_args(directory)),
-    );
-    args
+    dir_args(settings, name, home, tmp_dir.as_slice())
 }
 
 /// Start a chat of agent `name` its integration's own way; `None` leaves it

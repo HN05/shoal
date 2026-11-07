@@ -149,6 +149,23 @@ async fn built_in_restore_child() {
         |text: &str| (recovery.command.iter()).any(|arg| arg.to_string_lossy().contains(text));
     assert!(told("\n\nTriage load"), "{:?}", recovery.command);
     assert!(!told("Label it."), "{:?}", recovery.command);
+    // A setup agent may write the repository's local config again, as it
+    // could when it started; other agents may not.
+    let local_config = workspace.path.parent().unwrap().join(".shoal");
+    for (mode, writes) in [(crate::config::modes::SETUP, true), ("worker", false)] {
+        let restored = crate::execution::recovery::Restored {
+            mode,
+            ..restored("claude", Some("s1"))
+        };
+        let recovery = Recovery::resolve(&manager.paths, &workspace, restored, None, None)
+            .await
+            .unwrap();
+        let tools = crate::ai::tools(&Default::default());
+        let local_config = fs::canonicalize(&local_config).unwrap();
+        let expected = tools["claude"].launch.arguments.add_dir_args(&local_config);
+        let given = (recovery.command.windows(expected.len())).any(|args| args == expected);
+        assert_eq!(given, writes, "{mode}: {:?}", recovery.command);
+    }
     // A restore keeps the model and effort the agent ran with.
     let model = crate::agent::ModelChoice {
         model: Some("m1".into()),

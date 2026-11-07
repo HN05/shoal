@@ -440,6 +440,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         after: args.after,
         model: args.model.into(),
         mode: Some(mode),
+        prompt: None,
         parent,
         fork,
     };

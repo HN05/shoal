@@ -1544,16 +1544,16 @@ after verifying the recorded worktree and its branch, so a switched or replaced
 checkout is never moved.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
-likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write the
-tracked repository config, so it arrives as a reviewable commit that every clone
-shares. For a repository that won't take that file, or settings for one user,
-`--local` or the interactive “Save locally” choice has the agent write the local
-config and its scripts in the repository directory's `.shoal/` instead. Nothing
-then needs a branch, so the agent runs as a chat in the registered checkout,
-given that directory as another working directory;
-the result applies as soon as it is saved, and the agent tries the setup script
-in a temporary workspace it removes again. Explicit arguments are checked
-before the interactive choice. A `review` command such as tuicr owns its own
+likewise starts one agent, in the built-in `setup` mode in a workspace on the
+`shoal-setup` branch, which drafts the repository config and then asks the user
+whether to commit it, so it arrives as a reviewable commit that every clone
+shares, or, for a repository that won't take that file or settings for one user,
+to save it as the local config in the repository directory's `.shoal/`. The mode
+gives the agent that directory as another working directory on every launch, so
+one agent serves both answers; a local result applies as soon as it is saved,
+the agent tests it in its own worktree and its `done` removes the workspace and
+its empty branch. `setup` takes the rules and reach of a base mode and adds only
+its instructions, so config cannot change what it does. A `review` command such as tuicr owns its own
 storage, exports and forge authentication, with explicit feedback handoff to
 agents.
 

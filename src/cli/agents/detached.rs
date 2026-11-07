@@ -48,7 +48,7 @@ pub(super) async fn start(
     } = launch;
     crate::agents::ensure_available(&name, &settings)?;
     let model_args = model_args(app, &settings, &name, &model)?;
-    let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
+    let directories = workspace_dir_args(ctx, app, &settings, &workspace, &mode).await;
     let directories = [model_args, directories].concat();
     let (prompt, args) = workspace_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
@@ -242,31 +242,26 @@ fn instruction_args(
 }
 
 /// The arguments that give `app`'s agent the directories a workspace's agent
-/// works in, when it takes arguments.
+/// in `mode` works in, when it takes arguments.
 async fn workspace_dir_args(
     ctx: &Context,
     app: &dyn App,
     settings: &Effective,
     workspace: &Workspace,
+    mode: &str,
 ) -> Vec<OsString> {
     if app.takes_agent_args() {
-        crate::agents::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace).await
+        crate::agents::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace, mode).await
     } else {
         Vec::new()
     }
 }
 
-/// The arguments that give `app`'s agent the configured agent directories,
-/// `chat`'s temporary directory and `directories`, when it takes arguments.
-fn chat_dir_args(
-    app: &dyn App,
-    settings: &Effective,
-    home: &Path,
-    chat: &Chat,
-    directories: &[PathBuf],
-) -> Vec<OsString> {
+/// The arguments that give `app`'s agent the directories `chat`'s agent
+/// works in, when it takes arguments.
+fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) -> Vec<OsString> {
     if app.takes_agent_args() {
-        super::chat_dir_args(settings, app.agent(), home, chat, directories)
+        super::chat_dir_args(settings, app.agent(), home, chat)
     } else {
         Vec::new()
     }
@@ -342,8 +337,8 @@ pub(super) async fn start_chat(
 /// The first message and arguments of the session of `launch`, recorded as
 /// `chat`: the instructions as arguments with its opening, where the agent
 /// takes them apart, otherwise as the first message, which starts a turn
-/// before the user speaks. The agent directories, the chat's temporary
-/// directory and the launch's directories come before its own arguments.
+/// before the user speaks. The directories its agent works in come before
+/// its own arguments.
 fn chat_input(
     app: &dyn App,
     home: &Path,
@@ -354,11 +349,10 @@ fn chat_input(
         settings,
         instructions,
         opening,
-        directories,
         args,
         ..
     } = launch;
-    let args = chat_dir_args(app, settings, home, chat, directories)
+    let args = chat_dir_args(app, settings, home, chat)
         .into_iter()
         .chain(args.to_vec());
     match instruction_args(app, settings, instructions) {

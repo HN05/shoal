@@ -73,7 +73,7 @@ fn a_chat_agent_gets_its_temporary_directory_after_the_configured_ones() {
         children: Vec::new(),
     };
     assert_eq!(
-        chat_dir_args(&defaults, "codex", home.path(), &chat, &[]),
+        chat_dir_args(&defaults, "codex", home.path(), &chat),
         [
             OsString::from("--add-dir"),
             tmp.into(),

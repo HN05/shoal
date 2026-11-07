@@ -52,6 +52,8 @@ pub(in crate::cli::commands) struct AddOptions {
     pub model: crate::agent::ModelChoice,
     /// The mode the agent starts in; the default mode when `None`.
     pub mode: Option<ModeChoice>,
+    /// The agent's subject when no issue gives it one.
+    pub prompt: Option<String>,
     /// The space the workspace goes below, instead of the chat this runs in
     /// or, for a workspace process, its own space.
     pub parent: Option<String>,

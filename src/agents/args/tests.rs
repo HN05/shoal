@@ -40,7 +40,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
             &defaults,
             "codex",
             home.path(),
-            Some(Path::new("/root/repo"))
+            &[PathBuf::from("/root/repo")]
         ),
         [
             OsString::from("--add-dir"),

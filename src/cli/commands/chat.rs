@@ -353,8 +353,6 @@ pub(super) struct Topic {
     /// The issue the chat is linked to, whose fields the rules of a chat
     /// restored without its subject take.
     pub linked_issue: Option<templates::IssueFields>,
-    /// Other working directories the task needs, beside the chat's own.
-    pub directories: Vec<PathBuf>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: Vec<(Relation, LinkedItem)>,
     /// The workspace whose worktree the chat runs in, instead of the
@@ -372,7 +370,6 @@ impl Topic {
             mode: mode.to_owned(),
             subject: None,
             linked_issue: None,
-            directories: Vec::new(),
             links: Vec::new(),
             workspace: None,
         }
@@ -387,7 +384,6 @@ impl Topic {
             mode: mode.to_owned(),
             subject: None,
             linked_issue: None,
-            directories: Vec::new(),
             links: Vec::new(),
             workspace: None,
         }
@@ -403,7 +399,6 @@ impl Topic {
             mode: mode.to_owned(),
             subject: None,
             linked_issue: None,
-            directories: Vec::new(),
             links: Vec::new(),
             workspace: Some(workspace),
         }
@@ -554,7 +549,6 @@ pub(super) async fn launch(
         parent: parent.clone(),
         instructions: brief.system,
         opening: brief.first_message,
-        directories: topic.directories.clone(),
         model: crate::agents::resolve_model(&settings, agent.name(), model.clone()),
         repository: repo,
         workspace: topic.workspace.clone(),
@@ -572,7 +566,6 @@ pub(super) async fn launch(
         settings,
         instructions,
         opening,
-        directories,
         model: resolved,
         ..
     } = launch;
@@ -645,13 +638,7 @@ pub(super) async fn launch(
         &settings,
         [
             model_args,
-            agents::chat_dir_args(
-                &settings,
-                agent.name(),
-                &ctx.paths.home,
-                &chat,
-                &directories,
-            ),
+            agents::chat_dir_args(&settings, agent.name(), &ctx.paths.home, &chat),
         ]
         .concat(),
         home.path(),

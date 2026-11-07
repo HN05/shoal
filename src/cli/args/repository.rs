@@ -124,20 +124,14 @@ pub enum RepoCommand {
         /// New name; omit to enter one.
         name: Option<String>,
     },
-    /// Have an agent write the repository's Shoal config and commit it, or save it locally.
+    /// Have an agent write the repository's Shoal config in a workspace on
+    /// shoal-setup, then commit it or save it locally, as you choose.
     Setup {
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Save the config and its scripts as the repository's local config,
-        /// from a chat, instead of committing them; asked when interactive.
-        #[arg(long)]
-        local: bool,
-        /// Run the local setup's chat in this terminal instead of a new tab or detached session.
-        #[arg(short = 'H', long, requires = "local")]
+        /// Run in this terminal instead of a new tab or detached session.
+        #[arg(short = 'H', long)]
         here: bool,
-        /// Name of the local setup's chat; defaults to <repo>-setup.
-        #[arg(long, requires = "local")]
-        name: Option<String>,
         /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,

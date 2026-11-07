@@ -33,7 +33,7 @@ use crate::cli::args::{
     internal::InternalCommand,
     items::ItemsCommand,
     lifecycle::LifecycleCommand,
-    repository::RepositoryCommand,
+    repository::{RepoCommand, RepositoryCommand},
     resources::ResourcesCommand,
     service::{ConfigCommand, DaemonCommand, ServiceCommand},
     sessions::SessionsCommand,
@@ -239,6 +239,9 @@ impl Command {
         matches!(
             self,
             Command::Create(CreateCommand::Contribute(_))
+                | Command::Repository(RepositoryCommand::Repo {
+                    command: Some(RepoCommand::Setup { .. }),
+                })
                 | Command::Workspace(WorkspaceCommand::Work {
                     command: Some(WorkCommand::Setup { skip: true, .. }),
                     ..

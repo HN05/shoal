@@ -26,26 +26,18 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Rename { repository, name } => naming::rename(ctx, repository, name).await,
         RepoCommand::Setup {
             repository,
-            local,
             here,
-            name,
             agent,
             model,
             args,
         } => {
-            let options = super::chat::Options {
+            let options = super::repo_setup::Options {
+                here,
                 agent,
-                place: super::chat::ChatPlace::here(here),
-                name,
                 model: model.into(),
                 args,
-                session: None,
-                fork: false,
-                restore: None,
-                handoff: None,
-                parent: None,
             };
-            super::repo_setup::start(ctx, repository, local, options).await
+            super::repo_setup::start(ctx, repository, options).await
         }
         RepoCommand::Rm {
             repository,

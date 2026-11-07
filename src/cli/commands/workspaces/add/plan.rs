@@ -99,6 +99,7 @@ pub(super) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
 /// fork of the session it names.
 pub(super) fn start_as(plan: &mut AddPlan, options: &AddOptions, mode: Option<String>) {
     plan.mode = mode;
+    plan.prompt.clone_from(&options.prompt);
     plan.parent.clone_from(&options.parent);
     plan.fork.clone_from(&options.fork);
 }

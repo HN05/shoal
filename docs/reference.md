@@ -1151,7 +1151,7 @@ as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
 [Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
-`-H`/`--here` on `shoal start`, `contribute` and `repo setup --local`
+`-H`/`--here` on `shoal start`, `contribute` and `repo setup`
 runs the launch in this terminal instead of a new tab or detached session,
 whatever the host. An agent that `start` or `contribute` then starts runs as
 these launches do, in a zmx session attached here on a terminal; a chat runs in
@@ -1646,7 +1646,7 @@ otherwise keeps the forked session's directory.
 entry for every agent and chat, for a workspace's agent the repository's
 workspaces directory, where `shoal split` puts children and its [temporary
 directory](#temporary-directories) lies, and for a chat its temporary directory, plus the
-repository's local config directory for the chat of a local `repo setup`. An empty list gives none.
+directory of the config a [setup](#set-up-config) agent writes. An empty list gives none.
 `review` runs a [local review](#local-reviews) once, without a session: the
 launcher's words before `{args}`, or all of them, followed by these arguments,
 which name the prompt `{prompt}` and the output schema as a file, `{schema}`, or
@@ -2656,30 +2656,29 @@ last sync and its error; once syncs have failed for 30 minutes of the machine
 being awake, the repository joins the inbox and one `sync_failed` alert tells you. `shoal repo sync [repository]` syncs at once and
 reports the result or the error. Syncing never pushes or moves workspace branches.
 
-`repo setup [repository] [--local [--here] [--name NAME]] [--agent NAME] [-- ARGS]`
-starts an agent that writes the repository's config: setup, named ports, commands
-and resource pools. On a terminal without `--local`, it first asks whether to
-commit the config to the repository or save it locally; other callers commit it.
-A repository or agent named on the command line that cannot be used is refused
-before that question.
+### Set up config
 
-- **Commit to repository** writes `.shoal.toml`, checks it with `config show`
-  and `work setup`, and commits it with the scripts it runs, in the repository's
-  `shoal-setup` workspace, which Shoal opens on that branch when none exists.
-- **Save locally** (`--local`) starts a [chat](#chats) named `<repo>-setup` in
-  the registered checkout instead, which `--here` and `--name` place and name
-  as for `chat`. It writes the repository's
+`repo setup [repository] [--here] [--agent NAME] [-- ARGS]` starts an agent in
+the built-in `setup` mode that writes the repository's config: setup, named
+ports, commands and resource pools. It works in the repository's `shoal-setup`
+workspace, which Shoal opens on that branch when none exists, with the worker
+mode's rules. Once it has a draft, it asks you with `shoal questions ask`
+whether to commit it or save it locally, unless you have said already, and
+mentions a committed or local config the repository has.
+
+- **Commit** writes `.shoal.toml`, or `.shoal/config.toml` when that file
+  exists, and the scripts it runs, tests the setup script with `work setup`,
+  commits them and opens a PR.
+- **Save locally** writes the repository's
   [local config](#store-repository-config-outside-git) and the scripts it runs
-  beside it, named by paths relative to that directory, and leaves the
-  checkout's files and branches unchanged. The chat gets that `.shoal`
-  directory, created when missing, as another working directory. The config
-  applies to every workspace as soon as it is saved; the agent checks it with
-  `config show --repo NAME`, tries the setup script in a temporary
-  `shoal-setup-trial` workspace that it then removes, and ends by telling you to
-  check the config with `config show --repo NAME`.
+  beside it, named by paths relative to that directory, commits nothing, runs
+  `daemon reload` and tests the setup script with `work setup` in its own
+  worktree. Its `shoal done` removes the workspace and its empty branch.
 
-The agent is `--agent`, else `agent.default`, else one chosen from the agent
-picker; arguments after `--` go to the agent.
+Every launch and restore of the agent gets the local config's `.shoal`
+directory, created when missing, as another working directory. The agent is
+`--agent`, else `agent.default`, else one chosen from the agent picker;
+arguments after `--` go to the agent. Only the user runs `repo setup`.
 
 ### Contributions
 

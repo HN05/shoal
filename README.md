@@ -73,8 +73,7 @@ repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`;
 
 ```sh
 shoal repo add /path/to/project --name my-project
-shoal repo setup my-project   # Have an agent write and commit its .shoal.toml
-shoal repo setup my-project --local  # Or save the config outside Git
+shoal repo setup my-project   # Have an agent write its config, committed or local
 shoal start my-project fix-login
 shoal codex fix-login
 ```
