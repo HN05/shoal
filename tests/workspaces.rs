@@ -27027,6 +27027,71 @@ fn repository_setup_refuses_named_arguments_before_any_picker() {
 }
 
 #[test]
+fn start_takes_the_mode_an_issues_labels_name() {
+    let fixture = Fixture::with_config(Some(
+        "[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n",
+    ));
+    forge_origin(&fixture);
+    install_api_curl(&fixture.root.path().join("bin"));
+    for (number, title, labels) in [
+        (9, "Pick a cache", vec!["needs-plan"]),
+        (5, "Retry uploads", vec!["planned"]),
+        (3, "Track releases", vec![]),
+    ] {
+        let labels: Vec<_> = (labels.iter())
+            .map(|name| serde_json::json!({"name": name}))
+            .collect();
+        script_api(
+            fixture.root.path(),
+            &format!("repos/team/project/issues/{number}"),
+            &serde_json::json!({"number": number, "title": title, "state": "open",
+                "body": "", "labels": labels, "pull_request": null,
+                "html_url": format!("https://forge.example/team/project/issues/{number}")}),
+        );
+    }
+    install_recording_agent(&fixture, "pi");
+    let started_in = || {
+        let workspace = fs::read_to_string(fixture.root.path().join("chat-workspace")).unwrap();
+        let chat = fs::read_to_string(fixture.root.path().join("chat-id")).unwrap();
+        (!workspace.trim().is_empty(), !chat.trim().is_empty())
+    };
+
+    // An issue that needs a plan starts the plan mode's chat without asking.
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &["start", "--issue", "9", "--agent", "pi", "--here"],
+        "",
+        "",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "{rows}");
+    assert_eq!(started_in(), (false, true));
+    assert!(chat_args(&fixture)[0].contains("`planned`"));
+
+    // A planned issue starts the worker without asking.
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &["start", "--issue", "5", "--agent", "pi", "--here"],
+        "",
+        "",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "{rows}");
+    assert_eq!(started_in(), (true, false));
+
+    // An issue with neither label asks for the mode.
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &["start", "--issue", "3", "--agent", "pi", "--here"],
+        "plan",
+        "",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("worker") && rows.contains("plan"), "{rows}");
+    assert_eq!(started_in(), (false, true));
+}
+
+#[test]
 fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     let fixture = Fixture::with_config(Some(
         "[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n",

@@ -2181,6 +2181,10 @@ Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan
 an agent implements without asking. Both are repository configuration, so Shoal
 assumes no label scheme, and issues with neither stay outside the flow.
+The labels also pick the mode of a start on an issue without `--mode`, the
+worker for a planned issue and the plan mode for one that needs a plan, since
+the label already says which work comes next; an issue with neither leaves the
+choice to the picker.
 The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat coordinates the implementing workspace when the user has it start

@@ -222,6 +222,7 @@ pub(in crate::cli) struct Issue {
     pub(in crate::cli) title: String,
     pub(super) url: String,
     pub(super) details: String,
+    pub(in crate::cli) labels: Vec<String>,
 }
 
 impl Issue {
@@ -340,6 +341,7 @@ pub(in crate::cli) async fn load(
         title: issue.title,
         url: issue.url,
         details: issue.details,
+        labels: issue.labels,
     })
 }
 

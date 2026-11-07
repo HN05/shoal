@@ -16,12 +16,12 @@ use crate::{
         context::Context,
         ui::{self, Fallback, ModeChoice},
     },
-    config::{Effective, modes, templates},
+    config::{self, Effective, modes, templates},
     forge::{
         IssueInput,
         items::link::{Link, LinkTarget},
     },
-    model::{AgentSession, SpaceKind},
+    model::{AgentSession, Repository, SpaceKind},
     protocol::ConfigTarget,
 };
 
@@ -110,15 +110,20 @@ enum Start {
     Outside(String),
 }
 
-/// Where the start goes and its mode: the mode `--mode` names, else on a
-/// terminal the plan mode for `--issue` without a value, which no other
-/// mode takes, or one picked once the arguments given are checked, else
-/// the [`default_mode`]. When the arguments decide the kind of space, its
-/// own start picks among the modes of that kind in a repository after its
-/// checks; otherwise the mode is picked here among them all.
+/// Where the start goes and its mode: the mode `--mode` names, else the
+/// [`issue_mode`] of the issue it names, else on a terminal the plan mode
+/// for `--issue` without a value, which no other mode takes, or one picked
+/// once the arguments given are checked, else the [`default_mode`]. When
+/// the arguments decide the kind of space, its own start picks among the
+/// modes of that kind in a repository after its checks; otherwise the mode
+/// is picked here among them all.
 async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
     let named = match &args.mode {
         Some(mode) => Some(mode.clone()),
+        None => issue_mode(ctx, args).await?,
+    };
+    let named = match named {
+        Some(mode) => Some(mode),
         None if !ui::can_pick(ctx) => Some(default_mode(args).to_owned()),
         None if args.issue == Some(None) => Some(modes::PLAN.to_owned()),
         None => None,
@@ -149,6 +154,63 @@ async fn shaped(ctx: &Context, args: &StartArgs, mode: String) -> Result<Start> 
         (SpaceKind::Chat, true) => Start::Chat(ModeChoice::Named(mode)),
         (SpaceKind::Chat, false) => Start::Outside(mode),
     })
+}
+
+/// The mode the labels of the issue the arguments name call for, by
+/// [`labelled_mode`], when it starts the kind of space they ask for or fit;
+/// none without such an issue, a repository to read it in or a label to
+/// look for.
+async fn issue_mode(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
+    let Some(input) = named_issue(args) else {
+        return Ok(None);
+    };
+    let Some(repo) = mode_repository(ctx, args).await? else {
+        return Ok(None);
+    };
+    let target = ConfigTarget::Repository(repo.id.clone().into());
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    if settings.issue.plan_label.is_none() && settings.issue.planned_label.is_none() {
+        return Ok(None);
+    }
+    let context = super::issues::read_context(ctx, &repo).await?;
+    let issue = super::issues::load(ctx, context, input).await?;
+    let mode = labelled_mode(&settings.issue, &issue.labels);
+    Ok(mode
+        .filter(|mode| mode_fits(args, &settings, mode))
+        .map(str::to_owned))
+}
+
+/// Whether `settings` define `mode` and it starts the kind of space the
+/// arguments ask for or fit, if any.
+fn mode_fits(args: &StartArgs, settings: &Effective, mode: &str) -> bool {
+    let kind = forced_kind(args).or_else(|| fitting_kind(args));
+    modes::get(&settings.modes, mode).is_ok_and(|found| kind.is_none_or(|kind| kind == found.kind))
+}
+
+/// The mode for an issue labelled `labels`: the worker once `[issue]
+/// planned_label` says its plan is settled, else the plan mode while
+/// `plan_label` says it needs one.
+fn labelled_mode(config: &config::Issue, labels: &[String]) -> Option<&'static str> {
+    let labelled =
+        |label: &Option<String>| label.as_ref().is_some_and(|label| labels.contains(label));
+    if labelled(&config.planned_label) {
+        Some(modes::DEFAULT)
+    } else if labelled(&config.plan_label) {
+        Some(modes::PLAN)
+    } else {
+        None
+    }
+}
+
+/// The issue `--issue` or the positional argument names by number or URL.
+fn named_issue(args: &StartArgs) -> Option<&str> {
+    match (&args.issue, args.repository.as_deref()) {
+        (Some(Some(issue)), _) => Some(issue),
+        (_, Some(positional)) if positional_kind(positional) == Positional::Issue => {
+            Some(positional)
+        }
+        _ => None,
+    }
 }
 
 /// What the positional argument names.
@@ -299,9 +361,9 @@ fn forced_kind(args: &StartArgs) -> Option<SpaceKind> {
 /// [`mode_repository`] finds, else the global config's. Nothing is asked.
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     match mode_repository(ctx, args).await? {
-        Some(id) => {
-            crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Repository(id.into()))
-                .await
+        Some(repo) => {
+            let target = ConfigTarget::Repository(repo.id.into());
+            crate::client::workspaces::settings(&ctx.paths, target).await
         }
         None => {
             crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
@@ -309,24 +371,25 @@ async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     }
 }
 
-/// The ID of the registered repository `--repo` or the positional argument
-/// names, else of the one an issue or item URL belongs to, else of the
-/// current checkout or workspace, without asking.
-async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
+/// The registered repository `--repo` or the positional argument names,
+/// else the one an issue or item URL belongs to, else that of the current
+/// checkout or workspace, without asking.
+async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repository>> {
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let named = (args.repository_override.as_deref()).or(args.repository.as_deref());
     if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
         && let Ok(repo) = crate::repository::select(&repos, selector).await
     {
-        return Ok(Some(repo.id.clone()));
+        return Ok(Some(repo.clone()));
     }
     let urls = [args.issue.clone().flatten(), args.repository.clone()];
     for url in urls.iter().flatten() {
         if let Ok(Some(repo)) = super::issues::registered_for_item(&repos, url).await {
-            return Ok(Some(repo.id.clone()));
+            return Ok(Some(repo.clone()));
         }
     }
-    super::issues::current_repository_id(ctx, &repos).await
+    let current = super::issues::current_repository_id(ctx, &repos).await?;
+    Ok(current.and_then(|id| repos.into_iter().find(|repo| repo.id == id)))
 }
 
 /// Start the agent in a new or reopened workspace.

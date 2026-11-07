@@ -16,6 +16,7 @@ fn a_chat_on_an_issue_is_named_after_it_and_its_mode_without_asking() {
         title: "Attach to chats".into(),
         url: "https://forge.example/team/shoal/issues/1211".into(),
         details: String::new(),
+        labels: Vec::new(),
     };
     let topic = on(Topic::repository(&repo, "plan"), &repo, &issue);
     assert_eq!(topic.mode, "plan");

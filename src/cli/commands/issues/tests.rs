@@ -108,6 +108,7 @@ fn issue_names_are_portable_bounded_and_stable() {
         title: "Fix `API`: $(touch /tmp/no); 日本語".into(),
         url: "url".into(),
         details: "body".into(),
+        labels: Vec::new(),
     };
     assert_eq!(issue.branch_name(), "34-fix-api-touch");
     issue.title = "Remove a merged workspace whose HEAD is a rebased copy".into();

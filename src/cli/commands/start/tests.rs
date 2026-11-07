@@ -141,3 +141,39 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
     );
     assert_eq!(fits(&["repo", "--name", "talk"]), Some(SpaceKind::Chat));
 }
+
+#[test]
+fn an_issues_labels_name_its_mode() {
+    let config = config::Issue {
+        required_labels: Vec::new(),
+        plan_label: Some("needs-plan".into()),
+        planned_label: Some("planned".into()),
+    };
+    let mode = |labels: &[&str]| {
+        let labels: Vec<String> = labels.iter().map(|label| (*label).into()).collect();
+        labelled_mode(&config, &labels)
+    };
+    assert_eq!(mode(&["type/bug", "planned"]), Some(modes::DEFAULT));
+    assert_eq!(mode(&["needs-plan"]), Some(modes::PLAN));
+    // A settled plan wins over a stale label asking for one.
+    assert_eq!(mode(&["needs-plan", "planned"]), Some(modes::DEFAULT));
+    assert_eq!(mode(&["type/bug"]), None);
+    let unset = config::Issue {
+        plan_label: None,
+        planned_label: None,
+        ..config
+    };
+    assert_eq!(labelled_mode(&unset, &["needs-plan".into()]), None);
+}
+
+#[test]
+fn a_start_names_an_issue_with_issue_or_positionally() {
+    let issue = |args: &[&str]| named_issue(&start(args)).map(str::to_owned);
+    let url = "https://forge.example/o/r/issues/7";
+    assert_eq!(issue(&["repo", "--issue", "7"]).as_deref(), Some("7"));
+    assert_eq!(issue(&["7"]).as_deref(), Some("7"));
+    assert_eq!(issue(&[url]).as_deref(), Some(url));
+    assert_eq!(issue(&["repo"]), None);
+    assert_eq!(issue(&["https://forge.example/o/r/pulls/8"]), None);
+    assert_eq!(issue(&["repo", "--issue"]), None);
+}

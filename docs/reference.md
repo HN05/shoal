@@ -1966,7 +1966,8 @@ in the chat, then rewrites the issue's body with a Plan section, since an
 implementing agent receives only the body, swaps `plan_label` for
 `planned_label` where they are set, and opens follow-up issues for work the
 plan splits off. You start an agent on it when you want one, with
-`shoal start --issue`.
+`shoal start --issue`. Without `--mode`, `shoal start --issue ISSUE` on an
+issue labelled `plan_label` starts this chat too.
 
 ```toml
 [issue]
@@ -2229,7 +2230,10 @@ these modes:
 `shoal start` starts every new agent, in the mode `--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says
 otherwise; `worker` always starts in a workspace, and config that gives it
-another kind is refused. Without `--mode`, a terminal offers the modes in a
+another kind is refused. Without `--mode`, a start on an issue labelled `[issue]
+planned_label` takes `worker`, and one on an issue labelled `plan_label` takes
+`plan`, when that mode starts the kind of space the other arguments ask for;
+otherwise a terminal offers the modes in a
 picker with the kind of space each starts in, and without one the start takes
 `worker`, or `chat` with `--chat` or `--in`, which the picker lists first. The
 picker opens once the start has checked the arguments it was given, and offers

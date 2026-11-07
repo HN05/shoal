@@ -47,8 +47,10 @@ shoal contribute https://github.com/other/repo/issues/12 --agent claude
 
 `start` accepts a registered repository and branch, or an issue, PR or branch
 URL; an issue becomes the agent's first message, followed by its mode's
-instructions, and text after `--` is the task. `--mode` picks the mode,
-`worker` by default, which starts in a workspace; `chat` and `plan` start in a
+instructions, and text after `--` is the task. `--mode` picks the mode; without
+it, an issue labelled `[issue] planned_label` takes `worker` and one labelled
+`plan_label` takes `plan`, else `worker` is the default, which starts in a
+workspace; `chat` and `plan` start in a
 chat, and `--chat` or `--worktree` overrides the mode's kind. `--base` naming
 another workspace's branch stacks the new workspace on it. `contribute` takes
 the same URLs for a repository the user does not maintain: it clones it, forks
