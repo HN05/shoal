@@ -1864,9 +1864,9 @@ pub enum Dependency {
 }
 
 /// An agent launch `shoal start` asks the daemon to admit or queue. The plan
-/// is JSON in the format of `crate::agent_queue`, which the daemon also
-/// writes for the launches it queues itself and the `queue-start` worker
-/// reads back.
+/// is JSON in the format of the binary's `start_plan::AddPlan`, which the
+/// daemon also writes for the launches it queues itself and the
+/// `queue-start` worker reads back.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
     pub repository: crate::repository::Selector,
