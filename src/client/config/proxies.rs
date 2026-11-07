@@ -39,13 +39,7 @@ pub fn validate(proxies: &Proxies) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "proxy")]
-fn validate_upstream(url: &str) -> Result<()> {
-    shoal_proxy::Upstream::parse(url).map(drop)
-}
-
-/// A build without the proxy runs no launch through one, which says so.
-#[cfg(not(feature = "proxy"))]
+/// Only the scheme: the proxy checks the rest of the URL when it starts.
 fn validate_upstream(url: &str) -> Result<()> {
     ensure!(
         url.starts_with("http://") || url.starts_with("https://"),
