@@ -1,5 +1,5 @@
 use super::*;
-use crate::updates::UpdateKind;
+use crate::updates::{SnapshotKind, SnapshotState, UpdateKind};
 use serde_json::json;
 
 fn pull(mergeable: Value) -> Current {
@@ -24,7 +24,7 @@ fn statuses(statuses: Value) -> Value {
 fn snapshot(mergeable: Value, runs: &Value, statuses: &Value) -> Snapshot {
     let mut checks = check_runs("abc", runs).unwrap();
     checks.extend(commit_statuses("abc", statuses).unwrap());
-    let mut snapshot = Snapshot::new("open");
+    let mut snapshot = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
     snapshot.record_keyed_checks(&pull(mergeable), Ok(checks));
     snapshot
 }
@@ -101,7 +101,7 @@ fn completed_checks_wake_individually_while_other_checks_run() {
     ]);
     let pending = statuses(json!([{"context": "deploy", "state": "pending"}]));
     let mut observed = snapshot(json!(false), &runs(checks.clone()), &pending);
-    let mut first = Snapshot::new("open");
+    let mut first = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
     first.conflict = observed.conflict;
     first.conflict_at = observed.conflict_at.clone();
     observed.normalize(&first, 1000);

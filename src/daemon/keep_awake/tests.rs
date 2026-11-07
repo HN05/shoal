@@ -59,10 +59,11 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
     watch_pr(&manager, &workspace).await;
     // A PR no poll has seen yet is open.
     assert!(has_work(&manager).await);
-    for (state, work) in [("open", true), ("merged", false)] {
+    use crate::forge::updates::SnapshotState;
+    for (state, work) in [(SnapshotState::Open, true), (SnapshotState::Merged, false)] {
         let id = workspace.id.clone();
         let mut snapshot = crate::forge::updates::Snapshot::default();
-        snapshot.adopt_state(state);
+        snapshot.adopt_state(Some(state));
         let record = serde_json::to_string(&snapshot).unwrap();
         manager
             .store

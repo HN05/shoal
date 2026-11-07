@@ -312,7 +312,10 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
     register_watch(&manager, &workspace.id, "pr").await;
 
     let refused = anyhow::anyhow!("connection refused");
-    for snapshot in [Snapshot::unread_item("PR", &refused), snapshot("first")] {
+    for snapshot in [
+        Snapshot::unread_item(LinkKind::Pr, &refused),
+        snapshot("first"),
+    ] {
         manager
             .record_background_activity(&workspace.id, vec![("pr".into(), snapshot)])
             .await
@@ -1433,7 +1436,7 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
             let change = OwnChange {
                 url: "pr",
                 authored: vec!["discussion:2".into()],
-                state: Some("closed"),
+                state: Some(ItemState::Closed),
                 edited: Edited::default(),
             };
             record_own_change(db, &id, change)

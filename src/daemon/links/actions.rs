@@ -217,7 +217,7 @@ impl Manager {
             }
         };
         let own = Own {
-            state: own_state(action).then(|| acted.item.state.as_str()),
+            state: own_state(action).then_some(acted.item.state),
             authored: own_posts(action, acted.authored),
             edited: own_edits(action, acted.edited),
         };
@@ -300,7 +300,7 @@ pub(super) struct Target {
 
 /// What an applied action changed that is the agent's own.
 struct Own {
-    state: Option<&'static str>,
+    state: Option<ItemState>,
     authored: Vec<String>,
     edited: Edited,
 }

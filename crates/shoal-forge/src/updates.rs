@@ -10,10 +10,7 @@ use crate::{
     account::Account,
     backends::{Backend, rest::RestCheck},
     ci::check_state::CheckState,
-    items::{
-        item::{Current, ItemState},
-        link::LinkKind,
-    },
+    items::{item::Current, link::LinkKind},
     review::status::CheckResult,
     transport::limits::{RateLimited, rate_limited},
 };
@@ -37,6 +34,8 @@ pub(crate) use comments::{Entry, verdict_entries};
 mod details;
 pub use details::{Edited, ItemDetails};
 mod held;
+mod state;
+pub use state::{SnapshotKind, SnapshotState};
 mod watch;
 pub use watch::WatchRecord;
 
@@ -82,6 +81,10 @@ impl std::fmt::Display for Update {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Snapshot {
+    /// What the snapshot read; `None` before a first observation, and in
+    /// snapshots saved before kinds were recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) kind: Option<SnapshotKind>,
     #[serde(deserialize_with = "comments::saved")]
     pub(crate) comments: BTreeMap<String, Entry>,
     pub(crate) checks: BTreeMap<String, Check>,
@@ -107,7 +110,14 @@ pub struct Snapshot {
     /// check is, rather than what the forge last computed.
     #[serde(skip)]
     pub(crate) conflict_exact: bool,
-    pub(crate) state: String,
+    /// The item's or run's state; `None` for a branch, and before a first
+    /// observation.
+    #[serde(
+        default,
+        deserialize_with = "state::saved",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) state: Option<SnapshotState>,
     /// What people edit of an issue or PR; `None` for a CI run or branch,
     /// and in snapshots saved before details were recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -181,6 +191,7 @@ impl Snapshot {
     /// Take everything but this lookup's failures from `previous`.
     fn keep_previous(&mut self, previous: &Self) {
         *self = Self {
+            kind: self.kind,
             errors: std::mem::take(&mut self.errors),
             unread: true,
             ..previous.clone()
@@ -189,7 +200,7 @@ impl Snapshot {
 
     /// A local merge check, observed like PR mergeability.
     pub fn merge_check(check: Result<MergeCheck>) -> Self {
-        let mut snapshot = Self::default();
+        let mut snapshot = Self::of(SnapshotKind::Branch, None);
         match check {
             Ok(check) => {
                 snapshot.conflict = Some(check.conflict.is_some());
@@ -245,33 +256,8 @@ impl Snapshot {
         {
             emit(UpdateKind::Edited, summary, None);
         }
-        if next.state != self.state {
-            match next.state.as_str() {
-                "closed" => emit(
-                    UpdateKind::Closed,
-                    if url.contains("/issues/") {
-                        "Issue closed"
-                    } else {
-                        "PR closed without merging"
-                    }
-                    .into(),
-                    None,
-                ),
-                "open" if self.state == "closed" => {
-                    emit(UpdateKind::Reopened, "Item reopened".into(), None)
-                }
-                "merged" => emit(UpdateKind::Merged, "PR merged".into(), None),
-                "failed" | "finished" => emit(
-                    UpdateKind::CiCompleted,
-                    format!(
-                        "Run {}{}; read it with shoal view ci {url}",
-                        next.state,
-                        failed_jobs_text(&next.failed_jobs)
-                    ),
-                    None,
-                ),
-                _ => {}
-            }
+        if let Some((kind, message)) = self.state_change(next, url) {
+            emit(kind, message, None);
         }
         for (source, error) in &next.errors {
             if self.reported.get(source) != next.reported.get(source) {
@@ -285,22 +271,54 @@ impl Snapshot {
         updates
     }
 
+    /// The update for the state `next` saw, of the item or run at `url`,
+    /// when it reports a change from `self`'s.
+    fn state_change(&self, next: &Self, url: &str) -> Option<(UpdateKind, String)> {
+        use SnapshotState::*;
+        if next.state == self.state {
+            return None;
+        }
+        let change = match (next.kind, next.state?) {
+            (Some(SnapshotKind::Issue), Closed) => (UpdateKind::Closed, "Issue closed".into()),
+            (Some(SnapshotKind::Pr), Closed) => {
+                (UpdateKind::Closed, "PR closed without merging".into())
+            }
+            (_, Open) if self.state == Some(Closed) => {
+                (UpdateKind::Reopened, "Item reopened".into())
+            }
+            (_, Merged) => (UpdateKind::Merged, "PR merged".into()),
+            (_, state @ (Failed | Finished)) => (
+                UpdateKind::CiCompleted,
+                format!(
+                    "Run {state}{}; read it with shoal view ci {url}",
+                    failed_jobs_text(&next.failed_jobs)
+                ),
+            ),
+            _ => return None,
+        };
+        Some(change)
+    }
+
     /// Whether the snapshot shows a finished run, whose activity has ended.
     pub fn run_finished(&self) -> bool {
-        matches!(self.state.as_str(), "failed" | "finished")
+        matches!(
+            self.state,
+            Some(SnapshotState::Failed | SnapshotState::Finished)
+        )
     }
 
     /// Whether the item was seen merged or closed, ending its activity.
     pub fn concluded(&self) -> bool {
-        [ItemState::Merged, ItemState::Closed]
-            .iter()
-            .any(|state| self.state == state.as_str())
+        matches!(
+            self.state,
+            Some(SnapshotState::Merged | SnapshotState::Closed)
+        )
     }
 
     /// Whether the item's activity ended: a PR merged, or, once the
     /// assignment watching it is `done`, an item closed.
     pub fn activity_ended(&self, done: bool) -> bool {
-        self.state == ItemState::Merged.as_str() || (done && self.concluded())
+        self.state == Some(SnapshotState::Merged) || (done && self.concluded())
     }
 
     /// The message for a conflict `next` reports that `self` had not.
@@ -377,8 +395,8 @@ impl Snapshot {
         });
     }
 
-    pub fn state(&self) -> &str {
-        &self.state
+    pub fn state(&self) -> Option<SnapshotState> {
+        self.state
     }
 
     /// The PR's head commit, empty for an issue.
@@ -418,8 +436,8 @@ impl Snapshot {
 
     /// Take `state` as already seen, even before a first observation, whose
     /// other activity is still reported.
-    pub fn adopt_state(&mut self, state: &str) {
-        state.clone_into(&mut self.state);
+    pub fn adopt_state(&mut self, state: Option<SnapshotState>) {
+        self.state = state;
     }
 
     /// Keeps each source's report time until the interval passes and takes
@@ -573,30 +591,31 @@ impl ForgeRepo {
 }
 
 impl Snapshot {
-    /// A snapshot of a run in `state`, before anything else is recorded.
-    pub(crate) fn new(state: &str) -> Self {
+    /// A snapshot of a `kind` in `state`, before anything else is recorded.
+    pub(crate) fn of(kind: SnapshotKind, state: Option<SnapshotState>) -> Self {
         Self {
-            state: state.into(),
+            kind: Some(kind),
+            state,
             ..Self::default()
         }
     }
 
-    /// A snapshot of an item whose lookup failed with `error`, recorded
-    /// under `source`.
-    pub fn unread_item(source: &str, error: &anyhow::Error) -> Self {
+    /// A snapshot of the `kind` item whose lookup failed with `error`.
+    pub fn unread_item(kind: LinkKind, error: &anyhow::Error) -> Self {
         Self {
-            errors: BTreeMap::from([(source.into(), format!("{error:#}"))]),
+            errors: BTreeMap::from([(kind.noun().into(), format!("{error:#}"))]),
             unread: true,
-            ..Self::default()
+            ..Self::of(kind.into(), None)
         }
     }
 
     /// A snapshot of the issue or PR `current`, before its discussion and
     /// checks are recorded.
     pub(crate) fn item(current: &Current) -> Self {
+        let item = &current.item;
         Self {
             details: Some(ItemDetails::of(current)),
-            ..Self::new(current.item.state.as_str())
+            ..Self::of(item.kind.into(), Some(item.state.into()))
         }
     }
 

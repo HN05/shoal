@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use super::{Edited, Snapshot, Update, held::HeldPasses};
-use crate::transport::limits::unix_seconds;
+use crate::{items::item::ItemState, transport::limits::unix_seconds};
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct WatchRecord {
@@ -68,12 +68,12 @@ impl WatchRecord {
     pub fn adopt_own_change(
         &mut self,
         authored: Vec<String>,
-        state: Option<&str>,
+        state: Option<ItemState>,
         edited: &Edited,
     ) {
         self.authored.extend(authored);
         if let Some(state) = state {
-            self.snapshot.adopt_state(state);
+            self.snapshot.adopt_state(Some(state.into()));
             self.own_change_at = Some(unix_seconds());
         }
         if !edited.is_empty() {

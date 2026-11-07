@@ -222,7 +222,7 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
                 url: url.clone(),
                 relation,
                 title,
-                state: observed.and_then(|observed| present(observed.state())),
+                state: observed.and_then(Snapshot::state),
                 head: observed.and_then(|observed| present(observed.head())),
                 checks: observed.map_or_else(Vec::new, checks),
                 conflict: observed.and_then(Snapshot::head_conflict),

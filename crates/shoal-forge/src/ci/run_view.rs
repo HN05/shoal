@@ -10,7 +10,7 @@ use crate::{
     capability::Capability,
     ci::{JobState, checks::CheckLog, run_action::Run},
     transport::api::Request,
-    updates::{FailedJob, MAX_LISTED_JOBS, Snapshot},
+    updates::{FailedJob, MAX_LISTED_JOBS, Snapshot, SnapshotKind, SnapshotState},
 };
 
 /// The most runs one list returns.
@@ -143,11 +143,11 @@ impl ForgeRepo {
         // A run held for approval has yet to run, whatever state the forge
         // gives it, so its watch goes on.
         let state = match run.waiting {
-            true => "waiting",
-            false => run.state.as_str(),
+            true => SnapshotState::Waiting,
+            false => run.state.into(),
         };
-        let mut snapshot = Snapshot::new(state);
-        if state == JobState::Failed.as_str() {
+        let mut snapshot = Snapshot::of(SnapshotKind::Run, Some(state));
+        if state == SnapshotState::Failed {
             snapshot.failed_jobs = self.failed_jobs(account, &run).await?;
         }
         Ok(snapshot)

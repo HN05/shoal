@@ -1,5 +1,5 @@
 use super::*;
-use crate::items::link::ItemKind;
+use crate::items::link::{ItemKind, LinkKind};
 use serde_json::json;
 
 #[test]
@@ -37,7 +37,8 @@ fn activity_changes_report_finished_checks_without_waiting_for_the_set() {
     assert_eq!(updates[1].message, "review: success");
     assert!(reviewed.changes(&reviewed, "pr").is_empty());
     let mut closed = reviewed.clone();
-    closed.state = "closed".into();
+    closed.kind = Some(SnapshotKind::Pr);
+    closed.state = Some(SnapshotState::Closed);
     assert_eq!(reviewed.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
 }
 
@@ -127,11 +128,11 @@ fn a_sources_failures_are_reported_once_per_interval() {
 
 #[test]
 fn an_unread_item_keeps_its_activity_and_reports_its_failure_once() {
-    let mut seen = Snapshot::new("open");
+    let mut seen = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Open));
     seen.comments.insert("discussion:1".into(), "hello".into());
     let poll = |previous: &Snapshot, now| {
         let refused = anyhow::anyhow!("connection refused");
-        let mut next = Snapshot::unread_item("issue", &refused);
+        let mut next = Snapshot::unread_item(LinkKind::Issue, &refused);
         next.normalize(previous, now);
         let updates = previous.changes(&next, "issue");
         (next, updates)
@@ -143,7 +144,7 @@ fn an_unread_item_keeps_its_activity_and_reports_its_failure_once() {
         updates[0].message,
         "issue lookup failed: connection refused"
     );
-    assert_eq!(unread.state, "open");
+    assert_eq!(unread.state, Some(SnapshotState::Open));
     assert_eq!(unread.comments, seen.comments);
     let (still, updates) = poll(&unread, 1001);
     assert!(updates.is_empty(), "{updates:?}");
@@ -223,7 +224,7 @@ fn comments_saved_without_authors_match_the_same_comments_with_them() {
         "checks": {}, "conflict": null, "state": "open", "errors": {},
     }))
     .unwrap();
-    let mut next = Snapshot::new("open");
+    let mut next = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
     next.record_comments(
         DISCUSSION,
         Ok(vec![("1".into(), Entry::new("hi".into(), "alice".into()))]),
@@ -232,6 +233,24 @@ fn comments_saved_without_authors_match_the_same_comments_with_them() {
     assert!(message.starts_with("1 deleted comment;"), "{message}");
     let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&next).unwrap()).unwrap();
     assert_eq!(stored.comments, next.comments);
+}
+
+#[test]
+fn snapshots_saved_without_a_kind_report_the_next_observations_state() {
+    let saved = |state: &str| -> Snapshot {
+        serde_json::from_value(json!({
+            "comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {},
+        }))
+        .unwrap()
+    };
+    assert_eq!(saved("").state, None);
+    let closed = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Closed));
+    let updates = saved("open").changes(&closed, "issue");
+    assert_eq!(updates[0].kind, UpdateKind::Closed);
+    assert!(updates[0].message.starts_with("Issue"));
+    let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&closed).unwrap()).unwrap();
+    assert!(stored.changes(&closed, "issue").is_empty());
+    assert_eq!(stored.kind, Some(SnapshotKind::Issue));
 }
 
 #[test]
@@ -260,7 +279,7 @@ fn checks_saved_in_forge_casings_match_the_same_checks() {
 #[test]
 fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
     let verdicts = |pairs: &[(&str, &str)]| {
-        let mut snapshot = Snapshot::new("open");
+        let mut snapshot = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
         let pairs = pairs
             .iter()
             .map(|(reviewer, verdict)| ((*reviewer).to_owned(), (*verdict).to_owned()));
@@ -360,20 +379,14 @@ fn an_authored_reply_to_an_existing_review_is_taken_once_it_changes() {
 
 #[test]
 fn adopted_states_do_not_wake_even_before_a_first_observation() {
-    let open = Snapshot {
-        state: "open".into(),
-        ..Default::default()
-    };
-    let mut closed = Snapshot {
-        state: "closed".into(),
-        ..Default::default()
-    };
+    let open = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
+    let mut closed = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Closed));
     let mut seen = open.clone();
-    seen.adopt_state("closed");
+    seen.adopt_state(Some(SnapshotState::Closed));
     assert!(seen.changes(&closed, "pr").is_empty());
     closed.record_comments(DISCUSSION, Ok(vec![("1".into(), "theirs".into())]));
     let mut unseen = Snapshot::default();
-    unseen.adopt_state("closed");
+    unseen.adopt_state(Some(SnapshotState::Closed));
     let kinds: Vec<_> = unseen
         .changes(&closed, "pr")
         .iter()
@@ -384,29 +397,20 @@ fn adopted_states_do_not_wake_even_before_a_first_observation() {
 
 #[test]
 fn issue_closure_and_reopening_have_item_messages() {
-    let mut opened = Snapshot {
-        state: "open".into(),
-        ..Default::default()
-    };
-    let closed = Snapshot {
-        state: "closed".into(),
-        ..Default::default()
-    };
-    let updates = opened.changes(&closed, "https://forge.example/team/repo/issues/1");
+    let mut opened = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Open));
+    let closed = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Closed));
+    let updates = opened.changes(&closed, "issue");
     assert_eq!(updates[0].kind, UpdateKind::Closed);
     assert!(updates[0].message.starts_with("Issue"));
     assert_eq!(
         closed.changes(&opened, "issue")[0].kind,
         UpdateKind::Reopened
     );
-    opened.state.clear();
+    opened.state = None;
     assert!(
         opened
             .changes(
-                &Snapshot {
-                    state: "open".into(),
-                    ..Default::default()
-                },
+                &Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Open)),
                 "issue"
             )
             .is_empty()
@@ -584,9 +588,9 @@ fn forgejo_drafts_report_no_conflicts() {
 #[test]
 fn a_run_reports_once_when_it_finishes_with_its_failed_steps() {
     let url = "https://forge.example/team/repo/actions/runs/2765";
-    let running = Snapshot::new("running");
+    let running = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Running));
     assert!(Snapshot::default().changes(&running, url).is_empty());
-    let mut failed = Snapshot::new("failed");
+    let mut failed = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Failed));
     failed.failed_jobs = vec![
         FailedJob {
             name: "audit".into(),
@@ -609,21 +613,23 @@ fn a_run_reports_once_when_it_finishes_with_its_failed_steps() {
     );
     assert!(failed.run_finished());
     assert!(failed.changes(&failed, url).is_empty());
-    let finished = Snapshot::new("finished");
+    let finished = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Finished));
     assert_eq!(Snapshot::default().changes(&finished, url).len(), 1);
 }
 
 #[test]
 fn a_run_with_many_failed_jobs_reports_a_bounded_update() {
     let url = "https://forge.example/team/repo/actions/runs/2765";
-    let mut failed = Snapshot::new("failed");
+    let mut failed = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Failed));
     failed.failed_jobs = (0..5000)
         .map(|index| FailedJob {
             name: format!("shard {index} {}", "x".repeat(1000)),
             step: Some("y".repeat(1000)),
         })
         .collect();
-    let message = &Snapshot::new("running").changes(&failed, url)[0].message;
+    let message = &Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Running))
+        .changes(&failed, url)[0]
+        .message;
     assert!(message.len() < 4096, "{} bytes", message.len());
     assert!(message.contains("and 4990 more"), "{message}");
 }
@@ -741,11 +747,12 @@ fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
 
 #[test]
 fn a_merge_ends_activity_and_closing_ends_it_once_the_assignment_is_done() {
-    let snapshot = |state: &str| Snapshot::new(state);
-    assert!(snapshot("merged").concluded() && snapshot("closed").concluded());
-    assert!(!snapshot("open").concluded());
-    assert!(snapshot("merged").activity_ended(false));
-    assert!(!snapshot("closed").activity_ended(false));
-    assert!(snapshot("closed").activity_ended(true));
-    assert!(!snapshot("open").activity_ended(true));
+    use SnapshotState::*;
+    let snapshot = |state| Snapshot::of(SnapshotKind::Pr, Some(state));
+    assert!(snapshot(Merged).concluded() && snapshot(Closed).concluded());
+    assert!(!snapshot(Open).concluded());
+    assert!(snapshot(Merged).activity_ended(false));
+    assert!(!snapshot(Closed).activity_ended(false));
+    assert!(snapshot(Closed).activity_ended(true));
+    assert!(!snapshot(Open).activity_ended(true));
 }

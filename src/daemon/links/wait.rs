@@ -23,7 +23,10 @@ use crate::{
     daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
     forge::{
         account::Account,
-        items::link::{ItemKind, LinkKind, Selection},
+        items::{
+            item::ItemState,
+            link::{ItemKind, LinkKind, Selection},
+        },
         transport::limits::rate_limited,
         updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
@@ -771,7 +774,7 @@ impl Manager {
         let forge = self.item_url_forge(kind, url).await?;
         match forge.item_activity(account, kind, url, branch).await {
             Err(error) if linked && rate_limited(&error).is_none() => {
-                Ok(Snapshot::unread_item(kind.noun(), &error))
+                Ok(Snapshot::unread_item(kind, &error))
             }
             read => read,
         }
@@ -1287,7 +1290,7 @@ fn receiving<'a>(id: &'a str, children: &'a [SpaceRef]) -> impl Iterator<Item = 
 pub(crate) struct OwnChange<'a> {
     pub url: &'a str,
     pub authored: Vec<String>,
-    pub state: Option<&'a str>,
+    pub state: Option<ItemState>,
     pub edited: Edited,
 }
 

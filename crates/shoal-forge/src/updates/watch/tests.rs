@@ -1,10 +1,10 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::updates::UpdateKind;
+use crate::updates::{SnapshotState, UpdateKind};
 
 fn snapshot(comments: Value, state: &str) -> Snapshot {
-    serde_json::from_value(json!({"comments": comments, "checks": {},
+    serde_json::from_value(json!({"kind": "pr", "comments": comments, "checks": {},
             "conflict": null, "state": state, "errors": {}}))
     .unwrap()
 }
@@ -30,7 +30,7 @@ fn new_updates_become_one_delivery_reported_until_acknowledged() {
     // and the next observation waits.
     let reopened = record.observe(snapshot(json!({}), "open"), "pr", 0);
     assert_eq!(reopened, updates);
-    assert_eq!(record.snapshot.state(), "closed");
+    assert_eq!(record.snapshot.state(), Some(SnapshotState::Closed));
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn own_changes_are_not_reported_back() {
     record.pending.clear();
     record.adopt_own_change(
         vec!["discussion:2".into()],
-        Some("closed"),
+        Some(ItemState::Closed),
         &Edited::default(),
     );
     // A poll that read the item before the change keeps the adopted state.

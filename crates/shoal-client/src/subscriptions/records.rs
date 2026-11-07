@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     approvals::ApprovalRequest,
-    forge::{ci::check_state::CheckState, items::link::LinkKind},
+    forge::{ci::check_state::CheckState, items::link::LinkKind, updates::SnapshotState},
     model::{Relation, Repository, Workspace},
     notifications::Notification,
     questions::Question,
@@ -149,9 +149,8 @@ pub struct Link {
     pub url: String,
     pub relation: Relation,
     pub title: Option<String>,
-    /// The forge's state, such as `open`, `closed` or `merged`; absent until
-    /// the daemon has looked.
-    pub state: Option<String>,
+    /// Absent until the daemon has looked.
+    pub state: Option<SnapshotState>,
     /// A PR's head commit, which its checks ran on.
     pub head: Option<String>,
     /// A PR's CI checks on its head.
