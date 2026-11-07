@@ -3536,8 +3536,8 @@ takes one, or with `--checkpoint N` at an earlier one `shoal work restore
 <workspace>` lists, and a chat with its session. It refuses a removed workspace
 and a chat whose agent reported no session. With several spaces, a directory or
 `--all`, it writes a copy of each to `<name>.shoal` in the directory, reporting
-each space it cannot copy and copying the rest, and refuses `--checkpoint`,
-whose number names a checkpoint of one workspace. The import
+each space it cannot copy and copying the rest. It refuses `--checkpoint` for
+more than one space, since its number names a checkpoint of one workspace. The import
 opens a workspace copy as a new workspace on the nearest free `-2`, `-3`, ...
 variant of its branch, linked to its issues but not its PRs or CI runs, where
 `shoal resume` starts its agents from forks of their sessions, as `shoal start
