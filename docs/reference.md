@@ -2134,9 +2134,9 @@ then starts it, with or without attaching, moves or cancels it.
 `queue start` starts a waiting entry now regardless of the limits, as `--now`
 does, or restores an idle agent waiting for an update; it refuses a launch
 still waiting for work, whose branch it builds on, and a restore whose agent's
-processes have not stopped yet. With `--attach` on a terminal it then waits up
-to two minutes for the agent's session and attaches to it as `shoal attach`
-does. `queue cancel` removes a waiting entry: a
+processes have not stopped yet. With `--attach` on a terminal it then waits, up
+to ten minutes since setup comes first, for the session the agent runs in and
+attaches to it as `shoal attach` does. `queue cancel` removes a waiting entry: a
 cancelled restore stops the waiting wrapper as `shoal stop` does and leaves the
 agent for `shoal resume`. `shoal rm` also removes a waiting launch by name or
 ID, and only by ID when a workspace has the same name; a starting entry belongs

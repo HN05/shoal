@@ -1,5 +1,5 @@
-//! `shoal queue start --attach`: wait until the started entry's agent has a
-//! session, then attach this terminal to it.
+//! `shoal queue start --attach`: wait until the started entry's agent runs
+//! in a session, then attach this terminal to that session.
 use std::time::Duration;
 
 use anyhow::{Result, bail, ensure};
@@ -14,9 +14,8 @@ use crate::{
     state::QueueKind,
 };
 
-/// How long to wait for the session; setup runs inside it, so it opens
-/// before the agent starts.
-const WAIT: Duration = Duration::from_secs(120);
+/// How long to wait for the agent's session, which setup comes before.
+const WAIT: Duration = Duration::from_secs(600);
 const POLL: Duration = Duration::from_millis(200);
 
 /// Refuse to attach to the entry `selector` names when it is a CI job,
@@ -34,14 +33,16 @@ pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()>
 
 /// Attach to the session of the started `entry`'s agent once it has one.
 pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
-    let workspace = session_workspace(ctx, entry).await?;
-    sessions::attach(ctx, Some(SpaceSelector::id(&workspace)), None).await
+    let (workspace, session) = agent_session(ctx, entry).await?;
+    sessions::attach(ctx, Some(SpaceSelector::id(&workspace)), Some(session)).await
 }
 
-/// The ID of the workspace `entry` starts its agent in, once that workspace
-/// has a session to attach. A launch learns its workspace while it starts,
-/// and a launch that failed leaves the queue without one.
-async fn session_workspace(ctx: &Context, entry: &QueueEntry) -> Result<String> {
+/// The ID of the workspace `entry` starts its agent in and the name of the
+/// session the agent runs in, once it runs there; other sessions of the
+/// workspace, such as a shell left after a failed setup, do not count. A
+/// launch learns its workspace while it starts, and a launch that failed
+/// leaves the queue without one.
+async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(String, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().map(str::to_owned);
     loop {
@@ -55,7 +56,11 @@ async fn session_workspace(ctx: &Context, entry: &QueueEntry) -> Result<String> 
             workspace = opened_workspace(ctx, entry).await?;
         }
         match &workspace {
-            Some(id) if sessions::has_session(ctx, id).await? => return Ok(id.clone()),
+            Some(id) => {
+                if let Some(session) = sessions::agent_session(ctx, id).await? {
+                    return Ok((id.clone(), session));
+                }
+            }
             None if current.is_none() => {
                 bail!("{} did not start; shoal alerts shows why", entry.name)
             }
