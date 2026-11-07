@@ -428,41 +428,21 @@ async fn creation_honors_explicit_history_and_sync_preserves_ahead_main() {
     );
 }
 
-#[tokio::test]
-async fn branch_compatibility_preserves_allocation_and_existing_branch_policies() {
-    let mut cases = vec![
-        ("HEAD".to_owned(), "HEAD".to_owned(), true),
-        ("@".to_owned(), "workspace".to_owned(), true),
-        ("topic/HEAD".to_owned(), "topic-HEAD".to_owned(), false),
-        ("HEAD/topic".to_owned(), "HEAD-topic".to_owned(), false),
-        ("topic/@".to_owned(), "topic--".to_owned(), false),
-        ("@/topic".to_owned(), "topic".to_owned(), false),
-    ];
-    for len in [39, 40, 64, 65] {
-        for digit in ["a", "B", "g"] {
-            let name = digit.repeat(len);
-            cases.push((
-                name.clone(),
-                digit.repeat(len.min(64)),
-                digit != "g" && matches!(len, 40 | 64),
-            ));
-            cases.push((
-                format!("topic/{name}"),
-                format!("topic-{name}").chars().take(64).collect(),
-                false,
-            ));
-        }
-    }
+/// Allocate a workspace for each case's name, remove it, then open the
+/// existing branch of that name: a reserved name gets a suffixed branch and
+/// cannot be opened as is, and the others open at the allocated path. The
+/// cases' branches and workspace names differ, so they share one repository.
+async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
+    let f = Fixture::new().await;
     for (name, workspace_name, reserved) in cases {
-        let f = Fixture::new().await;
-        let allocated = f.add(&name).await;
-        let expected = if reserved {
+        let allocated = f.add(name).await;
+        let expected = if *reserved {
             format!("{name}-2")
         } else {
             name.clone()
         };
         assert_eq!(allocated.branch.as_deref(), Some(expected.as_str()));
-        assert_eq!(allocated.name, workspace_name);
+        assert_eq!(&allocated.name, workspace_name);
         assert_eq!(
             allocated.path.file_name().unwrap().to_str().unwrap(),
             workspace_name
@@ -483,17 +463,18 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
         let reference = format!("refs/heads/{name}");
         git(&f.repo, &["update-ref", &reference, "refs/heads/main"]);
         let before = git(&f.repo, &["rev-parse", &reference]);
+        let workspaces = f.manager.list_workspaces().await.unwrap().len();
         let opened = f
             .manager
             .open_branch(&f.repo_id, &reference, None, None, None)
             .await;
-        if reserved {
+        if *reserved {
             assert!(opened.is_err(), "{name}");
-            assert!(f.manager.list_workspaces().await.unwrap().is_empty());
+            assert_eq!(f.manager.list_workspaces().await.unwrap().len(), workspaces);
         } else {
             let workspace = opened.unwrap().workspace;
             assert_eq!(workspace.branch.as_deref(), Some(name.as_str()));
-            assert_eq!(workspace.name, workspace_name);
+            assert_eq!(&workspace.name, workspace_name);
             assert_eq!(workspace.path, allocated.path);
             assert_eq!(
                 git(&workspace.path, &["symbolic-ref", "HEAD"]),
@@ -502,6 +483,66 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
         }
         assert_eq!(git(&f.repo, &["rev-parse", &reference]), before);
     }
+}
+
+/// A name of `len` repetitions of `digit`, bare and nested: a bare hex name
+/// of an object ID's length is reserved, and workspace names are cut to 64
+/// characters.
+fn digit_run(digit: &str, len: usize) -> [(String, String, bool); 2] {
+    let name = digit.repeat(len);
+    [
+        (
+            name.clone(),
+            digit.repeat(len.min(64)),
+            digit != "g" && matches!(len, 40 | 64),
+        ),
+        (
+            format!("topic/{name}"),
+            format!("topic-{name}").chars().take(64).collect(),
+            false,
+        ),
+    ]
+}
+
+fn cases<const N: usize>(cases: [(&str, &str, bool); N]) -> [(String, String, bool); N] {
+    cases.map(|(name, workspace_name, reserved)| (name.into(), workspace_name.into(), reserved))
+}
+
+macro_rules! branch_compatibility_tests {
+    ($($test:ident: $cases:expr;)*) => {$(
+        #[tokio::test]
+        async fn $test() {
+            check_branch_compatibility(&$cases).await;
+        }
+    )*};
+}
+
+// Each test covers one class of names, so the classes run in parallel.
+branch_compatibility_tests! {
+    branch_compatibility_reserves_head_and_at: cases([
+        ("HEAD", "HEAD", true),
+        ("@", "workspace", true),
+    ]);
+    branch_compatibility_keeps_nested_head: cases([
+        ("topic/HEAD", "topic-HEAD", false),
+        ("HEAD/topic", "HEAD-topic", false),
+    ]);
+    branch_compatibility_keeps_nested_at: cases([
+        ("topic/@", "topic--", false),
+        ("@/topic", "topic", false),
+    ]);
+    branch_compatibility_of_39_lower_hex_digits: digit_run("a", 39);
+    branch_compatibility_of_39_upper_hex_digits: digit_run("B", 39);
+    branch_compatibility_of_39_non_hex_letters: digit_run("g", 39);
+    branch_compatibility_of_40_lower_hex_digits: digit_run("a", 40);
+    branch_compatibility_of_40_upper_hex_digits: digit_run("B", 40);
+    branch_compatibility_of_40_non_hex_letters: digit_run("g", 40);
+    branch_compatibility_of_64_lower_hex_digits: digit_run("a", 64);
+    branch_compatibility_of_64_upper_hex_digits: digit_run("B", 64);
+    branch_compatibility_of_64_non_hex_letters: digit_run("g", 64);
+    branch_compatibility_of_65_lower_hex_digits: digit_run("a", 65);
+    branch_compatibility_of_65_upper_hex_digits: digit_run("B", 65);
+    branch_compatibility_of_65_non_hex_letters: digit_run("g", 65);
 }
 
 #[tokio::test]
