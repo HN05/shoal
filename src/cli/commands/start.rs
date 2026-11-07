@@ -159,12 +159,13 @@ async fn shaped(ctx: &Context, args: &StartArgs, mode: String) -> Result<Start> 
 /// The mode the labels of the issue the arguments name call for, by
 /// [`labelled_mode`], when it starts the kind of space they ask for or fit;
 /// none without such an issue, a repository to read it in or a label to
-/// look for.
+/// look for. The start reads the issue again: this read only decides how
+/// it starts, before its own repository checks.
 async fn issue_mode(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
     let Some(input) = named_issue(args) else {
         return Ok(None);
     };
-    let Some(repo) = mode_repository(ctx, args).await? else {
+    let Some(repo) = issue_repository(ctx, args, input).await? else {
         return Ok(None);
     };
     let target = ConfigTarget::Repository(repo.id.clone().into());
@@ -178,6 +179,23 @@ async fn issue_mode(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
     Ok(mode
         .filter(|mode| mode_fits(args, &settings, mode))
         .map(str::to_owned))
+}
+
+/// The registered repository to read the issue `input` in, without
+/// asking: the one an issue URL belongs to, which leaves an unregistered
+/// one to the start's offer to register it, else the one
+/// [`mode_repository`] finds for a number.
+async fn issue_repository(
+    ctx: &Context,
+    args: &StartArgs,
+    input: &str,
+) -> Result<Option<Repository>> {
+    if IssueInput::parse(input) != IssueInput::Url {
+        return mode_repository(ctx, args).await;
+    }
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
+    let registered = super::issues::registered_for_item(&repos, input).await;
+    Ok(registered.ok().flatten().cloned())
 }
 
 /// Whether `settings` define `mode` and it starts the kind of space the

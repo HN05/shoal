@@ -27089,6 +27089,23 @@ fn start_takes_the_mode_an_issues_labels_name() {
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("worker") && rows.contains("plan"), "{rows}");
     assert_eq!(started_in(), (false, true));
+
+    // An issue of an unregistered repository is not read in this one, so
+    // the start still names how to register it.
+    let output = fixture
+        .command()
+        .args([
+            "start",
+            "--issue",
+            "https://forge.example/team/other/issues/4",
+        ])
+        .args(["--agent", "pi"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("shoal repo add"), "{stderr}");
 }
 
 #[test]
