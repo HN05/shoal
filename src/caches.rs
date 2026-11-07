@@ -88,7 +88,9 @@ impl Layout {
         Ok(directories)
     }
 
-    /// The caches that exist, configured or not.
+    /// The caches that exist, configured or not, apart from those a preset
+    /// fills only with its own files, which emptying keeps: processes
+    /// started with an exported environment still name them.
     pub fn list(&self) -> Result<Vec<String>> {
         let shared = self.root.join(SHARED);
         let entries = match fs::read_dir(&shared) {
@@ -99,24 +101,29 @@ impl Layout {
         let mut names = entries
             .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
             .collect::<std::io::Result<Vec<_>>>()?;
+        names.retain(|name| !crate::presets::KEPT_CACHES.contains(&name.as_str()));
         names.sort();
         Ok(names)
     }
 
-    /// Move every cache aside for [`Self::purge`] and return the names moved;
-    /// the next process Shoal starts recreates the directories it uses.
-    /// Callers keep tracked executions from starting meanwhile.
+    /// Move every cache [`Self::list`] names aside for [`Self::purge`] and
+    /// return the names moved; the next process Shoal starts recreates the
+    /// directories it uses. Callers keep tracked executions from starting
+    /// meanwhile.
     pub fn move_aside(&self) -> Result<Vec<String>> {
         let names = self.list()?;
         if names.is_empty() {
             return Ok(names);
         }
         self.ensure_owned()?;
-        let trash = self.root.join(TRASH);
-        fs::create_dir_all(&trash)?;
+        let batch = self.root.join(TRASH).join(uuid::Uuid::new_v4().to_string());
+        fs::create_dir_all(&batch)?;
         let shared = self.root.join(SHARED);
-        fs::rename(&shared, trash.join(uuid::Uuid::new_v4().to_string()))
-            .with_context(|| format!("move {} aside", shared.display()))?;
+        for name in &names {
+            let cache = shared.join(name);
+            fs::rename(&cache, batch.join(name))
+                .with_context(|| format!("move {} aside", cache.display()))?;
+        }
         Ok(names)
     }
 

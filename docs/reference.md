@@ -3296,7 +3296,8 @@ literal. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 
 `shoal cleanup caches` and [disk space](#overload-protection) cleanup empty a
-repository's caches, configured or not, while none of its tracked executions and
+repository's caches, configured or not, apart from `preset.cargo`, which holds
+only the [`cargo` preset's](#build-tool-presets) wrapper, while none of its tracked executions and
 no seed build of it is running; disk space cleanup records a `caches_emptied`
 notification. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.

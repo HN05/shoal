@@ -13,6 +13,9 @@ use crate::{
 
 /// The shared cache the `cargo` preset keeps its files in.
 pub const CARGO_CACHE: &str = "preset.cargo";
+/// The preset caches that hold only a preset's own files, which emptying
+/// caches keeps since it frees nothing there.
+pub const KEPT_CACHES: &[&str] = &[CARGO_CACHE];
 /// The shared cache the `xcode` preset keeps its files in.
 pub const XCODE_CACHE: &str = "preset.xcode";
 

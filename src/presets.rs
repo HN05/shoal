@@ -4,7 +4,7 @@ use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
 
 use anyhow::{Context as _, Result};
 
-pub(crate) use crate::config::presets::{CARGO_CACHE, Preset, XCODE_CACHE};
+pub(crate) use crate::config::presets::{CARGO_CACHE, KEPT_CACHES, Preset, XCODE_CACHE};
 
 pub mod cargo;
 pub mod derived_data;

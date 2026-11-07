@@ -75,3 +75,22 @@ fn caches_are_created_emptied_and_removed_only_when_owned() {
     assert!(!directory.exists());
     assert!(layout.move_aside().unwrap().is_empty());
 }
+
+#[test]
+fn emptying_keeps_the_caches_of_preset_files() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = Layout::new(root.path(), "repo");
+    let directories = layout
+        .prepare(&configured(&["go", crate::presets::CARGO_CACHE]))
+        .unwrap();
+    assert_eq!(layout.list().unwrap(), ["go"]);
+    assert_eq!(layout.move_aside().unwrap(), ["go"]);
+    layout.purge().unwrap();
+    assert!(!directories["go"].exists());
+    assert!(
+        directories[crate::presets::CARGO_CACHE]
+            .join(crate::presets::cargo::WRAPPER)
+            .is_file()
+    );
+    assert!(layout.list().unwrap().is_empty());
+}
