@@ -10,7 +10,7 @@
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, Transaction, named_params, params};
 use std::time::Duration;
 
 pub(crate) use crate::client::questions::{Ask, Listing, Question, QuestionStatus};
@@ -382,20 +382,20 @@ fn store_status(
     store_status_where(
         tx,
         &status,
-        "q.space_number=?6 AND q.number=?7",
-        params![question.number.space, question.number.item],
+        "q.space_number=:space AND q.number=:item",
+        named_params! {":space": question.number.space, ":item": question.number.item},
     )?;
     question.status = status;
     Ok(())
 }
 
-/// Persist `status` on the questions `filter` keeps, whose parameters
-/// `filter_params` number from `?6`, without reading them; their numbers.
+/// Persist `status` on the questions `filter` keeps, with the named
+/// parameters `filter_params`, without reading them; their numbers.
 fn store_status_where(
     tx: &Transaction<'_>,
     status: &QuestionStatus,
     filter: &str,
-    filter_params: &[&dyn rusqlite::ToSql],
+    filter_params: &[(&str, &dyn rusqlite::ToSql)],
 ) -> Result<Vec<ItemNumber>> {
     let StatusColumns {
         answer,
@@ -404,12 +404,20 @@ fn store_status_where(
         closed_at,
         withdrawn,
     } = StatusColumns::from(status);
-    let mut values = params![answer, answered_at, message_id, closed_at, withdrawn].to_vec();
+    let mut values = named_params! {
+        ":answer": answer,
+        ":answered_at": answered_at,
+        ":message_id": message_id,
+        ":closed_at": closed_at,
+        ":withdrawn": withdrawn,
+    }
+    .to_vec();
     values.extend_from_slice(filter_params);
     let numbers = tx
         .prepare(&format!(
             "UPDATE questions AS q
-                SET answer=?1,answered_at=?2,message_id=?3,closed_at=?4,withdrawn=?5
+                SET answer=:answer,answered_at=:answered_at,message_id=:message_id,
+                    closed_at=:closed_at,withdrawn=:withdrawn
                 WHERE {filter} RETURNING space_number,number"
         ))?
         .query_map(values.as_slice(), |row| {
@@ -495,8 +503,9 @@ pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<Ite
     let closed = QuestionStatus::Closed {
         closed_at: crate::time::UnixTime::now(),
     };
-    let filter = format!("{SPACE}=?6 AND {OPEN}");
-    let mut numbers = store_status_where(tx, &closed, &filter, params![space_id])?;
+    let filter = format!("{SPACE}=:space_id AND {OPEN}");
+    let mut numbers =
+        store_status_where(tx, &closed, &filter, named_params! {":space_id": space_id})?;
     numbers.sort_unstable();
     Ok(numbers)
 }
