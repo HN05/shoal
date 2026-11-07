@@ -220,7 +220,9 @@ impl Manager {
     /// `stopped_by` started, could not restore the chat `id`, failing with
     /// `error`: the chat waits for `shoal resume` again, if that process had
     /// taken it over, so the end of the process does not end it, stopped by
-    /// that space, and the user, who may not see where it ran, learns why.
+    /// that space, or by the one whose restart of it is in progress, as the
+    /// daemon restores the chat for it, and the user, who may not see where
+    /// it ran, learns why.
     pub async fn return_to_saved(
         &self,
         id: &str,
@@ -230,7 +232,7 @@ impl Manager {
     ) -> Result<()> {
         let chat = id.to_owned();
         let owner = self.root_dir_owner();
-        let stopped_by = stopped_by.map(str::to_owned);
+        let stopped_by = (stopped_by.map(str::to_owned)).or_else(|| self.chat_agents.stopper(id));
         let (saved, released) = (self.store)
             .run(move |db| resave(db, &owner, &chat, pid, stopped_by.as_deref()))
             .await?;

@@ -133,6 +133,47 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
     assert_eq!(fail_restore(coordinator).await.as_deref(), coordinator);
 }
 
+/// The daemon restores a chat for a restart without the scope of the space
+/// that asked for it, which a restore that fails after taking the chat over
+/// leaves it stopped by.
+#[tokio::test]
+async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = named_chat(root.path(), &manager, "taken").await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    HELD.lock().unwrap().push(chat.name.clone());
+    let restart = tokio::spawn({
+        let (manager, id) = (manager.clone(), chat.id.clone());
+        async move {
+            let coordinator = Some("coordinator".to_owned());
+            manager.restart_chat(&id, run("a"), coordinator).await
+        }
+    });
+    while !RESUMED.lock().unwrap().contains(&chat.id) {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    process.wait().unwrap();
+    let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let pid = restoring.id();
+    manager
+        .restore_chat(&chat.id, pid, None, false)
+        .await
+        .unwrap();
+
+    (manager.return_to_saved(&chat.id, pid, "failed", None))
+        .await
+        .unwrap();
+
+    let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
+    assert_eq!(stopper.as_deref(), Some("coordinator"));
+    HELD.lock().unwrap().retain(|name| *name != chat.name);
+    let _ = restart.await.unwrap();
+    restoring.kill();
+}
+
 #[tokio::test]
 async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
     let (root, manager) = manager().await;

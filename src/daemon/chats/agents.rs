@@ -21,6 +21,9 @@ pub(crate) struct ChatAgents(Mutex<HashMap<String, ChatAgent>>);
 #[derive(Default)]
 struct ChatAgent {
     restarts: Restarts,
+    /// The space whose process asked for the restart in progress, which
+    /// stops the chat.
+    stopped_by: Option<String>,
 }
 
 /// A request to restart a chat's agent.
@@ -133,6 +136,23 @@ impl ChatAgents {
                 })
             })
             .collect()
+    }
+
+    /// Record that the process of the space `stopped_by` asked for the
+    /// restart of the chat `id` that starts now.
+    pub(super) fn set_stopper(&self, id: &str, stopped_by: Option<String>) {
+        if let Some(agent) = self.lock().get_mut(id) {
+            agent.stopped_by = stopped_by;
+        }
+    }
+
+    /// The space whose process asked for the restart of the chat `id` in
+    /// progress, when one did.
+    pub(super) fn stopper(&self, id: &str) -> Option<String> {
+        let agents = self.lock();
+        let agent = agents.get(id)?;
+        agent.restarts.current.as_ref()?;
+        agent.stopped_by.clone()
     }
 
     fn lock(&self) -> MutexGuard<'_, HashMap<String, ChatAgent>> {

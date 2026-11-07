@@ -34,6 +34,7 @@ impl Manager {
         };
         let requested = (self.chat_agents).request(id, chat.as_ref(), resumes, run)?;
         if let Some(chat) = requested.starts {
+            self.chat_agents.set_stopper(&chat.id, stopped_by.clone());
             // A daemon update waits for the restart: the next daemon would
             // find the chat saved for `shoal resume`, with nothing to bring
             // it back.
