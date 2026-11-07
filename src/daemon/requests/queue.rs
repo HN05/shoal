@@ -4,8 +4,8 @@ use std::sync::Arc;
 use anyhow::{Result, ensure};
 
 use super::super::{
-    agent_queue,
     answer::Answer,
+    queued_starts,
     scope::{Caller, NOT_NOW, Scoped, denied},
     workspace::Manager,
 };
@@ -21,7 +21,7 @@ pub(super) async fn handle(
         QueueMethod::QueueHold { entry } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                agent_queue::hold(stream, request_id, manager, entry, guard)
+                queued_starts::hold(stream, request_id, manager, entry, guard)
             }));
         }
         QueueMethod::QueueAgent {

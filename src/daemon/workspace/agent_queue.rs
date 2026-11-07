@@ -754,7 +754,7 @@ impl Manager {
                 caller_admitted = true;
                 continue;
             }
-            match crate::daemon::agent_queue::spawn_start(&self.paths, &start) {
+            match crate::daemon::queued_starts::spawn_start(&self.paths, &start) {
                 Ok(()) => {
                     self.notify(
                         Some(&start.name),

@@ -2,7 +2,6 @@
 //! Unix socket, and runs background cleanup.
 pub mod access;
 pub mod agent_messages;
-pub(crate) mod agent_queue;
 pub mod allocation;
 mod answer;
 pub mod approvals;
@@ -39,6 +38,7 @@ mod permissions;
 pub mod ports;
 pub mod questions;
 pub(crate) mod queue;
+pub(crate) mod queued_starts;
 pub mod recovery;
 mod requests;
 pub mod resources;
@@ -169,7 +169,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         "shutdown lock",
         shutdown_lock::run,
     );
-    spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
+    spawn_supervised(&mut background, &manager, "agent queue", queued_starts::run);
     spawn_supervised(
         &mut background,
         &manager,

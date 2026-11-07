@@ -154,7 +154,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     let restore = starting_restore(&manager, &execution).await;
     assert_eq!(restore.state, QueueState::Starting);
     bounded(async {
-        while !crate::daemon::agent_queue::tests::STARTED
+        while !crate::daemon::queued_starts::tests::STARTED
             .lock()
             .unwrap()
             .iter()

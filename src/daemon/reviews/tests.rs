@@ -48,7 +48,7 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
         .unwrap();
     if !reviewers.is_empty() {
         tokio::spawn(run(manager.clone()));
-        tokio::spawn(crate::daemon::agent_queue::run(manager.clone()));
+        tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
     }
     Fixture {
         _root: root,
@@ -1187,7 +1187,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         .await
         .unwrap();
     tokio::spawn(run(manager.clone()));
-    tokio::spawn(crate::daemon::agent_queue::run(manager.clone()));
+    tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
     // The only slot is taken, so the review waits for it.
     let mut held = manager.agent_queue.request_oneshot(&repo.id, false, || {});
     held.admitted().await;

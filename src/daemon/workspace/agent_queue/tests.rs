@@ -4,7 +4,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::{
     daemon::{
-        agent_queue::tests::STARTED,
+        queued_starts::tests::STARTED,
         test_support::{global_config, manager, repository},
         workspace_files::Attacher,
     },
