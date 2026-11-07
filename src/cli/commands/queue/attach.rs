@@ -40,8 +40,10 @@ pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
 /// The ID of the workspace `entry` starts its agent in and the name of the
 /// session the agent runs in, once it runs there; other sessions of the
 /// workspace, such as a shell left after a failed setup, do not count. A
-/// launch learns its workspace while it starts, and a launch that failed
-/// leaves the queue without one.
+/// launch learns its workspace while it starts. The daemon records the
+/// agent where it runs before it takes the entry out of the queue, so an
+/// entry gone before the sessions were read without an agent session among
+/// them did not start in one.
 async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(String, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().map(str::to_owned);
@@ -60,11 +62,16 @@ async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(String, Str
                 if let Some(session) = sessions::agent_session(ctx, id).await? {
                     return Ok((id.clone(), session));
                 }
+                ensure!(
+                    current.is_some(),
+                    "{0} has no agent session to attach; shoal status {0} shows whether its agent runs, and shoal alerts why it did not start",
+                    entry.name
+                );
             }
             None if current.is_none() => {
                 bail!("{} did not start; shoal alerts shows why", entry.name)
             }
-            _ => {}
+            None => {}
         }
         ensure!(
             tokio::time::Instant::now() < deadline,
