@@ -323,10 +323,20 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
         chat.join().unwrap();
     });
     install_test_script(&zmx, terminal_zmx());
+    let failed_restores = || {
+        let alerts = fixture.ok(&["alerts", "--all"]);
+        let alerts = alerts.as_array().unwrap().clone();
+        (alerts.into_iter())
+            .filter(|alert| alert["kind"] == "chat_restore_failed")
+            .count()
+    };
+    let failed = failed_restores();
     let output = parent.run(fixture, &["resume", "talk"]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
     assert!(!restored.exists());
+    // The refusal comes before a place opens, so no restore failed.
+    assert_eq!(failed_restores(), failed);
 
     fixture.ok(&["resume", "talk"]);
     wait_until("the user's restore", || restored.exists());

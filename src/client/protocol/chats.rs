@@ -42,6 +42,11 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
+    /// Refuse the restore of the stopped chat `chat`, by ID, that
+    /// [`Self::RestoreChat`] would refuse the caller.
+    CheckChatRestore {
+        chat: String,
+    },
     /// Process `pid` could not restore the stopped chat `chat`, failing with
     /// `error`; the chat waits for `shoal resume` again if `pid` had taken
     /// it over.

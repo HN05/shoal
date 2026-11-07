@@ -79,6 +79,12 @@ pub async fn check_parent(
     request::<()>(daemon, method).await
 }
 
+/// Refuse the restore of the stopped chat `chat`, by ID, that the daemon
+/// would refuse this process, before anything opens a place for it.
+pub async fn check_restore(daemon: &impl Daemon, chat: String) -> Result<()> {
+    request::<()>(daemon, ChatMethod::CheckChatRestore { chat }).await
+}
+
 /// `root_dir`, where a chat without a repository runs, prepared as
 /// registering a repository prepares it.
 pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {

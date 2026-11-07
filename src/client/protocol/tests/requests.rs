@@ -117,6 +117,7 @@ const REQUESTS: &[&str] = &[
     r#"{"check_chat_name":{"name":"app-chat"}}"#,
     r#"{"check_chat_parent":{"repository":"app","workspace":"fix","parent":"7"}}"#,
     r#"{"free_chat_name":{"name":"app-chat"}}"#,
+    r#"{"check_chat_restore":{"chat":"c1"}}"#,
     r#"{"chat_scope":{"chat":"chat-id"}}"#,
     r#""chat_agents""#,
     r#"{"restart_chat":{"chat":"c1","run":"r1"}}"#,

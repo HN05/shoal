@@ -49,6 +49,7 @@ pub(super) async fn handle(
             origin,
             hands_over,
         } => Body::Chat(manager.restore_chat(&chat, pid, origin, hands_over).await?),
+        ChatMethod::CheckChatRestore { .. } => Body::Ok,
         ChatMethod::SaveChat { chat, pid, error } => {
             manager.return_to_saved(&chat, pid, &error).await?;
             Body::Ok
@@ -163,8 +164,8 @@ impl Scoped for ChatMethod {
             | ChatMethod::FreeChatName { .. }
             | ChatMethod::ChatRoot => None,
             // A scoped caller restores a chat from the background place it
-            // opens for it, with its scope.
-            ChatMethod::RestoreChat { chat, .. } => {
+            // opens for it, with its scope, once its check passed here.
+            ChatMethod::RestoreChat { chat, .. } | ChatMethod::CheckChatRestore { chat } => {
                 Some(manager.stopped_chat_below(caller, chat).await?)
             }
         })

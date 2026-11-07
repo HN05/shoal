@@ -186,12 +186,15 @@ async fn resume_each(
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` workspaces below this process's, only `execution`'s when
 /// given, and restore the `selected` chats in a background place; the daemon
-/// refuses those this process or one below it did not stop, and starts the
-/// workspaces' agents detached.
+/// refuses those this process or one below it did not stop, before any
+/// restore, and starts the workspaces' agents detached.
 async fn queue_below(ctx: &Context, selected: Selected, execution: Option<String>) -> Result<i32> {
     let mut stopped = Vec::new();
     for selector in selected.workspaces.unwrap_or_default() {
         stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
+    }
+    for chat in &selected.chats {
+        crate::client::chats::check_restore(&ctx.paths, chat.id.clone()).await?;
     }
     let (chats, failed) = chats::restore_each(ctx, &selected.chats).await;
     queue::queue_all(ctx, stopped, chats, failed, false).await

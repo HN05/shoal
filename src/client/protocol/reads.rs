@@ -20,6 +20,7 @@ impl Operation {
                 | Self::Chat(
                     ChatMethod::CheckChatName { .. }
                         | ChatMethod::CheckChatParent { .. }
+                        | ChatMethod::CheckChatRestore { .. }
                         | ChatMethod::FreeChatName { .. }
                 )
                 | Self::Ci(
