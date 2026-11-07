@@ -60,7 +60,7 @@ impl Manager {
     pub(super) async fn notify_restore_failed(&self, chat: &Chat, error: &str) {
         log!("chat {} not restored: {error}", chat.id);
         self.notify_about(
-            About::workspace(&chat.name, &chat.id),
+            About::space(&chat.name, &chat.id),
             NotificationKind::ChatRestoreFailed,
             format!(
                 "Could not restore chat {}: {error}; restore it with shoal resume {}",

@@ -122,7 +122,7 @@ impl Manager {
         }
         self.notify(
             Some(&workspace.name),
-            NotificationKind::WorkspaceDone,
+            NotificationKind::SpaceDone,
             done_notice(&workspace.name, &completion, &closed),
         )
         .await;
@@ -265,7 +265,7 @@ impl Manager {
             Ok(true) => {
                 self.notify(
                     Some(&workspace.name),
-                    NotificationKind::WorkspaceRemoved,
+                    NotificationKind::SpaceRemoved,
                     super::removal_notice(
                         &workspace.name,
                         "removed after the assignment was marked done",

@@ -73,7 +73,7 @@ impl Manager {
         notifications
             .into_iter()
             .filter(|notification| {
-                notification.kind == crate::daemon::notifications::NotificationKind::WorkspaceDone
+                notification.kind == crate::daemon::notifications::NotificationKind::SpaceDone
             })
             .map(|notification| notification.message)
             .collect()

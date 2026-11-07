@@ -222,7 +222,7 @@ impl Manager {
     pub(super) async fn record_sweep(&self, result: Result<(), SweepFailures>) {
         for unreported in self.cleanup_health.record(Moment::now(), &result) {
             let about = match &unreported.workspace {
-                Some((id, name)) => About::workspace(name, id),
+                Some((id, name)) => About::space(name, id),
                 None => About::default(),
             };
             let message = format!("automatic cleanup failed: {}", unreported.error);

@@ -1650,7 +1650,7 @@ impl Manager {
             if removal.announces_children() {
                 self.notify(
                     Some(&child.name),
-                    crate::daemon::notifications::NotificationKind::WorkspaceRemoved,
+                    crate::daemon::notifications::NotificationKind::SpaceRemoved,
                     super::removal_notice(&child.name, &format!("removed with {parent}")),
                 )
                 .await;

@@ -395,7 +395,7 @@ impl Manager {
                 };
                 self.notify(
                     Some(&workspace.name),
-                    NotificationKind::WorkspaceRemoved,
+                    NotificationKind::SpaceRemoved,
                     crate::daemon::workspace::removal_notice(&workspace.name, cause),
                 )
                 .await;

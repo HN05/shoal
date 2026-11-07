@@ -130,7 +130,7 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::WorkspaceRemoved)
+            .any(|notification| notification.kind == NotificationKind::SpaceRemoved)
     );
 }
 

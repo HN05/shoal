@@ -291,7 +291,7 @@ async fn free_space(
             Ok(()) => {
                 log!("disk space cleanup removed {}", workspace.name);
                 (
-                    NotificationKind::WorkspaceRemoved,
+                    NotificationKind::SpaceRemoved,
                     crate::daemon::workspace::removal_notice(
                         &workspace.name,
                         &format!("removed by disk space cleanup; {}", filesystem.describe()),

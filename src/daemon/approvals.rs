@@ -1171,7 +1171,7 @@ impl Manager {
     }
 
     async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
-        let about = About::workspace(workspace, &request.space_id).asking(&request.key);
+        let about = About::space(workspace, &request.space_id).asking(&request.key);
         self.notify_about(
             about,
             NotificationKind::ApprovalRequested,

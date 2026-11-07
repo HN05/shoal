@@ -618,7 +618,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
             .await
             .unwrap()
             .iter()
-            .any(|n| n.kind == NotificationKind::WorkspaceDone && n.message.contains("report.md")),
+            .any(|n| n.kind == NotificationKind::SpaceDone && n.message.contains("report.md")),
     );
 
     manager

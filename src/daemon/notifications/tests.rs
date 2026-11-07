@@ -301,7 +301,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
         .unwrap();
     // The sender is resolved, then renamed and its name taken before
     // the message is recorded.
-    let about = About::workspace(&sender.name, &sender.id);
+    let about = About::space(&sender.name, &sender.id);
     manager
         .rename_workspace(&SpaceSelector::id(&sender.id), "renamed", None)
         .await
@@ -332,7 +332,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
 async fn pruning_keeps_unread_and_the_newest_read_notifications() {
     let (_temp, manager) = manager().await;
     manager
-        .notify(None, NotificationKind::WorkspaceRemoved, "keep unread")
+        .notify(None, NotificationKind::SpaceRemoved, "keep unread")
         .await;
     for i in 0..RETAINED + 5 {
         manager

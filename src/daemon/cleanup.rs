@@ -312,12 +312,12 @@ pub(crate) async fn notify_chat_removal(
     cleanup: &str,
     removal: Result<bool>,
 ) {
-    let about = crate::daemon::notifications::About::workspace(&chat.name, &chat.id);
+    let about = crate::daemon::notifications::About::space(&chat.name, &chat.id);
     let (kind, message) = match removal {
         Ok(_) => {
             log!("{cleanup} removed chat {}", chat.name);
             (
-                NotificationKind::WorkspaceRemoved,
+                NotificationKind::SpaceRemoved,
                 format!("chat removed by {cleanup}"),
             )
         }
@@ -385,7 +385,7 @@ async fn sweep_workspace(
         Ok(_) => {
             log!("auto cleanup removed {}", workspace.name);
             (
-                NotificationKind::WorkspaceRemoved,
+                NotificationKind::SpaceRemoved,
                 crate::daemon::workspace::removal_notice(
                     &workspace.name,
                     "removed by idle cleanup",
@@ -764,7 +764,7 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
         Ok(_) => {
             log!("forgot deleted worktree {}", workspace.name);
             (
-                NotificationKind::WorkspaceRemoved,
+                NotificationKind::SpaceRemoved,
                 "forgotten after its directory was deleted; branch retained".to_owned(),
             )
         }

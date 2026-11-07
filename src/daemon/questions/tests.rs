@@ -706,7 +706,7 @@ async fn done_closes_open_questions_for_good() {
     assert!(
         notifications
             .iter()
-            .any(|n| n.kind == NotificationKind::WorkspaceDone
+            .any(|n| n.kind == NotificationKind::SpaceDone
                 && n.message.contains(&open.number.to_string()))
     );
     // The undelivered answer still reaches the agents.

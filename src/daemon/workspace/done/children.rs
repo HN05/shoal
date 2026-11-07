@@ -109,7 +109,7 @@ impl Manager {
         {
             Ok(false) => return Ok(()),
             Ok(true) => (
-                NotificationKind::WorkspaceRemoved,
+                NotificationKind::SpaceRemoved,
                 super::super::removal_notice(
                     &workspace.name,
                     &format!("removed after {} was marked done", ancestor.name()),

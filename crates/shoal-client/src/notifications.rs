@@ -33,10 +33,10 @@ states!(NotificationKind {
     AgentResumed => "agent_resumed",
     /// A daemon restart left a stopped agent's processes uncertain.
     RecoveryBlocked => "recovery_blocked",
-    /// The daemon removed or forgot a workspace on its own.
-    WorkspaceRemoved => "workspace_removed",
-    /// An agent explicitly marked its assignment finished.
-    WorkspaceDone => "workspace_done",
+    /// The daemon removed or forgot a space on its own.
+    SpaceRemoved => "workspace_removed",
+    /// An agent explicitly marked its space's work finished.
+    SpaceDone => "workspace_done",
     /// An automatic removal was attempted and the workspace retained, or a
     /// cleanup pass failed.
     CleanupFailed => "cleanup_failed",

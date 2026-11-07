@@ -754,7 +754,7 @@ impl Manager {
             Ok(_) => return,
             Err(error) => crate::daemon::log!("question {number} not rechecked: {error:#}"),
         }
-        let about = About::workspace(&question.space, &question.space_id);
+        let about = About::space(&question.space, &question.space_id);
         let kind = NotificationKind::QuestionAsked;
         (self.notify_with_files(about, kind, question.notification(), &question.files)).await;
     }
@@ -886,7 +886,7 @@ impl Manager {
         self.signals.question_changed();
         if !retracted {
             self.notify_about(
-                About::workspace(&question.space, &question.space_id),
+                About::space(&question.space, &question.space_id),
                 NotificationKind::QuestionWithdrawn,
                 question.withdrawal_notification(),
             )
@@ -924,7 +924,7 @@ impl Manager {
         // coordinating agent it went to instead, is told it closed.
         for (question, _) in closed.iter().filter(|(_, retracted)| !retracted) {
             self.notify_about(
-                About::workspace(&question.space, &question.space_id),
+                About::space(&question.space, &question.space_id),
                 NotificationKind::QuestionWithdrawn,
                 question.withdrawal_notification(),
             )

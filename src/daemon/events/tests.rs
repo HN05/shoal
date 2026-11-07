@@ -75,7 +75,7 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
     manager
         .notify(
             Some("worker"),
-            NotificationKind::WorkspaceRemoved,
+            NotificationKind::SpaceRemoved,
             "idle cleanup",
         )
         .await;

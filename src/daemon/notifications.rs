@@ -34,7 +34,7 @@ impl NotificationKindExt for NotificationKind {
             Self::AgentMessage
             | Self::QuestionAsked
             | Self::QuestionWithdrawn
-            | Self::WorkspaceDone => Some(Source::Agent),
+            | Self::SpaceDone => Some(Source::Agent),
             _ => None,
         }
     }
@@ -45,7 +45,7 @@ impl NotificationKindExt for NotificationKind {
             Self::AgentExited
                 | Self::AgentStopped
                 | Self::AgentResumed
-                | Self::WorkspaceRemoved
+                | Self::SpaceRemoved
                 | Self::CachesEmptied
                 | Self::ResultsDeleted
                 | Self::HookFailed
@@ -63,7 +63,7 @@ pub(crate) struct Recorded {
     pub new: bool,
 }
 
-/// What a notification is about: the workspace's name at the time and its
+/// What a notification is about: the space's name at the time and its
 /// identity, which withdrawal matches since names change and are reused, and
 /// the key of a request it asks the user to decide.
 #[derive(Debug, Clone, Default)]
@@ -82,8 +82,8 @@ impl About {
         }
     }
 
-    /// The workspace or chat `id`, which has `name`.
-    pub(crate) fn workspace(name: &str, id: &str) -> Self {
+    /// The space `id`, which has `name`.
+    pub(crate) fn space(name: &str, id: &str) -> Self {
         Self {
             name: Some(name.to_owned()),
             id: Some(id.to_owned()),
@@ -281,7 +281,7 @@ impl Manager {
         crate::validate::message(&message)?;
         workspace_files::check_sent(&attachments)?;
         let space = self.space(selector).await?;
-        let about = About::workspace(space.name(), space.id());
+        let about = About::space(space.name(), space.id());
         let id = space.id().to_owned();
         let (kind, text) = (NotificationKind::AgentMessage, message.clone());
         let notification = (self.send_with_files(
@@ -301,14 +301,14 @@ impl Manager {
     /// the user name their sender.
     async fn space_about(&self, selector: &SpaceSelector) -> Result<About> {
         let space = self.space(selector).await?;
-        Ok(About::workspace(space.name(), space.id()))
+        Ok(About::space(space.name(), space.id()))
     }
 
     /// Tell the user that a turn-state report of the workspace's agent failed
     /// with `error`, so the state shown for the agent may be out of date.
     pub async fn report_state_failure(&self, selector: &SpaceSelector, error: &str) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        let about = About::workspace(&workspace.name, &workspace.id);
+        let about = About::space(&workspace.name, &workspace.id);
         let error = error.replace(char::is_control, " ");
         let message = crate::validate::shorten(
             format!("agent state report failed; {error}"),

@@ -9,7 +9,7 @@ async fn a_long_notification_listing_goes_in_pages() {
         manager
             .notify(
                 None,
-                NotificationKind::WorkspaceDone,
+                NotificationKind::SpaceDone,
                 format!("assignment finished {n}; results: {}", "x".repeat(700)),
             )
             .await;

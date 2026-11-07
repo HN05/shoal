@@ -144,7 +144,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
             .await
             .unwrap()
             .iter()
-            .any(|event| event.kind == NotificationKind::WorkspaceDone)
+            .any(|event| event.kind == NotificationKind::SpaceDone)
     );
     reopened.store.shutdown().await;
 }

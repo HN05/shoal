@@ -126,7 +126,7 @@ impl Manager {
     async fn notify_stop_failed(&self, moment: &str, workspace: &Workspace, error: &anyhow::Error) {
         log!("stop {moment}: {} not stopped: {error:#}", workspace.name);
         self.notify_about(
-            About::workspace(&workspace.name, &workspace.id),
+            About::space(&workspace.name, &workspace.id),
             NotificationKind::StopFailed,
             format!("Could not stop tracked executions {moment}: {error:#}"),
         )

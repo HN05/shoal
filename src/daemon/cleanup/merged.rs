@@ -166,7 +166,7 @@ async fn sweep_workspace(
             log!("merged cleanup removed {}", workspace.name);
             state.retained.remove(&workspace.id);
             (
-                NotificationKind::WorkspaceRemoved,
+                NotificationKind::SpaceRemoved,
                 crate::daemon::workspace::removal_notice(
                     &workspace.name,
                     "removed by merged cleanup",
