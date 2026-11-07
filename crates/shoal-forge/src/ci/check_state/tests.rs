@@ -2,20 +2,17 @@ use super::*;
 
 #[test]
 fn saved_states_read_in_every_casing() {
-    for (saved, state) in [
-        ("\"Pending\"", CheckState::Pending),
-        ("\"Success\"", CheckState::Success),
-        ("\"SUCCESS\"", CheckState::Success),
-        ("\"TIMED_OUT\"", CheckState::TimedOut),
-        ("\"in_progress\"", CheckState::InProgress),
+    let read = |text: &str| saved(serde_json::Value::from(text)).ok();
+    for (text, state) in [
+        ("Pending", CheckState::Pending),
+        ("Success", CheckState::Success),
+        ("SUCCESS", CheckState::Success),
+        ("TIMED_OUT", CheckState::TimedOut),
+        ("in_progress", CheckState::InProgress),
     ] {
-        assert_eq!(serde_json::from_str::<CheckState>(saved).ok(), Some(state));
+        assert_eq!(read(text), Some(state));
     }
-    assert!(serde_json::from_str::<CheckState>("\"done\"").is_err());
-    assert_eq!(
-        serde_json::to_string(&CheckState::TimedOut).ok().as_deref(),
-        Some("\"timed_out\"")
-    );
+    assert_eq!(read("done"), None);
 }
 
 #[test]

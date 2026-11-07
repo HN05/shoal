@@ -158,6 +158,7 @@ pub(crate) struct MergeRevision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Check {
     pub(crate) name: String,
+    #[serde(deserialize_with = "crate::ci::check_state::saved")]
     pub(crate) state: CheckState,
     pub(crate) revision: String,
 }

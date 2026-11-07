@@ -60,6 +60,7 @@ pub struct PrStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckResult {
     pub name: String,
+    #[serde(deserialize_with = "crate::ci::check_state::saved")]
     pub result: CheckState,
 }
 

@@ -1,79 +1,38 @@
 //! The state of a CI check, which every forge's checks and commit statuses
 //! map onto.
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer};
 
-/// A CI check's state, in GitHub's terms, which name the most; the other
-/// forges map their states onto these. Serialized in lower case, and read
-/// in any casing, since saved snapshots spell states as `Success` or
-/// `SUCCESS`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckState {
-    Pending,
-    Queued,
-    InProgress,
-    /// Held for a runner to take it, or on GitHub for a deployment's
-    /// approval.
-    Waiting,
-    Requested,
-    /// Finished without a conclusion.
-    Completed,
-    Success,
-    Neutral,
-    Skipped,
-    /// Failed in a way the forge lets pass.
-    Warning,
-    Failure,
-    Error,
-    TimedOut,
-    StartupFailure,
-    Cancelled,
-    ActionRequired,
-    Stale,
-}
+use crate::state::states;
+
+states!(
+    /// A CI check's state, in GitHub's terms, which name the most; the other
+    /// forges map their states onto these.
+    CheckState: Variants {
+        Pending => "pending",
+        Queued => "queued",
+        InProgress => "in_progress",
+        /// Held for a runner to take it, or on GitHub for a deployment's
+        /// approval.
+        Waiting => "waiting",
+        Requested => "requested",
+        /// Finished without a conclusion.
+        Completed => "completed",
+        Success => "success",
+        Neutral => "neutral",
+        Skipped => "skipped",
+        /// Failed in a way the forge lets pass.
+        Warning => "warning",
+        Failure => "failure",
+        Error => "error",
+        TimedOut => "timed_out",
+        StartupFailure => "startup_failure",
+        Cancelled => "cancelled",
+        ActionRequired => "action_required",
+        Stale => "stale",
+    }
+);
 
 impl CheckState {
-    pub const ALL: &'static [Self] = &[
-        Self::Pending,
-        Self::Queued,
-        Self::InProgress,
-        Self::Waiting,
-        Self::Requested,
-        Self::Completed,
-        Self::Success,
-        Self::Neutral,
-        Self::Skipped,
-        Self::Warning,
-        Self::Failure,
-        Self::Error,
-        Self::TimedOut,
-        Self::StartupFailure,
-        Self::Cancelled,
-        Self::ActionRequired,
-        Self::Stale,
-    ];
-
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Queued => "queued",
-            Self::InProgress => "in_progress",
-            Self::Waiting => "waiting",
-            Self::Requested => "requested",
-            Self::Completed => "completed",
-            Self::Success => "success",
-            Self::Neutral => "neutral",
-            Self::Skipped => "skipped",
-            Self::Warning => "warning",
-            Self::Failure => "failure",
-            Self::Error => "error",
-            Self::TimedOut => "timed_out",
-            Self::StartupFailure => "startup_failure",
-            Self::Cancelled => "cancelled",
-            Self::ActionRequired => "action_required",
-            Self::Stale => "stale",
-        }
-    }
-
     /// The state `text` names in any casing.
     pub fn parse(text: &str) -> Option<Self> {
         Self::ALL
@@ -109,24 +68,12 @@ impl CheckState {
     }
 }
 
-impl std::fmt::Display for CheckState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl Serialize for CheckState {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for CheckState {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        Self::parse(&text)
-            .ok_or_else(|| serde::de::Error::custom(format!("unknown CI check state {text}")))
-    }
+/// A saved check's state, in any casing: saved snapshots spell states as
+/// `Success` or `SUCCESS`.
+pub(crate) fn saved<'de, D: Deserializer<'de>>(deserializer: D) -> Result<CheckState, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    CheckState::parse(&text)
+        .ok_or_else(|| serde::de::Error::custom(format!("unknown CI check state {text}")))
 }
 
 #[cfg(test)]
