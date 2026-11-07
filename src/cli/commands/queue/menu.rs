@@ -8,6 +8,7 @@ use crate::cli::{context::Context, ui};
 #[derive(Clone, Copy)]
 enum Action {
     Start,
+    StartAttached,
     Move,
     Cancel,
 }
@@ -22,12 +23,19 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     let entry = selection::pick_entry(ctx, &waiting, "Queue> ").await?;
     let mut actions = vec![(Action::Move, "Move"), (Action::Cancel, "Cancel")];
     if !crate::env::inherits_scope(&ctx.paths.state) {
-        actions.insert(0, (Action::Start, "Start now"));
+        actions.splice(
+            0..0,
+            [
+                (Action::Start, "Start now"),
+                (Action::StartAttached, "Start and attach"),
+            ],
+        );
     }
     let action = ui::pick_choice(ctx, &format!("{}> ", entry.name), &actions)?;
     let entry = Some(entry.id);
     match action {
         Action::Start => changes::start(ctx, entry, false).await,
+        Action::StartAttached => changes::start(ctx, entry, true).await,
         Action::Move => changes::move_entry(ctx, entry, None).await,
         Action::Cancel => changes::cancel(ctx, entry).await,
     }
