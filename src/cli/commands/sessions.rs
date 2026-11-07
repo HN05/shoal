@@ -56,13 +56,15 @@ pub(super) async fn attach(
     Ok(0)
 }
 
-/// Whether the workspace with the ID `id` has a session `shoal attach` takes.
-pub(super) async fn has_session(ctx: &Context, id: &str) -> Result<bool> {
+/// The name of the session `shoal attach` takes in which the daemon
+/// recorded the agent of the workspace with the ID `id` running.
+pub(super) async fn agent_session(ctx: &Context, id: &str) -> Result<Option<String>> {
     let target = Target::inspected(ctx, id.to_owned()).await?;
-    Ok(target
-        .attachable(ctx, None)
-        .await?
-        .is_ok_and(|sessions| !sessions.is_empty()))
+    let sessions = target.attachable(ctx, None).await?.unwrap_or_default();
+    Ok(sessions
+        .into_iter()
+        .find(|session| session.agent.is_some())
+        .map(|session| session.name))
 }
 
 /// What `shoal attach` returns to.

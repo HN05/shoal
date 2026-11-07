@@ -28829,7 +28829,22 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["queue"])[0]["name"], "second");
+    let queued = &fixture.ok(&["queue"])[0];
+    assert_eq!(queued["name"], "second");
+    // A session the workspace already has, such as a shell, is not the agent's.
+    let workspace = queued["opens"].as_str().unwrap();
+    let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+        "workspace": workspace,
+        "origin": {"host": "zmx", "place": "second-shell"},
+    }}));
+    assert!(recorded.get("error").is_none(), "{recorded}");
+    fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(home.join("zmx-sessions"))
+        .unwrap()
+        .write_all(created_zmx_session(&fixture, "second-shell", workspace).as_bytes())
+        .unwrap();
 
     let (output, transcript) = fixture.terminal_command(
         fixture
