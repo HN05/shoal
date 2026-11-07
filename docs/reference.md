@@ -1191,8 +1191,8 @@ workspace's agent or the chat running, or one Shoal opened for the workspace,
 such as a detached session left at its shell after a failed setup. The
 session of an agent Shoal stopped, such as for memory pressure, while it waits
 for its automatic restore is not offered: attaching to it says why the agent
-stopped, what restores it, and that `shoal queue start <workspace>` restores it
-now. Sessions are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
+stopped, what restores it, and that `shoal queue start --attach <workspace>`
+restores it now and attaches. Sessions are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
 Sessions Shoal creates are also labelled `shoal.created=1`. Removing a
@@ -2000,6 +2000,7 @@ shoal start <issue-url> --agent claude --after api --after 12  # Starts once api
 shoal resume -A                               # Queues the restore of every stopped agent
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
 shoal queue start api                         # Starts a waiting entry now regardless of the limits
+shoal queue start --attach api                # Starts it and attaches this terminal to its agent's session
 shoal queue move api 1                        # Moves an entry to position 1; without a position, pick its place
 shoal queue move api last                     # Stops api's running agent and queues its restore last
 shoal queue cancel api                        # Removes a waiting entry; a restore's agent stays stopped
@@ -2133,7 +2134,9 @@ then starts, moves or cancels it.
 `queue start` starts a waiting entry now regardless of the limits, as `--now`
 does, or restores an idle agent waiting for an update; it refuses a launch
 still waiting for work, whose branch it builds on, and a restore whose agent's
-processes have not stopped yet. `queue cancel` removes a waiting entry: a
+processes have not stopped yet. With `--attach` on a terminal it then waits up
+to two minutes for the agent's session and attaches to it as `shoal attach`
+does. `queue cancel` removes a waiting entry: a
 cancelled restore stops the waiting wrapper as `shoal stop` does and leaves the
 agent for `shoal resume`. `shoal rm` also removes a waiting launch by name or
 ID, and only by ID when a workspace has the same name; a starting entry belongs

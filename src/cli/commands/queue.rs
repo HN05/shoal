@@ -1,5 +1,6 @@
 //! `shoal queue`: the agent queue of every repository, and starting, moving
 //! and cancelling its entries, named or picked.
+mod attach;
 mod changes;
 mod listing;
 mod menu;
@@ -20,7 +21,7 @@ pub(super) async fn run(
             menu::choose(ctx).await
         }
         None => listing::list(ctx, repository).await,
-        Some(QueueCommand::Start { entry }) => changes::start(ctx, entry).await,
+        Some(QueueCommand::Start { entry, attach }) => changes::start(ctx, entry, attach).await,
         Some(QueueCommand::Move { entry, position }) => {
             changes::move_entry(ctx, entry, position).await
         }

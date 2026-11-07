@@ -6,19 +6,24 @@ use super::selection;
 use crate::client::queue;
 use crate::{cli::context::Context, model::QueuePlace, state::QueueKind};
 
-/// `shoal queue start`: start the entry now, regardless of the limits.
-pub(super) async fn start(ctx: &Context, entry: Option<String>) -> Result<i32> {
+/// `shoal queue start`: start the entry now, regardless of the limits, and
+/// with `attach` attach this terminal to its agent's session.
+pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) -> Result<i32> {
     // A process that cleared its scope token is still the workspace's.
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
         "start queued agents outside scoped executions"
     );
+    ensure!(!attach || ctx.interactive(), "--attach requires a terminal");
     let entry = selection::selected(ctx, entry, "Start> ").await?;
     let entry = queue::start(&ctx.paths, entry).await?;
     ctx.emit(
         &format!("Starting {} from the agent queue", entry.name),
         &entry,
     )?;
+    if attach {
+        return super::attach::started(ctx, &entry).await;
+    }
     Ok(0)
 }
 

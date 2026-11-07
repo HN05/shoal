@@ -27,9 +27,7 @@ pub(super) async fn attach(
     );
     ensure!(ctx.interactive(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
-    let settings = crate::client::workspaces::settings(&ctx.paths, target.config()).await?;
-    let sessions = terminal::sessions(&settings, &target.places()).await?;
-    let sessions = terminal::attachable(sessions, session.as_deref())
+    let sessions = (target.attachable(ctx, session.as_deref()).await?)
         .map_err(|protection| anyhow!("{}", stopped_agent(target.name(), &protection)))?;
     let session = match (session, sessions.as_slice()) {
         (Some(name), _) => sessions
@@ -56,6 +54,15 @@ pub(super) async fn attach(
         target.record_detach(ctx).await;
     }
     Ok(0)
+}
+
+/// Whether the workspace with the ID `id` has a session `shoal attach` takes.
+pub(super) async fn has_session(ctx: &Context, id: &str) -> Result<bool> {
+    let target = Target::inspected(ctx, id.to_owned()).await?;
+    Ok(target
+        .attachable(ctx, None)
+        .await?
+        .is_ok_and(|sessions| !sessions.is_empty()))
 }
 
 /// What `shoal attach` returns to.
@@ -142,6 +149,18 @@ impl Target {
         }
     }
 
+    /// The target's sessions but those of agents Shoal stopped, or why not
+    /// as [`terminal::attachable`] gives it.
+    async fn attachable(
+        &self,
+        ctx: &Context,
+        named: Option<&str>,
+    ) -> Result<Result<Vec<crate::terminal::Session>, Protection>> {
+        let settings = crate::client::workspaces::settings(&ctx.paths, self.config()).await?;
+        let sessions = terminal::sessions(&settings, &self.places()).await?;
+        Ok(terminal::attachable(sessions, named))
+    }
+
     /// Whose settings choose the hosts to look in.
     fn config(&self) -> ConfigTarget {
         match self {
@@ -191,7 +210,7 @@ impl Target {
 /// Why `name`'s agent, which `protection` stopped, cannot be attached to.
 fn stopped_agent(name: &str, protection: &Protection) -> String {
     format!(
-        "{name}'s agent is stopped ({}) and resumes once {}; `shoal queue start {name}` resumes it now",
+        "{name}'s agent is stopped ({}) and resumes once {}; `shoal queue start --attach {name}` resumes it now and attaches",
         protection.reason, protection.resumes_when
     )
 }

@@ -28794,6 +28794,67 @@ fn add_queues_agents_past_max_agents_until_removed() {
     first.wait().unwrap();
 }
 
+/// `queue start --attach` starts a waiting agent and attaches this terminal
+/// to the session the daemon starts it in.
+#[test]
+fn queue_start_attaches_to_the_started_agents_session() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    // zmx lists the sessions the daemon opens.
+    fs::write(home.join("zmx-keep-sessions"), "").unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    let mut first = fixture
+        .command()
+        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        fixture
+            .ok(&["work"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["queue"]) == serde_json::json!([])
+    });
+    let output = fixture
+        .command()
+        .args(["--json", "start", repo, "second", "--agent", "waiter"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["queue"])[0]["name"], "second");
+
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["queue", "start", "--attach", "second"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let opened = zmx_calls(&fixture)
+        .into_iter()
+        .find(|call| call[0] == "run")
+        .unwrap();
+    let attached = zmx_calls(&fixture)
+        .into_iter()
+        .rfind(|call| call[0] == "attach")
+        .unwrap();
+    assert_eq!(attached, ["attach", opened[1].as_str()]);
+
+    fixture.ok(&["stop", "second"]);
+    fixture.ok(&["stop", "first"]);
+    first.wait().unwrap();
+    wait_zmx_sessions_ended(home);
+}
+
 /// A queued agent starts from the daemon, which gives it the output setting
 /// of the caller that queued it rather than its own.
 #[test]
