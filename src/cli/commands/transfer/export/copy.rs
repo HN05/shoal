@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, ensure};
 
 use super::{
-    super::STANDARD_STREAM, ExportDirectory, Output, ensure_unscoped_export, repository_spaces,
-    selected_spaces, warn,
+    super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, ensure_unscoped_export,
+    repository_spaces, selected_spaces, warn,
 };
-use crate::client::output::transfer::{Exported, Exports};
 use crate::{
     cli::{
         context::Context,
@@ -65,46 +64,24 @@ async fn copy_into(
 ) -> Result<i32> {
     ensure_one_at_checkpoint(spaces.len(), checkpoint)?;
     let directory = ExportDirectory::create(directory)?;
-    let mut report = ui::Report::new("copy");
+    let mut report = DirectoryReport::new(&directory, true);
     for space in spaces {
-        let name = space.name();
-        let copied = async {
-            let output = Output::reserve(&directory.file(name))?;
-            copy(ctx, space.id().to_owned(), checkpoint, output.file()).await
-        };
-        match copied.await {
-            Ok(exported) => {
-                let message = format!(
-                    "Exported a copy of {name} to {}",
-                    directory.shown_file(name).display()
-                );
-                let value = Exported {
-                    file: directory.file(name),
-                    manifest: exported.manifest,
-                    removal: None,
-                };
-                report.done(ctx, &message, value);
-            }
-            Err(error) => report.failed(ctx, name, &error),
-        }
+        let copied = copy_one(ctx, &directory, space, checkpoint).await;
+        report.add(ctx, space.name(), copied);
     }
-    let (copied, failed) = report.counts();
-    let shown = directory.shown.display();
-    let summary = if failed == 0 {
-        format!(
-            "Exported copies of {copied} spaces to {shown}; shoal move import {shown} opens them as new spaces"
-        )
-    } else {
-        format!(
-            "Exported copies of {copied} of {} spaces to {shown}; {failed} failed",
-            copied + failed
-        )
-    };
-    report.finish(ctx, &summary, |exported, failed| Exports {
-        exported,
-        failed,
-        directory: directory.path.clone(),
-    })
+    report.finish(ctx)
+}
+
+/// Write a copy of `space` to its file in `directory`, refusing a file
+/// that exists.
+async fn copy_one(
+    ctx: &Context,
+    directory: &ExportDirectory,
+    space: &PresentSpace,
+    checkpoint: Option<u64>,
+) -> Result<ExportedSpace> {
+    let output = Output::reserve(&directory.file(space.name()))?;
+    copy(ctx, space.id().to_owned(), checkpoint, output.file()).await
 }
 
 /// Refuse `--checkpoint` for `count` spaces other than one, since its

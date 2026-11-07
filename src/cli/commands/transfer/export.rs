@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-use crate::client::output::transfer::{Exported, Exports};
+use crate::client::output::transfer::Exported;
 use crate::{
     cli::{
         context::Context,
@@ -21,6 +21,10 @@ use crate::{
 use super::STANDARD_STREAM;
 
 pub(super) mod copy;
+mod directory;
+
+use directory::DirectoryReport;
+pub(super) use directory::ExportDirectory;
 
 /// `shoal move export`: end the space here, or take an already removed
 /// workspace, and write it to `file`. Several spaces, or any written to a
@@ -102,7 +106,7 @@ async fn export_into(
     let heading = format!(
         "Export {} spaces to {}",
         spaces.len(),
-        directory.shown.display()
+        directory.shown().display()
     );
     let planned = check_exports(ctx, spaces, &directory, yes, &heading, EXPORT).await?;
     export_each(ctx, planned, &directory).await
@@ -474,38 +478,6 @@ pub(super) async fn repository_spaces(
     Ok(spaces)
 }
 
-/// The directory an export of several spaces goes to, shown as the user
-/// named it.
-pub(super) struct ExportDirectory {
-    path: PathBuf,
-    shown: PathBuf,
-}
-
-impl ExportDirectory {
-    /// Create the directory when it is missing.
-    pub(super) fn create(shown: PathBuf) -> Result<Self> {
-        std::fs::create_dir_all(&shown)
-            .with_context(|| format!("create the directory {}", shown.display()))?;
-        let path = std::fs::canonicalize(&shown)
-            .with_context(|| format!("find the directory {}", shown.display()))?;
-        Ok(Self { path, shown })
-    }
-
-    /// The file the space `name` goes to.
-    pub(super) fn file(&self, name: &str) -> PathBuf {
-        self.path.join(Self::file_name(name))
-    }
-
-    /// The file the space `name` goes to, as the user names it.
-    fn shown_file(&self, name: &str) -> PathBuf {
-        self.shown.join(Self::file_name(name))
-    }
-
-    fn file_name(name: &str) -> String {
-        format!("{name}.shoal")
-    }
-}
-
 /// A space that passed its export check, with the file it goes to.
 pub(super) struct PlannedExport {
     check: Checked,
@@ -592,42 +564,12 @@ async fn export_each(
     planned: Vec<PlannedExport>,
     directory: &ExportDirectory,
 ) -> Result<i32> {
-    let mut report = ui::Report::new("export");
+    let mut report = DirectoryReport::new(directory, false);
     for PlannedExport { check, output } in planned {
-        let name = check.name();
-        match export_checked(ctx, &check, &output).await {
-            Ok(exported) => {
-                let message = format!(
-                    "Exported {name} to {}",
-                    directory.shown_file(name).display()
-                );
-                let value = Exported {
-                    file: directory.file(name),
-                    manifest: exported.manifest,
-                    removal: exported.removal,
-                };
-                report.done(ctx, &message, value);
-            }
-            Err(error) => report.failed(ctx, name, &error),
-        }
+        let exported = export_checked(ctx, &check, &output).await;
+        report.add(ctx, check.name(), exported);
     }
-    let (exported, failed) = report.counts();
-    let shown = directory.shown.display();
-    let summary = if failed == 0 {
-        format!(
-            "Exported {exported} spaces to {shown}; shoal move import {shown} opens them on another machine"
-        )
-    } else {
-        format!(
-            "Exported {exported} of {} spaces to {shown}; {failed} failed",
-            exported + failed
-        )
-    };
-    report.finish(ctx, &summary, |exported, failed| Exports {
-        exported,
-        failed,
-        directory: directory.path.clone(),
-    })
+    report.finish(ctx)
 }
 
 #[cfg(test)]
