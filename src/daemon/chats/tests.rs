@@ -393,7 +393,7 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .unwrap();
     let released = manager
         .store
-        .run(move |db| stop(db, &exited))
+        .write(move |tx| stop(tx, &exited))
         .await
         .unwrap();
     assert!(released.is_empty());

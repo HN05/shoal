@@ -353,7 +353,7 @@ impl Manager {
             return;
         }
         let ids: Vec<i64> = records.iter().map(|file| file.id).collect();
-        if let Err(error) = self.store.run(move |db| records::forget(db, &ids)).await {
+        if let Err(error) = self.store.write(move |tx| records::forget(tx, &ids)).await {
             crate::daemon::log!("records of refused files not deleted: {error:#}");
         }
         discard(kept).await;
@@ -429,7 +429,9 @@ impl Manager {
         })
         .await??;
         let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
-        self.store.run(move |db| records::forget(db, &ids)).await?;
+        self.store
+            .write(move |tx| records::forget(tx, &ids))
+            .await?;
         Ok(files)
     }
 
@@ -480,7 +482,7 @@ impl Manager {
         let (id, attacher) = (space_id.to_owned(), attacher.clone());
         let copies = kept.copies.clone();
         self.store
-            .run(move |db| records::record_all(db, &id, source, &attacher, &copies))
+            .write(move |tx| records::record_all(tx, &id, source, &attacher, &copies))
             .await
     }
 

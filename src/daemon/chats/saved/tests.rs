@@ -447,7 +447,7 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
     // A save interrupted before its stop, then the agent ended.
     manager
         .store
-        .run(|db| super::save(db, ChatRestore::Resume, None, None))
+        .write(|tx| super::save(tx, ChatRestore::Resume, None, None))
         .await
         .unwrap();
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
@@ -647,7 +647,7 @@ async fn a_stop_after_the_agent_exited_ends_what_it_left_running() {
         .unwrap();
     manager
         .store
-        .run(|db| super::save(db, ChatRestore::Resume, None, None))
+        .write(|tx| super::save(tx, ChatRestore::Resume, None, None))
         .await
         .unwrap();
     // The agent exits between the save and its stop.
@@ -703,7 +703,7 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
         .unwrap();
     manager
         .store
-        .run(|db| super::save(db, ChatRestore::Resume, None, None))
+        .write(|tx| super::save(tx, ChatRestore::Resume, None, None))
         .await
         .unwrap();
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
@@ -775,7 +775,7 @@ wait
         .unwrap();
     manager
         .store
-        .run(|db| super::save(db, ChatRestore::Resume, None, None))
+        .write(|tx| super::save(tx, ChatRestore::Resume, None, None))
         .await
         .unwrap();
     // The stop records the child and signals it, then the daemon crashes.

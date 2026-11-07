@@ -934,11 +934,11 @@ async fn finished_reviews(
     let (id, body) = (workspace.to_owned(), body.to_owned());
     manager
         .store
-        .run(move |db| {
+        .write(move |tx| {
             let mut ids = Vec::new();
             for _ in 0..count {
                 let review = store::queue(
-                    db,
+                    tx,
                     &id,
                     &ReviewTarget::Workspace,
                     "absent",
@@ -946,13 +946,13 @@ async fn finished_reviews(
                     UnixTime::from_seconds(1),
                 )?
                 .id();
-                store::start(db, review, "head", "base", UnixTime::from_seconds(2))?;
+                store::start(tx, review, "head", "base", UnixTime::from_seconds(2))?;
                 let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
                     serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
                         "findings": [{"path": "a", "line": 1, "severity": "nit",
                             "title": "Long", "body": body}]}),
                 )?;
-                store::finish(db, review, "absent", &output, UnixTime::from_seconds(3))?;
+                store::finish(tx, review, "absent", &output, UnixTime::from_seconds(3))?;
                 ids.push(review);
             }
             Ok(ids)

@@ -56,12 +56,10 @@ async fn seed_turns(manager: &Manager, count: usize) {
 async fn journal(manager: &Manager, count: usize, record: &'static str) {
     manager
         .store
-        .run(move |db| {
-            let tx = db.transaction()?;
+        .write(move |tx| {
             for _ in 0..count {
                 tx.execute("INSERT INTO workspace_events(record) VALUES (?1)", [record])?;
             }
-            tx.commit()?;
             Ok(())
         })
         .await

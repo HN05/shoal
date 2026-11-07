@@ -190,13 +190,12 @@ pub(crate) fn start(
 /// from 1, and the checks it made of earlier `fixed` findings of the same
 /// workspace. False when the review is no longer running.
 pub(crate) fn finish(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     id: ReviewId,
     reviewer: &str,
     output: &ReviewerOutput,
     now: crate::time::UnixTime,
 ) -> Result<bool> {
-    let tx = db.transaction()?;
     let finished = tx.execute(
         "UPDATE reviews SET state=?6,reviewer=?2,summary=?3,verdict=?4,ended_at=?5
             WHERE id=?1 AND state=?7",
@@ -229,9 +228,8 @@ pub(crate) fn finish(
         )?;
     }
     for checked in &output.checked {
-        record_check(&tx, id, checked)?;
+        record_check(tx, id, checked)?;
     }
-    tx.commit()?;
     Ok(true)
 }
 

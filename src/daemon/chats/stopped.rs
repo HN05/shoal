@@ -22,7 +22,7 @@ impl Manager {
     ) -> Result<()> {
         let chat = id.to_owned();
         self.store
-            .run(move |db| record(db, &chat, &processes))
+            .write(move |tx| record(tx, &chat, &processes))
             .await
     }
 }
@@ -52,8 +52,7 @@ fn stopped(db: &mut Connection, id: &str) -> Result<Vec<Identity>> {
 
 /// Record that a stop of the chat `id` signals `processes`, unless the chat
 /// was removed while it stops: then no later stop or check follows them.
-fn record(db: &mut Connection, id: &str, processes: &[Identity]) -> Result<()> {
-    let tx = db.transaction()?;
+fn record(tx: &rusqlite::Transaction<'_>, id: &str, processes: &[Identity]) -> Result<()> {
     for process in processes {
         tx.execute(
             "INSERT OR IGNORE INTO chat_stopped_processes(chat_id,pid,birth,unique_id)
@@ -70,7 +69,6 @@ fn record(db: &mut Connection, id: &str, processes: &[Identity]) -> Result<()> {
             ],
         )?;
     }
-    tx.commit()?;
     Ok(())
 }
 

@@ -2,7 +2,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 pub(crate) use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{Connection, Transaction, TransactionBehavior, params};
+use rusqlite::{Transaction, params};
 use std::{
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -136,7 +136,7 @@ impl Manager {
         let claim =
             PortClaim::resolve(workspace.id.clone(), name, request, ports, caller.is_some())?;
         self.touch(&workspace.id).await;
-        let (outcome, conflict) = self.store.run(move |db| claim_port(db, claim)).await?;
+        let (outcome, conflict) = self.store.write(move |tx| claim_port(tx, claim)).await?;
         if let Some(conflict) = conflict {
             self.notify(
                 Some(&workspace.name),
@@ -193,11 +193,10 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                store::require_ready(&tx, &workspace.id)?;
+            .write(move |tx| {
+                store::require_ready(tx, &workspace.id)?;
                 let released =
-                    approvals::release(&tx, &workspace.id, &Target::Port(name.clone()), &name)?;
+                    approvals::release(tx, &workspace.id, &Target::Port(name.clone()), &name)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",
@@ -206,7 +205,6 @@ impl Manager {
                         || released,
                     "unknown port reservation or approval request"
                 );
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -283,10 +281,9 @@ enum Selection {
 
 /// Claim or renew atomically, returning the outcome and any port conflict to
 /// report. Grants and approval requests commit; a suggestion changes nothing.
-fn claim_port(db: &mut Connection, claim: PortClaim) -> Result<(Acquisition, Option<String>)> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    store::require_ready(&tx, &claim.workspace_id)?;
-    let existing = store::ports(&tx, Some(&claim.workspace_id))?;
+fn claim_port(tx: &Transaction<'_>, claim: PortClaim) -> Result<(Acquisition, Option<String>)> {
+    store::require_ready(tx, &claim.workspace_id)?;
+    let existing = store::ports(tx, Some(&claim.workspace_id))?;
     if let Some(reservation) = existing.iter().find(|p| p.name == claim.name) {
         let renewed = renew_reservation(tx, reservation, claim.request)?;
         return Ok((Acquisition::Allocation(Allocation::Granted(renewed)), None));
@@ -310,15 +307,14 @@ fn claim_port(db: &mut Connection, claim: PortClaim) -> Result<(Acquisition, Opt
             lifetime,
             claim.request.reason.as_deref(),
         );
-        if let Some(approval) = approvals::check(&tx, approval)? {
-            tx.commit()?;
+        if let Some(approval) = approvals::check(tx, approval)? {
             return Ok((
                 Acquisition::Allocation(Allocation::Approval(Box::new(approval))),
                 None,
             ));
         }
     }
-    let port = match select_port(&tx, &claim)? {
+    let port = match select_port(tx, &claim)? {
         Selection::Reserve(port) => port,
         Selection::Suggest {
             requested,
@@ -347,8 +343,7 @@ fn claim_port(db: &mut Connection, claim: PortClaim) -> Result<(Acquisition, Opt
         env_var: claim.env_var,
         reason: claim.reason,
     };
-    insert_reservation(&tx, &reservation)?;
-    tx.commit()?;
+    insert_reservation(tx, &reservation)?;
     Ok((
         Acquisition::Allocation(Allocation::Granted(reservation)),
         conflict,
@@ -358,7 +353,7 @@ fn claim_port(db: &mut Connection, claim: PortClaim) -> Result<(Acquisition, Opt
 /// An existing reservation with the same name is returned again, refreshing
 /// its reason, as long as the request does not contradict it.
 fn renew_reservation(
-    tx: Transaction<'_>,
+    tx: &Transaction<'_>,
     existing: &PortReservation,
     request: PortRequest,
 ) -> Result<PortReservation> {
@@ -378,7 +373,6 @@ fn renew_reservation(
         )?;
         reservation.reason = Some(reason);
     }
-    tx.commit()?;
     Ok(reservation)
 }
 

@@ -149,14 +149,13 @@ pub(crate) fn record(
 /// [`record`] in a transaction of its own, returning the copies' records in
 /// their order.
 pub(super) fn record_all(
-    db: &mut Connection,
+    tx: &Transaction<'_>,
     space_id: &str,
     source: FileSource,
     attacher: &Attacher,
     copies: &[Copy],
 ) -> Result<Vec<AttachedFile>> {
-    let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    record(&tx, space_id, source, Some(attacher), copies)?;
+    record(tx, space_id, source, Some(attacher), copies)?;
     let records = {
         let mut statement = tx.prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE path=?1"
@@ -166,7 +165,6 @@ pub(super) fn record_all(
             .map(|copy| Ok(statement.query_row([copy.path.to_string_lossy()], row)?))
             .collect::<Result<Vec<_>>>()?
     };
-    tx.commit()?;
     Ok(records)
 }
 
@@ -266,21 +264,17 @@ pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<String>> {
 }
 
 /// Forget the records `ids`.
-pub(super) fn forget(db: &mut Connection, ids: &[i64]) -> Result<()> {
-    let tx = db.transaction()?;
+pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
     for id in ids {
         tx.execute("DELETE FROM workspace_files WHERE id=?1", [id])?;
     }
-    tx.commit()?;
     Ok(())
 }
 
 /// Forget every record of the removed workspace or removed chat `space_id`.
-pub(super) fn forget_space(db: &mut Connection, space_id: &str) -> Result<()> {
-    let tx = db.transaction()?;
+pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &str) -> Result<()> {
     tx.execute("DELETE FROM workspace_files WHERE space_id=?1", [space_id])?;
     tx.execute("DELETE FROM ended_chats WHERE chat_id=?1", [space_id])?;
-    tx.commit()?;
     Ok(())
 }
 

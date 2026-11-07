@@ -406,14 +406,12 @@ impl Manager {
         let id = id.to_owned();
         let error = format!("{error:#}");
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 tx.execute(
                     "UPDATE workspaces SET state=?2,error=?3 WHERE id=?1",
                     params![id, state, error],
                 )?;
-                record(&tx, &id, EventKind::Retained, cause, Some(&error))?;
-                tx.commit()?;
+                record(tx, &id, EventKind::Retained, cause, Some(&error))?;
                 Ok(())
             })
             .await

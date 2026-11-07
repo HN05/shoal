@@ -590,14 +590,7 @@ impl Manager {
         &self,
         request: ApprovalRequest,
     ) -> Result<Option<ApprovalRequest>> {
-        self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let pending = check(&tx, request)?;
-                tx.commit()?;
-                Ok(pending)
-            })
-            .await
+        self.store.write(move |tx| check(tx, request)).await
     }
 
     /// [`request_merge`] in its own transaction.
@@ -605,14 +598,7 @@ impl Manager {
         &self,
         request: ApprovalRequest,
     ) -> Result<Option<ApprovalRequest>> {
-        self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let undecided = request_merge(&tx, request)?;
-                tx.commit()?;
-                Ok(undecided)
-            })
-            .await
+        self.store.write(move |tx| request_merge(tx, request)).await
     }
 
     /// Whether a PR proposal of the workspace waits for the user's decision.
@@ -639,11 +625,9 @@ impl Manager {
         name: String,
     ) -> Result<bool> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                store::require_ready(&tx, &owner)?;
-                let released = release(&tx, &owner, &target, &name)?;
-                tx.commit()?;
+            .write(move |tx| {
+                store::require_ready(tx, &owner)?;
+                let released = release(tx, &owner, &target, &name)?;
                 Ok(released)
             })
             .await
@@ -655,25 +639,13 @@ impl Manager {
         request: ApprovalRequest,
         record: fn(&Transaction<'_>, ApprovalRequest) -> Result<proposals::Recorded>,
     ) -> Result<proposals::Recorded> {
-        self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let recorded = record(&tx, request)?;
-                tx.commit()?;
-                Ok(recorded)
-            })
-            .await
+        self.store.write(move |tx| record(tx, request)).await
     }
 
     /// [`proposals::save`] in its own transaction.
     pub(crate) async fn save_proposal(&self, request: ApprovalRequest) -> Result<()> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                proposals::save(&tx, &request)?;
-                tx.commit()?;
-                Ok(())
-            })
+            .write(move |tx| proposals::save(tx, &request))
             .await
     }
 
@@ -682,12 +654,9 @@ impl Manager {
     pub(crate) async fn forget_proposal(&self, request: &ApprovalRequest) -> Result<()> {
         let request = request.clone();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                events::record_approval(&tx, EventKind::ApprovalDecided, &request)?;
-                proposals::remove(&tx, &request.key)?;
-                tx.commit()?;
-                Ok(())
+            .write(move |tx| {
+                events::record_approval(tx, EventKind::ApprovalDecided, &request)?;
+                proposals::remove(tx, &request.key)
             })
             .await
     }
@@ -732,15 +701,13 @@ impl Manager {
         selected: ApprovalRequest,
     ) -> Result<(ApprovalRequest, bool)> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let request = withdraw(&tx, &selected)?;
+            .write(move |tx| {
+                let request = withdraw(tx, &selected)?;
                 let retracted = notifications::retract_about(
-                    &tx,
+                    tx,
                     NotificationKind::ApprovalRequested,
                     &request.key,
                 )?;
-                tx.commit()?;
                 Ok((request, retracted))
             })
             .await
@@ -767,14 +734,7 @@ impl Manager {
 
     /// [`retire`] in its own transaction, such as for a stale request.
     pub async fn retire_approval(&self, request: ApprovalRequest) -> Result<()> {
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                retire(&tx, &request)?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await
+        self.store.write(move |tx| retire(tx, &request)).await
     }
 
     /// Every request, or those of the workspace `selector` names, or those
@@ -917,9 +877,8 @@ impl Manager {
         let _hold = self.hold_decision_guard(&request, approve).await?;
         let _guard = self.gates.lock_simulators().await;
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let stored = by_key(&tx, &key)?.context("the approval request no longer exists")?;
+            .write(move |tx| {
+                let stored = by_key(tx, &key)?.context("the approval request no longer exists")?;
                 ensure!(
                     stored.decider.as_deref() == Some(coordinator.as_str()),
                     "approval request {id} is not routed to this workspace"
@@ -929,12 +888,11 @@ impl Manager {
                     format_args!("approval request {id}"),
                 )?;
                 ensure!(
-                    !approve || may_decide(&tx, &coordinator, &stored)?,
+                    !approve || may_decide(tx, &coordinator, &stored)?,
                     "approval {id}: this workspace holds no grant for {}; deny it or pass it up with shoal approvals --escalate {id}",
                     stored.subject()
                 );
-                let decision = decide_and_place(&tx, &key, approve)?;
-                tx.commit()?;
+                let decision = decide_and_place(tx, &key, approve)?;
                 Ok(decision)
             })
             .await
@@ -952,12 +910,7 @@ impl Manager {
         // transactions under this gate; a decision must not land between them.
         let _guard = self.gates.lock_simulators().await;
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let decision = decide_and_place(&tx, &key, approve)?;
-                tx.commit()?;
-                Ok(decision)
-            })
+            .write(move |tx| decide_and_place(tx, &key, approve))
             .await
     }
 
@@ -1070,16 +1023,14 @@ impl Manager {
         let (key, workspace) = (request.key.clone(), request.space_id.clone());
         let above = above.map(str::to_owned);
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 // Passed up, it goes on above its decider, whatever became
                 // of the requester's agent since it was routed.
                 let candidates = match &above {
-                    Some(above) => crate::daemon::workspace::spaces_above(&tx, above, &agents)?,
-                    None => crate::daemon::workspace::deciders(&tx, &workspace, &agents)?,
+                    Some(above) => crate::daemon::workspace::spaces_above(tx, above, &agents)?,
+                    None => crate::daemon::workspace::deciders(tx, &workspace, &agents)?,
                 };
-                let routed = route(&tx, &key, &candidates, above.as_deref())?;
-                tx.commit()?;
+                let routed = route(tx, &key, &candidates, above.as_deref())?;
                 Ok(routed)
             })
             .await
@@ -1145,12 +1096,7 @@ impl Manager {
         let (key, decider) = (request.key.clone(), request.decider.clone());
         let released = self
             .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                give_back(&tx, &key, decider.as_deref())?;
-                tx.commit()?;
-                Ok(())
-            })
+            .write(move |tx| give_back(tx, &key, decider.as_deref()))
             .await;
         if let Err(error) = released {
             log!("approval {} not given back: {error:#}", request.number);

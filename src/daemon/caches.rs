@@ -1,7 +1,6 @@
 //! Emptying a repository's shared tool caches, which only happens while
 //! nothing Shoal started can be using them.
 use anyhow::Result;
-use rusqlite::{Connection, TransactionBehavior};
 
 pub(crate) use crate::client::cleanup::Emptying;
 use crate::{
@@ -36,7 +35,7 @@ impl Manager {
         let (repository_id, moving) = (repo.id.clone(), layout.clone());
         let moved = self
             .store
-            .run(move |db| move_unless_running(db, &repository_id, &moving, dry_run))
+            .write(move |tx| move_unless_running(tx, &repository_id, &moving, dry_run))
             .await?;
         let Some(caches) = moved else {
             return Ok(Some(Emptying::Busy {
@@ -55,13 +54,12 @@ impl Manager {
 /// an execution prepares the caches under the same write lock, so none can
 /// start in between.
 fn move_unless_running(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     repository_id: &str,
     layout: &Layout,
     dry_run: bool,
 ) -> Result<Option<Vec<String>>> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    if store::repository_has_executions(&tx, repository_id)? {
+    if store::repository_has_executions(tx, repository_id)? {
         return Ok(None);
     }
     let caches = if dry_run {
@@ -69,7 +67,6 @@ fn move_unless_running(
     } else {
         layout.move_aside()?
     };
-    tx.commit()?;
     Ok(Some(caches))
 }
 

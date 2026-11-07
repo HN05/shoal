@@ -43,7 +43,7 @@ impl Manager {
             released,
         } = match self
             .store
-            .run(move |db| save(db, restore, None, None))
+            .write(move |tx| save(tx, restore, None, None))
             .await
         {
             Ok(saved) => saved,
@@ -76,7 +76,7 @@ impl Manager {
         let stopped_by = stopped_by.map(str::to_owned);
         let Saved { running, released } = self
             .store
-            .run(move |db| save(db, ChatRestore::Resume, Some(&chat), stopped_by.as_deref()))
+            .write(move |tx| save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_deref()))
             .await?;
         let (id, process) = running
             .into_iter()
@@ -186,7 +186,7 @@ impl Manager {
         };
         let owner = self.root_dir_owner();
         let chat = (self.store)
-            .run(move |db| restore(db, &owner, &restored))
+            .write(move |tx| restore(tx, &owner, &restored))
             .await?;
         self.give_restored_tmp_dir(chat, repository.as_ref(), pid)
             .await
@@ -210,7 +210,7 @@ impl Manager {
                 let id = chat.id.clone();
                 let owner = self.root_dir_owner();
                 let (_, released) = (self.store)
-                    .run(move |db| resave(db, &owner, &id, pid, None))
+                    .write(move |tx| resave(tx, &owner, &id, pid, None))
                     .await?;
                 self.ask_user_about(&released).await;
                 Err(error)
@@ -237,7 +237,7 @@ impl Manager {
         let owner = self.root_dir_owner();
         let stopped_by = (stopped_by.map(str::to_owned)).or_else(|| self.chat_agents.stopper(id));
         let (saved, released) = (self.store)
-            .run(move |db| resave(db, &owner, &chat, pid, stopped_by.as_deref()))
+            .write(move |tx| resave(tx, &owner, &chat, pid, stopped_by.as_deref()))
             .await?;
         self.ask_user_about(&released).await;
         self.notify_restore_failed(&saved, error).await;
@@ -322,13 +322,12 @@ struct Saved {
 /// `restore` says, stopped by the process of the space `stopped_by`, or by
 /// Shoal.
 fn save(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     restore: ChatRestore,
     only: Option<&str>,
     stopped_by: Option<&str>,
 ) -> Result<Saved> {
-    let tx = db.transaction()?;
-    let mut running = super::recorded_processes(&tx)?;
+    let mut running = super::recorded_processes(tx)?;
     running.retain(|(id, _)| only.is_none_or(|only| only == id));
     let mut released = Vec::new();
     for (id, process) in &running {
@@ -337,9 +336,8 @@ fn save(
                 saved=1,stopped_by=?4 WHERE id=?1",
             params![id, restore, live_unique_id(process)?, stopped_by],
         )?;
-        released.extend(release_decided_by(&tx, id)?);
+        released.extend(release_decided_by(tx, id)?);
     }
-    tx.commit()?;
     Ok(Saved { running, released })
 }
 
@@ -358,13 +356,12 @@ fn live_unique_id(process: &Identity) -> Result<Option<String>> {
 /// once it runs as another, returning it with the requests it decided, given
 /// back to the user. A chat `pid` never took over keeps its stopper.
 fn resave(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     owner: &std::path::Path,
     id: &str,
     pid: u32,
     stopped_by: Option<&str>,
 ) -> Result<(Chat, Vec<ApprovalRequest>)> {
-    let tx = db.transaction()?;
     tx.execute(
         "UPDATE chats SET restore=?3,stopped_at=unixepoch(),saved=1
          WHERE id=?1 AND pid=?2 AND restore IS NULL",
@@ -375,7 +372,7 @@ fn resave(
         "UPDATE chats SET stopped_by=?3 WHERE id=?1 AND pid=?2",
         params![id, pid, stopped_by],
     )?;
-    let chat = recorded(&tx, owner)?
+    let chat = recorded(tx, owner)?
         .into_iter()
         .find(|chat| chat.id == id)
         .context("the chat ended")?;
@@ -384,8 +381,7 @@ fn resave(
         "chat {id} runs as process {}",
         chat.pid
     );
-    let released = release_decided_by(&tx, id)?;
-    tx.commit()?;
+    let released = release_decided_by(tx, id)?;
     Ok((chat, released))
 }
 
@@ -428,10 +424,13 @@ struct Restored {
 /// is moved when it hands over, unless a restore took it first. The check
 /// before it found nothing its stops signalled still running, nor anything
 /// they started.
-fn restore(db: &mut Connection, owner: &std::path::Path, restored: &Restored) -> Result<Chat> {
-    let tx = db.transaction()?;
+fn restore(
+    tx: &rusqlite::Transaction<'_>,
+    owner: &std::path::Path,
+    restored: &Restored,
+) -> Result<Chat> {
     let repository = restored.repository.as_deref();
-    ensure_place_free(&tx, repository, restored.workspace.as_deref())?;
+    ensure_place_free(tx, repository, restored.workspace.as_deref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
             unique_id=?6,stopped_by=NULL
@@ -450,12 +449,11 @@ fn restore(db: &mut Connection, owner: &std::path::Path, restored: &Restored) ->
         ],
     )?;
     ensure!(updated == 1, "the chat is no longer stopped");
-    stopped::forget(&tx, &restored.id)?;
-    let chat = recorded(&tx, owner)?
+    stopped::forget(tx, &restored.id)?;
+    let chat = recorded(tx, owner)?
         .into_iter()
         .find(|chat| chat.id == restored.id)
         .context("the chat ended")?;
-    tx.commit()?;
     Ok(chat)
 }
 

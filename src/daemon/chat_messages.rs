@@ -62,14 +62,12 @@ impl Manager {
     ) -> Result<()> {
         let queued = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 let paths: Vec<_> = attachments.iter().map(|copy| copy.path.clone()).collect();
-                let queued = insert(&tx, &chat, &About::default(), None, &message, &paths)?;
+                let queued = insert(tx, &chat, &About::default(), None, &message, &paths)?;
                 let queued = queued.is_some();
                 let source = workspace_files::FileSource::Message;
-                workspace_files::record(&tx, &chat, source, Some(&attacher), &attachments)?;
-                tx.commit()?;
+                workspace_files::record(tx, &chat, source, Some(&attacher), &attachments)?;
                 Ok(queued)
             })
             .await?;
@@ -97,15 +95,13 @@ impl Manager {
         let workspace_id = workspace_id.map(str::to_owned);
         let queued = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 let about = About {
                     name: workspace,
                     id: workspace_id,
                     subject: None,
                 };
-                let queued = insert(&tx, &chat, &about, kind, &message, &attachments)?.is_some();
-                tx.commit()?;
+                let queued = insert(tx, &chat, &about, kind, &message, &attachments)?.is_some();
                 Ok(queued)
             })
             .await?;
@@ -207,16 +203,14 @@ impl Manager {
     pub async fn mark_chat_messages_delivered(&self, chat: &str, ids: Vec<i64>) -> Result<()> {
         let chat = chat.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 for id in ids {
                     tx.execute(
                         "DELETE FROM chat_messages WHERE id=?1 AND chat_id=?2",
                         params![id, chat],
                     )?;
-                    crate::daemon::questions::delete_delivered(&tx, &chat, id)?;
+                    crate::daemon::questions::delete_delivered(tx, &chat, id)?;
                 }
-                tx.commit()?;
                 Ok(())
             })
             .await

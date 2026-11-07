@@ -2,7 +2,7 @@
 //! guards every mutation shares.
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, OptionalExtension, Params, Row};
+use rusqlite::{Connection, OptionalExtension, Params, Row, Transaction, TransactionBehavior};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
@@ -36,6 +36,8 @@ impl Store {
         let store = Self {
             worker: worker::Worker::start(path)?,
         };
+        // Not `write`: tests migrate plain connections, so the migration
+        // opens its own transaction.
         store
             .run(migrations::migrate)
             .await
@@ -46,8 +48,7 @@ impl Store {
     /// Quarantine interrupted operations while the daemon holds its startup lock.
     /// This commits separately from migration and must precede auditing or serving.
     pub async fn quarantine_interrupted_operations(&self) -> Result<()> {
-        self.run(|db| {
-            let tx = db.transaction()?;
+        self.write(|tx| {
             tx.execute(
                 "UPDATE simulator_clean_requests SET record=json_set(record, '$.status', ?1)
                     WHERE json_extract(record, '$.status')=?2",
@@ -65,7 +66,6 @@ impl Store {
                     serde_json::to_string(&WorkspaceState::transient().collect::<Vec<_>>())?,
                 ],
             )?;
-            tx.commit()?;
             Ok(())
         })
         .await
@@ -73,11 +73,36 @@ impl Store {
     }
 
     /// Run once on the connection's blocking worker, waiting for queue space.
+    /// Prefer `write` or `read`; this suits an operation that manages its own
+    /// transactions or needs none.
     pub async fn run<T: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut Connection) -> Result<T> + Send + 'static,
     ) -> Result<T> {
         self.worker.run(operation).await
+    }
+
+    /// Run once in an immediate transaction that commits when the operation
+    /// succeeds and rolls back when it fails.
+    pub async fn write<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&Transaction<'_>) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        self.run(|db| write_transaction(db, operation)).await
+    }
+
+    /// Run once in a deferred transaction, so every query reads one snapshot.
+    pub async fn read<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&Transaction<'_>) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        self.run(|db| {
+            let tx = db.transaction()?;
+            let value = operation(&tx)?;
+            tx.commit()?;
+            Ok(value)
+        })
+        .await
     }
 
     pub(crate) fn watch_changes(&self) -> tokio::sync::watch::Receiver<()> {
@@ -87,6 +112,18 @@ impl Store {
     pub async fn shutdown(&self) {
         self.worker.shutdown().await;
     }
+}
+
+/// Run `operation` in an immediate transaction on `db`, as [`Store::write`]
+/// does, for an operation that runs several transactions on the worker.
+pub fn write_transaction<T>(
+    db: &mut Connection,
+    operation: impl FnOnce(&Transaction<'_>) -> Result<T>,
+) -> Result<T> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let value = operation(&tx)?;
+    tx.commit()?;
+    Ok(value)
 }
 
 /// Whether the supplied SELECT query returns any rows.

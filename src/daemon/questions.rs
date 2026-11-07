@@ -567,20 +567,19 @@ struct Asking {
 /// asked before. A chat asker's turn must be marked, and recording consumes
 /// the mark, also for a repeated question.
 fn record(
-    db: &mut Connection,
+    tx: &Transaction<'_>,
     space: &PresentSpace,
     asking: &Asking,
     asker: &Asker,
     removing: &crate::daemon::chats::Removing,
 ) -> Result<Recorded> {
     let Asking { ask, files } = asking;
-    let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     // A space reserved for removal takes no question its cleanup checks have
     // not seen. A chat's reservation precedes the removal's next read here,
     // on the store's one thread, so the removal sees any question before it.
     match space {
         PresentSpace::Workspace(workspace) => {
-            crate::daemon::store::require_ready(&tx, &workspace.id)?
+            crate::daemon::store::require_ready(tx, &workspace.id)?
         }
         PresentSpace::Chat(chat) => ensure!(
             !removing.reserved(&chat.id),
@@ -589,18 +588,16 @@ fn record(
         ),
     }
     if let Asker::Chat(turn) = asker
-        && !set_chat_mark(&tx, turn, false)?
+        && !set_chat_mark(tx, turn, false)?
     {
         return Ok(Recorded::Unmarked);
     }
-    if let Some(question) = repeated(&tx, space.id(), ask, files)? {
-        tx.commit()?;
+    if let Some(question) = repeated(tx, space.id(), ask, files)? {
         return Ok(Recorded::Repeated(question));
     }
     let in_chat = matches!(asker, Asker::Chat(_));
-    let number = insert(&tx, space, ask, files, in_chat)?;
-    let question = by_number(&tx, number)?.context("recorded question is missing")?;
-    tx.commit()?;
+    let number = insert(tx, space, ask, files, in_chat)?;
+    let question = by_number(tx, number)?.context("recorded question is missing")?;
     Ok(Recorded::New(question))
 }
 
@@ -743,7 +740,7 @@ impl Manager {
         let removing = self.chat_removals.clone();
         let recorded = self
             .store
-            .run(move |db| record(db, &space, &asking, &asker, &removing))
+            .write(move |tx| record(tx, &space, &asking, &asker, &removing))
             .await?;
         match recorded {
             Recorded::Unmarked => Ok(None),
@@ -853,12 +850,7 @@ impl Manager {
     ) -> Result<Question> {
         let question = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = record_answer(&tx, number, &answer, shown.as_ref())?;
-                tx.commit()?;
-                Ok(question)
-            })
+            .write(move |tx| record_answer(tx, number, &answer, shown.as_ref()))
             .await?;
         // The answer waits in the inbox of a workspace's or chat's agents.
         self.signals.agent_message_queued();
@@ -880,16 +872,14 @@ impl Manager {
         let _gate = self.gates.lock_announcements().await;
         let (question, retracted) = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = withdraw(&tx, &space, number, shown.as_ref())?;
+            .write(move |tx| {
+                let question = withdraw(tx, &space, number, shown.as_ref())?;
                 let retracted = notifications::retract(
-                    &tx,
+                    tx,
                     &question.space_id,
                     NotificationKind::QuestionAsked,
                     &question.notification(),
                 )?;
-                tx.commit()?;
                 Ok((question, retracted))
             })
             .await?;
@@ -917,13 +907,11 @@ impl Manager {
         let _gate = self.gates.lock_announcements().await;
         let closed = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 if let Some(turn) = &turn {
-                    set_chat_mark(&tx, turn, false)?;
+                    set_chat_mark(tx, turn, false)?;
                 }
-                let closed = close_in_chat(&tx, space.id())?;
-                tx.commit()?;
+                let closed = close_in_chat(tx, space.id())?;
                 Ok(closed)
             })
             .await?;

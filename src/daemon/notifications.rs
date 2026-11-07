@@ -328,12 +328,7 @@ impl Manager {
     ) -> Result<Notification> {
         let space = self.space_about(selector).await?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let notification = withdraw_message(&tx, &space, id)?;
-                tx.commit()?;
-                Ok(notification)
-            })
+            .write(move |tx| withdraw_message(tx, &space, id))
             .await
     }
 
@@ -386,11 +381,9 @@ impl Manager {
     ) -> Result<i64> {
         let recorded = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let about = about.resolve(&tx)?;
-                let recorded = insert(&tx, &about, kind, &message, &files)?;
-                tx.commit()?;
+            .write(move |tx| {
+                let about = about.resolve(tx)?;
+                let recorded = insert(tx, &about, kind, &message, &files)?;
                 Ok(recorded)
             })
             .await?;
@@ -470,12 +463,10 @@ impl Manager {
     /// Mark exactly these notifications as shown.
     pub async fn mark_notifications_read(&self, ids: Vec<i64>) -> Result<()> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 for id in ids {
                     tx.execute("UPDATE notifications SET read=1 WHERE id=?1", [id])?;
                 }
-                tx.commit()?;
                 Ok(())
             })
             .await

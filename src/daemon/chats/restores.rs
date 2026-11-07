@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::params;
 use tokio::task::JoinHandle;
 
 use super::{recorded, saved::still_runs};
@@ -32,7 +32,7 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
     }
     let owner = manager.root_dir_owner();
     let claimed = (manager.store)
-        .run(move |db| claim_automatic(db, &owner))
+        .write(move |tx| claim_automatic(tx, &owner))
         .await?;
     drop(saving);
     Ok(claimed
@@ -73,15 +73,14 @@ impl Manager {
 
 /// Make the chats saved to come back on their own wait for `shoal resume`,
 /// returning them, unless one still runs, which runs on.
-fn claim_automatic(db: &mut Connection, owner: &std::path::Path) -> Result<Vec<Chat>> {
-    let tx = db.transaction()?;
-    let saved: Vec<Chat> = recorded(&tx, owner)?
+fn claim_automatic(tx: &rusqlite::Transaction<'_>, owner: &std::path::Path) -> Result<Vec<Chat>> {
+    let saved: Vec<Chat> = recorded(tx, owner)?
         .into_iter()
         .filter(|chat| chat.restore == Some(ChatRestore::Automatic))
         .collect();
     let mut claimed = Vec::new();
     for chat in saved {
-        let restore = match still_runs(&tx, &chat)? {
+        let restore = match still_runs(tx, &chat)? {
             true => None,
             false => Some(ChatRestore::Resume),
         };
@@ -96,7 +95,6 @@ fn claim_automatic(db: &mut Connection, owner: &std::path::Path) -> Result<Vec<C
             claimed.push(chat);
         }
     }
-    tx.commit()?;
     Ok(claimed)
 }
 

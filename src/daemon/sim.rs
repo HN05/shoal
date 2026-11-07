@@ -558,11 +558,9 @@ impl Manager {
 
     async fn release_simulator_access(&self, owner: String, name: String) -> Result<bool> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 let released =
-                    approvals::release(&tx, &owner, &approvals::Target::Simulator, &name)?;
-                tx.commit()?;
+                    approvals::release(tx, &owner, &approvals::Target::Simulator, &name)?;
                 Ok(released)
             })
             .await

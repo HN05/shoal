@@ -2,7 +2,7 @@
 //! agent and session keep running until completion cleanup, when requested,
 //! removes the chat as it removes a workspace.
 use anyhow::{Context as _, Result, ensure};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 
 use crate::{
     client::assignments::Done,
@@ -51,7 +51,7 @@ impl Manager {
         };
         let (id, recorded) = (chat.id.clone(), completion.clone());
         let closed = (self.store)
-            .run(move |db| record_completion(db, &id, &recorded))
+            .write(move |tx| record_completion(tx, &id, &recorded))
             .await?;
         if !closed.is_empty() {
             self.signals.question_changed();
@@ -139,7 +139,7 @@ impl Manager {
         let chat = (self.chat_by_id(id).await?).with_context(|| format!("no chat {id}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let id = chat.id.clone();
-        self.store.run(move |db| take_completion(db, &id)).await
+        self.store.write(move |tx| take_completion(tx, &id)).await
     }
 
     async fn done_chat(&self, id: &str) -> Result<Chat> {
@@ -163,11 +163,10 @@ impl Manager {
 /// questions, which its finished work waits on no longer; the questions it
 /// closed. A completion that would change nothing fails.
 fn record_completion(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     id: &str,
     completion: &Completion,
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
-    let tx = db.transaction()?;
     let previous: Option<Option<String>> = tx
         .query_row(
             "SELECT completion FROM chats WHERE id=?1 AND restore IS NULL",
@@ -183,18 +182,16 @@ fn record_completion(
         "UPDATE chats SET completion=?2 WHERE id=?1",
         params![id, serde_json::to_string(completion)?],
     )?;
-    let closed = questions::close_open(&tx, id)?;
+    let closed = questions::close_open(tx, id)?;
     ensure!(
         previous.as_ref() != Some(completion) || !closed.is_empty(),
         "the chat is already marked done at this HEAD"
     );
-    tx.commit()?;
     Ok(closed)
 }
 
 /// Delete and return the completion the chat `id` recorded.
-fn take_completion(db: &mut Connection, id: &str) -> Result<Completion> {
-    let tx = db.transaction()?;
+fn take_completion(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Completion> {
     let record: String = tx
         .query_row(
             "SELECT completion FROM chats WHERE id=?1 AND completion IS NOT NULL",
@@ -206,7 +203,6 @@ fn take_completion(db: &mut Connection, id: &str) -> Result<Completion> {
     // An unreadable record stays in place for diagnosis.
     let completion = serde_json::from_str(&record)?;
     tx.execute("UPDATE chats SET completion=NULL WHERE id=?1", [id])?;
-    tx.commit()?;
     Ok(completion)
 }
 

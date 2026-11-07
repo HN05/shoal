@@ -343,10 +343,8 @@ impl Manager {
         let workspace_id = workspace_id.to_owned();
         let queued = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let queued = insert(&tx, &workspace_id, &message, &attachments)?;
-                tx.commit()?;
+            .write(move |tx| {
+                let queued = insert(tx, &workspace_id, &message, &attachments)?;
                 Ok(queued.is_some())
             })
             .await?;
@@ -380,18 +378,16 @@ impl Manager {
         let workspace_id = workspace_id.to_owned();
         let queued = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 let paths: Vec<_> = attachments.iter().map(|copy| copy.path.clone()).collect();
-                let queued = insert_delivered(&tx, &workspace_id, &message, &paths, delivery)?;
+                let queued = insert_delivered(tx, &workspace_id, &message, &paths, delivery)?;
                 workspace_files::record(
-                    &tx,
+                    tx,
                     &workspace_id,
                     workspace_files::FileSource::Message,
                     attacher.as_ref(),
                     &attachments,
                 )?;
-                tx.commit()?;
                 Ok(queued.is_some())
             })
             .await?;
@@ -511,16 +507,14 @@ impl Manager {
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 for id in ids {
                     tx.execute(
                         "DELETE FROM agent_messages WHERE id=?1 AND workspace_id=?2",
                         params![id, workspace.id],
                     )?;
-                    crate::daemon::questions::delete_delivered(&tx, &workspace.id, id)?;
+                    crate::daemon::questions::delete_delivered(tx, &workspace.id, id)?;
                 }
-                tx.commit()?;
                 Ok(())
             })
             .await?;

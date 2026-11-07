@@ -3,7 +3,6 @@
 //! approval requests it had not decided, its attached files stay for the
 //! retention period, and its record and temporary directory go.
 use anyhow::{Result, ensure};
-use rusqlite::Connection;
 
 use crate::{
     daemon::{
@@ -22,7 +21,7 @@ impl Manager {
         let id = chat.id.clone();
         let deleted = self
             .store
-            .run(move |db| delete(db, &id, expires_at))
+            .write(move |tx| delete(tx, &id, expires_at))
             .await?;
         if let Err(error) = self.delete_chat_tmp_dir(chat).await {
             log!(
@@ -48,11 +47,14 @@ struct Deleted {
 
 /// Delete the record of the stopped chat `id`, giving the user its unread
 /// messages and keeping its attached files until `expires_at`.
-fn delete(db: &mut Connection, id: &str, expires_at: crate::time::UnixTime) -> Result<Deleted> {
-    let tx = db.transaction()?;
+fn delete(
+    tx: &rusqlite::Transaction<'_>,
+    id: &str,
+    expires_at: crate::time::UnixTime,
+) -> Result<Deleted> {
     ensure!(
         store::exists(
-            &tx,
+            tx,
             "SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL",
             [id]
         )?,
@@ -60,15 +62,14 @@ fn delete(db: &mut Connection, id: &str, expires_at: crate::time::UnixTime) -> R
     );
     // The spaces below go first; none may outlive it.
     ensure!(
-        crate::daemon::workspace::children(&tx, id)?.is_empty(),
+        crate::daemon::workspace::children(tx, id)?.is_empty(),
         "workspaces were opened from it during removal; retaining it"
     );
-    let notification = chat_messages::hand_to_user(&tx, id)?;
-    workspace_files::keep_ended_chat(&tx, id, expires_at)?;
+    let notification = chat_messages::hand_to_user(tx, id)?;
+    workspace_files::keep_ended_chat(tx, id, expires_at)?;
     // With the record, so no request is left with a removed decider.
-    let released = release_decided_by(&tx, id)?;
+    let released = release_decided_by(tx, id)?;
     tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
-    tx.commit()?;
     Ok(Deleted {
         notification,
         released,

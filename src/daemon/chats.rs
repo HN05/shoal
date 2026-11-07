@@ -222,7 +222,7 @@ impl Manager {
         let below = parent.map(|parent| (parent, removing));
         let chat = self
             .store
-            .run(move |db| insert(db, chat, &recorded, hands_over, below))
+            .write(move |tx| insert(tx, chat, &recorded, hands_over, below))
             .await?;
         self.give_tmp_dir(chat, home.repository.as_ref(), process)
             .await
@@ -294,7 +294,8 @@ impl Manager {
         // so no other rename or chat start reaches either name in between.
         self.store
             .run(move |db| {
-                let (old, renamed) = rename(db, &owner, &chat, &name)?;
+                let (old, renamed) =
+                    store::write_transaction(db, |tx| rename(tx, &owner, &chat, &name))?;
                 // The chat has its new name even when its files stay behind.
                 if old.name != renamed.name
                     && let Err(error) = move_chat_files(&paths, &old, &renamed)
@@ -513,7 +514,7 @@ impl Manager {
         if exited.is_empty() {
             return Ok(());
         }
-        let released = self.store.run(move |db| stop(db, &exited)).await?;
+        let released = self.store.write(move |tx| stop(tx, &exited)).await?;
         self.ask_user_about(&released).await;
         Ok(())
     }
@@ -635,19 +636,18 @@ struct ChatHome<'a> {
 }
 
 fn insert(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     mut chat: Chat,
     process: &Identity,
     hands_over: bool,
     parent: Option<(String, Removing)>,
 ) -> Result<Chat> {
-    let tx = db.transaction()?;
     let workspace = chat
         .workspace
         .as_ref()
         .map(|workspace| workspace.id.as_str());
-    ensure_place_free(&tx, chat.repository_id.as_deref(), workspace)?;
-    store::ensure_name_available(&tx, &chat.name, None)?;
+    ensure_place_free(tx, chat.repository_id.as_deref(), workspace)?;
+    store::ensure_name_available(tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
             unique_id,scope_token,workspace_id,mode,root_dir)
@@ -679,11 +679,10 @@ fn insert(
     // waited finds the chat below the parent or refuses it.
     if let Some((parent, removing)) = &parent {
         ensure!(!removing.reserved(parent), "{parent} is being removed");
-        workspace::ensure_parent(&tx, chat.repository_id.as_deref(), &chat.id, parent)?;
-        workspace::set_parent(&tx, &chat.id, Some(parent))?;
-        chat.parent = workspace::parent(&tx, &chat.id)?;
+        workspace::ensure_parent(tx, chat.repository_id.as_deref(), &chat.id, parent)?;
+        workspace::set_parent(tx, &chat.id, Some(parent))?;
+        chat.parent = workspace::parent(tx, &chat.id)?;
     }
-    tx.commit()?;
     Ok(chat)
 }
 
@@ -745,9 +744,13 @@ fn ensure_place_free(
 
 /// Rename the running or stopped chat `chat`, by ID or name, to `name` unless
 /// another holds it. Returns the chat before and after.
-fn rename(db: &mut Connection, owner: &Path, chat: &str, name: &SpaceName) -> Result<(Chat, Chat)> {
-    let tx = db.transaction()?;
-    let old = recorded(&tx, owner)?
+fn rename(
+    tx: &rusqlite::Transaction<'_>,
+    owner: &Path,
+    chat: &str,
+    name: &SpaceName,
+) -> Result<(Chat, Chat)> {
+    let old = recorded(tx, owner)?
         .into_iter()
         .find(|running| running.id == chat || running.name == chat)
         .with_context(|| format!("no running chat {chat}"))?;
@@ -755,20 +758,19 @@ fn rename(db: &mut Connection, owner: &Path, chat: &str, name: &SpaceName) -> Re
         // The starting chat's files are not open yet under its name.
         ensure!(
             !store::exists(
-                &tx,
+                tx,
                 "SELECT 1 FROM chats WHERE id=?1 AND starting",
                 [&old.id]
             )?,
             "chat {} is still starting; rename it once it runs",
             old.name
         );
-        store::ensure_name_available(&tx, name, None)?;
+        store::ensure_name_available(tx, name, None)?;
         tx.execute(
             "UPDATE chats SET name=?2 WHERE id=?1",
             params![old.id, name],
         )?;
     }
-    tx.commit()?;
     let renamed = Chat {
         name: name.clone(),
         ..old.clone()
@@ -929,8 +931,10 @@ fn finished(recorded: Vec<(String, Identity)>) -> Vec<(String, Identity)> {
 /// Record the chats still running as the processes `exited` found ended
 /// stopped, to wait for `shoal resume`, returning the requests they decided,
 /// given back to the user, since a stopped chat decides none.
-fn stop(db: &mut Connection, exited: &[(String, Identity)]) -> Result<Vec<ApprovalRequest>> {
-    let tx = db.transaction()?;
+fn stop(
+    tx: &rusqlite::Transaction<'_>,
+    exited: &[(String, Identity)],
+) -> Result<Vec<ApprovalRequest>> {
     let mut released = Vec::new();
     for (id, process) in exited {
         let stopped = tx.execute(
@@ -939,10 +943,9 @@ fn stop(db: &mut Connection, exited: &[(String, Identity)]) -> Result<Vec<Approv
             params![id, process.pid, process.birth, ChatRestore::Resume],
         )?;
         if stopped == 1 {
-            released.extend(release_decided_by(&tx, id)?);
+            released.extend(release_decided_by(tx, id)?);
         }
     }
-    tx.commit()?;
     Ok(released)
 }
 

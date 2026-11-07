@@ -122,7 +122,7 @@ impl Manager {
             tokio::task::spawn_blocking(move || layout.remove_kept(&id)).await??;
         }
         self.store
-            .run(move |db| records::forget_space(db, &space_id))
+            .write(move |tx| records::forget_space(tx, &space_id))
             .await
     }
 }

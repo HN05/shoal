@@ -97,9 +97,9 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
     let directory = tempfile::tempdir().unwrap();
     let store = store(&directory).await;
     store
-        .run(|db| {
+        .write(|tx| {
             let first = queue(
-                db,
+                tx,
                 "work",
                 &ReviewTarget::Workspace,
                 "claude",
@@ -107,9 +107,9 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 UnixTime::from_seconds(1),
             )?
             .id();
-            start(db, first, "one", "base", UnixTime::from_seconds(2))?;
+            start(tx, first, "one", "base", UnixTime::from_seconds(2))?;
             assert!(finish(
-                db,
+                tx,
                 first,
                 "claude",
                 &output(2, Vec::new()),
@@ -123,14 +123,14 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 review: first,
                 number: 2,
             };
-            reply(db, finding, "Is this reachable?", UnixTime::from_seconds(4))?;
-            resolve(db, finding, Some(&Outcome::Fixed))?;
+            reply(tx, finding, "Is this reachable?", UnixTime::from_seconds(4))?;
+            resolve(tx, finding, Some(&Outcome::Fixed))?;
             let duplicate = Outcome::new(OutcomeKind::Duplicate, None, None, Some(finding))?;
-            resolve(db, other, Some(&duplicate))?;
-            assert!(resolve(db, finding, Some(&Outcome::Duplicate { of: finding })).is_err());
+            resolve(tx, other, Some(&duplicate))?;
+            assert!(resolve(tx, finding, Some(&Outcome::Duplicate { of: finding })).is_err());
             assert!(
                 reply(
-                    db,
+                    tx,
                     FindingId {
                         review: first,
                         number: 9
@@ -142,7 +142,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
             );
 
             let second = queue(
-                db,
+                tx,
                 "work",
                 &ReviewTarget::Workspace,
                 "codex",
@@ -150,7 +150,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 UnixTime::from_seconds(6),
             )?
             .id();
-            start(db, second, "two", "base", UnixTime::from_seconds(7))?;
+            start(tx, second, "two", "base", UnixTime::from_seconds(7))?;
             let checked = vec![
                 Checked {
                     finding,
@@ -163,14 +163,14 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 },
             ];
             assert!(finish(
-                db,
+                tx,
                 second,
                 "claude",
                 &output(0, checked),
                 UnixTime::from_seconds(8)
             )?);
 
-            let review = load(db, first)?.unwrap();
+            let review = load(tx, first)?.unwrap();
             assert_eq!(review.workspace, "fix-login");
             assert_eq!(review.state, ReviewState::Finished);
             assert_eq!(review.duration(), Some(std::time::Duration::from_secs(1)));
@@ -186,18 +186,18 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
             assert_eq!(review.findings[1].check, None);
             assert_eq!(review.unresolved().count(), 0);
 
-            let listed = list(db, &["work".into()])?;
+            let listed = list(tx, &["work".into()])?;
             assert_eq!(
                 listed.iter().map(|review| review.id).collect::<Vec<_>>(),
                 [second, first]
             );
-            assert_eq!(latest(db, "work")?.unwrap().id, second);
-            let status = latest_status(db, "work")?.unwrap();
+            assert_eq!(latest(tx, "work")?.unwrap().id, second);
+            let status = latest_status(tx, "work")?.unwrap();
             assert_eq!((status.id, status.unresolved), (second, 0));
-            assert_eq!(earlier(db, "work", second)?.len(), 1);
+            assert_eq!(earlier(tx, "work", second)?.len(), 1);
 
-            resolve(db, finding, None)?;
-            assert_eq!(load(db, first)?.unwrap().unresolved().count(), 1);
+            resolve(tx, finding, None)?;
+            assert_eq!(load(tx, first)?.unwrap().unresolved().count(), 1);
             Ok(())
         })
         .await
@@ -266,9 +266,9 @@ async fn removing_the_workspace_deletes_its_reviews() {
     let directory = tempfile::tempdir().unwrap();
     let store = store(&directory).await;
     store
-        .run(|db| {
+        .write(|tx| {
             let id = queue(
-                db,
+                tx,
                 "work",
                 &ReviewTarget::Workspace,
                 "claude",
@@ -276,16 +276,16 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 UnixTime::from_seconds(1),
             )?
             .id();
-            start(db, id, "head", "base", UnixTime::from_seconds(2))?;
+            start(tx, id, "head", "base", UnixTime::from_seconds(2))?;
             finish(
-                db,
+                tx,
                 id,
                 "claude",
                 &output(1, Vec::new()),
                 UnixTime::from_seconds(3),
             )?;
             reply(
-                db,
+                tx,
                 FindingId {
                     review: id,
                     number: 1,
@@ -293,8 +293,8 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 "Why?",
                 UnixTime::from_seconds(4),
             )?;
-            db.execute("DELETE FROM workspaces WHERE id='work'", [])?;
-            let left: i64 = db.query_row(
+            tx.execute("DELETE FROM workspaces WHERE id='work'", [])?;
+            let left: i64 = tx.query_row(
                 "SELECT (SELECT COUNT(*) FROM reviews)+(SELECT COUNT(*) FROM review_findings)
                     +(SELECT COUNT(*) FROM review_replies)",
                 [],

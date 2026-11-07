@@ -469,7 +469,7 @@ impl Manager {
                 .await?;
         }
         self.store
-            .run(move |db| release_lease(db, &workspace, &pool, &name))
+            .write(move |tx| release_lease(tx, &workspace, &pool, &name))
             .await
     }
 
@@ -514,15 +514,14 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let definitions = self.resource_definitions(&workspace).await?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let all = leases(&tx, None)?;
+            .read(move |tx| {
+                let all = leases(tx, None)?;
                 let mut grouped = grouped_usage(&all);
                 let mut pools = Vec::new();
                 for (name, (scope, definition)) in &definitions {
                     let usage = grouped.remove(&(scope, name.as_str())).unwrap_or_default();
                     let matches = usage.slots == 0
-                        || stored_definition(&tx, scope, name)?.as_ref() == Some(definition);
+                        || stored_definition(tx, scope, name)?.as_ref() == Some(definition);
                     pools.push(pool_status(
                         name.clone(),
                         scope.clone(),
@@ -557,20 +556,19 @@ fn releasable_lease(
 /// Delete a lease and end its approval atomically, in either scope, so
 /// release works even after the pool definition is edited or deleted.
 fn release_lease(
-    db: &mut Connection,
+    tx: &Transaction<'_>,
     workspace: &crate::model::Workspace,
     pool: &str,
     name: &str,
 ) -> Result<()> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    store::require_ready(&tx, &workspace.id)?;
+    store::require_ready(tx, &workspace.id)?;
     let mut released = false;
     for scope in [Scope::Global, Scope::Repo(workspace.repository_id.clone())] {
         let target = Target::Resource {
             scope,
             pool: pool.to_owned(),
         };
-        released |= approvals::release(&tx, &workspace.id, &target, name)?;
+        released |= approvals::release(tx, &workspace.id, &target, name)?;
     }
     ensure!(
         tx.execute(
@@ -580,7 +578,6 @@ fn release_lease(
             || released,
         "unknown resource lease or approval request"
     );
-    tx.commit()?;
     Ok(())
 }
 
@@ -594,7 +591,8 @@ struct Claimant {
 }
 
 /// Claim or renew atomically. Approval and grant outcomes commit; busy outcomes
-/// leave the pool definition and access records unchanged. Earlier queued
+/// leave the pool definition and access records unchanged, so this opens its
+/// own transaction instead of running in `Store::write`. Earlier queued
 /// requests keep new claims busy but never block renewal or approval.
 fn acquire_lease(
     db: &mut Connection,

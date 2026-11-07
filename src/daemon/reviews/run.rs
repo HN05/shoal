@@ -320,11 +320,11 @@ impl Manager {
         let now = UnixTime::now();
         let recorded = self
             .store
-            .run(move |db| match ended {
-                Ended::Returned(output) => store::finish(db, id, &reviewer, &output, now),
-                Ended::Failed(reason) => store::fail(db, id, Some(&reviewer), reason, now),
+            .write(move |tx| match ended {
+                Ended::Returned(output) => store::finish(tx, id, &reviewer, &output, now),
+                Ended::Failed(reason) => store::fail(tx, id, Some(&reviewer), reason, now),
                 Ended::LeftRunning => {
-                    store::fail(db, id, Some(&reviewer), FailureReason::ExecutionFailed, now)
+                    store::fail(tx, id, Some(&reviewer), FailureReason::ExecutionFailed, now)
                 }
                 Ended::Cancelled => Ok(false),
             })

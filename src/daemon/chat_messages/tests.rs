@@ -490,11 +490,9 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     let id = worker.repository_id.clone();
     manager
         .store
-        .run(move |db| {
-            let tx = db.transaction()?;
-            crate::daemon::workspace_files::rebase(&tx, &id, &from, &to)?;
-            super::rebase_attachments(&tx, &from, &to)?;
-            tx.commit()?;
+        .write(move |tx| {
+            crate::daemon::workspace_files::rebase(tx, &id, &from, &to)?;
+            super::rebase_attachments(tx, &from, &to)?;
             Ok(())
         })
         .await
