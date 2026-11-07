@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 
 use super::chat;
+use crate::config_file::ConfigExt;
 use crate::{
     cli::{args::service::ConfigSetupArgs, context::Context},
     config::{Config, modes, templates::Subject},

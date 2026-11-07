@@ -1,6 +1,30 @@
 use super::*;
 use crate::config::{edit, repo::ConfigLayers};
 
+const TEMPLATE: &str = include_str!("../../crates/shoal-client/configs/default.toml");
+
+#[test]
+fn install_writes_the_template_once_and_keeps_edits() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    let expected = home.path().join(".config/shoal/config.toml");
+    let (path, created) = Config::install(&paths).unwrap();
+    assert!(created && path == expected);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), TEMPLATE);
+    std::fs::write(&path, "agent.default = 'claude'\n").unwrap();
+    let (same, created) = Config::install(&paths).unwrap();
+    assert!(!created && same == expected);
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        Config::parse(&text, &paths)
+            .unwrap()
+            .repository
+            .agent
+            .default,
+        "claude".parse::<crate::agent::Agent>().ok()
+    );
+}
+
 #[test]
 fn replace_keeps_the_replaced_file_as_a_backup() {
     let home = tempfile::tempdir().unwrap();

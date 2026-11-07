@@ -145,28 +145,6 @@ fn a_home_other_than_the_users_keeps_its_config_inside() {
 }
 
 #[test]
-fn install_writes_the_template_once_and_keeps_edits() {
-    let home = tempfile::tempdir().unwrap();
-    let paths = Paths::for_test(home.path());
-    let expected = home.path().join(".config/shoal/config.toml");
-    let (path, created) = Config::install_at(expected.clone()).unwrap();
-    assert!(created && path == expected);
-    assert_eq!(fs::read_to_string(&path).unwrap(), TEMPLATE);
-    fs::write(&path, "agent.default = 'claude'\n").unwrap();
-    let (same, created) = Config::install_at(expected.clone()).unwrap();
-    assert!(!created && same == expected);
-    let text = fs::read_to_string(&path).unwrap();
-    assert_eq!(
-        Config::parse(&text, &paths)
-            .unwrap()
-            .repository
-            .agent
-            .default,
-        "claude".parse::<crate::agent::Agent>().ok()
-    );
-}
-
-#[test]
 fn agent_and_job_limits_accept_dynamic_fixed_and_unlimited_values() {
     for (value, expected) in [
         ("'dynamic'", RunLimit::Dynamic),

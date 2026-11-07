@@ -23,7 +23,6 @@ pub mod value;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -205,31 +204,6 @@ impl Config {
             .join("shoal/config.toml")
     }
 
-    /// Write the commented template unless a config file already exists.
-    /// Returns the path and whether this call created it.
-    pub fn install(paths: &Paths) -> Result<(PathBuf, bool)> {
-        Self::install_at(Self::path(paths))
-    }
-
-    fn install_at(path: PathBuf) -> Result<(PathBuf, bool)> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-        }
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => {
-                std::io::Write::write_all(&mut file, default_template().as_bytes())
-                    .with_context(|| format!("write {}", path.display()))?;
-                Ok((path, true))
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok((path, false)),
-            Err(error) => Err(error).with_context(|| format!("create {}", path.display())),
-        }
-    }
-
     /// The global file as one snapshot: machine policy, without the prompt
     /// template files only agent launches need.
     pub fn load(paths: &Paths) -> Result<Self> {
@@ -368,14 +342,6 @@ fn read_template_files(global: &mut RepoConfig, paths: &Paths) -> Result<modes::
     let path = Config::path(paths);
     let directory = path.parent().context("config has no directory")?;
     modes::fill(global, &[directory.to_owned()])
-}
-
-fn default_template() -> &'static str {
-    PACKAGED
-        .iter()
-        .find(|(name, _)| *name == "default")
-        .expect("packaged default config")
-        .1
 }
 
 /// Named templates shipped in this binary, independent of the source checkout.

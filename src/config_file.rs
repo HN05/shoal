@@ -96,8 +96,42 @@ fn keep_backup(path: &Path, backup: &Path) -> std::io::Result<bool> {
     Ok(true)
 }
 
-/// The global config's writes, which hold its edit lock.
+/// Write `packaged` at `path` unless a file already exists there. Whether
+/// this call created it.
+fn install_at(path: &Path, packaged: &str) -> Result<bool> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(mut file) => {
+            std::io::Write::write_all(&mut file, packaged.as_bytes())
+                .with_context(|| format!("write {}", path.display()))?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("create {}", path.display())),
+    }
+}
+
+/// The packaged config named `name`.
+fn packaged(name: &str) -> Result<&'static str> {
+    PACKAGED
+        .iter()
+        .find(|(candidate, _)| *candidate == name)
+        .map(|(_, text)| *text)
+        .with_context(|| format!("unknown packaged config: {name}"))
+}
+
+/// The global config's writes; those that replace a file hold its edit lock.
 pub(crate) trait ConfigExt: Sized {
+    /// Write the commented template unless a config file already exists.
+    /// Returns the path and whether this call created it.
+    fn install(paths: &Paths) -> Result<(PathBuf, bool)>;
+
     /// Write a fresh template, first moving any existing file to
     /// `config.toml.backup` (replacing an older backup). Returns the path and
     /// the backup, if one was made.
@@ -114,6 +148,12 @@ pub(crate) trait ConfigExt: Sized {
 }
 
 impl ConfigExt for Config {
+    fn install(paths: &Paths) -> Result<(PathBuf, bool)> {
+        let path = Self::path(paths);
+        let created = install_at(&path, packaged("default")?)?;
+        Ok((path, created))
+    }
+
     fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
         Self::install_named(paths, "default")
     }
@@ -127,11 +167,7 @@ impl ConfigExt for Config {
     }
 
     fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
-        let text = PACKAGED
-            .iter()
-            .find(|(candidate, _)| *candidate == name)
-            .map(|(_, text)| *text)
-            .with_context(|| format!("unknown packaged config: {name}"))?;
+        let text = packaged(name)?;
         Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
         let path = Self::path(paths);
         let _lock = lock(&path)?;
