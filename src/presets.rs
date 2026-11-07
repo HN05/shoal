@@ -1,8 +1,8 @@
 //! What build tool presets keep on disk: the files of their shared caches
 //! and Xcode's derived data. [`crate::config::presets`] names the presets.
-use std::path::Path;
+use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 pub(crate) use crate::config::presets::{Preset, XCODE_CACHE};
 
@@ -12,10 +12,21 @@ pub mod xcode;
 /// Write the files a preset keeps in its cache `directory`, once the
 /// directory exists.
 pub fn prepare_cache(name: &str, directory: &Path) -> Result<()> {
-    if name == XCODE_CACHE {
-        xcode::prepare(directory)?;
+    match name {
+        XCODE_CACHE => xcode::prepare(directory),
+        _ => Ok(()),
     }
-    Ok(())
+}
+
+/// Write `content` to `path` with `mode`, leaving a file whose content is
+/// current untouched, since build tools compare its modification time.
+fn write_if_changed(path: &Path, content: &str, mode: u32) -> Result<()> {
+    if fs::read_to_string(path).is_ok_and(|current| current == content) {
+        return Ok(());
+    }
+    fs::write(path, content).with_context(|| format!("write {}", path.display()))?;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+        .with_context(|| format!("set permissions on {}", path.display()))
 }
 
 #[cfg(test)]

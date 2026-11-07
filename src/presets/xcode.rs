@@ -7,13 +7,14 @@
 use std::{
     collections::HashSet,
     fs,
-    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     time::SystemTime,
 };
 
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
+
+use super::write_if_changed;
 
 /// The xcconfig `XCODE_XCCONFIG_FILE` names, inside the cache directory.
 pub const XCCONFIG: &str = "shoal.xcconfig";
@@ -145,15 +146,6 @@ exec /usr/bin/xcodebuild "$@"
 "#,
         packages = packages.display().to_string().replace('\'', r"'\''"),
     )
-}
-
-fn write_if_changed(path: &Path, content: &str, mode: u32) -> Result<()> {
-    if fs::read_to_string(path).is_ok_and(|current| current == content) {
-        return Ok(());
-    }
-    fs::write(path, content).with_context(|| format!("write {}", path.display()))?;
-    fs::set_permissions(path, fs::Permissions::from_mode(mode))
-        .with_context(|| format!("set permissions on {}", path.display()))
 }
 
 #[cfg(test)]
