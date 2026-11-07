@@ -151,12 +151,36 @@ async fn shaped(ctx: &Context, args: &StartArgs, mode: String) -> Result<Start> 
     })
 }
 
+/// What the positional argument names.
+#[derive(Debug, PartialEq, Eq)]
+enum Positional {
+    /// An issue, by number or URL.
+    Issue,
+    /// A PR or branch, by its link.
+    Branch,
+    /// A repository, by name or URL.
+    Repository,
+}
+
+fn positional_kind(positional: &str) -> Positional {
+    match IssueInput::parse(positional) {
+        IssueInput::Number => Positional::Issue,
+        IssueInput::Url => match Link::parse(positional) {
+            Ok(link) if matches!(link.target, LinkTarget::Issue) => Positional::Issue,
+            Ok(_) => Positional::Branch,
+            // A repository's own URL.
+            Err(_) => Positional::Repository,
+        },
+        IssueInput::Invalid => Positional::Repository,
+    }
+}
+
 /// The kind of space the arguments other than the mode fit: a workspace
 /// for a flag only a workspace takes or a PR or branch link, a chat for
 /// `--name`.
 fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
-    let link = (args.repository.as_deref()).and_then(|positional| Link::parse(positional).ok());
-    let links_branch = link.is_some_and(|link| !matches!(link.target, LinkTarget::Issue));
+    let links_branch = (args.repository.as_deref())
+        .is_some_and(|positional| positional_kind(positional) == Positional::Branch);
     if links_branch || !workspace_flags(args).is_empty() {
         Some(SpaceKind::Workspace)
     } else if args.name.is_some() {
@@ -361,9 +385,10 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
 /// Refuse a copy beside a PR or branch link, which would open that branch
 /// instead, before anything is asked or looked up.
 fn ensure_copy_fits(args: &StartArgs) -> Result<()> {
-    let link = (args.repository.as_deref()).and_then(|positional| Link::parse(positional).ok());
+    let links_branch = (args.repository.as_deref())
+        .is_some_and(|positional| positional_kind(positional) == Positional::Branch);
     ensure!(
-        !args.copy.is_set() || link.is_none_or(|link| matches!(link.target, LinkTarget::Issue)),
+        !args.copy.is_set() || !links_branch,
         "a copy starts from the workspace it copies, not a PR or branch link"
     );
     Ok(())
@@ -502,23 +527,12 @@ fn positional_target(
     repository: Option<String>,
     issue: Option<Option<String>>,
 ) -> Result<(Option<String>, Option<Option<String>>)> {
-    let names_issue = match IssueInput::parse(&positional) {
-        IssueInput::Number => true,
-        IssueInput::Url => match Link::parse(&positional) {
-            Ok(link) => {
-                ensure!(
-                    matches!(link.target, LinkTarget::Issue),
-                    "a chat starts on an issue, not a PR or branch link; pass --worktree for a \
-                     workspace"
-                );
-                true
-            }
-            // A repository's own URL.
-            Err(_) => false,
-        },
-        _ => false,
-    };
-    if names_issue {
+    let kind = positional_kind(&positional);
+    ensure!(
+        kind != Positional::Branch,
+        "a chat starts on an issue, not a PR or branch link; pass --worktree for a workspace"
+    );
+    if kind == Positional::Issue {
         ensure!(
             issue.is_none(),
             "name the issue once, positionally or with --issue"
