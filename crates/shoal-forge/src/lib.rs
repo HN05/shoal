@@ -183,14 +183,15 @@ impl ForgeRepo {
         }
     }
 
+    /// The open issue `number`, which must have a title.
     pub async fn issue_details(
         &self,
         account: &account::Account,
         number: u64,
-    ) -> Result<(String, String)> {
-        let (title, details) = self.kind.issue_details(self, account, number).await?;
-        ensure!(!title.trim().is_empty(), "issue title is empty");
-        Ok((title, details))
+    ) -> Result<items::item::Current> {
+        let issue = self.kind.issue_details(self, account, number).await?;
+        ensure!(!issue.item.title.trim().is_empty(), "issue title is empty");
+        Ok(issue)
     }
 
     /// The repository an issue URL belongs to.

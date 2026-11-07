@@ -114,8 +114,11 @@ impl Manager {
             .context("issue lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
         let (number, url) = forge.issue(input)?;
-        let (title, _) = forge.issue_details(&self.user_account(), number).await?;
-        Ok(OpenIssue { url, title })
+        let issue = forge.issue_details(&self.user_account(), number).await?;
+        Ok(OpenIssue {
+            url,
+            title: issue.item.title,
+        })
     }
 
     /// The forge of the repository whose origin `checkout` has, with the

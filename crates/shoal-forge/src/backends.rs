@@ -232,13 +232,13 @@ pub(crate) trait Backend {
         rest::issue_state(repo, account, number).await
     }
 
-    /// An open issue's title and description.
+    /// An open issue.
     async fn issue_details(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-    ) -> Result<(String, String)> {
+    ) -> Result<Current> {
         rest::issue_details(repo, account, number).await
     }
 
@@ -1087,7 +1087,7 @@ impl Backend for ForgeKind {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-    ) -> Result<(String, String)> {
+    ) -> Result<Current> {
         dispatch!(self, backend => backend.issue_details(repo, account, number).await)
     }
 

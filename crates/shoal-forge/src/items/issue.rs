@@ -4,25 +4,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ForgeRepo, account::Account, backends::Backend, items::item::ItemState};
 
-/// An issue's title and description, with the URL of its number.
+/// An issue's title, description and labels, with the URL of its number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueDetails {
     pub number: u64,
     pub url: String,
     pub title: String,
     pub details: String,
+    pub labels: Vec<String>,
 }
 
 impl ForgeRepo {
     /// The issue `input` names, a number or URL in this repository.
     pub async fn read_issue(&self, account: &Account, input: &str) -> Result<IssueDetails> {
         let (number, url) = self.issue(input)?;
-        let (title, details) = self.issue_details(account, number).await?;
+        let issue = self.issue_details(account, number).await?;
         Ok(IssueDetails {
             number,
             url,
-            title,
-            details,
+            title: issue.item.title,
+            details: issue.body,
+            labels: issue.item.labels,
         })
     }
 

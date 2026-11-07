@@ -289,18 +289,18 @@ pub(crate) async fn issue_state(
         .state)
 }
 
-/// An open issue's title and description.
+/// An open issue.
 pub(crate) async fn issue_details(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
-) -> Result<(String, String)> {
+) -> Result<Current> {
     let issue = repo
         .read(account, ItemKind::Issue, number)
         .await
         .hint_login(&repo.kind)?;
     require_open(issue.item.state)?;
-    Ok((issue.item.title, issue.body))
+    Ok(issue)
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.
