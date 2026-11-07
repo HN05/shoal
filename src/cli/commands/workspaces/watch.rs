@@ -65,6 +65,7 @@ pub(in crate::cli::commands) async fn watch_items(
 fn resume_watch_arguments(space: &str, deadline: Option<Instant>) -> Vec<OsString> {
     use crate::cli::installed::{arguments, replace_option, with_flag, without_option};
     let resumed = without_option(arguments(), "--workspace");
+    let resumed = without_option(resumed, "-s");
     let mut resumed = replace_option(resumed, "--space", space);
     if let Some(seconds) = items::seconds_left(deadline) {
         resumed = replace_option(resumed, "--timeout", &seconds.to_string());

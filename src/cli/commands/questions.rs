@@ -142,6 +142,7 @@ async fn await_answer(
 /// replaces.
 fn resume_arguments(space: &str, item: u32) -> Vec<OsString> {
     let arguments = without_option(arguments(), "--workspace");
+    let arguments = without_option(arguments, "-s");
     let arguments = replace_option(arguments, "--space", space);
     replace_option(arguments, "--resume", &item.to_string())
 }

@@ -26,12 +26,18 @@ pub(crate) fn replace_option(
     replaced
 }
 
-/// `arguments` without `option` and the value it was given.
+/// `arguments` without `option` and the value it was given, where `option`
+/// is a long (`--space`) or short (`-s`) spelling.
 pub(crate) fn without_option(
     arguments: impl IntoIterator<Item = OsString>,
     option: &str,
 ) -> Vec<OsString> {
-    let inline = format!("{option}=");
+    // A short option's value may follow it directly, as in `-sapi`.
+    let inline = if option.starts_with("--") {
+        format!("{option}=")
+    } else {
+        option.to_owned()
+    };
     let mut kept = Vec::new();
     let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
