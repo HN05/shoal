@@ -1176,6 +1176,7 @@ const BEFORE_ATTACHED_FILES: &str = "ALTER TABLE chats DROP COLUMN root_dir;
     DROP TRIGGER chat_restored;
     ALTER TABLE chats DROP COLUMN restore;
     ALTER TABLE chats DROP COLUMN unique_id;
+    ALTER TABLE chats DROP COLUMN stopped_by;
     ALTER TABLE workspaces DROP COLUMN start_commit;
     ALTER TABLE workspaces DROP COLUMN made_for;
     ALTER TABLE workspaces DROP COLUMN setup_skipped;
