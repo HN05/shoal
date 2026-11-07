@@ -37,15 +37,16 @@ for argument in "$@"; do
 done
 shift "$count"
 [ -n "$crate" ] && [ -z "$query" ] || exec "$@"
-case ,${RUSTC_BOOTSTRAP-}, in
+bootstrap=${RUSTC_BOOTSTRAP-}
+case ,$bootstrap, in
   ,-1,) exec "$@" ;;
   ,1,|*,"$crate",*) features= ;;
-  ,,) RUSTC_BOOTSTRAP=$crate features=-Zallow-features= ;;
-  *) RUSTC_BOOTSTRAP=$RUSTC_BOOTSTRAP,$crate features=-Zallow-features= ;;
+  ,,) bootstrap=$crate features=-Zallow-features= ;;
+  *) bootstrap=$bootstrap,$crate features=-Zallow-features= ;;
 esac
-RUSTC_BOOTSTRAP=$RUSTC_BOOTSTRAP "$1" --crate-name "$crate" -Zremap-cwd-prefix=. $features \
+RUSTC_BOOTSTRAP=$bootstrap "$1" --crate-name "$crate" -Zremap-cwd-prefix=. $features \
   --print=sysroot >/dev/null 2>&1 || exec "$@"
-export RUSTC_BOOTSTRAP
+export RUSTC_BOOTSTRAP="$bootstrap"
 exec "$@" -Zremap-cwd-prefix=. $features
 "#;
 

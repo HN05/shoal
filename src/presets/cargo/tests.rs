@@ -106,6 +106,11 @@ fn the_wrapper_passes_through_what_it_cannot_map() {
         format!("RUSTC_BOOTSTRAP=unset\n{unchanged}"),
         "a rustc without the flag builds as usual"
     );
+    assert_eq!(
+        run(Some("other"), false, CRATE),
+        format!("RUSTC_BOOTSTRAP=other\n{unchanged}"),
+        "and keeps the RUSTC_BOOTSTRAP it was given"
+    );
     assert_eq!(run(None, true, &["-vV"]), "RUSTC_BOOTSTRAP=unset\n-vV\n");
     assert_eq!(
         run(None, true, &["-", "--crate-name", "___", "--print=cfg"]),
