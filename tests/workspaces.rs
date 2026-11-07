@@ -27091,21 +27091,21 @@ fn start_takes_the_mode_an_issues_labels_name() {
     assert_eq!(started_in(), (false, true));
 
     // An issue of an unregistered repository is not read in this one, so
-    // the start still names how to register it.
-    let output = fixture
-        .command()
-        .args([
-            "start",
-            "--issue",
-            "https://forge.example/team/other/issues/4",
-        ])
-        .args(["--agent", "pi"])
-        .current_dir(&fixture.repo)
-        .output()
-        .unwrap();
+    // the start still offers to register it.
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["start", "https://forge.example/team/other/issues/4"])
+            .args(["--agent", "pi", "--here"])
+            .current_dir(&fixture.repo),
+        "n\n",
+        false,
+    );
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("shoal repo add"), "{stderr}");
+    assert!(
+        transcript.contains("Register https://forge.example/team/other"),
+        "{transcript}"
+    );
 }
 
 #[test]

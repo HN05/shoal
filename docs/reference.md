@@ -1966,8 +1966,8 @@ in the chat, then rewrites the issue's body with a Plan section, since an
 implementing agent receives only the body, swaps `plan_label` for
 `planned_label` where they are set, and opens follow-up issues for work the
 plan splits off. You start an agent on it when you want one, with
-`shoal start --issue`. Without `--mode`, `shoal start --issue ISSUE` on an
-issue labelled `plan_label` starts this chat too.
+`shoal start --issue`. On a terminal, `shoal start --issue ISSUE` without
+`--mode` starts this chat for an issue labelled `plan_label`.
 
 ```toml
 [issue]
@@ -2230,10 +2230,7 @@ these modes:
 `shoal start` starts every new agent, in the mode `--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says
 otherwise; `worker` always starts in a workspace, and config that gives it
-another kind is refused. Without `--mode`, a start on an issue labelled `[issue]
-planned_label` takes `worker`, and one on an issue labelled `plan_label` takes
-`plan`, when that mode starts the kind of space the other arguments ask for;
-otherwise a terminal offers the modes in a
+another kind is refused. Without `--mode`, a terminal offers the modes in a
 picker with the kind of space each starts in, and without one the start takes
 `worker`, or `chat` with `--chat` or `--in`, which the picker lists first. The
 picker opens once the start has checked the arguments it was given, and offers
@@ -2241,7 +2238,10 @@ only the modes of the kind of space they ask for, a workspace for a branch,
 `--base` or another flag only a workspace takes, a chat for `--name`, and only
 modes in a repository when they name a repository or issue or ask for a kind
 of space; when only one fits, the start takes it without asking, as it takes
-`plan` for `--issue` without a value, which no other mode accepts. A
+`plan` for `--issue` without a value, which no other mode accepts. When the
+arguments ask for neither kind of space, a start on an issue labelled `[issue]
+planned_label` takes `worker` and one labelled `plan_label` takes `plan`
+instead of the picker. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
