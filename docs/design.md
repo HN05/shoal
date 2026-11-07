@@ -2180,7 +2180,8 @@ an agent implements without asking. Both are repository configuration, so Shoal
 assumes no label scheme, and issues with neither stay outside the flow.
 The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
-the chat then coordinates the implementing workspace it opens. The plan goes
+the chat coordinates the implementing workspace when the user has it start
+one; the agent does not offer to. The plan goes
 into the issue body because the body is all an implementing agent's prompt
 carries. The planning task is the plan mode's built-in instructions, which a
 repository extends like any mode's text, and it

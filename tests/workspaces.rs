@@ -19470,7 +19470,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
         args.starts_with("--prompt=Issue #37: Sort the queue\n"),
         "{args}"
     );
-    assert!(args.ends_with("`shoal start --issue 37`.\0"), "{args}");
+    assert!(args.ends_with("work the plan splits off.\0"), "{args}");
     assert_eq!(status["workspace"]["mode"], "plan", "{status}");
     // A mode no config defines is refused before anything is created, also
     // when a flag decides the kind.

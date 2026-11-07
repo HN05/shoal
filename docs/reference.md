@@ -1963,7 +1963,8 @@ picker offers the open issues labelled `[issue] plan_label`. The agent checks
 the issue against the default branch, talks the open points through with you
 in the chat, then rewrites the issue's body with a Plan section, since an
 implementing agent receives only the body, swaps `plan_label` for
-`planned_label` where they are set, and offers to start an agent on it with
+`planned_label` where they are set, and opens follow-up issues for work the
+plan splits off. You start an agent on it when you want one, with
 `shoal start --issue`.
 
 ```toml

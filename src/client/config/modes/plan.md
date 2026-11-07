@@ -7,5 +7,4 @@ with `shoal questions ask`.
 Once the user agrees, rewrite the issue's body with `shoal issue edit` so it states
 the goal and a Plan section with the decisions, the approach and what done looks
 like, since an implementing agent receives only the body.{relabel} Open follow-up
-issues for work the plan splits off. Then offer to start an agent on it with
-`shoal start --issue {issue.number}`.
+issues for work the plan splits off.

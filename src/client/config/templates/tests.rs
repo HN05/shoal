@@ -136,7 +136,7 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
         assert_eq!(plan.system, chat.system);
         let first = plan.first_message.unwrap();
         assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
-        assert!(first.ends_with("`shoal start --issue 7`."), "{first}");
+        assert!(first.ends_with("work the plan splits off."), "{first}");
     }
 }
 
