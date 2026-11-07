@@ -886,7 +886,8 @@ walk the tree only when the timer starts, when it expires and after removal hook
 since change times only move forward and cannot be set. For the same reason,
 merged cleanup walks a worktree again only once the newest change its last walk
 saw is older than the idle period. A sweep lists directory
-users with one lsof scan shared by every workspace it checks; removal scans again.
+users with one scan of the processes' working directories, read from the kernel,
+shared by every workspace it checks; removal scans again.
 Status reports the first reason cleanup keeps a workspace from the checks the sweep
 runs, so it cannot disagree with the sweep. A HEAD changed by removal
 hooks keeps its branch when only that branch has the new commits.

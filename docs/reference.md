@@ -4929,7 +4929,7 @@ A restore of an idle agent waiting for an update blocks nothing: removal cancels
 it and keeps the agent stopped, so `shoal work restore` brings it back for
 `shoal resume`.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
-timers reset on restart. The daemon needs `lsof` on PATH.
+timers reset on restart.
 
 [Chats](#chats) follow the same rules, with their repository's settings and
 none of the conditions on a worktree: a chat goes once its agent stopped, with
@@ -5522,7 +5522,7 @@ shoal work adopt <path>             # Reclaim a worktree at its recorded path af
 
 Each problem shows where you look and names the command that resolves it. When
 the daemon starts and when `daemon reload` rereads its config, it checks that
-`git`, `wt` and `lsof` are executable on its PATH, that the host the global
+`git` and `wt` are executable on its PATH, that the host the global
 `terminal.default_host` names is installed, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have
 a working tree, whether a global rule repeats Shoal's guidance, and which forge each

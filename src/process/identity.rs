@@ -1158,7 +1158,7 @@ fn bsd_info(pid: u32, include_zombies: bool) -> Result<Option<BsdInfo>> {
 /// `pid`'s `proc_pidinfo` record of `flavor`, a plain C struct, or `None`
 /// when it has exited or is another user's.
 #[cfg(target_os = "macos")]
-fn pid_info<T>(pid: u32, flavor: i32, argument: u64) -> Result<Option<T>> {
+pub(super) fn pid_info<T>(pid: u32, flavor: i32, argument: u64) -> Result<Option<T>> {
     let mut info = std::mem::MaybeUninit::<T>::zeroed();
     let size = std::mem::size_of::<T>();
     let result = unsafe {
@@ -1682,6 +1682,14 @@ async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
     tokio::task::spawn_blocking(list_same_user)
         .await
         .context("process listing worker failed")?
+}
+
+/// The PIDs of this user's live processes other than init and this one.
+pub(super) fn same_user_pids() -> Result<Vec<u32>> {
+    Ok(list_same_user()?
+        .into_iter()
+        .map(|(pid, _, _)| pid)
+        .collect())
 }
 
 fn list_same_user() -> Result<Vec<(u32, u32, u32)>> {

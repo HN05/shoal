@@ -66,9 +66,9 @@ impl DaemonGuard {
     }
 
     /// Kill the daemon with the commands it runs in its process group, which
-    /// launchd would otherwise adopt; one with a hidden environment, such as
-    /// `lsof`, fails the setup checks of other tests' daemons. A daemon a test
-    /// launched itself may lead no group.
+    /// launchd would otherwise adopt; one with a hidden environment fails the
+    /// setup checks of other tests' daemons. A daemon a test launched itself
+    /// may lead no group.
     pub fn kill(&mut self) {
         // While the daemon is unreaped, no other process can take its group ID.
         if matches!(self.child.try_wait(), Ok(None)) {

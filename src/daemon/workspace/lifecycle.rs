@@ -748,7 +748,8 @@ impl Manager {
         if let Some(reason) = self.recorded_cleanup_reason(id, &executions).await? {
             return Ok(Err(reason));
         }
-        // Git state rules out most workspaces, so lsof only scans for safe ones.
+        // Git state rules out most workspaces, so only safe ones read the
+        // processes' working directories.
         let mut check = self
             .inspect_removal(
                 self.workspace_by_id(id).await?,

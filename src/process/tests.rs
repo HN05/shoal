@@ -1,4 +1,5 @@
 use super::*;
+use tokio::process::Command;
 
 #[tokio::test]
 async fn in_directory_leaves_out_excluded_processes() {
@@ -12,7 +13,7 @@ async fn in_directory_leaves_out_excluded_processes() {
     let pid = child.id().unwrap();
     let named = format!("(PID {pid})");
     let found = in_directory(root.path()).await.unwrap();
-    assert!(found.iter().any(|process| process.ends_with(&named)));
+    assert!(found.contains(&format!("sleep {named}")), "{found:?}");
     let found = in_directory_except(root.path(), &[pid]).await.unwrap();
     assert!(!found.iter().any(|process| process.ends_with(&named)));
     child.kill().await.unwrap();
