@@ -25,13 +25,10 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     assert!(installed("claude"));
     assert!(!installed("codex"));
     // Happy needs both its own CLI and the agent it runs.
-    #[cfg(feature = "happy")]
-    {
-        assert!(!installed("happy-claude"));
-        install_test_script(&bin.path().join("happy"), "#!/bin/sh\n");
-        assert!(installed("happy-claude"));
-        assert!(!installed("happy-codex"));
-    }
+    assert!(!installed("happy-claude"));
+    install_test_script(&bin.path().join("happy"), "#!/bin/sh\n");
+    assert!(installed("happy-claude"));
+    assert!(!installed("happy-codex"));
 
     assert!(installed("probe"));
     assert!(installed("absolute"));
@@ -126,12 +123,9 @@ fn enabled_turns_an_agent_off_and_happys_agents_on() {
     // A turned-off agent does not review either.
     assert!(off.check_reviewer("claude").is_err());
     assert!(off.check_reviewer("codex").is_ok());
-    #[cfg(feature = "happy")]
-    {
-        assert!(agent_off(&off, "happy-codex").is_some());
-        let on = settings("[agents.happy]\nenabled = true\n");
-        assert!(agent_off(&on, "happy-codex").is_none());
-    }
+    assert!(agent_off(&off, "happy-codex").is_some());
+    let on = settings("[agents.happy]\nenabled = true\n");
+    assert!(agent_off(&on, "happy-codex").is_none());
 }
 
 #[test]

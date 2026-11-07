@@ -14362,23 +14362,6 @@ fn proxied_claude() -> Fixture {
 }
 
 #[test]
-#[cfg(not(feature = "proxy"))]
-fn a_build_without_the_proxy_refuses_a_proxied_agent_and_ends_its_execution() {
-    let fixture = proxied_claude();
-    let output = fixture
-        .command()
-        .args(["claude", "proxied"])
-        .env("CLIPROXY_TEST_KEY", "sk-test")
-        .output()
-        .unwrap();
-    assert!(!output.status.success(), "{output:?}");
-    assert!(!fixture.root.path().join("claude-args").exists());
-    let status = fixture.ok(&["status", "proxied"]);
-    assert_eq!(status["executions"], serde_json::json!([]), "{status}");
-}
-
-#[test]
-#[cfg(feature = "proxy")]
 fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
     let fixture = proxied_claude();
     let home = fixture.root.path();

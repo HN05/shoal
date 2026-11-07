@@ -299,6 +299,5 @@ fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) 
         .env(env::EXECUTION_ID, &plan.id);
 }
 
-// Its tests run the proxy, which only that feature builds.
-#[cfg(all(test, feature = "proxy"))]
+#[cfg(test)]
 mod tests;
