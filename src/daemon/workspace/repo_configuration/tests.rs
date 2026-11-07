@@ -1,5 +1,5 @@
 use crate::client::space_names::SpaceSelector;
-use crate::daemon::test_support;
+use crate::daemon::{notifications::NotificationKind, test_support};
 
 /// A registered repository and its local config's directory, which does not
 /// exist yet.
@@ -125,8 +125,71 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     let settings = manager.workspace_settings(&workspace).await.unwrap_err();
     assert!(format!("{settings:#}").contains("stalled"), "{settings:#}");
 
+    // Once access recovers, the file is read and ignored as rejected.
     manager.file_access.recover_at(&workspace.path);
     let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-    let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
-    assert!(error.contains("TOML parse error"), "{error}");
+    manager.config_layers_for(target).await.unwrap();
+    assert_eq!(ignored_configs(&manager).await.len(), 1);
+}
+
+/// The unread notifications that a workspace's config file is ignored.
+async fn ignored_configs(manager: &super::Manager) -> Vec<String> {
+    (manager.notifications(true, 50).await.unwrap().into_iter())
+        .filter(|notification| notification.kind == NotificationKind::ConfigIgnored)
+        .map(|notification| notification.message)
+        .collect()
+}
+
+async fn mark_all_read(manager: &super::Manager) {
+    let unread = manager.notifications(true, 50).await.unwrap();
+    let ids = unread
+        .into_iter()
+        .map(|notification| notification.id)
+        .collect();
+    manager.mark_notifications_read(ids).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_worktree_file_the_format_rejects_is_ignored_and_reported_once_per_error() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .write_local_config(&repo.id, Some("[cleanup.auto]\nidle_minutes = 3\n".into()))
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "old".into(), None, None, None)
+        .await
+        .unwrap();
+    let file = workspace.path.join(".shoal.toml");
+    std::fs::write(&file, "setup_cmd = \"scripts/setup.sh\"\n").unwrap();
+
+    // The other layers still apply.
+    let settings = manager.workspace_settings(&workspace).await.unwrap();
+    assert_eq!(settings.cleanup.auto.idle_minutes, 3);
+    let reported = ignored_configs(&manager).await;
+    assert_eq!(reported.len(), 1);
+    assert!(reported[0].contains("setup_cmd"), "{reported:?}");
+
+    // Once read, the same error is not reported again.
+    mark_all_read(&manager).await;
+    manager.workspace_settings(&workspace).await.unwrap();
+    assert!(ignored_configs(&manager).await.is_empty());
+
+    // Another error is.
+    std::fs::write(&file, "[setup]\ncmd = \"scripts/setup.sh\"\n").unwrap();
+    manager.workspace_settings(&workspace).await.unwrap();
+    assert_eq!(ignored_configs(&manager).await.len(), 1);
+    mark_all_read(&manager).await;
+
+    // A file the format accepts in between makes the next rejection new.
+    std::fs::write(&file, "").unwrap();
+    manager.workspace_settings(&workspace).await.unwrap();
+    std::fs::write(&file, "[setup]\ncmd = \"scripts/setup.sh\"\n").unwrap();
+    manager.workspace_settings(&workspace).await.unwrap();
+    assert_eq!(ignored_configs(&manager).await.len(), 1);
 }

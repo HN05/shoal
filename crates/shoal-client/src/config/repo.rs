@@ -387,28 +387,53 @@ fn resolve_script_paths(config: &mut RepoConfig, directory: &Path) {
     }
 }
 
+/// The error of a worktree's config that the current format rejects, as
+/// opposed to one that could not be read. Its message names the file.
+#[derive(Debug)]
+pub struct Rejected(String);
+
+impl Rejected {
+    /// Whether `error` is a rejection, with whatever context it gained since.
+    pub fn is(error: &anyhow::Error) -> bool {
+        error.downcast_ref::<Self>().is_some()
+    }
+}
+
+impl std::fmt::Display for Rejected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Rejected {}
+
 /// The worktree's repository config with its mode and rule files, and the
-/// files they came from.
+/// files they came from. A file the format rejects fails with [`Rejected`].
 pub fn load(workspace_dir: &Path) -> Result<(RepoConfig, modes::Files)> {
     let paths = [
         workspace_dir.join(".shoal.toml"),
         workspace_dir.join(".shoal/config.toml"),
     ];
     let found: Vec<_> = paths.iter().filter(|p| p.exists()).collect();
-    ensure!(
-        found.len() <= 1,
-        "both .shoal.toml and .shoal/config.toml exist; keep only one repository config"
-    );
+    if found.len() > 1 {
+        return Err(Rejected(
+            "both .shoal.toml and .shoal/config.toml exist; keep only one repository config".into(),
+        )
+        .into());
+    }
     let mut config = match found.first() {
         Some(path) => {
             let text =
                 fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-            let config = parse(&text).with_context(|| format!("parse {}", path.display()))?;
-            ensure!(
-                config.secrets.is_empty(),
-                "{}: [secrets] belongs in the global or local config",
-                path.display()
-            );
+            let config =
+                parse(&text).with_context(|| Rejected(format!("parse {}", path.display())))?;
+            if !config.secrets.is_empty() {
+                return Err(Rejected(format!(
+                    "{}: [secrets] belongs in the global or local config",
+                    path.display()
+                ))
+                .into());
+            }
             config
         }
         None => RepoConfig::default(),

@@ -83,6 +83,9 @@ states!(NotificationKind {
     AccessStalled => "access_stalled",
     /// A repository's runner could not register, be deleted or run a job.
     RunnerFailed => "runner_failed",
+    /// The current config format rejects a workspace's config file, which
+    /// Shoal ignores.
+    ConfigIgnored => "config_ignored",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -180,6 +180,9 @@ pub struct Manager {
     pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
     proxy_retries: std::sync::Mutex<std::collections::HashMap<String, proxy_retries::ProxyRetry>>,
+    /// The config files of worktrees the current format rejects, which the
+    /// daemon ignores.
+    rejected_configs: repo_configuration::RejectedConfigs,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
 }
@@ -225,6 +228,7 @@ impl Manager {
             runners: Default::default(),
             oneshot_runs: Default::default(),
             proxy_retries: Default::default(),
+            rejected_configs: Default::default(),
             file_access: Default::default(),
         }))
     }
@@ -1039,6 +1043,7 @@ impl Manager {
     /// Drop in-memory bookkeeping for a workspace that no longer exists.
     pub(crate) async fn forget_workspace(&self, id: &str) {
         self.usage.forget_workspace(id);
+        self.rejected_configs.forget(id);
         self.executions.forget_workspace(id).await;
     }
 }

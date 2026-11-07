@@ -5,7 +5,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
         self, Config, Effective,
-        repo::{ConfigLayers, RepoConfig},
+        repo::{ConfigLayers, Rejected, RepoConfig},
     },
     fsutil::off_runtime,
     hooks::{HookDirectory, HookKind},
@@ -14,6 +14,9 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use std::{collections::BTreeMap, path::PathBuf};
+
+mod rejected;
+pub(crate) use rejected::RejectedConfigs;
 
 impl Manager {
     /// The repository's local config file; its directory is reserved when
@@ -115,8 +118,30 @@ impl Manager {
     }
 
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
-        let file = self.worktree_file(&workspace.path).await?;
+        let file = self.workspace_file(workspace).await?;
         self.config_layers(&workspace.repository_id, file).await
+    }
+
+    /// The config file of `workspace`'s worktree, or none when the current
+    /// format rejects it, as a branch from before a format change keeps its
+    /// old file: the other layers still settle what the workspace does, and
+    /// the user hears of each new rejection once.
+    async fn workspace_file(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<(RepoConfig, config::modes::Files)> {
+        match self.worktree_file(&workspace.path).await {
+            Err(error) if Rejected::is(&error) => {
+                self.report_rejected_config(workspace, &error).await;
+                Ok(Default::default())
+            }
+            read => {
+                if read.is_ok() {
+                    self.rejected_configs.forget(&workspace.id);
+                }
+                read
+            }
+        }
     }
 
     /// The repository layer for `target`; a repository's file is the one in
@@ -126,7 +151,7 @@ impl Manager {
             ConfigTarget::Global => return Ok(ConfigLayers::default()),
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
-                let file = self.worktree_file(&workspace.path).await?;
+                let file = self.workspace_file(&workspace).await?;
                 (workspace.repository_id, file)
             }
             ConfigTarget::Repository(selector) => {

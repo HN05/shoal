@@ -2867,8 +2867,11 @@ repository: a value in the local config wins, one it omits comes from the
 worktree's `.shoal.toml` or `.shoal/config.toml` (both together is an error),
 and a named `[ports.<name>]`, `[resources.<name>]` or `[resource_pools.<name>]`
 table replaces the one below it as a unit, so a local `[ports.web]` supplies
-every field of `web`. `move root` moves the file with the repository's
-directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
+every field of `web`. A worktree file that the current format rejects, such as
+one a branch kept from before a format change, is ignored: the workspace
+resolves its options from the other layers, and the daemon logs the error and
+notifies you once per error until the file is fixed. `move root` moves the
+file with the repository's directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
 while the file does not exist. Scoped workspace commands cannot administer it.
 
 ### Delete a repository
@@ -5045,8 +5048,8 @@ simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `shoal stop` when it left processes
 behind), an agent's failed [turn-state report](#agent-state), [agent queue](#agent-queue) starts and failures, [runner](#runner) failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
-idle cleanup, automatic cleanup that starts failing, a directory whose file access
-stalled, and, when the daemon starts or
+idle cleanup, automatic cleanup that starts failing, a workspace config file it
+ignores, a directory whose file access stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global rule repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a space, a workspace or chat, which the entry names;

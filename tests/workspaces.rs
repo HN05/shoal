@@ -5925,9 +5925,9 @@ fn resuming_several_goes_on_after_one_fails() {
         )
         .unwrap();
         if name == "broken" {
-            // Its settings cannot load, so its agent cannot start.
+            // Its config file cannot be read, so its agent cannot start.
             let path = Path::new(workspace["path"].as_str().unwrap());
-            fs::write(path.join(".shoal.toml"), "not toml [").unwrap();
+            fs::create_dir(path.join(".shoal.toml")).unwrap();
         }
     }
     // On a terminal this process starts each restore, which reads its
@@ -7709,11 +7709,8 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
     let fixture = Fixture::new();
     let broken = fixture.add("broken");
     fixture.add("healthy");
-    fs::write(
-        Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml"),
-        "invalid = [",
-    )
-    .unwrap();
+    // A config file that cannot be read fails its workspace's reads.
+    fs::create_dir(Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml")).unwrap();
     // The daemon lists by name, so a failure must not short-circuit the query.
     let workspaces = fixture.ok(&["work"]);
     assert_eq!(workspaces[0]["name"], "broken");
@@ -7743,7 +7740,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
             .starts_with(&format!("broken: {error}\nhealthy\n"))
     );
     // Once every workspace is healthy, the same overview succeeds.
-    fs::remove_file(Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml")).unwrap();
+    fs::remove_dir(Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml")).unwrap();
     assert_eq!(
         fixture
             .ok(&["leases", "resource", "--all"])
@@ -7873,12 +7870,17 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     fs::create_dir(path.join(".shoal")).unwrap();
     fs::rename(path.join(".shoal.toml"), path.join(".shoal/config.toml")).unwrap();
     fixture.ok(&["catalog", "port", "--workspace", "configured"]);
+    // Both together are rejected, so neither names the port, and the
+    // workspace's config says why.
     fs::write(path.join(".shoal.toml"), "").unwrap();
+    let catalog = fixture.ok(&["catalog", "port", "--workspace", "configured"]);
+    assert!(catalog["configured"].get("web").is_none(), "{catalog}");
+    let show = fixture.run(&["config", "show", "configured"]);
+    assert!(show.status.success());
+    let warning = String::from_utf8(show.stderr).unwrap();
     assert!(
-        !fixture
-            .run(&["catalog", "port", "--workspace", "configured"])
-            .status
-            .success()
+        warning.contains("keep only one repository config"),
+        "{warning}"
     );
 }
 
@@ -18666,14 +18668,16 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
 
-    // Secret sources describe this machine, so a tracked file cannot name one.
+    // Secret sources describe this machine, so a tracked file naming one is
+    // rejected and its secret is never used.
     fs::write(
         worktree.join(".shoal.toml"),
         "[secrets.OTHER]\ncommand = ['true']\n",
     )
     .unwrap();
     let output = fixture.run(&["config", "show", "secrets"]);
-    assert!(!output.status.success());
+    assert!(output.status.success());
+    assert!(!String::from_utf8(output.stdout).unwrap().contains("OTHER"));
 }
 
 #[test]

@@ -1659,3 +1659,35 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
     assert_eq!(reason().await, CleanupReason::Idle { minutes: 10 });
     drop(process);
 }
+
+#[tokio::test]
+async fn requested_cleanup_removes_a_merged_workspace_whose_config_the_format_rejects() {
+    use crate::daemon::test_support::{git, manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "old".into(), None, None, None)
+        .await
+        .unwrap();
+    // The branch keeps a file in a format the default branch moved on from.
+    fs::write(workspace.path.join(".shoal.toml"), "setup_cmd = \"x\"\n").unwrap();
+    git(&workspace.path, &["add", ".shoal.toml"]);
+    git(&workspace.path, &["commit", "-m", "Old config"]);
+    git(&checkout, &["merge", "--ff-only", "old"]);
+    git(&checkout, &["rm", "-q", ".shoal.toml"]);
+    git(&checkout, &["commit", "-m", "New config"]);
+
+    let reason = manager.cleanup_reason(&workspace).await;
+    assert!(matches!(reason, CleanupReason::Idle { .. }), "{reason:?}");
+    let all = Selection {
+        spaces: Pick::All,
+        ..Selection::default()
+    };
+    let report = on_request(&manager, false, &all).await.unwrap();
+    assert_eq!(report.removed, ["old"]);
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+}
