@@ -2712,7 +2712,8 @@ directory as another working directory; `--here` and `--agent` work as for
 `repo setup`.
 
 Only the user runs `repo setup` and `config setup`, since both change the
-user's own config.
+user's own config. Both start their agent at once, whatever
+`machine.max_agents` allows.
 
 ### Contributions
 
