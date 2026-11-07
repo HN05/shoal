@@ -957,9 +957,11 @@ output directory. So the Cargo preset runs the workspace's own crates through
 a wrapper that adds `-Zremap-cwd-prefix=.` and passes the output directory
 relative to the workspace root. Cargo's `trim-paths` does not help: its flags
 name each package's directory. Stable rustc takes the unstable flag only for
-the crates `RUSTC_BOOTSTRAP` names, so the wrapper names each crate it builds,
-which leaves dependencies and build script probes on a stable compiler, and it
-drops the flag for a rustc that no longer takes it. Preset seeds run the default branch's own build code, as
+the crates `RUSTC_BOOTSTRAP` names, so the wrapper names each crate it builds
+and allows it no unstable features. Dependencies, build script probes and
+Cargo's target queries, whose printed cfgs would otherwise include nightly
+ones, stay on a stable compiler, and the wrapper drops the flag for a rustc
+that no longer takes it. Preset seeds run the default branch's own build code, as
 `setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its

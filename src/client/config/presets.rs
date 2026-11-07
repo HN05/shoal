@@ -19,9 +19,8 @@ pub const XCODE_CACHE: &str = "preset.xcode";
 states!(
     /// A build tool whose usual setup Shoal knows.
     Preset {
-        /// Cargo: builds workspace crates without their directory in
-        /// rustc's options, so the incremental state in `target` serves
-        /// every workspace, and seeds `target`.
+        /// Cargo: seeds `target`, and runs workspace crates through a
+        /// wrapper that keeps their incremental state usable elsewhere.
         Cargo => "cargo",
         /// npm: seeds `node_modules`.
         Npm => "npm",
@@ -78,10 +77,9 @@ impl Preset {
     }
 
     /// Variables the preset sets where `[env]` does not, rendered like
-    /// `[env]`. rustc discards incremental state built in another working
-    /// directory, and Go's cache keys include a package's directory unless
-    /// paths are trimmed; ccache's, the compiler's working directory and
-    /// paths outside its base directory.
+    /// `[env]`. Go's cache keys include a package's directory unless paths
+    /// are trimmed; ccache's, the compiler's working directory and paths
+    /// outside its base directory.
     fn environment(self) -> &'static [(&'static str, &'static str)] {
         match self {
             Self::Cargo => &[(

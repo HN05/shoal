@@ -56,12 +56,25 @@ const CRATE: &[&str] = &["--crate-name", "demo", "src/lib.rs"];
 
 #[test]
 fn the_wrapper_maps_the_working_directory_for_the_crate_it_builds() {
+    let mapped = "--crate-name\ndemo\nsrc/lib.rs\n-Zremap-cwd-prefix=.\n";
     assert_eq!(
         run(None, true, CRATE),
-        "RUSTC_BOOTSTRAP=demo\n--crate-name\ndemo\nsrc/lib.rs\n-Zremap-cwd-prefix=.\n"
+        format!("RUSTC_BOOTSTRAP=demo\n{mapped}-Zallow-features=\n"),
+        "the crate the wrapper names gets the flag and no unstable features"
     );
-    assert!(run(Some("1"), true, CRATE).starts_with("RUSTC_BOOTSTRAP=1\n"));
-    assert!(run(Some("other"), true, CRATE).starts_with("RUSTC_BOOTSTRAP=other,demo\n"));
+    assert_eq!(
+        run(Some("other"), true, CRATE),
+        format!("RUSTC_BOOTSTRAP=other,demo\n{mapped}-Zallow-features=\n")
+    );
+    assert_eq!(
+        run(Some("1"), true, CRATE),
+        format!("RUSTC_BOOTSTRAP=1\n{mapped}"),
+        "a crate already granted keeps its features"
+    );
+    assert_eq!(
+        run(Some("other,demo"), true, CRATE),
+        format!("RUSTC_BOOTSTRAP=other,demo\n{mapped}")
+    );
 }
 
 #[test]
@@ -94,4 +107,9 @@ fn the_wrapper_passes_through_what_it_cannot_map() {
         "a rustc without the flag builds as usual"
     );
     assert_eq!(run(None, true, &["-vV"]), "RUSTC_BOOTSTRAP=unset\n-vV\n");
+    assert_eq!(
+        run(None, true, &["-", "--crate-name", "___", "--print=cfg"]),
+        "RUSTC_BOOTSTRAP=unset\n-\n--crate-name\n___\n--print=cfg\n",
+        "target queries see a stable compiler"
+    );
 }
