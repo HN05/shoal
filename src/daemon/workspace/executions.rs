@@ -28,7 +28,7 @@ use crate::{
     state::{ExecutionState, WorkspaceState},
 };
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 use std::{
     collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
@@ -547,9 +547,8 @@ impl Manager {
         // that a restart releases.
         let reattach_token = (kind == ExecutionKind::Command).then_some(scope_token);
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                kind.reserve(&tx, &workspace_id, parent_execution.as_deref())?;
+            .write(move |tx| {
+                kind.reserve(tx, &workspace_id, parent_execution.as_deref())?;
                 tx.execute(
                     "INSERT INTO executions(id,workspace_id,state,wrapper,scope_token,agent_execution)
                         VALUES (?1,?2,?3,?4,?5,?6)",
@@ -563,16 +562,15 @@ impl Manager {
                     ],
                 )?;
                 if let Some(demo) = &demo {
-                    super::demos::record(&tx, &id, &workspace_id, demo)?;
+                    super::demos::record(tx, &id, &workspace_id, demo)?;
                 }
                 if let Some(place) = &place {
-                    super::places::record_execution_place(&tx, &id, &workspace_id, place)?;
+                    super::places::record_execution_place(tx, &id, &workspace_id, place)?;
                 }
-                let ports = store::ports(&tx, Some(&workspace_id))?;
+                let ports = store::ports(tx, Some(&workspace_id))?;
                 // Under the write lock emptying caches takes, and undone with
                 // the execution's row when the directories cannot be prepared.
                 let directories = ProcessDirectories::prepare(&repository, &caches, &workspace_id)?;
-                tx.commit()?;
                 Ok((ports, directories))
             })
             .await
@@ -729,8 +727,7 @@ impl Manager {
             "child must lead its execution process group"
         );
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 let updated = tx.execute(
                     "UPDATE executions SET child=?2,group_id=?3 WHERE id=?1 AND group_id IS NULL",
                     params![id, store::json_text(child.as_ref())?, group_id],
@@ -739,10 +736,9 @@ impl Manager {
                     updated == 1,
                     "execution already registered or no longer exists"
                 );
-                super::demos::mark_run(&tx, &id)?;
+                super::demos::mark_run(tx, &id)?;
                 // A restored agent takes over the slot its restore kept.
                 tx.execute("DELETE FROM agent_queue WHERE execution_id=?1", [&id])?;
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -907,9 +903,8 @@ impl Manager {
     async fn authorize_reattachment(&self, request: &Reattach) -> Result<(String, Option<String>)> {
         let request = request.clone();
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let execution = store::find_execution(&tx, &request.execution)?
+            .write(move |tx| {
+                let execution = store::find_execution(tx, &request.execution)?
                     .context("execution record is missing")?;
                 let (token, agent): (Option<String>, Option<String>) = tx.query_row(
                     "SELECT scope_token,agent_execution FROM executions WHERE id=?1",
@@ -928,7 +923,6 @@ impl Manager {
                     "UPDATE executions SET state=?2 WHERE id=?1",
                     params![request.execution, ExecutionState::Running],
                 )?;
-                tx.commit()?;
                 Ok((execution.workspace_id, agent))
             })
             .await

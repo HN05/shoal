@@ -401,12 +401,11 @@ impl Manager {
         let source = utf8(source)?;
         let destination = utf8(destination)?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let states = movable_records(&tx, &id, Running::Refused)?;
+            .write(move |tx| {
+                let states = movable_records(tx, &id, Running::Refused)?;
                 // A workspace recorded there since the reservation would be
                 // deleted with the destination if the move failed.
-                store::ensure_path_unrecorded(&tx, &claimed)
+                store::ensure_path_unrecorded(tx, &claimed)
                     .context("a workspace was placed where the repository directory would move")?;
                 tx.execute(
                     "INSERT INTO repository_moves
@@ -425,7 +424,6 @@ impl Manager {
                     "UPDATE workspaces SET state=?2 WHERE repository_id=?1",
                     params![id, WorkspaceState::Reconciling],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -437,8 +435,7 @@ impl Manager {
         let source = utf8(source)?;
         let destination = utf8(destination)?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 let inside = |column: &str| {
                     format!("({column}=?2 OR substr({column},1,length(?2)+1)=?2||'/')")
                 };
@@ -471,18 +468,18 @@ impl Manager {
                     params![id, source, destination],
                 )?;
                 crate::daemon::agent_messages::rebase_attachments(
-                    &tx,
+                    tx,
                     &id,
                     Path::new(&source),
                     Path::new(&destination),
                 )?;
                 crate::daemon::chat_messages::rebase_attachments(
-                    &tx,
+                    tx,
                     Path::new(&source),
                     Path::new(&destination),
                 )?;
                 crate::daemon::workspace_files::rebase(
-                    &tx,
+                    tx,
                     &id,
                     Path::new(&source),
                     Path::new(&destination),
@@ -491,7 +488,6 @@ impl Manager {
                     "UPDATE repository_moves SET switched=1 WHERE repository_id=?1",
                     [&id],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -610,8 +606,7 @@ impl Manager {
         let id = intent.repository_id.clone();
         let states = intent.states.clone();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 for (workspace, state) in states {
                     // A daemon restart quarantined it with an error that no
                     // longer applies once the move finished.
@@ -623,7 +618,6 @@ impl Manager {
                     )?;
                 }
                 tx.execute("DELETE FROM repository_moves WHERE repository_id=?1", [id])?;
-                tx.commit()?;
                 Ok(())
             })
             .await

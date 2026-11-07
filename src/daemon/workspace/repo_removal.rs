@@ -318,14 +318,12 @@ impl Manager {
             serde_json::to_string(workspace_paths)?,
         );
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                crate::daemon::resources::ensure_no_external_leases(&tx, &id)?;
+            .write(move |tx| {
+                crate::daemon::resources::ensure_no_external_leases(tx, &id)?;
                 tx.execute(
                     "INSERT INTO repository_removals(repository_id,directory_id,workspace_paths) VALUES (?1,?2,?3) ON CONFLICT(repository_id) DO UPDATE SET directory_id=excluded.directory_id, workspace_paths=excluded.workspace_paths",
                     params![id, recorded_identity, workspace_paths],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await?;
@@ -408,10 +406,9 @@ impl Manager {
     async fn unregister_repository(&self, id: &str) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 ensure!(
-                    !store::repository_has_workspaces(&tx, &id)?,
+                    !store::repository_has_workspaces(tx, &id)?,
                     "repository still has workspaces"
                 );
                 tx.execute(
@@ -422,7 +419,6 @@ impl Manager {
                     tx.execute("DELETE FROM repositories WHERE id=?1", [&id])? == 1,
                     "repository registration disappeared during removal"
                 );
-                tx.commit()?;
                 Ok(())
             })
             .await

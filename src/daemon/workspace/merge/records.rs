@@ -148,7 +148,7 @@ impl Manager {
             plan.default_branch.clone(),
         );
         self.store
-            .run(move |db| replace_replayed(db, undone, &repository_id, &default, &rewritten))
+            .write(move |tx| replace_replayed(tx, undone, &repository_id, &default, &rewritten))
             .await
     }
 
@@ -220,18 +220,16 @@ async fn replayed_commits(
 /// other records of `repository_id`'s `default` at the commits `rewritten`
 /// maps theirs to, together.
 fn replace_replayed(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     undone: i64,
     repository_id: &str,
     default: &str,
     rewritten: &HashMap<String, String>,
 ) -> Result<()> {
-    let tx = db.transaction()?;
-    delete(&tx, &[undone])?;
-    for recorded in list(&tx, repository_id, default)? {
-        rewrite(&tx, &recorded, rewritten)?;
+    delete(tx, &[undone])?;
+    for recorded in list(tx, repository_id, default)? {
+        rewrite(tx, &recorded, rewritten)?;
     }
-    tx.commit()?;
     Ok(())
 }
 

@@ -268,7 +268,7 @@ impl Manager {
             prompt_cache_expires_at: ending.prompt_cache.map(|lifetime| now + lifetime),
             failed: ending.failed,
         };
-        let saved = self.store.run(move |db| save(db, &report)).await?;
+        let saved = self.store.write(move |tx| save(tx, &report)).await?;
         let Some((status, changed)) = saved else {
             return Ok(unrecorded(state, now));
         };
@@ -385,20 +385,18 @@ struct Report {
 /// Record `report` with the turn retries it settles, in one transaction:
 /// the state it leaves and whether it changed it, or `None` when its space
 /// takes no report by then.
-fn save(db: &mut Connection, report: &Report) -> Result<Option<(AgentStatus, bool)>> {
-    let tx = db.transaction()?;
-    if !takes_report(&tx, &report.space)? {
+fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(AgentStatus, bool)>> {
+    if !takes_report(tx, &report.space)? {
         return Ok(None);
     }
-    let previous = get(&tx, &report.space)?.map(|status| status.state);
-    let changed = write_state(&tx, report)?;
-    super::turn_retry::follow_state(&tx, &report.space, report.state)?;
+    let previous = get(tx, &report.space)?.map(|status| status.state);
+    let changed = write_state(tx, report)?;
+    super::turn_retry::follow_state(tx, &report.space, report.state)?;
     if !report.failed {
         let execution = report.execution.as_deref();
-        super::turn_retry::unretried::follow_state(&tx, execution, previous, report.state)?;
+        super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;
     }
-    let status = get(&tx, &report.space)?.expect("agent state was just recorded");
-    tx.commit()?;
+    let status = get(tx, &report.space)?.expect("agent state was just recorded");
     Ok(Some((status, changed)))
 }
 

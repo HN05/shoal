@@ -307,7 +307,7 @@ impl Manager {
         };
         let record = removed.clone();
         self.store
-            .run(move |db| record_imported(db, record))
+            .write(move |tx| record_imported(tx, record))
             .await?;
         Ok(removed)
     }
@@ -355,7 +355,7 @@ impl Manager {
             format!("no restorable workspace {selector}; a removed workspace has no number, so name it by name or ID")
         })?;
         self.store
-            .run(move |db| claim(db, &name))
+            .write(move |tx| claim(tx, &name))
             .await?
             .with_context(|| {
                 format!("no restorable workspace {selector}; shoal work restore lists them")
@@ -461,15 +461,13 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
 
 /// Record an imported workspace's checkpoint under its next number and its
 /// removal record naming that number, unless the repository is being removed.
-fn record_imported(db: &mut Connection, mut removed: RemovedWorkspace) -> Result<()> {
-    let tx = db.transaction()?;
+fn record_imported(tx: &rusqlite::Transaction<'_>, mut removed: RemovedWorkspace) -> Result<()> {
     anyhow::ensure!(
-        !crate::daemon::store::repository_removing(&tx, &removed.repository_id)?,
+        !crate::daemon::store::repository_removing(tx, &removed.repository_id)?,
         "the repository is being removed"
     );
-    removed.checkpoint.number = super::checkpoints::insert_numbered(&tx, &removed.checkpoint)?;
-    record(&tx, &removed)?;
-    tx.commit()?;
+    removed.checkpoint.number = super::checkpoints::insert_numbered(tx, &removed.checkpoint)?;
+    record(tx, &removed)?;
     Ok(())
 }
 
@@ -479,9 +477,8 @@ pub(super) const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_
 
 /// Find a removal record and keep it and its checkpoints for at least
 /// [`RESTORE_CLAIM`].
-fn claim(db: &mut Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
-    let tx = db.transaction()?;
-    let Some(mut removed) = find(&tx, selector)? else {
+fn claim(tx: &rusqlite::Transaction<'_>, selector: &str) -> Result<Option<RemovedWorkspace>> {
+    let Some(mut removed) = find(tx, selector)? else {
         return Ok(None);
     };
     let until = UnixTime::now() + RESTORE_CLAIM;
@@ -500,7 +497,6 @@ fn claim(db: &mut Connection, selector: &str) -> Result<Option<RemovedWorkspace>
          WHERE workspace_id=?1 AND json_extract(record, '$.checkpoint.expires_at') < ?2",
         params![removed.workspace_id, until],
     )?;
-    tx.commit()?;
     removed.expires_at = removed.expires_at.max(until);
     removed.checkpoint.expires_at = removed.checkpoint.expires_at.max(until);
     Ok(Some(removed))

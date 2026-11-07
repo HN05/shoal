@@ -1,6 +1,7 @@
 use super::*;
 use crate::daemon::store::Store;
 use crate::time::UnixTime;
+use rusqlite::Connection;
 
 async fn database() -> Result<(tempfile::TempDir, Store)> {
     let root = tempfile::tempdir()?;
@@ -35,8 +36,8 @@ fn remaining(db: &Connection) -> Result<Vec<String>> {
 async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Result<()> {
     let (_root, store) = database().await?;
     store
-        .run(|db| {
-            db.execute_batch(
+        .write(|tx| {
+            tx.execute_batch(
                 "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
                      execution_id,state,created_at,seen_at,workspace_id) VALUES
                  ('held','launch','repo','held','codex','{}','{}',NULL,'starting',0,99,NULL),
@@ -47,15 +48,15 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
                  ('wrapper','restore','repo','wrapper','codex',NULL,NULL,'wrapper','starting',0,99,'workspace');",
             )?;
             let held = HashSet::from(["held".to_owned()]);
-            let failures = expire_starts(db, &held, UnixTime::from_seconds(100))?;
+            let failures = expire_starts(tx, &held, UnixTime::from_seconds(100))?;
             assert_eq!(failures.len(), 2);
             assert!(failures.contains(&FailedStart::UnopenedLaunch("launch".into())));
             assert!(failures.contains(&FailedStart::UnstartedRestore("restore".into())));
             assert_eq!(
-                remaining(db)?,
+                remaining(tx)?,
                 ["boundary", "held", "queued", "recent", "unseen", "wrapper"]
             );
-            assert!(expire_starts(db, &held, UnixTime::from_seconds(100))?.is_empty());
+            assert!(expire_starts(tx, &held, UnixTime::from_seconds(100))?.is_empty());
             Ok(())
         })
         .await
@@ -64,22 +65,32 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
 #[tokio::test]
 async fn a_failed_deletion_rolls_back_the_whole_expiry() -> Result<()> {
     let (_root, store) = database().await?;
+    // Fail the second deletion regardless of the query's row order.
     store
         .run(|db| {
-            // Fail the second deletion regardless of the query's row order.
-            db.execute_batch(
+            Ok(db.execute_batch(
                 "CREATE TRIGGER fail_expiry AFTER DELETE ON agent_queue
                  WHEN (SELECT count(*) FROM agent_queue) = 1
                  BEGIN SELECT RAISE(ABORT, 'expiry rejected'); END;",
-            )?;
-            expire_starts(db, &HashSet::new(), UnixTime::from_seconds(100))
-                .expect_err("expiry must fail on the second deletion");
+            )?)
+        })
+        .await?;
+    store
+        .write(|tx| expire_starts(tx, &HashSet::new(), UnixTime::from_seconds(100)))
+        .await
+        .expect_err("expiry must fail on the second deletion");
+    store
+        .run(|db| {
             assert_eq!(remaining(db)?, ["launch", "opened", "restore"]);
-            db.execute_batch("DROP TRIGGER fail_expiry;")?;
-            assert_eq!(
-                expire_starts(db, &HashSet::new(), UnixTime::from_seconds(100))?.len(),
-                2
-            );
+            Ok(db.execute_batch("DROP TRIGGER fail_expiry;")?)
+        })
+        .await?;
+    let failures = store
+        .write(|tx| expire_starts(tx, &HashSet::new(), UnixTime::from_seconds(100)))
+        .await?;
+    assert_eq!(failures.len(), 2);
+    store
+        .run(|db| {
             assert!(remaining(db)?.is_empty());
             Ok(())
         })

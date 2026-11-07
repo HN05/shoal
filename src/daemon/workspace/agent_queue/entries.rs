@@ -63,7 +63,9 @@ impl Manager {
         };
         let detached = launch.opens.is_some();
         let now = launch.request.now;
-        self.store.run(move |db| insert_launch(db, &launch)).await?;
+        self.store
+            .write(move |tx| insert_launch(tx, &launch))
+            .await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Read the response before a detached worker can take the entry.
         let entries = self.queue_entries().await?;
@@ -238,15 +240,14 @@ impl Manager {
         let id = id.to_owned();
         let attached = self
             .store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 let started = tx.execute(
                     "UPDATE agent_queue SET workspace_id=?2
                      WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?;
                 if started == 1 {
-                    dependencies::replace_launch(&tx, &id, &workspace.id)?;
+                    dependencies::replace_launch(tx, &id, &workspace.id)?;
                 }
                 let waiting = match opens && started == 0 {
                     true => tx.execute(
@@ -263,7 +264,6 @@ impl Manager {
                     )?,
                     false => 0,
                 };
-                tx.commit()?;
                 Ok(started + waiting)
             })
             .await?;

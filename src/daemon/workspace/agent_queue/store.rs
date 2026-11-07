@@ -61,20 +61,19 @@ pub(super) struct Launch {
 /// being removed. A launch in an existing workspace needs it ready in the same
 /// transaction: removal reserves the workspace before its final checks, so the
 /// launch either precedes them, which keeps the workspace, or is refused here.
-pub(super) fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
-    let tx = db.transaction()?;
+pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> Result<()> {
     ensure!(
-        !crate::daemon::store::repository_removing(&tx, &launch.repository)?,
+        !crate::daemon::store::repository_removing(tx, &launch.repository)?,
         "the repository is being removed"
     );
     if let Some(workspace) = &launch.opens {
-        crate::daemon::store::require_ready(&tx, workspace)
+        crate::daemon::store::require_ready(tx, workspace)
             .context("start agents in a ready workspace")?;
     }
     let request = &launch.request;
     ensure!(
         !crate::daemon::store::exists(
-            &tx,
+            tx,
             "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND name=?2 AND kind=?3",
             params![launch.repository, request.name, QueueKind::Launch],
         )?,
@@ -101,8 +100,7 @@ pub(super) fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> R
             request.mode,
         ],
     )?;
-    dependencies::record(&tx, &launch.id, &launch.repository, &request.after)?;
-    tx.commit()?;
+    dependencies::record(tx, &launch.id, &launch.repository, &request.after)?;
     Ok(())
 }
 

@@ -123,30 +123,28 @@ impl Manager {
         };
         let caller_execution = caller_execution.map(str::to_owned);
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &workspace.id)?;
+            .write(move |tx| {
+                store::require_ready(tx, &workspace.id)?;
                 ensure!(
                     !store::exists(
-                        &tx,
+                        tx,
                         "SELECT 1 FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id!=?2)",
                         params![workspace.id, caller_execution]
                     )?,
                     "workspace has other active or unknown executions; stop them before renaming"
                 );
                 store::ensure_name_and_branch_available(
-                    &tx,
+                    tx,
                     &workspace.repository_id,
                     &intent.name,
                     Some(&intent.branch),
                     Some(&workspace.id),
                 )?;
-                intent.record(&tx, &workspace.id)?;
+                intent.record(tx, &workspace.id)?;
                 tx.execute(
                     "UPDATE workspaces SET state=?2 WHERE id=?1",
                     params![workspace.id, crate::state::WorkspaceState::Reconciling],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -185,11 +183,10 @@ impl Manager {
         let id = id.to_owned();
         let caller_execution = caller_execution.map(str::to_owned);
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 ensure!(
                     !store::exists(
-                        &tx,
+                        tx,
                         "SELECT 1 FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id!=?2)",
                         params![id, caller_execution]
                     )?,
@@ -207,7 +204,6 @@ impl Manager {
                     "UPDATE workspaces SET state=?2 WHERE id=?1",
                     params![id, WorkspaceState::Reconciling],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await

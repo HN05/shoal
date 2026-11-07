@@ -200,9 +200,9 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
     let id = repo.id.clone();
     manager
         .store
-        .run(move |db| {
-            queue_job(db, &id, &unlinked)?;
-            queue_job(db, &id, &linked)
+        .write(move |tx| {
+            queue_job(tx, &id, &unlinked)?;
+            queue_job(tx, &id, &linked)
         })
         .await
         .unwrap();

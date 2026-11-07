@@ -1260,23 +1260,21 @@ impl Manager {
     ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 // Children go first; none may outlive its parent.
                 ensure!(
                     !crate::daemon::store::exists(
-                        &tx,
+                        tx,
                         "SELECT 1 FROM space_parents WHERE parent_id=?1",
                         [&id],
                     )?,
                     "spaces were opened below it during removal; retaining it"
                 );
-                events::record(&tx, &id, EventKind::Removed, cause, None)?;
+                events::record(tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
-                crate::daemon::workspace_files::forget_removed(&tx, &id)?;
-                let released = crate::daemon::approvals::release_decided_by(&tx, &id)?;
+                crate::daemon::workspace_files::forget_removed(tx, &id)?;
+                let released = crate::daemon::approvals::release_decided_by(tx, &id)?;
                 tx.execute("DELETE FROM workspaces WHERE id=?1", [&id])?;
-                tx.commit()?;
                 Ok(released)
             })
             .await

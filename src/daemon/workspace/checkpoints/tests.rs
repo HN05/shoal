@@ -140,9 +140,9 @@ async fn listings_come_in_pages_that_fit_a_protocol_frame() {
     let record = checkpoint.clone();
     f.manager
         .store
-        .run(move |db| {
+        .write(move |tx| {
             for _ in 0..300 {
-                insert(db, &record)?;
+                insert_numbered(tx, &record)?;
             }
             Ok(())
         })

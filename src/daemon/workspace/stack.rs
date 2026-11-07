@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Result, ensure};
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
@@ -47,7 +47,7 @@ impl Manager {
         let workspace = self.workspace_by_id(&workspace.id).await?;
         let (id, repository_id) = (workspace.id.clone(), workspace.repository_id.clone());
         self.store
-            .run(move |db| change_base(db, &repository_id, &id, base.as_deref()))
+            .write(move |tx| change_base(tx, &repository_id, &id, base.as_deref()))
             .await?;
         self.workspace_by_id(&workspace.id).await
     }
@@ -56,20 +56,19 @@ impl Manager {
 /// Record the workspace `base` names as the base of workspace `id`, or clear
 /// it without one, and journal the change. Fails when nothing would change.
 fn change_base(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     repository_id: &str,
     id: &str,
     base: Option<&str>,
 ) -> Result<()> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let base = match base {
-        Some(base) => Some(base_workspace(&tx, repository_id, base)?),
+        Some(base) => Some(base_workspace(tx, repository_id, base)?),
         None => None,
     };
     if let Some(base) = &base {
         ensure!(
             !store::exists(
-                &tx,
+                tx,
                 "WITH RECURSIVE chain(id) AS (
                     SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
                     JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
@@ -87,8 +86,7 @@ fn change_base(
         Some(_) => ensure!(changed > 0, "the workspace already builds on that base"),
         None => ensure!(changed > 0, "the workspace has no base workspace"),
     }
-    record_base_changed(&tx, id, EventCause::Manual)?;
-    tx.commit()?;
+    record_base_changed(tx, id, EventCause::Manual)?;
     Ok(())
 }
 

@@ -223,10 +223,9 @@ impl Manager {
         let id = id.to_owned();
         let created_at = crate::time::UnixTime::now();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                require_ready_space(&tx, &id)?;
-                let linked = linked_items(&tx, &id, kind)?;
+            .write(move |tx| {
+                require_ready_space(tx, &id)?;
+                let linked = linked_items(tx, &id, kind)?;
                 let items = marked_items(linked, explicit, kind, &pulls)?;
                 // Linked-item marks replace a mark made while nothing was linked.
                 if items.iter().any(|(url, _)| url.is_some()) {
@@ -257,7 +256,6 @@ impl Manager {
                         warnings: Vec::new(),
                     });
                 }
-                tx.commit()?;
                 Ok(ReadyMarks {
                     marks,
                     skipped: pulls.skipped,
@@ -334,15 +332,13 @@ impl Manager {
             .map(|mark| mark.url.clone().unwrap_or_default())
             .collect();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 for url in &urls {
                     tx.execute(
                         "DELETE FROM space_review WHERE space_id=?1 AND url=?2",
                         params![id, url],
                     )?;
                 }
-                tx.commit()?;
                 Ok(())
             })
             .await

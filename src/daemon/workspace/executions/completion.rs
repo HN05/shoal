@@ -1,6 +1,6 @@
 //! Persist verified execution completion and setup readiness in one transaction.
 use anyhow::Result;
-use rusqlite::{Transaction, TransactionBehavior, params};
+use rusqlite::{Transaction, params};
 
 use super::{ExecutionKind, Manager};
 use crate::state::{ExecutionState, WorkspaceState};
@@ -17,18 +17,16 @@ impl Manager {
         let record_id = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 if kind == ExecutionKind::Setup {
-                    record_setup_result(&tx, &record_id, exit_code, issue.as_deref())?;
+                    record_setup_result(tx, &record_id, exit_code, issue.as_deref())?;
                 }
                 let demo = if complete {
-                    super::super::sessions::pending::record_demo(&tx, &record_id, &hosts)?
+                    super::super::sessions::pending::record_demo(tx, &record_id, &hosts)?
                 } else {
                     None
                 };
-                record_execution_end(&tx, &record_id, complete)?;
-                tx.commit()?;
+                record_execution_end(tx, &record_id, complete)?;
                 Ok(demo)
             })
             .await
@@ -38,11 +36,9 @@ impl Manager {
         let id = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let demo = super::super::sessions::pending::record_demo(&tx, &id, &hosts)?;
-                record_execution_end(&tx, &id, true)?;
-                tx.commit()?;
+            .write(move |tx| {
+                let demo = super::super::sessions::pending::record_demo(tx, &id, &hosts)?;
+                record_execution_end(tx, &id, true)?;
                 Ok(demo)
             })
             .await

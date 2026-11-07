@@ -2,7 +2,7 @@
 //! installed binary: it gets a new plan and records what its registration
 //! records.
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, TransactionBehavior};
+use rusqlite::OptionalExtension;
 use std::collections::BTreeMap;
 
 use super::{
@@ -44,7 +44,9 @@ impl Manager {
             let (id, workspace_id) = (id.to_owned(), workspace.id.clone());
             let (repository, caches) = (repository.clone(), settings.caches.clone());
             self.store
-                .run(move |db| register_again(db, &id, &workspace_id, place, &repository, &caches))
+                .write(move |tx| {
+                    register_again(tx, &id, &workspace_id, place, &repository, &caches)
+                })
                 .await?
         };
         let environment = crate::env::render_configured_environment(
@@ -72,14 +74,13 @@ impl Manager {
 /// Record `place` for execution `id` and read what its plan needs, in one
 /// transaction, as [`Manager::persist_execution`] does for a new one.
 fn register_again(
-    db: &mut rusqlite::Connection,
+    tx: &rusqlite::Transaction<'_>,
     id: &str,
     workspace_id: &str,
     place: Option<ExecutionPlace>,
     repository: &Repository,
     caches: &BTreeMap<String, Cache>,
 ) -> Result<Registration> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     // Only commands, which may reattach, keep their token.
     let scope_token = tx
         .query_row(
@@ -91,11 +92,10 @@ fn register_again(
         .flatten()
         .context("the execution cannot register again")?;
     if let Some(place) = &place {
-        super::super::places::record_execution_place(&tx, id, workspace_id, place)?;
+        super::super::places::record_execution_place(tx, id, workspace_id, place)?;
     }
-    let ports = store::ports(&tx, Some(workspace_id))?;
+    let ports = store::ports(tx, Some(workspace_id))?;
     let directories = ProcessDirectories::prepare(repository, caches, workspace_id)?;
-    tx.commit()?;
     Ok(Registration {
         scope_token,
         ports,

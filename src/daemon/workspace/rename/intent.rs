@@ -54,8 +54,7 @@ impl Manager {
         let repository_id = workspace.repository_id.clone();
         let old_base = git::local_ref(workspace.require_branch("renaming a branch")?);
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 tx.execute(
                     "UPDATE workspaces SET name=?2,branch=?3 WHERE id=?1",
                     params![id, intent.name, intent.branch],
@@ -64,8 +63,7 @@ impl Manager {
                     "UPDATE workspaces SET base_ref=?3 WHERE repository_id=?1 AND base_ref=?2",
                     params![repository_id, old_base, git::local_ref(&intent.branch)],
                 )?;
-                release(&tx, &id)?;
-                tx.commit()?;
+                release(tx, &id)?;
                 Ok(())
             })
             .await

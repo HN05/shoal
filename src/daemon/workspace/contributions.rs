@@ -109,9 +109,8 @@ impl Manager {
         let id = repo.id.clone();
         let directory = real_directory_identity(&repo.path)?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                if in_use(&tx, &id)? {
+            .write(move |tx| {
+                if in_use(tx, &id)? {
                     return Ok(false);
                 }
                 tx.execute(
@@ -119,7 +118,6 @@ impl Manager {
                      VALUES (?1,?2,'[]') ON CONFLICT(repository_id) DO NOTHING",
                     params![id, directory],
                 )?;
-                tx.commit()?;
                 Ok(true)
             })
             .await

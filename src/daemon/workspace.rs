@@ -91,7 +91,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::StreamExt as _;
 use ownership::owns_git_dir;
-use rusqlite::{OptionalExtension, TransactionBehavior, params};
+use rusqlite::{OptionalExtension, params};
 use std::{collections::HashSet, fs, sync::Arc};
 use tokio::sync::OwnedMutexGuard;
 
@@ -637,17 +637,16 @@ impl Manager {
         };
         let removing = self.chat_removals.clone();
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            .write(move |tx| {
                 store::ensure_name_and_branch_available(
-                    &tx,
+                    tx,
                     &record.repository_id,
                     &record.name,
                     record.branch.as_deref(),
                     None,
                 )?;
-                store::ensure_path_unrecorded(&tx, &record.path)?;
-                store::ensure_path_outside_moves(&tx, &record.path)?;
+                store::ensure_path_unrecorded(tx, &record.path)?;
+                store::ensure_path_outside_moves(tx, &record.path)?;
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -665,7 +664,7 @@ impl Manager {
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
                 }
                 let base_workspace = match &base_branch {
-                    Some(branch) => stack::owner(&tx, &record.repository_id, branch)?,
+                    Some(branch) => stack::owner(tx, &record.repository_id, branch)?,
                     None => None,
                 };
                 // Recorded first, so the workspace's creation names it.
@@ -674,8 +673,8 @@ impl Manager {
                         !removing.reserved(parent),
                         "the chat the workspace would go below is being removed"
                     );
-                    tree::ensure_parent(&tx, Some(&record.repository_id), &record.id, parent)?;
-                    tree::set_parent(&tx, &record.id, Some(parent))?;
+                    tree::ensure_parent(tx, Some(&record.repository_id), &record.id, parent)?;
+                    tree::set_parent(tx, &record.id, Some(parent))?;
                 }
                 tx.execute(
                     "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16)",
@@ -707,7 +706,6 @@ impl Manager {
                     [&record.id],
                     |row| row.get(0),
                 )?;
-                tx.commit()?;
                 Ok(Workspace { number, ..record })
             })
             .await
@@ -943,14 +941,13 @@ impl Manager {
         let _resources = self.gates.resource_guard(id, GuardMode::Shared)?;
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 // Removal checks pending intent after reserving the lifecycle,
                 // so a confirmed-deleted worktree can release its ownership.
                 if state != Some(WorkspaceState::Reconciling) && !rules.allow_pending_rename {
-                    store::ensure_no_pending_rename(&tx, &id)?;
+                    store::ensure_no_pending_rename(tx, &id)?;
                 }
-                store::ensure_no_pending_move(&tx, &id)?;
+                store::ensure_no_pending_move(tx, &id)?;
                 let current: Option<WorkspaceState> = tx
                     .query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
                         row.get(0)
@@ -964,7 +961,7 @@ impl Manager {
                     Some(current @ WorkspaceState::Preparing)
                         if rules.awaiting_setup
                             && !store::exists(
-                                &tx,
+                                tx,
                                 "SELECT 1 FROM executions WHERE workspace_id=?1",
                                 [&id],
                             )? =>
@@ -983,7 +980,7 @@ impl Manager {
                 ensure!(
                     !rules.refuse_holds
                         || !store::exists(
-                            &tx,
+                            tx,
                             "SELECT 1 FROM workspace_holds WHERE workspace_id=?1 AND placed_by=?2",
                             params![id, crate::model::HoldPlacer::User],
                         )?,
@@ -994,7 +991,6 @@ impl Manager {
                         "UPDATE workspaces SET state=?2 WHERE id=?1",
                         params![id, state],
                     )?;
-                    tx.commit()?;
                 }
                 Ok(current)
             })

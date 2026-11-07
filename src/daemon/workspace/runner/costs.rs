@@ -50,8 +50,7 @@ impl Manager {
         let (id, repository) = (job.id.clone(), job.repository_id.clone());
         let (workflow, name) = key(&job.job);
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 let peaks: Option<(Option<f64>, Option<i64>)> = tx
                     .query_row(
                         "SELECT peak_cpu,peak_memory FROM ci_jobs WHERE id=?1 AND usage_recorded=0",
@@ -82,7 +81,6 @@ impl Manager {
                          ORDER BY ended_at DESC, rowid DESC LIMIT ?4)",
                     params![repository, workflow, name, RECENT_RUNS],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await

@@ -2,7 +2,7 @@
 //! its agent ends a turn normally, so a run of failed turns adds one
 //! notification rather than one each.
 use anyhow::Result;
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::Connection;
 
 use super::{Manager, cancel};
 use crate::{
@@ -48,14 +48,12 @@ impl Unretried {
 
 /// Drop the workspace's retry and note that `execution`'s failed turn went
 /// unretried, together. Whether the note is new.
-fn record(db: &mut Connection, workspace_id: &str, execution: &str) -> Result<bool> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    cancel(&tx, workspace_id)?;
+fn record(tx: &rusqlite::Transaction<'_>, workspace_id: &str, execution: &str) -> Result<bool> {
+    cancel(tx, workspace_id)?;
     let noted = tx.execute(
         "INSERT OR IGNORE INTO execution_unretried_turns(execution_id) VALUES (?1)",
         [execution],
     )?;
-    tx.commit()?;
     Ok(noted > 0)
 }
 
@@ -95,7 +93,7 @@ impl Manager {
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
         if self
             .store
-            .run(move |db| record(db, &id, &execution))
+            .write(move |tx| record(tx, &id, &execution))
             .await?
         {
             let message = reason.message(agent, failure);

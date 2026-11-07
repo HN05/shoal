@@ -392,14 +392,12 @@ impl Manager {
             job.job.handle.clone(),
         );
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
                 tx.execute(
                     "INSERT OR IGNORE INTO ci_passed_jobs(repository_id,handle) VALUES (?1,?2)",
                     params![repository, handle],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await

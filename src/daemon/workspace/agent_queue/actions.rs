@@ -177,7 +177,7 @@ impl Manager {
         let _gate = self.agent_queue.lock_admission().await;
         let workspace_id = workspace_id.to_owned();
         self.store
-            .run(move |db| delete_waiting_launches(db, &workspace_id))
+            .write(move |tx| delete_waiting_launches(tx, &workspace_id))
             .await
     }
 
@@ -229,16 +229,14 @@ impl Manager {
             job.job.handle.clone(),
         );
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let deleted = delete_waiting(&tx, &id)?;
+            .write(move |tx| {
+                let deleted = delete_waiting(tx, &id)?;
                 if deleted {
                     tx.execute(
                         "INSERT OR IGNORE INTO ci_passed_jobs(repository_id,handle) VALUES (?1,?2)",
                         params![repository, handle],
                     )?;
                 }
-                tx.commit()?;
                 Ok(deleted)
             })
             .await
@@ -287,7 +285,7 @@ impl Manager {
     /// entry's ID.
     async fn place_restore(&self, restore: WaitingRestore, place: QueuePlace) -> Result<String> {
         self.store
-            .run(move |db| record_placed_restore(db, &restore, &place))
+            .write(move |tx| record_placed_restore(tx, &restore, &place))
             .await
     }
 
@@ -295,14 +293,12 @@ impl Manager {
     /// `back_only`, returning its new position.
     async fn place_entry(&self, id: String, place: QueuePlace, back_only: bool) -> Result<usize> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let moved = order::place(&tx, &id, &place)?;
+            .write(move |tx| {
+                let moved = order::place(tx, &id, &place)?;
                 ensure!(
                     !back_only || moved.to >= moved.from,
                     "workspace processes can only move queue entries back"
                 );
-                tx.commit()?;
                 Ok(moved.to)
             })
             .await
@@ -361,41 +357,37 @@ fn delete_waiting(db: &rusqlite::Connection, id: &str) -> Result<bool> {
 /// Delete the launches waiting to open `workspace_id`, returning them in
 /// queue order.
 fn delete_waiting_launches(
-    db: &mut rusqlite::Connection,
+    tx: &rusqlite::Transaction<'_>,
     workspace_id: &str,
 ) -> Result<Vec<QueueEntry>> {
     const WAITING: &str = "FROM agent_queue WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3";
     let selection = params![workspace_id, QueueKind::Launch, QueueState::Queued];
-    let tx = db.transaction()?;
     let launches = tx
         .prepare(&format!("SELECT {ENTRY_COLUMNS} {WAITING} ORDER BY seq"))?
         .query_map(selection, queue_entry)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     tx.execute(&format!("DELETE {WAITING}"), selection)?;
-    tx.commit()?;
     Ok(launches)
 }
 
 /// Record `restore` at `place` in one transaction, refusing an agent whose
 /// restore already has an entry.
 fn record_placed_restore(
-    db: &mut rusqlite::Connection,
+    tx: &rusqlite::Transaction<'_>,
     restore: &WaitingRestore,
     place: &QueuePlace,
 ) -> Result<String> {
-    let tx = db.transaction()?;
     ensure!(
         !crate::daemon::store::exists(
-            &tx,
+            tx,
             "SELECT 1 FROM agent_queue WHERE execution_id=?1",
             [&restore.execution],
         )?,
         "the restore of {} is already in the agent queue",
         restore.workspace.name
     );
-    let id = record_waiting_restore(&tx, restore)?;
-    order::place(&tx, &id, place)?;
-    tx.commit()?;
+    let id = record_waiting_restore(tx, restore)?;
+    order::place(tx, &id, place)?;
     Ok(id)
 }
 

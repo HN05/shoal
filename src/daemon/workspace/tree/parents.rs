@@ -1,7 +1,7 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
 //! whose agent opened it, or the user when one opened it outside any.
 use anyhow::{Result, ensure};
-use rusqlite::{Connection, params};
+use rusqlite::params;
 
 use super::super::{Manager, NewWorkspace};
 use crate::client::space_names::SpaceSelector;
@@ -18,7 +18,7 @@ impl Manager {
         let workspace = workspace.to_owned();
         let held = [self.chat_removals.clone(), self.chat_owners.clone()];
         self.store
-            .run(move |db| assign(db, &workspace, parent.as_deref(), &held))
+            .write(move |tx| assign(tx, &workspace, parent.as_deref(), &held))
             .await
     }
 
@@ -126,24 +126,23 @@ impl Manager {
 /// user. A workspace below a chat being removed stays there: the removal
 /// listed it after reserving the chat, on this one thread, and takes it.
 fn assign(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     workspace: &str,
     parent: Option<&str>,
     [removing, owners]: &[Removing; 2],
 ) -> Result<()> {
-    let tx = db.transaction()?;
     // A removal decided by the space the workspace is below keeps it there.
     ensure!(
         !store::exists(
-            &tx,
+            tx,
             "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
             params![workspace, crate::state::WorkspaceState::Removing]
         )?,
         "the workspace is being removed"
     );
-    let current = super::parent_id(&tx, workspace)?;
+    let current = super::parent_id(tx, workspace)?;
     if let Some(current) = &current
-        && spaces::space_kind(&tx, current)? == Some(SpaceKind::Workspace)
+        && spaces::space_kind(tx, current)? == Some(SpaceKind::Workspace)
     {
         return Ok(());
     }
@@ -161,7 +160,7 @@ fn assign(
     let parent = match parent
         .filter(|parent| !removing.reserved(parent) || current.as_deref() == Some(*parent))
     {
-        Some(parent) if spaces::space_kind(&tx, parent)?.is_some() => Some(parent),
+        Some(parent) if spaces::space_kind(tx, parent)?.is_some() => Some(parent),
         _ => None,
     };
     if parent != current.as_deref() {
@@ -171,10 +170,9 @@ fn assign(
                 [workspace],
                 |row| row.get(0),
             )?;
-            super::ensure_parent(&tx, Some(&repository), workspace, parent)?;
+            super::ensure_parent(tx, Some(&repository), workspace, parent)?;
         }
-        super::set_parent(&tx, workspace, parent)?;
+        super::set_parent(tx, workspace, parent)?;
     }
-    tx.commit()?;
     Ok(())
 }

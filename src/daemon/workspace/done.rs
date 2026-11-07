@@ -42,9 +42,8 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         let completion = self
             .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &workspace.id)?;
+            .write(move |tx| {
+                store::require_ready(tx, &workspace.id)?;
                 let record: String = tx
                     .query_row(
                         "DELETE FROM workspace_completion WHERE workspace_id=?1 RETURNING record",
@@ -55,7 +54,6 @@ impl Manager {
                     .context("assignment is not marked done")?;
                 // An unreadable record stays in place for diagnosis.
                 let completion = serde_json::from_str(&record)?;
-                tx.commit()?;
                 Ok(completion)
             })
             .await?;
@@ -140,20 +138,18 @@ impl Manager {
         let completion = completion.clone();
         let persisted = self
             .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
-                let replaced = record_completion(&tx, &id, &completion)?;
+            .write(move |tx| {
+                store::require_ready(tx, &id)?;
+                let replaced = record_completion(tx, &id, &completion)?;
                 // Like the continuation it replaced, a hold made from one by
                 // migration 31 ends at the next explicit done.
                 let released = tx.execute(
                     "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
                     [&id],
                 )?;
-                let closed = questions::close_open(&tx, &id)?;
+                let closed = questions::close_open(tx, &id)?;
                 // A finished assignment leaves its failed turn alone.
-                super::turn_retry::cancel(&tx, &id)?;
-                tx.commit()?;
+                super::turn_retry::cancel(tx, &id)?;
                 Ok(Persisted {
                     changed: replaced || released > 0 || !closed.is_empty(),
                     closed,

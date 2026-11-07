@@ -81,13 +81,12 @@ impl Restore {
 /// automatic; one that starts at once refuses it. Its workspace must be
 /// ready and its execution ended, since a recorded one runs, waits for its
 /// wrapper's restore or is unresolved.
-fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
-    let tx = db.transaction()?;
-    crate::daemon::store::require_ready(&tx, &restore.target.id)
+fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
+    crate::daemon::store::require_ready(tx, &restore.target.id)
         .context("restore agents in a ready workspace")?;
     ensure!(
         !crate::daemon::store::exists(
-            &tx,
+            tx,
             "SELECT 1 FROM executions WHERE id=?1",
             [&restore.execution],
         )?,
@@ -98,7 +97,7 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
     ensure!(
         restore.state == QueueState::Queued
             || !crate::daemon::store::exists(
-                &tx,
+                tx,
                 "SELECT 1 FROM agent_queue WHERE execution_id=?1",
                 [&restore.execution],
             )?,
@@ -124,7 +123,6 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
             restore.automatic,
         ],
     )?;
-    tx.commit()?;
     Ok(())
 }
 
@@ -282,7 +280,7 @@ impl Manager {
         let restore = Restore::new(target, execution, &agent, &env, false)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
-        self.store.run(move |db| insert(db, &restore)).await?;
+        self.store.write(move |tx| insert(tx, &restore)).await?;
         let entry = self
             .queue_entries()
             .await?
@@ -320,7 +318,7 @@ impl Manager {
             name: restore.target.name.clone(),
             env,
         };
-        self.store.run(move |db| insert(db, &restore)).await?;
+        self.store.write(move |tx| insert(tx, &restore)).await?;
         Ok(start)
     }
 
@@ -350,7 +348,7 @@ impl Manager {
         let queued = async {
             let restore = Restore::new(target, execution, agent, &env, true)?;
             let _gate = self.agent_queue.lock_admission().await;
-            self.store.run(move |db| insert(db, &restore)).await
+            self.store.write(move |tx| insert(tx, &restore)).await
         };
         if let Err(error) = queued.await {
             crate::daemon::log!(
@@ -401,7 +399,7 @@ impl Manager {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
         if let Some(record) = recovery::Record::load(&path).ok().flatten() {
             let restore = Restore::new(workspace.clone(), execution, &record.agent, env, true)?;
-            if let Err(error) = self.store.run(move |db| insert(db, &restore)).await {
+            if let Err(error) = self.store.write(move |tx| insert(tx, &restore)).await {
                 crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
                 return Ok(());
             }

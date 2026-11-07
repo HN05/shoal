@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::params;
 
 use crate::state::{QueueKind, QueueState};
 
@@ -16,11 +16,10 @@ pub(super) enum FailedStart {
 /// Delete unheld, daemon-started entries older than `cutoff`. Opened launches
 /// expire silently. Return reportable failures only after deletion commits.
 pub(super) fn expire_starts(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     held: &HashSet<String>,
     cutoff: crate::time::UnixTime,
 ) -> Result<Vec<FailedStart>> {
-    let tx = db.transaction()?;
     let stale = tx
         .prepare(
             "SELECT id,name,kind,workspace_id IS NULL FROM agent_queue
@@ -44,7 +43,6 @@ pub(super) fn expire_starts(
         };
         failures.push(failure);
     }
-    tx.commit()?;
     Ok(failures)
 }
 

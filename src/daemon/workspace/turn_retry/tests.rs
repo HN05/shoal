@@ -459,34 +459,34 @@ async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
     let reset = UnixTime::from_seconds(4_000_000_000_000);
     let due_at = manager
         .store
-        .run(move |db| {
+        .write(move |tx| {
             let failure = TurnFailure::RateLimited;
             // Each runs whole: the reset is kept before the failure is
             // recorded, so the retry reads it ...
-            record_reset(db, &execution, Some(reset))?;
+            record_reset(tx, &execution, Some(reset))?;
             record_failure(
-                db,
+                tx,
                 &id,
                 &execution,
                 failure,
                 UnixTime::from_seconds(1000),
                 0.5,
             )?;
-            let first = get(db, &id)?.context("retry after the reset")?.due_at;
-            cancel(db, &id)?;
-            record_reset(db, &execution, None)?;
+            let first = get(tx, &id)?.context("retry after the reset")?.due_at;
+            cancel(tx, &id)?;
+            record_reset(tx, &execution, None)?;
             // ... or the failure is recorded first, and the reset holds it.
             record_failure(
-                db,
+                tx,
                 &id,
                 &execution,
                 failure,
                 UnixTime::from_seconds(1000),
                 0.5,
             )?;
-            assert!(get(db, &id)?.context("retry")?.due_at < reset);
-            assert!(record_reset(db, &execution, Some(reset))?);
-            let second = get(db, &id)?.context("held retry")?.due_at;
+            assert!(get(tx, &id)?.context("retry")?.due_at < reset);
+            assert!(record_reset(tx, &execution, Some(reset))?);
+            let second = get(tx, &id)?.context("held retry")?.due_at;
             Ok::<_, anyhow::Error>((first, second))
         })
         .await?;
@@ -502,21 +502,21 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
     let scheduling_execution = execution.clone();
     let pending = manager
         .store
-        .run(move |db| {
+        .write(move |tx| {
             let failure = TurnFailure::RateLimited;
             let start = UnixTime::from_seconds(1000);
             let mut now = start;
             // Drive the scheduling clock, without sleeping through usage limits.
             while now < start + secs(8 * 24 * 60 * 60) {
-                record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
-                let pending = get(db, &id)?.context("pending usage-limit retry")?;
+                record_failure(tx, &id, &scheduling_execution, failure, now, 0.5)?;
+                let pending = get(tx, &id)?.context("pending usage-limit retry")?;
                 assert!(pending.due_at > now);
-                assert!(deliver(db, &id, pending.due_at)?);
-                db.execute("DELETE FROM agent_messages WHERE workspace_id=?1", [&id])?;
+                assert!(deliver(tx, &id, pending.due_at)?);
+                tx.execute("DELETE FROM agent_messages WHERE workspace_id=?1", [&id])?;
                 now = pending.due_at;
             }
-            record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
-            get(db, &id)?.context("retry after eight days")
+            record_failure(tx, &id, &scheduling_execution, failure, now, 0.5)?;
+            get(tx, &id)?.context("retry after eight days")
         })
         .await?;
     assert!(pending.attempt > 8);

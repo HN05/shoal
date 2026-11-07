@@ -459,8 +459,8 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
         let id = chat.id.clone();
         let saved = manager
             .store
-            .run(move |db| {
-                db.execute(ended, [&id])?;
+            .write(move |tx| {
+                tx.execute(ended, [&id])?;
                 let report = Report {
                     space: id.clone(),
                     state: AgentState::Working,
@@ -469,7 +469,7 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
                     prompt_cache_expires_at: None,
                     failed: false,
                 };
-                Ok((save(db, &report)?, get(db, &id)?))
+                Ok((save(tx, &report)?, get(tx, &id)?))
             })
             .await
             .unwrap();

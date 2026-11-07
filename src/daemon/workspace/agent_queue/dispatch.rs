@@ -287,8 +287,7 @@ impl Manager {
         mut bases: HashMap<String, String>,
     ) -> Result<Vec<Start>> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 let now = UnixTime::now();
                 let mut starts = Vec::new();
                 for id in admitted {
@@ -309,7 +308,6 @@ impl Manager {
                         });
                     }
                 }
-                tx.commit()?;
                 Ok(starts)
             })
             .await
@@ -354,7 +352,7 @@ impl Manager {
         let cutoff = UnixTime::now() - START_GRACE;
         let expired = self
             .store
-            .run(move |db| expiry::expire_starts(db, &held, cutoff))
+            .write(move |tx| expiry::expire_starts(tx, &held, cutoff))
             .await?;
         for failure in expired {
             self.report_expired_start(failure).await;
@@ -387,8 +385,7 @@ impl Manager {
         let connected = self.executions.connection_ids().await;
         let cutoff = UnixTime::now() - START_GRACE;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
+            .write(move |tx| {
                 let stale = tx
                     .prepare(
                         "SELECT execution_id FROM agent_queue
@@ -399,7 +396,6 @@ impl Manager {
                 for execution in stale.iter().filter(|id| !connected.contains(*id)) {
                     tx.execute("DELETE FROM agent_queue WHERE execution_id=?1", [execution])?;
                 }
-                tx.commit()?;
                 Ok(())
             })
             .await

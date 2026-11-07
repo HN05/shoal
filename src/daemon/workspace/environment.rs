@@ -59,10 +59,9 @@ impl Manager {
         let token = Uuid::new_v4().to_string();
         let paths = self.paths.clone();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &workspace_id)?;
-                let ports = store::ports(&tx, Some(&workspace_id))?;
+            .write(move |tx| {
+                store::require_ready(tx, &workspace_id)?;
+                let ports = store::ports(tx, Some(&workspace_id))?;
                 let mut values = env::render_configured_environment(
                     &configured,
                     &workspace,
@@ -87,7 +86,6 @@ impl Manager {
                     "INSERT INTO workspace_scopes(token,workspace_id) VALUES (?1,?2)",
                     params![token, workspace_id],
                 )?;
-                tx.commit()?;
                 Ok(values)
             })
             .await

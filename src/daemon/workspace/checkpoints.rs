@@ -142,7 +142,10 @@ impl Manager {
         let reference = git::checkpoint::reference(&checkpoint.commit);
         git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
         let record = checkpoint.clone();
-        checkpoint.number = self.store.run(move |db| insert(db, &record)).await?;
+        checkpoint.number = self
+            .store
+            .write(move |tx| insert_numbered(tx, &record))
+            .await?;
         Ok(checkpoint)
     }
 
@@ -343,12 +346,11 @@ impl Manager {
     ) -> Result<()> {
         let (from, to) = (removed.workspace_id.clone(), workspace_id.to_owned());
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                reassign(&tx, &from, &to)?;
-                crate::daemon::events::adopt(&tx, &from, &to)?;
+            .write(move |tx| {
+                reassign(tx, &from, &to)?;
+                crate::daemon::events::adopt(tx, &from, &to)?;
                 crate::daemon::events::record(
-                    &tx,
+                    tx,
                     &to,
                     crate::daemon::events::EventKind::Restored,
                     crate::daemon::events::EventCause::Manual,
@@ -358,7 +360,6 @@ impl Manager {
                     "DELETE FROM removed_workspaces WHERE workspace_id=?1",
                     [&from],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await
@@ -442,14 +443,6 @@ fn branch_label(branch: Option<&str>) -> String {
         || "a detached HEAD".to_owned(),
         |branch| format!("branch {branch}"),
     )
-}
-
-/// Record a checkpoint under the workspace's next number and return it.
-fn insert(db: &mut Connection, checkpoint: &Checkpoint) -> Result<u64> {
-    let tx = db.transaction()?;
-    let number = insert_numbered(&tx, checkpoint)?;
-    tx.commit()?;
-    Ok(number)
 }
 
 /// Record a checkpoint under the workspace's next number, in the caller's

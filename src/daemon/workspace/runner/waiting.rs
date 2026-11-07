@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::params;
 
 use super::{Registration, runner_labels};
 use crate::{client::space_names::SpaceName, model::SpaceKind};
@@ -62,7 +62,7 @@ impl Manager {
         let id = repository.id.clone();
         let known = self
             .store
-            .run(move |db| forget_unlisted_jobs(db, &id, &listed))
+            .write(move |tx| forget_unlisted_jobs(tx, &id, &listed))
             .await?;
         for job in waiting {
             if known.contains(&job.handle) {
@@ -76,7 +76,7 @@ impl Manager {
                 workspace_id,
             };
             let id = repository.id.clone();
-            self.store.run(move |db| queue_job(db, &id, &job)).await?;
+            self.store.write(move |tx| queue_job(tx, &id, &job)).await?;
         }
         Ok(())
     }
@@ -114,11 +114,10 @@ impl Manager {
 /// handles the forge no longer lists among `listed`, returning the handles
 /// the runner still knows: queued, starting, claimed or passed over.
 fn forget_unlisted_jobs(
-    db: &mut Connection,
+    tx: &rusqlite::Transaction<'_>,
     repository_id: &str,
     listed: &HashSet<String>,
 ) -> Result<HashSet<String>> {
-    let tx = db.transaction()?;
     let entries = tx
         .prepare(
             "SELECT id,json_extract(job,'$.job.handle'),state FROM agent_queue
@@ -156,14 +155,12 @@ fn forget_unlisted_jobs(
             )?;
         }
     }
-    tx.commit()?;
     Ok(known)
 }
 
 /// Queue `job` behind the work already waiting, except that it goes ahead of
 /// a waiting restore of the agent of the workspace its run links.
-fn queue_job(db: &mut Connection, repository_id: &str, job: &QueuedJob) -> Result<()> {
-    let tx = db.transaction()?;
+fn queue_job(tx: &rusqlite::Transaction<'_>, repository_id: &str, job: &QueuedJob) -> Result<()> {
     let id = uuid::Uuid::new_v4().to_string();
     let name = SpaceName::derive(
         SpaceKind::Workspace,
@@ -191,9 +188,8 @@ fn queue_job(db: &mut Connection, repository_id: &str, job: &QueuedJob) -> Resul
         None => None,
     };
     if let Some(restore) = restore {
-        crate::daemon::workspace::agent_queue::place_entry(&tx, &id, &QueuePlace::Before(restore))?;
+        crate::daemon::workspace::agent_queue::place_entry(tx, &id, &QueuePlace::Before(restore))?;
     }
-    tx.commit()?;
     Ok(())
 }
 

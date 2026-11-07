@@ -10,13 +10,13 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 
 pub(crate) use crate::client::executions::TurnRetry;
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use self::unretried::Unretried;
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{agent_messages, log},
+    daemon::{agent_messages, log, store},
     state::{AgentState, TurnFailure},
     time::UnixTime,
 };
@@ -94,20 +94,18 @@ fn spread() -> f64 {
 /// waits past the reset the execution's proxy last reported, read in the
 /// same transaction as a report of it, so neither can slip between.
 fn record_failure(
-    db: &mut Connection,
+    tx: &Transaction<'_>,
     workspace_id: &str,
     execution: &str,
     failure: TurnFailure,
     now: UnixTime,
     spread: f64,
 ) -> Result<()> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let reset = upstream_reset(&tx, execution)?;
-    let previous = previous_attempt(&tx, workspace_id)?;
+    let reset = upstream_reset(tx, execution)?;
+    let previous = previous_attempt(tx, workspace_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
     let due_at = reset.map_or(due_at, |reset| due_at.max(reset + RESET_MARGIN));
-    save_retry(&tx, workspace_id, execution, failure, attempt, due_at)?;
-    tx.commit()?;
+    save_retry(tx, workspace_id, execution, failure, attempt, due_at)?;
     Ok(())
 }
 
@@ -115,11 +113,9 @@ fn record_failure(
 /// until, and hold its pending turn retry until past it, together, so a
 /// failure recorded at the same time sees one or the other; `None` forgets
 /// it. Whether a pending retry was held.
-fn record_reset(db: &mut Connection, execution: &str, reset: Option<UnixTime>) -> Result<bool> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+fn record_reset(tx: &Transaction<'_>, execution: &str, reset: Option<UnixTime>) -> Result<bool> {
     let Some(reset) = reset else {
-        forget_upstream_reset(&tx, execution)?;
-        tx.commit()?;
+        forget_upstream_reset(tx, execution)?;
         return Ok(false);
     };
     tx.execute(
@@ -132,7 +128,6 @@ fn record_reset(db: &mut Connection, execution: &str, reset: Option<UnixTime>) -
          WHERE execution_id=?1 AND delivered=0",
         params![execution, reset + RESET_MARGIN],
     )?;
-    tx.commit()?;
     Ok(held > 0)
 }
 
@@ -295,7 +290,7 @@ fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
     let mut queued = false;
     let mut failed = Vec::new();
     for workspace_id in due_workspaces(db, now)? {
-        match deliver(db, &workspace_id, now) {
+        match store::write_transaction(db, |tx| deliver(tx, &workspace_id, now)) {
             Ok(delivered) => queued |= delivered,
             Err(error) => {
                 postpone(
@@ -324,14 +319,13 @@ fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
 /// delivered together, or drop a retry that may not be. One transaction
 /// checks and delivers, so a turn that starts meanwhile never receives a
 /// cancelled retry. Whether a message was queued.
-fn deliver(db: &mut Connection, workspace_id: &str, now: UnixTime) -> Result<bool> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let Some(due) = due(&tx, workspace_id, now)? else {
+fn deliver(tx: &Transaction<'_>, workspace_id: &str, now: UnixTime) -> Result<bool> {
+    let Some(due) = due(tx, workspace_id, now)? else {
         return Ok(false);
     };
     if due.deliverable {
         agent_messages::insert(
-            &tx,
+            tx,
             workspace_id,
             &continuation(due.failure, due.attempt),
             &[],
@@ -341,9 +335,8 @@ fn deliver(db: &mut Connection, workspace_id: &str, now: UnixTime) -> Result<boo
             [workspace_id],
         )?;
     } else {
-        cancel(&tx, workspace_id)?;
+        cancel(tx, workspace_id)?;
     }
-    tx.commit()?;
     Ok(due.deliverable)
 }
 
@@ -398,7 +391,7 @@ impl Manager {
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
         let (now, spread) = (UnixTime::now(), spread());
         self.store
-            .run(move |db| record_failure(db, &id, &execution, failure, now, spread))
+            .write(move |tx| record_failure(tx, &id, &execution, failure, now, spread))
             .await?;
         self.signals.wake_turn_retry();
         Ok(())
@@ -414,7 +407,7 @@ impl Manager {
     ) -> Result<()> {
         if self
             .store
-            .run(move |db| record_reset(db, &execution, reset))
+            .write(move |tx| record_reset(tx, &execution, reset))
             .await?
         {
             self.signals.wake_turn_retry();
