@@ -1010,7 +1010,8 @@ inherit a daemon-validated scope token that
 confines them to their own workspace and the spaces below it:
 status, inspect, execute, setup, and resources.
 Creation other than of a child of the caller's space, removal other than of a descendant the user holds nothing below,
-reconciliation, other workspaces, repository administration, and service control need an
+reconciliation, other workspaces, repository administration, and service control other
+than `daemon reload`, which applies the config on disk and stops nothing, need an
 unscoped caller. A scoped `merge` is an
 approval request bound to the branch and its HEAD unless `[permissions] merge`
 and `push` are `"direct"`, and a scoped `unmerge` one bound to the merge it undoes;

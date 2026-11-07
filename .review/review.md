@@ -144,7 +144,7 @@ instead of the PR delivery guidance below.
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than a child of their own space, removal other than of a space below their own
-  the user holds nothing below, recovery and shared repository/service administration stay denied. For the workspaces below their own, scoped callers hold them, queue agents,
+  the user holds nothing below, recovery and shared repository/service administration other than `daemon reload` stay denied. For the workspaces below their own, scoped callers hold them, queue agents,
   which the daemon starts detached so they never inherit the caller's scope, cancel their queue
   entries or move them back, send agent messages,
   answer questions, stop their executions, restart their agents and those of the chats below their own,
