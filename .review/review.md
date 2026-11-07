@@ -639,7 +639,10 @@ configured command for another agent, plus proven child
   the daemon refresh only directories that still hold a Shoal skill. Code that
   changes user-level files outside the state directory checks
   `build::changes_user_files`, which debug builds fail unless
-  `SHOAL_DEV_USER_FILES=1`.
+  `SHOAL_DEV_USER_FILES=1`. Code writes the global config and the files beside
+  it through `config_file`, and tests outside `shoal-client` through
+  `test_support`, which refuse the user's own config directory in a debug
+  build and always in unit tests.
 - Tests run in temporary state directories and repositories without the launching
   environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.

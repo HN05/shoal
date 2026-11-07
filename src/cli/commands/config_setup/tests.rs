@@ -15,7 +15,7 @@ fn setup_installs_the_default_config_only_where_there_is_none() {
         .find(|(name, _)| *name == "default")
         .map(|(_, text)| *text);
     assert_eq!(std::fs::read_to_string(&file).ok().as_deref(), packaged);
-    std::fs::write(&file, "# mine\n").unwrap();
+    crate::test_support::write_beside_global_config(&ctx.paths, "config.toml", "# mine\n");
     installed_config(&ctx).unwrap();
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "# mine\n");
 }

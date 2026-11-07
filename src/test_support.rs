@@ -81,9 +81,17 @@ const BASE_CONFIG: &str = "setup.copy_ignored = false\nmessages.settle_seconds =
 
 /// Write global config `text` after [`BASE_CONFIG`] for the state of `paths`.
 pub fn write_global_config(paths: &Paths, text: &str) {
+    write_beside_global_config(paths, "config.toml", &format!("{BASE_CONFIG}{text}"));
+}
+
+/// Write `text` to `name` in the directory of the global config for `paths`,
+/// failing for the user's own config directory.
+pub fn write_beside_global_config(paths: &Paths, name: &str, text: &str) {
     let config = crate::config::Config::path(paths);
-    fs::create_dir_all(config.parent().unwrap()).unwrap();
-    fs::write(&config, format!("{BASE_CONFIG}{text}")).unwrap();
+    let path = config.parent().unwrap().join(name);
+    crate::config_file::refuse_user_config(&path).unwrap();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, text).unwrap();
 }
 
 /// Run a test helper as its own wrapper, without the runner's scope or terminal.

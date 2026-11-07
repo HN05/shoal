@@ -305,7 +305,11 @@ launching environment's Shoal variables or configuration locations; never instal
 persistent OS services or modify real user workspaces as a side effect of tests.
 Run development builds only with a temporary `--state-dir`: the user's daemon
 serves every running agent, so never stop, restart or reinstall it, and a debug
-build refuses the user's state directory unless `SHOAL_DEV_USER_FILES=1`. Code that
+build refuses the user's state directory, and writes to the user's config
+directory, unless `SHOAL_DEV_USER_FILES=1`. Code writes the global config and
+the files beside it through `config_file`, and tests outside `shoal-client`
+through `test_support`, which refuse that directory in unit tests whatever
+they inherit. Code that
 changes user-level files outside the state directory checks
 `build::changes_user_files`, so debug builds leave them to the installed Shoal.
 

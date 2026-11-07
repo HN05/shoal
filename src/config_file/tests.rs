@@ -11,7 +11,11 @@ fn install_writes_the_template_once_and_keeps_edits() {
     let (path, created) = Config::install(&paths).unwrap();
     assert!(created && path == expected);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), TEMPLATE);
-    std::fs::write(&path, "agent.default = 'claude'\n").unwrap();
+    crate::test_support::write_beside_global_config(
+        &paths,
+        "config.toml",
+        "agent.default = 'claude'\n",
+    );
     let (same, created) = Config::install(&paths).unwrap();
     assert!(!created && same == expected);
     let text = std::fs::read_to_string(&path).unwrap();
@@ -28,10 +32,10 @@ fn install_writes_the_template_once_and_keeps_edits() {
 #[test]
 fn replace_keeps_the_replaced_file_as_a_backup() {
     let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".config/shoal/config.toml");
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let paths = Paths::for_test(home.path());
+    let path = Config::path(&paths);
     let edited = "agent.default = 'claude'\n";
-    std::fs::write(&path, edited).unwrap();
+    crate::test_support::write_beside_global_config(&paths, "config.toml", edited);
     let (same, backup) = replace(path.clone(), "template\n").unwrap();
     let backup = backup.unwrap();
     assert!(same == path && backup == home.path().join(".config/shoal/config.toml.backup"));
