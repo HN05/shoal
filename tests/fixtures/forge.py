@@ -23,7 +23,6 @@ import json
 import os
 import re
 import sys
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.join(os.environ["HOME"], "forge")
 LOG = os.path.join(ROOT, "requests.jsonl")
@@ -164,51 +163,60 @@ def form_file(data):
     }
 
 
-class Handler(BaseHTTPRequestHandler):
-    def handle_request(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        data = self.rfile.read(length)
-        if self.headers.get("Content-Type", "").startswith("multipart/form-data"):
-            body = form_file(data)
-        else:
-            body = json.loads(data) if length else None
-        path = self.path.removeprefix("/api/v1/")
-        key = f"{self.command} {path}"
-        if GIT_TRANSPORT.match(path):
-            status, answer, headers = 404, None, {}
-        elif key == "GET version" and key not in load_responses():
-            status, answer, headers = 200, {"version": "11.0.0+gitea-1.22.0"}, {}
-        else:
-            status, answer, headers = respond(
-                key,
-                body,
-                self.headers.get("Authorization"),
-                tag=self.headers.get("If-None-Match"),
-            )
-        data = b"" if answer is None else (answer if isinstance(answer, str) else json.dumps(answer)).encode()
-        self.send_response(status)
-        if status == 200:
-            self.send_header("ETag", etag(answer))
-        for name, value in headers.items():
-            self.send_header(name, value)
-        if "Content-Type" not in headers:
-            self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+def serve(port_file):
+    """Serve the scripted Forgejo API on a loopback port, written to
+    `port_file` once it listens."""
+    # Only the server needs http.server, whose import takes longer than the
+    # rest of a scripted curl's run.
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = handle_request
+    class Handler(BaseHTTPRequestHandler):
+        def handle_request(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            data = self.rfile.read(length)
+            if self.headers.get("Content-Type", "").startswith("multipart/form-data"):
+                body = form_file(data)
+            else:
+                body = json.loads(data) if length else None
+            path = self.path.removeprefix("/api/v1/")
+            key = f"{self.command} {path}"
+            if GIT_TRANSPORT.match(path):
+                status, answer, headers = 404, None, {}
+            elif key == "GET version" and key not in load_responses():
+                status, answer, headers = 200, {"version": "11.0.0+gitea-1.22.0"}, {}
+            else:
+                status, answer, headers = respond(
+                    key,
+                    body,
+                    self.headers.get("Authorization"),
+                    tag=self.headers.get("If-None-Match"),
+                )
+            data = b"" if answer is None else (answer if isinstance(answer, str) else json.dumps(answer)).encode()
+            self.send_response(status)
+            if status == 200:
+                self.send_header("ETag", etag(answer))
+            for name, value in headers.items():
+                self.send_header(name, value)
+            if "Content-Type" not in headers:
+                self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
-    def log_message(self, *args):
-        pass
+        do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = handle_request
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    with open(port_file + ".tmp", "w") as f:
+        f.write(str(server.server_address[1]))
+    os.rename(port_file + ".tmp", port_file)
+    server.serve_forever()
 
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["serve"]:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        with open(sys.argv[2] + ".tmp", "w") as f:
-            f.write(str(server.server_address[1]))
-        os.rename(sys.argv[2] + ".tmp", sys.argv[2])
-        server.serve_forever()
+        serve(sys.argv[2])
     else:
         curl(sys.argv[1:])
