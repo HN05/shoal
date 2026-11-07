@@ -7,8 +7,9 @@ descendants it waited for, such as the daemons and CLI processes a test
 spawns, but not processes left running after it.
 
 `suite` runs each binary whole, one after another, as `cargo test` does, and
-prints their totals. `tests` runs every test alone in its own process, --jobs
-at a time, and lists the costliest; --csv keeps every row.
+prints their totals. `tests` runs every test alone in its own process, as
+`cargo nextest run` does, --jobs at a time, and lists the costliest; --csv
+keeps every row.
 
   python3 scripts/profile_tests.py suite
   python3 scripts/profile_tests.py tests --binary workspaces --csv target/tests.csv

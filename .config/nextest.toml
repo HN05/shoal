@@ -1,0 +1,31 @@
+# cargo-nextest runs every test in a process of its own, with the tests of
+# every binary in one pool, so no binary waits for another's slowest test.
+#
+# A lock in one test binary's memory no longer keeps its tests apart; tests
+# that must not overlap need a lock other processes see, and a test group
+# here so that waiting for it takes no test slot.
+
+# The first release with test priorities.
+nextest-version = "0.9.91"
+
+[test-groups]
+# The overload fixture's ownership scans cover the whole process table, so its
+# tests take turns through a file lock (src/daemon/test_support/overload.rs).
+overload-fixture = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'package(shoal) & kind(bin) & (test(/^daemon::overload_tests::/) | test(/^cli::commands::resume::tests::stopped::/))'
+test-group = 'overload-fixture'
+# They run one after another for minutes; starting them first keeps them from
+# becoming the run's tail.
+priority = 100
+
+[profile.ci]
+# Every failing test is a defect to fix, so a run reports them all.
+fail-fast = false
+# Report a test running for over a minute as slow, and stop one after ten as
+# hung: a Shoal runner never stops a job on its own. A hang guard, not a
+# deadline; tests must not depend on runner speed (AGENTS.md, Validation).
+slow-timeout = { period = "60s", terminate-after = 10 }
+# Repeat the failures at the end, which CI's log tail keeps.
+failure-output = "immediate-final"

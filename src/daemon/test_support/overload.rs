@@ -27,13 +27,8 @@ pub(crate) fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output 
     }
 }
 
-// Native ownership scans cover the whole process table. Another fixture's
-// terminating process may have an unreadable environment before it disappears.
-pub(crate) static PROCESS_FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
 pub(crate) struct FixtureRoot {
     _root: tempfile::TempDir,
-    _process_guard: tokio::sync::MutexGuard<'static, ()>,
     _process_file_guard: std::fs::File,
 }
 
@@ -43,7 +38,10 @@ pub(crate) async fn fixture() -> (
     crate::model::Workspace,
     tokio::task::JoinHandle<()>,
 ) {
-    let process_guard = PROCESS_FIXTURE.lock().await;
+    // Native ownership scans cover the whole process table. Another fixture's
+    // terminating process may have an unreadable environment before it
+    // disappears, so fixtures take turns through a file lock, which tests in
+    // other processes see too; .config/nextest.toml groups their tests.
     let process_file = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -81,7 +79,6 @@ pub(crate) async fn fixture() -> (
     (
         FixtureRoot {
             _root: root,
-            _process_guard: process_guard,
             _process_file_guard: process_file_guard,
         },
         manager,

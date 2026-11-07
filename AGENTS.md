@@ -306,10 +306,15 @@ test in the PR.
 
 ## Validation
 
-Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
-for Rust changes. Test in temporary state directories and repositories, without the
-launching environment's Shoal variables or configuration locations; never install
-persistent OS services or modify real user workspaces as a side effect of tests.
+Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and
+`cargo nextest run` for Rust changes, with `cargo test --doc` when a change touches
+doc tests. Nextest runs every test in a process of its own, so a lock in a test
+binary's memory keeps no tests apart: tests that must not overlap take a lock
+other processes see, such as a file lock, and join a test group with
+`max-threads = 1` in `.config/nextest.toml`. Test in temporary state
+directories and repositories, without the launching environment's Shoal
+variables or configuration locations; never install persistent OS services or
+modify real user workspaces as a side effect of tests.
 Run development builds only with a temporary `--state-dir`: the user's daemon
 serves every running agent, so never stop, restart or reinstall it, and a debug
 build refuses the user's state directory, and writes to the user's config
@@ -354,10 +359,10 @@ Shoal process print a `profile` line to stderr for each daemon call, daemon
 request, daemon startup step and subprocess run. It is a contributor tool, so the user documentation
 leaves it out.
 
-`python3 scripts/profile_tests.py suite` runs each test binary as `cargo test`
-does and prints its wall, user and system time; `tests --binary NAME` runs
-every test of a binary alone and lists the costliest. Both count a test's
-daemons and commands, but not processes that outlive it.
+`python3 scripts/profile_tests.py suite` runs each test binary whole, one after
+another, and prints its wall, user and system time; `tests --binary NAME` runs
+every test of a binary alone, as nextest does, and lists the costliest. Both
+count a test's daemons and commands, but not processes that outlive it.
 
 ## CI
 
