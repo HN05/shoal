@@ -1,6 +1,5 @@
 //! The proxy a tracked agent's wrapper runs, the key its requests name,
 //! and the reports it sends the daemon.
-#[cfg(feature = "proxy")]
 use crate::client::space_names::SpaceSelector;
 use anyhow::Context;
 use anyhow::Result;
@@ -23,23 +22,17 @@ pub struct Running {
     /// A directory only the user can read, for what the agent's launch
     /// must keep off its command line; gone with the proxy.
     private: tempfile::TempDir,
-    #[cfg(feature = "proxy")]
     serving: tokio::task::JoinHandle<std::io::Result<()>>,
     /// What the proxy reports, until [`Running::report_turns`] takes it.
-    #[cfg(feature = "proxy")]
     events: Option<tokio::sync::mpsc::UnboundedReceiver<shoal_proxy::Event>>,
-    #[cfg(feature = "proxy")]
     reporting: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Drop for Running {
     fn drop(&mut self) {
-        #[cfg(feature = "proxy")]
-        {
-            self.serving.abort();
-            if let Some(reporting) = &self.reporting {
-                reporting.abort();
-            }
+        self.serving.abort();
+        if let Some(reporting) = &self.reporting {
+            reporting.abort();
         }
     }
 }
@@ -63,7 +56,6 @@ impl Running {
         execution: &str,
         ends_turns: bool,
     ) {
-        #[cfg(feature = "proxy")]
         if let Some(events) = self.events.take() {
             let reporter = Reporter {
                 paths: paths.clone(),
@@ -75,8 +67,6 @@ impl Running {
             };
             self.reporting = Some(tokio::spawn(reporter.run(events)));
         }
-        #[cfg(not(feature = "proxy"))]
-        let _ = (paths, workspace, execution, ends_turns);
     }
 }
 
@@ -204,7 +194,6 @@ pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execut
 }
 
 /// Reports a proxied agent's ended turns to the daemon.
-#[cfg(feature = "proxy")]
 pub(super) struct Reporter {
     pub(super) paths: crate::paths::Paths,
     pub(super) workspace: String,
@@ -220,7 +209,6 @@ pub(super) struct Reporter {
 }
 
 /// What a [`Reporter`] last told the daemon.
-#[cfg(feature = "proxy")]
 #[derive(Default)]
 pub(super) struct Sent {
     /// Whether it shows a retry the proxy waits to make.
@@ -229,7 +217,6 @@ pub(super) struct Sent {
     reset: Option<i64>,
 }
 
-#[cfg(feature = "proxy")]
 impl Reporter {
     pub(super) async fn run(
         mut self,
@@ -367,7 +354,6 @@ impl Reporter {
 }
 
 /// The turn failure a proxy failure is.
-#[cfg(feature = "proxy")]
 fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
     use crate::state::TurnFailure;
     use shoal_proxy::Failure;
@@ -381,7 +367,6 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
 
 /// Start `proxy` on a free loopback port, serving on this process's
 /// runtime, sending the upstream `key`, the value of the proxy's own.
-#[cfg(feature = "proxy")]
 pub async fn start(proxy: &super::Proxy, key: Option<&str>) -> Result<Running> {
     let mut upstream = shoal_proxy::Upstream::parse(&proxy.upstream)?;
     if let Some(key) = key {
@@ -405,11 +390,4 @@ pub async fn start(proxy: &super::Proxy, key: Option<&str>) -> Result<Running> {
         events: Some(events),
         reporting: None,
     })
-}
-
-#[cfg(not(feature = "proxy"))]
-pub async fn start(_proxy: &super::Proxy, _key: Option<&str>) -> Result<Running> {
-    anyhow::bail!(
-        "this Shoal was built without the proxy feature, so it cannot start [proxy] tables"
-    )
 }

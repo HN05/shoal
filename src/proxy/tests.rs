@@ -111,7 +111,6 @@ fn daemon_refusing(
 }
 
 #[tokio::test]
-#[cfg(feature = "proxy")]
 async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() {
     use shoal_proxy::{Event, Failure};
     // No retry was shown, so none is taken away.
@@ -248,13 +247,11 @@ async fn the_proxy_report_worker_sends_only_a_wrappers_reports() {
 }
 
 #[test]
-#[cfg(feature = "proxy")]
 fn agents_name_the_key_in_the_header_the_proxy_reads() {
     assert_eq!(KEY_HEADER, shoal_proxy::CLIENT_KEY_HEADER);
 }
 
 #[tokio::test]
-#[cfg(feature = "proxy")]
 async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();
@@ -305,7 +302,6 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
 }
 
 #[tokio::test]
-#[cfg(feature = "proxy")]
 async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();
@@ -343,7 +339,6 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
 }
 
 #[tokio::test]
-#[cfg(feature = "proxy")]
 async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();

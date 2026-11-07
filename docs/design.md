@@ -1698,9 +1698,8 @@ them, as zmx, Herdr, Rex, tmux and Zellij do; an external app, such as Quay, is 
 not a host and reads and acts on Shoal's state through `shoal_client`. It holds
 a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
-Happy sessions are an optional integration behind a default Cargo feature and
-the `agents.happy.enabled` setting, off by default, so its encrypted client stays out of
-core. Happy is an agent backend like any other: `shoal happy` is gone, and its
+Happy sessions are an optional integration behind the `agents.happy.enabled`
+setting, off by default. Happy is an agent backend like any other: `shoal happy` is gone, and its
 agents start as other agents do, with `--agent happy-claude|happy-codex` or as
 `shoal happy-claude`. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts

@@ -1636,8 +1636,7 @@ settings. Claude Code keeps its prompt cache for an hour only on a claude.ai
 login within its usage limits, and for 5 minutes with an API key or auth token,
 so a proxied Claude agent gets `ENABLE_PROMPT_CACHING_1H=1` unless the
 environment it runs with sets that variable; a lifetime in
-`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
-`proxy` Cargo feature refuse to launch an agent that names one.
+`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it.
 
 `instructions` passes the rendered system text apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
@@ -1702,9 +1701,7 @@ tracking, scope token, port variables or output default (so automatic cleanup ca
 T3's app must already be running.
 
 Happy sessions are an optional integration: off until `agents.happy.enabled = true` in
-global or repository config, and absent from builds without the default `happy`
-Cargo feature (`cargo build --no-default-features --features cli`), which also drops its
-encryption dependencies. While off, pickers and completion leave Happy out and
+global or repository config. While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
 `shoal happy-claude|happy-codex [workspace]` and `start --agent happy-claude|happy-codex`

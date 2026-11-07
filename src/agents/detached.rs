@@ -35,9 +35,8 @@ pub(crate) trait App: Sync {
     fn prepare<'a>(&'a self, session: Session<'a>) -> BoxFuture<'a, Result<Box<dyn Prepared>>>;
 }
 
-/// A session an [`App`] is to run, as Shoal sets it up. Only optional
-/// integrations read it.
-#[cfg_attr(not(feature = "happy"), allow(dead_code))]
+/// A session an [`App`] is to run, as Shoal sets it up, which
+/// integrations read.
 pub(crate) struct Session<'a> {
     pub paths: &'a Paths,
     /// Where the session runs.

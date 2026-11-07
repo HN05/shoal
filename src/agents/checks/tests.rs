@@ -16,7 +16,6 @@ fn launches_name_the_missing_program_or_undefined_agent() {
     assert!(ensure_installed("undefined", &settings).is_err());
 }
 
-#[cfg(feature = "happy")]
 #[test]
 fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {
     let config = crate::config::Config::from_toml(

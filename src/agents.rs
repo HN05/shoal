@@ -11,7 +11,6 @@ mod checks;
 mod claude;
 mod codex;
 pub(crate) mod detached;
-#[cfg(feature = "happy")]
 mod happy;
 pub(crate) mod hooks;
 mod proxy;
@@ -183,9 +182,7 @@ pub(crate) struct Added {
     off: fn(&Effective) -> Option<&'static str>,
 }
 
-/// Agents integrations add, built only with each integration's Cargo
-/// feature.
-#[cfg(feature = "happy")]
+/// Agents integrations add.
 pub(crate) const ADDED: &[Added] = &[
     Added {
         name: "happy-claude",
@@ -198,8 +195,6 @@ pub(crate) const ADDED: &[Added] = &[
         off: happy::off,
     },
 ];
-#[cfg(not(feature = "happy"))]
-pub(crate) const ADDED: &[Added] = &[];
 
 /// The agent `name`, when an integration adds it.
 pub(crate) fn added(name: &str) -> Option<&'static Added> {

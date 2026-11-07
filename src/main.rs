@@ -2,91 +2,52 @@
 
 // First, so that every module below sees its print macros.
 #[macro_use]
-#[cfg(feature = "cli")]
 mod stdout;
 
-#[cfg(feature = "cli")]
 mod agent_git;
-#[cfg(feature = "cli")]
 mod agent_queue;
-#[cfg(feature = "cli")]
 mod agents;
-#[cfg(feature = "cli")]
 mod build;
-#[cfg(feature = "cli")]
 mod caches;
-#[cfg(feature = "cli")]
 mod cli;
-#[cfg(feature = "cli")]
 mod config_file;
-#[cfg(feature = "cli")]
 mod daemon;
-#[cfg(feature = "cli")]
 mod env;
-#[cfg(feature = "cli")]
 mod execution;
-#[cfg(feature = "cli")]
 mod fsutil;
-#[cfg(feature = "cli")]
 mod git;
-#[cfg(feature = "cli")]
 mod git_profile;
-#[cfg(feature = "happy")]
 mod happy;
-#[cfg(feature = "cli")]
 mod hooks;
-#[cfg(feature = "cli")]
 mod installed;
-#[cfg(feature = "cli")]
 mod paths;
-#[cfg(feature = "cli")]
 mod presets;
-#[cfg(feature = "cli")]
 mod process;
-#[cfg(feature = "cli")]
 mod proxy;
-#[cfg(feature = "cli")]
 mod push_gate;
-#[cfg(feature = "cli")]
 mod refusal;
-#[cfg(feature = "cli")]
 mod removal;
-#[cfg(feature = "cli")]
 mod repository;
-#[cfg(feature = "cli")]
 mod secrets;
-#[cfg(feature = "cli")]
 mod seed;
-#[cfg(feature = "cli")]
 mod service;
-#[cfg(feature = "cli")]
 mod sessions;
-#[cfg(feature = "cli")]
 mod shell;
-#[cfg(feature = "cli")]
 mod terminal;
-#[cfg(all(test, feature = "cli"))]
+#[cfg(test)]
 mod test_support;
-#[cfg(feature = "cli")]
 mod tmp_dirs;
-#[cfg(feature = "cli")]
 mod tools;
-#[cfg(feature = "cli")]
 mod transfer;
-#[cfg(feature = "cli")]
 mod workers;
 
-#[cfg(feature = "cli")]
 use cli::Cli;
 use shoal_client as client;
-#[cfg(feature = "cli")]
 use shoal_client::time;
 use shoal_client::{agent, ai, config, demos, model, profile, protocol, reviews, state, validate};
 use shoal_forge as forge;
-#[cfg(feature = "cli")]
 use shoal_subprocess as subprocess;
 
-#[cfg(feature = "cli")]
 fn main() {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)
         .var(env::COMPLETE)
@@ -135,10 +96,8 @@ fn main() {
 /// Tokio worker threads get more stack than its 2 MiB default: the daemon
 /// polls deep async paths, such as manual cleanup's removal, whose debug
 /// builds overflow that on Linux. Unused stack is reserved, not committed.
-#[cfg(feature = "cli")]
 pub(crate) const WORKER_STACK: usize = 8 << 20;
 
-#[cfg(feature = "cli")]
 fn run_cli(cli: Cli) {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -148,7 +107,6 @@ fn run_cli(cli: Cli) {
         .block_on(run_commands(cli));
 }
 
-#[cfg(feature = "cli")]
 async fn run_commands(cli: Cli) {
     let json_output = cli.json;
     // Output without a final newline is still buffered, and the flush on exit

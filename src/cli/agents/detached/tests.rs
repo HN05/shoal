@@ -46,7 +46,6 @@ fn stopping_a_session_stops_the_agent_it_started() {
     }
 }
 
-#[cfg(feature = "happy")]
 #[test]
 fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments() {
     let config = crate::config::Config::from_toml("").unwrap();
