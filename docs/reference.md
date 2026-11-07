@@ -26,7 +26,8 @@ Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
 stay plain; stdout and stderr are detected independently.
 Progress feedback shows the pending operation with a spinner and elapsed seconds
-after half a second, cleared before the result.
+after half a second, cleared before the result. Work that prints, such as setup,
+shows its lines above the spinner, which names the current step.
 Progress uses terminal stderr only and is suppressed with JSON output or `TERM=dumb`.
 
 - [Installation and upgrades](#homebrew)
