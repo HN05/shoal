@@ -293,6 +293,10 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     wait_zmx_sessions_ended(&home);
 }
 
+/// A zmx that fails every command, saying so, so the daemon's log tells
+/// these failures from others.
+const FAILING_ZMX: &str = "#!/bin/sh\necho 'zmx fails in this test' >&2\nexit 1\n";
+
 /// `parent` resumes the chat `talk` below it once its restart, which no
 /// place could restore, left the chat stopped, but not once the user's did.
 fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
@@ -317,7 +321,7 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
             )
         });
         wait_until("chat started", || home.join("chat-started").exists());
-        install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
+        install_test_script(&zmx, FAILING_ZMX);
         let output = fixture.run(&["restart", "talk"]);
         assert!(!output.status.success(), "{output:?}");
         chat.join().unwrap();
@@ -341,7 +345,7 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
     fixture.ok(&["resume", "talk"]);
     wait_until("the user's restore", || restored.exists());
     fs::remove_file(&restored).unwrap();
-    install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
+    install_test_script(&zmx, FAILING_ZMX);
     let output = parent.run(fixture, &["restart", "talk"]);
     assert!(!output.status.success(), "{output:?}");
     install_test_script(&zmx, terminal_zmx());
