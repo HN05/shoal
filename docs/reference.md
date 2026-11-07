@@ -3231,9 +3231,10 @@ when a build directory is first configured. With the workspace as ccache's base
 directory and its working directory left out of the hash, a compile another
 workspace ran hits, and debug info records that workspace's directory.
 
-The `xcode` preset keeps a [shared cache](#shared-caches) named `preset.xcode` holding
-an xcconfig, Xcode's compilation cache and Swift package checkouts. It sets
-`XCODE_XCCONFIG_FILE` to the xcconfig, and puts an `xcodebuild` wrapper first on
+The `xcode` preset keeps an xcconfig and an `xcodebuild` wrapper in a [shared
+cache](#shared-caches) named `preset.xcode-files`, and Xcode's compilation cache
+and Swift package checkouts in one named `preset.xcode`. It sets
+`XCODE_XCCONFIG_FILE` to the xcconfig, and puts the wrapper first on
 the PATH of every process Shoal starts in a workspace and of `shoal work env`. The
 xcconfig turns compilation caching on and maps the workspace and its DerivedData
 folder out of cache keys, so a workspace reuses what another compiled. Packages
@@ -3332,8 +3333,9 @@ literal. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 
 `shoal cleanup caches` and [disk space](#overload-protection) cleanup empty a
-repository's caches, configured or not, apart from `preset.cargo`, which holds
-only the [`cargo` preset's](#build-tool-presets) wrapper, while none of its tracked executions and
+repository's caches, configured or not, apart from `preset.cargo` and
+`preset.xcode-files`, which hold only the [presets'](#build-tool-presets) own
+files, while none of its tracked executions and
 no seed build of it is running; disk space cleanup records a `caches_emptied`
 notification. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.

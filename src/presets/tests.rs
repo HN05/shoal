@@ -22,11 +22,11 @@ fn the_xcode_preset_keeps_its_files_in_a_shared_cache() {
     let env = environment(&[Preset::Xcode], BTreeMap::new());
     assert_eq!(
         env["XCODE_XCCONFIG_FILE"],
-        format!("{{cache.{XCODE_CACHE}}}/{}", xcode::XCCONFIG)
+        format!("{{cache.{XCODE_FILES_CACHE}}}/{}", xcode::XCCONFIG)
     );
     assert_eq!(
         env[crate::env::PATH_PREFIX],
-        format!("{{cache.{XCODE_CACHE}}}/{}", xcode::BIN)
+        format!("{{cache.{XCODE_FILES_CACHE}}}/{}", xcode::BIN)
     );
 }
 

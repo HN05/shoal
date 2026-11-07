@@ -4,18 +4,20 @@ use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
 
 use anyhow::{Context as _, Result};
 
-pub(crate) use crate::config::presets::{CARGO_CACHE, KEPT_CACHES, Preset, XCODE_CACHE};
+pub(crate) use crate::config::presets::{
+    CARGO_CACHE, KEPT_CACHES, Preset, XCODE_CACHE, XCODE_FILES_CACHE,
+};
 
 pub mod cargo;
 pub mod derived_data;
 pub mod xcode;
 
 /// Write the files a preset keeps in its cache `directory`, once the
-/// directory exists.
+/// directory exists. A preset's caches lie side by side.
 pub fn prepare_cache(name: &str, directory: &Path) -> Result<()> {
     match name {
         CARGO_CACHE => cargo::prepare(directory),
-        XCODE_CACHE => xcode::prepare(directory),
+        XCODE_FILES_CACHE => xcode::prepare(directory, &directory.with_file_name(XCODE_CACHE)),
         _ => Ok(()),
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::config::repo::CacheScope;
+use crate::{config::repo::CacheScope, presets};
 
 #[test]
 fn only_a_cache_directory_marked_for_the_repository_is_owned() {
@@ -81,16 +81,25 @@ fn emptying_keeps_the_caches_of_preset_files() {
     let root = tempfile::tempdir().unwrap();
     let layout = Layout::new(root.path(), "repo");
     let directories = layout
-        .prepare(&configured(&["go", crate::presets::CARGO_CACHE]))
+        .prepare(&configured(&[
+            "go",
+            presets::CARGO_CACHE,
+            presets::XCODE_FILES_CACHE,
+            presets::XCODE_CACHE,
+        ]))
         .unwrap();
-    assert_eq!(layout.list().unwrap(), ["go"]);
-    assert_eq!(layout.move_aside().unwrap(), ["go"]);
+    assert_eq!(layout.list().unwrap(), ["go", presets::XCODE_CACHE]);
+    assert_eq!(layout.move_aside().unwrap(), ["go", presets::XCODE_CACHE]);
     layout.purge().unwrap();
     assert!(!directories["go"].exists());
+    assert!(!directories[presets::XCODE_CACHE].exists());
     assert!(
-        directories[crate::presets::CARGO_CACHE]
-            .join(crate::presets::cargo::WRAPPER)
+        directories[presets::CARGO_CACHE]
+            .join(presets::cargo::WRAPPER)
             .is_file()
     );
+    let xcode = &directories[presets::XCODE_FILES_CACHE];
+    assert!(xcode.join(presets::xcode::XCCONFIG).is_file());
+    assert!(xcode.join(presets::xcode::BIN).join("xcodebuild").is_file());
     assert!(layout.list().unwrap().is_empty());
 }

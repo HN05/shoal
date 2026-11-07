@@ -4,21 +4,22 @@ use std::process::Command;
 #[test]
 fn the_wrapper_shares_checkouts_by_the_resolved_pins() {
     let root = tempfile::tempdir().unwrap();
+    let files = root.path().join("files");
     let cache = root.path().join("cache");
-    fs::create_dir(&cache).unwrap();
-    prepare(&cache).unwrap();
-    let xcconfig = fs::read_to_string(cache.join(XCCONFIG)).unwrap();
+    fs::create_dir(&files).unwrap();
+    prepare(&files, &cache).unwrap();
+    let xcconfig = fs::read_to_string(files.join(XCCONFIG)).unwrap();
     assert!(xcconfig.contains(&format!(
         "COMPILATION_CACHE_CAS_PATH = {}/CompilationCache.noindex",
         cache.display()
     )));
-    let modified = fs::metadata(cache.join(XCCONFIG))
+    let modified = fs::metadata(files.join(XCCONFIG))
         .unwrap()
         .modified()
         .unwrap();
-    prepare(&cache).unwrap();
+    prepare(&files, &cache).unwrap();
     assert_eq!(
-        fs::metadata(cache.join(XCCONFIG))
+        fs::metadata(files.join(XCCONFIG))
             .unwrap()
             .modified()
             .unwrap(),
@@ -27,7 +28,7 @@ fn the_wrapper_shares_checkouts_by_the_resolved_pins() {
     );
 
     // A stand-in for /usr/bin/xcodebuild prints the arguments it gets.
-    let script = fs::read_to_string(cache.join(BIN).join("xcodebuild"))
+    let script = fs::read_to_string(files.join(BIN).join("xcodebuild"))
         .unwrap()
         .replace("/usr/bin/xcodebuild", "printf '%s\\n'");
     let project = root.path().join("worktree");
@@ -46,6 +47,14 @@ fn the_wrapper_shares_checkouts_by_the_resolved_pins() {
         assert!(output.status.success());
         String::from_utf8(output.stdout).unwrap()
     };
+    assert_eq!(
+        run(&["-clonedSourcePackagesDirPath", "/mine", "build"]),
+        "-clonedSourcePackagesDirPath\n/mine\nbuild\n"
+    );
+    assert!(
+        cache.is_dir(),
+        "emptied data comes back for the compilation cache"
+    );
     let built = run(&["-scheme", "App", "build"]);
     let mut lines = built.lines();
     assert_eq!(lines.next(), Some("-clonedSourcePackagesDirPath"));
@@ -71,10 +80,6 @@ fn the_wrapper_shares_checkouts_by_the_resolved_pins() {
     assert_eq!(run(&["build"]).lines().nth(1), Some(checkouts));
     let pinned = run(&["-workspace", "App.xcworkspace", "build"]);
     assert_ne!(pinned.lines().nth(1), Some(checkouts));
-    assert_eq!(
-        run(&["-clonedSourcePackagesDirPath", "/mine", "build"]),
-        "-clonedSourcePackagesDirPath\n/mine\nbuild\n"
-    );
     assert_eq!(
         run(&["-project", "Other.xcodeproj", "build"]),
         "-project\nOther.xcodeproj\nbuild\n"

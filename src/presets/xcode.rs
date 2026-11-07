@@ -1,4 +1,4 @@
-//! The `xcode` preset's files in its shared cache directory: an xcconfig
+//! The `xcode` preset's files in its shared cache directories: an xcconfig
 //! that gives every workspace's `xcodebuild` one compilation cache, with
 //! the workspace and DerivedData paths mapped out of its keys, and an
 //! `xcodebuild` wrapper that shares Swift package checkouts between
@@ -16,24 +16,28 @@ use sha2::{Digest, Sha256};
 
 use super::write_if_changed;
 
-/// The xcconfig `XCODE_XCCONFIG_FILE` names, inside the cache directory.
+/// The xcconfig `XCODE_XCCONFIG_FILE` names, inside the files' cache
+/// directory.
 pub const XCCONFIG: &str = "shoal.xcconfig";
 /// The directory whose `xcodebuild` goes first on workspace processes' PATH.
 pub const BIN: &str = "bin";
-/// The directory of package checkouts, one per set of resolved pins.
+/// The directory of package checkouts, one per set of resolved pins,
+/// inside the data's cache directory.
 const PACKAGES: &str = "SourcePackages";
 /// The file that records a project's resolved package pins.
 pub const PINS: &str = "Package.resolved";
 
-/// Write the preset's files into `directory`, leaving files whose content
-/// is current untouched, since Xcode rebuilds its build description when
-/// an xcconfig changes.
-pub fn prepare(directory: &Path) -> Result<()> {
-    write_if_changed(&directory.join(XCCONFIG), &xcconfig(directory), 0o644)?;
+/// Write the preset's files into `directory`, pointing them at the
+/// compilation cache and package checkouts in `data`, which emptying
+/// caches can delete while the files stay. Files whose content is current
+/// stay untouched, since Xcode rebuilds its build description when an
+/// xcconfig changes.
+pub fn prepare(directory: &Path, data: &Path) -> Result<()> {
+    write_if_changed(&directory.join(XCCONFIG), &xcconfig(data), 0o644)?;
     fs::create_dir_all(directory.join(BIN))?;
     write_if_changed(
         &directory.join(BIN).join("xcodebuild"),
-        &wrapper(directory),
+        &wrapper(data),
         0o755,
     )
 }
@@ -41,7 +45,7 @@ pub fn prepare(directory: &Path) -> Result<()> {
 /// `$(OBJROOT)` is `<DerivedData>/Build/Intermediates.noindex`; no setting
 /// names the DerivedData folder itself. A missing workspace path maps a
 /// path no build uses rather than every path.
-fn xcconfig(directory: &Path) -> String {
+fn xcconfig(data: &Path) -> String {
     format!(
         "// Written by Shoal for the xcode preset.
 COMPILATION_CACHE_ENABLE_CACHING = YES
@@ -55,7 +59,7 @@ SHOAL_PREFIX_MAPPINGS = $(SHOAL_DERIVED_DATA)=/^derived-data $({workspace}:defau
 SWIFT_OTHER_PREFIX_MAPPINGS = $(inherited) $(SHOAL_PREFIX_MAPPINGS)
 CLANG_OTHER_PREFIX_MAPPINGS = $(inherited) $(SHOAL_PREFIX_MAPPINGS)
 ",
-        cas = directory.join("CompilationCache.noindex").display(),
+        cas = data.join("CompilationCache.noindex").display(),
         workspace = crate::env::WORKSPACE_PATH,
     )
 }
@@ -113,12 +117,15 @@ pub fn prune_checkouts(
 /// builds, as `xcodebuild` picks it: a named container, or else the
 /// directory's project ahead of its workspace. The checkouts are keyed by
 /// that file's content, and each build marks the ones it uses.
-/// A caller's own `-clonedSourcePackagesDirPath` wins.
-fn wrapper(directory: &Path) -> String {
-    let packages = directory.join(PACKAGES);
+/// A caller's own `-clonedSourcePackagesDirPath` wins. Emptying caches
+/// deletes `data`, so the wrapper creates it again for the compilation
+/// cache.
+fn wrapper(data: &Path) -> String {
+    let quoted = |path: &Path| path.display().to_string().replace('\'', r"'\''");
     format!(
         r#"#!/bin/sh
 # Written by Shoal for the xcode preset.
+mkdir -p '{data}'
 container= next=
 for argument in "$@"; do
   if [ -n "$next" ]; then container=$argument next=; continue; fi
@@ -144,7 +151,8 @@ if [ -f "$resolved" ]; then
 fi
 exec /usr/bin/xcodebuild "$@"
 "#,
-        packages = packages.display().to_string().replace('\'', r"'\''"),
+        data = quoted(data),
+        packages = quoted(&data.join(PACKAGES)),
     )
 }
 

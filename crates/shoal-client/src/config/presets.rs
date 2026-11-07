@@ -13,11 +13,14 @@ use crate::{
 
 /// The shared cache the `cargo` preset keeps its files in.
 pub const CARGO_CACHE: &str = "preset.cargo";
+/// The shared cache the `xcode` preset keeps its files in.
+pub const XCODE_FILES_CACHE: &str = "preset.xcode-files";
+/// The shared cache of the `xcode` preset's compilation cache and package
+/// checkouts.
+pub const XCODE_CACHE: &str = "preset.xcode";
 /// The preset caches that hold only a preset's own files, which emptying
 /// caches keeps since it frees nothing there.
-pub const KEPT_CACHES: &[&str] = &[CARGO_CACHE];
-/// The shared cache the `xcode` preset keeps its files in.
-pub const XCODE_CACHE: &str = "preset.xcode";
+pub const KEPT_CACHES: &[&str] = &[CARGO_CACHE, XCODE_FILES_CACHE];
 
 states!(
     /// A build tool whose usual setup Shoal knows.
@@ -91,8 +94,11 @@ impl Preset {
             )],
             Self::Go => &[("GOFLAGS", "-trimpath")],
             Self::Xcode => &[
-                ("XCODE_XCCONFIG_FILE", "{cache.preset.xcode}/shoal.xcconfig"),
-                (crate::env::PATH_PREFIX, "{cache.preset.xcode}/bin"),
+                (
+                    "XCODE_XCCONFIG_FILE",
+                    "{cache.preset.xcode-files}/shoal.xcconfig",
+                ),
+                (crate::env::PATH_PREFIX, "{cache.preset.xcode-files}/bin"),
             ],
             Self::Zig => &[("ZIG_LOCAL_CACHE_DIR", "{cache.preset.zig}")],
             Self::Ccache => &[
@@ -105,21 +111,24 @@ impl Preset {
         }
     }
 
-    /// The shared cache the preset keeps its files in. Configured cache
-    /// names cannot contain a dot, so only the preset prepares it.
-    fn cache(self) -> Option<&'static str> {
+    /// The shared caches the preset keeps its files and data in. Configured
+    /// cache names cannot contain a dot, so only the preset prepares them.
+    fn caches(self) -> &'static [&'static str] {
         match self {
-            Self::Cargo => Some(CARGO_CACHE),
-            Self::Xcode => Some(XCODE_CACHE),
-            Self::Zig => Some("preset.zig"),
-            _ => None,
+            Self::Cargo => &[CARGO_CACHE],
+            Self::Xcode => &[XCODE_FILES_CACHE, XCODE_CACHE],
+            Self::Zig => &["preset.zig"],
+            _ => &[],
         }
     }
 }
 
-/// `caches` with each preset's shared cache.
+/// `caches` with each preset's shared caches.
 pub fn caches(presets: &[Preset], mut caches: BTreeMap<String, Cache>) -> BTreeMap<String, Cache> {
-    for name in presets.iter().filter_map(|preset| preset.cache()) {
+    for name in presets
+        .iter()
+        .flat_map(|preset| preset.caches().iter().copied())
+    {
         caches.insert(
             name.to_owned(),
             Cache {
