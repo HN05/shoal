@@ -3418,81 +3418,94 @@ fn check_logs_are_read_from_a_registered_checkout_as_its_agent_account() {
 }
 
 #[test]
-fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() {
-    for outcome in ["failure", "unavailable", "success"] {
-        let fixture = Fixture::new(Forge::Forgejo, "");
-        let mut responses = failed_check_responses();
-        responses["GET repos/team/project/pulls/8"]["body"] = json!({
-            "number": 8, "title": "Fix crash", "state": "open", "body": "PR description",
-            "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
-            "base": {"ref": "main"}, "mergeable": true
-        });
-        responses["GET repos/team/project/issues/8/comments"] =
-            json!({"body": [{"body": "Please fix CI", "user": {"login": "reviewer"}}]});
-        responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
-        responses["GET repos/team/project/issues/8/timeline?limit=50&page=1"] = json!({"body": []});
-        if outcome == "unavailable" {
-            responses["GET repos/team/project/actions/jobs/18345/logs"] =
-                json!({"status": 404, "body": {"message": "logs unavailable"}});
+fn view_automatically_includes_failed_logs() {
+    view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet("failure");
+}
+
+#[test]
+fn view_reports_failed_logs_it_cannot_read() {
+    view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet("unavailable");
+}
+
+#[test]
+fn view_leaves_successful_checks_quiet() {
+    view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet("success");
+}
+
+/// View a PR whose `rust` check had `outcome`, with and without comments.
+fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet(outcome: &str) {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut responses = failed_check_responses();
+    responses["GET repos/team/project/pulls/8"]["body"] = json!({
+        "number": 8, "title": "Fix crash", "state": "open", "body": "PR description",
+        "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
+        "base": {"ref": "main"}, "mergeable": true
+    });
+    responses["GET repos/team/project/issues/8/comments"] =
+        json!({"body": [{"body": "Please fix CI", "user": {"login": "reviewer"}}]});
+    responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
+    responses["GET repos/team/project/issues/8/timeline?limit=50&page=1"] = json!({"body": []});
+    if outcome == "unavailable" {
+        responses["GET repos/team/project/actions/jobs/18345/logs"] =
+            json!({"status": 404, "body": {"message": "logs unavailable"}});
+    }
+    let result = if outcome == "success" {
+        "success"
+    } else {
+        "failure"
+    };
+    responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
+        "total_count": 3, "statuses": [
+            {"context": "rust", "status": result},
+            {"context": "gate", "status": "success"},
+            {"context": "queued", "status": "pending"}
+        ]
+    }});
+    fixture.respond(responses);
+    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
+    fixture.requests();
+    for no_comments in [false, true] {
+        let mut args = vec!["view", "--space", "topic"];
+        if no_comments {
+            args.push("--no-comments");
         }
-        let result = if outcome == "success" {
-            "success"
-        } else {
-            "failure"
-        };
-        responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
-            "total_count": 3, "statuses": [
-                {"context": "rust", "status": result},
-                {"context": "gate", "status": "success"},
-                {"context": "queued", "status": "pending"}
-            ]
-        }});
-        fixture.respond(responses);
-        fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-        fixture.requests();
-        for no_comments in [false, true] {
-            let mut args = vec!["view", "--space", "topic"];
-            if no_comments {
-                args.push("--no-comments");
-            }
-            let views = fixture.ok(&args);
-            assert_eq!(views[0]["title"], "Fix crash");
-            assert_eq!(views[0]["body"], "PR description");
-            if !no_comments {
-                assert_eq!(views[0]["comments"][0]["body"], "Please fix CI");
-            }
-            match outcome {
-                "failure" => {
-                    let logs = views[0]["check_logs"].as_array().unwrap();
-                    assert_eq!(logs.len(), 1);
-                    assert_eq!(logs[0]["name"], "rust");
-                    assert_eq!(logs[0]["failed_step"], "Main Test");
-                    assert!(
-                        logs[0]["text"]
-                            .as_str()
-                            .unwrap()
-                            .contains("assertion failed")
-                    );
-                }
-                "unavailable" => assert!(
-                    views[0]["errors"]
-                        .as_array()
+        let views = fixture.ok(&args);
+        assert_eq!(views[0]["title"], "Fix crash");
+        assert_eq!(views[0]["body"], "PR description");
+        if !no_comments {
+            assert_eq!(views[0]["comments"][0]["body"], "Please fix CI");
+        }
+        match outcome {
+            "failure" => {
+                let logs = views[0]["check_logs"].as_array().unwrap();
+                assert_eq!(logs.len(), 1);
+                assert_eq!(logs[0]["name"], "rust");
+                assert_eq!(logs[0]["failed_step"], "Main Test");
+                assert!(
+                    logs[0]["text"]
+                        .as_str()
                         .unwrap()
-                        .iter()
-                        .any(|error| error.as_str().unwrap().contains("rust")),
-                    "{views}"
-                ),
-                _ => assert!(views[0].get("check_logs").is_none(), "{views}"),
+                        .contains("assertion failed")
+                );
             }
-        }
-        if outcome == "success" {
-            assert!(
-                !fixture
-                    .requests()
+            "unavailable" => assert!(
+                views[0]["errors"]
+                    .as_array()
+                    .unwrap()
                     .iter()
-                    .any(|request| request[0].as_str().unwrap().ends_with("/logs"))
-            );
+                    .any(|error| error.as_str().unwrap().contains("rust")),
+                "{views}"
+            ),
+            _ => assert!(views[0].get("check_logs").is_none(), "{views}"),
         }
+    }
+    if outcome == "success" {
+        assert!(
+            !fixture
+                .requests()
+                .iter()
+                .any(|request| request[0].as_str().unwrap().ends_with("/logs"))
+        );
     }
 }
 
