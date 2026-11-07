@@ -10,7 +10,7 @@ use crate::{
     },
     client::links::pr::RegistrationKind,
     forge::review::status::PrStatus,
-    model::{AgentStatus, Chat, SpaceDetail, SpaceStatus, WorktreeStatus},
+    model::{AgentStatus, Chat, Completion, SpaceDetail, SpaceStatus, WorktreeStatus},
 };
 
 pub(super) fn render_status(view: &StatusView, json: bool) {
@@ -340,33 +340,40 @@ fn render_assignment(status: &SpaceStatus, palette: Palette) {
         }
     }
     if let Some(completion) = &status.completion {
-        let choice = if completion.cleanup {
-            "cleanup requested"
-        } else {
-            "no cleanup requested"
-        };
-        let integrated = if completion.integrated {
-            ", integrated elsewhere"
-        } else {
-            ""
-        };
-        outln!("Completion:    done ({choice}{integrated})");
-        if !completion.results.is_empty() {
-            let names: Vec<_> = completion
-                .results
-                .iter()
-                .map(|result| result.name.as_str())
-                .collect();
-            outln!("  Results:     {}", names.join(", "));
-        }
-        if let Some(error) = &completion.error {
-            outln!("  {}", palette.paint(Style::Warning, error));
-        }
+        render_completion(completion, palette);
     }
     render_pr_watch(status, palette);
     let links = status.space.links();
     render_recorded("Opened:", &links.opened);
     render_recorded("Related:", &links.related);
+}
+
+fn render_completion(completion: &Completion, palette: Palette) {
+    let choice = if completion.cleanup {
+        "cleanup requested"
+    } else {
+        "no cleanup requested"
+    };
+    let integrated = if completion.integrated {
+        ", integrated elsewhere"
+    } else {
+        ""
+    };
+    outln!("Completion:    done ({choice}{integrated})");
+    if let Some(summary) = &completion.summary {
+        outln!("  Summary:     {summary}");
+    }
+    if !completion.results.is_empty() {
+        let names: Vec<_> = completion
+            .results
+            .iter()
+            .map(|result| result.name.as_str())
+            .collect();
+        outln!("  Results:     {}", names.join(", "));
+    }
+    if let Some(error) = &completion.error {
+        outln!("  {}", palette.paint(Style::Warning, error));
+    }
 }
 
 fn render_pr_watch(status: &SpaceStatus, palette: Palette) {

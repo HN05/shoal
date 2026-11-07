@@ -6150,6 +6150,19 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
 }
 
 #[test]
+fn done_records_a_summary_that_status_shows() {
+    // Completion without cleanup keeps the workspace to read.
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
+    fixture.add("audit");
+    let refused = fixture.run(&["done", "audit", "--summary", "two\nlines"]);
+    assert!(!refused.status.success());
+    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
+    fixture.ok(&["done", "audit", "--summary", "No leak"]);
+    let status = fixture.ok(&["status", "audit"]);
+    assert_eq!(status["completion"]["summary"], "No leak", "{status}");
+}
+
+#[test]
 fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
     // Completion without cleanup keeps the finished child to inspect.
     let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));

@@ -123,6 +123,7 @@ pub(in crate::cli::commands) async fn run(
             undo,
             keep_demos,
             attach,
+            summary,
         } => {
             if undo {
                 workspaces::undone(&ctx, space).await
@@ -131,7 +132,7 @@ pub(in crate::cli::commands) async fn run(
                     cleanup,
                     integrated,
                     results: messages::attachments(&attach)?,
-                    summary: None,
+                    summary,
                 };
                 // Before anything is picked or stopped.
                 done.check()?;

@@ -1749,7 +1749,10 @@ CLI shows them once, unless asked to keep them unread, on request or as a follow
 terminal's own notifications (OSC 9); workspace `status` and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
-the user a PR is ready neither ends the assignment nor affects cleanup. The
+the user a PR is ready neither ends the assignment nor affects cleanup. What a
+finished assignment found travels with its completion instead: `done --summary`
+records one line under the alert message rule and ends the completion notice
+with it, and longer findings are files handed back with it. The
 sending workspace may withdraw its message while it is unread; once shown, it
 stays, because deleting it would not unsay it, and a correction does. `hooks.post_agent_exit` exposes tracked-agent exit notifications to user
 integrations while the workspace is ready, using normal configuration precedence

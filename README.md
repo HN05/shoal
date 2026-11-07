@@ -223,6 +223,7 @@ shoal resume talk             # Restore a chat Shoal saved, continuing its sessi
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [cleanup.done] enabled = false
 shoal done --attach report.md  # Hand back files, such as an investigation's report
+shoal done --summary "No leak; the cache is freed on drop" # State the finding in the completion notice
 shoal done --integrated fix-login # Another branch has its work under new commits
 shoal done fix-login --undo        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace

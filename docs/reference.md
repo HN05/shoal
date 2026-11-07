@@ -3634,8 +3634,7 @@ import there is reported while the rest are copied.
 ### Assignment completion
 
 `shoal done [space]` records that the assignment is finished and notifies the
-user. It replaces a recorded completion at another HEAD, with another cleanup
-choice, another `--integrated` choice, other results or a cleanup error, and fails when it would change nothing: the same
+user. It replaces the whole recorded completion when anything it records differs, and fails when it would change nothing: the same
 completion with no open question to close and no `hooks.post_done` to rerun.
 `[cleanup.done] enabled` defaults to true; `--cleanup` requests cleanup when it is
 false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
@@ -3649,7 +3648,11 @@ branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
 the workspace's [attached files](#attached-files) as a result, the completion
 lists their names in `results`, `status` names them, and the completion notice
 ends with `results in shoal files <workspace>:` and the first three names, then
-how many more. A missing file
+how many more. `--summary TEXT` states what the work found in one line of at
+most 512 bytes without control characters, as for `shoal alerts send`: the
+completion records it as `summary`, `status` shows it, and the completion
+notice ends with `; summary: TEXT`; a `done` without it records none, and
+`--undo` deletes it with the completion. A missing file or an invalid summary
 fails before anything is stopped or recorded. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
@@ -3669,7 +3672,7 @@ finished at its checkout's HEAD, and its agent and session keep running until
 completion cleanup, requested as for a workspace, removes the chat and the
 spaces below it after the grace period, stopping its agent, whatever PRs it
 watches. It has no branch or demos, so `--integrated` and
-`--keep-demos` are refused. `--attach` hands files back into the chat's attached files, its
+`--keep-demos` are refused. `--attach` hands files back into the chat's attached files, `--summary` records its summary, its
 open questions close, and its coordinator is told, else the user, as for a workspace. Its
 closed linked items stop being polled, as a finished workspace's do. `work
 --chats` shows the chat as `finished`, `shoal inbox` and the menu list it, and

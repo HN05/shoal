@@ -72,6 +72,11 @@ pub enum CoordinationCommand {
         /// for more. shoal files lists it, after cleanup too.
         #[arg(long, value_name = "FILE", conflicts_with = "undo")]
         attach: Vec<String>,
+        /// State what the work found in one line of at most 512 bytes; the
+        /// completion notice ends with it. Put longer findings in a file
+        /// handed back with --attach.
+        #[arg(long, value_name = "TEXT", conflicts_with = "undo")]
+        summary: Option<String>,
     },
 }
 

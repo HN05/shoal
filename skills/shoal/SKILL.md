@@ -372,14 +372,16 @@ coordinator, or else the user, reads them with `shoal files <space>`.
 ## Completion
 
 ```sh
-shoal done [space] [--attach FILE]... [--keep-demos]
+shoal done [space] [--summary TEXT] [--attach FILE]... [--keep-demos]
 shoal done --integrated <workspace>
 shoal done --undo [space]
 ```
 
 `shoal done` records that the space's work is finished at its HEAD, notifies
 its coordinator or else the user, closes its open questions and stops its
-demos unless `--keep-demos`. Only `done` records completion; issue closure and
+demos unless `--keep-demos`. `--summary` ends the notice with one line, of at
+most 512 bytes, saying what the work found; `--attach` hands back anything
+longer. Only `done` records completion; issue closure and
 merged PRs do not. With cleanup, the default unless `[cleanup.done] enabled =
 false` (`--cleanup` overrides it), Shoal removes the space and the spaces below
 it after the grace period (`[cleanup] grace_minutes`), stopping their agents:
