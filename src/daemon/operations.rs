@@ -167,7 +167,7 @@ impl Entry {
     }
 
     /// The kept events from the `after`th on, and the end once it came.
-    pub(crate) fn since(&self, after: u64) -> (Vec<OperationEvent>, Option<Ended>) {
+    pub(crate) fn events_from(&self, after: u64) -> (Vec<OperationEvent>, Option<Ended>) {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let events = state
             .events

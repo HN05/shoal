@@ -189,7 +189,7 @@ impl Follower {
                 Some(token) => manager.caller(token).await?.is_some(),
                 None => true,
             };
-            let (events, ended) = entry.since(next);
+            let (events, ended) = entry.events_from(next);
             let Some(operation) = manager.gates.try_operation() else {
                 return Ok(());
             };
