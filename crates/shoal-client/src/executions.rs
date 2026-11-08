@@ -107,6 +107,11 @@ pub struct Record {
     /// of `session`, which stays the original's, or anew without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copied: Option<Copied>,
+    /// The space whose process asked for the stop, as for a restart that
+    /// left the agent stopped, which with the spaces above it may resume the
+    /// agent; unknown for one the user or Shoal stopped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_by: Option<String>,
     /// What the agent was doing when it stopped, as its hooks last reported
     /// it. Unknown for agents without hooks and for records saved before
     /// turns were kept.
@@ -184,9 +189,10 @@ pub struct LastSession {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin: Option<Origin>,
-    /// The workspace whose process stopped the agent with `shoal stop`,
-    /// which with the workspaces above it may resume it; unknown for one the
-    /// user or Shoal stopped, or that exited on its own.
+    /// The space whose process stopped the agent with `shoal stop`, or whose
+    /// restart left it stopped, which with the spaces above it may resume
+    /// it; unknown for one the user or Shoal stopped, or that exited on its
+    /// own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_by: Option<String>,
     /// Why and when Shoal stopped the agent; none for one that exited on its

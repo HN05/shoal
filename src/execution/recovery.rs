@@ -450,6 +450,7 @@ impl RecordExt for Record {
             session: None,
             moved: false,
             copied: None,
+            stopped_by: None,
             turn: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
@@ -465,7 +466,7 @@ impl RecordExt for Record {
             moved: self.moved,
             copied: self.copied,
             origin: self.origin,
-            stopped_by: None,
+            stopped_by: self.stopped_by,
             stop: Some(stop),
             model: self.model,
             mode: self.mode,
@@ -513,8 +514,23 @@ pub(crate) fn save_record(
     reason: Option<&str>,
     turn: Option<AgentState>,
 ) -> Result<PathBuf> {
+    save_record_stopped_by(paths, workspace_id, id, agent, reason, turn, None)
+}
+
+/// Save the record as [`save_record`] does, for a stop the process of the
+/// space `stopped_by` asked for when given, which may resume the agent.
+pub(crate) fn save_record_stopped_by(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    agent: &super::TrackedAgent,
+    reason: Option<&str>,
+    turn: Option<AgentState>,
+    stopped_by: Option<&str>,
+) -> Result<PathBuf> {
     let record = Record {
         turn,
+        stopped_by: stopped_by.map(str::to_owned),
         ..Record::new(agent, reason, Stage::Stopping, None)
     };
     write_record(paths, workspace_id, id, record)
@@ -563,6 +579,7 @@ fn write_record(
         record.waiting = record.waiting.or(saved.waiting);
         record.session = record.session.or(saved.session);
         record.turn = record.turn.or(saved.turn);
+        record.stopped_by = record.stopped_by.or(saved.stopped_by);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }
@@ -677,7 +694,7 @@ pub(crate) fn save_stopped_agents(
 
 /// Keep the agent stopped as `id`, whose recovery record is at `path`, as a
 /// last session instead, which the process of workspace `stopped_by` stopped
-/// when given.
+/// when given, or else the space its record names.
 pub(crate) fn keep_as_last_session(
     paths: &Paths,
     workspace_id: &str,
@@ -689,9 +706,10 @@ pub(crate) fn keep_as_last_session(
     let Some(record) = Record::load(path)? else {
         return Ok(());
     };
+    let last = record.into_last_session(id.to_owned(), path);
     LastSession {
-        stopped_by: stopped_by.map(str::to_owned),
-        ..record.into_last_session(id.to_owned(), path)
+        stopped_by: stopped_by.map(str::to_owned).or(last.stopped_by),
+        ..last
     }
     .write(paths, workspace_id)?;
     consume(path)
@@ -710,9 +728,12 @@ pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -
     }
 }
 
-/// The workspace whose process stopped the agent that execution `id` of
-/// `workspace_id` keeps as a last session, when one did.
+/// The space whose process stopped the agent that execution `id` of
+/// `workspace_id` keeps as stopped work or a last session, when one did.
 pub(crate) fn stopped_by(paths: &Paths, workspace_id: &str, id: &str) -> Result<Option<String>> {
+    if let Some(record) = Record::load(&record_path(paths, workspace_id, id))? {
+        return Ok(record.stopped_by);
+    }
     let path = LastSession::path(paths, workspace_id, id);
     Ok(LastSession::load(&path)?.and_then(|last| last.stopped_by))
 }

@@ -156,6 +156,7 @@ fn running_record(execution: &Execution, session: Option<String>) -> Option<Reco
         session,
         moved: false,
         copied: None,
+        stopped_by: None,
         turn: None,
         model: execution.model.clone(),
         mode: execution

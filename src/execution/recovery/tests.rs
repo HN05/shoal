@@ -450,3 +450,39 @@ fn copied_agents_are_told_the_workspace_is_a_copy() {
     );
     assert!(earlier.contains("earlier checkpoint"), "{earlier}");
 }
+
+#[test]
+fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let path = save_record_stopped_by(
+        &paths,
+        "workspace",
+        "execution",
+        &crate::execution::TrackedAgent::named("codex"),
+        Some("restart"),
+        None,
+        Some("parent"),
+    )
+    .unwrap();
+    let recovery = Recovery {
+        mode: "worker".into(),
+        model: Default::default(),
+        agent: "codex".into(),
+        command: vec![],
+        automatic: false,
+        handoff_delivered: false,
+        proxy: None,
+    };
+    // The wrapper completes the record without knowing who asked.
+    recovery
+        .save(&paths, "workspace", "execution", None, None, Restorer::User)
+        .unwrap();
+    let stopper = stopped_by(&paths, "workspace", "execution").unwrap();
+    assert_eq!(stopper.as_deref(), Some("parent"));
+    // A stop that names no stopper keeps the one the record names.
+    keep_as_last_session(&paths, "workspace", "execution", &path, None).unwrap();
+    assert!(!path.exists());
+    let stopper = stopped_by(&paths, "workspace", "execution").unwrap();
+    assert_eq!(stopper.as_deref(), Some("parent"));
+}
