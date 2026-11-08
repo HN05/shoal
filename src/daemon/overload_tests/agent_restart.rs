@@ -25,7 +25,7 @@ async fn restart_in_place_restores_the_agent_in_its_wrapper_without_waiting_for_
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
-    bounded(manager.restart_agent(&execution, None, true))
+    bounded(manager.restart_agent(&execution, None, true, None))
         .await
         .unwrap();
     // The same wrapper ran the restore command, which exits at once.
@@ -46,7 +46,7 @@ async fn a_restart_in_place_that_cannot_start_the_agent_leaves_it_for_shoal_resu
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
-    let restarted = bounded(manager.restart_agent(&execution, None, true)).await;
+    let restarted = bounded(manager.restart_agent(&execution, None, true, None)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
@@ -71,7 +71,7 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
         })
         .await
         .unwrap();
-    let restarted = bounded(manager.restart_agent(&execution, None, false)).await;
+    let restarted = bounded(manager.restart_agent(&execution, None, false, None)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
@@ -142,7 +142,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move { manager.restart_agent(&execution, None, false).await }
+        async move { manager.restart_agent(&execution, None, false, None).await }
     });
     // The old wrapper finishes with the agent's record. Dispatch, which
     // ends restarts whose start left the queue, waits while the restore is
@@ -213,7 +213,7 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
     let execution = agent_execution(&manager, &workspace).await;
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move { manager.restart_agent(&execution, None, false).await }
+        async move { manager.restart_agent(&execution, None, false, None).await }
     });
     bounded(launched).await.unwrap().unwrap();
     let restore = starting_restore(&manager, &execution).await;
@@ -243,7 +243,7 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
         let (manager, execution) = (manager.clone(), execution.clone());
         async move {
             manager
-                .restart_agent(&execution, Some("first".into()), false)
+                .restart_agent(&execution, Some("first".into()), false, None)
                 .await
         }
     });

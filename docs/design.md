@@ -287,7 +287,8 @@ once the daemon registers the restarted agent and at least the admission
 stagger after the previous start.
 Agents without a restore command and executions whose wrapper is gone are left
 to `shoal stop` and `shoal resume`; a restart that cannot start the agent leaves
-its record for `shoal resume`.
+its record for `shoal resume`, naming the space whose process asked for it,
+which may then resume the agent as after its own `shoal stop`.
 `shoal stop --interrupt` redirects an agent without stopping it: the agent's
 own interrupt key cancels its turn and keeps its process, background shells
 and subagents, which a stop and resume would end and start again. The CLI types

@@ -170,6 +170,44 @@ fn a_chats_agent_resumes_the_chats_it_stopped() {
     agent.wait().unwrap();
 }
 
+/// A workspace's agent resumes the agent of a workspace below its own that
+/// its restart left stopped, and is refused one the user's restart left
+/// stopped.
+#[test]
+fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
+    let fixture = parent_fixture();
+    fixture.add("parent");
+    let parent = Parent::Workspace("parent");
+    let home = fixture.root.path().to_owned();
+    let zmx = home.join("bin/zmx");
+    let repo = fixture.repo.to_str().unwrap();
+    let child = fixture.ok(&["start", repo, "child", "--parent", parent.name()]);
+    let agent = Running::start(&fixture, "child", &child);
+    let restored = agent.path.join("restored");
+    // No new wrapper can start, so the restart leaves the agent stopped.
+    let failed_restart = |restarter: &dyn Fn(&[&str]) -> Output| {
+        install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
+        let output = restarter(&["restart", "child"]);
+        assert!(!output.status.success(), "{output:?}");
+        install_test_script(&zmx, terminal_zmx());
+    };
+
+    failed_restart(&|args| fixture.run(args));
+    let output = parent.run(&fixture, &["resume", "child"]);
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("ask the user"), "{output:?}");
+    fixture.ok(&["resume", "child"]);
+    wait_until("the user's restore", || restored.exists());
+    fs::remove_file(&restored).unwrap();
+
+    failed_restart(&|args| parent.run(&fixture, args));
+    parent.ok(&fixture, &["resume", "child"]);
+    wait_until("the parent's restore", || restored.exists());
+    fixture.ok(&["stop", "child"]);
+    drop(agent);
+    wait_zmx_sessions_ended(&home);
+}
+
 /// A fixture whose workspace agents restart with `resume.sh` in their
 /// worktree, whose chats run `agent.sh` in the checkout, and whose detached
 /// places are zmx sessions.

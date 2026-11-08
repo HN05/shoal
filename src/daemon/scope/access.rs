@@ -140,9 +140,9 @@ impl Manager {
     }
 
     /// `workspace`, which must be one below the caller's whose agent stopped
-    /// as `execution` the caller's process or one below it stopped: an agent
-    /// the user or Shoal stopped, or that exited on its own, is the user's
-    /// to resume.
+    /// as `execution` the caller's process or one below it stopped, or whose
+    /// restart by one of them left it stopped: an agent the user or Shoal
+    /// stopped, or that exited on its own, is the user's to resume.
     pub(in crate::daemon) async fn stopped_below<'a>(
         &self,
         caller: &Caller,
@@ -164,7 +164,7 @@ impl Manager {
         };
         ensure!(
             ours,
-            "scoped processes resume only the agents that they or the spaces below them stopped with shoal stop; ask the user to resume this one"
+            "scoped processes resume only the agents that they or the spaces below them stopped, with shoal stop or a restart; ask the user to resume this one"
         );
         Ok(workspace)
     }

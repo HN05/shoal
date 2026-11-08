@@ -64,14 +64,19 @@ impl Manager {
     /// Restart the agent of `execution`, `in_place` or in a new wrapper,
     /// returning once it runs again, with the place of the wrapper that runs
     /// it when that runs in a terminal host. `run` names the `shoal restart`
-    /// run that asks for it.
+    /// run that asks for it, which the process of the space `stopped_by`
+    /// runs when given.
     pub(crate) async fn restart_agent(
         &self,
         execution: &str,
         run: Option<String>,
         in_place: bool,
+        stopped_by: Option<&str>,
     ) -> Result<Option<Origin>> {
-        restarted(self.request_restart(execution, run, in_place).await?).await
+        let answer = self
+            .request_restart(execution, run, in_place, stopped_by)
+            .await?;
+        restarted(answer).await
     }
 
     /// Wait for the restart of `execution` that `of_run` asked for as
@@ -115,6 +120,7 @@ impl Manager {
         id: &str,
         run: Option<String>,
         in_place: bool,
+        stopped_by: Option<&str>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         self.executions
             .with_restarts(|agents, renewals| {
@@ -122,20 +128,24 @@ impl Manager {
                 if let Some(Renewal::Starting(handover)) = renewals.get_mut(&id) {
                     return Ok(handover.answer(run));
                 }
-                self.stop_for_restart(&id, agents.get_mut(&id), run, in_place)
+                let agent = agents.get_mut(&id);
+                self.stop_for_restart(&id, agent, run, in_place, stopped_by)
             })
             .await
     }
 
     /// Save the handoff of `agent`, the agent of `id`, then stop it for a
     /// restart, `in_place` or in a new wrapper, or join the restart already
-    /// in progress as it was asked.
+    /// in progress as it was asked. The handoff names the space
+    /// `stopped_by`, whose process asked for the restart, so it may resume
+    /// an agent the restart leaves stopped.
     fn stop_for_restart(
         &self,
         id: &str,
         agent: Option<&mut Agent>,
         run: Option<String>,
         in_place: bool,
+        stopped_by: Option<&str>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
@@ -156,13 +166,14 @@ impl Manager {
         agent.ensure_not_stopped()?;
         // Save the handoff before the stop, so a wrapper that dies stopping
         // the agent leaves it for `shoal resume`.
-        let handoff = recovery::save_record(
+        let handoff = recovery::save_record_stopped_by(
             &self.paths,
             &agent.workspace_id,
             id,
             &agent.tracked(),
             Some(&Protection::restart().reason),
             agent.turn,
+            stopped_by,
         )
         .context("save the agent's recovery record")?;
         let mut restart = Restart::unanswered(run, in_place);
