@@ -499,6 +499,22 @@ pub(super) async fn begin(
     }
 }
 
+/// Refuse `narrowing` where it is wider than the permissions of the chat
+/// mode `mode` in `settings`, before anything is asked.
+fn ensure_narrowing_fits(
+    settings: &Effective,
+    narrowing: &crate::config::permissions::PermissionsConfig,
+    mode: &str,
+    repo: &ChatRepository,
+) -> Result<()> {
+    let mode = crate::config::permissions::SpaceMode {
+        name: mode,
+        kind: crate::model::SpaceKind::Chat,
+        repository: repo.registered().is_some(),
+    };
+    narrowing.ensure_within_mode(settings, mode)
+}
+
 /// How a chat started.
 pub(super) enum Started {
     /// It ran here, or beside this terminal, or an app that runs it detached
@@ -531,6 +547,10 @@ pub(super) async fn launch(
         parent,
         narrowing,
     } = options;
+    // A restore or an imported session keeps the narrowing it was given.
+    if restore.is_none() && session.is_none() {
+        ensure_narrowing_fits(&settings, &narrowing, &topic.mode, &repo)?;
+    }
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
     let topic = match &restore {
@@ -553,15 +573,6 @@ pub(super) async fn launch(
     // An agent that cannot continue or fork the session starts a new one,
     // which has not seen the chat's rules.
     let brief = brief(&settings, &agent, &repo, &topic, !resumed.is_empty())?;
-    // A restore or an imported session keeps the narrowing it was given.
-    if restore.is_none() && session.is_none() {
-        let mode = crate::config::permissions::SpaceMode {
-            name: &topic.mode,
-            kind: crate::model::SpaceKind::Chat,
-            repository: repo.registered().is_some(),
-        };
-        narrowing.ensure_within_mode(&settings, mode)?;
-    }
     let launch = agents::ChatLaunch {
         name,
         mode: topic.mode.clone(),

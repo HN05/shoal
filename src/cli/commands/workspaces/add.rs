@@ -78,6 +78,25 @@ impl AddOptions {
     }
 }
 
+/// Refuse `narrowing` where it is wider than the permissions of the
+/// workspace mode `mode`, the default mode without one, in the
+/// repository's `settings`.
+async fn ensure_narrowing_fits(
+    settings: &AddSettings<'_>,
+    narrowing: &crate::config::permissions::PermissionsConfig,
+    mode: Option<&str>,
+) -> Result<()> {
+    if narrowing.is_empty() {
+        return Ok(());
+    }
+    let mode = crate::config::permissions::SpaceMode {
+        name: mode.unwrap_or(crate::config::modes::DEFAULT),
+        kind: crate::model::SpaceKind::Workspace,
+        repository: true,
+    };
+    narrowing.ensure_within_mode(settings.get().await?, mode)
+}
+
 pub(in crate::cli::commands) async fn add(
     ctx: &Context,
     repository: Option<String>,
@@ -98,6 +117,15 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
+    // A named or default mode is known now; a picked one once picked.
+    let picks_mode = matches!(options.mode, Some(ModeChoice::Pick { .. }));
+    if !picks_mode {
+        let named = match &options.mode {
+            Some(ModeChoice::Named(mode)) => Some(mode.as_str()),
+            _ => None,
+        };
+        ensure_narrowing_fits(&settings, &options.narrowing, named).await?;
+    }
     let agent = choose_add_agent(&settings, agent).await?;
     check_chosen_model(&settings, &agent, &options.model).await?;
     let picked = match issue {
@@ -112,12 +140,9 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    let started_mode = crate::config::permissions::SpaceMode {
-        name: mode.as_deref().unwrap_or(crate::config::modes::DEFAULT),
-        kind: crate::model::SpaceKind::Workspace,
-        repository: true,
-    };
-    (options.narrowing).ensure_within_mode(settings.get().await?, started_mode)?;
+    if picks_mode {
+        ensure_narrowing_fits(&settings, &options.narrowing, mode.as_deref()).await?;
+    }
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     start_as(&mut plan, &options, mode, options.narrowing);
     ensure!(

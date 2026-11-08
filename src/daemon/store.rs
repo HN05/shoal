@@ -366,7 +366,6 @@ pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
         .map_err(Into::into)
 }
 
-/// Parse an optional JSON text column, reporting failures as SQL conversions.
 /// The column value of a `--permission` narrowing: its JSON, or none for
 /// one that narrows nothing.
 pub(crate) fn narrowing_column(
@@ -377,6 +376,7 @@ pub(crate) fn narrowing_column(
         .transpose()?)
 }
 
+/// Parse an optional JSON text column, reporting failures as SQL conversions.
 pub(crate) fn json_column<T: DeserializeOwned>(
     row: &Row<'_>,
     name: &str,
