@@ -7,8 +7,8 @@ use anyhow::{Context, Result, bail};
 use crate::{
     daemon::{
         approvals::{
-            ApprovalRequest, Lifetime, MERGE, MergeSpecification, Specification, Target, Undecided,
-            UnmergeSpecification,
+            ApprovalRequest, DecisionStatus, Lifetime, MERGE, MergeSpecification, Specification,
+            Target, Undecided, UnmergeSpecification,
         },
         log,
         scope::Caller,
@@ -67,10 +67,19 @@ impl Manager {
         }
     }
 
-    /// Refuse to approve a merge request whose branch has moved since the
-    /// request: drop it and tell the agent to request again. A failed Git
-    /// lookup keeps the request. The merge itself merges only the approved commit.
-    pub(crate) async fn ensure_merge_current(&self, request: &ApprovalRequest) -> Result<()> {
+    /// Refuse to approve a pending merge request whose branch has moved since
+    /// the request: drop it and tell the agent to request again. A failed Git
+    /// lookup keeps the request. The merge itself merges only the approved
+    /// commit. Every other decision passes.
+    pub(crate) async fn ensure_merge_current(
+        &self,
+        request: &ApprovalRequest,
+        approve: bool,
+    ) -> Result<()> {
+        if request.target != Target::Merge || !approve || request.status != DecisionStatus::Pending
+        {
+            return Ok(());
+        }
         let Specification::Merge(merge) = &request.specification else {
             bail!(
                 "approval request {} has no merge specification",

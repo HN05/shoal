@@ -955,9 +955,7 @@ impl Manager {
         request: &ApprovalRequest,
         approve: bool,
     ) -> Result<Decision> {
-        if request.target == Target::Merge && approve && request.status == DecisionStatus::Pending {
-            self.ensure_merge_current(request).await?;
-        }
+        self.ensure_merge_current(request, approve).await?;
         let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.number);
         let _hold = self.hold_decision_guard(&request, approve).await?;
@@ -987,9 +985,7 @@ impl Manager {
     /// Decide the stored `request` the user chose; later requests reusing its
     /// number are not affected.
     async fn record_decision(&self, request: ApprovalRequest, approve: bool) -> Result<Decision> {
-        if request.target == Target::Merge && approve && request.status == DecisionStatus::Pending {
-            self.ensure_merge_current(&request).await?;
-        }
+        self.ensure_merge_current(&request, approve).await?;
         let _hold = self.hold_decision_guard(&request, approve).await?;
         let key = request.key;
         // Simulator allocation checks approval and mutates devices in separate
