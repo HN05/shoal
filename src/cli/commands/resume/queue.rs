@@ -55,7 +55,8 @@ impl QueuedExt for Queued {
 
 /// Queue the restore of every agent and last session `stopped` saves,
 /// starting each at once when `now`, and report the commands of workspaces
-/// without one, going on after one fails, which it reports.
+/// without one that restores outside a waiting wrapper, going on after one
+/// fails, which it reports.
 pub(super) async fn queue_each(
     ctx: &Context,
     stopped: Vec<(Workspace, Saved)>,
@@ -65,7 +66,7 @@ pub(super) async fn queue_each(
     let mut commands = Vec::new();
     let mut failed = Vec::new();
     for (workspace, mut saved) in stopped {
-        if saved.agents.is_empty() && saved.sessions.is_empty() {
+        if !saved.restores_outside_wrappers() {
             let _claims = claim_commands(&mut saved.commands);
             match report_commands(ctx, &workspace, &saved.commands) {
                 Ok(report) => commands.push(report),

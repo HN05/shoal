@@ -141,6 +141,40 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
 }
 
 #[test]
+fn only_agents_outside_a_waiting_wrapper_receive_the_stopped_commands() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let recovery = Recovery {
+        mode: "worker".into(),
+        model: Default::default(),
+        agent: "claude".into(),
+        command: vec![],
+        automatic: true,
+        handoff_delivered: false,
+        proxy: None,
+    };
+    let wrapper = identity::capture(std::process::id())
+        .unwrap()
+        .expect("this process has an identity");
+    let save = |execution, restorer| {
+        recovery
+            .save(&paths, "workspace", execution, None, None, restorer)
+            .unwrap()
+    };
+    save("waiting", Restorer::Wrapper(wrapper));
+    let saved = Saved::load(&paths, "workspace").unwrap();
+    assert!(waits_in_wrapper(&saved.agents[0].1));
+    assert!(!saved.restores_outside_wrappers());
+
+    save("stopped", Restorer::User);
+    let mut saved = Saved::load(&paths, "workspace").unwrap();
+    assert!(saved.restores_outside_wrappers());
+    saved.retain_unattended();
+    let kept: Vec<_> = saved.agents.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(kept, ["stopped"]);
+}
+
+#[test]
 fn commands_with_arguments_that_are_not_utf8_are_not_recorded() {
     use std::os::unix::ffi::OsStringExt;
     let root = tempfile::tempdir().unwrap();

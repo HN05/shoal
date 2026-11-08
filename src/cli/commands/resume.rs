@@ -301,8 +301,7 @@ async fn queue_workspace(
 /// a waiting wrapper restores its agent where it stopped.
 async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<()> {
     for (workspace, saved) in stopped {
-        let mut agents = saved.agents.iter().chain(&saved.sessions);
-        if agents.all(|(_, path)| waits_in_wrapper(path)) {
+        if !saved.restores_outside_wrappers() {
             continue;
         }
         let settings = crate::client::workspaces::settings(
@@ -438,8 +437,8 @@ pub async fn run(
         return Ok(0);
     }
     let (selected_id, selected) = select_agent(ctx, &saved.agents, agent_label)?;
-    if waits_for_restore(&inspection, &selected_id) {
-        saved.retain_execution(&selected_id, false);
+    if waits_in_wrapper(&selected) {
+        saved.retain_execution(&selected_id, true);
         let stopped = vec![(workspace.clone(), saved)];
         return queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), true).await;
     }
@@ -742,14 +741,6 @@ fn stop_time(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// Whether the execution `id` of the workspace `inspection` describes is an
-/// agent Shoal stopped whose wrapper waits to restore it, which its queued
-/// restore starts rather than a new one beside it.
-fn waits_for_restore(inspection: &Inspection, id: &str) -> bool {
-    (inspection.executions.iter())
-        .any(|execution| execution.id == id && execution.stopped.is_some())
-}
-
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
 /// records are still safe to use once the daemon has rechecked that execution's
 /// recorded processes are gone, so make that repair part of resume itself. An
@@ -807,7 +798,8 @@ async fn reconcile_stale_execution(
 }
 
 /// Resume each workspace's stopped work, reporting it with what `resumed`
-/// holds already. Commands without an agent are reported here. An agent
+/// holds already. Commands without an agent to receive them, as none
+/// restoring through its waiting wrapper does, are reported here. An agent
 /// resumes where it stopped when the terminal backend can reuse that place,
 /// otherwise in the backend's background; without a backend one agent
 /// resumes in this terminal unless `resumed` reports chats or failures, and
@@ -819,7 +811,7 @@ async fn run_all(
 ) -> Result<i32> {
     let mut sessions = Vec::new();
     for (workspace, mut saved) in stopped {
-        if saved.agents.is_empty() && saved.sessions.is_empty() {
+        if !saved.restores_outside_wrappers() {
             let _claims = claim_commands(&mut saved.commands);
             match report_commands(ctx, &workspace, &saved.commands) {
                 Ok(report) => resumed.commands.push(report),
@@ -828,15 +820,14 @@ async fn run_all(
                     resumed.failed.push(failure);
                 }
             }
-        } else {
-            sessions.extend(
-                saved
-                    .agents
-                    .into_iter()
-                    .chain(saved.sessions)
-                    .map(|(id, path)| (workspace.clone(), id, path)),
-            );
         }
+        sessions.extend(
+            saved
+                .agents
+                .into_iter()
+                .chain(saved.sessions)
+                .map(|(id, path)| (workspace.clone(), id, path)),
+        );
     }
     // An agent restored here replaces this run's report, so it takes the
     // terminal only when there is nothing else to report.

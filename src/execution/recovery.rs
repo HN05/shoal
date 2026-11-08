@@ -1128,6 +1128,12 @@ impl Saved {
     pub fn retain_unattended(&mut self) {
         self.agents.retain(|(_, path)| !waits_in_wrapper(path));
     }
+
+    /// Whether an agent or last session restores outside a waiting wrapper,
+    /// receiving the stopped commands; a wrapper's restore receives none.
+    pub fn restores_outside_wrappers(&self) -> bool {
+        (self.agents.iter().chain(&self.sessions)).any(|(_, path)| !waits_in_wrapper(path))
+    }
 }
 
 /// Whether a live wrapper waits to restore the agent saved at `path`.
