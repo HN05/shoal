@@ -12,9 +12,9 @@ use crate::{
     client::output::{Output, batch::Failure},
 };
 
-/// Tab selects an entry and moves on to the next, which the bottom-up list
-/// shows above it; Shift-Tab moves back.
-const NEXT: &str = "tab:toggle+up,btab:toggle+down";
+/// Tab and Shift-Tab select or clear the highlighted entry without moving
+/// the cursor.
+const TOGGLE: &str = "tab:toggle,btab:toggle";
 
 /// Ctrl-A selects every matching entry, or clears them once all of them
 /// are selected. fzf lists the selected entries, which may include some
@@ -32,7 +32,7 @@ pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<St
         "--marker=✓ ".to_owned(),
         "--color=marker:green:bold".to_owned(),
         "--bind".to_owned(),
-        NEXT.to_owned(),
+        TOGGLE.to_owned(),
         "--bind".to_owned(),
         SELECT_ALL.to_owned(),
         "--header".to_owned(),
