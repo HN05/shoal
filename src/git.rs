@@ -14,9 +14,10 @@ mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 mod queries;
 pub use queries::{
-    HeadState, RemoteUrls, checkout_dirs, current_branch, git_dir, head_and_branch, head_state,
-    is_bare_with_work_tree, latest_subject, metadata_path, push_remote, remote_url, remote_urls,
-    remotes, revision, symbolic_revision, verify_revision, worktree_root,
+    HeadState, RemoteUrls, checked_out_branch, checkout_dirs, current_branch, git_dir,
+    head_and_branch, head_state, is_bare_with_work_tree, latest_subject, metadata_path,
+    push_remote, remote_url, remote_urls, remotes, revision, symbolic_revision, verify_revision,
+    worktree_root,
 };
 pub mod checkpoint;
 pub mod repo;

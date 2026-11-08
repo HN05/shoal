@@ -154,7 +154,7 @@ pub(crate) async fn inspect(
 /// delete, still is.
 async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> Result<()> {
     if check.workspace.disposable {
-        check.branch = checked_out_branch(&check.workspace.path).await?;
+        check.branch = git::checked_out_branch(&check.workspace.path).await?;
         return Ok(());
     }
     let path = &check.workspace.path;
@@ -203,13 +203,6 @@ pub(crate) async fn holds_starting_files(workspace: &Workspace) -> Result<bool> 
             && git::checkpoint::index_tree(path).await? == copied.index
             && git::checkpoint::matches(path, &copied.commit).await?,
     )
-}
-
-/// The branch the worktree at `path` is on; `None` when detached.
-async fn checked_out_branch(path: &std::path::Path) -> Result<Option<String>> {
-    let branch = git::current_branch(path).await?;
-    let branch = branch.trim_end_matches('\n');
-    Ok((!branch.is_empty()).then(|| branch.to_owned()))
 }
 
 /// What keeps a workspace's commits besides the remotes: the local default

@@ -55,12 +55,10 @@ pub async fn head_state(repo: &Path) -> Result<HeadState> {
     let mut lines = output.lines();
     let tree = lines.next().context("git rev-parse printed no tree")?;
     let commit = lines.next().context("git rev-parse printed no commit")?;
-    let branch = current_branch(repo).await?;
-    let branch = branch.trim_end_matches('\n');
     Ok(HeadState {
         commit: commit.to_owned(),
         tree: tree.to_owned(),
-        branch: (!branch.is_empty()).then(|| branch.to_owned()),
+        branch: checked_out_branch(repo).await?,
     })
 }
 
@@ -80,6 +78,13 @@ fn parse_head_and_branch(output: &str) -> Result<(String, Option<String>)> {
 /// Detached HEAD returns an empty branch name.
 pub async fn current_branch(repo: &Path) -> Result<String> {
     run(repo, &["branch", "--show-current"]).await
+}
+
+/// The branch the worktree at `repo` is on; `None` when detached.
+pub async fn checked_out_branch(repo: &Path) -> Result<Option<String>> {
+    let branch = current_branch(repo).await?;
+    let branch = branch.trim_end_matches('\n');
+    Ok((!branch.is_empty()).then(|| branch.to_owned()))
 }
 
 pub async fn worktree_root(repo: &Path) -> Result<String> {
