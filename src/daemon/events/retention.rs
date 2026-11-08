@@ -5,7 +5,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, Transaction, params};
 
 use crate::{
     daemon::{log, workspace::Manager},
@@ -24,7 +24,7 @@ impl Manager {
     pub(crate) async fn expire_events(&self) -> Result<()> {
         let gone = self.store.run(|db| gone(db)).await?;
         let expired = self.expired(gone).await;
-        self.store.run(move |db| forget(db, &expired)).await
+        self.store.write(move |tx| forget(tx, &expired)).await
     }
 
     /// The IDs of the `gone` spaces whose retention after their removal
@@ -96,8 +96,7 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
 }
 
 /// Forget the events of the spaces `ids`, unless one came back meanwhile.
-fn forget(db: &mut Connection, ids: &[String]) -> Result<()> {
-    let tx = db.transaction()?;
+fn forget(tx: &Transaction<'_>, ids: &[String]) -> Result<()> {
     for id in ids {
         tx.execute(
             "UPDATE journal_pruned SET id=MAX(id, (SELECT COALESCE(MAX(id),0)
@@ -112,7 +111,6 @@ fn forget(db: &mut Connection, ids: &[String]) -> Result<()> {
             [id],
         )?;
     }
-    tx.commit()?;
     Ok(())
 }
 
