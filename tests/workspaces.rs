@@ -17323,10 +17323,12 @@ fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             if fixture.repo.join(".git/merge-driver.pid").exists() {
                 return true;
             }
-            assert!(
-                merge.try_wait().unwrap().is_none(),
-                "merge exited before merge driver"
-            );
+            if let Some(status) = merge.try_wait().unwrap() {
+                panic!(
+                    "merge exited before merge driver with {status}: {}",
+                    fs::read_to_string(&stderr_path).unwrap()
+                );
+            }
             false
         });
         let pid: i32 = fs::read_to_string(fixture.repo.join(".git/merge-driver.pid"))
