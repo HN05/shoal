@@ -124,17 +124,21 @@ pub(super) async fn remove_imported_sessions(repo: &Repository) -> Result<()> {
 }
 
 /// The directory of one repository's kept session files.
-struct Layout {
+pub(super) struct Layout {
     root: PathBuf,
     owner: String,
 }
 
 impl Layout {
-    fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+    pub(super) fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
         Self {
             root: workspaces_dir.join(".sessions"),
             owner: repository_id.to_owned(),
         }
+    }
+
+    pub(super) fn root(&self) -> &Path {
+        &self.root
     }
 
     /// The repository's kept session files; registrations from before the

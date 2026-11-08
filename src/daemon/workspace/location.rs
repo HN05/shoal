@@ -93,6 +93,10 @@ impl Manager {
                             &path,
                             crate::tmp_dirs::Layout::new(directory, &other.id).root(),
                         )
+                        && !overlaps(
+                            &path,
+                            super::imported_sessions::Layout::new(directory, &other.id).root(),
+                        )
                         && !overlaps(&path, &directory.join(crate::config::repo::LOCAL_DIR)),
                     "workspace path overlaps a reserved repository directory"
                 );

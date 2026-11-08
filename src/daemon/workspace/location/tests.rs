@@ -1,7 +1,7 @@
 use crate::daemon::test_support::{manager, repository};
 
 #[tokio::test]
-async fn workspaces_stay_out_of_the_seed_cache_and_temporary_directories() {
+async fn workspaces_stay_out_of_the_seed_cache_temporary_and_session_directories() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -9,7 +9,7 @@ async fn workspaces_stay_out_of_the_seed_cache_and_temporary_directories() {
         .await
         .unwrap();
     let directory = repo.workspaces_dir.clone().unwrap();
-    for reserved in [".seed/inside", ".caches", ".tmp/id"] {
+    for reserved in [".seed/inside", ".caches", ".tmp/id", ".sessions/feature"] {
         let location = manager
             .workspace_location(&repo, &directory.join(reserved))
             .await;
