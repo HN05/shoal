@@ -5,6 +5,7 @@ use std::fmt;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    config::permissions::PermissionKey,
     daemon::{
         events::{self, EventKind},
         item_numbers::{self, ItemKind, ItemNumber},
@@ -52,19 +53,20 @@ impl TargetExt for Target {
 /// governs. They are those whose value made the space ask instead of act: an
 /// issue in another repository is governed by `issue_other_repositories`
 /// alone, and what pushes by `push` too.
-fn governing(request: &ApprovalRequest) -> &'static [&'static str] {
+fn governing(request: &ApprovalRequest) -> &'static [PermissionKey] {
+    use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
     use proposals::ProposalExt;
     match request.target {
         Target::IssueOpen
             if (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some()) =>
         {
-            &["issue_other_repositories"]
+            &[IssueOtherRepositories]
         }
-        Target::IssueOpen => &["issue_open"],
-        Target::PrOpen if request.pending_push().is_some() => &["pr_open", "push"],
-        Target::PrOpen => &["pr_open"],
-        Target::Push => &["push"],
-        Target::Merge | Target::Unmerge => &["merge", "push"],
+        Target::IssueOpen => &[IssueOpen],
+        Target::PrOpen if request.pending_push().is_some() => &[PrOpen, Push],
+        Target::PrOpen => &[PrOpen],
+        Target::Push => &[Push],
+        Target::Merge | Target::Unmerge => &[Merge, Push],
         _ => &[],
     }
 }
@@ -777,9 +779,9 @@ impl Manager {
         self.store.run(move |db| list(db, owner.as_deref())).await
     }
 
-    /// Decide request `number` as `caller`: a workspace process decides
-    /// only what was routed to it, and denies a proposal with a reason at
-    /// most.
+    /// Decide request `number` as `caller`: a scoped process decides only
+    /// what was routed to its space, as [`Self::decide_routed_approval`]
+    /// allows.
     pub(super) async fn decide_approval_as(
         &self,
         caller: Option<&Caller>,
@@ -921,7 +923,7 @@ impl Manager {
                 let stored = by_key(tx, &key)?.context("the approval request no longer exists")?;
                 ensure!(
                     stored.decider.as_deref() == Some(coordinator.as_str()),
-                    "approval request {id} is not routed to this workspace"
+                    "approval request {id} is not routed to this space"
                 );
                 crate::refusal::ensure_unchanged(
                     stored.is_same(&request),
@@ -929,7 +931,7 @@ impl Manager {
                 )?;
                 ensure!(
                     !approve || may_decide(tx, &coordinator, &stored)?,
-                    "approval {id}: this workspace holds no grant for {}; deny it or pass it up with shoal approvals --escalate {id}",
+                    "approval {id}: this space holds no grant for {}; deny it or pass it up with shoal approvals --escalate {id}",
                     stored.subject()
                 );
                 let decision = decide_and_place(tx, &key, approve)?;

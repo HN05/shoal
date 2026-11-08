@@ -102,8 +102,9 @@ fn only_direct_permissions_are_held_for_a_decision() {
     let settings = settings("", "");
     let chat = resolve(&settings, mode("chat")).unwrap();
     let worker = resolve(&settings, mode("worker")).unwrap();
-    assert!(chat.withheld(&["merge", "push"]).is_none());
-    assert!(worker.withheld(&["push"]).is_none());
-    assert!(worker.withheld(&["merge", "push"]).is_some());
-    assert!(worker.withheld(&["api_writes"]).is_some());
+    use PermissionKey::{ApiWrites, Merge, Push};
+    assert!(chat.withheld(&[Merge, Push]).is_none());
+    assert!(worker.withheld(&[Push]).is_none());
+    assert!(worker.withheld(&[Merge, Push]).is_some());
+    assert!(worker.withheld(&[ApiWrites]).is_some());
 }

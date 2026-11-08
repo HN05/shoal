@@ -95,6 +95,18 @@ impl PermissionsConfig {
 }
 
 states!(
+    /// A permission, by the key config names it with.
+    PermissionKey: Variants {
+        IssueOpen => "issue_open",
+        PrOpen => "pr_open",
+        IssueOtherRepositories => "issue_other_repositories",
+        Merge => "merge",
+        Push => "push",
+        ApiWrites => "api_writes",
+    }
+);
+
+states!(
     /// Where a space's permission comes from.
     PermissionSource {
         /// Its agent's mode, with `[permissions]` and the key's default.
@@ -174,35 +186,41 @@ impl Permissions {
         }
     }
 
-    /// Each key with its value and where it comes from, in config order.
-    pub fn entries(&self) -> [(&'static str, &'static str, PermissionSource); 6] {
-        fn entry<T: Copy>(
-            key: &'static str,
+    /// The value of `key`, as config names it, and where it comes from.
+    pub fn get(&self, key: PermissionKey) -> (&'static str, PermissionSource) {
+        fn of<T: Copy>(
             permission: Permission<T>,
             name: fn(T) -> &'static str,
-        ) -> (&'static str, &'static str, PermissionSource) {
-            (key, name(permission.value), permission.from)
+        ) -> (&'static str, PermissionSource) {
+            (name(permission.value), permission.from)
         }
-        [
-            entry("issue_open", self.issue_open, Opening::as_str),
-            entry("pr_open", self.pr_open, Opening::as_str),
-            entry(
-                "issue_other_repositories",
-                self.issue_other_repositories,
-                OtherRepositories::as_str,
-            ),
-            entry("merge", self.merge, Opening::as_str),
-            entry("push", self.push, Pushes::as_str),
-            entry("api_writes", self.api_writes, ApiWrites::as_str),
-        ]
+        match key {
+            PermissionKey::IssueOpen => of(self.issue_open, Opening::as_str),
+            PermissionKey::PrOpen => of(self.pr_open, Opening::as_str),
+            PermissionKey::IssueOtherRepositories => {
+                of(self.issue_other_repositories, OtherRepositories::as_str)
+            }
+            PermissionKey::Merge => of(self.merge, Opening::as_str),
+            PermissionKey::Push => of(self.push, Pushes::as_str),
+            PermissionKey::ApiWrites => of(self.api_writes, ApiWrites::as_str),
+        }
+    }
+
+    /// Each key with its value and where it comes from, in config order.
+    pub fn entries(&self) -> impl Iterator<Item = (PermissionKey, &'static str, PermissionSource)> {
+        (PermissionKey::ALL.iter()).map(|&key| {
+            let (value, from) = self.get(key);
+            (key, value, from)
+        })
     }
 
     /// The first of `keys` these permissions hold below `direct`, cited;
     /// none when every one is `direct`.
-    pub fn withheld(&self, keys: &[&str]) -> Option<String> {
-        (self.entries().into_iter())
-            .find(|(key, value, _)| keys.contains(key) && *value != "direct")
-            .map(|(key, value, from)| cite(key, &value, from))
+    pub fn withheld(&self, keys: &[PermissionKey]) -> Option<String> {
+        keys.iter().find_map(|&key| {
+            let (value, from) = self.get(key);
+            (value != Opening::Direct.as_str()).then(|| cite(key.as_str(), &value, from))
+        })
     }
 
     fn of_mode(layered: PermissionsConfig) -> Self {

@@ -422,7 +422,7 @@ fn render_permissions(status: &SpaceStatus, palette: Palette) {
     };
     outln!("Permissions:");
     for (key, value, from) in permissions.entries() {
-        outln!("  {key:<26}{value:<9}{from}");
+        outln!("  {:<26}{value:<9}{from}", key.as_str());
     }
 }
 
