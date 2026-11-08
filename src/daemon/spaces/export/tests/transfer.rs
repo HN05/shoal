@@ -132,6 +132,7 @@ async fn import_record(
             packaged.prerequisite.as_deref(),
             workspace,
             import.manifest.copy.is_some(),
+            &[],
         )
         .await
         .unwrap()
@@ -244,10 +245,93 @@ async fn import_writes_nothing_while_the_repository_moves() {
             packaged.prerequisite.as_deref(),
             packaged.workspace.clone(),
             false,
+            &[],
         )
         .await;
     assert!(imported.is_err());
     assert!(importing.removed_workspaces().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_the_restore() {
+    let (_source, exporting, source_repo, origin) = exporter().await;
+    let (target, importing, target_repo) = importer(&origin).await;
+    let workspace = exporting
+        .create_workspace(&source_repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let file = export_removed(&exporting, &workspace.id).await;
+    let import = Import::read(&mut &file[..]).unwrap();
+    let packaged = packaged_workspace(&import.manifest);
+    let contents = target.path().join("carried");
+    fs::write(&contents, "{}\n").unwrap();
+    let session_file = SessionFile {
+        agent: "claude-moving".into(),
+        session: "s1".into(),
+        path: "project/s1.jsonl".into(),
+        size: 3,
+    };
+    let carried = CarriedSessionFile {
+        file: session_file.clone(),
+        contents,
+    };
+    // Another history on the workspace's branch keeps the import from
+    // opening it.
+    git(&target_repo.path, &["checkout", "-q", "--orphan", "topic"]);
+    fs::write(target_repo.path.join("another"), "another\n").unwrap();
+    commit(&target_repo.path, "another");
+    git(&target_repo.path, &["checkout", "-q", "main"]);
+    let imported = importing
+        .import_workspace(
+            &target_repo.id.as_str().into(),
+            import.bundle.as_ref().map(|bundle| bundle.path()),
+            packaged.prerequisite.as_deref(),
+            packaged.workspace.clone(),
+            false,
+            std::slice::from_ref(&carried),
+        )
+        .await;
+    assert!(imported.is_err());
+    let removed = importing.removed_workspaces().await.unwrap();
+    assert_eq!(
+        removed[0].session_files,
+        std::slice::from_ref(&session_file)
+    );
+    // The repository's directory keeps them, beside its workspaces.
+    let sessions = importing
+        .repository(&target_repo.id)
+        .await
+        .unwrap()
+        .workspaces_dir
+        .unwrap()
+        .join(".sessions");
+    let kept = sessions.join(&removed[0].workspace_id);
+    assert_eq!(fs::read_to_string(kept.join("0")).unwrap(), "{}\n");
+
+    // The restore that opens it gives them to the workspace, for its caller
+    // to put in place; the sweep leaves them while the workspace exists.
+    git(&target_repo.path, &["branch", "-q", "-D", "topic"]);
+    let restored = importing
+        .restore_workspace(&SpaceSelector::id(&removed[0].workspace_id))
+        .await
+        .unwrap();
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    let handed = sessions.join(&restored.opened.workspace.id);
+    assert_eq!(
+        restored.session_files,
+        [CarriedSessionFile {
+            file: session_file,
+            contents: handed.join("0"),
+        }]
+    );
+    assert!(!kept.exists());
+    assert_eq!(fs::read_to_string(handed.join("0")).unwrap(), "{}\n");
+    // Those of a workspace that neither exists nor has a removal record go.
+    let unowned = sessions.join("gone");
+    fs::create_dir_all(&unowned).unwrap();
+    importing.expire_checkpoints().await.unwrap();
+    assert!(!unowned.exists());
+    assert!(handed.exists());
 }
 
 #[tokio::test]

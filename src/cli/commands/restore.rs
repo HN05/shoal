@@ -253,8 +253,8 @@ impl ReopenedExt for Reopened {
 }
 
 /// Print the reopening's warnings, trust its path for the agents that resume
-/// there, set the workspace up and link its PRs again; `None` when its
-/// setup did not finish.
+/// there and put their session files in place, set the workspace up and
+/// link its PRs again; `None` when its setup did not finish.
 pub(super) async fn prepare_reopened(
     ctx: &Context,
     restored: RestoredWorkspace,
@@ -262,12 +262,20 @@ pub(super) async fn prepare_reopened(
     let RestoredWorkspace {
         opened,
         removed,
+        session_files,
         warnings,
     } = restored;
     for warning in &warnings {
         eprintln!("warning: {warning}");
     }
     crate::cli::agents::trust_resumed(ctx, &opened.workspace, &removed).await;
+    crate::cli::agents::install_kept_session_files(
+        ctx,
+        &opened.workspace,
+        &removed,
+        &session_files,
+    )
+    .await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
         let Some(set_up) = super::workspaces::setup_workspace(ctx, &workspace, false).await? else {

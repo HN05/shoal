@@ -156,28 +156,20 @@ impl Package {
         })
     }
 
-    /// Record the packaged workspace as removed in its repository and open
-    /// it again there, putting its agents' session files in place.
+    /// Record the packaged workspace as removed in its repository, keeping
+    /// its agents' session files with the record for the restore that opens
+    /// it, and open it again.
     async fn open_workspace(self, ctx: &Context) -> Result<RestoredWorkspace> {
         let Space::Workspace(packaged) = &self.space else {
             anyhow::bail!("the package holds a chat, not a workspace");
         };
-        let restored = ctx
-            .progress("Importing workspace", self.import(ctx, packaged))
+        ctx.progress("Importing workspace", self.import(ctx, packaged))
             .await
-            .map(|restored| *restored);
-        // A workspace recorded but not opened keeps its sessions for `shoal
-        // work restore`.
-        let home = match &restored {
-            Ok(restored) => SessionHome::Workspace(&restored.opened.workspace),
-            Err(_) => SessionHome::Repository(self.repository.clone()),
-        };
-        let existing = agents::Existing::of_copy(self.copy.is_some());
-        agents::install_session_files(ctx, home, &self.carried(), existing).await;
-        restored
+            .map(|restored| *restored)
     }
 
-    /// Record `packaged` as removed and open it again.
+    /// Record `packaged` as removed with its session files and open it
+    /// again.
     async fn import(
         &self,
         ctx: &Context,
@@ -190,6 +182,7 @@ impl Package {
             packaged.prerequisite.clone(),
             packaged.workspace_with(self.sessions.clone()),
             self.copy.is_some(),
+            self.carried(),
         )
         .await
     }

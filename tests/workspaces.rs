@@ -6644,38 +6644,11 @@ fn export_carries_session_files_that_import_puts_back() {
     // The importing machine has none of them; the import puts them back, and
     // the agent continues its session.
     fs::remove_dir_all(&projects).unwrap();
-    let repo = fixture.repo.to_str().unwrap();
     // The import records the workspace but cannot open it while another
-    // branch has its name; its sessions still arrive, for the restore that
-    // opens it. A development build leaves agents' files to the installed
-    // Shoal unless told otherwise.
-    let tree = git(&fixture.repo, &["write-tree"]);
-    let unrelated = git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit-tree",
-            tree.trim(),
-            "-m",
-            "Another history",
-        ],
-    );
-    git(
-        &fixture.repo,
-        &["branch", "-f", "transcript", unrelated.trim()],
-    );
-    let imported = fixture
-        .command()
-        .env("SHOAL_DEV_USER_FILES", "1")
-        .args(["--json", "move", "import", file, "--repo", repo])
-        .output()
-        .unwrap();
-    assert!(!imported.status.success(), "{imported:?}");
-    git(&fixture.repo, &["branch", "-D", "transcript"]);
-    fixture.ok(&["work", "restore", "transcript"]);
+    // branch has its name; its sessions still arrive, with the restore that
+    // opens it.
+    import_without_opening(&fixture, file, "transcript");
+    restore_with_user_files(&fixture, "transcript");
     assert_eq!(
         fs::read_to_string(project.join("moved-session.jsonl")).unwrap(),
         "{\"turn\":1}\n"
@@ -6798,7 +6771,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
 }
 
 #[test]
-fn export_finds_the_sessions_of_a_profile_only_the_workspace_defines() {
+fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("profiled");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -6829,11 +6802,66 @@ fn export_finds_the_sessions_of_a_profile_only_the_workspace_defines() {
     fs::write(project.join("profiled-session.jsonl"), "{}\n").unwrap();
 
     let file = fixture.root.path().join("profiled.shoal");
-    let exported = fixture.ok(&["move", "export", "profiled", "-o", file.to_str().unwrap()]);
+    let file = file.to_str().unwrap();
+    let exported = fixture.ok(&["move", "export", "profiled", "-o", file]);
     assert_eq!(
         exported["manifest"]["session_files"][0]["path"], "-elsewhere/profiled-session.jsonl",
         "{exported}"
     );
+
+    // The import that cannot open the workspace cannot read its config
+    // either; the restore that opens it puts the session's file in place.
+    fs::remove_dir_all(&project).unwrap();
+    import_without_opening(&fixture, file, "profiled");
+    assert!(!project.join("profiled-session.jsonl").exists());
+    restore_with_user_files(&fixture, "profiled");
+    assert_eq!(
+        fs::read_to_string(project.join("profiled-session.jsonl")).unwrap(),
+        "{}\n"
+    );
+}
+
+/// Import the export `file` while a branch named `branch`, the workspace's,
+/// has another history, so the import records the workspace without opening
+/// it, then delete that branch. A development build leaves agents' files to
+/// the installed Shoal unless told otherwise.
+fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
+    let tree = git(&fixture.repo, &["write-tree"]);
+    let unrelated = git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit-tree",
+            tree.trim(),
+            "-m",
+            "Another history",
+        ],
+    );
+    git(&fixture.repo, &["branch", "-f", branch, unrelated.trim()]);
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture
+        .command()
+        .env("SHOAL_DEV_USER_FILES", "1")
+        .args(["--json", "move", "import", file, "--repo", repo])
+        .output()
+        .unwrap();
+    assert!(!imported.status.success(), "{imported:?}");
+    git(&fixture.repo, &["branch", "-D", branch]);
+}
+
+/// Restore the removed `workspace`, letting the development build put its
+/// agents' session files in place.
+fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
+    let restored = fixture
+        .command()
+        .env("SHOAL_DEV_USER_FILES", "1")
+        .args(["--json", "work", "restore", workspace])
+        .output()
+        .unwrap();
+    assert!(restored.status.success(), "{restored:?}");
 }
 
 #[test]

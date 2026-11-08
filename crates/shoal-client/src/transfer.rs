@@ -182,9 +182,10 @@ pub async fn copy(
     .await
 }
 
-/// Record the packaged `workspace` of `repository` as removed and open it
-/// again, fetching its commits from `bundle`, which needs `prerequisite`;
-/// a `copy` opens as a new workspace on a branch of its own.
+/// Record the packaged `workspace` of `repository` as removed, keeping its
+/// agents' `session_files`, and open it again, fetching its commits from
+/// `bundle`, which needs `prerequisite`; a `copy` opens as a new workspace
+/// on a branch of its own.
 pub async fn import(
     daemon: &impl Daemon,
     repository: Selector,
@@ -192,6 +193,7 @@ pub async fn import(
     prerequisite: Option<String>,
     workspace: RemovedWorkspace,
     copy: bool,
+    session_files: Vec<CarriedSessionFile>,
 ) -> Result<Box<RestoredWorkspace>> {
     let method = RemovalMethod::ImportWorkspace {
         repository,
@@ -199,6 +201,7 @@ pub async fn import(
         prerequisite,
         workspace: Box::new(workspace),
         copy,
+        session_files,
     };
     request(daemon, method).await
 }

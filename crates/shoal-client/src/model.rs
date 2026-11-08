@@ -474,9 +474,25 @@ pub struct RemovedWorkspace {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub last_sessions: Vec<crate::executions::LastSession>,
+    /// The agents' session files an import carried, which the daemon keeps
+    /// until the restore that opens the workspace puts them in place with
+    /// its settings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub session_files: Vec<crate::transfer::SessionFile>,
     pub cause: crate::events::EventCause,
     pub removed_at: crate::time::UnixTime,
     pub expires_at: crate::time::UnixTime,
+}
+
+impl RemovedWorkspace {
+    /// Whether it is a copy of another workspace, whose agents start from
+    /// forks of the original's sessions.
+    pub fn is_copy(&self) -> bool {
+        self.agents
+            .iter()
+            .any(|agent| agent.record.copied.is_some())
+            || self.last_sessions.iter().any(|last| last.copied.is_some())
+    }
 }
 
 /// A workspace `shoal work restore` opened again from its removal record; the
@@ -485,6 +501,10 @@ pub struct RemovedWorkspace {
 pub struct RestoredWorkspace {
     pub opened: OpenedWorkspace,
     pub removed: RemovedWorkspace,
+    /// The session files the daemon kept with the removal record, which
+    /// the caller puts in place and then deletes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub session_files: Vec<crate::transfer::CarriedSessionFile>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }

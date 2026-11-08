@@ -3684,7 +3684,10 @@ such as one whose files were copied by hand, and `--new-sessions` none.
 An imported workspace fetches the default branch when the repository lacks the
 commit the bundle builds on, is recorded as removed with its checkpoint, then
 restored as `shoal work restore` does; when that restore fails, `shoal work
-restore <workspace>` retries it. `shoal resume` continues its agents' sessions,
+restore <workspace>` retries it. The agents' session files stay with the removal
+record, in the repository directory's `.sessions`, until the restore that opens
+the workspace puts them in place, as its own
+configuration describes the agents. `shoal resume` continues its agents' sessions,
 and `--resume` queues the restores of the agents the export stopped, as `shoal
 resume` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal work restore`, trusts the workspace's path for the agents that resume there. An agent

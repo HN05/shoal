@@ -72,6 +72,7 @@ impl Manager {
             agents: self.copied_agents(&workspace).await?,
             // An unreadable last session is not worth refusing the copy for.
             last_sessions: LastSession::all(&self.paths, &workspace.id).unwrap_or_default(),
+            session_files: Vec::new(),
             cause: EventCause::Manual,
             removed_at: UnixTime::now(),
         };

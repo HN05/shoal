@@ -132,6 +132,7 @@ impl Manager {
         self.remove_seed(&repo).await?;
         delete_caches(&repo).await?;
         delete_tmp_dirs(&repo).await?;
+        super::imported_sessions::remove_imported_sessions(&repo).await?;
         self.delete_repository_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_local_config(repo.workspaces_dir.clone()).await?;

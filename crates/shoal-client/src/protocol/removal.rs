@@ -72,7 +72,8 @@ pub enum RemovalMethod {
     },
     /// Record a workspace another Shoal exported as removed here, with its
     /// checkpoint fetched from `bundle`, and open it again; a `copy` as a
-    /// new workspace on a branch of its own.
+    /// new workspace on a branch of its own. The daemon keeps the agents'
+    /// `session_files` with the record.
     ImportWorkspace {
         repository: crate::repository::Selector,
         bundle: Option<std::path::PathBuf>,
@@ -80,5 +81,7 @@ pub enum RemovalMethod {
         workspace: Box<crate::model::RemovedWorkspace>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         copy: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        session_files: Vec<crate::transfer::CarriedSessionFile>,
     },
 }

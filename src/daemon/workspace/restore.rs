@@ -18,6 +18,7 @@ use crate::{
         RestoredWorkspace, SpaceLinks, Workspace,
     },
     time::UnixTime,
+    transfer::CarriedSessionFile,
 };
 
 impl Manager {
@@ -54,6 +55,7 @@ impl Manager {
             links,
             agents,
             last_sessions,
+            session_files: Vec::new(),
             cause,
             removed_at: UnixTime::now(),
         };
@@ -126,6 +128,13 @@ impl Manager {
             None => self.restore_branch_workspace(&removed, files).await?,
         };
         let mut warnings = self.relink(&opened.workspace.id, &removed.links).await;
+        let session_files = self
+            .hand_over_imported_sessions(&removed, &opened.workspace.id)
+            .await
+            .unwrap_or_else(|error| {
+                warnings.push(format!("cannot keep the agents' session files: {error:#}"));
+                Vec::new()
+            });
         if let Err(error) = crate::execution::recovery::save_stopped_agents(
             &self.paths,
             &opened.workspace.id,
@@ -147,6 +156,7 @@ impl Manager {
         Ok(RestoredWorkspace {
             opened,
             removed,
+            session_files,
             warnings,
         })
     }
@@ -181,8 +191,9 @@ impl Manager {
 
     /// Open a workspace another Shoal exported: record it as removed here
     /// with its checkpoint, fetched from `bundle` or else on the default
-    /// branch, and restore it; a `copy` as a new workspace of its own. A
-    /// failed restore leaves the record for `shoal work restore`.
+    /// branch, and its agents' `session_files`, and restore it; a `copy` as
+    /// a new workspace of its own. A failed restore leaves the record for
+    /// `shoal work restore`.
     pub async fn import_workspace(
         &self,
         selector: &crate::repository::Selector,
@@ -190,6 +201,7 @@ impl Manager {
         prerequisite: Option<&str>,
         removed: RemovedWorkspace,
         copy: bool,
+        session_files: &[CarriedSessionFile],
     ) -> Result<RestoredWorkspace> {
         let repo = self.repository(selector).await?;
         ensure!(
@@ -203,7 +215,8 @@ impl Manager {
         let removed = {
             // A repository move holds this gate; the checkout may have moved.
             let (repo, _git) = self.lock_repository(&repo.id).await?;
-            self.record_import(&repo, bundle, removed, copy).await?
+            self.record_import(&repo, bundle, removed, copy, session_files)
+                .await?
         };
         self.restore_workspace(&SpaceSelector::id(&removed.workspace_id))
             .await
@@ -281,16 +294,17 @@ impl Manager {
         })
     }
 
-    /// Point the checkpoint's ref at its commit, then record the checkpoint
-    /// and the removal in one transaction, as a removal would; a `copy` as
-    /// the new workspace that copies it. The caller holds the repository's
-    /// Git gate.
+    /// Point the checkpoint's ref at its commit, keep the agents'
+    /// `session_files`, then record the checkpoint and the removal in one
+    /// transaction, as a removal would; a `copy` as the new workspace that
+    /// copies it. The caller holds the repository's Git gate.
     async fn record_import(
         &self,
         repo: &Repository,
         bundle: Option<&Path>,
         removed: RemovedWorkspace,
         copy: bool,
+        session_files: &[CarriedSessionFile],
     ) -> Result<RemovedWorkspace> {
         let _refs = self.gates.lock_checkpoints().await;
         let commit = &removed.checkpoint.commit;
@@ -305,10 +319,19 @@ impl Manager {
             true => self.copied_record(repo, removed).await?,
             false => removed,
         };
-        let record = removed.clone();
-        self.store
-            .write(move |tx| record_imported(tx, record))
+        let removed = self
+            .keep_imported_sessions(repo, removed, session_files)
             .await?;
+        let record = removed.clone();
+        if let Err(error) = self
+            .store
+            .write(move |tx| record_imported(tx, record))
+            .await
+        {
+            self.discard_imported_sessions(repo, &removed.workspace_id)
+                .await;
+            return Err(error);
+        }
         Ok(removed)
     }
 

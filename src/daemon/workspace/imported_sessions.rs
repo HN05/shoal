@@ -1,0 +1,227 @@
+//! The agents' session files an import carried, kept with the removal
+//! record it made until the restore that opens the workspace puts them in
+//! place with the workspace's own settings. A repository keeps them in its
+//! directory's `.sessions`, a directory per workspace named by its ID,
+//! holding each file under its place in the record's list.
+use std::{
+    collections::HashSet,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
+
+use anyhow::{Context, Result, ensure};
+use rusqlite::Connection;
+
+use super::Manager;
+use crate::{
+    fsutil::{create_marked_dir, is_marked_dir},
+    model::{RemovedWorkspace, Repository},
+    transfer::{CarriedSessionFile, SessionFile},
+};
+
+impl Manager {
+    /// Keep `files` for `removed`, imported into `repo`, replacing what an
+    /// earlier import of it kept, and list them in its record. The caller
+    /// holds the repository's Git gate and the checkpoint gate, so the sweep
+    /// cannot take them before the record exists.
+    pub(super) async fn keep_imported_sessions(
+        &self,
+        repo: &Repository,
+        mut removed: RemovedWorkspace,
+        files: &[CarriedSessionFile],
+    ) -> Result<RemovedWorkspace> {
+        removed.session_files = files.iter().map(|carried| carried.file.clone()).collect();
+        let layout = match files.is_empty() {
+            true => Layout::of(repo),
+            false => Some(Layout::new(&self.workspaces_dir(repo).await?, &repo.id)),
+        };
+        let Some(layout) = layout else {
+            return Ok(removed);
+        };
+        let copies: Vec<_> = files
+            .iter()
+            .zip(layout.kept(&removed.workspace_id, &removed.session_files))
+            .map(|(carried, kept)| (carried.contents.clone(), kept.contents))
+            .collect();
+        let workspace_id = removed.workspace_id.clone();
+        tokio::task::spawn_blocking(move || layout.keep(&workspace_id, &copies))
+            .await
+            .context("keep the agents' session files")??;
+        Ok(removed)
+    }
+
+    /// Forget the session files `repo` keeps for the workspace
+    /// `workspace_id`.
+    pub(super) async fn discard_imported_sessions(&self, repo: &Repository, workspace_id: &str) {
+        let Some(layout) = Layout::of(repo) else {
+            return;
+        };
+        let workspace_id = workspace_id.to_owned();
+        let _ = tokio::task::spawn_blocking(move || layout.remove_one(&workspace_id)).await;
+    }
+
+    /// Give the session files kept for `removed` to the workspace `to` that
+    /// restores it, for the caller to put in place, returning them there.
+    pub(super) async fn hand_over_imported_sessions(
+        &self,
+        removed: &RemovedWorkspace,
+        to: &str,
+    ) -> Result<Vec<CarriedSessionFile>> {
+        if removed.session_files.is_empty() {
+            return Ok(Vec::new());
+        }
+        let repo = self.repository(&removed.repository_id).await?;
+        let layout = Layout::of(&repo).context("the repository has no directory")?;
+        layout.hand_over(&removed.workspace_id, to)?;
+        Ok(layout.kept(to, &removed.session_files))
+    }
+
+    /// Delete the session files `repo` keeps for workspaces that neither
+    /// exist nor have a removal record left. The caller holds the
+    /// checkpoint gate.
+    pub(super) async fn expire_imported_sessions(&self, repo: &Repository) -> Result<()> {
+        let Some(layout) = Layout::of(repo) else {
+            return Ok(());
+        };
+        let owners = self.store.run(|db| session_owners(db)).await?;
+        tokio::task::spawn_blocking(move || layout.remove_unowned(&owners))
+            .await
+            .context("delete expired session files")?
+    }
+}
+
+/// Delete every kept session file of `repo` with their directory, when the
+/// repository goes; a directory Shoal did not create is the user's and
+/// stays.
+pub(super) async fn remove_imported_sessions(repo: &Repository) -> Result<()> {
+    let Some(layout) = Layout::of(repo) else {
+        return Ok(());
+    };
+    tokio::task::spawn_blocking(move || layout.remove())
+        .await
+        .context("delete the kept session files")?
+}
+
+/// The directory of one repository's kept session files.
+struct Layout {
+    root: PathBuf,
+    owner: String,
+}
+
+impl Layout {
+    fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+        Self {
+            root: workspaces_dir.join(".sessions"),
+            owner: repository_id.to_owned(),
+        }
+    }
+
+    /// The repository's kept session files; registrations from before the
+    /// repository directory layout have none until an import reserves it.
+    fn of(repo: &Repository) -> Option<Self> {
+        repo.workspaces_dir
+            .as_deref()
+            .map(|directory| Self::new(directory, &repo.id))
+    }
+
+    /// The session files `files` kept for the workspace `id`, each named by
+    /// its place among them.
+    fn kept(&self, id: &str, files: &[SessionFile]) -> Vec<CarriedSessionFile> {
+        let directory = self.root.join(id);
+        files
+            .iter()
+            .enumerate()
+            .map(|(index, file)| CarriedSessionFile {
+                file: file.clone(),
+                contents: directory.join(index.to_string()),
+            })
+            .collect()
+    }
+
+    /// Copy each source of `copies` to its destination in the directory of
+    /// the workspace `id`, which starts empty, and is left out without any;
+    /// a failure leaves none of them.
+    fn keep(&self, id: &str, copies: &[(PathBuf, PathBuf)]) -> Result<()> {
+        self.remove_one(id)?;
+        if copies.is_empty() {
+            return Ok(());
+        }
+        create_marked_dir(&self.root, &self.owner)
+            .with_context(|| format!("create {}", self.root.display()))?;
+        ensure!(
+            is_marked_dir(&self.root, &self.owner),
+            "{} is not a directory Shoal created for session files; move it away",
+            self.root.display()
+        );
+        let directory = self.root.join(id);
+        std::fs::create_dir(&directory)
+            .with_context(|| format!("create {}", directory.display()))?;
+        for (source, destination) in copies {
+            if let Err(error) = std::fs::copy(source, destination) {
+                remove_dir(&directory)?;
+                return Err(error).with_context(|| format!("copy {}", source.display()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Move the files kept for the workspace `from` to the workspace `to`.
+    fn hand_over(&self, from: &str, to: &str) -> Result<()> {
+        ensure!(
+            is_marked_dir(&self.root, &self.owner),
+            "{} is not a directory Shoal created for session files",
+            self.root.display()
+        );
+        let (from, to) = (self.root.join(from), self.root.join(to));
+        std::fs::rename(&from, &to)
+            .with_context(|| format!("move {} to {}", from.display(), to.display()))
+    }
+
+    fn remove_one(&self, id: &str) -> Result<()> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Ok(());
+        }
+        remove_dir(&self.root.join(id))
+    }
+
+    /// Delete the files kept for workspaces other than `owners`.
+    fn remove_unowned(&self, owners: &HashSet<String>) -> Result<()> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Ok(());
+        }
+        for entry in std::fs::read_dir(&self.root)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir()
+                && !owners.contains(entry.file_name().to_string_lossy().as_ref())
+            {
+                remove_dir(&entry.path())?;
+            }
+        }
+        Ok(())
+    }
+
+    fn remove(&self) -> Result<()> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Ok(());
+        }
+        remove_dir(&self.root)
+    }
+}
+
+fn remove_dir(directory: &Path) -> Result<()> {
+    match std::fs::remove_dir_all(directory) {
+        Err(error) if error.kind() != ErrorKind::NotFound => {
+            Err(error).with_context(|| format!("delete {}", directory.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The IDs of the workspaces and removal records that keep their session
+/// files.
+fn session_owners(db: &Connection) -> Result<HashSet<String>> {
+    db.prepare("SELECT id FROM workspaces UNION SELECT workspace_id FROM removed_workspaces")?
+        .query_map([], |row| row.get(0))?
+        .map(|id| Ok(id?))
+        .collect()
+}
