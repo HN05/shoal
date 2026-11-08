@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -57,14 +58,19 @@ class SandboxTests(unittest.TestCase):
             self.assertTrue(home.is_dir())
             self.assertFalse(any((parent / ".git").exists() for parent in home.parents))
 
-    def test_clearing_a_sandbox_whose_outside_directory_is_gone_removes_it(self):
-        with tempfile.TemporaryDirectory() as root, \
-                patch.object(sandbox, "OUTSIDE_ROOT", Path(root, "outside")):
-            directory = Path(root, "sandbox")
-            (directory / "bin").mkdir(parents=True)
-            (directory / "bin" / "shoal").touch()
-            sandbox.Sandbox(directory).clear()
-            self.assertFalse(directory.exists())
+    def test_clearing_a_sandbox_whose_home_is_gone_removes_it(self):
+        for removed in ("outside directory", "home"):
+            with self.subTest(removed=removed), tempfile.TemporaryDirectory() as root, \
+                    patch.object(sandbox, "OUTSIDE_ROOT", Path(root, "outside")):
+                Path(root, "outside").mkdir()
+                directory = Path(root, "sandbox")
+                (directory / "bin").mkdir(parents=True)
+                (directory / "bin" / "shoal").symlink_to(shutil.which("true"))
+                if removed == "home":
+                    sandbox.outside_directory(directory).mkdir()
+                sandbox.Sandbox(directory).clear()
+                self.assertFalse(directory.exists())
+                self.assertFalse(sandbox.outside_directory(directory).exists())
 
     def test_removing_the_sandbox_removes_its_outside_directory(self):
         with tempfile.TemporaryDirectory() as root, \

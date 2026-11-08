@@ -101,8 +101,8 @@ class Sandbox:
         self.env = environment(path, self.bin_dir)
         self.daemon = None
 
-    def run(self, args, check=True):
-        result = subprocess.run(["shoal", *args], env=self.env, cwd=self.env["HOME"],
+    def run(self, args, check=True, cwd=None):
+        result = subprocess.run(["shoal", *args], env=self.env, cwd=cwd or self.home,
                                 stdin=subprocess.DEVNULL, capture_output=True, text=True)
         if check and result.returncode != 0:
             sys.exit(f"shoal {' '.join(args)} failed:\n{result.stderr}")
@@ -110,10 +110,10 @@ class Sandbox:
 
     def clear(self):
         """Remove the last run's sandbox, stopping a daemon an interrupted run left.
-        No daemon runs once its outside directory is gone, as /tmp is at reboot,
-        and the stop would run from the home inside it."""
-        if (self.bin_dir / "shoal").exists() and outside_directory(self.path).exists():
-            self.run(["daemon", "stop"], check=False)
+        The stop runs from the sandbox, since /tmp cleaners can have removed the
+        home in the outside directory."""
+        if (self.bin_dir / "shoal").exists():
+            self.run(["daemon", "stop"], check=False, cwd=self.path)
         remove(self.path)
 
     def prepare(self, shoal, prompt):
