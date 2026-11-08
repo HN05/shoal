@@ -2488,9 +2488,16 @@ space's set comes from its agent's mode: `[modes.NAME.permissions]` over
 key is then the narrower of that and the parent's effective value, so no child
 has more than its parent. The modes that coordinate default `merge` and
 `issue_other_repositories` to `"direct"` so they can decide their children's;
-`worker` keeps the key defaults. Effective permissions are computed at each
-check from the current config, the recorded modes and the tree, never stored,
-so a config change reaches running agents; only the push rewrites, which are
+`worker` keeps the key defaults. A parent may give a child less than it has
+with `shoal start --permission KEY=VALUE`, a narrowing recorded with the
+agent's mode, since it belongs to that agent as its mode does: restores and
+restarts keep both, and a new agent in the space brings its own. A narrowing
+never widens: a value above the mode's is refused, because asking for more
+than the mode gives is a mistake worth saying, while one above the parent's
+is lowered, since the parent's own permissions may change. Effective
+permissions are computed at each check from the current config, the recorded
+modes and narrowings and the tree, never stored, so a config change reaches
+running agents; only the push rewrites, which are
 Git environment fixed at launch, wait for a restart. A check uses the acting
 space's permissions, so a parent acting on a child acts under its own.
 

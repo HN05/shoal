@@ -1798,7 +1798,7 @@ other commands do. Failed session closes notify and retry at startup or with
 
 ### Chats
 
-`shoal start --chat [repository | --in [WORKSPACE]] [--mode NAME] [--issue [ISSUE]] [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
+`shoal start --chat [repository | --in [WORKSPACE]] [--mode NAME] [--permission KEY=VALUE]... [--issue [ISSUE]] [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
 starts a new chat with an agent about a repository, to discuss it, its issues
 and plans, or to coordinate work, without changing code; so does `shoal start`
 in a [mode](#modes-and-rules) whose kind is `chat`. Without `--mode`, `--chat`
@@ -2263,8 +2263,9 @@ kind of space the mode names unless `--chat`, `--in` or `--worktree` says
 otherwise; `worker` always starts in a workspace, and config that gives it
 another kind is refused. Without `--mode`, a terminal offers the modes in a
 picker with the kind of space each starts in, and without one the start takes
-`worker`, or `chat` with `--chat` or `--in`, which the picker lists first. The
-picker opens once the start has checked the arguments it was given, and offers
+`worker`, or `chat` with `--chat` or `--in`, which the picker lists first.
+`--permission KEY=VALUE`, repeatable, narrows the mode's
+[permissions](#mode-permissions) for that agent. The picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,
 `--base` or another flag only a workspace takes, a chat for `--name`, and only
 modes in a repository when they name a repository or issue or ask for a kind
@@ -2348,9 +2349,9 @@ push = "propose"
 ```
 
 Each space has its own permissions. A top-level space has those of its
-agent's mode; a space below another has, for each key, the narrower of its
-mode's value and its parent's effective one, so a child never has more than
-its parent. A space whose agent has not started, such as one `shoal split`
+agent's mode, narrowed by the `--permission` its agent started with; a space
+below another has, for each key, the narrowest of those and its parent's
+effective value, so a child never has more than its parent. A space whose agent has not started, such as one `shoal split`
 created, has `[permissions]` and the keys' defaults, narrowed the same way.
 A chat without a repository resolves its mode's keys in the config of the
 repository the action is in, and in the global config otherwise. Shoal
@@ -2360,8 +2361,21 @@ below them; only the hold on an agent's plain `git push` follows the `push`
 permission it launched with, which a restart renews. A check uses the
 permissions of the space that acts, so a parent acting on a space below it
 acts under its own. `shoal work status` lists a space's permissions, each with
-`mode` or `parent` for where it comes from; `--json` gives them as
-`permissions`, each key with its `value` and `from`.
+`mode`, `narrowing` or `parent` for where it comes from; `--json` gives them
+as `permissions`, each key with its `value` and `from`.
+
+`shoal start --permission KEY=VALUE`, repeatable, narrows the new agent's
+permissions below its mode's, such as a parent giving a child less than it
+has itself:
+
+```sh
+shoal start my-project fix-login --permission push=propose --permission merge=propose
+```
+
+A value wider than the mode's is refused, and one wider than the parent
+space's effective value is lowered to it. Shoal records the narrowing with
+the agent's mode, on its execution, queue entry, workspace or chat, and a
+restore or restart keeps it; nothing changes it while the agent runs.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,

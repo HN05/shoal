@@ -235,7 +235,9 @@ A space's permissions (`issue_open`, `pr_open`, `issue_other_repositories`,
 `merge`, `push`, `api_writes`) come from its agent's mode and config, and are
 never wider than those of the space above it; `shoal work status` lists them,
 each with where it comes from. A command acting on a space below uses the
-caller's own.
+caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
+less than its mode would, such as `--permission push=propose`; a value wider
+than the mode's is refused, and one wider than yours is lowered to it.
 
 Where a space's permissions require approval for issues and PRs, `issue open`
 and `pr open` exit 0 with `proposed`, an approval request, instead of the item;
