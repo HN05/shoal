@@ -1,6 +1,7 @@
 use crate::execution::recovery::RecordExt;
 use std::{fs, path::Path, sync::Arc};
 
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -65,12 +66,12 @@ async fn importer(origin: &Path) -> (tempfile::TempDir, Arc<Manager>, Repository
 }
 
 /// Export `workspace`, removing it, and read the file back.
-async fn export_removed(manager: &Manager, workspace: &str) -> Vec<u8> {
+async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("workspace.shoal");
     let exported = manager
         .export_space(
-            &SpaceSelector::parse(workspace),
+            &SpaceSelector::id(workspace),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.clone(),

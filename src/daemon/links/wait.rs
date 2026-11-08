@@ -145,7 +145,7 @@ impl ActiveWaits {
 
 #[cfg(test)]
 impl ActiveWaits {
-    pub(crate) fn is_waiting(&self, key: &str) -> bool {
+    pub(crate) fn is_waiting(&self, key: &SpaceId) -> bool {
         self.running
             .lock()
             .expect("active waits lock")

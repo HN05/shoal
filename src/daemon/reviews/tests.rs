@@ -64,12 +64,12 @@ impl Fixture {
         self.review_of(&self.workspace.id).await
     }
 
-    async fn review_of(&self, workspace: &str) -> Review {
+    async fn review_of(&self, workspace: &SpaceId) -> Review {
         let mut ended = self.manager.reviews.ended.subscribe();
         let queued = self
             .manager
             .queue_review(
-                &SpaceSelector::parse(workspace),
+                &SpaceSelector::id(workspace),
                 ReviewTarget::Workspace,
                 None,
                 Default::default(),

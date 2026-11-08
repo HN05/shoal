@@ -172,7 +172,7 @@ async fn a_newer_wait_supersedes_the_older_one_per_workspace() {
     drop(older);
     assert!(newer.is_current());
     drop(newer);
-    assert!(!waits.is_waiting("one"));
+    assert!(!waits.is_waiting(&SpaceId::from("one")));
 }
 
 #[tokio::test]
@@ -232,8 +232,8 @@ fn snapshot(message: &str) -> Snapshot {
     serde_json::from_value(json!({"comments": {"one": message}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
 }
 
-async fn register_watch(manager: &Manager, id: &str, url: &str) {
-    let id = id.to_owned();
+async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
+    let id = id.clone();
     let registration = super::super::pr::Registration {
         kind: RegistrationKind::Watch {
             urls: vec![url.into()],
