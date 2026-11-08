@@ -285,12 +285,13 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         running.push(run_agent(&manager, workspace).await);
     }
     // Chats run with this process as their agent.
+    let mut chats = Vec::new();
     for (repository, name) in [
         (&parent.repository_id, "planning"),
         (&parent.repository_id, "sender"),
         (&elsewhere.id, "other"),
     ] {
-        manager
+        let chat = manager
             .start_chat(
                 repository.clone().into(),
                 name.into(),
@@ -301,9 +302,11 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             )
             .await
             .unwrap();
+        chats.push(chat);
     }
+    let sender = chats[1].id.clone();
     let send = |repository: Option<&String>, below: Option<SpaceId>| {
-        let manager = &manager;
+        let (manager, sender) = (&manager, &sender);
         let repository = repository.cloned().map(Into::into);
         async move {
             manager
@@ -313,7 +316,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                     Vec::new(),
                     &Attacher::User,
                     below.as_ref(),
-                    Some(&SpaceId::from("sender")),
+                    Some(sender),
                 )
                 .await
                 .unwrap()
