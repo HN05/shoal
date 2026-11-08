@@ -4840,13 +4840,17 @@ completion, and `shoal done --undo` leaves it as it is.
 `--steps` replaces the steps with a markdown task list, one `- [ ] name` or
 `- [x] name` per line.
 
-`work status`, `inspect`, `work --json` and `shoal progress --json` give `progress`
-with `status`, `steps` (`name`, `done`), `current` (the step's index, or null
-once every step is done) and Unix-seconds `updated_at`; a space without
-progress has none. Each change is a `progress_changed`
-[event](#workspace-events), which `shoal work log --all` shows, and setting
-the same value again is not a change. Progress never notifies, and
-coordinating agents read their children's progress on demand.
+`work status` shows a `Progress` section with the status line and the numbered
+steps, marking the current one, and `work` shows how many steps are done with
+the current step, such as `3/5 Fix the timeout`, followed by the status line
+in place of the issue title where the width allows. `work status`, `inspect`,
+`work --json` and `shoal progress --json` give `progress` with `status`,
+`steps` (`name`, `done`), `current` (the step's index, or null once every step
+is done) and Unix-seconds `updated_at`; a space without progress has none.
+Each change is a `progress_changed` [event](#workspace-events), which
+`shoal work log --all` shows, and setting the same value again is not a
+change. Progress never notifies, and coordinating agents read their
+children's progress on demand.
 
 Scoped callers set only their own space's progress, and read their own and
 that of the spaces below it.

@@ -496,3 +496,48 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
         "running, chat mode"
     );
 }
+
+#[test]
+fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
+    use crate::client::progress::Step;
+    let step = |name: &str, done| Step {
+        name: name.into(),
+        done,
+    };
+    let mut working = workspace("a", "working", "working", WorkspaceState::Ready);
+    working.links.issue_title = Some("Fix the login timeout".into());
+    working.progress = Some(Progress {
+        status: Some("Reproduced; the cause is the query limit".into()),
+        steps: vec![
+            step("Reproduce", true),
+            step("Raise the query limit to thirty seconds or more", false),
+        ],
+        current: Some(1),
+        updated_at: crate::time::UnixTime::EPOCH,
+    });
+    let mut planned = workspace("a", "planned", "planned", WorkspaceState::Ready);
+    planned.links.issue_title = Some("Add onboarding".into());
+    planned.progress = Some(Progress {
+        status: None,
+        steps: vec![step("Sketch", true)],
+        current: None,
+        updated_at: crate::time::UnixTime::EPOCH,
+    });
+    let rows = workspace_tree_rows(
+        &[working, planned],
+        &[],
+        &HashSet::new(),
+        Palette::stdout(true),
+        None,
+    );
+    assert!(
+        rows[0].ends_with(
+            "1/2 Raise the query limit to thirty…  Reproduced; the cause is the query limit"
+        ),
+        "{rows:?}"
+    );
+    // A plan whose steps are all done shows only the count.
+    let (start, end) = rows[1].split_once("1/1").unwrap();
+    assert!(start.ends_with("  "), "{rows:?}");
+    assert_eq!(end.trim_start(), "Add onboarding", "{rows:?}");
+}

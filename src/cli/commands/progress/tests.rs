@@ -38,6 +38,7 @@ fn steps_number_from_one_and_mark_the_current_step() {
     assert_eq!(lines[0], " 1. [x] Step 1");
     assert_eq!(lines[2], " 3. [ ] Step 3  (current)");
     assert_eq!(lines[9], "10. [ ] Step 10");
+    assert_eq!(summary(&progress), "2/10 steps");
 }
 
 #[test]

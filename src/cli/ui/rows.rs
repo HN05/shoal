@@ -13,6 +13,7 @@ use crate::{
         list_status::ListStatus,
         output::{Palette, Style},
     },
+    client::progress::Progress,
     forge::items::link,
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind, QueueState},
@@ -100,7 +101,8 @@ pub fn usage_label(usage: &WorkspaceUsage) -> String {
 
 /// One aligned row per workspace: a status marker, the number, the name,
 /// the repository when the rows span several (`(id, name)` pairs), the
-/// status, what its processes use, and the linked issue's title when known.
+/// status, what its processes use, its progress, and its agent's status
+/// line, else the linked issue's title when known.
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
@@ -204,7 +206,7 @@ impl<'a> SpaceTree<'a> {
     }
 
     /// The row of `space` at `depth`, then those of the spaces below it.
-    fn push(&self, rows: &mut Vec<(String, [Cell; 6])>, space: Listed<'a>, depth: usize) {
+    fn push(&self, rows: &mut Vec<(String, [Cell; 7])>, space: Listed<'a>, depth: usize) {
         rows.push(match space {
             Listed::Workspace(workspace) => {
                 tree_workspace_row(workspace, depth, self.stopped, self.palette)
@@ -233,7 +235,7 @@ fn tree_workspace_row(
     depth: usize,
     stopped: &HashSet<String>,
     palette: Palette,
-) -> (String, [Cell; 6]) {
+) -> (String, [Cell; 7]) {
     let name = indented(&workspace.name, depth);
     let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
     (
@@ -244,9 +246,40 @@ fn tree_workspace_row(
             (String::new(), None),
             workspace_status_cell(workspace, status),
             usage_cell(workspace),
-            (workspace_title(workspace), None),
+            progress_cell(workspace.progress.as_ref()),
+            (workspace_text(workspace), None),
         ],
     )
+}
+
+/// What a workspace row ends with: its agent's status line, else what it
+/// names as its work.
+fn workspace_text(workspace: &Workspace) -> String {
+    match status_line(workspace.progress.as_ref()) {
+        Some(status) => status.to_owned(),
+        None => workspace_title(workspace),
+    }
+}
+
+fn status_line(progress: Option<&Progress>) -> Option<&str> {
+    progress?.status.as_deref()
+}
+
+/// The most characters a progress cell shows of the step under way.
+const STEP_WIDTH: usize = 32;
+
+/// How far along a space's agent is, as `3/5 Fix the timeout`: the done
+/// steps out of all, and the step under way.
+fn progress_cell(progress: Option<&Progress>) -> Cell {
+    let Some(progress) = progress.filter(|progress| !progress.steps.is_empty()) else {
+        return (String::new(), None);
+    };
+    let count = format!("{}/{}", progress.done(), progress.steps.len());
+    let text = match progress.current_step() {
+        Some(step) => format!("{count} {}", truncated(step.name.clone(), STEP_WIDTH)),
+        None => count,
+    };
+    (text, None)
 }
 
 /// What a workspace row names as its work: the CI job it runs, or the
@@ -274,8 +307,9 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
 }
 
 /// A chat's row: its status marker, number and name, the workspace it
-/// runs in, its status with its mode and agent.
-fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 6]) {
+/// runs in, its status with its mode, its progress, and its agent's status
+/// line, else its agent.
+fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 7]) {
     let status = ListStatus::of_chat(chat);
     let place = chat.workspace.as_ref();
     let label = with_mode(status.label(), Some(&chat.mode), &crate::model::chat_mode());
@@ -290,7 +324,13 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 6]) 
             ),
             (label, Some(status.style())),
             (String::new(), None),
-            (chat.agent.clone(), None),
+            progress_cell(chat.progress.as_ref()),
+            (
+                status_line(chat.progress.as_ref())
+                    .unwrap_or(&chat.agent)
+                    .to_owned(),
+                None,
+            ),
         ],
     )
 }
@@ -311,7 +351,7 @@ pub(super) fn rows_with_status(
         .into_iter()
         .map(|(status, cell)| (status.marker(palette), cell))
         .unzip();
-    let cells: Vec<[Cell; 6]> = workspaces
+    let cells: Vec<[Cell; 7]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
         .zip(statuses)
@@ -322,7 +362,8 @@ pub(super) fn rows_with_status(
                 (repository, None),
                 status,
                 usage_cell(w),
-                (workspace_title(w), None),
+                progress_cell(w.progress.as_ref()),
+                (workspace_text(w), None),
             ]
         })
         .collect();
@@ -356,7 +397,7 @@ fn number_cell(number: u32) -> Cell {
 /// Rows of `width` with a state marker before their cells cut the title.
 fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
     width.map(|width| WidthLimit {
-        column: 5,
+        column: 6,
         width: width.saturating_sub(2),
     })
 }

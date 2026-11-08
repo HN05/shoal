@@ -846,6 +846,14 @@ impl SpaceDetail {
         }
     }
 
+    /// Where its agent is in its work.
+    pub fn progress(&self) -> Option<&crate::progress::Progress> {
+        match self {
+            Self::Workspace(status) => status.workspace.progress.as_ref(),
+            Self::Chat { chat } => chat.progress.as_ref(),
+        }
+    }
+
     /// Its ready-for-review marks.
     pub fn review(&self) -> &[ReviewMark] {
         match self {

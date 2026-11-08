@@ -123,6 +123,30 @@ fn render(progress: Option<&Progress>, palette: Palette) {
     }
 }
 
+/// `progress` as a space's status shows it: how many steps are done, then
+/// the status line and the numbered steps.
+pub(in crate::cli) fn render_section(progress: Option<&Progress>, palette: Palette) {
+    let Some(progress) = progress else {
+        outln!("Progress:      none");
+        return;
+    };
+    outln!("Progress:      {}", summary(progress));
+    if let Some(status) = &progress.status {
+        outln!("  {status}");
+    }
+    for line in step_lines(progress, palette) {
+        outln!("  {line}");
+    }
+}
+
+/// How many of the steps are done, as `3/5 steps`.
+fn summary(progress: &Progress) -> String {
+    match progress.steps.len() {
+        0 => "no steps".to_owned(),
+        total => format!("{}/{total} steps", progress.done()),
+    }
+}
+
 /// Each step as `2. [x] name`, the current one marked.
 fn step_lines(progress: &Progress, palette: Palette) -> Vec<String> {
     let width = progress.steps.len().to_string().len();

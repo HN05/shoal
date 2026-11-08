@@ -168,9 +168,9 @@ shoal progress [--space S]          # Show the status line and steps
 shoal progress --steps < plan.md    # `- [ ] name` / `- [x] name` per line
 ```
 
-`progress` sets the space's status line, one line in the agent's words, and
-`--steps` its steps. Changes never notify; a coordinator reads its children's
-progress on demand.
+`progress` sets the space's status line, one line in the agent's words that
+`work` and `work status` show, and `--steps` its steps. Changes never notify; a
+coordinator reads its children's progress on demand.
 
 ## Issues and pull requests
 

@@ -4,7 +4,7 @@ use super::StatusView;
 use crate::cli::list_status::ListStatusExt;
 use crate::{
     cli::{
-        commands::{base, ci, links, resources, split},
+        commands::{base, ci, links, progress, resources, split},
         list_status::ListStatus,
         output::{Palette, Style},
         ui,
@@ -22,6 +22,7 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
         SpaceDetail::Chat { chat } => render_chat(chat, palette),
     }
     render_activity(view, palette);
+    progress::render_section(status.space.progress(), palette);
     if let Some(worktree) = status.space.worktree() {
         render_leases(worktree, palette);
     }
