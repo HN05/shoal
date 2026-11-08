@@ -55,7 +55,7 @@ impl Manager {
             links,
             agents,
             last_sessions,
-            session_files: Vec::new(),
+            session_files: self.unplaced_sessions(workspace).await,
             cause,
             removed_at: UnixTime::now(),
         };

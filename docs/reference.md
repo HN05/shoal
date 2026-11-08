@@ -3688,7 +3688,9 @@ restore <workspace>` retries it. The agents' session files stay with the removal
 record, in the repository directory's `.sessions`, until the restore that opens
 the workspace puts them in place, as its own
 configuration describes the agents, and an export of that record carries them
-again. `shoal resume` continues its agents' sessions,
+again. Files that restore cannot put in place, as in a development build
+without `SHOAL_DEV_USER_FILES`, stay for the workspace's next removal record.
+`shoal resume` continues its agents' sessions,
 and `--resume` queues the restores of the agents the export stopped, as `shoal
 resume` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal work restore`, trusts the workspace's path for the agents that resume there. An agent

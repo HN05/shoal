@@ -6830,7 +6830,7 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
 }
 
 #[test]
-fn a_restore_that_places_no_session_files_keeps_them() {
+fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("unplaced");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -6875,6 +6875,15 @@ fn a_restore_that_places_no_session_files_keeps_them() {
         .filter(|entry| entry.is_dir())
         .collect();
     assert_eq!(left.len(), 1, "{left:?}");
+
+    // The workspace's next removal record lists them, so the next restore
+    // puts them in place.
+    fixture.ok(&["rm", "unplaced", "--yes"]);
+    restore_with_user_files(&fixture, "unplaced");
+    assert_eq!(
+        fs::read_to_string(project.join("unplaced-session.jsonl")).unwrap(),
+        "{}\n"
+    );
 }
 
 /// Import the export `file` while a branch named `branch`, the workspace's,

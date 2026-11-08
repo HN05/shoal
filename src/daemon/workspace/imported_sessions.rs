@@ -2,7 +2,9 @@
 //! record it made until the restore that opens the workspace puts them in
 //! place with the workspace's own settings. A repository keeps them in its
 //! directory's `.sessions`, a directory per workspace named by its ID,
-//! holding each file under its place in the record's list.
+//! holding each file under its place in the list beside them. Files a
+//! restore hands over but its caller does not put in place stay listed
+//! there for the workspace's next removal record.
 use std::{
     collections::HashSet,
     io::ErrorKind,
@@ -16,7 +18,7 @@ use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     fsutil::{create_marked_dir, is_marked_dir},
-    model::{RemovedWorkspace, Repository},
+    model::{RemovedWorkspace, Repository, Workspace},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
 
@@ -44,8 +46,8 @@ impl Manager {
             .zip(layout.kept(&removed.workspace_id, &removed.session_files))
             .map(|(carried, kept)| (carried.contents.clone(), kept.contents))
             .collect();
-        let workspace_id = removed.workspace_id.clone();
-        tokio::task::spawn_blocking(move || layout.keep(&workspace_id, &copies))
+        let (workspace_id, listed) = (removed.workspace_id.clone(), removed.session_files.clone());
+        tokio::task::spawn_blocking(move || layout.keep(&workspace_id, &listed, &copies))
             .await
             .context("keep the agents' session files")??;
         Ok(removed)
@@ -98,6 +100,23 @@ impl Manager {
         Ok(kept)
     }
 
+    /// The session files kept for `workspace` that its restore's caller did
+    /// not put in place, for its removal record. An unreadable list is not
+    /// worth keeping the workspace for.
+    pub(super) async fn unplaced_sessions(&self, workspace: &Workspace) -> Vec<SessionFile> {
+        let Ok(repo) = self.repository(&workspace.repository_id).await else {
+            return Vec::new();
+        };
+        let Some(layout) = Layout::of(&repo) else {
+            return Vec::new();
+        };
+        let id = workspace.id.clone();
+        match tokio::task::spawn_blocking(move || layout.listed(&id)).await {
+            Ok(Ok(listed)) => listed,
+            _ => Vec::new(),
+        }
+    }
+
     /// Delete the session files `repo` keeps for workspaces that neither
     /// exist nor have a removal record left. The caller holds the
     /// checkpoint gate.
@@ -145,6 +164,9 @@ pub(super) async fn remove_imported_sessions(repo: &Repository) -> Result<()> {
         .context("delete the kept session files")?
 }
 
+/// The file beside a workspace's kept session files that lists them.
+const LIST: &str = "files.json";
+
 /// The directory of one repository's kept session files.
 pub(super) struct Layout {
     root: PathBuf,
@@ -186,9 +208,10 @@ impl Layout {
     }
 
     /// Copy each source of `copies` to its destination in the directory of
-    /// the workspace `id`, which starts empty, and is left out without any;
-    /// a failure leaves none of them.
-    fn keep(&self, id: &str, copies: &[(PathBuf, PathBuf)]) -> Result<()> {
+    /// the workspace `id`, which starts empty, and is left out without any,
+    /// beside the list `listed` of what they are; a failure leaves none of
+    /// them.
+    fn keep(&self, id: &str, listed: &[SessionFile], copies: &[(PathBuf, PathBuf)]) -> Result<()> {
         self.remove_one(id)?;
         if copies.is_empty() {
             return Ok(());
@@ -203,13 +226,37 @@ impl Layout {
         let directory = self.root.join(id);
         std::fs::create_dir(&directory)
             .with_context(|| format!("create {}", directory.display()))?;
-        for (source, destination) in copies {
-            if let Err(error) = std::fs::copy(source, destination) {
-                remove_dir(&directory)?;
-                return Err(error).with_context(|| format!("copy {}", source.display()));
-            }
+        let written = copies
+            .iter()
+            .try_for_each(|(source, destination)| {
+                std::fs::copy(source, destination)
+                    .map(drop)
+                    .with_context(|| format!("copy {}", source.display()))
+            })
+            .and_then(|()| {
+                let list = directory.join(LIST);
+                std::fs::write(&list, serde_json::to_vec(listed)?)
+                    .with_context(|| format!("write {}", list.display()))
+            });
+        if written.is_err() {
+            remove_dir(&directory)?;
         }
-        Ok(())
+        written
+    }
+
+    /// The list of the files kept for the workspace `id`.
+    fn listed(&self, id: &str) -> Result<Vec<SessionFile>> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Ok(Vec::new());
+        }
+        let list = self.root.join(id).join(LIST);
+        match std::fs::read(&list) {
+            Ok(bytes) => {
+                serde_json::from_slice(&bytes).with_context(|| format!("read {}", list.display()))
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(Vec::new()),
+            Err(error) => Err(error).with_context(|| format!("read {}", list.display())),
+        }
     }
 
     /// Move the files kept for the workspace `from` to the workspace `to`.

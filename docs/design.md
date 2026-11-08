@@ -2816,7 +2816,8 @@ and leaving that to the installed Shoal in a development build; a session whose
 files cannot be read is left out with a warning and starts over. A workspace's
 files go in place once the restore that opens it reads the workspace's
 configuration, which may define the agent, so the daemon keeps them with the
-removal record until then and deletes them once the client has placed them. The export records the agents' sessions, with the
+removal record until then and deletes them once the client has placed them;
+ones it could not place stay, listed for the workspace's next removal record. The export records the agents' sessions, with the
 exporting machine's ID when it has one, beside the moved records, which older
 importers read. An import on that machine, one that received the session's
 files, or one told to keep sessions, keeps the session IDs, which the agents resume from any directory, dropping another

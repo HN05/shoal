@@ -122,7 +122,7 @@ pub(in crate::cli) async fn install_kept_session_files(
         return;
     }
     let existing = Existing::of_copy(restored.is_copy());
-    // Left behind, they go with the workspace's removal record.
+    // Left behind, the workspace's next removal record lists them again.
     if !install_session_files(ctx, SessionHome::Workspace(workspace), files, existing).await {
         return;
     }
