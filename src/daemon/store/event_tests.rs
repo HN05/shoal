@@ -150,27 +150,50 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
 }
 
 #[test]
-fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
+fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
+    let insert = |db: &Connection, space: &str, record: &str| {
+        db.execute(
+            "INSERT INTO workspace_events(record) VALUES (json_set(json(?2),'$.workspace_id',?1))",
+            [space, record],
+        )
+    };
     let tx = db.transaction()?;
-    for _ in 0..1005 {
-        tx.execute("INSERT INTO workspace_events(record) VALUES ('{}')", [])?;
+    insert(&tx, "busy", r#"{"kind":"created"}"#)?;
+    insert(&tx, "quiet", r#"{"kind":"created"}"#)?;
+    insert(&tx, "quiet", r#"{"kind":"agent_state"}"#)?;
+    let merged = r#"{"kind":"item_activity","item_activity":{"update":{"kind":"merged"}}}"#;
+    let comment = r#"{"kind":"item_activity","item_activity":{"update":{"kind":"comment"}}}"#;
+    insert(&tx, "busy", merged)?;
+    for turn in 0..600 {
+        let record = if turn % 2 == 0 {
+            r#"{"kind":"agent_state"}"#
+        } else {
+            comment
+        };
+        insert(&tx, "busy", record)?;
     }
     tx.commit()?;
-    assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r
-            .get::<_, i64>(0))?,
-        1000
-    );
-    assert_eq!(
-        db.query_row("SELECT MIN(id) FROM workspace_events", [], |r| r
-            .get::<_, i64>(0))?,
-        6
-    );
+    let count = |space: &str, bulk: bool| -> Result<i64> {
+        Ok(db.query_row(
+            "SELECT COUNT(*) FROM workspace_events WHERE space_id=?1 AND bulk=?2",
+            rusqlite::params![space, bulk],
+            |r| r.get(0),
+        )?)
+    };
+    assert_eq!(count("busy", true)?, 500);
+    assert_eq!(count("busy", false)?, 2);
+    assert_eq!((count("quiet", true)?, count("quiet", false)?), (1, 1));
+    let oldest_bulk: i64 = db.query_row(
+        "SELECT MIN(id) FROM workspace_events WHERE space_id='busy' AND bulk",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(oldest_bulk, 105);
     db.execute("DELETE FROM workspace_events", [])?;
-    db.execute("INSERT INTO workspace_events(record) VALUES ('{}')", [])?;
-    assert_eq!(db.last_insert_rowid(), 1006);
+    insert(&db, "busy", r#"{"kind":"created"}"#)?;
+    assert_eq!(db.last_insert_rowid(), 605);
     Ok(())
 }
 
@@ -183,7 +206,14 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
          DROP TRIGGER space_review_cleared; DROP TRIGGER space_agent_state_set;
          DROP TRIGGER space_agent_state_changed; DROP TRIGGER space_agent_state_cleared;
          DROP VIEW journal_spaces;
-         DROP INDEX workspace_events_space; ALTER TABLE workspace_events DROP COLUMN space_id;",
+         DROP INDEX workspace_events_space; DROP TRIGGER workspace_events_retention;
+         ALTER TABLE workspace_events DROP COLUMN bulk;
+         ALTER TABLE workspace_events DROP COLUMN space_id;
+         CREATE TRIGGER workspace_events_retention AFTER INSERT ON workspace_events BEGIN
+             DELETE FROM workspace_events WHERE id <= (
+                 SELECT id FROM workspace_events ORDER BY id DESC LIMIT 1 OFFSET 1000
+             );
+         END;",
     )?;
     // Workspaces record no copies again.
     db.execute_batch(

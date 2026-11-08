@@ -224,5 +224,8 @@ impl Manager {
     }
 }
 
+mod retention;
+pub(crate) use retention::adopt;
+
 #[cfg(test)]
 mod tests;

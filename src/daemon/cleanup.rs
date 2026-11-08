@@ -212,6 +212,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
     step("result expiry", manager.expire_results().await);
+    step("event expiry", manager.expire_events().await);
     step(
         "earlier attached files",
         manager.record_earlier_files().await,

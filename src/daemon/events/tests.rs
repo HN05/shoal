@@ -40,14 +40,27 @@ async fn connect(
 }
 
 async fn seed(manager: &Manager, count: usize) {
-    manager.store.run(move |db| {
-        let tx = db.transaction()?;
-        for _ in 0..count {
-            tx.execute("INSERT INTO workspace_events(record) VALUES (?1)", [r#"{"kind":"ready","workspace_id":"w","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null}"#])?;
-        }
-        tx.commit()?;
-        Ok(())
-    }).await.unwrap();
+    journal(manager, count, r#"{"kind":"ready","workspace_id":"w","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null}"#).await;
+}
+
+/// Journal `count` turn states of one workspace, which keeps its newest 500.
+async fn seed_turns(manager: &Manager, count: usize) {
+    journal(manager, count, r#"{"kind":"agent_state","workspace_id":"w","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null,"agent_state":{"state":"idle"}}"#).await;
+}
+
+async fn journal(manager: &Manager, count: usize, record: &'static str) {
+    manager
+        .store
+        .run(move |db| {
+            let tx = db.transaction()?;
+            for _ in 0..count {
+                tx.execute("INSERT INTO workspace_events(record) VALUES (?1)", [record])?;
+            }
+            tx.commit()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -92,7 +105,7 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
 #[tokio::test]
 async fn finite_replay_reports_gaps_and_survives_reopen() {
     let (_temp, manager) = manager().await;
-    seed(&manager, 1005).await;
+    seed_turns(&manager, 1005).await;
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     let (mut stream, task) = connect(reopened, Some(0), false).await;
     let Body::EventItem(EventItem::Gap {
@@ -103,7 +116,7 @@ async fn finite_replay_reports_gaps_and_survives_reopen() {
     else {
         panic!("expected gap");
     };
-    assert_eq!((oldest_id, latest_id), (6, 1005));
+    assert_eq!((oldest_id, latest_id), (506, 1005));
     let count = latest_id - oldest_id + 1;
     for index in 0..count {
         let Body::EventItem(EventItem::Event(event)) = receive(&mut stream).await else {
@@ -310,29 +323,29 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
             ..
         })
     ));
-    seed(&manager, 1).await;
+    seed_turns(&manager, 1).await;
     assert!(matches!(
         receive(&mut stream).await,
         Body::EventItem(EventItem::Event(event)) if event.id == 1
     ));
     drop(stream);
     task.await.unwrap().unwrap();
-    seed(&manager, 1004).await;
-    let boundary = manager.workspace_events(Some(5), 1000).await.unwrap();
-    assert_eq!(boundary.len(), 1000);
+    seed_turns(&manager, 1004).await;
+    let boundary = manager.workspace_events(Some(505), 1000).await.unwrap();
+    assert_eq!(boundary.len(), 500);
     assert!(matches!(
         &boundary[0],
-        EventItem::Event(event) if event.id == 6
+        EventItem::Event(event) if event.id == 506
     ));
     let future = manager.workspace_events(Some(1006), 1000).await.unwrap();
     assert!(matches!(
         future[0],
         EventItem::Gap {
             since: 1006,
-            oldest_id: 6,
+            oldest_id: 506,
             latest_id: 1005
         }
     ));
-    assert_eq!(future.len(), 1001);
+    assert_eq!(future.len(), 501);
     assert!(manager.workspace_events(Some(-1), 100).await.is_err());
 }

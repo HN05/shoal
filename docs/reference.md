@@ -4904,8 +4904,11 @@ shoal internal events --follow --json             # stream lifecycle changes
 shoal internal events --follow --json --since 123  # replay after an event ID
 ```
 
-The daemon retains the newest 1,000 events independently of notifications;
-reading them never marks notifications read. Without `--since`, events replay
+The daemon keeps a space's events while the space exists and, once it is
+removed, for `cleanup.restore.retention_days` or while its removal record
+lasts, independently of notifications; of its agent's turn states and its
+forge activity other than an item's closing, merging and reopening, it keeps
+the newest 500 per space. Reading events never marks notifications read. Without `--since`, events replay
 all retained history; without `--follow`, the command exits after that backlog.
 Scoped callers cannot read events.
 

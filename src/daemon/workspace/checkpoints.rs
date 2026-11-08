@@ -333,8 +333,9 @@ impl Manager {
             .await
     }
 
-    /// Give a reopened workspace the checkpoints of the removed one and drop
-    /// its removal record, at once, so the checkpoints always have an owner.
+    /// Give a reopened workspace the checkpoints and events of the removed
+    /// one and drop its removal record, at once, so the checkpoints always
+    /// have an owner.
     pub(super) async fn adopt_removal(
         &self,
         removed: &RemovedWorkspace,
@@ -345,6 +346,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 reassign(&tx, &from, &to)?;
+                crate::daemon::events::adopt(&tx, &from, &to)?;
                 tx.execute(
                     "DELETE FROM removed_workspaces WHERE workspace_id=?1",
                     [&from],

@@ -4,7 +4,27 @@
 ALTER TABLE workspace_events ADD COLUMN space_id TEXT GENERATED ALWAYS AS (COALESCE(
     json_extract(record,'$.workspace_id'), json_extract(record,'$.chat_id'),
     json_extract(record,'$.chat.id'))) VIRTUAL;
-CREATE INDEX workspace_events_space ON workspace_events(space_id, id);
+-- The events a space records often and its log leaves out: its agent's
+-- turn states, and forge activity other than an item's closing, merging
+-- and reopening.
+ALTER TABLE workspace_events ADD COLUMN bulk INTEGER GENERATED ALWAYS AS (
+    json_extract(record,'$.kind')='agent_state'
+    OR (json_extract(record,'$.kind')='item_activity'
+        AND json_extract(record,'$.item_activity.update.kind')
+            NOT IN ('closed','merged','reopened'))) VIRTUAL;
+CREATE INDEX workspace_events_space ON workspace_events(space_id, bulk, id);
+
+-- Each space keeps its newest 500 bulk events, so a busy space cannot push
+-- out another's history; the rest stay while the space does, and the
+-- retention sweep forgets a removed space's events with its removal record.
+DROP TRIGGER workspace_events_retention;
+CREATE TRIGGER workspace_events_retention AFTER INSERT ON workspace_events
+WHEN NEW.bulk BEGIN
+    DELETE FROM workspace_events WHERE space_id=NEW.space_id AND bulk AND id <= (
+        SELECT id FROM workspace_events WHERE space_id=NEW.space_id AND bulk
+            ORDER BY id DESC LIMIT 1 OFFSET 500
+    );
+END;
 
 -- What an event of a space records about it: a workspace, or a chat, which
 -- has no path or branch.
