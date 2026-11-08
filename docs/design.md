@@ -265,7 +265,7 @@ the run that last restarted it, so a run that finds restarts in progress
 continues under their run's name and leaves out what that run restarted. A
 run leaves out an agent protection stopped, which waits for its restore and is
 no running agent, and the daemon refuses its restart naming that stop;
-`shoal resume` restores it before the condition its restore waits for holds. An
+`shoal queue start` restores it before the condition its restore waits for holds. An
 agent between its wrappers is listed as the execution it ran as, and one a new
 wrapper runs with the executions it ran as, which requests may still name. The
 restore command resolves the agent again, so an updated agent

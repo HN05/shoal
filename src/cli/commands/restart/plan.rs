@@ -252,12 +252,13 @@ fn absent_reason(space: &str, agent: Option<&str>, stopped: &[RunningAgent]) -> 
 }
 
 /// Why `running`, the agent of `space`, does not restart when protection
-/// stopped it: it waits for its restore, which `shoal resume` starts now.
+/// stopped it: it waits for its restore, which `shoal queue start` starts
+/// now.
 pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
     let protection = running.stopped.as_ref()?;
     let agent = running.agent.as_deref().unwrap_or("its agent");
     Some(format!(
-        "{agent} is stopped ({}) and resumes once {}; restore it now with shoal resume {space}",
+        "{agent} is stopped ({}) and resumes once {}; restore it now with shoal queue start {space}",
         protection.reason, protection.resumes_when
     ))
 }

@@ -150,7 +150,7 @@ fn agents_waiting_for_their_restore_are_left_out_unless_named() {
     assert_eq!(skipped(&plan), ["stopped"]);
     let reason = &plan.skipped[0].reason;
     assert!(reason.contains("critical memory pressure"), "{reason}");
-    assert!(reason.contains("shoal resume stopped"), "{reason}");
+    assert!(reason.contains("shoal queue start stopped"), "{reason}");
 }
 
 #[test]

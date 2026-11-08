@@ -160,8 +160,9 @@ impl Restart {
         let joins = self.joins.clone();
         let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place).await;
         restarted.map_err(|error| {
-            // A restart that waits still restores the agent itself.
-            match recovery::pending(&ctx.paths, &workspace.id) {
+            // A restart that waits still restores the agent itself, as a
+            // wrapper waiting for its restore does.
+            match recovery::resumable(&ctx.paths, &workspace.id) {
                 Ok(true) if waits(&error).is_none() => {
                     anyhow::anyhow!("{error:#}; restore it with shoal resume {}", workspace.name)
                 }

@@ -1143,13 +1143,19 @@ pub fn any_pending(paths: &Paths) -> bool {
         return false;
     };
     entries.flatten().any(|entry| {
-        entry.file_name().to_str().is_some_and(|id| {
-            Saved::load(paths, id).is_ok_and(|mut saved| {
-                saved.retain_unattended();
-                saved.is_unfinished()
-            })
-        })
+        entry
+            .file_name()
+            .to_str()
+            .is_some_and(|id| resumable(paths, id).unwrap_or(false))
     })
+}
+
+/// Whether the workspace has stopped work that waits for `shoal resume`,
+/// which an agent whose wrapper still waits to restore it is not.
+pub fn resumable(paths: &Paths, workspace_id: &str) -> Result<bool> {
+    let mut saved = Saved::load(paths, workspace_id)?;
+    saved.retain_unattended();
+    Ok(saved.is_unfinished())
 }
 
 /// Pending recovery is unfinished work even when its Git tree is clean.

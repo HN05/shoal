@@ -126,5 +126,5 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
     };
     let skipped = refresh(&mut restarts, &[stopped], "run");
     assert!(restarts.is_empty());
-    assert!(skipped[0].reason.contains("shoal resume docs"));
+    assert!(skipped[0].reason.contains("shoal queue start docs"));
 }

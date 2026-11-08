@@ -216,10 +216,11 @@ impl Agent {
     fn ensure_not_stopped(&self) -> anyhow::Result<()> {
         if let Some(protection) = &self.overload {
             anyhow::bail!(
-                "{} is stopped ({}) and resumes once {}",
+                "{} is stopped ({}) and resumes once {}; restore it now with shoal queue start {}",
                 self.name,
                 protection.reason,
-                protection.resumes_when
+                protection.resumes_when,
+                self.workspace
             );
         }
         anyhow::ensure!(
