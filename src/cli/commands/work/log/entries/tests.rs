@@ -33,6 +33,15 @@ fn details_name_what_each_entry_is_about() {
         "from api-part"
     );
     assert_eq!(
+        details(serde_json::json!({"kind": "renamed", "name": "fix-login",
+            "branch": "fix/login"})),
+        "fix-login, branch fix/login"
+    );
+    assert_eq!(
+        details(serde_json::json!({"kind": "renamed", "title": "Login retries"})),
+        "Login retries"
+    );
+    assert_eq!(
         details(serde_json::json!({"kind": "agent_exited",
             "agent": {"name": "claude", "execution_id": "e", "exit_code": 2}})),
         "claude, exit code 2"

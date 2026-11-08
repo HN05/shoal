@@ -4971,8 +4971,9 @@ workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
 a [chat](#chats) that opened it returned it to you. Earlier versions recorded
 `parent_workspace` on these events and `chat`, the chat's ID, on
 `chat_changed` events.
-`renamed` events add a workspace's new `title`, or null; a chat's rename is
-its own `chat_renamed` line. `restored` events record a workspace
+`renamed` events record a workspace's new `name` and `branch`, as a branch
+rename gives them, or add its new `title`, null once cleared; a chat's rename
+is its own `chat_renamed` line. `restored` events record a workspace
 `shoal work restore` reopened, which takes the removed workspace's events
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`

@@ -218,3 +218,14 @@ WHEN OLD.base_ref IS NULL AND NEW.base_ref IS NOT NULL BEGIN
         WHERE id=(SELECT MAX(id) FROM workspace_events
             WHERE space_id=NEW.id AND json_extract(record,'$.kind')='created');
 END;
+
+-- A workspace's new name, which a branch rename gives it with its branch;
+-- unlike a title change, it records no title.
+CREATE TRIGGER workspace_name_changed AFTER UPDATE OF name ON workspaces
+WHEN NEW.name IS NOT OLD.name BEGIN
+    INSERT INTO workspace_events(record) VALUES (json_object(
+        'kind','renamed','workspace_id',NEW.id,'chat_id',NULL,
+        'repository_id',NEW.repository_id,'name',NEW.name,'path',NEW.path,
+        'branch',NEW.branch,'cause',NULL,'error',NULL
+    ));
+END;

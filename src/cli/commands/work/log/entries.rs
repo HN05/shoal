@@ -40,7 +40,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
     let fixed = |label: &str, details: String| (label.to_owned(), details);
     match event.kind {
         EventKind::Created => fixed("Created", created(event)),
-        EventKind::Renamed => fixed("Renamed", event.title.clone().flatten().unwrap_or_default()),
+        EventKind::Renamed => fixed("Renamed", renamed(event)),
         EventKind::Removed => fixed("Removed", event.cause.map(cause).unwrap_or_default()),
         EventKind::Restored => fixed("Restored", String::new()),
         EventKind::AgentStarted => fixed("Agent started", agent(event)),
@@ -101,6 +101,17 @@ fn created(event: &EventDetails) -> String {
         parts.push(format!("parent {}", parent.name));
     }
     parts.join(", ")
+}
+
+/// A workspace's new title, or its new name and a branch named otherwise.
+fn renamed(event: &EventDetails) -> String {
+    match &event.title {
+        Some(title) => title.clone().unwrap_or_default(),
+        None => match event.branch.as_deref() {
+            Some(branch) if branch != event.name => format!("{}, branch {branch}", event.name),
+            _ => event.name.clone(),
+        },
+    }
 }
 
 /// A branch or tag without its `refs/` prefix.
