@@ -2,69 +2,11 @@
 use crate::{
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
     daemon::{
-        chats::NewChat,
-        test_support::manager,
-        workspace::{Manager, NewWorkspace},
+        test_support::{chat, manager, repository, workspace_below as workspace},
+        workspace::Manager,
     },
-    model::{Chat, Repository, Workspace},
-    test_support::{ProcessGroup, repository},
+    model::Repository,
 };
-
-/// Start the chat `name` in `mode`, of `repository` or without one, below
-/// `parent`, running as the returned process.
-async fn chat(
-    manager: &Manager,
-    name: &str,
-    mode: &str,
-    repository: Option<&Repository>,
-    parent: Option<&str>,
-) -> (Chat, ProcessGroup) {
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let new = NewChat {
-        name: name.into(),
-        agent: "claude".into(),
-        mode: mode.into(),
-        pid: process.id(),
-        origin: None,
-        hands_over: false,
-        parent: parent.map(str::to_owned),
-    };
-    let repository = repository.map(|repository| repository.id.clone().into());
-    let chat = manager.start_new_chat(repository, None, new).await.unwrap();
-    (chat, process)
-}
-
-/// Create the workspace `name` of `repository` below `parent`, recording
-/// `mode` as its agent's.
-async fn workspace(
-    manager: &Manager,
-    repository: &Repository,
-    name: &str,
-    parent: &str,
-    mode: Option<&str>,
-) -> Workspace {
-    let new = NewWorkspace {
-        parent: Some(parent.to_owned()),
-        ..Default::default()
-    };
-    let workspace = manager
-        .create_workspace_with(&repository.id, name.into(), None, new)
-        .await
-        .unwrap();
-    let (id, mode) = (workspace.id.clone(), mode.map(str::to_owned));
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE workspaces SET mode=?2 WHERE id=?1",
-                rusqlite::params![id, mode],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    workspace
-}
 
 async fn register(temp: &tempfile::TempDir, manager: &Manager, name: &str) -> Repository {
     let checkout = repository(temp.path(), name);

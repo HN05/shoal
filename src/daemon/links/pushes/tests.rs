@@ -3,7 +3,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::proposals::PR,
-        test_support::{commit, manager, repository},
+        test_support::{chat, commit, manager, repository, working_below},
     },
     forge::items::create::NewPull,
 };
@@ -311,42 +311,6 @@ async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
     assert!(manager.approval_requests(None).await.unwrap().is_empty());
 }
 
-/// The workspace `name` below `parent`, its agent working in `mode`.
-async fn below(
-    manager: &Manager,
-    repository: &str,
-    name: &str,
-    parent: &str,
-    mode: &str,
-) -> Workspace {
-    let new = crate::daemon::workspace::NewWorkspace {
-        parent: Some(parent.to_owned()),
-        ..Default::default()
-    };
-    let workspace = manager
-        .create_workspace_with(repository, name.into(), None, new)
-        .await
-        .unwrap();
-    let (id, mode) = (workspace.id.clone(), mode.to_owned());
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE workspaces SET mode=?2 WHERE id=?1",
-                rusqlite::params![id, mode],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let selector = SpaceSelector::id(&workspace.id);
-    let working = crate::state::AgentState::Working;
-    (manager.set_agent_state(&selector, working, None, None))
-        .await
-        .unwrap();
-    workspace
-}
-
 #[tokio::test]
 async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
     let (root, manager) = manager().await;
@@ -359,23 +323,9 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
-    // The sleep stands in for the chat's agent.
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let new = crate::daemon::chats::NewChat {
-        name: "top".into(),
-        agent: "claude".into(),
-        mode: "chat".into(),
-        pid: process.id(),
-        origin: None,
-        hands_over: false,
-        parent: None,
-    };
-    let top = (manager.start_new_chat(Some(repo.id.clone().into()), None, new))
-        .await
-        .unwrap();
-    let worker = below(&manager, &repo.id, "worker", &top.id, "worker").await;
-    let child = below(&manager, &repo.id, "child", &worker.id, "worker").await;
+    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = working_below(&manager, &repo, "worker", &top.id, "worker").await;
+    let child = working_below(&manager, &repo, "child", &worker.id, "worker").await;
     let caller = Caller {
         space_id: child.id.clone(),
         execution: None,

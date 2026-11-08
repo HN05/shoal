@@ -838,3 +838,81 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
             Ok(())
         }).await.unwrap();
 }
+
+/// The request to merge `workspace`'s branch at its current commit.
+fn merge_request(workspace: &crate::model::Workspace) -> ApprovalRequest {
+    let head = crate::test_support::git(&workspace.path, &["rev-parse", "HEAD"]);
+    let merge = MergeSpecification {
+        branch: workspace.branch.clone().unwrap(),
+        head: head.trim().into(),
+        push: None,
+        unpushed: None,
+        changed_on_both_sides: Vec::new(),
+    };
+    let specification = Specification::Merge(merge);
+    ApprovalRequest::new(
+        &workspace.id,
+        Target::Merge,
+        MERGE,
+        specification,
+        Lifetime::Lease,
+        Some("Merges the branch"),
+    )
+}
+
+#[tokio::test]
+async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit() {
+    use crate::daemon::test_support::{chat, commit, manager, repository, working_below};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = working_below(&manager, &repo, "worker", &top.id, "worker").await;
+    let child = working_below(&manager, &repo, "child", &worker.id, "worker").await;
+    // Each request goes to the worker, which asks before it merges, so it
+    // may only deny it or pass it up to the chat.
+    let request = || async {
+        let requested = (manager.request_merge_approval(merge_request(&child)))
+            .await
+            .unwrap()
+            .unwrap();
+        manager.notify_approval(&child.name, &requested).await;
+        let approved = manager.decide_routed_approval(
+            &worker.id,
+            requested.number,
+            true,
+            None,
+            Default::default(),
+        );
+        assert!(approved.await.is_err());
+        let selected = SpaceSelector::id(&worker.id);
+        let passed = manager.escalate_approval(&selected, requested.number, None);
+        assert_eq!(passed.await.unwrap().decider, Some(top.id.clone()));
+        requested
+    };
+
+    // The chat merges directly, so it approves.
+    let requested = request().await;
+    let approved = manager
+        .decide_routed_approval(&top.id, requested.number, true, None, Default::default())
+        .await
+        .unwrap();
+    assert_eq!(approved.status, DecisionStatus::Approved);
+
+    // A branch that moved since the request makes it stale for the chat, as
+    // for the user.
+    std::fs::write(child.path.join("tracked"), "changed\n").unwrap();
+    commit(&child.path, "tracked");
+    let requested = request().await;
+    std::fs::write(child.path.join("tracked"), "changed again\n").unwrap();
+    commit(&child.path, "tracked");
+    let stale = manager
+        .decide_routed_approval(&top.id, requested.number, true, None, Default::default())
+        .await;
+    assert!(stale.is_err());
+    let retired = manager.approval_by_key(&requested.key).await.unwrap();
+    assert_eq!(retired.unwrap().status, DecisionStatus::Outdated);
+}

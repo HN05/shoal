@@ -42,6 +42,80 @@ pub async fn indexed_manager() -> (tempfile::TempDir, Arc<Manager>) {
     (root, manager)
 }
 
+/// Start the chat `name` in `mode`, of `repository` or without one, below
+/// `parent`, with a sleep standing in for its agent as the returned process.
+pub async fn chat(
+    manager: &Manager,
+    name: &str,
+    mode: &str,
+    repository: Option<&crate::model::Repository>,
+    parent: Option<&str>,
+) -> (crate::model::Chat, ProcessGroup) {
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: name.into(),
+        agent: "claude".into(),
+        mode: mode.into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: parent.map(str::to_owned),
+    };
+    let repository = repository.map(|repository| repository.id.clone().into());
+    let chat = manager.start_new_chat(repository, None, new).await.unwrap();
+    (chat, process)
+}
+
+/// Create the workspace `name` of `repository` below `parent`, recording
+/// `mode` as its agent's.
+pub async fn workspace_below(
+    manager: &Manager,
+    repository: &crate::model::Repository,
+    name: &str,
+    parent: &str,
+    mode: Option<&str>,
+) -> crate::model::Workspace {
+    let new = crate::daemon::workspace::NewWorkspace {
+        parent: Some(parent.to_owned()),
+        ..Default::default()
+    };
+    let workspace = manager
+        .create_workspace_with(&repository.id, name.into(), None, new)
+        .await
+        .unwrap();
+    let (id, mode) = (workspace.id.clone(), mode.map(str::to_owned));
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET mode=?2 WHERE id=?1",
+                rusqlite::params![id, mode],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    workspace
+}
+
+/// The workspace `name` of `repository` below `parent`, its agent working
+/// in `mode`.
+pub async fn working_below(
+    manager: &Manager,
+    repository: &crate::model::Repository,
+    name: &str,
+    parent: &str,
+    mode: &str,
+) -> crate::model::Workspace {
+    let workspace = workspace_below(manager, repository, name, parent, Some(mode)).await;
+    let selector = crate::client::space_names::SpaceSelector::id(&workspace.id);
+    let working = crate::state::AgentState::Working;
+    (manager.set_agent_state(&selector, working, None, None))
+        .await
+        .unwrap();
+    workspace
+}
+
 /// Replace the global config with `text` and reload it.
 pub async fn configure(manager: &Manager, text: &str) {
     write_global_config(&manager.paths, text);
