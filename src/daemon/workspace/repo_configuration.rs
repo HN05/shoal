@@ -117,50 +117,44 @@ impl Manager {
             .resolve_with_template_files(&layers, &self.paths)
     }
 
+    /// The layers of `workspace`, without a worktree file the current format
+    /// rejects, which they name instead: a branch from before a format
+    /// change keeps its old file, and the other layers still settle what the
+    /// workspace does. The user hears of each new rejection once.
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
-        let file = self.workspace_file(workspace).await?;
-        self.config_layers(&workspace.repository_id, file).await
-    }
-
-    /// The config file of `workspace`'s worktree, or none when the current
-    /// format rejects it, as a branch from before a format change keeps its
-    /// old file: the other layers still settle what the workspace does, and
-    /// the user hears of each new rejection once.
-    async fn workspace_file(
-        &self,
-        workspace: &Workspace,
-    ) -> Result<(RepoConfig, config::modes::Files)> {
-        match self.worktree_file(&workspace.path).await {
+        let (file, rejected) = match self.worktree_file(&workspace.path).await {
             Err(error) if Rejected::is(&error) => {
                 self.report_rejected_config(workspace, &error).await;
-                Ok(Default::default())
+                (Default::default(), Some(format!("{error:#}")))
             }
             read => {
-                if read.is_ok() {
-                    self.rejected_configs.forget(&workspace.id);
-                }
-                read
+                let file = read?;
+                self.rejected_configs.forget(&workspace.id);
+                (file, None)
             }
-        }
+        };
+        let layers = self.config_layers(&workspace.repository_id, file).await?;
+        Ok(ConfigLayers {
+            rejected_worktree_file: rejected,
+            ..layers
+        })
     }
 
     /// The repository layer for `target`; a repository's file is the one in
     /// its registered checkout, and the global config has none.
     pub async fn config_layers_for(&self, target: ConfigTarget) -> Result<ConfigLayers> {
-        let (repository_id, worktree_file) = match target {
-            ConfigTarget::Global => return Ok(ConfigLayers::default()),
+        match target {
+            ConfigTarget::Global => Ok(ConfigLayers::default()),
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
-                let file = self.workspace_file(&workspace).await?;
-                (workspace.repository_id, file)
+                self.workspace_layers(&workspace).await
             }
             ConfigTarget::Repository(selector) => {
                 let repo = self.repository(&selector).await?;
                 let file = self.worktree_file(&repo.path).await?;
-                (repo.id, file)
+                self.config_layers(&repo.id, file).await
             }
-        };
-        self.config_layers(&repository_id, worktree_file).await
+        }
     }
 
     /// The config file and template files of the checkout or worktree at
@@ -255,6 +249,7 @@ impl Manager {
             local_config,
             worktree_template_files,
             local_template_files,
+            rejected_worktree_file: None,
         })
     }
 

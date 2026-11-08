@@ -125,10 +125,13 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     let settings = manager.workspace_settings(&workspace).await.unwrap_err();
     assert!(format!("{settings:#}").contains("stalled"), "{settings:#}");
 
-    // Once access recovers, the file is read and ignored as rejected.
+    // Once access recovers, the file is read and ignored as rejected, and
+    // the layers say why.
     manager.file_access.recover_at(&workspace.path);
     let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-    manager.config_layers_for(target).await.unwrap();
+    let layers = manager.config_layers_for(target).await.unwrap();
+    let rejected = layers.rejected_worktree_file.unwrap();
+    assert!(rejected.contains("TOML parse error"), "{rejected}");
     assert_eq!(ignored_configs(&manager).await.len(), 1);
 }
 

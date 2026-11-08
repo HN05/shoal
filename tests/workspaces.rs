@@ -18678,6 +18678,8 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let output = fixture.run(&["config", "show", "secrets"]);
     assert!(output.status.success());
     assert!(!String::from_utf8(output.stdout).unwrap().contains("OTHER"));
+    let warning = String::from_utf8(output.stderr).unwrap();
+    assert!(warning.contains("[secrets] belongs"), "{warning}");
 }
 
 #[test]

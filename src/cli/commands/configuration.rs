@@ -163,10 +163,16 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     })
 }
 
-/// Every option with its winning layer, and warnings for retired settings:
-/// the daemon's repository layers under the global file read now.
+/// Every option with its winning layer, and warnings for retired settings
+/// and an ignored worktree file: the daemon's repository layers under the
+/// global file read now.
 async fn report(paths: &Paths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
     let layers = crate::client::workspaces::config_layers(paths, target).await?;
     let stack = Stack::new(&Config::load_with_templates(paths)?, &layers);
-    Ok((stack.report()?, stack.warnings().to_vec()))
+    let mut warnings = stack.warnings().to_vec();
+    warnings.extend(
+        (layers.rejected_worktree_file.iter())
+            .map(|error| format!("the worktree's config file is ignored: {error}")),
+    );
+    Ok((stack.report()?, warnings))
 }

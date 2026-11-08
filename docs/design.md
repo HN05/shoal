@@ -2297,8 +2297,10 @@ Every option that does not describe the machine may be set at either level and
 resolves per option: local config, worktree file, global config, then the
 built-in default. A worktree file the current format rejects counts as absent,
 since a branch from before a format change keeps its old file and must not stop
-cleanup or anything else the other layers settle; the daemon tells the log and
-the user once per error. A file that cannot be read still fails the request.
+cleanup or anything else the other layers settle. The layers name the
+rejection, which `config show` warns about, and the daemon tells the log and the
+user once per error while it runs. A file that cannot be read still fails the
+request.
 One declaration of each option, the field of the repository schema with its
 kind, generates its built-in default, merge, resolved form and provenance, so a
 reported layer is the one whose value is in use; the daemon resolves a workspace's settings

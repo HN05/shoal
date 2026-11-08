@@ -23,6 +23,10 @@ pub struct ConfigLayers {
     pub worktree_template_files: modes::Files,
     #[serde(default)]
     pub local_template_files: modes::Files,
+    /// Why a workspace's worktree file is left out: the current format
+    /// rejects it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejected_worktree_file: Option<String>,
 }
 
 /// Display uses human-readable layer labels rather than the snake_case JSON names.
