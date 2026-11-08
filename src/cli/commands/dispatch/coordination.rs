@@ -4,7 +4,7 @@ use crate::cli::{
     args::coordination::{
         CoordinationCommand, FilesCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand,
     },
-    commands::{files, messages, questions, workspaces},
+    commands::{files, messages, progress, questions, workspaces},
     context::Context,
 };
 
@@ -116,6 +116,11 @@ pub(in crate::cli::commands) async fn run(
             };
             files::list(&ctx, space, listing).await
         }
+        CoordinationCommand::Progress {
+            status,
+            steps,
+            space,
+        } => progress::run(&ctx, space, status, steps).await,
         CoordinationCommand::Done {
             space,
             cleanup,

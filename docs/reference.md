@@ -3738,10 +3738,11 @@ lists their names in `results`, `work status` names them, and the completion not
 ends with `results in shoal files <workspace>:` and the first three names, then
 how many more. `--summary TEXT` states what the work found in one line of at
 most 512 bytes without control characters, as for `shoal alerts send`: the
-completion records it as `summary`, `status` shows it, and the completion
-notice ends with `; summary: TEXT`; a `done` without it records none, and
-`--undo` deletes it with the completion. A missing file or an invalid summary
-fails before anything is stopped or recorded. The setting follows normal repository and worktree configuration
+completion records it as `summary` and as the space's
+[status line](#progress), `status` shows it, and the completion notice ends
+with `; summary: TEXT`; a `done` without it records none, and `--undo`
+deletes it with the completion, leaving the status line. A missing file or an
+invalid summary fails before anything is stopped or recorded. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal, except
@@ -4816,6 +4817,40 @@ leaves the state as last reported and records an [alert](#notifications) with th
 Scoped callers report only for their own space, which their scope names
 wherever they run; `--space` selects another one for unscoped callers.
 
+### Progress
+
+```sh
+shoal progress "Reproduced; the cause is the 5-second query limit"  # Set the status line ("" clears it)
+shoal progress                                                     # Show the status line and steps
+shoal progress --space api                                         # Another workspace or chat
+shoal progress --steps < plan.md                                   # Replace the steps (empty input clears them)
+shoal done --summary "Fix merged; the timeout is now 30 seconds"   # Completes with this as the status line
+```
+
+Each workspace and chat keeps its agent's progress: a status line in the
+agent's own words and the steps of its plan, each done or not. The status line
+and each step name are a single line of at most 512 bytes without control
+characters, as an alert's. A plan keeps its first 50 steps. The current step
+is the one the agent's plan tool marks in progress, else the first that is not
+done. Progress lasts until it is replaced or the space is removed, across
+daemon restarts and agent exits, so a completed space still shows where its
+work ended: a `shoal done --summary` sets the status line with the
+completion, and `shoal done --undo` leaves it as it is.
+
+`--steps` replaces the steps with a markdown task list, one `- [ ] name` or
+`- [x] name` per line.
+
+`work status`, `inspect`, `work --json` and `shoal progress --json` give `progress`
+with `status`, `steps` (`name`, `done`), `current` (the step's index, or null
+once every step is done) and Unix-seconds `updated_at`; a space without
+progress has none. Each change is a `progress_changed`
+[event](#workspace-events), which `shoal work log --all` shows, and setting
+the same value again is not a change. Progress never notifies, and
+coordinating agents read their children's progress on demand.
+
+Scoped callers set only their own space's progress, and read their own and
+that of the spaces below it.
+
 ### Automatic cleanup
 
 Idle, clean, fully pushed worktrees are removed after 10 minutes by default, or
@@ -4947,16 +4982,16 @@ details, under a heading for each date:
 - the spaces created and removed below it.
 
 `--all` adds every other event of the space, dimmed: setup and cleanup
-results, branch, base and parent changes, its agent's turn states, other
-forge activity such as comments and checks, demos, simulator leases and
+results, branch, base and parent changes, its agent's turn states and
+progress changes, other forge activity such as comments and checks, demos, simulator leases and
 attached files. With `--json` each line is the entry as
 [`shoal internal events`](#workspace-events) prints it.
 
 A removed space's log stays for `cleanup.restore.retention_days` after its
 removal and is named by the space's last name, as `shoal files` names it; a
 restored workspace's log goes on from the removed one's. A space keeps its
-newest 500 agent turn states and forge activity other than an item's
-closing, merging and reopening, so a busy space cannot push out another's
+newest 500 agent turn states, progress changes and forge activity other than
+an item's closing, merging and reopening, so a busy space cannot push out another's
 log. A workspace process reads the logs of its own space and the spaces
 below it, removed ones included.
 
@@ -4969,8 +5004,8 @@ shoal internal events --follow --json --since 123  # replay after an event ID
 
 The daemon keeps a space's events while the space exists and, once it is
 removed, for `cleanup.restore.retention_days` or while its removal record
-lasts, independently of notifications; of its agent's turn states and its
-forge activity other than an item's closing, merging and reopening, it keeps
+lasts, independently of notifications; of its agent's turn states, its
+progress changes and its forge activity other than an item's closing, merging and reopening, it keeps
 the newest 500 per space. Reading events never marks notifications read. Without `--since`, events replay
 all retained history; without `--follow`, the command exits after that backlog.
 Scoped callers cannot read events.
@@ -4980,7 +5015,7 @@ the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
 other null), `repository_id` (null for a chat without a repository), `name`,
 `path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `alert_sent`, `child_created` and `child_removed`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `alert_sent`, `progress_changed`, `child_created` and `child_removed`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -5006,7 +5041,9 @@ and when the wrapper reported none. `question_asked` and `question_answered`
 events add `question` with its `number`, `question` and `answer`.
 `approval_requested` and `approval_decided` events add `approval` with its
 `number`, `target`, `subject` and `status`. `alert_sent` events add `alert`
-with its `message`. `child_created` and `child_removed` events, in the log of
+with its `message`. `progress_changed` events add `progress` as
+`shoal progress --json` shows it, with empty `steps` and a null `status` once
+both are cleared. `child_created` and `child_removed` events, in the log of
 the space above, add `child` with its `id`, `name`, `kind` and a workspace's
 `branch`.
 `demo_started` events, when a [demo](#demos)'s command first runs, and

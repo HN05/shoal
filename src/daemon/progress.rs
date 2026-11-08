@@ -136,6 +136,22 @@ fn save(
     Ok(Some(progress))
 }
 
+/// Set the status line of the space `id` to `status` at `now` in the
+/// caller's transaction, as a completion's summary does; whether it
+/// changed.
+pub(crate) fn record_status(
+    tx: &Transaction<'_>,
+    id: &str,
+    status: Option<&str>,
+    now: UnixTime,
+) -> Result<bool> {
+    let Some(status) = status else {
+        return Ok(false);
+    };
+    let change = ProgressChange::Status(Some(status.to_owned()));
+    Ok(save(tx, id, change, now)?.is_some())
+}
+
 /// Refuse a change with a status line or step that is not a valid line.
 fn validate(change: &ProgressChange) -> Result<()> {
     match change {

@@ -160,6 +160,18 @@ scoped callers cannot read them.
 `shoal work rename "<title>"` names the space's work; the tabs and windows
 Shoal opens for it show the title instead of its branch or issue number.
 
+## Progress
+
+```sh
+shoal progress "Reproduced; the cause is the query limit"  # "" clears it
+shoal progress [--space S]          # Show the status line and steps
+shoal progress --steps < plan.md    # `- [ ] name` / `- [x] name` per line
+```
+
+`progress` sets the space's status line, one line in the agent's words, and
+`--steps` its steps. Changes never notify; a coordinator reads its children's
+progress on demand.
+
 ## Issues and pull requests
 
 ```sh
@@ -394,8 +406,8 @@ shoal done --undo [space]
 `shoal done` records that the space's work is finished at its HEAD, notifies
 its coordinator or else the user, closes its open questions and stops its
 demos unless `--keep-demos`. `--summary` ends the notice with one line, of at
-most 512 bytes, saying what the work found; `--attach` hands back anything
-longer. Only `done` records completion; issue closure and
+most 512 bytes, saying what the work found, and becomes the status line;
+`--attach` hands back anything longer. Only `done` records completion; issue closure and
 merged PRs do not. With cleanup, the default unless `[cleanup.done] enabled =
 false` (`--cleanup` overrides it), Shoal removes the space and the spaces below
 it after the grace period (`[cleanup] grace_minutes`), stopping their agents:

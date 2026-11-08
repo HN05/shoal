@@ -47,6 +47,21 @@ pub enum CoordinationCommand {
         #[arg(short = 'p', long, conflicts_with = "path")]
         print: bool,
     },
+    /// Show or set where a space's agent is in its work: a status line and
+    /// the steps of its plan.
+    Progress {
+        /// The status line, such as "Reproduced; the cause is the query
+        /// limit"; "" clears it. Omit it and --steps to show the progress.
+        status: Option<String>,
+        /// Replace the steps with a markdown task list read from stdin, one
+        /// `- [ ] name` or `- [x] name` per line; empty input clears them.
+        #[arg(long)]
+        steps: bool,
+        /// Space, a workspace or chat; defaults to the current workspace or
+        /// chat, or a picker.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     ///
     /// A chat records that its work is finished and keeps running.

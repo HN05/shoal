@@ -101,6 +101,7 @@ outputs!(
     crate::notifications::Cleared,
     crate::notifications::Notification,
     crate::notifications::Sent,
+    crate::progress::Progress,
     crate::questions::Listing,
     crate::questions::Question,
     crate::resources::Overview,

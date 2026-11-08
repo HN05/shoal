@@ -9,7 +9,7 @@ use crate::{
     daemon::{
         cleanup::SpaceFailures,
         notifications::{About, NotificationKind},
-        questions,
+        progress, questions,
         spaces::removal_notices::Cleanup,
         workspace::{
             Manager,
@@ -50,8 +50,13 @@ impl Manager {
             error: None,
         };
         let (id, recorded) = (chat.id.clone(), completion.clone());
+        let now = crate::time::UnixTime::now();
         let closed = (self.store)
-            .write(move |tx| record_completion(tx, &id, &recorded))
+            .write(move |tx| {
+                let progressed =
+                    progress::record_status(tx, &id, recorded.summary.as_deref(), now)?;
+                record_completion(tx, &id, &recorded, progressed)
+            })
             .await?;
         if !closed.is_empty() {
             self.signals.question_changed();
@@ -161,11 +166,13 @@ impl Manager {
 
 /// Record `completion` for the running chat `id` and close its open
 /// questions, which its finished work waits on no longer; the questions it
-/// closed. A completion that would change nothing fails.
+/// closed. A completion that would change nothing, without the status line
+/// it `progressed`, fails.
 fn record_completion(
     tx: &rusqlite::Transaction<'_>,
     id: &str,
     completion: &Completion,
+    progressed: bool,
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
     let previous: Option<Option<String>> = tx
         .query_row(
@@ -184,7 +191,7 @@ fn record_completion(
     )?;
     let closed = questions::close_open(tx, id)?;
     ensure!(
-        previous.as_ref() != Some(completion) || !closed.is_empty(),
+        previous.as_ref() != Some(completion) || !closed.is_empty() || progressed,
         "the chat is already marked done at this HEAD"
     );
     Ok(closed)

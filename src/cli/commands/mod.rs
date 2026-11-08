@@ -37,6 +37,7 @@ mod notifications;
 pub(crate) mod operations;
 
 mod ports;
+mod progress;
 mod push_gate;
 mod questions;
 mod queue;

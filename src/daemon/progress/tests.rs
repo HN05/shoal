@@ -241,7 +241,6 @@ async fn scoped_callers_set_only_their_own_progress_and_read_below() {
     assert!(allowed(&mut read(&own)).await);
     assert!(allowed(&mut read(&child)).await);
     assert!(!allowed(&mut read(&other)).await);
-
 }
 
 #[tokio::test]
@@ -304,4 +303,38 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
         .await
         .map(|left| assert_eq!(left, 0))
         .unwrap();
+}
+
+#[tokio::test]
+async fn a_done_summary_sets_the_status_line_with_the_completion_it_records() {
+    use crate::{client::assignments::Done, daemon::workspace_files::Attacher};
+    let (temp, manager) = manager().await;
+    let [workspace] = workspaces(&manager, &temp, ["done"]).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let done = |status: &str| Done {
+        summary: Some(status.to_owned()),
+        ..Default::default()
+    };
+    manager
+        .mark_space_done(&selector, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    // A summary at the same HEAD is a change, and becomes the status line.
+    manager
+        .mark_space_done(&selector, done("Fix merged"), &Attacher::User)
+        .await
+        .unwrap();
+    let status = || async {
+        let progress = manager.space_progress(&selector).await.unwrap();
+        progress.and_then(|progress| progress.status)
+    };
+    assert_eq!(status().await.as_deref(), Some("Fix merged"));
+    // A done refused before it records anything leaves the line alone.
+    let removed = workspace.path.join(".git");
+    std::fs::remove_file(&removed).unwrap();
+    let refused = manager
+        .mark_space_done(&selector, done("Something else"), &Attacher::User)
+        .await;
+    assert!(refused.is_err());
+    assert_eq!(status().await.as_deref(), Some("Fix merged"));
 }

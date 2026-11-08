@@ -1751,8 +1751,8 @@ workspace's. Retention is per space, so one busy space cannot push out
 another's history: a space keeps its events while it exists and for
 `cleanup.restore.retention_days` after its removal, as its checkpoints and
 attached files, and a restored workspace takes the removed one's; only its
-high-volume events, its agent's turn states and forge activity other than an
-item's closing, merging and reopening, keep a cap of the newest 500 per space.
+high-volume events, its agent's turn states, its progress changes and forge
+activity other than an item's closing, merging and reopening, keep a cap of the newest 500 per space.
 A space's log (`shoal work log`, `client::work::log`) is a filtered view of
 this journal, not a second store: renames, restores, agent starts, stops and
 exits, questions, approvals, alerts, and the spaces created and removed below

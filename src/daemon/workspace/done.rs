@@ -8,8 +8,8 @@ use crate::client::{assignments::Done, space_names::SpaceSelector};
 use crate::{
     config::Effective,
     daemon::{
-        events::EventCause, item_numbers::ItemNumber, notifications::NotificationKind, questions,
-        spaces::removal_notices::Cleanup, store, workspace_files::Attacher,
+        events::EventCause, item_numbers::ItemNumber, notifications::NotificationKind, progress,
+        questions, spaces::removal_notices::Cleanup, store, workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
     model::{Completion, HandedBack, Workspace},
@@ -131,16 +131,20 @@ impl Manager {
         Ok(completion)
     }
 
-    /// Record `completion` and close the workspace's open questions, which
-    /// the finished assignment waits on no longer, waking waits on them.
+    /// Record `completion`, with its summary as the status line, and close
+    /// the workspace's open questions, which the finished assignment waits on
+    /// no longer, waking waits on them.
     async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Persisted> {
         let id = id.to_owned();
         let completion = completion.clone();
+        let now = crate::time::UnixTime::now();
         let persisted = self
             .store
             .write(move |tx| {
                 store::require_ready(tx, &id)?;
                 let replaced = record_completion(tx, &id, &completion)?;
+                let progressed =
+                    progress::record_status(tx, &id, completion.summary.as_deref(), now)?;
                 // Like the continuation it replaced, a hold made from one by
                 // migration 31 ends at the next explicit done.
                 let released = tx.execute(
@@ -151,7 +155,7 @@ impl Manager {
                 // A finished assignment leaves its failed turn alone.
                 super::turn_retry::cancel(tx, &id)?;
                 Ok(Persisted {
-                    changed: replaced || released > 0 || !closed.is_empty(),
+                    changed: replaced || released > 0 || !closed.is_empty() || progressed,
                     closed,
                 })
             })

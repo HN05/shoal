@@ -200,6 +200,8 @@ shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into 
 shoal alerts                  # Conflicts, finished agents, and removals you missed
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
+shoal progress "Reproduced; the cause is the query limit"  # Set the agent's status line
+shoal progress --space fix-login  # Its status line and plan steps
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Network is back"  # Message every running agent
