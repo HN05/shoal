@@ -43,8 +43,9 @@ pub async fn send(
     request(daemon, method).await
 }
 
-/// Queue `message` with `attachments` for every running agent, of
-/// `repository` when it names one, returning the spaces it reached.
+/// Queue `message` with `attachments` for every agent, running, stopped or
+/// queued, of `repository` when it names one, returning the spaces it
+/// reached.
 pub async fn send_to_all(
     daemon: &impl Daemon,
     repository: Option<Selector>,

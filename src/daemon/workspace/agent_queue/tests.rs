@@ -1140,6 +1140,47 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
 }
 
 #[tokio::test]
+async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let idle = create(&manager, &repo, "idle").await;
+    let (execution, _stop) = connected_agent(&manager, &idle).await;
+    manager
+        .set_agent_state(
+            &SpaceSelector::from(&idle.name),
+            crate::state::AgentState::Idle,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    manager.dispatch_queue().await.unwrap();
+    assert!(manager.queue_entries().await.unwrap()[0].waits_for_update);
+    let reached = manager
+        .send_all_message(
+            None,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(reached.on_start.workspaces, ["idle"]);
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+}
+
+#[tokio::test]
 async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

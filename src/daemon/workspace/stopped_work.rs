@@ -32,6 +32,14 @@ impl Manager {
             .collect())
     }
 
+    /// Whether a stop saved an agent of workspace `id`: one a wrapper waits
+    /// to restore, stopped work or a last session, which `shoal resume`
+    /// restores.
+    pub(crate) fn has_saved_agent(&self, id: &str) -> Result<bool> {
+        let saved = Saved::load(&self.paths, id)?;
+        Ok(!saved.agents.is_empty() || !saved.sessions.is_empty())
+    }
+
     /// Keep the workspace's stopped agents whose execution ended as last
     /// sessions, which hold no agent slot and nothing restores on its own,
     /// recording `stopper` on those it stopped. One a wrapper waits to

@@ -1,6 +1,8 @@
 use super::Delivery;
 use crate::client::space_names::SpaceSelector;
+use crate::execution::recovery::LastSessionExt;
 use crate::{
+    client::output::messages::{Reached, ReachedSpaces},
     daemon::{
         scope::{self, Caller},
         test_support::{manager, repository},
@@ -316,7 +318,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                 .unwrap()
         }
     };
-    let reached = send(None, None).await;
+    let reached = send(None, None).await.now;
     assert_eq!(
         (reached.workspaces, reached.chats),
         (
@@ -329,7 +331,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             vec!["other".to_owned(), "planning".to_owned()]
         )
     );
-    let reached = send(Some(&parent.repository_id), None).await;
+    let reached = send(Some(&parent.repository_id), None).await.now;
     assert_eq!(reached.workspaces, ["child", "parent", "sibling"]);
     // The sending chat is left out.
     assert_eq!(reached.chats, ["planning"]);
@@ -350,11 +352,10 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     );
     let reached = send(None, Some(parent.id.clone())).await;
     assert_eq!(
-        (reached.workspaces, reached.chats),
+        (reached.now.workspaces, reached.now.chats),
         (vec!["child".to_owned()], vec![])
     );
-    let reached = send(None, Some(child.id.clone())).await;
-    assert!(reached.workspaces.is_empty() && reached.chats.is_empty());
+    assert!(send(None, Some(child.id.clone())).await.is_empty());
     // A workspace process names only its own repository, or none.
     manager
         .executions
@@ -384,6 +385,95 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             allowed
         );
     }
+}
+
+#[tokio::test]
+async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_them() {
+    let (temp, manager) = manager().await;
+    let running = workspace(&temp, &manager, "running").await;
+    let _execution = run_agent(&manager, &running).await;
+    let create = |name: &str| {
+        manager.create_workspace(&running.repository_id, name.into(), None, None, None)
+    };
+    let stopped = create("stopped").await.unwrap();
+    let queued = create("queued").await.unwrap();
+    let without = create("without").await.unwrap();
+    // The user stopped its agent, which `shoal resume` restores.
+    crate::execution::recovery::LastSession {
+        mode: "worker".into(),
+        model: Default::default(),
+        execution: "stopped".into(),
+        agent: "claude".into(),
+        session: None,
+        moved: false,
+        copied: None,
+        origin: None,
+        stopped_by: None,
+        stop: None,
+    }
+    .write(&manager.paths, &stopped.id)
+    .unwrap();
+    manager
+        .queue_agent(&SpaceSelector::id(&queued.id), "claude".into(), None)
+        .await
+        .unwrap();
+    for name in ["planning", "paused"] {
+        manager
+            .start_chat(
+                running.repository_id.clone().into(),
+                name.into(),
+                "claude".into(),
+                std::process::id(),
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+    }
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE chats SET restore='resume' WHERE name='paused'", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let reached = manager
+        .send_all_message(
+            None,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        reached,
+        Reached {
+            now: ReachedSpaces {
+                workspaces: vec!["running".into()],
+                chats: vec!["planning".into()],
+            },
+            on_start: ReachedSpaces {
+                workspaces: vec!["queued".into(), "stopped".into()],
+                chats: vec!["paused".into()],
+            },
+        }
+    );
+    for (workspace, unread) in [(&stopped, 1), (&queued, 1), (&without, 0)] {
+        let messages = manager
+            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap();
+        assert_eq!(messages.len(), unread, "{}", workspace.name);
+    }
+    // Only the launch queued before waits in the queue.
+    assert_eq!(
+        manager.queued_agent_workspaces().await.unwrap(),
+        [queued.id.clone()].into()
+    );
 }
 
 #[tokio::test]

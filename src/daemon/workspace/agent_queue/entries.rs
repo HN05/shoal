@@ -1,6 +1,8 @@
 //! Operations on one entry: adding a launch, listing entries, and a starting
 //! entry's way from its reservation to the agent that takes its slot or its
 //! failure.
+use std::collections::HashSet;
+
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 
@@ -284,6 +286,25 @@ impl Manager {
                     "SELECT 1 FROM agent_queue WHERE (workspace_id=?1 OR opens_workspace_id=?1) AND kind=?2",
                     params![workspace_id, QueueKind::Launch],
                 )
+            })
+            .await
+    }
+
+    /// The workspaces in which an agent launch or restore waits in the queue
+    /// or starts.
+    pub(crate) async fn queued_agent_workspaces(&self) -> Result<HashSet<String>> {
+        self.store
+            .run(|db| {
+                Ok(db
+                    .prepare(
+                        "SELECT DISTINCT COALESCE(workspace_id,opens_workspace_id) FROM agent_queue
+                         WHERE kind IN (?1,?2)
+                            AND COALESCE(workspace_id,opens_workspace_id) IS NOT NULL",
+                    )?
+                    .query_map(params![QueueKind::Launch, QueueKind::Restore], |row| {
+                        row.get(0)
+                    })?
+                    .collect::<rusqlite::Result<_>>()?)
             })
             .await
     }

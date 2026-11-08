@@ -11,7 +11,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 pub(crate) use crate::client::agent_messages::AgentMessage;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::output::messages::Reached,
+    client::output::messages::{Reached, ReachedSpaces},
     daemon::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
@@ -227,12 +227,15 @@ impl Manager {
         }
     }
 
-    /// [`Self::send_space_message`] to every workspace with a running agent
-    /// and each running chat but the sending chat `sender_chat`, of
-    /// `repository` when it names one, or only to the workspaces below
-    /// `below`, the sender's own workspace; the spaces it reached. Identical unread messages collapse, so sending
-    /// again after a failure does not repeat it to recipients that have not
-    /// read it yet.
+    /// [`Self::send_space_message`] to every workspace and chat with an
+    /// agent, running, stopped, queued or waiting for its restore, but the
+    /// sending chat `sender_chat`, of `repository` when it names one, or only
+    /// to the workspaces below `below`, the sender's own workspace; the
+    /// spaces it reached, by whether their agent runs. A stopped agent reads
+    /// the message once it starts, which the message does not do, except for
+    /// a restore waiting for an update. Identical unread messages collapse,
+    /// so sending again after a failure does not repeat it to recipients
+    /// that have not read it yet.
     pub async fn send_all_message(
         &self,
         repository: Option<&Selector>,
@@ -243,7 +246,8 @@ impl Manager {
         sender_chat: Option<&str>,
     ) -> Result<Reached> {
         let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
-        for workspace in &workspaces {
+        let mut reached = Reached::default();
+        for (workspace, runs) in workspaces {
             self.send_agent_message(
                 &SpaceSelector::id(&workspace.id),
                 message.clone(),
@@ -252,8 +256,11 @@ impl Manager {
             )
             .await
             .with_context(|| format!("message {}", workspace.name))?;
+            reached_by(&mut reached, runs)
+                .workspaces
+                .push(workspace.name.into());
         }
-        for chat in &chats {
+        for chat in chats {
             self.send_chat_message(
                 &SpaceSelector::id(&chat.id),
                 message.clone(),
@@ -262,64 +269,79 @@ impl Manager {
             )
             .await
             .with_context(|| format!("message {}", chat.name))?;
+            reached_by(&mut reached, chat.restore.is_none())
+                .chats
+                .push(chat.name.into());
         }
-        Ok(Reached {
-            workspaces: workspaces
-                .into_iter()
-                .map(|workspace| workspace.name.into())
-                .collect(),
-            chats: chats.into_iter().map(|chat| chat.name.into()).collect(),
-        })
+        Ok(reached)
     }
 
-    /// The workspaces with a running agent, by name, except those being
-    /// removed, and the running chats but `sender_chat`, of `repository`
-    /// when it names one; only the workspaces below `below` when it names
-    /// one.
+    /// The [`Self::workspace_recipients`] and, unless `below` names the
+    /// sender's workspace, the [`Self::chat_recipients`] of `repository`
+    /// when it names one.
     async fn recipients(
         &self,
         repository: Option<&Selector>,
         below: Option<&str>,
         sender_chat: Option<&str>,
-    ) -> Result<(Vec<Workspace>, Vec<Chat>)> {
+    ) -> Result<(Vec<(Workspace, bool)>, Vec<Chat>)> {
         let repository = match repository {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
         };
-        let in_repository = |id: Option<&String>| {
-            repository
-                .as_ref()
-                .is_none_or(|repository| Some(repository) == id)
+        let workspaces = self
+            .workspace_recipients(repository.as_ref(), below)
+            .await?;
+        let chats = match below {
+            Some(_) => Vec::new(),
+            None => {
+                self.chat_recipients(repository.as_ref(), sender_chat)
+                    .await?
+            }
         };
-        // The subtree lists `below` itself first.
-        let below: Option<Vec<String>> = match below {
-            Some(below) => Some(self.subtree(below).await?.into_iter().skip(1).collect()),
-            None => None,
-        };
-        let mut workspaces = Vec::new();
-        for id in self.running_agent_workspaces().await {
-            if below.as_ref().is_some_and(|below| !below.contains(&id)) {
+        Ok((workspaces, chats))
+    }
+
+    /// The workspaces with an agent, by name, each with whether its agent
+    /// runs, except those being removed, of `repository` when it names one;
+    /// only the workspaces below `below` when it names one.
+    async fn workspace_recipients(
+        &self,
+        repository: Option<&String>,
+        below: Option<&str>,
+    ) -> Result<Vec<(Workspace, bool)>> {
+        let running = self.running_agent_workspaces().await;
+        let queued = self.queued_agent_workspaces().await?;
+        let mut recipients = Vec::new();
+        for workspace in self.list_workspaces_within(below).await? {
+            if Some(workspace.id.as_str()) == below
+                || repository.is_some_and(|repository| *repository != workspace.repository_id)
+                || workspace.state == WorkspaceState::Removing
+            {
                 continue;
             }
-            let workspace = self.workspace_by_id(&id).await?;
-            if in_repository(Some(&workspace.repository_id))
-                && workspace.state != WorkspaceState::Removing
-            {
-                workspaces.push(workspace);
+            let runs = running.contains(&workspace.id);
+            if runs || queued.contains(&workspace.id) || self.has_saved_agent(&workspace.id)? {
+                recipients.push((workspace, runs));
             }
         }
-        workspaces.sort_by(|a, b| a.name.cmp(&b.name));
-        let mut chats = match below {
-            Some(_) => Vec::new(),
-            None => self.chats().await?,
-        };
+        Ok(recipients)
+    }
+
+    /// The chats, running or stopped, but `sender_chat`, by name, of
+    /// `repository` when it names one.
+    async fn chat_recipients(
+        &self,
+        repository: Option<&String>,
+        sender_chat: Option<&str>,
+    ) -> Result<Vec<Chat>> {
+        let mut chats = self.chats().await?;
         chats.retain(|chat| {
-            in_repository(chat.repository_id.as_ref())
-                && chat.restore.is_none()
+            repository.is_none_or(|repository| Some(repository) == chat.repository_id.as_ref())
                 && sender_chat.is_none_or(|sender| sender != chat.id && chat.name != sender)
         });
         chats.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok((workspaces, chats))
+        Ok(chats)
     }
 
     pub(crate) async fn queue_agent_message(
@@ -520,6 +542,16 @@ impl Manager {
             .await?;
         self.signals.agent_changed();
         Ok(())
+    }
+}
+
+/// The spaces of `reached` that a space joins whose agent `runs`, or else
+/// receives the message once it starts.
+fn reached_by(reached: &mut Reached, runs: bool) -> &mut ReachedSpaces {
+    if runs {
+        &mut reached.now
+    } else {
+        &mut reached.on_start
     }
 }
 

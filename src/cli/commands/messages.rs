@@ -1,6 +1,7 @@
 //! `shoal messages send` queues a message for a space's agents, or with
-//! `--all` for every running agent of the workspaces and chats, or with
-//! `--repo` for those of one repository, the current one without a value;
+//! `--all` for every agent of the workspaces and chats, running, stopped or
+//! queued, or with `--repo` for those of one repository, the current one
+//! without a value;
 //! `shoal messages` shows the space's undelivered messages once.
 use std::path::{Path, PathBuf};
 
@@ -18,6 +19,7 @@ use crate::{
         agent_messages::{self, AgentMessage},
         files::NewFile,
         links::Updates,
+        output::messages::ReachedSpaces,
     },
     forge::items::attach::Attachment,
     repository::Selector,
@@ -27,10 +29,10 @@ use crate::{
 pub(super) enum Recipients {
     /// The agents of the named space, else the current one or a picked one.
     Space(Option<SpaceSelector>),
-    /// Every running agent of the workspaces and chats.
+    /// Every agent of the workspaces and chats.
     All,
-    /// Every running agent of the named repository's workspaces and chats,
-    /// else the current one's or a picked one's.
+    /// Every agent of the named repository's workspaces and chats, else the
+    /// current one's or a picked one's.
     Repository(Option<String>),
 }
 
@@ -72,8 +74,7 @@ async fn send_to_space(
     Ok(0)
 }
 
-/// Every running agent's spaces, only those of `repository` when it names
-/// one.
+/// Every agent's spaces, only those of `repository` when it names one.
 async fn send_to_all(
     ctx: &Context,
     repository: Option<Selector>,
@@ -85,19 +86,28 @@ async fn send_to_all(
         agent_messages::send_to_all(&ctx.paths, repository, message, attachments, sender_chat)
             .await?;
     ctx.show(&reached, |reached| {
-        if reached.workspaces.is_empty() && reached.chats.is_empty() {
-            outln!("No workspace or chat has a running agent.");
+        if reached.is_empty() {
+            outln!("No workspace or chat has an agent.");
             return;
         }
-        outln!("Message queued for:");
-        for workspace in &reached.workspaces {
-            outln!("  {workspace}");
-        }
-        for chat in &reached.chats {
-            outln!("  {chat} (chat)");
-        }
+        show_reached("Message queued for:", &reached.now);
+        show_reached("Queued for when their agent starts:", &reached.on_start);
     })?;
     Ok(0)
+}
+
+/// The spaces under `heading`, unless there are none.
+fn show_reached(heading: &str, spaces: &ReachedSpaces) {
+    if spaces.is_empty() {
+        return;
+    }
+    outln!("{heading}");
+    for workspace in &spaces.workspaces {
+        outln!("  {workspace}");
+    }
+    for chat in &spaces.chats {
+        outln!("  {chat} (chat)");
+    }
 }
 
 /// The repository `--repo` names, else the current checkout's or

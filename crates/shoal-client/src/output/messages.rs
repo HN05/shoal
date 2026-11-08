@@ -3,11 +3,33 @@ use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
 
-/// The workspaces and chats a repository-wide message reached, by name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// The spaces a message to every agent reached, by whether their agent
+/// receives it now or once it starts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reached {
+    /// The spaces whose agent runs.
+    pub now: ReachedSpaces,
+    /// The spaces whose agent is stopped, queued or waits for its restore.
+    pub on_start: ReachedSpaces,
+}
+
+impl Reached {
+    pub fn is_empty(&self) -> bool {
+        self.now.is_empty() && self.on_start.is_empty()
+    }
+}
+
+/// Workspaces and chats a message reached, by name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReachedSpaces {
     pub workspaces: Vec<String>,
     pub chats: Vec<String>,
+}
+
+impl ReachedSpaces {
+    pub fn is_empty(&self) -> bool {
+        self.workspaces.is_empty() && self.chats.is_empty()
+    }
 }
 
 outputs!(Reached);

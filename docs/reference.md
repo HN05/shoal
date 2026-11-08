@@ -5174,8 +5174,8 @@ workspace and withdraw those messages. Read entries older than the newest
 shoal messages send "Stop the dev server" [--space S]  # Queue one for a workspace's or chat's agents
 shoal messages send --body-file plan.md [--space S]    # Queue a file's text as one message
 shoal messages send "Crash on launch" --attach shot.png    # Attach files; repeat --attach for more
-shoal messages send --all "Network is back"    # Queue one for every running agent
-shoal messages send "Rebase onto main" --repo [R]  # Every running agent of R or the current one
+shoal messages send --all "Network is back"    # Queue one for every agent
+shoal messages send "Rebase onto main" --repo [R]  # Every agent of R or the current one
 shoal messages [space]     # New messages, oldest first, shown once
 ```
 
@@ -5191,13 +5191,17 @@ lists each copy's path as an `Attached file:` line, or in `attachments` with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
 
-`--all` queues the message for every running agent, and `--repo` for every
-running agent of the repository it names, or without a value the current
-checkout's or workspace's, else a picked one: each running chat but the one sending, and each
-workspace with an agent Shoal tracks, working or idle, that is connected and
-not being stopped; stopped and queued agents do not count. It lists the spaces
-it reached, in `workspaces` and `chats` with `--json`; a workspace process
-reaches only the workspaces below its own. Workspaces without a running agent get nothing, since a message
+`--all` queues the message for every agent, and `--repo` for every agent of
+the repository it names, or without a value the current checkout's or
+workspace's, else a picked one: each chat but the one sending, running or
+stopped, and each workspace, except one being removed, whose agent runs,
+working or idle, or is stopped, waits for its restore or is queued to start or
+restore. An agent that runs receives it now, and any other once it next
+starts; the message starts none of them, except an idle agent Shoal stopped
+whose restore waits for an update, as a message to its space alone starts it. It lists the spaces that receive it now, and those that receive it
+once their agent starts, in `now` and `on_start` with `--json`, each with
+`workspaces` and `chats`; a workspace process reaches only the workspaces
+below its own. Workspaces without any agent get nothing, since a message
 waits there until an agent reads it. Sending the same message again after a
 failure does not repeat it to agents that have not read it yet, because
 identical unread messages collapse.
