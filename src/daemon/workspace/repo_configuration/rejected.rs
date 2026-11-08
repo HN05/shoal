@@ -49,7 +49,7 @@ impl Manager {
         }
         log!("ignored the config file of {}: {error}", workspace.name);
         self.notify_about(
-            About::workspace(&workspace.name, &workspace.id),
+            About::space(&workspace.name, &workspace.id),
             NotificationKind::ConfigIgnored,
             format!("Config file ignored until fixed: {error}"),
         )
