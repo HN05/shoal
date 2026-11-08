@@ -2372,10 +2372,13 @@ has itself:
 shoal start my-project fix-login --permission push=propose --permission merge=propose
 ```
 
-A value wider than the mode's is refused, and one wider than the parent
-space's effective value is lowered to it. Shoal records the narrowing with
-the agent's mode, on its execution, queue entry, workspace or chat, and a
-restore or restart keeps it; nothing changes it while the agent runs.
+A value wider than the mode's is refused before anything is created; one
+wider than the parent space's effective value is recorded as given, and each
+check caps it at the parent's, as it does every key. Shoal records the
+narrowing with the agent's mode, on its execution, queue entry, workspace or
+chat, and a restore or restart keeps it; nothing changes it while the agent
+runs. `shoal work status --json` gives the recorded narrowing as `narrowing`,
+beside the effective `permissions`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,

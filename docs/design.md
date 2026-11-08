@@ -2494,7 +2494,8 @@ agent's mode, since it belongs to that agent as its mode does: restores and
 restarts keep both, and a new agent in the space brings its own. A narrowing
 never widens: a value above the mode's is refused, because asking for more
 than the mode gives is a mistake worth saying, while one above the parent's
-is lowered, since the parent's own permissions may change. Effective
+is recorded as given and capped at each check, since the parent's own
+permissions may change, and a copy of today's value would outlast that. Effective
 permissions are computed at each check from the current config, the recorded
 modes and narrowings and the tree, never stored, so a config change reaches
 running agents; only the push rewrites, which are
