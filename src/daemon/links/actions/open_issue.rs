@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result, bail};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
-        permissions::{Opening, OtherRepositories},
+        permissions::{Opening, OtherRepositories, Permissions},
         resolve::Effective,
     },
     daemon::{
@@ -91,9 +91,7 @@ impl Manager {
                 Some(checkout) => LinkSpace::Chat { chat, checkout },
                 None => {
                     anyhow::ensure!(!link, "{LINK_NEEDS_REPOSITORY}");
-                    return self
-                        .open_outside_issue(&chat, issue, repository, caller)
-                        .await;
+                    return self.open_outside_issue(issue, repository, caller).await;
                 }
             },
             None => self.context_space(context).await?,
@@ -115,9 +113,12 @@ impl Manager {
                 "an issue in another repository cannot be linked; open it without --link"
             );
         }
-        if let Some(proposer) = proposer {
-            let settings = self.space_settings(&space).await?;
-            if destination.opening(&settings)? == Opening::Propose {
+        if let (Some(proposer), Some(caller)) = (proposer, caller) {
+            let permissions = self
+                .caller_permissions(caller, space.repository_id())
+                .await?;
+            if destination.opening(&permissions)? == Opening::Propose {
+                let settings = self.space_settings(&space).await?;
                 let required = destination.required(&settings);
                 return (self.propose_issue_at(
                     &space,
@@ -159,12 +160,12 @@ impl Manager {
 
     /// Open the issue a chat without a repository opens in the repository
     /// the URL `repository` names, which is not registered, and so another
-    /// repository under the global `[permissions] issue_other_repositories`.
+    /// repository under the caller's `issue_other_repositories` permission in
+    /// the global config.
     /// A proposal belongs to a registered repository, so a scoped `caller`
     /// that the setting would have propose one is refused.
     async fn open_outside_issue(
         &self,
-        chat: &crate::model::Chat,
         issue: NewIssue,
         repository: Option<String>,
         caller: Option<&Caller>,
@@ -178,13 +179,16 @@ impl Manager {
             forge,
             elsewhere: true,
         };
-        if self.proposer(caller).await.is_some() {
-            let settings = self.chat_settings(chat).await?;
+        if let Some(caller) = caller {
+            // No registered repository's config applies, so the global one does.
+            let permissions = self.space_permissions(&caller.space_id, None).await?;
             anyhow::ensure!(
-                destination.opening(&settings)? == Opening::Direct,
+                destination.opening(&permissions)? == Opening::Direct,
                 "agents propose issues only in registered repositories from a chat without a \
-                 repository, and [permissions] issue_other_repositories asks for a proposal; ask \
-                 the user to open it"
+                 repository, and {}; ask the user to open it",
+                permissions
+                    .issue_other_repositories
+                    .cited("issue_other_repositories")
             );
         }
         let Created { item, unfinished } = (destination.forge)
@@ -232,8 +236,12 @@ impl Manager {
             !link || !destination.elsewhere,
             "an issue in another repository cannot be linked; open it without --link"
         );
-        let opening = match proposer {
-            Some(_) => destination.opening(&settings)?,
+        let opening = match caller {
+            Some(caller) => {
+                let permissions =
+                    (self.caller_permissions(caller, &workspace.repository_id)).await?;
+                destination.opening(&permissions)?
+            }
             None => Opening::Direct,
         };
         let (forge, required) = (&destination.forge, destination.required(&settings));
@@ -333,21 +341,18 @@ struct IssueDestination {
 }
 
 impl IssueDestination {
-    /// How a scoped caller opens the issue here under `settings`, refusing
-    /// another repository they deny.
-    fn opening(&self, settings: &Effective) -> Result<Opening> {
+    /// How a scoped caller with `permissions` opens the issue here,
+    /// refusing another repository they deny.
+    fn opening(&self, permissions: &Permissions) -> Result<Opening> {
         if !self.elsewhere {
-            return Ok(crate::config::permissions::resolve(&settings, None)?
-                .issue_open
-                .value);
+            return Ok(permissions.issue_open.value);
         }
-        match crate::config::permissions::resolve(&settings, None)?
-            .issue_other_repositories
-            .value
-        {
+        let other = permissions.issue_other_repositories;
+        match other.value {
             OtherRepositories::Deny => bail!(
-                "agents cannot open issues in {}: [permissions] issue_other_repositories is \"deny\"",
-                self.forge.repository_url()
+                "agents cannot open issues in {}: {}",
+                self.forge.repository_url(),
+                other.cited("issue_other_repositories")
             ),
             OtherRepositories::Propose => Ok(Opening::Propose),
             OtherRepositories::Direct => Ok(Opening::Direct),

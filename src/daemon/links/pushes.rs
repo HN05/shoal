@@ -60,20 +60,20 @@ impl Manager {
         Ok(true)
     }
 
-    /// What `[permissions] push` does with the pushes `caller` makes from
-    /// the workspace; unscoped callers always push.
+    /// What the `push` permission of `caller` does with the pushes it makes
+    /// from the workspace; unscoped callers always push.
     pub(super) async fn scoped_pushes(
         &self,
         workspace: &Workspace,
         caller: Option<&Caller>,
     ) -> Result<Pushes> {
-        if caller.is_none() {
+        let Some(caller) = caller else {
             return Ok(Pushes::Direct);
-        }
-        let settings = self.workspace_settings(workspace).await?;
-        Ok(crate::config::permissions::resolve(&settings, None)?
-            .push
-            .value)
+        };
+        let permissions = self
+            .caller_permissions(caller, &workspace.repository_id)
+            .await?;
+        Ok(permissions.push.value)
     }
 
     /// The push of the workspace's branch that `shoal pr open` from

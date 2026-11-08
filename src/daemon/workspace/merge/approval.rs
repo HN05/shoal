@@ -11,6 +11,7 @@ use crate::{
             UnmergeSpecification,
         },
         log,
+        scope::Caller,
         workspace::Manager,
     },
     git,
@@ -18,16 +19,17 @@ use crate::{
 };
 
 impl Manager {
-    /// A scoped merge needs the user's approval for the branch at the commit
-    /// `plan` merges, and the push it makes, unless `[permissions] merge` is
-    /// "direct" and `[permissions] push` lets the merge push the default
+    /// A scoped `caller`'s merge needs approval for the branch at the commit
+    /// `plan` merges, and the push it makes, unless its `merge` permission is
+    /// "direct" and its `push` permission lets the merge push the default
     /// branch without it. The caller holds the repository Git gate, so the
     /// approved commit is the one that merges.
     pub(in crate::daemon::workspace) async fn authorize_scoped_merge(
         &self,
         plan: &MergePlan,
+        caller: &Caller,
     ) -> Result<()> {
-        if self.merges_directly(&plan.workspace).await? {
+        if self.merges_directly(&plan.workspace, caller).await? {
             return Ok(());
         }
         let request = merge_request(plan, &self.plan_preview(plan).await?);
@@ -39,19 +41,21 @@ impl Manager {
     pub(in crate::daemon::workspace) async fn authorize_scoped_unmerge(
         &self,
         plan: &UnmergePlan,
+        caller: &Caller,
     ) -> Result<()> {
-        if self.merges_directly(&plan.workspace).await? {
+        if self.merges_directly(&plan.workspace, caller).await? {
             return Ok(());
         }
         self.await_merge_decision(unmerge_request(plan)).await
     }
 
-    /// Whether `[permissions] merge` and `[permissions] push` let
-    /// `workspace`'s processes merge, push and unmerge without approval.
-    async fn merges_directly(&self, workspace: &Workspace) -> Result<bool> {
+    /// Whether the `merge` and `push` permissions of `caller` let it merge,
+    /// push and unmerge `workspace` without approval.
+    async fn merges_directly(&self, workspace: &Workspace, caller: &Caller) -> Result<bool> {
         use crate::config::permissions::{Opening, Pushes};
-        let settings = self.workspace_settings(workspace).await?;
-        let permissions = crate::config::permissions::resolve(&settings, None)?;
+        let permissions = self
+            .caller_permissions(caller, &workspace.repository_id)
+            .await?;
         Ok(permissions.merge.value == Opening::Direct && permissions.push.value == Pushes::Direct)
     }
 

@@ -406,7 +406,7 @@ impl Manager {
     ) -> Result<StartedExecution> {
         let ExecutionRequest { demo, place, merge } = request;
         let (workspace, preparation) = self
-            .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some(), merge)
+            .prepare_execution(selector, wrapper.as_ref(), kind, caller, merge)
             .await?;
         let agent = match caller {
             Some(caller) => self.caller_agent(caller).await.map(|agent| agent.execution),
@@ -617,7 +617,7 @@ impl Manager {
         selector: &SpaceSelector,
         wrapper: Option<&Identity>,
         kind: ExecutionKind,
-        scoped: bool,
+        caller: Option<&Caller>,
         merge: Option<crate::model::MergeOptions>,
     ) -> Result<(Workspace, PreparedExecution)> {
         if let Some(wrapper) = wrapper {
@@ -631,17 +631,18 @@ impl Manager {
         self.reserve_repository_directory(&workspace.repository_id)
             .await?;
         let preparation = self
-            .prepare_execution_kind(&workspace, kind, scoped, merge)
+            .prepare_execution_kind(&workspace, kind, caller, merge)
             .await?;
         Ok((workspace, preparation))
     }
 
-    /// `merge` says how a merge runs.
+    /// `merge` says how a merge runs; a scoped `caller`'s merge or unmerge
+    /// needs its permission.
     async fn prepare_execution_kind(
         &self,
         workspace: &Workspace,
         kind: ExecutionKind,
-        scoped: bool,
+        caller: Option<&Caller>,
         merge: Option<crate::model::MergeOptions>,
     ) -> Result<PreparedExecution> {
         match kind {
@@ -654,8 +655,8 @@ impl Manager {
                         &merge.unwrap_or_default(),
                     )
                     .await?;
-                if scoped {
-                    self.authorize_scoped_merge(&merge).await?;
+                if let Some(caller) = caller {
+                    self.authorize_scoped_merge(&merge, caller).await?;
                 }
                 Ok(PreparedExecution {
                     merge: Some(Box::new(merge)),
@@ -668,8 +669,8 @@ impl Manager {
                 let unmerge = self
                     .prepare_unmerge(&SpaceSelector::id(&workspace.id))
                     .await?;
-                if scoped {
-                    self.authorize_scoped_unmerge(&unmerge).await?;
+                if let Some(caller) = caller {
+                    self.authorize_scoped_unmerge(&unmerge, caller).await?;
                 }
                 Ok(PreparedExecution {
                     unmerge: Some(Box::new(unmerge)),

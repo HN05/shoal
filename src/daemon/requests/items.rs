@@ -140,7 +140,7 @@ pub(super) async fn handle(
             repository,
         } => {
             let response = manager
-                .forge_api(&context, &raw, repository.as_deref(), caller.is_some())
+                .forge_api(&context, &raw, repository.as_deref(), caller)
                 .await
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return Ok(Answer::pages(response, Body::ApiResponse));
@@ -151,7 +151,7 @@ pub(super) async fn handle(
             repository,
         } => {
             let download = manager
-                .forge_download(&context, &url, repository.as_deref(), caller.is_some())
+                .forge_download(&context, &url, repository.as_deref(), caller)
                 .await
                 .map(protocol::DownloadPiece::split);
             return Ok(Answer::pages(download, Body::Downloaded));

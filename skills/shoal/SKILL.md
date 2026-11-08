@@ -190,7 +190,8 @@ commands act on the linked item, or on the number or URL given.
 
 `issue open` records the issue as opened by the space, and only `--link`
 assigns it. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
-in another repository, as `[permissions] issue_other_repositories` allows;
+in another repository, as the space's `issue_other_repositories` permission
+allows;
 `issue list` and `pr list` take `--repo` too. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
@@ -202,14 +203,18 @@ changes on one, or approve CI runs: `pr merge`, `pr delete-branch`,
 threads, rerunning jobs or reading job logs, and what to do instead.
 `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the forge's API
 and prints the JSON, `--repo OWNER/NAME` for another repository; other methods
-are refused unless the repository sets `[permissions] api_writes`.
+are refused unless the space's `api_writes` permission is `direct`.
 `shoal forge download <url> --output <file>` saves an image or attached file
 from the forge with the same login.
 
 ### Proposals and pushes
 
-Where a repository's `[permissions]` require the user's approval for issues
-and PRs, `issue open` and `pr open` exit 0 with `proposed`, an approval
+A space's permissions (`issue_open`, `pr_open`, `issue_other_repositories`,
+`merge`, `push`, `api_writes`) come from its agent's mode and config, and are
+never wider than those of the space above it. A command acting on a space below uses the caller's
+own.
+
+Where a space's permissions require approval for issues and PRs, `issue open` and `pr open` exit 0 with `proposed`, an approval
 request, instead of the item; `pr open` still pushes unless pushes need
 approval too. Only the user approves a proposal, and may edit its title and
 description first; the decision arrives as a message naming the opened item,
@@ -218,7 +223,7 @@ after the space is removed. A pending PR proposal keeps the workspace; a new
 commit outdates it until `pr open` runs again. A chat proposes issues, never
 PRs.
 
-With `[permissions] push` requiring approval, `pr open` pushes nothing: it
+With the space's `push` permission requiring approval, `pr open` pushes nothing: it
 proposes the PR together with the push, or only the push for an open PR. Plain
 `git push` reports the push as rejected and `waits for approval <S.N>`;
 `--force-with-lease` works as usual. On approval Shoal pushes the
@@ -466,7 +471,7 @@ Where the repository merges locally instead of through PRs, `merge` merges a
 committed branch into the default branch and `unmerge` undoes its latest merge
 while the default branch is unpushed. A workspace process's `merge` or
 `unmerge` first exits 2 with `approval_pending` for its current HEAD, unless
-`[permissions] merge = "direct"`; after approval the same command at the same
+its `merge` permission is `direct`; after approval the same command at the same
 HEAD proceeds, and a new commit needs a new request. A merge that pushes asks
 for confirmation on a terminal, and `--yes` gives it.
 

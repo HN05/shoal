@@ -138,10 +138,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
   acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
-  sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its `[permissions]`), opening issues
-  in other repositories as `[permissions] issue_other_repositories` allows, rerunning
+  sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its permissions there), opening issues
+  in other repositories as their `issue_other_repositories` permission allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to any repository's forge API, or
-  other methods to the own repository's where `[permissions] api_writes` allows them, are allowed, except merging a PR, deleting its branch, approving or requesting changes on one, or approving CI runs.
+  other methods to the own repository's where their `api_writes` permission allows them, are allowed, except merging a PR, deleting its branch, approving or requesting changes on one, or approving CI runs.
   Scoped callers may run, view, cancel and answer the reviews of their own workspace and those below it;
   with `[review] require_for_pr` or `require_for_ready`, a workspace process's new-PR `pr open` and its
   ready mark are refused until a finished review covers HEAD with every finding resolved.
@@ -227,16 +227,23 @@ for delivering a PR, under Committing near the end, decide when work is done.
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
   A scoped merge
-  is a request bound to the branch HEAD unless `[permissions] merge` is
+  is a request bound to the branch HEAD unless the caller's `merge` permission is
   `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval
   lets the retry proceed under every check.
-  `[permissions] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
+  `issue_open`/`pr_open = "propose"` make a scoped `issue open` or
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded
   commit. A chat proposes issues, without a branch or commit, but never PRs.
   Issue proposals belong to the repository and outlive the space that made them.
-  `[permissions] issue_other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
+  `issue_other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
   does the same for a scoped issue in another repository, which is never linked.
+- Permissions belong to spaces. A space's are its agent's mode's
+  (`[modes.NAME.permissions]` over `[permissions]` over the built-in mode's
+  defaults over the key's), each narrowed to its parent's effective value, and
+  one daemon operation computes them at each check from current config, the
+  recorded modes and the tree; a scoped check reads the acting caller's space's
+  through it, never a repository's settings, and a chat without a repository
+  resolves its mode in the config of the repository the action is in.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.

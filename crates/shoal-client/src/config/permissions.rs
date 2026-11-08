@@ -132,6 +132,20 @@ impl<T: Ord + Copy> Permission<T> {
     }
 }
 
+impl<T: std::fmt::Display> Permission<T> {
+    /// The permission `key` as a refusal cites it, with where it comes from.
+    pub fn cited(&self, key: &str) -> String {
+        let from = match self.from {
+            PermissionSource::Mode => "its agent's mode",
+            PermissionSource::Parent => "the space above it",
+        };
+        format!(
+            "the space's {key} permission is \"{}\", from {from}",
+            self.value
+        )
+    }
+}
+
 /// A space's effective permissions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Permissions {
@@ -156,29 +170,6 @@ impl Permissions {
             push: self.push.below(parent.push),
             api_writes: self.api_writes.below(parent.api_writes),
         }
-    }
-
-    /// Each key with its value and where it comes from, in config order.
-    pub fn entries(&self) -> [(&'static str, &'static str, PermissionSource); 6] {
-        fn entry<T: Copy>(
-            key: &'static str,
-            permission: Permission<T>,
-            name: fn(T) -> &'static str,
-        ) -> (&'static str, &'static str, PermissionSource) {
-            (key, name(permission.value), permission.from)
-        }
-        [
-            entry("issue_open", self.issue_open, Opening::as_str),
-            entry("pr_open", self.pr_open, Opening::as_str),
-            entry(
-                "issue_other_repositories",
-                self.issue_other_repositories,
-                OtherRepositories::as_str,
-            ),
-            entry("merge", self.merge, Opening::as_str),
-            entry("push", self.push, Pushes::as_str),
-            entry("api_writes", self.api_writes, ApiWrites::as_str),
-        ]
     }
 
     fn of_mode(layered: PermissionsConfig) -> Self {

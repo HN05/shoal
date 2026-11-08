@@ -35,6 +35,7 @@ mod overload;
 #[cfg(test)]
 mod overload_tests;
 pub(crate) mod ownership;
+mod permissions;
 pub mod ports;
 pub mod questions;
 pub(crate) mod queue;

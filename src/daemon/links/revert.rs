@@ -2,7 +2,7 @@
 //! the revert itself, or by reading what reverting its merge with Git in a
 //! new workspace needs.
 use crate::daemon::links::proposals::OpenOutcomeExt;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 
 use super::{proposals::OpenOutcome, space::LinkSpace};
 use crate::client::space_names::SpaceSelector;
@@ -52,18 +52,22 @@ impl Manager {
             }
             LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await?,
         };
-        if self.proposer(caller).await.is_some() {
-            let permissions = crate::config::permissions::resolve(&settings, None)?;
-            if permissions.pr_open.value == Opening::Propose {
-                bail!(
-                    "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
-                );
-            }
-            if permissions.push.value != Pushes::Direct {
-                bail!(
-                    "[permissions] push holds back or refuses agents' pushes, and a forge's revert pushes its branch at once; ask the user to run shoal pr revert"
-                );
-            }
+        if let Some(caller) = caller {
+            let permissions = self
+                .caller_permissions(caller, space.repository_id())
+                .await?;
+            ensure!(
+                permissions.pr_open.value == Opening::Direct,
+                "{}, and a forge's revert cannot wait for approval; ask the user to run shoal pr \
+                 revert",
+                permissions.pr_open.cited("pr_open")
+            );
+            ensure!(
+                permissions.push.value == Pushes::Direct,
+                "{}, and a forge's revert pushes its branch at once; ask the user to run shoal pr \
+                 revert",
+                permissions.push.cited("push")
+            );
         }
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
         let input = match input {

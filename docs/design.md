@@ -36,8 +36,8 @@ makes for a workspace act as the agent too, with the host's configured
 `agent_token`. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
-other executions keep theirs; the push rewrites of `[permissions] push` travel
-the same way. Desktop handoffs have no authentication override
+other executions keep theirs; the push rewrites of the agent's `push` permission
+travel the same way. Desktop handoffs have no authentication override
 because they may reuse an existing process.
 The generic repository `[env]` table is available to tracked executions and hooks:
 it renders workspace identity and reserved ports into user-selected variables
@@ -1027,8 +1027,8 @@ Creation other than of a child of the caller's space, removal other than of a de
 reconciliation, other workspaces, repository administration, and service control other
 than `daemon reload`, which applies the config on disk and stops nothing, need an
 unscoped caller. A scoped `merge` is an
-approval request bound to the branch and its HEAD unless `[permissions] merge`
-and `push` are `"direct"`, and a scoped `unmerge` one bound to the merge it undoes;
+approval request bound to the branch and its HEAD unless the caller's `merge`
+and `push` permissions are `"direct"`, and a scoped `unmerge` one bound to the merge it undoes;
 approval lets the agent's retry merge that commit, or undo that merge, through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
@@ -2402,8 +2402,21 @@ closing and reopening. Decisions bind to the displayed or
 authorized record through mutation, including when a coordinating agent decides. Explicit `--approve` and `--deny` flags decide every kind: merging
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
+Permissions belong to spaces, not repositories, because a top-level chat the
+user talks with may be trusted with more than a worker several levels down. A
+space's set comes from its agent's mode: `[modes.NAME.permissions]` over
+`[permissions]` over the built-in mode's defaults over each key's default. Each
+key is then the narrower of that and the parent's effective value, so no child
+has more than its parent. The modes that coordinate default `merge` and
+`issue_other_repositories` to `"direct"` so they can decide their children's;
+`worker` keeps the key defaults. Effective permissions are computed at each
+check from the current config, the recorded modes and the tree, never stored,
+so a config change reaches running agents; only the push rewrites, which are
+Git environment fixed at launch, wait for a restart. A check uses the acting
+space's permissions, so a parent acting on a child acts under its own.
+
 In a shared repository everything an agent opens is seen by other people, so
-`[permissions] issue_open` and `pr_open` can make a scoped `issue open` or `pr open`
+the `issue_open` and `pr_open` permissions can make a scoped `issue open` or `pr open`
 propose instead of open (`"direct"` is the default; unscoped callers always open).
 A proposal is an approval request whose record carries the command's options with
 their defaults resolved, the workspace, branch, commit and agent, and copies of its

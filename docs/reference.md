@@ -1957,12 +1957,12 @@ your notifications stay with you. Every registered repository counts as its
 own: `--repo` or an issue or PR URL names the one a command acts in, and
 there it reads, opens, comments on, labels and edits issues, comments on PRs,
 lists CI runs and reruns or cancels a PR's checks, and sends forge API
-requests under that repository's `[permissions]`, and
+requests under its [permissions](#mode-permissions) as that repository's config resolves them, and
 its proposals go to you as that repository's; through `--space` it acts on a
 space's items as a coordinator does. It opens no PRs and links nothing. In
 a repository that is not registered it only opens an issue, named by its
-URL, where the global `[permissions] issue_other_repositories` is
-`"direct"`, since a proposal belongs to a registered repository; it reads
+URL, where its `issue_other_repositories` permission, resolved in the global
+config, is `"direct"`, since a proposal belongs to a registered repository; it reads
 such a repository only through a space whose own repository reads it. Its attached files stay in
 the `.attachments` of the `root_dir` it started in, however `root_dir` changes
 later, which the daemon marks with its state directory as it does `.tmp`, and [`shoal move`](#move-a-space-to-another-machine) refuses it.
@@ -2340,6 +2340,20 @@ and [forge API requests](#forge-api-requests) give; `chat`, `plan` and
 [modes.worker.permissions]
 push = "propose"
 ```
+
+Each space has its own permissions. A top-level space has those of its
+agent's mode; a space below another has, for each key, the narrower of its
+mode's value and its parent's effective one, so a child never has more than
+its parent. A space whose agent has not started, such as one `shoal split`
+created, has `[permissions]` and the keys' defaults, narrowed the same way.
+A chat without a repository resolves its mode's keys in the config of the
+repository the action is in, and in the global config otherwise. Shoal
+computes the permissions at each check from the current config, the recorded
+modes and the tree, so a config change reaches running agents and the spaces
+below them; only the hold on an agent's plain `git push` follows the `push`
+permission it launched with, which a restart renews. A check uses the
+permissions of the space that acts, so a parent acting on a space below it
+acts under its own.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,
@@ -2932,8 +2946,8 @@ main`), resolve the conflicts there, and run `shoal merge` again.
 Merged commits count as pushed for `rm` and automatic cleanup.
 
 An agent's scoped `shoal merge` needs the user's approval for the branch at its
-current commit, and for where it pushes, unless `[permissions] merge = "direct"` and
-[`[permissions] push`](#approval-for-agent-pushes) is `"direct"` too. The first run records a
+current commit, and for where it pushes, unless its [`merge` permission](#mode-permissions) is `"direct"` and
+its [`push` permission](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 the request names the branch, the default branch it merges into, its commit count,
 the remote branch it pushes to, any other local commits of the default branch
@@ -4127,8 +4141,8 @@ issue.
 workspace's forge or by a repository URL on any forge, still as the agent
 account. The workspace's [conventions](#repository-conventions) do not apply
 there, so nothing requires or warns about its labels or description, and
-`--link` is refused. `[permissions] issue_other_repositories` decides it for workspace
-processes: `"propose"` records an [approval request](#approval-for-agent-issues-and-prs)
+`--link` is refused. The space's `issue_other_repositories`
+[permission](#mode-permissions) decides it for workspace processes: `"propose"` records an [approval request](#approval-for-agent-issues-and-prs)
 naming the repository, `"direct"` opens it at once, and `"deny"` refuses it.
 Unscoped callers always open directly.
 
@@ -4143,7 +4157,8 @@ A repository whose issues and PRs other people see can require your approval
 before an agent opens one. `"direct"`, the default, opens at once; `"propose"`
 makes `issue open` or `pr open` in a workspace process, and `issue open` in a
 chat's agent, record an [approval request](#resource-approvals) instead. Unscoped callers always open
-directly.
+directly. Like every key below, these are the space's
+[permissions](#mode-permissions), which its mode and the space above it may narrow.
 
 ```toml
 [permissions]
@@ -4459,8 +4474,8 @@ rate limits and 64 MiB response bound of other forge requests. On Forgejo, a
 GET whose query sets `limit` without `page` reads the first page, since
 Forgejo's Actions lists otherwise ignore `limit` and return every run.
 Processes inside a workspace and a chat's agent send it as the
-[agent account](#agent-accounts), and only GET unless `[permissions]
-api_writes` lets agents send other methods to their space's repository, which could merge, approve or skip required labels
+[agent account](#agent-accounts), and only GET unless their space's `api_writes`
+[permission](#mode-permissions) lets them send other methods to their space's repository, which could merge, approve or skip required labels
 around Shoal's checks; to another repository they send only GET. Anyone
 else sends any request with your own logins.
 

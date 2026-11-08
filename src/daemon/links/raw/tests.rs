@@ -2,7 +2,10 @@ use serde_json::json;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::test_support::{configure, git, manager, repository},
+    daemon::{
+        scope::Caller,
+        test_support::{configure, git, manager, repository},
+    },
     forge::{
         raw::{HttpMethod, RawRequest},
         test_support::Server,
@@ -34,6 +37,10 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     )
     .await;
     let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+    let caller = Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+    };
     let request = |method| RawRequest {
         method,
         path: "repos/{owner}/{repo}".into(),
@@ -51,12 +58,12 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
 
     let read = manager
-        .forge_api(&context, &request(HttpMethod::Get), None, true)
+        .forge_api(&context, &request(HttpMethod::Get), None, Some(&caller))
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, true)
+        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
         .await
         .unwrap_err();
     assert_eq!(sent(), ["GET /api/v3/repos/team/repo"]);
@@ -69,14 +76,19 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, true)
+        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
         .await
         .unwrap();
     assert_eq!(sent()[1], "PATCH /api/v3/repos/team/repo");
 
     // Another repository is only read, whatever the workspace's allows.
     let read = manager
-        .forge_api(&context, &request(HttpMethod::Get), Some("team/tool"), true)
+        .forge_api(
+            &context,
+            &request(HttpMethod::Get),
+            Some("team/tool"),
+            Some(&caller),
+        )
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
@@ -85,7 +97,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
             &context,
             &request(HttpMethod::Patch),
             Some("team/tool"),
-            true,
+            Some(&caller),
         )
         .await
         .unwrap_err();
@@ -134,6 +146,10 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
     )
     .await;
     let context = ItemContext::Chat(SpaceSelector::id(&chat.id));
+    let caller = Caller {
+        space_id: chat.id.clone(),
+        execution: None,
+    };
     let request = |method| RawRequest {
         method,
         path: "repos/{owner}/{repo}".into(),
@@ -142,11 +158,11 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
 
     // Its agent reads as the agent account, as a workspace's does.
     manager
-        .forge_api(&context, &request(HttpMethod::Get), None, true)
+        .forge_api(&context, &request(HttpMethod::Get), None, Some(&caller))
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, true)
+        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
         .await
         .unwrap_err();
     manager
@@ -157,7 +173,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, true)
+        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
         .await
         .unwrap();
     manager
@@ -165,13 +181,13 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
             &context,
             &request(HttpMethod::Patch),
             Some("team/tool"),
-            true,
+            Some(&caller),
         )
         .await
         .unwrap_err();
     // The user's own command in the chat sends with the user's login.
     manager
-        .forge_api(&context, &request(HttpMethod::Get), None, false)
+        .forge_api(&context, &request(HttpMethod::Get), None, None)
         .await
         .unwrap();
     let sent: Vec<_> = (server.received().into_iter())
@@ -220,6 +236,10 @@ async fn agents_download_from_their_forge_as_their_account() {
         &format!("[machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"),
     )
     .await;
+    let caller = Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+    };
     let url = &format!("http://{host}/user-attachments/assets/abc");
 
     let download = manager
@@ -227,7 +247,7 @@ async fn agents_download_from_their_forge_as_their_account() {
             &ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
             url,
             None,
-            true,
+            Some(&caller),
         )
         .await
         .unwrap();
@@ -238,7 +258,7 @@ async fn agents_download_from_their_forge_as_their_account() {
             &ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
             "https://example.com/shot.png",
             None,
-            true,
+            Some(&caller),
         )
         .await
         .unwrap_err();

@@ -159,7 +159,7 @@ instead of the PR delivery guidance below.
   those of the own repository except merging, deleting a PR's branch, approving or requesting changes, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
   GET requests to any repository's forge API, or other methods to the own repository's where
-  `[permissions] api_writes` allows them, own-repository sync and
+  their `api_writes` permission allows them, own-repository sync and
   effective-configuration reads are allowed, but approving CI runs that wait for approval is not;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
@@ -212,21 +212,24 @@ instead of the PR delivery guidance below.
   and a child that fails retains the parent. A standing completion with cleanup
   removes the workspaces and chats below it that nothing of their own keeps,
   whatever their work, after the grace period. A scoped merge
-  is an approval request bound to the branch HEAD unless `[permissions] merge`
-  and `[permissions] push` are both `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval never skips a check and merges only the approved commit or undoes only the approved merge.
-  Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
+  is an approval request bound to the branch HEAD unless the caller's `merge`
+  and `push` permissions are both `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval never skips a check and merges only the approved commit or undoes only the approved merge.
+  Under an `issue_open`/`pr_open` permission of `"propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening, routed like other approval
   requests, though only the user approves it; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives the space that made it.
   A chat's agent proposes issues, without a branch or commit, but never PRs.
-  Under `[permissions] push = "propose"`, a scoped push, through `pr open` or
+  Under a `push` permission of `"propose"`, a scoped push, through `pr open` or
   plain `git push`, records a request bound to the ref and commit instead;
   approval pushes exactly that, with no agent present, and a branch that moved
   outdates it. Nothing decides, withdraws or replaces a request while its push runs.
   `"deny"` refuses those pushes and records nothing.
-  `[permissions] issue_other_repositories` governs a scoped issue in another repository the same
-  way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. This is cooperative,
+  The `issue_other_repositories` permission governs a scoped issue in another repository the same
+  way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. These permissions
+  are the acting caller's space's, from its agent's mode (`[modes.NAME.permissions]` over
+  `[permissions]`), never wider than its parent's, computed at each check through one daemon
+  operation; flag a check that reads a repository's `[permissions]` directly. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

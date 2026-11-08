@@ -365,7 +365,7 @@ impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
     /// unlinked. A workspace process's new PR is recorded for the user's
-    /// approval instead when `[permissions] pr_open` says so, or when
+    /// approval instead when its `pr_open` permission says so, or when
     /// `push_held` says `[permissions] push` held back the branch's push,
     /// which approving it runs first; a held push to an open PR is recorded
     /// on its own.
@@ -424,11 +424,9 @@ impl Manager {
                     ..new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?
                 };
                 // A PR whose branch is not pushed cannot open before the
-                // user approves the push, which then opens it too.
-                let pr_open = crate::config::permissions::resolve(&settings, None)?.pr_open;
-                if let Some(proposer) =
-                    proposer.filter(|_| push.is_some() || pr_open.value == Opening::Propose)
-                {
+                // push is approved, which then opens it too.
+                let proposes = push.is_some() || self.proposes_pull(&workspace, caller).await?;
+                if let Some(proposer) = proposer.filter(|_| proposes) {
                     forge.check_uploads(&account, &pull.attachments).await?;
                     self.ensure_workspace_not_pushing(&workspace).await?;
                     let proposed = self
@@ -708,6 +706,20 @@ fn only_assigned(kind: ItemKind, assigned: Vec<String>) -> Result<String> {
         (ItemKind::Issue, _) => bail!("no issue is linked; pass a number or URL"),
         (ItemKind::Pr, []) => bail!("no PR is linked; pass a number or URL"),
         (ItemKind::Pr, _) => bail!("several PRs are linked; pass a number or URL"),
+    }
+}
+
+impl Manager {
+    /// Whether a scoped `caller`'s `pr_open` permission has it propose the
+    /// new PR of `workspace` instead of opening it; unscoped callers open.
+    async fn proposes_pull(&self, workspace: &Workspace, caller: Option<&Caller>) -> Result<bool> {
+        let Some(caller) = caller else {
+            return Ok(false);
+        };
+        let permissions = self
+            .caller_permissions(caller, &workspace.repository_id)
+            .await?;
+        Ok(permissions.pr_open.value == Opening::Propose)
     }
 }
 
