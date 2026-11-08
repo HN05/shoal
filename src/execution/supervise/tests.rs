@@ -37,23 +37,7 @@ async fn adjacent_controls_child() {
     }
     let root = std::env::current_dir().unwrap();
     let paths = Paths::for_test(&root);
-    let plan = ExecutionPlan {
-        id: uuid::Uuid::new_v4().to_string(),
-        workspace: Workspace::new_record(
-            "repo".into(),
-            "worker".into(),
-            root.clone(),
-            Some("worker".into()),
-            crate::state::WorkspaceState::Ready,
-        ),
-        scope_token: "test-scope".into(),
-        setup_cmd: None,
-        copy_ignored: false,
-        ports: vec![],
-        environment: Default::default(),
-        merge: None,
-        unmerge: None,
-    };
+    let plan = plan(&root);
     let (client, mut server) = UnixStream::pair().unwrap();
     let mut bytes = Vec::new();
     for control in [
@@ -227,23 +211,7 @@ async fn reattachment_child() {
     let paths = Paths::for_test(&root);
     std::fs::create_dir_all(&paths.state).unwrap();
     let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
-    let plan = ExecutionPlan {
-        id: uuid::Uuid::new_v4().to_string(),
-        workspace: Workspace::new_record(
-            "repo".into(),
-            "worker".into(),
-            root.clone(),
-            Some("worker".into()),
-            crate::state::WorkspaceState::Ready,
-        ),
-        scope_token: "test-scope".into(),
-        setup_cmd: None,
-        copy_ignored: false,
-        ports: vec![],
-        environment: Default::default(),
-        merge: None,
-        unmerge: None,
-    };
+    let plan = plan(&root);
     let mode = Mode::Command { record: false };
     let waiting = |marker: &str| -> Vec<OsString> {
         vec![
@@ -408,23 +376,7 @@ async fn ended_session_child() {
     }
     let root = std::env::current_dir().unwrap();
     let paths = Paths::for_test(&root);
-    let plan = ExecutionPlan {
-        id: uuid::Uuid::new_v4().to_string(),
-        workspace: Workspace::new_record(
-            "repo".into(),
-            "worker".into(),
-            root.clone(),
-            Some("worker".into()),
-            crate::state::WorkspaceState::Ready,
-        ),
-        scope_token: "test-scope".into(),
-        setup_cmd: None,
-        copy_ignored: false,
-        ports: vec![],
-        environment: Default::default(),
-        merge: None,
-        unmerge: None,
-    };
+    let plan = plan(&root);
     let mode = Mode::Command { record: false };
     let run =
         |script: &str| -> Vec<OsString> { vec!["/bin/sh".into(), "-c".into(), script.into()] };
@@ -551,6 +503,89 @@ async fn ended_session_child() {
             }
         )
     );
+}
+
+#[tokio::test]
+async fn a_command_has_the_terminal_before_its_registration() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let output = crate::test_support::in_new_terminal(
+        root.path(),
+        "execution::supervise::tests::terminal_child",
+    )
+    .await;
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[tokio::test]
+#[ignore = "isolated wrapper launched by terminal regression"]
+async fn terminal_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::current_dir().unwrap();
+    let paths = Paths::for_test(&root);
+    let plan = plan(&root);
+    let checked = root.join("checked");
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    // The daemon acknowledges the command only after it checked whether it
+    // has the terminal, so the check runs before any handoff that waits for
+    // registration.
+    let registration = async {
+        let event = protocol::read_buffered::<ExecutionEvent>(&mut daemon)
+            .await
+            .unwrap();
+        assert!(matches!(event, ExecutionEvent::Started { .. }), "{event:?}");
+        while !checked.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        protocol::write(daemon.get_mut(), &Control::Started)
+            .await
+            .unwrap();
+    };
+    let wrapper = async {
+        supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &[
+                "perl".into(),
+                "-MPOSIX".into(),
+                "-e".into(),
+                "my $foreground = POSIX::tcgetpgrp(0) == getpgrp(); \
+                 open my $f, '>', shift; close $f; exit($foreground ? 0 : 3)"
+                    .into(),
+                checked.clone().into(),
+            ],
+            &Mode::Command { record: false },
+            None,
+            unsaved(),
+        )
+        .await
+        .unwrap()
+    };
+    let ((), outcome) = tokio::join!(registration, wrapper);
+    assert!(matches!(outcome, Outcome::Exited(0)), "{outcome:?}");
+}
+
+/// A plan for a command in a workspace at `root`.
+fn plan(root: &Path) -> ExecutionPlan {
+    ExecutionPlan {
+        id: uuid::Uuid::new_v4().to_string(),
+        workspace: Workspace::new_record(
+            "repo".into(),
+            "worker".into(),
+            root.to_owned(),
+            Some("worker".into()),
+            crate::state::WorkspaceState::Ready,
+        ),
+        scope_token: "test-scope".into(),
+        setup_cmd: None,
+        copy_ignored: false,
+        ports: vec![],
+        environment: Default::default(),
+        merge: None,
+        unmerge: None,
+    }
 }
 
 /// Nothing restores the supervised command or saves it.

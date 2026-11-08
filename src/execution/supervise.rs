@@ -142,8 +142,8 @@ pub(super) async fn supervise(
     Ok(outcome)
 }
 
-/// Spawn a child, register its process group with the daemon, and hand over
-/// the terminal only after registration is acknowledged.
+/// Spawn a child as the terminal's foreground job and register its process
+/// group with the daemon.
 async fn register_child(
     link: &mut Link,
     paths: &Paths,
@@ -158,16 +158,11 @@ async fn register_child(
     Option<Terminal>,
     process::scoped::Records,
 )> {
-    let (child, group, mut terminal, scope) =
-        spawn_registered_child(paths, plan, command, mode, auth)?;
+    let (child, group, terminal, scope) = spawn_registered_child(paths, plan, command, mode, auth)?;
     let restored = matches!(mode, Mode::Recovery { .. }) || recovery_record.is_some();
     register_process(link, &group, restored).await?;
     consume_recovery_records(mode, recovery_record)?;
     report_detached_launch(plan, mode, &group)?;
-    handoff_terminal(&mut terminal, &group)?;
-    // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
-    // foreground group.
-    group.send(libc::SIGCONT);
     Ok((child, group, terminal, scope))
 }
 
@@ -185,13 +180,14 @@ fn spawn_registered_child(
 )> {
     // Capture before spawning, and restore after child/process-group cleanup,
     // including failures before the terminal handoff.
-    let terminal = Terminal::capture(true)?;
+    let mut terminal = Terminal::capture(true)?;
     // Descendants that clear their scope token find the wrapper's record from
     // their first instruction, and the child's once the wrapper is gone.
     let mut scope = process::scoped::Records::wrapper(&paths.state)?;
-    let child = spawn(paths, plan, command, mode, auth)?;
+    let child = spawn(paths, plan, command, mode, auth, terminal.as_ref())?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
     scope.command(group.pid())?;
+    handoff_terminal(&mut terminal, &group)?;
     Ok((child, group, terminal, scope))
 }
 
@@ -223,10 +219,14 @@ fn report_detached_launch(plan: &ExecutionPlan, mode: &Mode, group: &ProcessGrou
     Ok(())
 }
 
+/// Give the terminal to the child's group, which took it as it started
+/// unless its standard input is another file, and continue a child stopped
+/// on terminal I/O before then.
 fn handoff_terminal(terminal: &mut Option<Terminal>, group: &ProcessGroup) -> Result<()> {
     if let Some(terminal) = terminal {
         terminal.give_to(group.0)?;
     }
+    group.send(libc::SIGCONT);
     Ok(())
 }
 

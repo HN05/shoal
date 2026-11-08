@@ -115,6 +115,46 @@ pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
     command
 }
 
+/// Run a test helper as [`isolated_test`] does, as the leader of a new
+/// session whose controlling terminal is a new one, so it starts as that
+/// terminal's foreground job.
+pub async fn in_new_terminal(root: &Path, name: &str) -> std::process::Output {
+    use std::os::fd::FromRawFd;
+
+    let (mut master, mut slave) = (-1, -1);
+    // SAFETY: openpty initializes both descriptors; File owns them below.
+    let opened = unsafe {
+        libc::openpty(
+            &mut master,
+            &mut slave,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(opened, 0);
+    // SAFETY: openpty returned the descriptors, which nothing else owns.
+    let (master, slave) = unsafe { (fs::File::from_raw_fd(master), fs::File::from_raw_fd(slave)) };
+    let mut helper = isolated_test(root, name);
+    helper.stdin(slave);
+    // SAFETY: setsid and ioctl are async-signal-safe.
+    unsafe {
+        helper.pre_exec(|| {
+            if libc::setsid() == -1 || libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), helper.output())
+        .await
+        .expect("the test helper in a new terminal stalled")
+        .unwrap();
+    // The terminal stays until the helper is done with it.
+    drop(master);
+    output
+}
+
 /// Install `script` at `path` as a new executable file, renamed over any
 /// earlier one. A child process writes it: a test that forks while this
 /// binary holds the file open for writing leaves the descriptor in its child

@@ -46,6 +46,23 @@ impl Terminal {
         }))
     }
 
+    /// Have `command`, spawned in a process group of its own, take this
+    /// terminal for its group before it runs, as a shell's child does. A
+    /// command that reads or configures the terminal from the background
+    /// stops on SIGTTIN or SIGTTOU, and that stop can follow the SIGCONT
+    /// sent after [`Terminal::give_to`], leaving it stopped in the
+    /// foreground. A child whose standard input is another file keeps
+    /// waiting for `give_to`.
+    pub(crate) fn hand_over_at_start(&self, command: &mut Command) {
+        // SAFETY: the hook makes only async-signal-safe calls.
+        unsafe {
+            command.pre_exec(|| {
+                take_foreground();
+                Ok(())
+            });
+        }
+    }
+
     pub(crate) fn give_to(&mut self, group: i32) -> Result<()> {
         // Ignore SIGTTOU only after spawning, so the child keeps normal job
         // control while the wrapper can reclaim the terminal from background.
@@ -56,6 +73,23 @@ impl Terminal {
             "cannot hand terminal to command"
         );
         Ok(())
+    }
+}
+
+/// In a new child before exec: make its process group the foreground of the
+/// terminal on its standard input. With SIGTTOU blocked, a background group
+/// may do so without being stopped.
+fn take_foreground() {
+    // SAFETY: sigset and mask calls touch only this thread's local set and
+    // mask; tcsetpgrp names this process's own group.
+    unsafe {
+        let mut blocked = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        let mut previous = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        libc::sigemptyset(blocked.as_mut_ptr());
+        libc::sigaddset(blocked.as_mut_ptr(), libc::SIGTTOU);
+        libc::sigprocmask(libc::SIG_BLOCK, blocked.as_ptr(), previous.as_mut_ptr());
+        libc::tcsetpgrp(libc::STDIN_FILENO, libc::getpgrp());
+        libc::sigprocmask(libc::SIG_SETMASK, previous.as_ptr(), std::ptr::null_mut());
     }
 }
 
@@ -119,6 +153,9 @@ pub(super) fn clear_terminal() {
 /// modes, whatever the command left.
 pub(crate) async fn run_in_terminal(mut command: Command) -> Result<ExitStatus> {
     let mut terminal = Terminal::capture(false)?;
+    if let Some(terminal) = &terminal {
+        terminal.hand_over_at_start(&mut command);
+    }
     let mut child = command.process_group(0).spawn()?;
     let group = child.id().context("command process ID unavailable")? as i32;
     if let Some(terminal) = &mut terminal {
@@ -158,3 +195,6 @@ fn reset_input_modes_on(output: &mut std::fs::File) {
         .as_bytes(),
     );
 }
+
+#[cfg(test)]
+mod tests;

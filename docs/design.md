@@ -129,10 +129,11 @@ it, and setup and merges fail with their daemon as before.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups. It retains buffered daemon controls across start, stop,
-and recovery transitions so adjacent frames cannot be lost. It hands the
-terminal to the command's group once the daemon registered it, and starts the
-command with the default stops for background terminal use, whatever the
-wrapper inherited, so a command that reads its terminal earlier waits for it
+and recovery transitions so adjacent frames cannot be lost. A command takes the
+terminal as its foreground job before it runs, without waiting for its
+registration, so its first read or terminal setting never stops it. The wrapper
+starts it with the default stops for background terminal use, whatever the
+wrapper inherited, so a command that uses the terminal before it has it waits
 instead of failing. After commands it
 restores the caller's foreground group and OS terminal settings. When `TERM` is nonempty and not `dumb`,
 it also resets emulator input modes for the shell, writing best-effort cleanup directly

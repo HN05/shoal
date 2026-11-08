@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf, process::Stdio};
 use anyhow::{Context, Result};
 use tokio::process::{Child, Command};
 
-use super::Mode;
+use super::{Mode, terminal::Terminal};
 use crate::{config::value::Value, env, model::ExecutionPlan, paths::Paths};
 
 /// What an agent's or publishing child receives beyond the workspace
@@ -224,12 +224,15 @@ impl AgentLaunch {
     }
 }
 
+/// Spawn `command` in a process group of its own, which takes `terminal`
+/// as it starts.
 pub(super) fn spawn(
     paths: &Paths,
     plan: &ExecutionPlan,
     command: &[OsString],
     mode: &Mode,
     auth: Option<&AgentLaunch>,
+    terminal: Option<&Terminal>,
 ) -> Result<Child> {
     let command = match auth {
         Some(auth) => auth.route(command, &plan.environment, &plan.workspace.path)?,
@@ -271,6 +274,9 @@ pub(super) fn spawn(
         _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
     };
     restore_terminal_stops(&mut process);
+    if let Some(terminal) = terminal {
+        terminal.hand_over_at_start(&mut process);
+    }
     process
         .stdin(stdin)
         .stdout(stdout)
@@ -283,10 +289,10 @@ pub(super) fn spawn(
 
 /// Let the command stop when it uses the terminal from the background, as a
 /// shell's job does, even where this wrapper started with those stops
-/// ignored, as in a pane tmux's `respawn-pane` started. The command runs in
-/// a process group of its own, which gets the terminal only once the daemon
-/// has registered it: a read before then waits for the handover instead of
-/// failing with EIO.
+/// ignored, as in a pane tmux's `respawn-pane` started. A command whose
+/// standard input is another file gets the terminal from the wrapper only
+/// after it starts: its use of the terminal before then waits for the
+/// handover instead of failing with EIO.
 fn restore_terminal_stops(process: &mut Command) {
     // SAFETY: sigaction is async-signal-safe, and the closure runs in the
     // forked child before exec without allocating.

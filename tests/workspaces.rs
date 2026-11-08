@@ -4799,18 +4799,9 @@ fn execution_restores_terminal_settings_after_exit_and_stop() {
     install_test_script(
         &agent,
         r#"#!/usr/bin/env python3
-import errno, os, pathlib, signal, sys, termios, time, tty
+import os, pathlib, signal, sys, time, tty
 mode = sys.argv[1] if len(sys.argv) > 1 else 'success'
-# Before the wrapper hands over the terminal, tcsetattr stops the agent with
-# SIGTTOU; the wrapper's SIGCONT then interrupts it, and Python 3.9 does not
-# retry it.
-while True:
-    try:
-        tty.setraw(0)
-        break
-    except termios.error as error:
-        if error.args[0] != errno.EINTR:
-            raise
+tty.setraw(0)
 # Emulator modes are independent of termios. Write to the terminal even when
 # the command's output streams are pipes (as in the driver below).
 with open('/dev/tty', 'wb', buffering=0) as terminal:

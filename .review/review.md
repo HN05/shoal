@@ -551,8 +551,10 @@ configured command for another agent, plus proven child
   cancellation, and drain output while sending input. Internal CLI workers use
   one typed builder with explicit state directory and output mode.
   The execution wrapper retains buffered daemon controls across execution transitions.
-  Terminal I/O stays in the execution wrapper, which restores the caller's foreground
-  group and OS terminal settings after commands and interactive hooks. When `TERM` is
+  Terminal I/O stays in the execution wrapper, whose commands take the terminal as
+  their foreground job before they run, not after registration, and which restores
+  the caller's foreground group and OS terminal settings after commands and
+  interactive hooks. When `TERM` is
   nonempty and not `dumb`, it also resets emulator input modes for the shell, writing
   best-effort cleanup to the terminal rather than redirected output; stop requests
   give the entire command process group a shared grace period, even after its leader exits.
