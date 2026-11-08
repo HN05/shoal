@@ -86,6 +86,7 @@ impl Manager {
             repo,
             manifest,
             removal: None,
+            kept_sessions: Vec::new(),
             continues: None,
         })
     }
@@ -139,6 +140,7 @@ impl Manager {
             manifest,
             removal: None,
             settings: None,
+            kept_sessions: Vec::new(),
             continues: None,
         })
     }

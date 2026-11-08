@@ -16,7 +16,7 @@ use super::Manager;
 use crate::{
     fsutil::{create_marked_dir, is_marked_dir},
     model::{RemovedWorkspace, Repository},
-    transfer::{CarriedSessionFile, SessionFile},
+    transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
 
 impl Manager {
@@ -88,6 +88,27 @@ impl Manager {
             .await
             .context("delete expired session files")?
     }
+}
+
+/// The kept session files of `removed`, a workspace of `repo`, as sources
+/// of its export.
+pub(crate) fn kept_session_sources(
+    repo: &Repository,
+    removed: &RemovedWorkspace,
+) -> Vec<SessionSource> {
+    let Some(layout) = Layout::of(repo) else {
+        return Vec::new();
+    };
+    layout
+        .kept(&removed.workspace_id, &removed.session_files)
+        .into_iter()
+        .map(|kept| SessionSource {
+            agent: kept.file.agent,
+            session: kept.file.session,
+            path: kept.file.path,
+            source: kept.contents,
+        })
+        .collect()
 }
 
 /// Delete every kept session file of `repo` with their directory, when the

@@ -563,7 +563,8 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
     Ok(Some(commit.trim().to_owned()))
 }
 
-/// The record for another machine, where its agents' sessions do not exist.
+/// The record for another machine, where its agents' sessions do not exist
+/// and the package carries the session files it kept.
 fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
     RemovedWorkspace {
         agents: removed.agents.into_iter().map(moved_agent).collect(),
@@ -572,6 +573,7 @@ fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
             .into_iter()
             .map(LastSession::moved)
             .collect(),
+        session_files: Vec::new(),
         ..removed
     }
 }

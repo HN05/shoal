@@ -67,6 +67,7 @@ pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, S
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
 pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
 pub(crate) use holds::place_approved as place_approved_hold;
+pub(crate) use imported_sessions::kept_session_sources;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;

@@ -308,6 +308,34 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     let kept = sessions.join(&removed[0].workspace_id);
     assert_eq!(fs::read_to_string(kept.join("0")).unwrap(), "{}\n");
 
+    // Exported again, the record takes them along.
+    let directory = tempfile::tempdir().unwrap();
+    let again = directory.path().join("again.shoal");
+    importing
+        .export_space(
+            &SpaceSelector::id(&removed[0].workspace_id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            again.clone(),
+        )
+        .await
+        .unwrap();
+    let reread = Import::read(&mut &fs::read(again).unwrap()[..]).unwrap();
+    assert_eq!(
+        reread.manifest.session_files,
+        std::slice::from_ref(&session_file)
+    );
+    assert!(
+        packaged_workspace(&reread.manifest)
+            .workspace
+            .session_files
+            .is_empty()
+    );
+    assert_eq!(
+        fs::read_to_string(reread.sessions[0].contents.path()).unwrap(),
+        "{}\n"
+    );
+
     // The restore that opens it gives them to the workspace, for its caller
     // to put in place; the sweep leaves them while the workspace exists.
     git(&target_repo.path, &["branch", "-q", "-D", "topic"]);

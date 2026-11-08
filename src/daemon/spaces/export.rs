@@ -8,7 +8,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     client::transcripts::Environments,
     config::Effective,
-    daemon::workspace::Manager,
+    daemon::workspace::{Manager, kept_session_sources},
     model::{Chat, PresentSpace, Repository, SpaceKind, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
@@ -19,13 +19,15 @@ mod copy;
 /// A space prepared for its package, ended here or copied: its repository,
 /// the package without its session files, the removal that ended a
 /// workspace, the settings describing its agents when they are not the
-/// repository's, and how the user continues the space here when writing the
-/// package fails, unless a removal record or the space itself keeps it.
+/// repository's, the session files an import kept for it, and how the user
+/// continues the space here when writing the package fails, unless a
+/// removal record or the space itself keeps it.
 struct Prepared {
     repo: Repository,
     manifest: Manifest,
     removal: Option<RemovalResult>,
     settings: Option<Result<Effective>>,
+    kept_sessions: Vec<SessionSource>,
     continues: Option<String>,
 }
 
@@ -91,7 +93,13 @@ impl Manager {
             None => self.repository_settings(&prepared.repo.id).await,
         };
         let written = self
-            .write_package(&prepared.repo, prepared.manifest, settings, file)
+            .write_package(
+                &prepared.repo,
+                prepared.manifest,
+                settings,
+                prepared.kept_sessions,
+                file,
+            )
             .await;
         let (manifest, warnings) = match (written, prepared.continues) {
             (Ok(written), _) => written,
@@ -106,16 +114,20 @@ impl Manager {
     }
 
     /// Write `manifest`'s package, a space of `repo` whose agents `settings`
-    /// describes, with their session files to the new file `file`, and the
-    /// warnings for what it left out.
+    /// describes, with their session files to the new file `file`, those
+    /// of a session in `kept` from there, and the warnings for what it left
+    /// out.
     async fn write_package(
         &self,
         repo: &Repository,
         manifest: Manifest,
         settings: Result<Effective>,
+        kept: Vec<SessionSource>,
         file: std::path::PathBuf,
     ) -> Result<(Manifest, Vec<String>)> {
-        let (sessions, mut warnings) = self.session_sources(repo, settings, &manifest).await;
+        let (mut sessions, mut warnings) = self.session_sources(repo, settings, &manifest).await;
+        sessions.retain(|found| !kept.iter().any(|kept| kept.session == found.session));
+        sessions.extend(kept);
         let (manifest, left_out) = crate::transfer::export(repo, manifest, sessions, file).await?;
         warnings.extend(left_out);
         Ok((manifest, warnings))
@@ -169,6 +181,7 @@ impl Manager {
         );
         let repo = self.repository(&removed.repository_id).await?;
         Ok(Prepared {
+            kept_sessions: kept_session_sources(&repo, &removed),
             manifest: Manifest::of(&repo, Source::Workspace(removed)).await?,
             repo,
             removal: removal.map(|(_, removal)| removal),
@@ -244,6 +257,7 @@ impl Manager {
             manifest,
             removal: None,
             settings: None,
+            kept_sessions: Vec::new(),
             continues: Some(continues),
         })
     }
