@@ -196,3 +196,45 @@ async fn a_worktree_file_the_format_rejects_is_ignored_and_reported_once_per_err
     manager.workspace_settings(&workspace).await.unwrap();
     assert_eq!(ignored_configs(&manager).await.len(), 1);
 }
+
+#[tokio::test]
+async fn a_lease_is_kept_while_the_file_that_may_name_its_hooks_is_rejected() {
+    use crate::{daemon::resources::ResourceRequest, hooks::HookKind};
+    let (root, manager) = test_support::manager().await;
+    test_support::configure(&manager, "[resources.lock]\n").await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "old".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let request = ResourceRequest {
+        mode: None,
+        kind: None,
+        pool: "lock".into(),
+        name: "held".into(),
+        resource: None,
+        reason: None,
+        queue: false,
+    };
+    manager
+        .acquire_resource(&selector, request, None)
+        .await
+        .unwrap();
+    std::fs::write(workspace.path.join(".shoal.toml"), "setup_cmd = \"x\"\n").unwrap();
+
+    // Other hooks go with the ignored file.
+    let pre_remove = manager.workspace_hook(&workspace, HookKind::PreRemove);
+    assert_eq!(pre_remove.await.unwrap(), None);
+    let release = manager.release_resource(&selector, "lock".into(), "held".into());
+    let error = format!("{:#}", release.await.unwrap_err());
+    assert!(error.contains("pre_resource_release"), "{error}");
+    assert_eq!(
+        manager.list_resources(Some(&selector)).await.unwrap().len(),
+        1
+    );
+}

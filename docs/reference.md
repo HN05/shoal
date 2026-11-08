@@ -2871,7 +2871,9 @@ every field of `web`. A worktree file that the current format rejects, such as
 one a branch kept from before a format change, is ignored: the workspace
 resolves its options from the other layers, `shoal config show` warns about
 it, and the daemon logs the error and notifies you once per error while it
-runs, until the file is fixed. `move root` moves the
+runs, until the file is fixed. Its resource leases are the exception: since the
+file may name their hooks, acquiring or releasing one, and removing a
+workspace that holds one, fails until it is fixed. `move root` moves the
 file with the repository's directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
 while the file does not exist. Scoped workspace commands cannot administer it.
 

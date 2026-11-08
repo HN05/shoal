@@ -83,7 +83,9 @@ impl Manager {
         workspace: &Workspace,
         kind: HookKind,
     ) -> Result<Option<std::path::PathBuf>> {
-        let settings = self.workspace_settings(workspace).await?;
+        let layers = self.workspace_layers(workspace).await?;
+        ensure_lease_hook_readable(kind, layers.rejected_worktree_file.as_deref())?;
+        let settings = self.config().resolve(&layers)?;
         let Some(command) = kind.command(&settings) else {
             return Ok(None);
         };
@@ -368,6 +370,21 @@ impl Manager {
             tmp_dir.as_deref(),
         ))
     }
+}
+
+/// Refuse a lease hook while the worktree file, which may name it, is
+/// `rejected`: a lease is kept until its release hook ran, so leases neither
+/// come nor go without the file. Other hooks go with the ignored file.
+fn ensure_lease_hook_readable(kind: HookKind, rejected: Option<&str>) -> Result<()> {
+    if let (HookKind::PostResourceAcquire | HookKind::PreResourceRelease, Some(rejected)) =
+        (kind, rejected)
+    {
+        anyhow::bail!(
+            "the worktree's config file may name the {} hook, and the current format rejects it; fix the file first: {rejected}",
+            kind.key()
+        );
+    }
+    Ok(())
 }
 
 /// The config file and template files of the checkout or worktree at `path`.

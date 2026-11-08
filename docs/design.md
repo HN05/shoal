@@ -2300,7 +2300,9 @@ since a branch from before a format change keeps its old file and must not stop
 cleanup or anything else the other layers settle. The layers name the
 rejection, which `config show` warns about, and the daemon tells the log and the
 user once per error while it runs. A file that cannot be read still fails the
-request.
+request. Lease hooks are the exception, since a lease is kept until its release
+hook ran: they fail to resolve while the file is rejected, and removal resolves
+the release hook only for leases it releases.
 One declaration of each option, the field of the repository schema with its
 kind, generates its built-in default, merge, resolved form and provenance, so a
 reported layer is the one whose value is in use; the daemon resolves a workspace's settings

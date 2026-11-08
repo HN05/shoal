@@ -1395,15 +1395,17 @@ impl Manager {
             )
             .await?;
         }
-        let release_hook = self
-            .workspace_hook(workspace, HookKind::PreResourceRelease)
-            .await?;
-        for lease in self
-            .list_resources(Some(&SpaceSelector::id(&workspace.id)))
-            .await?
-        {
-            self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
+        let leases = (self.list_resources(Some(&SpaceSelector::id(&workspace.id)))).await?;
+        // Resolved only for leases to release, since it fails while the
+        // worktree's config file is rejected.
+        if !leases.is_empty() {
+            let release_hook = self
+                .workspace_hook(workspace, HookKind::PreResourceRelease)
                 .await?;
+            for lease in leases {
+                self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
+                    .await?;
+            }
         }
         // Processes can write files as they stop, which the final inspection
         // and the checkpoint must include.
