@@ -51,15 +51,19 @@ impl Existing {
 /// Put the session files an import carried where the agents of `home` look
 /// for them, as [`place`] does with the files there as `existing` says. A
 /// development build leaves them to the installed Shoal. Failures only
-/// warn; that agent's resume then fails to find its session.
+/// warn; that agent's resume then fails to find its session. Returns
+/// whether every file is in place.
 pub(in crate::cli) async fn install_session_files(
     ctx: &Context,
     home: SessionHome<'_>,
     files: &[CarriedSessionFile],
     existing: Existing,
-) {
-    if files.is_empty() || !crate::build::changes_user_files() {
-        return;
+) -> bool {
+    if files.is_empty() {
+        return true;
+    }
+    if !crate::build::changes_user_files() {
+        return false;
     }
     let (target, workspace) = match home {
         SessionHome::Workspace(workspace) => (
@@ -71,10 +75,10 @@ pub(in crate::cli) async fn install_session_files(
     let settings = match crate::client::workspaces::settings(&ctx.paths, target).await {
         Ok(settings) => settings,
         // The import's own error says why it found no repository.
-        Err(_) if workspace.is_none() => return,
+        Err(_) if workspace.is_none() => return false,
         Err(error) => {
             eprintln!("warning: cannot place the agents' session files: {error:#}");
-            return;
+            return false;
         }
     };
     let workspace_environment = match workspace {
@@ -82,6 +86,7 @@ pub(in crate::cli) async fn install_session_files(
         None => BTreeMap::new(),
     };
     let mut directories = BTreeMap::new();
+    let mut placed_all = true;
     for imported in files {
         let agent = &imported.file.agent;
         let directory = directories.entry(agent.clone()).or_insert_with(|| {
@@ -93,6 +98,7 @@ pub(in crate::cli) async fn install_session_files(
             Err(error) => Err(anyhow::anyhow!("{error:#}")),
         };
         if let Err(error) = placed {
+            placed_all = false;
             eprintln!(
                 "warning: cannot place {} of {agent} session {}: {error:#}",
                 imported.file.path.display(),
@@ -100,11 +106,12 @@ pub(in crate::cli) async fn install_session_files(
             );
         }
     }
+    placed_all
 }
 
 /// Put `files`, which the daemon kept with the removal record `restored`,
 /// where the agents of the workspace `workspace` that restores it look for
-/// them, then have the daemon delete them, since nothing reads them again.
+/// them, then have the daemon delete them once they all are.
 pub(in crate::cli) async fn install_kept_session_files(
     ctx: &Context,
     workspace: &Workspace,
@@ -115,8 +122,10 @@ pub(in crate::cli) async fn install_kept_session_files(
         return;
     }
     let existing = Existing::of_copy(restored.is_copy());
-    install_session_files(ctx, SessionHome::Workspace(workspace), files, existing).await;
     // Left behind, they go with the workspace's removal record.
+    if !install_session_files(ctx, SessionHome::Workspace(workspace), files, existing).await {
+        return;
+    }
     let selector = SpaceSelector::id(&workspace.id);
     if let Err(error) = crate::client::removal::drop_restored_sessions(&ctx.paths, selector).await {
         eprintln!("warning: cannot delete the kept session files: {error:#}");

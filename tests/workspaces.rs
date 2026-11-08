@@ -6829,6 +6829,54 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     assert!(left.is_empty(), "{left:?}");
 }
 
+#[test]
+fn a_restore_that_places_no_session_files_keeps_them() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("unplaced");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "printf '{{\"session_id\":\"unplaced-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            support::shoal_binary()
+        ),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["claude", "unplaced"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let project = fixture.root.path().join(".claude/projects/-elsewhere");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("unplaced-session.jsonl"), "{}\n").unwrap();
+    let file = fixture.root.path().join("unplaced.shoal");
+    let file = file.to_str().unwrap();
+    fixture.ok(&["move", "export", "unplaced", "-o", file]);
+    fs::remove_dir_all(&project).unwrap();
+    import_without_opening(&fixture, file, "unplaced");
+
+    // A development build leaves the agents' files to the installed Shoal,
+    // so the daemon keeps its copy.
+    let restored = fixture
+        .command()
+        .env_remove("SHOAL_DEV_USER_FILES")
+        .args(["--json", "work", "restore", "unplaced"])
+        .output()
+        .unwrap();
+    assert!(restored.status.success(), "{restored:?}");
+    assert!(!project.join("unplaced-session.jsonl").exists());
+    let kept = path.parent().unwrap().join(".sessions");
+    let left: Vec<_> = fs::read_dir(&kept)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|entry| entry.is_dir())
+        .collect();
+    assert_eq!(left.len(), 1, "{left:?}");
+}
+
 /// Import the export `file` while a branch named `branch`, the workspace's,
 /// has another history, so the import records the workspace without opening
 /// it, then delete that branch. A development build leaves agents' files to
