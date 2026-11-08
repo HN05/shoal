@@ -178,7 +178,12 @@ instead of the PR delivery guidance below.
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
   fixed prompt with which `shoal resume` continues that turn; the daemon never
   writes to a terminal. Workspace events are an unscoped, durable lifecycle
-  stream with replay gaps, independent of notification read state. Ready-for-review
+  stream with replay gaps, independent of notification read state, recorded
+  for chats through the same path as workspaces and kept per space: while it
+  exists and for the restore retention after its removal, with only turn
+  states and non-closing forge activity capped per space. A space's log is a
+  filtered view of them, readable by a scoped caller for its own space and
+  those below it. Ready-for-review
   marks bind to HEAD, cover only linked items or the unlinked workspace, record
   journal events, and never notify, complete, or change cleanup; `hooks.post_ready`
   failure keeps them. Only explicit

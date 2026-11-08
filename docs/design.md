@@ -1714,9 +1714,22 @@ the first message once the session is alive, keeping a copy on disk when that
 fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
-Workspace lifecycle events persist in a separate SQLite journal alongside
-lifecycle transitions and cleanup outcomes, survive ownership removal, and retain
-the newest 1,000 records with increasing IDs. Unscoped integrations replay or
+Workspace and chat lifecycle events persist in a separate SQLite journal alongside
+lifecycle transitions and cleanup outcomes, survive ownership removal, and keep
+increasing IDs. A chat's events go through the same recording path as a
+workspace's. Retention is per space, so one busy space cannot push out
+another's history: a space keeps its events while it exists and for
+`cleanup.restore.retention_days` after its removal, as its checkpoints and
+attached files, and a restored workspace takes the removed one's; only its
+high-volume events, its agent's turn states and forge activity other than an
+item's closing, merging and reopening, keep a cap of the newest 500 per space.
+A space's log (`shoal work log`, `client::work::log`) is a filtered view of
+this journal, not a second store: renames, restores, agent starts, stops and
+exits, questions, approvals, alerts, and the spaces created and removed below
+a space (in that parent's log) are journal events for it, each recorded where
+the change is made. A scoped caller reads the logs of its own space and the
+spaces below it; a removed space's place in the tree is the one its parent's
+log recorded at its removal. Unscoped integrations replay or
 follow them without consuming notifications; expired cursors report a gap for
 resync. External branch changes are observed during daemon sweeps without
 changing recorded ownership. Issue and PR association changes append `linked` or
@@ -2045,8 +2058,8 @@ A failed forge change fails the command with the marks kept, so the agent can
 retry it.
 A chat marks the same way, except that its checkout is not on a PR's branch:
 it marks each linked open PR at the head the forge reports, and its issue or itself
-at its checkout's HEAD. Its marks are not journal events, since the journal
-records workspaces, and they show it `ready` in lists and the inbox.
+at its checkout's HEAD. Its marks are journal events as a workspace's are,
+and they show it `ready` in lists and the inbox.
 
 Agent state is the turn state a space's agent reports from its hooks:
 `working`, `waiting` for the user mid-turn, or `idle` before its first turn
