@@ -1,4 +1,5 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
+use crate::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -53,7 +54,7 @@ pub enum Attacher {
         /// The chat's agent, named as `--agent` names it.
         agent: String,
         /// The chat's ID.
-        chat: String,
+        chat: SpaceId,
     },
 }
 
@@ -207,7 +208,7 @@ pub async fn add(
     daemon: &impl Daemon,
     space: SpaceSelector,
     files: Vec<NewFile>,
-    sender_chat: Option<String>,
+    sender_chat: Option<SpaceId>,
 ) -> Result<Vec<AttachedFile>> {
     let method = FileMethod::AddFiles {
         space,

@@ -2,6 +2,7 @@
 //! sessions after `shoal stop`, and forgetting them, which the daemon does so
 //! it can confine coordinating agents to the workspaces below theirs.
 pub use crate::client::executions::Discarded;
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 
 use super::Manager;
@@ -12,7 +13,7 @@ use crate::execution::recovery::{self, Saved};
 /// may resume the agents among them.
 pub(super) struct Stopper<'a> {
     /// The ID of the process's workspace.
-    pub(super) workspace: &'a str,
+    pub(super) workspace: &'a SpaceId,
     /// The executions the stop ended.
     pub(super) executions: Vec<String>,
 }
@@ -21,7 +22,7 @@ impl Manager {
     /// The executions of workspace `id` that nothing stopped yet. An agent
     /// that already saved its recovery record was stopped before, such as
     /// one whose wrapper waits to restore it after a protection stop.
-    pub(super) async fn unstopped_executions(&self, id: &str) -> Result<Vec<String>> {
+    pub(super) async fn unstopped_executions(&self, id: &SpaceId) -> Result<Vec<String>> {
         let executions = self.workspace_executions(id).await?;
         let stopped_before =
             |execution: &str| recovery::record_path(&self.paths, id, execution).exists();
@@ -36,7 +37,7 @@ impl Manager {
     /// to restore, stopped work or a last session, which `shoal resume`
     /// restores. A state directory that cannot be read counts as none, so
     /// it costs only its own workspace.
-    pub(crate) fn has_saved_agent(&self, id: &str) -> bool {
+    pub(crate) fn has_saved_agent(&self, id: &SpaceId) -> bool {
         recovery::saves_agent(&self.paths, id).unwrap_or_else(|error| {
             crate::daemon::log!("saved agents of workspace {id} unreadable: {error:#}");
             false

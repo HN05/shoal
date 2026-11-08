@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn unmerge(
     match operations::run(
         ctx,
         OperationSpec::Unmerge {
-            workspace: SpaceSelector::parse(&workspace),
+            workspace: workspace.clone(),
         },
     )
     .await
@@ -68,7 +68,7 @@ fn show_unmerged(ctx: &Context, unmerged: &Unmerged) -> Result<()> {
 /// execution whose worker writes what it undid to a file.
 pub(in crate::cli::commands) async fn unmerge_branch(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     reporter: &Reporter<'_>,
 ) -> Result<Unmerged> {
     reporter.step(Step::UnmergeStarted).await?;
@@ -77,7 +77,7 @@ pub(in crate::cli::commands) async fn unmerge_branch(
 
 /// Undo `workspace`'s merge as a tracked execution, reading what its worker
 /// undid, or why it could not, from the file the worker writes.
-async fn run_unmerge(paths: &Paths, workspace: String) -> Result<Unmerged> {
+async fn run_unmerge(paths: &Paths, workspace: SpaceSelector) -> Result<Unmerged> {
     let result = tempfile::NamedTempFile::new().context("create the unmerge result file")?;
     let code = execution::unmerge(paths, workspace, result.path().to_owned()).await?;
     let written = std::fs::read(result.path()).context("read the unmerge result")?;

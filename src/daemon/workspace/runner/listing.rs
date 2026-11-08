@@ -1,6 +1,7 @@
 //! What lists and status show of the jobs the runner claimed: each job's
 //! workspace names its job, and the workspace its run's PR or branch links
 //! lists the jobs that run for it.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::{
@@ -22,18 +23,18 @@ impl Manager {
     }
 
     /// The job the runner runs in the workspace `id`, if any.
-    pub(crate) async fn workspace_job(&self, id: &str) -> Result<Option<Box<QueuedJob>>> {
+    pub(crate) async fn workspace_job(&self, id: &SpaceId) -> Result<Option<Box<QueuedJob>>> {
         Ok(self
             .claimed_jobs()
             .await?
             .into_iter()
-            .find(|job| job.workspace_id == id)
+            .find(|job| job.workspace_id == *id)
             .map(|job| Box::new(job.job)))
     }
 
     /// The workspaces of the jobs running for the PR or branch the
     /// workspace `id` links, with their job and what they use.
-    pub(crate) async fn linked_job_workspaces(&self, id: &str) -> Result<Vec<Workspace>> {
+    pub(crate) async fn linked_job_workspaces(&self, id: &SpaceId) -> Result<Vec<Workspace>> {
         let mut workspaces = Vec::new();
         for job in self.claimed_jobs().await? {
             if job.job.workspace_id.as_deref() != Some(id) {

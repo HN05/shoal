@@ -1,4 +1,5 @@
 //! Recording a space's work as done, and withdrawing that.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::client::assignments;
@@ -17,9 +18,7 @@ use crate::{
 async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&space))
-            .await?
-        {
+        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
             Some(PresentSpace::Chat(chat)) => Selected::Chat(chat.id),
             _ => Selected::Workspace(space),
         },
@@ -27,8 +26,8 @@ async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selecte
 }
 
 enum Selected {
-    Chat(String),
-    Workspace(String),
+    Chat(SpaceId),
+    Workspace(SpaceSelector),
 }
 
 pub(in crate::cli::commands) async fn undone(
@@ -36,7 +35,7 @@ pub(in crate::cli::commands) async fn undone(
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let withdrawn = assignments::undo_done(&ctx.paths, SpaceSelector::parse(&space)).await?;
+    let withdrawn = assignments::undo_done(&ctx.paths, space.clone()).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
         Withdrawn { withdrawn },
@@ -59,7 +58,7 @@ pub(in crate::cli::commands) async fn done(
                 !done.integrated && !keep_demos,
                 "a chat has no branch or demos; --integrated and --keep-demos apply to workspaces"
             );
-            chat.clone()
+            SpaceSelector::id(chat)
         }
         Selected::Workspace(workspace) => {
             // Before completion, whose cleanup may remove the workspace at once.
@@ -69,13 +68,7 @@ pub(in crate::cli::commands) async fn done(
             workspace.clone()
         }
     };
-    let completion = assignments::mark_done(
-        &ctx.paths,
-        SpaceSelector::parse(&space),
-        done,
-        crate::env::chat(),
-    )
-    .await?;
+    let completion = assignments::mark_done(&ctx.paths, space, done, crate::env::chat()).await?;
     let message = match selected {
         Selected::Chat(_) if completion.cleanup => {
             "Chat marked done; cleanup requested. Its agent may stop and the chat may be removed."
@@ -88,8 +81,8 @@ pub(in crate::cli::commands) async fn done(
     Ok(0)
 }
 
-async fn stop_demos(ctx: &Context, workspace: &str) -> Result<()> {
-    crate::client::demos::stop(&ctx.paths, SpaceSelector::parse(workspace), None).await
+async fn stop_demos(ctx: &Context, workspace: &SpaceSelector) -> Result<()> {
+    crate::client::demos::stop(&ctx.paths, workspace.clone(), None).await
 }
 
 fn done_message(completion: &Completion) -> String {

@@ -3,6 +3,7 @@
 //! workspaces, in a directory its agents are given as a working directory,
 //! and the store records each copy with how it came, so `shoal files` lists
 //! them.
+use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -39,7 +40,7 @@ mod tests;
 /// kept.
 #[derive(Debug, Clone)]
 pub(crate) struct Space {
-    pub(crate) id: String,
+    pub(crate) id: SpaceId,
     pub(crate) name: String,
     /// The repository whose directory keeps its files; none for a chat
     /// without a repository, whose files `root_dir` keeps.
@@ -48,7 +49,7 @@ pub(crate) struct Space {
     /// one it started in; none for a space of a repository.
     pub(crate) root_dir: Option<PathBuf>,
     /// The space's parent when it attached the files.
-    pub(crate) parent_id: Option<String>,
+    pub(crate) parent_id: Option<SpaceId>,
 }
 
 /// Which home keeps attached files: a repository's directory, or a
@@ -149,7 +150,7 @@ const ADDED: &str = "shoal files add";
 /// repository's attached files.
 pub(crate) async fn keep(
     layout: Layout,
-    space_id: &str,
+    space_id: &SpaceId,
     message: &str,
     files: Vec<NewFile>,
 ) -> Result<Kept> {
@@ -163,7 +164,7 @@ pub(crate) async fn keep(
 /// repository's attached files.
 async fn copy_for_user(
     layout: Layout,
-    space_id: &str,
+    space_id: &SpaceId,
     message: &str,
     files: Vec<NewFile>,
 ) -> Result<Kept> {
@@ -215,7 +216,7 @@ impl Manager {
     pub(crate) async fn attacher(
         &self,
         caller: Option<&Caller>,
-        sender_chat: Option<&str>,
+        sender_chat: Option<&SpaceId>,
     ) -> Attacher {
         let Some(caller) = caller else {
             return self.chat_attacher(sender_chat).await;
@@ -240,11 +241,11 @@ impl Manager {
     /// The running chat `sender_chat`, by ID or name, as an attacher, else
     /// the user, as for a chat that is stopped or a request from outside any
     /// chat.
-    async fn chat_attacher(&self, sender_chat: Option<&str>) -> Attacher {
+    async fn chat_attacher(&self, sender_chat: Option<&SpaceId>) -> Attacher {
         let Some(chat) = sender_chat else {
             return Attacher::User;
         };
-        match self.chat(&SpaceSelector::parse(chat)).await {
+        match self.chat(&SpaceSelector::id(chat)).await {
             Ok(chat) if chat.restore.is_none() => Attacher::Chat {
                 agent: chat.agent,
                 chat: chat.id,
@@ -458,7 +459,7 @@ impl Manager {
     /// delete the copies made for them when that fails.
     async fn record_or_discard(
         &self,
-        space_id: &str,
+        space_id: &SpaceId,
         source: FileSource,
         attacher: &Attacher,
         kept: Kept,
@@ -474,7 +475,7 @@ impl Manager {
     /// `space_id` from `source` by `attacher`, and return their records.
     async fn record_kept(
         &self,
-        space_id: &str,
+        space_id: &SpaceId,
         source: FileSource,
         attacher: &Attacher,
         kept: &Kept,
@@ -544,7 +545,7 @@ impl Manager {
 
     /// Refuse attaching files to the space `space_id` once the
     /// workspace is being removed or is gone, or the chat was removed.
-    async fn ensure_attachable(&self, space_id: &str) -> Result<()> {
+    async fn ensure_attachable(&self, space_id: &SpaceId) -> Result<()> {
         match self.workspace_by_id(space_id).await {
             Ok(workspace) => ensure!(
                 workspace.state != WorkspaceState::Removing,

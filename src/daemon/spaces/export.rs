@@ -1,6 +1,7 @@
 //! Packages of spaces for `shoal move`: the daemon removes a space here,
 //! stopping a chat's agent first, or copies one that keeps running, and
 //! writes what continues it on another machine.
+use crate::client::space_ids::SpaceId;
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
 
@@ -199,7 +200,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         unsaved: &UnsavedWork,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SpaceId>> {
         let (chats, taken): (Vec<_>, Vec<_>) = (self.spaces_taken_with(&workspace.id).await?)
             .into_iter()
             .partition(|space| space.kind == SpaceKind::Chat);
@@ -210,7 +211,7 @@ impl Manager {
             workspace.name,
             chats.join(", ")
         );
-        let confirmed = |id: &String| unsaved.children().is_none_or(|ids| ids.contains(id));
+        let confirmed = |id: &SpaceId| unsaved.children().is_none_or(|ids| ids.contains(id));
         Ok(taken
             .into_iter()
             .map(|space| space.id)

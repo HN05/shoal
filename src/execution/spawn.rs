@@ -1,5 +1,6 @@
 //! Spawning a tracked command in its workspace, with the environment, agent
 //! Git profile and output streams its mode gives it.
+use crate::client::space_ids::SpaceId;
 use std::{collections::BTreeMap, ffi::OsString, path::PathBuf, process::Stdio};
 
 use anyhow::{Context, Result};
@@ -121,7 +122,7 @@ impl AgentLaunch {
     /// Have the agent's proxy, when one runs, report to the daemon for
     /// `execution` in `workspace`, its turns' ends when the proxy's failure
     /// stream ends them.
-    pub(super) fn report_proxy(&mut self, paths: &Paths, workspace: &str, execution: &str) {
+    pub(super) fn report_proxy(&mut self, paths: &Paths, workspace: &SpaceId, execution: &str) {
         let ends_turns = crate::agents::proxy_ends_turns(self.kind());
         if let Some(proxy) = self.proxy.as_mut() {
             proxy.report_turns(paths, workspace, execution, ends_turns);

@@ -1,4 +1,5 @@
 //! Xcode simulators as Shoal configures, leases and audits them.
+use crate::space_ids::SpaceId;
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
@@ -107,8 +108,8 @@ pub struct Simulator {
     pub udid: Option<String>,
     pub device: String,
     pub runtime: String,
-    pub workspace_id: Option<String>,
-    pub last_workspace_id: Option<String>,
+    pub workspace_id: Option<SpaceId>,
+    pub last_workspace_id: Option<SpaceId>,
     pub lease_name: Option<String>,
     pub reason: Option<String>,
     pub state: SimulatorState,
@@ -205,7 +206,7 @@ pub struct EvictedDevice {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CleanRequest {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub workspace_name: String,
     pub repository_id: String,
     pub execution_id: Option<String>,

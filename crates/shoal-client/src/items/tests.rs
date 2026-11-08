@@ -70,7 +70,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         Duration::from_secs(60),
         super::await_updates(
             &paths,
-            "work",
+            &"work".into(),
             Default::default(),
             Some(deadline(600)),
             false,
@@ -104,7 +104,7 @@ async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
     // The paused clock reaches the deadline only once nothing else can run.
     let updates = super::await_updates(
         &paths,
-        "work",
+        &"work".into(),
         Default::default(),
         Some(deadline(600)),
         false,

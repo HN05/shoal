@@ -6,6 +6,7 @@
 pub(crate) mod starts;
 mod worker;
 
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     sync::{Arc, Mutex, PoisonError},
@@ -42,7 +43,7 @@ pub(crate) struct Operations {
 /// One operation's progress, as its followers read it.
 pub(crate) struct Entry {
     /// The ID of the workspace it works in.
-    pub workspace: String,
+    pub workspace: SpaceId,
     state: Mutex<State>,
     changed: watch::Sender<()>,
 }
@@ -60,7 +61,7 @@ struct State {
 
 impl Operations {
     /// Record a new operation in `workspace`.
-    fn register(&self, workspace: String) -> (String, Arc<Entry>) {
+    fn register(&self, workspace: SpaceId) -> (String, Arc<Entry>) {
         let id = Uuid::new_v4().to_string();
         let entry = Arc::new(Entry {
             workspace,

@@ -1,4 +1,6 @@
 use super::*;
+use crate::space_ids::SpaceId;
+use crate::space_names::SpaceSelector;
 
 #[test]
 fn a_given_name_may_not_be_all_digits() {
@@ -53,10 +55,10 @@ fn digits_select_a_number_and_other_text_an_id_or_name() {
     );
     assert_eq!(parse("3a"), SpaceSelector::IdOrName("3a".into()));
     assert!("".parse::<SpaceSelector>().is_err());
-    assert!(parse("3").selects("id", "name", 3));
-    assert!(!parse("3").selects("3", "name", 4));
-    assert!(parse("name").selects("id", "name", 4));
-    assert!(!SpaceSelector::id("name").selects("id", "name", 4));
+    assert!(parse("3").selects(&SpaceId::from("id"), "name", 3));
+    assert!(!parse("3").selects(&SpaceId::from("3"), "name", 4));
+    assert!(parse("name").selects(&SpaceId::from("id"), "name", 4));
+    assert!(!SpaceSelector::id(&SpaceId::from("name")).selects(&SpaceId::from("id"), "name", 4));
     let json = serde_json::to_string(&parse("3")).unwrap();
     assert_eq!(json, "\"3\"");
     assert_eq!(

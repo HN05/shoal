@@ -3,6 +3,7 @@
 //! repository in `root_dir`'s, named by its ID, which its processes receive
 //! as `TMPDIR`. The directory goes with its workspace or chat, so nothing in
 //! it is ever kept.
+use crate::client::space_ids::SpaceId;
 use std::{
     fs,
     io::ErrorKind,
@@ -55,13 +56,13 @@ impl Layout {
 
     /// The temporary directory of the workspace or chat `id`, without
     /// creating it.
-    pub fn locate(&self, id: &str) -> PathBuf {
+    pub fn locate(&self, id: &SpaceId) -> PathBuf {
         self.root.join(id)
     }
 
     /// The temporary directory of the workspace or chat `id`, created private
     /// to the user when missing.
-    pub fn prepare(&self, id: &str) -> Result<PathBuf> {
+    pub fn prepare(&self, id: &SpaceId) -> Result<PathBuf> {
         create_marked_dir(&self.root, &self.owner)
             .with_context(|| format!("create {}", self.root.display()))?;
         self.ensure_own()?;
@@ -103,7 +104,7 @@ impl Layout {
     /// Shoal created: a directory, not a link, in the directory marked for
     /// this repository. What works in it counts as the space's, so a link
     /// put in its place must not lead elsewhere.
-    pub fn existing(&self, id: &str) -> Option<PathBuf> {
+    pub fn existing(&self, id: &SpaceId) -> Option<PathBuf> {
         let directory = self.locate(id);
         (is_marked_dir(&self.root, &self.owner)
             && fs::symlink_metadata(&directory).is_ok_and(|metadata| metadata.is_dir()))
@@ -130,7 +131,7 @@ impl Layout {
     }
 
     /// Delete the temporary directory of the workspace or chat `id`.
-    pub fn remove_one(&self, id: &str) -> Result<()> {
+    pub fn remove_one(&self, id: &SpaceId) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
@@ -150,13 +151,13 @@ impl Layout {
 
 /// The temporary directory of the repository's workspace or chat `id`,
 /// without creating it; `None` without a repository directory.
-pub fn locate(repo: &Repository, id: &str) -> Option<PathBuf> {
+pub fn locate(repo: &Repository, id: &SpaceId) -> Option<PathBuf> {
     Layout::of(repo).map(|layout| layout.locate(id))
 }
 
 /// The temporary directory of the repository's workspace or chat `id`,
 /// created when missing; `None` without a repository directory.
-pub fn directory(repo: &Repository, id: &str) -> Result<Option<PathBuf>> {
+pub fn directory(repo: &Repository, id: &SpaceId) -> Result<Option<PathBuf>> {
     Layout::of(repo)
         .map(|layout| layout.prepare(id))
         .transpose()

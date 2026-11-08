@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
@@ -18,7 +19,7 @@ use std::{
 #[derive(Default)]
 struct FakeHost {
     name: Option<HostName>,
-    remaining: Mutex<Vec<(String, String)>>,
+    remaining: Mutex<Vec<(String, SpaceId)>>,
     demos: Mutex<std::collections::HashMap<String, String>>,
     closed: Mutex<Vec<String>>,
     fail: AtomicBool,

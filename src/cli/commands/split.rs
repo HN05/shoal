@@ -61,7 +61,7 @@ pub(super) async fn run(
         base: split.base,
         options: split.options,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
-        ..NewSplit::new(SpaceSelector::parse(&parent), name)
+        ..NewSplit::new(parent.clone(), name)
     };
     let child = start_child(ctx, start).await?;
     let Some(child) = follow_preparation(ctx, child).await? else {
@@ -85,19 +85,14 @@ pub(super) async fn at_commit(
     let copy = super::copies::source(ctx, copy).await?;
     let copied = copy.as_ref().map(|copy| copy.repository.clone());
     let (repository, parent) = commit_owner(ctx, workspace, copied).await?;
-    let parent = parent.or_else(|| ui::current_chat(&None));
+    let parent = parent.or_else(|| ui::current_chat(&None).map(SpaceSelector::Id));
     let start = match copy {
         Some(copy) => CommitStart::Copy(copy.source),
         None => CommitStart::Revision(base),
     };
-    let created = crate::client::workspaces::create_at_commit(
-        &ctx.paths,
-        repository,
-        parent.as_deref().map(SpaceSelector::parse),
-        start,
-        options,
-    )
-    .await?;
+    let created =
+        crate::client::workspaces::create_at_commit(&ctx.paths, repository, parent, start, options)
+            .await?;
     let Some(child) = prepare(ctx, created).await? else {
         return Ok(1);
     };
@@ -112,16 +107,13 @@ async fn commit_owner(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
     copied: Option<String>,
-) -> Result<(crate::repository::Selector, Option<String>)> {
+) -> Result<(crate::repository::Selector, Option<SpaceSelector>)> {
     match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
         Ok(parent) => {
             let repository = crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .into_iter()
-                .find(|workspace| {
-                    let parent = SpaceSelector::parse(&parent);
-                    parent.selects(&workspace.id, &workspace.name, workspace.number)
-                })
+                .find(|workspace| parent.selects(&workspace.id, &workspace.name, workspace.number))
                 .map(|workspace| workspace.repository_id)
                 .ok_or_else(|| {
                     Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}"))
@@ -205,8 +197,8 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
 }
 
 /// The issue `input` names in the parent workspace's repository.
-async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
-    let context = ItemContext::Workspace(SpaceSelector::parse(parent));
+async fn load_issue(ctx: &Context, parent: &SpaceSelector, input: &str) -> Result<Issue> {
+    let context = ItemContext::Workspace(parent.clone());
     super::issues::load(ctx, context, input).await
 }
 

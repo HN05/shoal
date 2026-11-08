@@ -17,13 +17,18 @@ pub(in crate::cli::commands) async fn diff(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let base =
-        crate::client::workspaces::diff_base(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let base = crate::client::workspaces::diff_base(&ctx.paths, workspace.clone()).await?;
     let command = git::diff_command(&base.commit);
     if crate::env::in_chat().is_some() {
         return diff_untracked(&base.path, &command);
     }
-    execution::run(&ctx.paths, base.workspace_id, command, None).await
+    execution::run(
+        &ctx.paths,
+        SpaceSelector::Id(base.workspace_id),
+        command,
+        None,
+    )
+    .await
 }
 
 /// Run the diff `command` in the worktree at `path`, which the daemon
@@ -45,9 +50,7 @@ pub(in crate::cli::commands) async fn conflicts(
     target: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check =
-        crate::client::workspaces::conflicts(&ctx.paths, SpaceSelector::parse(&workspace), target)
-            .await?;
+    let check = crate::client::workspaces::conflicts(&ctx.paths, workspace.clone(), target).await?;
     ctx.show(&check, |check| {
         if check.clean() {
             outln!("No conflicts with {}", check.target);

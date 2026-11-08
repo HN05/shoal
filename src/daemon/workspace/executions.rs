@@ -4,6 +4,7 @@ mod completion;
 mod reregistration;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_work::Stopper};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
@@ -43,7 +44,7 @@ use uuid::Uuid;
 mod state;
 /// The workspaces with a running execution. One whose wrapper is gone is
 /// left for `shoal stop <workspace>` rather than failing every bulk stop.
-fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
+fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
         .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
         .query_map([ExecutionState::Running], |row| row.get(0))?
@@ -244,7 +245,7 @@ enum Keep<'a> {
     /// Last sessions, which stay down until `shoal resume`, recording the
     /// workspace whose process stopped them when given.
     LastSessions {
-        stopped_by: Option<&'a str>,
+        stopped_by: Option<&'a SpaceId>,
         launches: QueuedLaunches,
     },
 }
@@ -252,7 +253,7 @@ enum Keep<'a> {
 /// The record a new execution persists at registration.
 struct ExecutionRecord {
     id: String,
-    workspace_id: String,
+    workspace_id: SpaceId,
     kind: ExecutionKind,
     parent_execution: Option<String>,
     /// The agent execution whose process tree registers it.
@@ -275,7 +276,7 @@ impl ProcessDirectories {
     fn prepare(
         repository: &Repository,
         caches: &BTreeMap<String, Cache>,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<Self> {
         Ok(Self {
             caches: crate::caches::directories(repository, caches)?,
@@ -301,7 +302,7 @@ pub(crate) trait ExecutionKindExt {
     fn reserve(
         self,
         tx: &Transaction<'_>,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         parent_execution: Option<&str>,
     ) -> Result<()>;
 }
@@ -317,7 +318,7 @@ impl ExecutionKindExt for ExecutionKind {
     fn reserve(
         self,
         tx: &Transaction<'_>,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         parent_execution: Option<&str>,
     ) -> Result<()> {
         // Quarantine may have left a moving workspace failed, which setup
@@ -458,7 +459,7 @@ impl Manager {
     /// execution whose process tree it runs in.
     async fn register_execution(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
         parents: (Option<&str>, Option<String>),
@@ -901,7 +902,10 @@ impl Manager {
     /// workspace ID and the agent execution whose process tree registered it.
     /// The caller holds the connections lock until it connects the wrapper,
     /// so no other wrapper connects in between.
-    async fn authorize_reattachment(&self, request: &Reattach) -> Result<(String, Option<String>)> {
+    async fn authorize_reattachment(
+        &self,
+        request: &Reattach,
+    ) -> Result<(SpaceId, Option<String>)> {
         let request = request.clone();
         self.store
             .write(move |tx| {
@@ -1037,7 +1041,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         acknowledge_unproven: bool,
-        stopped_by: Option<&str>,
+        stopped_by: Option<&SpaceId>,
         launches: QueuedLaunches,
     ) -> Result<StoppedWorkspace> {
         if let Some(run) = self.cancel_job_in(selector).await? {
@@ -1244,7 +1248,7 @@ impl Manager {
 
     /// Fail while processes use the workspace's directory: an acknowledgement
     /// that an unprovable execution ended cannot cover a visible process.
-    async fn ensure_directory_unused(&self, workspace_id: &str) -> Result<()> {
+    async fn ensure_directory_unused(&self, workspace_id: &SpaceId) -> Result<()> {
         let path = self.workspace_by_id(workspace_id).await?.path;
         let users = if off_runtime::is_dir(&path).await? {
             crate::process::in_directory(&path).await?
@@ -1281,7 +1285,7 @@ impl Manager {
     /// Ask connected wrappers to stop and signal disconnected survivors.
     pub(super) async fn stop_executions(
         &self,
-        id: &str,
+        id: &SpaceId,
         policy: StopPolicy,
         request: &StopRequest,
     ) -> Result<()> {
@@ -1292,7 +1296,7 @@ impl Manager {
     /// Wrappers decide what to save; setup and merge save nothing.
     async fn stop_executions_keeping(
         &self,
-        id: &str,
+        id: &SpaceId,
         policy: StopPolicy,
         request: &StopRequest,
         protected: Protected,

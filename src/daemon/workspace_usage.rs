@@ -1,5 +1,6 @@
 //! What each workspace's processes use, sampled on a fixed cadence from the
 //! processes carrying its identity.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -25,7 +26,7 @@ const STALE: Duration = Duration::from_secs(30);
 /// Every workspace process with its workspace and reading at one time.
 struct Sample {
     time: Instant,
-    processes: HashMap<Identity, (String, Reading)>,
+    processes: HashMap<Identity, (SpaceId, Reading)>,
     /// Processes that exited but whose parent has not reaped them, so their
     /// time has not reached it yet. They use no memory and are not counted.
     unreaped: HashSet<Identity>,
@@ -34,7 +35,7 @@ struct Sample {
 #[derive(Default)]
 pub(crate) struct WorkspaceUsages {
     latest: Option<Sample>,
-    usage: HashMap<String, WorkspaceUsage>,
+    usage: HashMap<SpaceId, WorkspaceUsage>,
     /// Counted time of ended processes, per live ancestor that may reap
     /// them, that its reaped time does not show yet: a parent read just
     /// before it reaped a child gone by its own read shows the child's time
@@ -67,7 +68,7 @@ impl WorkspaceUsages {
 
     /// The processes of the latest sample, which the next one follows until
     /// their parents reap them.
-    fn tracked(&self) -> Vec<(String, Identity)> {
+    fn tracked(&self) -> Vec<(SpaceId, Identity)> {
         self.latest.as_ref().map_or_else(Vec::new, |latest| {
             latest
                 .processes
@@ -79,7 +80,7 @@ impl WorkspaceUsages {
 
     /// The latest usage of the workspace `id`, while it has processes and
     /// sampling has not stalled.
-    pub(crate) fn get(&self, id: &str, now: Instant) -> Option<WorkspaceUsage> {
+    pub(crate) fn get(&self, id: &SpaceId, now: Instant) -> Option<WorkspaceUsage> {
         let latest = self.latest.as_ref()?;
         if now.duration_since(latest.time) > STALE {
             return None;
@@ -112,8 +113,8 @@ fn usage(
     previous: Option<&Sample>,
     current: &Sample,
     pending: &mut HashMap<Identity, Vec<Counted>>,
-) -> HashMap<String, WorkspaceUsage> {
-    let mut usage: HashMap<String, WorkspaceUsage> = HashMap::new();
+) -> HashMap<SpaceId, WorkspaceUsage> {
+    let mut usage: HashMap<SpaceId, WorkspaceUsage> = HashMap::new();
     let mut used: HashMap<&str, u64> = HashMap::new();
     for (identity, (workspace, reading)) in &current.processes {
         let entry = usage.entry(workspace.clone()).or_default();
@@ -245,7 +246,7 @@ fn routed_to_reapers(
 fn reaper<'a>(
     live: &HashMap<(&str, u32), &'a Identity>,
     ended: &HashMap<(&str, u32), u32>,
-    workspace: &str,
+    workspace: &SpaceId,
     mut parent: u32,
 ) -> Option<(&'a Identity, bool)> {
     // Each step reaches another ended process, unless a reused PID makes a cycle.
@@ -271,7 +272,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 
 /// The workspaces' processes, and those of `tracked` that have exited
 /// unreaped, whose environment no scan can read.
-async fn sample(manager: &Manager, tracked: Vec<(String, Identity)>) -> Result<Sample> {
+async fn sample(manager: &Manager, tracked: Vec<(SpaceId, Identity)>) -> Result<Sample> {
     let ids = manager.workspace_ids().await?;
     let running = identity::scan_workspaces(ids).await?;
     let found: HashSet<&Identity> = running.iter().map(|(_, identity)| identity).collect();
@@ -307,8 +308,8 @@ fn state(identity: &Identity) -> Result<State> {
 /// scan is still followed until reaped, but a missed process counts only
 /// while unreaped, since one still running no longer carries the identity.
 fn read(
-    found: Vec<(String, Identity)>,
-    missed: Vec<(String, Identity)>,
+    found: Vec<(SpaceId, Identity)>,
+    missed: Vec<(SpaceId, Identity)>,
     reading: impl Fn(u32) -> Result<Option<Reading>>,
     state: impl Fn(&Identity) -> Result<State>,
 ) -> Result<Sample> {

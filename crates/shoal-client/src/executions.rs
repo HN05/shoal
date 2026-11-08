@@ -1,6 +1,7 @@
 //! Tracked executions: what they run, where their executable came from, the
 //! agents Shoal stopped or that exited with a session to resume, and the
 //! retries of their failed turns.
+use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
@@ -111,7 +112,7 @@ pub struct Record {
     /// left the agent stopped, which with the spaces above it may resume the
     /// agent; unknown for one the user or Shoal stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped_by: Option<String>,
+    pub stopped_by: Option<SpaceId>,
     /// What the agent was doing when it stopped, as its hooks last reported
     /// it. Unknown for agents without hooks and for records saved before
     /// turns were kept.
@@ -201,7 +202,7 @@ pub struct LastSession {
     /// it; unknown for one the user or Shoal stopped, or that exited on its
     /// own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped_by: Option<String>,
+    pub stopped_by: Option<SpaceId>,
     /// Why and when Shoal stopped the agent; none for one that exited on its
     /// own.
     #[serde(default, skip_serializing_if = "Option::is_none")]

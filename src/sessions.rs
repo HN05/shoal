@@ -9,6 +9,7 @@ pub(crate) mod zmx;
 
 pub(crate) use crate::client::sessions::{HostName, Origin, PlaceClose, PlaceOwnership};
 
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,7 @@ use std::{collections::BTreeMap, path::Path, sync::Arc};
 /// A terminal session labelled with the workspace that owns it.
 pub(crate) struct Session {
     pub name: String,
-    pub workspace: String,
+    pub workspace: SpaceId,
 }
 
 /// The ownership that must still match when a session is closed. Demo launches
@@ -25,7 +26,7 @@ pub(crate) struct Session {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Owner {
-    Workspace(String),
+    Workspace(SpaceId),
     Demo(String),
 }
 

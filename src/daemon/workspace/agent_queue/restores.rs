@@ -1,5 +1,6 @@
 //! Restores a stopped agent's waiting wrapper carries out: queuing one,
 //! waiting for its admission, and keeping, returning or removing its entry.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail};
 use rusqlite::{OptionalExtension, params};
 
@@ -18,7 +19,7 @@ impl Manager {
         &self,
         execution: &str,
         agent: &str,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<()> {
         let restore = WaitingRestore {
             workspace: self.workspace_by_id(workspace_id).await?,

@@ -2,6 +2,7 @@
 //! beside the workspaces, in a directory its agents are given as a working
 //! directory, so they read the files where any sandbox lets them. The chats
 //! without a repository keep theirs in `root_dir`, where they run.
+use crate::client::space_ids::SpaceId;
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -57,7 +58,7 @@ impl Layout {
     /// copies, so sending it again collapses with the unread one.
     pub(crate) fn keep(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
@@ -69,7 +70,7 @@ impl Layout {
     /// from its other files since they outlive its removal.
     pub(crate) fn keep_results(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
@@ -81,7 +82,7 @@ impl Layout {
     fn keep_in(
         &self,
         directory: &Path,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
@@ -169,7 +170,7 @@ impl Layout {
     /// the files two directories below its own, one directory per message and
     /// one per file within it. A hidden message directory holds copies still
     /// being made; the files themselves may have any name.
-    pub(crate) fn workspace_copies(&self, workspace_id: &str) -> Result<Vec<PathBuf>> {
+    pub(crate) fn workspace_copies(&self, workspace_id: &SpaceId) -> Result<Vec<PathBuf>> {
         let ours = check_marked_dir(&self.root, &self.owner)
             .with_context(|| format!("read {}", self.root.display()))?;
         if !ours {
@@ -195,7 +196,7 @@ impl Layout {
     }
 
     /// Delete the files attached for the workspace `workspace_id`.
-    pub(crate) fn remove_workspace(&self, workspace_id: &str) -> Result<()> {
+    pub(crate) fn remove_workspace(&self, workspace_id: &SpaceId) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
@@ -205,7 +206,7 @@ impl Layout {
     /// The directories that may hold the files kept for the workspace or
     /// chat `space_id` after it is gone: a chat's own, and the results a
     /// workspace handed back.
-    pub(crate) fn kept(&self, space_id: &str) -> [PathBuf; 2] {
+    pub(crate) fn kept(&self, space_id: &SpaceId) -> [PathBuf; 2] {
         [
             self.root.join(space_id),
             self.root.join(RESULTS).join(space_id),
@@ -214,7 +215,7 @@ impl Layout {
 
     /// Delete the files kept for the space `space_id` after it
     /// is gone.
-    pub(crate) fn remove_kept(&self, space_id: &str) -> Result<()> {
+    pub(crate) fn remove_kept(&self, space_id: &SpaceId) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }

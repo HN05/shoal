@@ -19,14 +19,16 @@ pub(super) enum Target {
     Chat(Chat),
     /// A workspace by ID, or a selector no space has, which the daemon
     /// refuses.
-    Workspace(String),
+    Workspace(SpaceSelector),
 }
 
 /// The space `selector` names among `spaces`: a stopped chat or a workspace.
 /// A running chat has nothing to resume.
-pub(super) fn resolve(spaces: &Spaces, selector: String) -> Result<Target> {
-    match spaces.find(&SpaceSelector::parse(&selector)) {
-        Some(PresentSpace::Workspace(workspace)) => Ok(Target::Workspace(workspace.id)),
+pub(super) fn resolve(spaces: &Spaces, selector: SpaceSelector) -> Result<Target> {
+    match spaces.find(&selector) {
+        Some(PresentSpace::Workspace(workspace)) => {
+            Ok(Target::Workspace(SpaceSelector::Id(workspace.id)))
+        }
         Some(PresentSpace::Chat(chat)) if chat.restore.is_some() => Ok(Target::Chat(chat)),
         Some(PresentSpace::Chat(chat)) => bail!("chat {} is running; nothing to resume", chat.name),
         None => Ok(Target::Workspace(selector)),
@@ -39,7 +41,7 @@ pub(super) struct Selected {
     pub chats: Vec<Chat>,
     /// By ID, or by a selector the daemon refuses; every workspace with
     /// stopped work for `None`.
-    pub workspaces: Option<Vec<String>>,
+    pub workspaces: Option<Vec<SpaceSelector>>,
 }
 
 impl Selected {
@@ -60,7 +62,7 @@ impl Selected {
     }
 
     /// The spaces `selectors` name among `spaces`, each once.
-    fn resolved(spaces: &Spaces, selectors: Vec<String>) -> Result<Self> {
+    fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Result<Self> {
         let mut selected = Self {
             chats: Vec::new(),
             workspaces: Some(Vec::new()),

@@ -1,4 +1,5 @@
 //! Durable rename intent: the reserved name and branch a workspace is moving to.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -13,7 +14,7 @@ pub(super) struct RenameIntent {
 
 impl RenameIntent {
     /// Reserve the name and branch inside the caller's transaction.
-    pub(super) fn record(&self, db: &Connection, workspace_id: &str) -> Result<()> {
+    pub(super) fn record(&self, db: &Connection, workspace_id: &SpaceId) -> Result<()> {
         db.execute(
             "INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,?2,?3)",
             params![workspace_id, self.name, self.branch],
@@ -23,7 +24,10 @@ impl RenameIntent {
 }
 
 impl Manager {
-    pub(super) async fn rename_intent(&self, workspace_id: &str) -> Result<Option<RenameIntent>> {
+    pub(super) async fn rename_intent(
+        &self,
+        workspace_id: &SpaceId,
+    ) -> Result<Option<RenameIntent>> {
         let id = workspace_id.to_owned();
         self.store
             .run(move |db| {
@@ -70,13 +74,13 @@ impl Manager {
     }
 
     /// Release the reservation and keep the recorded identity.
-    pub(super) async fn cancel_rename(&self, workspace_id: &str) -> Result<()> {
+    pub(super) async fn cancel_rename(&self, workspace_id: &SpaceId) -> Result<()> {
         let id = workspace_id.to_owned();
         self.store.run(move |db| release(db, &id)).await
     }
 }
 
-fn release(db: &Connection, workspace_id: &str) -> Result<()> {
+fn release(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     db.execute(
         "DELETE FROM workspace_renames WHERE workspace_id=?1",
         [workspace_id],

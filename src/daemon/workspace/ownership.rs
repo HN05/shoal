@@ -7,6 +7,7 @@ use super::{
     },
     paths::matches_recorded_worktree_path,
 };
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
@@ -210,7 +211,7 @@ impl Manager {
     pub(super) async fn release_stale_owner(
         &self,
         git_dir: &Path,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<()> {
         let workspaces = self.list_workspaces().await?;
         let git_dir = git_dir.to_owned();
@@ -327,7 +328,7 @@ fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
 /// marker naming a workspace other than `workspace_id`, which none of them is.
 fn release_stale_marker(
     git_dir: &Path,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     workspaces: &[Workspace],
 ) -> Result<()> {
     let marked = marked_owner(git_dir)?;
@@ -335,12 +336,12 @@ fn release_stale_marker(
     for other in workspaces {
         let owns = owns_git_dir(other, git_dir, Some(&identity), marked.as_deref())?;
         ensure!(
-            other.id == workspace_id || !owns,
+            other.id == *workspace_id || !owns,
             "Git worktree is already owned by {}; restore its recorded path",
             other.name
         );
     }
-    if marked.is_some_and(|owner| owner != workspace_id) {
+    if marked.is_some_and(|owner| owner != *workspace_id) {
         clear_owner(git_dir)?;
     }
     Ok(())
@@ -348,10 +349,10 @@ fn release_stale_marker(
 
 /// Mark the admin directory as `workspace_id`'s unless it already is,
 /// returning whether it already was, and its filesystem identity.
-fn mark_git_dir(git_dir: &Path, workspace_id: &str) -> Result<(bool, String)> {
+fn mark_git_dir(git_dir: &Path, workspace_id: &SpaceId) -> Result<(bool, String)> {
     let marked = marked_owner(git_dir)?.as_deref() == Some(workspace_id);
     if !marked {
-        mark_owner(git_dir, workspace_id)?;
+        mark_owner(git_dir, workspace_id.as_str())?;
     }
     // The identity only proves ownership of records made before markers.
     Ok((marked, directory_identity(git_dir)?))

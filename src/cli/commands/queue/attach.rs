@@ -1,5 +1,6 @@
 //! `shoal queue start --attach`: wait until the started entry's agent runs
 //! in a session, then attach this terminal to that session.
+use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
 use anyhow::{Result, bail, ensure};
@@ -44,9 +45,9 @@ pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
 /// agent where it runs before it takes the entry out of the queue, so an
 /// entry gone before the sessions were read without an agent session among
 /// them did not start in one.
-async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(String, String)> {
+async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
-    let mut workspace = entry.workspace().map(str::to_owned);
+    let mut workspace = entry.workspace().cloned();
     loop {
         let current = (queued_agents::entries(ctx).await?)
             .into_iter()
@@ -86,7 +87,7 @@ async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(String, Str
 /// The ID of the workspace the launch `entry` opened, found by its name in
 /// its repository once its agent took the entry out of the queue before a
 /// poll saw the workspace it recorded.
-async fn opened_workspace(ctx: &Context, entry: &QueueEntry) -> Result<Option<String>> {
+async fn opened_workspace(ctx: &Context, entry: &QueueEntry) -> Result<Option<SpaceId>> {
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     Ok(workspaces
         .into_iter()

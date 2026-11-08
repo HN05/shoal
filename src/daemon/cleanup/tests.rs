@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
 
@@ -14,20 +15,20 @@ fn changed_signals_restart_timer_and_expiry_returns_its_snapshot() {
         tree: 7,
     };
     assert!(matches!(
-        timers.expired("w", 1, now, delay),
+        timers.expired(&SpaceId::from("w"), 1, now, delay),
         Expiry::Restart
     ));
-    timers.start("w", snapshot, now);
+    timers.start(&SpaceId::from("w"), snapshot, now);
     assert!(matches!(
-        timers.expired("w", 1, now + delay / 2, delay),
+        timers.expired(&SpaceId::from("w"), 1, now + delay / 2, delay),
         Expiry::Running
     ));
     assert!(matches!(
-        timers.expired("w", 2, now + delay, delay),
+        timers.expired(&SpaceId::from("w"), 2, now + delay, delay),
         Expiry::Restart
     ));
     assert!(matches!(
-        timers.expired("w", 1, now + delay, delay),
+        timers.expired(&SpaceId::from("w"), 1, now + delay, delay),
         Expiry::Expired(expired) if expired == snapshot
     ));
 }

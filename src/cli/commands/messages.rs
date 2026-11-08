@@ -64,7 +64,7 @@ async fn send_to_space(
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     agent_messages::send(
         &ctx.paths,
-        SpaceSelector::parse(&space),
+        space.clone(),
         message,
         attachments,
         crate::env::chat(),
@@ -252,8 +252,7 @@ fn user_prompt(input: &str) -> bool {
 async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<()> {
     let reply = async {
         let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
-        let space = inbox.space.clone();
-        crate::client::questions::replied_in_chat(&ctx.paths, SpaceSelector::parse(&space)).await
+        crate::client::questions::replied_in_chat(&ctx.paths, inbox.space).await
     };
     tokio::time::timeout_at(deadline, reply)
         .await
@@ -285,8 +284,8 @@ async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
 /// outside any workspace scope, otherwise its workspace's.
 #[derive(Clone)]
 struct Inbox {
-    /// The ID of the workspace or chat whose inbox this is.
-    space: String,
+    /// The workspace or chat whose inbox this is.
+    space: SpaceSelector,
     /// What the hook's text calls the space: `workspace` or `chat`.
     kind: &'static str,
 }
@@ -295,7 +294,11 @@ impl Inbox {
     /// The inbox a wake hook waits on: the one `space` names, else the
     /// current one. After a daemon restart, found once the daemon knows the
     /// agent's scope again, as the wait itself is.
-    async fn waited_for(ctx: &Context, space: Option<&str>, restarted: bool) -> Result<Self> {
+    async fn waited_for(
+        ctx: &Context,
+        space: Option<&SpaceSelector>,
+        restarted: bool,
+    ) -> Result<Self> {
         let find = || async move {
             match space {
                 Some(space) => Self::named(ctx, space).await,
@@ -310,13 +313,11 @@ impl Inbox {
     }
 
     /// The inbox of the workspace or running chat `space` names.
-    async fn named(ctx: &Context, space: &str) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(space))
-            .await?
-        {
+    async fn named(ctx: &Context, space: &SpaceSelector) -> Result<Self> {
+        match crate::client::workspaces::present_space(&ctx.paths, space).await? {
             Some(space) => Ok(Self {
                 kind: space.kind(),
-                space: space.id().to_owned(),
+                space: SpaceSelector::id(space.id()),
             }),
             None => bail!("no workspace or running chat {space}"),
         }
@@ -325,7 +326,7 @@ impl Inbox {
     async fn current(ctx: &Context, fallback: Fallback) -> Result<Self> {
         if let Some(chat) = crate::env::in_chat() {
             return Ok(Self {
-                space: chat,
+                space: SpaceSelector::Id(chat),
                 kind: "chat",
             });
         }
@@ -336,12 +337,12 @@ impl Inbox {
     }
 
     async fn messages(&self, ctx: &Context) -> Result<Vec<AgentMessage>> {
-        agent_messages::undelivered(&ctx.paths, SpaceSelector::parse(&self.space)).await
+        agent_messages::undelivered(&ctx.paths, self.space.clone()).await
     }
 
     /// Undelivered messages and queued item updates, without waiting.
     async fn updates(&self, ctx: &Context) -> Result<Updates> {
-        agent_messages::updates(&ctx.paths, SpaceSelector::parse(&self.space)).await
+        agent_messages::updates(&ctx.paths, self.space.clone()).await
     }
 
     /// The next messages or item updates, waiting for them; `restarted` says
@@ -378,7 +379,7 @@ impl Inbox {
             return Ok(());
         }
         let ids = messages.iter().map(|message| message.id).collect();
-        agent_messages::mark_delivered(&ctx.paths, SpaceSelector::parse(&self.space), ids).await
+        agent_messages::mark_delivered(&ctx.paths, self.space.clone(), ids).await
     }
 }
 
@@ -455,17 +456,10 @@ pub(super) fn hook_output(input: &str, context: &str) -> String {
 }
 
 /// Shown once: the messages and updates a hook printed do not come back.
-async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
+async fn acknowledge(ctx: &Context, space: SpaceSelector, updates: &Updates) -> Result<()> {
     let messages = updates.messages.iter().map(|message| message.id).collect();
     let (deliveries, leftovers) = (deliveries(updates), leftover_pids(updates));
-    agent_messages::acknowledge(
-        &ctx.paths,
-        SpaceSelector::parse(&workspace),
-        deliveries,
-        messages,
-        leftovers,
-    )
-    .await
+    agent_messages::acknowledge(&ctx.paths, space, deliveries, messages, leftovers).await
 }
 
 /// The deliveries of the item updates `updates` tells about.

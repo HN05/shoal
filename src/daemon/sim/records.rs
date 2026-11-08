@@ -1,4 +1,5 @@
 //! Indexed ownership lookup over the authoritative JSON records.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
@@ -11,7 +12,7 @@ const OWNED: &str = "SELECT id,record FROM simulators
     WHERE coalesce(json_extract(record, '$.workspace_id'), json_extract(record, '$.last_workspace_id')) = ?1
     ORDER BY id";
 
-pub(crate) fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<Simulator>> {
+pub(crate) fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<Simulator>> {
     let mut statement = db.prepare(if owner.is_some() { OWNED } else { ALL })?;
     let mut rows = match owner {
         Some(owner) => statement.query([owner])?,

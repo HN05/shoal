@@ -1,6 +1,7 @@
 //! How spaces are named and selected: a space's name, which is never all
 //! digits, since a number alone selects a space by its number, and the
 //! selector a command names a space with.
+use crate::space_ids::SpaceId;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
@@ -185,7 +186,7 @@ impl PartialEq<SpaceName> for String {
 pub enum SpaceSelector {
     Number(u32),
     IdOrName(String),
-    Id(String),
+    Id(SpaceId),
 }
 
 impl SpaceSelector {
@@ -199,8 +200,8 @@ impl SpaceSelector {
     }
 
     /// The space with the ID `id`.
-    pub fn id(id: &str) -> Self {
-        Self::Id(id.to_owned())
+    pub fn id(id: &SpaceId) -> Self {
+        Self::Id(id.clone())
     }
 
     /// The ID or name it gives; none for a number, which selects only a
@@ -208,22 +209,23 @@ impl SpaceSelector {
     pub fn id_or_name(&self) -> Option<&str> {
         match self {
             Self::Number(_) => None,
-            Self::IdOrName(text) | Self::Id(text) => Some(text),
+            Self::IdOrName(text) => Some(text),
+            Self::Id(id) => Some(id.as_str()),
         }
     }
 
     /// Whether it gives this ID or name, as it selects a removed space,
     /// which has no number.
-    pub fn names(&self, id: &str, name: &str) -> bool {
+    pub fn names(&self, id: &SpaceId, name: &str) -> bool {
         match self {
             Self::Number(_) => false,
             Self::IdOrName(text) => text == id || text == name,
-            Self::Id(text) => text == id,
+            Self::Id(selected) => selected == id,
         }
     }
 
     /// Whether it selects the space with this ID, name and number.
-    pub fn selects(&self, id: &str, name: &str, number: u32) -> bool {
+    pub fn selects(&self, id: &SpaceId, name: &str, number: u32) -> bool {
         match self {
             Self::Number(selected) => *selected == number,
             _ => self.names(id, name),
@@ -235,7 +237,8 @@ impl std::fmt::Display for SpaceSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Number(number) => write!(f, "{number}"),
-            Self::IdOrName(text) | Self::Id(text) => f.write_str(text),
+            Self::IdOrName(text) => f.write_str(text),
+            Self::Id(id) => f.write_str(id.as_str()),
         }
     }
 }
@@ -284,7 +287,8 @@ impl PartialEq<str> for SpaceSelector {
     fn eq(&self, other: &str) -> bool {
         match self {
             Self::Number(number) => other.parse() == Ok(*number),
-            Self::IdOrName(text) | Self::Id(text) => text == other,
+            Self::IdOrName(text) => text == other,
+            Self::Id(id) => id == other,
         }
     }
 }

@@ -1,4 +1,5 @@
 //! The workspace `--copy` and `--checkpoint` start a new one from.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use crate::client::space_names::SpaceSelector;
@@ -31,9 +32,8 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     let selector =
         ui::select_workspace(ctx, args.copy.flatten(), Fallback::CurrentDirectory).await?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let selected = SpaceSelector::parse(&selector);
     let live = (workspaces.into_iter())
-        .find(|workspace| selected.selects(&workspace.id, &workspace.name, workspace.number));
+        .find(|workspace| selector.selects(&workspace.id, &workspace.name, workspace.number));
     let (workspace, repository, named) = match live {
         Some(workspace) => (
             workspace.id,
@@ -44,7 +44,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         None => anyhow::bail!("no workspace {selector}"),
     };
     let source = CopySource {
-        workspace: SpaceSelector::parse(&workspace),
+        workspace: SpaceSelector::id(&workspace),
         checkpoint: args.checkpoint,
     };
     Ok(Some(Copied {
@@ -56,11 +56,11 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
 
 /// The ID of the removed workspace `selector` names, by name or ID, of its
 /// repository, and its branch or else its name.
-async fn removed(ctx: &Context, selector: String) -> Result<(String, String, String)> {
+async fn removed(ctx: &Context, selector: SpaceSelector) -> Result<(SpaceId, String, String)> {
     let removed = crate::client::removal::removed(&ctx.paths).await?;
     let removed = removed
         .into_iter()
-        .find(|removed| SpaceSelector::parse(&selector).names(&removed.workspace_id, &removed.name))
+        .find(|removed| selector.names(&removed.workspace_id, &removed.name))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
     let named = removed.checkpoint.branch.unwrap_or(removed.name.into());
     Ok((removed.workspace_id, removed.repository_id, named))

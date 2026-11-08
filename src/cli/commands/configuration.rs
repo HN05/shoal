@@ -158,7 +158,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
         None => {
             let picked = ui::pick_workspace(ctx, workspaces, "workspace").await?;
-            ConfigTarget::Workspace(SpaceSelector::parse(&picked))
+            ConfigTarget::Workspace(SpaceSelector::id(&picked))
         }
     })
 }

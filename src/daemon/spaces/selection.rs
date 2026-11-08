@@ -1,6 +1,7 @@
 //! Resolving the space a request names, by its number, ID or name, over
 //! workspaces and chats alike, and refusing the other kind where a request
 //! needs one.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
 
@@ -30,15 +31,15 @@ impl Manager {
     pub(crate) async fn space_id(
         &self,
         selector: Option<&SpaceSelector>,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<SpaceId>> {
         Ok(match selector {
-            Some(selector) => Some(self.space(selector).await?.id().to_owned()),
+            Some(selector) => Some(self.space(selector).await?.id().clone()),
             None => None,
         })
     }
 
     /// The workspace or chat, running or stopped, with the ID `id`.
-    pub(crate) async fn space_by_id(&self, id: &str) -> Result<PresentSpace> {
+    pub(crate) async fn space_by_id(&self, id: &SpaceId) -> Result<PresentSpace> {
         if let Some(workspace) = self.find_workspace(id).await? {
             return Ok(PresentSpace::Workspace(workspace));
         }
@@ -86,7 +87,7 @@ fn other_kind(space: &PresentSpace, needed: SpaceKind) -> anyhow::Error {
 pub(crate) fn selected(
     db: &Connection,
     selector: &SpaceSelector,
-) -> Result<Option<(SpaceKind, String)>> {
+) -> Result<Option<(SpaceKind, SpaceId)>> {
     let (id, name, number) = match selector {
         SpaceSelector::Number(number) => (None, None, Some(*number)),
         SpaceSelector::IdOrName(text) => (Some(text.as_str()), Some(text.as_str()), None),

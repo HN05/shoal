@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 use crate::time::UnixTime;
 
@@ -48,8 +49,11 @@ fn spaces() -> Spaces {
 #[test]
 fn a_target_resolves_to_a_saved_chat_or_a_workspace() {
     let spaces = spaces();
-    let resolved = |selector: &str| resolve(&spaces, selector.to_owned()).unwrap();
-    assert_eq!(resolved("worker"), Target::Workspace("w1".into()));
+    let resolved = |selector: &str| resolve(&spaces, SpaceSelector::parse(selector)).unwrap();
+    assert_eq!(
+        resolved("worker"),
+        Target::Workspace(SpaceSelector::id(&"w1".into()))
+    );
     assert!(matches!(resolved("talk"), Target::Chat(chat) if chat.id == "c2"));
     assert!(matches!(resolved("c2"), Target::Chat(chat) if chat.name == "talk"));
     // A name no space has stays for the daemon to refuse.
@@ -59,10 +63,15 @@ fn a_target_resolves_to_a_saved_chat_or_a_workspace() {
 
 #[test]
 fn a_space_named_twice_is_selected_once() {
-    let selectors = ["talk", "worker", "c2", "w1"].map(String::from).to_vec();
+    let selectors = ["talk", "worker", "c2", "w1"]
+        .map(SpaceSelector::parse)
+        .to_vec();
     let selected = Selected::resolved(&spaces(), selectors).unwrap();
     assert_eq!(selected.chats.len(), 1);
-    assert_eq!(selected.workspaces, Some(vec!["w1".to_owned()]));
+    assert_eq!(
+        selected.workspaces,
+        Some(vec![SpaceSelector::id(&"w1".into())])
+    );
 }
 
 #[test]

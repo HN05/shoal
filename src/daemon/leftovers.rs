@@ -2,6 +2,7 @@
 //! them exited, which the cleanup sweep finds. The daemon keeps them in
 //! memory, so the first sweep after a restart finds them again, and tells a
 //! space's agent about each one once.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Mutex, PoisonError},
@@ -32,7 +33,7 @@ const COMMAND_LIMIT: usize = 300;
 
 /// What the last sweep found, by space.
 #[derive(Default)]
-pub(crate) struct Leftovers(Mutex<HashMap<String, Found>>);
+pub(crate) struct Leftovers(Mutex<HashMap<SpaceId, Found>>);
 
 struct Found {
     leftovers: Vec<(Identity, Leftover)>,
@@ -43,7 +44,7 @@ struct Found {
 impl Leftovers {
     /// Replace what the last sweep found with `found`, by space. An agent
     /// told about a leftover is not told again while it runs.
-    fn record(&self, found: HashMap<String, Vec<(Identity, Leftover)>>) {
+    fn record(&self, found: HashMap<SpaceId, Vec<(Identity, Leftover)>>) {
         let mut spaces = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let mut earlier = std::mem::take(&mut *spaces);
         for (space, leftovers) in found {
@@ -64,7 +65,7 @@ impl Leftovers {
 
     /// How many leftovers the workspace or chat `space` has, and as many of
     /// them as one status lists.
-    pub(crate) fn of(&self, space: &str) -> (usize, Vec<Leftover>) {
+    pub(crate) fn of(&self, space: &SpaceId) -> (usize, Vec<Leftover>) {
         let mut leftovers = self.listed(space, |_| true);
         let count = leftovers.len();
         leftovers.truncate(LISTED_AT_ONCE);
@@ -73,7 +74,7 @@ impl Leftovers {
 
     /// The leftovers of `space` its agent has not been told about, as many
     /// as one delivery names in `room` bytes; the rest wait for a later one.
-    pub(crate) fn undelivered(&self, space: &str, room: usize) -> Result<Vec<Leftover>> {
+    pub(crate) fn undelivered(&self, space: &SpaceId, room: usize) -> Result<Vec<Leftover>> {
         let mut used = 0;
         let mut fitting = Vec::new();
         for leftover in self.listed(space, |found| !found) {
@@ -86,7 +87,7 @@ impl Leftovers {
         Ok(fitting)
     }
 
-    fn listed(&self, space: &str, delivered: impl Fn(bool) -> bool) -> Vec<Leftover> {
+    fn listed(&self, space: &SpaceId, delivered: impl Fn(bool) -> bool) -> Vec<Leftover> {
         let spaces = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(found) = spaces.get(space) else {
             return Vec::new();
@@ -101,7 +102,7 @@ impl Leftovers {
 
     /// Remember that the agent of `space` was told about the leftovers
     /// `pids` name.
-    pub(crate) fn delivered(&self, space: &str, pids: &[u32]) {
+    pub(crate) fn delivered(&self, space: &SpaceId, pids: &[u32]) {
         let mut spaces = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(found) = spaces.get_mut(space) {
             let told = found
@@ -159,9 +160,9 @@ impl Manager {
 /// The leftovers among the untracked processes `found` of each space, as
 /// people recognize them, leaving out those that exited meanwhile.
 async fn described_leftovers(
-    found: HashMap<String, Vec<Untracked>>,
-) -> Result<HashMap<String, Vec<(Identity, Leftover)>>> {
-    let leftovers: Vec<(String, Untracked)> = found
+    found: HashMap<SpaceId, Vec<Untracked>>,
+) -> Result<HashMap<SpaceId, Vec<(Identity, Leftover)>>> {
+    let leftovers: Vec<(SpaceId, Untracked)> = found
         .into_iter()
         .flat_map(|(space, found)| {
             found
@@ -176,7 +177,7 @@ async fn described_leftovers(
         .collect();
     let described = described::describe(&pids).await?;
     let now = UnixTime::now();
-    let mut by_space: HashMap<String, Vec<(Identity, Leftover)>> = HashMap::new();
+    let mut by_space: HashMap<SpaceId, Vec<(Identity, Leftover)>> = HashMap::new();
     for (space, process) in leftovers {
         if let Some(description) = described.get(&process.identity.pid) {
             let leftover = Leftover::of(&process, description, now);

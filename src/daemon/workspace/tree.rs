@@ -3,6 +3,7 @@
 //! works on it or coordinates its agent;
 //! `space_parents` records it. Every reader takes one walk up or one walk
 //! down that link, whatever each space's kind.
+use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail, ensure};
@@ -59,7 +60,7 @@ impl Manager {
     }
 
     /// Whether `id` is `ancestor` or a space below it.
-    pub async fn within_subtree(&self, ancestor: &str, id: &str) -> Result<bool> {
+    pub async fn within_subtree(&self, ancestor: &SpaceId, id: &SpaceId) -> Result<bool> {
         let (ancestor, id) = (ancestor.to_owned(), id.to_owned());
         self.store
             .run(move |db| Ok(subtree(db, &ancestor)?.contains(&id)))
@@ -67,14 +68,14 @@ impl Manager {
     }
 
     /// `id` and every space below it, `id` first.
-    pub async fn subtree(&self, id: &str) -> Result<Vec<String>> {
+    pub async fn subtree(&self, id: &SpaceId) -> Result<Vec<SpaceId>> {
         let id = id.to_owned();
         self.store.run(move |db| subtree(db, &id)).await
     }
 
     /// Every space a removal of `id` takes before it, nearest first: those
     /// below it and the chats in each workspace's worktree among them.
-    pub(crate) async fn spaces_taken_with(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    pub(crate) async fn spaces_taken_with(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -93,7 +94,7 @@ impl Manager {
 
     /// The spaces a removal of `id` takes first, each before those below
     /// it: the chats in its worktree, then the spaces directly below it.
-    pub(crate) async fn taken_first(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    pub(crate) async fn taken_first(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -111,7 +112,7 @@ impl Manager {
     }
 
     /// The spaces above `id`, nearest first.
-    pub(crate) async fn ancestors(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    pub(crate) async fn ancestors(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -129,8 +130,8 @@ impl Manager {
 
     /// The ID, name and branch of `root` and every workspace below it, or
     /// of every workspace without `root`, by name.
-    pub async fn workspace_refs_within(&self, root: Option<&str>) -> Result<Vec<WorkspaceRef>> {
-        let root = root.map(str::to_owned);
+    pub async fn workspace_refs_within(&self, root: Option<&SpaceId>) -> Result<Vec<WorkspaceRef>> {
+        let root = root.cloned();
         self.store
             .run(move |db| {
                 Ok(db
@@ -148,7 +149,7 @@ impl Manager {
     }
 
     /// The spaces directly below the space `id`, by name.
-    pub(crate) async fn children(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    pub(crate) async fn children(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store.run(move |db| children(db, &id)).await
     }
@@ -164,7 +165,7 @@ impl Manager {
     pub(crate) async fn tell_coordinator(
         &self,
         name: &str,
-        workspace_id: Option<&str>,
+        workspace_id: Option<&SpaceId>,
         kind: Option<NotificationKind>,
         message: String,
         attachments: Vec<PathBuf>,
@@ -203,7 +204,7 @@ impl Manager {
 
     /// The spaces below `id` whose activity its agent receives: children
     /// without an agent of their own, and theirs in turn.
-    pub(crate) async fn delegated_spaces(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    pub(crate) async fn delegated_spaces(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store.run(move |db| delegated(db, &id, &agents)).await
@@ -218,12 +219,12 @@ impl Manager {
 /// The workspaces whose agent the daemon tracks. An agent counts whether it
 /// reports turn states from hooks or not, as custom and Happy agents do not.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct TrackedAgents(Vec<String>);
+pub(crate) struct TrackedAgents(Vec<SpaceId>);
 
 impl TrackedAgents {
     /// The parameter `has_agent` reads.
     fn parameter(&self) -> String {
-        serde_json::Value::from(self.0.clone()).to_string()
+        serde_json::Value::from(self.0.iter().map(SpaceId::as_str).collect::<Vec<_>>()).to_string()
     }
 }
 
@@ -295,7 +296,7 @@ fn runs_agent(column: &str) -> String {
 }
 
 /// Whether the agent of the space `id` runs, in any turn state.
-pub(crate) fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+pub(crate) fn agent_runs(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<bool> {
     crate::daemon::store::exists(
         db,
         &format!("SELECT 1 WHERE {}", runs_agent("?1")),
@@ -313,8 +314,8 @@ pub(crate) fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> R
 pub(crate) fn ensure_parent(
     db: &Connection,
     repository_id: Option<&str>,
-    space: &str,
-    parent: &str,
+    space: &SpaceId,
+    parent: &SpaceId,
 ) -> Result<()> {
     let name = ready_parent(db, repository_id, parent)?;
     let taken: bool = db.query_row(
@@ -334,7 +335,7 @@ pub(crate) fn ensure_parent(
 pub(crate) fn ready_parent(
     db: &Connection,
     repository_id: Option<&str>,
-    parent: &str,
+    parent: &SpaceId,
 ) -> Result<String> {
     let (name, state) = parent_in_repository(db, repository_id, parent)?;
     if let Some(state) = state {
@@ -352,7 +353,7 @@ pub(crate) fn ready_parent(
 pub(crate) fn parent_in_repository(
     db: &Connection,
     repository_id: Option<&str>,
-    parent: &str,
+    parent: &SpaceId,
 ) -> Result<(String, Option<WorkspaceState>)> {
     let recorded: Option<(Option<String>, String, Option<WorkspaceState>)> = db
         .query_row(
@@ -376,7 +377,7 @@ pub(crate) fn parent_in_repository(
 }
 
 /// Record `parent` as the parent of the space `space`, or make it top-level.
-pub(crate) fn set_parent(db: &Connection, space: &str, parent: Option<&str>) -> Result<()> {
+pub(crate) fn set_parent(db: &Connection, space: &SpaceId, parent: Option<&SpaceId>) -> Result<()> {
     match parent {
         Some(parent) => db.execute(
             "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)
@@ -389,7 +390,7 @@ pub(crate) fn set_parent(db: &Connection, space: &str, parent: Option<&str>) -> 
 }
 
 /// The ID of the space directly above the space `id`.
-pub(crate) fn parent_id(db: &Connection, id: &str) -> Result<Option<String>> {
+pub(crate) fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
             "SELECT parent_id FROM space_parents WHERE space_id=?1",
@@ -410,7 +411,7 @@ pub(super) fn subtree_query(columns: &str) -> String {
     )
 }
 
-fn subtree(db: &Connection, id: &str) -> Result<Vec<String>> {
+fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
             "{} SELECT id FROM down ORDER BY depth, id",
@@ -421,7 +422,7 @@ fn subtree(db: &Connection, id: &str) -> Result<Vec<String>> {
 }
 
 /// The spaces directly below the space `id`, by name.
-pub(crate) fn children(db: &Connection, id: &str) -> Result<Vec<SpaceRef>> {
+pub(crate) fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
     Ok(db
         .prepare(&format!(
             "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
@@ -433,7 +434,7 @@ pub(crate) fn children(db: &Connection, id: &str) -> Result<Vec<SpaceRef>> {
 }
 
 /// The space directly above the space `id`.
-pub(crate) fn parent(db: &Connection, id: &str) -> Result<Option<SpaceRef>> {
+pub(crate) fn parent(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
     Ok(db
         .query_row(
             &format!(
@@ -450,7 +451,7 @@ pub(crate) fn parent(db: &Connection, id: &str) -> Result<Option<SpaceRef>> {
 /// The spaces below `id` whose activity its agent receives.
 pub(crate) fn delegated(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     agents: &TrackedAgents,
 ) -> Result<Vec<SpaceRef>> {
     Ok(db
@@ -469,9 +470,9 @@ pub(crate) fn delegated(
 /// the nearest ancestor that has one, or the root.
 pub(crate) fn receiving_paths(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     agents: &TrackedAgents,
-) -> Result<Vec<Vec<String>>> {
+) -> Result<Vec<Vec<SpaceId>>> {
     let receivers = receiving_ancestors(db, id, agents)?;
     Ok(delegation_paths(db, id, agents)?
         .into_iter()
@@ -481,7 +482,11 @@ pub(crate) fn receiving_paths(
 
 /// The ancestors that receive `id`'s activity, topmost first: each parent
 /// while the space below it has no agent of its own.
-fn receiving_ancestors(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<String>> {
+fn receiving_ancestors(
+    db: &Connection,
+    id: &SpaceId,
+    agents: &TrackedAgents,
+) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
             "{} SELECT id FROM up WHERE depth > 0 ORDER BY depth DESC",
@@ -493,7 +498,11 @@ fn receiving_ancestors(db: &Connection, id: &str, agents: &TrackedAgents) -> Res
 
 /// The space `id` and those below it whose activity its agent receives,
 /// each as the path of spaces from `id` down to it.
-fn delegation_paths(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<Vec<String>>> {
+fn delegation_paths(
+    db: &Connection,
+    id: &SpaceId,
+    agents: &TrackedAgents,
+) -> Result<Vec<Vec<SpaceId>>> {
     db.prepare(&format!(
         "{} SELECT path FROM down ORDER BY depth, id",
         down(&format!("NOT {}", has_agent("space_parents.space_id")))
@@ -501,7 +510,12 @@ fn delegation_paths(db: &Connection, id: &str, agents: &TrackedAgents) -> Result
     .query_map(params![id, agents.parameter()], |row| {
         row.get::<_, String>(0)
     })?
-    .map(|path| Ok(path?.split(',').map(str::to_owned).collect()))
+    .map(|path| {
+        Ok(path?
+            .split(',')
+            .map(|id| SpaceId::from(id.to_owned()))
+            .collect())
+    })
     .collect()
 }
 
@@ -517,7 +531,11 @@ pub(crate) enum Source {
 /// The spaces that decide the requests of the space `id`, nearest first:
 /// those above it with an agent. A space without an agent of its own has
 /// none, since its coordinator or the user acts there.
-pub(crate) fn deciders(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<String>> {
+pub(crate) fn deciders(
+    db: &Connection,
+    id: &SpaceId,
+    agents: &TrackedAgents,
+) -> Result<Vec<SpaceId>> {
     if !has_running_agent(db, id, agents)? {
         return Ok(Vec::new());
     }
@@ -528,9 +546,9 @@ pub(crate) fn deciders(db: &Connection, id: &str, agents: &TrackedAgents) -> Res
 /// passes up, nearest first.
 pub(crate) fn spaces_above(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     agents: &TrackedAgents,
-) -> Result<Vec<String>> {
+) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
             "{} SELECT id FROM up WHERE depth > 0 AND {} ORDER BY depth",
@@ -542,7 +560,7 @@ pub(crate) fn spaces_above(
 }
 
 /// Whether the space `id` has an agent among `agents`.
-fn has_running_agent(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+fn has_running_agent(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<bool> {
     crate::daemon::store::exists(
         db,
         &format!("SELECT 1 WHERE {}", has_agent("?1")),
@@ -557,8 +575,8 @@ fn coordinator(
     name: &str,
     source: Source,
     agents: &TrackedAgents,
-) -> Result<Option<String>> {
-    let id: Option<String> = db
+) -> Result<Option<SpaceId>> {
+    let id: Option<SpaceId> = db
         .query_row(
             &format!("SELECT id FROM {SPACES} WHERE name=?1"),
             [name],
@@ -578,9 +596,9 @@ fn coordinator(
 /// agent.
 pub(crate) fn coordinator_of(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     agents: &TrackedAgents,
-) -> Result<Option<String>> {
+) -> Result<Option<SpaceId>> {
     Ok(spaces_above(db, id, agents)?.into_iter().next())
 }
 

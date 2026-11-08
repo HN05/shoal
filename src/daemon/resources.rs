@@ -1,4 +1,5 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
@@ -96,7 +97,7 @@ fn leases_query(scoped: bool) -> String {
     )
 }
 
-pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>> {
+pub fn leases(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ResourceLease>> {
     Ok(db
         .prepare(&leases_query(owner.is_some()))?
         .query_map(rusqlite::params_from_iter(owner), row_lease)?
@@ -107,7 +108,7 @@ pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>
 // already held by this workspace under the previous scope.
 fn named_lease(
     db: &Connection,
-    workspace: &str,
+    workspace: &SpaceId,
     pool: &str,
     name: &str,
 ) -> Result<Option<ResourceLease>> {
@@ -439,7 +440,7 @@ impl Manager {
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<ResourceLease>> {
         let owner = self.workspace_filter(selector).await?;
-        self.store.run(move |db| leases(db, owner.as_deref())).await
+        self.store.run(move |db| leases(db, owner.as_ref())).await
     }
 
     pub async fn release_resource(
@@ -545,7 +546,7 @@ impl Manager {
 /// The workspace's lease a release would delete, once the workspace is ready.
 fn releasable_lease(
     db: &Connection,
-    workspace: &str,
+    workspace: &SpaceId,
     pool: &str,
     name: &str,
 ) -> Result<Option<ResourceLease>> {
@@ -583,7 +584,7 @@ fn release_lease(
 
 /// The workspace asking for a lease and its standing.
 struct Claimant {
-    workspace_id: String,
+    workspace_id: SpaceId,
     /// Scoped callers need configured approvals.
     scoped: bool,
     /// Queued requests that arrived earlier.

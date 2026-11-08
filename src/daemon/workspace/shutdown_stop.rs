@@ -1,5 +1,6 @@
 //! Stopping tracked work before the system or the daemon shuts down, as
 //! `shoal stop --all` does, while the daemon and wrappers still run to save it.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -100,7 +101,7 @@ impl Manager {
     /// stopped.
     pub(super) async fn stop_every_target<F, Fut>(&self, moment: &str, stop: F) -> Vec<Workspace>
     where
-        F: Fn(String) -> Fut,
+        F: Fn(SpaceId) -> Fut,
         Fut: Future<Output = Result<()>>,
     {
         let _operation = self.gates.operation().await;

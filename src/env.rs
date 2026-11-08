@@ -1,5 +1,6 @@
 //! The environment Shoal gives the processes it starts, and what it reads of
 //! its own; [`crate::client::env`] names every variable.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail};
 use std::{
     collections::BTreeMap,
@@ -375,8 +376,11 @@ pub fn output_setting() -> (String, String) {
 }
 
 /// The chat this process runs under, if any.
-pub fn chat() -> Option<String> {
-    std::env::var(CHAT).ok().filter(|chat| !chat.is_empty())
+pub fn chat() -> Option<SpaceId> {
+    std::env::var(CHAT)
+        .ok()
+        .filter(|chat| !chat.is_empty())
+        .map(SpaceId::from)
 }
 
 /// Whether this process carries a workspace's scope, which names its own
@@ -388,21 +392,22 @@ pub fn workspace_scoped() -> bool {
 /// The chat whose own agent this process belongs to: a workspace's process
 /// that a chat started, which keeps the chat's marker, belongs to the
 /// workspace instead.
-pub fn in_chat() -> Option<String> {
+pub fn in_chat() -> Option<SpaceId> {
     own_chat(std::env::var_os(WORKSPACE_ID), chat())
 }
 
 /// The space whose process this is: its workspace, else the chat whose own
 /// agent it belongs to.
-pub fn own_space() -> Option<String> {
+pub fn own_space() -> Option<SpaceId> {
     std::env::var(WORKSPACE_ID)
         .ok()
         .filter(|own| !own.is_empty())
+        .map(SpaceId::from)
         .or_else(in_chat)
 }
 
 /// `chat`, unless `workspace` names the workspace the process belongs to.
-fn own_chat(workspace: Option<OsString>, chat: Option<String>) -> Option<String> {
+fn own_chat(workspace: Option<OsString>, chat: Option<SpaceId>) -> Option<SpaceId> {
     chat.filter(|_| workspace.is_none_or(|workspace| workspace.is_empty()))
 }
 

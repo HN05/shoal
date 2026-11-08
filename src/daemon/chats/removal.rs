@@ -2,6 +2,7 @@
 //! agent are gone: the user gets the messages it had not read and the
 //! approval requests it had not decided, its attached files stay for the
 //! retention period, and its record and temporary directory go.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -49,7 +50,7 @@ struct Deleted {
 /// messages and keeping its attached files until `expires_at`.
 fn delete(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     expires_at: crate::time::UnixTime,
 ) -> Result<Deleted> {
     ensure!(

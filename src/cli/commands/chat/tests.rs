@@ -1,3 +1,5 @@
+use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
 use std::ffi::OsString;
 
 use super::*;
@@ -45,8 +47,8 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
     // A chat below a named parent goes there too.
     let resumed = Beside {
         session: Some("s1"),
-        restore: Some("c1"),
-        parent: Some("7"),
+        restore: Some(&SpaceId::from("c1")),
+        parent: Some(&SpaceSelector::parse("7")),
         ..beside
     };
     assert_eq!(
@@ -199,10 +201,18 @@ fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
     }))
     .unwrap();
     let chats = [chat];
-    let restored = with_saved_issue(Topic::repository(&repo, "plan"), &chats, "c");
+    let restored = with_saved_issue(
+        Topic::repository(&repo, "plan"),
+        &chats,
+        &SpaceId::from("c"),
+    );
     let issue = restored.linked_issue.unwrap();
     assert_eq!((issue.number, issue.url.as_str()), (7, url));
-    let other = with_saved_issue(Topic::repository(&repo, "plan"), &chats, "d");
+    let other = with_saved_issue(
+        Topic::repository(&repo, "plan"),
+        &chats,
+        &SpaceId::from("d"),
+    );
     assert!(other.linked_issue.is_none());
 }
 

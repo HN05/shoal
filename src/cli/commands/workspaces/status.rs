@@ -32,7 +32,7 @@ pub(in crate::cli::commands) async fn status(
     let spaces = crate::client::workspaces::find_spaces(&ctx.paths, target).await?;
     let mut statuses = Vec::new();
     for space in spaces {
-        statuses.push(status_view(ctx, space.id().to_owned()).await?);
+        statuses.push(status_view(ctx, SpaceSelector::id(space.id())).await?);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {
@@ -47,9 +47,8 @@ pub(in crate::cli::commands) async fn status(
 
 /// The status of `space`, with the sessions its terminal hosts keep and
 /// where its agents' transcripts are.
-async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
-    let status =
-        crate::client::workspaces::status(&ctx.paths, SpaceSelector::parse(&space)).await?;
+async fn status_view(ctx: &Context, space: SpaceSelector) -> Result<StatusView> {
+    let status = crate::client::workspaces::status(&ctx.paths, space.clone()).await?;
     let (sessions, sessions_error) = listed(sessions(ctx, &status.space).await);
     let id = status.space.id().to_owned();
     let (transcripts, transcripts_error) =

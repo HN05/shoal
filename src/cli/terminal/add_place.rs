@@ -1,5 +1,6 @@
 //! The place a host opened for an addition: the add worker that runs there,
 //! and how the place hosts the workspace it adds.
+use crate::client::space_names::SpaceSelector;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -92,7 +93,7 @@ pub(in crate::cli) async fn host_workspace(
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }
             if place.focused {
-                recent::record_attach(ctx, &workspace.id).await;
+                recent::record_attach(ctx, &SpaceSelector::id(&workspace.id)).await;
             }
             Ok(())
         }

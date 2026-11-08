@@ -2,6 +2,7 @@
 //! unmerge` undoes. The daemon updates them when a merge or unmerge
 //! execution ends, from what the default branch holds then rather than what
 //! the worker reports, and drops the ones that can no longer be undone.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -22,7 +23,7 @@ use crate::{
 pub(crate) struct LocalMerge {
     pub repository_id: String,
     pub default_branch: String,
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     /// The workspace's name when it merged.
     pub workspace: String,
     pub branch: String,

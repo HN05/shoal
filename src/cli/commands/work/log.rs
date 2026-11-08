@@ -25,8 +25,7 @@ pub(super) async fn run(
     limit: u32,
     follow: bool,
 ) -> Result<i32> {
-    let space =
-        SpaceSelector::parse(&ui::select_space(ctx, space, Fallback::CurrentDirectory).await?);
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let filter = if all {
         LogFilter::All
     } else {

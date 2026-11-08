@@ -2,6 +2,7 @@
 //! workspace or chat, how it came, and the removed workspaces and removed chats
 //! whose files stay. A space is gone when neither a workspace nor a chat has
 //! its ID; its removal or end record says how long its files stay.
+use crate::client::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -107,7 +108,7 @@ fn space(row: &rusqlite::Row<'_>) -> rusqlite::Result<Space> {
 /// record and takes any new title; none is recorded for a space that is gone.
 pub(crate) fn record(
     tx: &Connection,
-    space_id: &str,
+    space_id: &SpaceId,
     source: FileSource,
     attacher: Option<&Attacher>,
     copies: &[Copy],
@@ -149,7 +150,7 @@ pub(crate) fn record(
 /// [`record`], returning the copies' records in their order.
 pub(super) fn record_all(
     tx: &Transaction<'_>,
-    space_id: &str,
+    space_id: &SpaceId,
     source: FileSource,
     attacher: &Attacher,
     copies: &[Copy],
@@ -168,7 +169,7 @@ pub(super) fn record_all(
 }
 
 /// The files of the space `space_id`, oldest first.
-pub(super) fn list(db: &Connection, space_id: &str) -> Result<Vec<AttachedFile>> {
+pub(super) fn list(db: &Connection, space_id: &SpaceId) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE space_id=?1 ORDER BY id"
@@ -178,7 +179,7 @@ pub(super) fn list(db: &Connection, space_id: &str) -> Result<Vec<AttachedFile>>
 }
 
 /// How many files the space `space_id` has.
-pub(crate) fn count(db: &Connection, space_id: &str) -> Result<usize> {
+pub(crate) fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     let count: i64 = db.query_row(
         "SELECT COUNT(*) FROM workspace_files WHERE space_id=?1",
         [space_id],
@@ -248,7 +249,7 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
 /// their record expired, or that never had one. A removed chat's record
 /// stays until its files are deleted, so a failed deletion still lists them
 /// as the chat's.
-pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<String>> {
+pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
             "SELECT DISTINCT space_id FROM workspace_files WHERE {IN_HOME} AND {GONE}
@@ -271,7 +272,7 @@ pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
 }
 
 /// Forget every record of the removed workspace or removed chat `space_id`.
-pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &str) -> Result<()> {
+pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM workspace_files WHERE space_id=?1", [space_id])?;
     tx.execute("DELETE FROM ended_chats WHERE chat_id=?1", [space_id])?;
     Ok(())
@@ -282,7 +283,7 @@ pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &str) -> Result<()> {
 /// the transaction that deletes the chat, before its row goes.
 pub(crate) fn keep_ended_chat(
     tx: &Transaction<'_>,
-    chat_id: &str,
+    chat_id: &SpaceId,
     expires_at: crate::time::UnixTime,
 ) -> Result<()> {
     tx.execute(
@@ -314,7 +315,7 @@ pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
 /// it handed the user, which keep its last name, and move those it was the
 /// parent of to its own parent, in the transaction that deletes it, before
 /// its row goes.
-pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result<()> {
+pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &SpaceId) -> Result<()> {
     let [result, alert, question] = FileSource::KEPT;
     tx.execute(
         "DELETE FROM workspace_files WHERE space_id=?1 AND source NOT IN (?2,?3,?4)",
@@ -331,7 +332,7 @@ pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result
 
 /// Move the records of files whose space was below the space `id`, which
 /// goes, to its own parent.
-fn reparent(tx: &Transaction<'_>, id: &str) -> Result<()> {
+fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute(
         "UPDATE workspace_files
             SET parent_id=(SELECT parent_id FROM space_parents WHERE space_id=?1)
@@ -401,7 +402,7 @@ pub(super) fn moving(db: &Connection, repository_id: &str) -> Result<bool> {
 }
 
 /// The workspaces of repository `repository_id`.
-pub(super) fn repository_workspaces(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
+pub(super) fn repository_workspaces(db: &Connection, repository_id: &str) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM workspaces WHERE repository_id=?1")?
         .query_map([repository_id], |row| row.get(0))?

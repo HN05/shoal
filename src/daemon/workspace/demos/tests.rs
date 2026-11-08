@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -440,7 +441,7 @@ async fn running_web_demos_list_their_url() {
 /// The kinds and demos of the workspace's demo events, oldest first.
 async fn demo_events(
     manager: &Manager,
-    workspace: &str,
+    workspace: &SpaceId,
 ) -> Vec<(EventKind, String, Option<String>)> {
     manager
         .workspace_events(None, 1000)
@@ -448,7 +449,7 @@ async fn demo_events(
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.space_id() == workspace => {
+            EventItem::Event(event) if event.details.space_id() == Some(workspace) => {
                 let demo = event.details.demo?;
                 Some((event.details.kind, demo.name, demo.udid))
             }

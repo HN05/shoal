@@ -1,5 +1,6 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use std::{
@@ -154,7 +155,7 @@ const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 pub(crate) struct CallerAgent {
     pub(crate) execution: String,
     pub(crate) name: String,
-    pub(crate) workspace_id: String,
+    pub(crate) workspace_id: SpaceId,
 }
 
 pub(crate) struct Agent {
@@ -167,7 +168,7 @@ pub(crate) struct Agent {
     /// records keep.
     narrowing: crate::config::permissions::PermissionsConfig,
     workspace: String,
-    workspace_id: String,
+    workspace_id: SpaceId,
     started: Instant,
     recover: bool,
     stop: watch::Sender<bool>,
@@ -334,7 +335,7 @@ impl Manager {
     }
 
     /// A new agent or a finished assignment replaces the last sessions.
-    pub(crate) fn forget_last_sessions(&self, workspace_id: &str) {
+    pub(crate) fn forget_last_sessions(&self, workspace_id: &SpaceId) {
         let forgotten =
             crate::execution::recovery::LastSession::forget_all(&self.paths, workspace_id);
         if let Err(error) = forgotten {
@@ -410,7 +411,7 @@ impl Manager {
         .await
     }
 
-    async fn agent_exit_workspace_ready(&self, id: &str) -> anyhow::Result<bool> {
+    async fn agent_exit_workspace_ready(&self, id: &SpaceId) -> anyhow::Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -441,7 +442,7 @@ impl Manager {
         &self,
         id: &str,
         tracked: &TrackedAgent,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         workspace: &str,
         recover: bool,
         running: Duration,
@@ -457,7 +458,7 @@ impl Manager {
             mode: tracked.mode.clone(),
             narrowing: tracked.narrowing,
             workspace: workspace.into(),
-            workspace_id: workspace_id.into(),
+            workspace_id: workspace_id.clone(),
             started: Instant::now()
                 .checked_sub(running)
                 .unwrap_or_else(Instant::now),
@@ -519,7 +520,7 @@ impl Manager {
     pub(crate) async fn pause_agent_execution(
         &self,
         id: &str,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         patience: Duration,
     ) -> anyhow::Result<Pause> {
         let record = self
@@ -743,7 +744,7 @@ impl Manager {
     pub(crate) async fn admit_agent_restore(
         &self,
         id: &str,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> anyhow::Result<Grant> {
         loop {
             let grant = self.await_restore_admission(id).await?;
@@ -755,7 +756,10 @@ impl Manager {
 
     /// Check that a stopped agent's workspace is ready and still the
     /// recorded worktree, so a replaced one never receives the agent.
-    pub(crate) async fn verify_restore_workspace(&self, workspace_id: &str) -> anyhow::Result<()> {
+    pub(crate) async fn verify_restore_workspace(
+        &self,
+        workspace_id: &SpaceId,
+    ) -> anyhow::Result<()> {
         let workspace = self.workspace_by_id(workspace_id).await?;
         self.verify_worktree(&workspace).await?;
         anyhow::ensure!(
@@ -772,7 +776,7 @@ impl Manager {
     pub(super) async fn confirm_restore(
         &self,
         id: &str,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         grant: Grant,
     ) -> anyhow::Result<bool> {
         self.verify_restore_workspace(workspace_id).await?;
@@ -791,7 +795,7 @@ impl Manager {
     /// proof its load may still show.
     pub(super) async fn agent_executions(
         &self,
-    ) -> std::collections::HashMap<String, (String, Activity)> {
+    ) -> std::collections::HashMap<String, (SpaceId, Activity)> {
         let waiting = self.agent_queue.restore_waiters();
         self.executions
             .with_agents(|agents| {
@@ -859,7 +863,7 @@ impl Manager {
 
     /// The agent and workspace the record of execution `id` names, if it
     /// ran one.
-    async fn recorded_agent(&self, id: &str) -> Option<(String, String)> {
+    async fn recorded_agent(&self, id: &str) -> Option<(String, SpaceId)> {
         let execution = id.to_owned();
         let recorded = self
             .store
@@ -887,7 +891,7 @@ impl Manager {
     }
 
     /// Workspaces with a connected agent that is not being stopped.
-    pub(crate) async fn running_agent_workspaces(&self) -> Vec<String> {
+    pub(crate) async fn running_agent_workspaces(&self) -> Vec<SpaceId> {
         let mut workspaces: Vec<_> = self
             .executions
             .with_agents(|agents| {
@@ -905,7 +909,7 @@ impl Manager {
 
     /// Workspaces with a recorded agent execution, connected or not, such as
     /// one whose wrapper waits to reattach after a daemon restart.
-    pub(crate) async fn recorded_agent_workspaces(&self) -> anyhow::Result<HashSet<String>> {
+    pub(crate) async fn recorded_agent_workspaces(&self) -> anyhow::Result<HashSet<SpaceId>> {
         let agents = self
             .store
             .run(crate::daemon::store::agent_executions)
@@ -916,7 +920,7 @@ impl Manager {
     /// Whether something an agent could stop runs in the workspace: a tracked
     /// command, a demo or a background process an agent started. The agents
     /// themselves do not count, working or idle.
-    pub(crate) async fn runs_agent_work(&self, workspace_id: &str) -> anyhow::Result<bool> {
+    pub(crate) async fn runs_agent_work(&self, workspace_id: &SpaceId) -> anyhow::Result<bool> {
         let id = workspace_id.to_owned();
         let running = self
             .store
@@ -1119,7 +1123,7 @@ fn still_idle(turns: &mut HashMap<String, Turn>, agents: &HashMap<String, Agent>
 /// The workspace's running executions.
 fn running_executions(
     db: &rusqlite::Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
 ) -> anyhow::Result<Vec<crate::model::Execution>> {
     Ok(crate::daemon::store::executions(db, workspace_id)?
         .into_iter()

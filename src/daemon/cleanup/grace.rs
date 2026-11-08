@@ -1,4 +1,5 @@
 //! Grace periods of unattended removals, persisted so restarts keep them.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::OptionalExtension;
 use std::time::Duration;
@@ -8,7 +9,7 @@ use crate::{daemon::workspace::Manager, time::UnixTime};
 impl Manager {
     /// When the space's grace period ends, starting it now when none runs,
     /// and recording that this pass still wants to remove it.
-    pub(crate) async fn claim_grace(&self, id: &str, grace: Duration) -> Result<UnixTime> {
+    pub(crate) async fn claim_grace(&self, id: &SpaceId, grace: Duration) -> Result<UnixTime> {
         self.claim(
             "INSERT INTO cleanup_grace(space_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
              ON CONFLICT(space_id) DO UPDATE SET claimed=1
@@ -50,7 +51,7 @@ impl Manager {
     }
 
     /// When automatic cleanup removes the space, while its grace period runs.
-    pub(crate) async fn cleanup_at(&self, id: &str) -> Result<Option<UnixTime>> {
+    pub(crate) async fn cleanup_at(&self, id: &SpaceId) -> Result<Option<UnixTime>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

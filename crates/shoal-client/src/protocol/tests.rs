@@ -1,5 +1,6 @@
 use super::*;
 use crate::executions::ExecutionKind;
+use crate::space_ids::SpaceId;
 use serde_json::json;
 
 #[test]
@@ -550,8 +551,8 @@ async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
     let mut reader = tokio::io::BufReader::new(wire.as_slice());
     let joined = read_response(&mut reader).await.unwrap();
     let joined = Vec::<PresentSpace>::try_from(joined.body).unwrap();
-    let ids = |spaces: &[PresentSpace]| -> Vec<String> {
-        spaces.iter().map(|space| space.id().to_owned()).collect()
+    let ids = |spaces: &[PresentSpace]| -> Vec<SpaceId> {
+        spaces.iter().map(|space| space.id().clone()).collect()
     };
     assert_eq!(ids(&joined), ids(&spaces));
 }

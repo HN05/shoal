@@ -1,3 +1,4 @@
+use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +14,7 @@ pub enum AssignmentMethod {
         done: crate::assignments::Done,
         /// The chat whose agent sends the request, which attaches them.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<String>,
+        sender_chat: Option<SpaceId>,
     },
     /// Withdraw the completion of a workspace or running chat.
     UndoDone { space: SpaceSelector },

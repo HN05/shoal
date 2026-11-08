@@ -28,10 +28,9 @@ pub(in crate::cli::commands) async fn open(
         agents::ensure_opens(agents::app(name), &args)?;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
-            .await?
-            .workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+        .await?
+        .workspace;
     let app = agents::app(match name {
         Some(name) => name,
         None => default_app(ctx, &workspace).await?,

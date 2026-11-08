@@ -1,5 +1,6 @@
 //! Demos where no terminal host keeps them: the demo worker runs as a
 //! background process writing a log, which stands in for its screen.
+use crate::client::space_ids::SpaceId;
 use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom},
@@ -89,7 +90,7 @@ fn tail(path: &Path, limit: u64) -> std::io::Result<String> {
 }
 
 /// In the workspace's state directory, which its removal deletes.
-fn log_path(paths: &Paths, workspace_id: &str, name: &str) -> PathBuf {
+fn log_path(paths: &Paths, workspace_id: &SpaceId, name: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join("demos")

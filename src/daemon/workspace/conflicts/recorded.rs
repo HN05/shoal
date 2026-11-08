@@ -1,5 +1,6 @@
 //! The last check of each workspace against its default conflict target,
 //! which merging reads instead of checking again.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -21,7 +22,7 @@ pub(super) fn save(db: &Connection, check: &ConflictCheck) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<ChangedOnBothSides>> {
+pub(crate) fn get(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ChangedOnBothSides>> {
     db.query_row(
         &format!("SELECT {COLUMNS} FROM changed_on_both_sides WHERE workspace_id=?1"),
         [workspace_id],
@@ -33,7 +34,7 @@ pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<ChangedO
 }
 
 /// Each workspace's record that lists files, by workspace ID.
-pub(crate) fn listing_files(db: &Connection) -> Result<Vec<(String, ChangedOnBothSides)>> {
+pub(crate) fn listing_files(db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides)>> {
     let mut statement = db.prepare(&format!(
         "SELECT {COLUMNS} FROM changed_on_both_sides WHERE files != '[]'"
     ))?;
@@ -49,7 +50,7 @@ const COLUMNS: &str = "workspace_id,target,target_commit,head,files";
 
 /// A row of [`COLUMNS`], its files still JSON.
 struct Row {
-    workspace_id: String,
+    workspace_id: SpaceId,
     target: String,
     target_commit: String,
     head: String,
@@ -67,7 +68,7 @@ impl Row {
         })
     }
 
-    fn record(self) -> Result<(String, ChangedOnBothSides)> {
+    fn record(self) -> Result<(SpaceId, ChangedOnBothSides)> {
         let record = ChangedOnBothSides {
             target: self.target,
             target_commit: self.target_commit,

@@ -4,6 +4,7 @@
 //! A chat is no workspace's agent, so it is not a tracked execution; the
 //! daemon records it while its agent runs.
 //! Every start makes a new chat and gives it focus.
+use crate::client::space_ids::SpaceId;
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
@@ -63,7 +64,7 @@ pub(super) async fn start(
             Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
             None => chosen(ctx, repository).await?,
         };
-        check_parent(ctx, Some(&repo), None, options.parent.as_deref()).await?;
+        check_parent(ctx, Some(&repo), None, options.parent.as_ref()).await?;
         let settings = settings(ctx, &repo).await?;
         options.check_agent(&settings)?;
         let mode = (subject.mode).chosen(
@@ -88,7 +89,7 @@ pub(super) async fn start(
     }
     .await;
     handoff::report(&started);
-    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
 }
 
 /// Start a chat about `topic` without a repository, in `root_dir`, which
@@ -102,7 +103,7 @@ pub(super) async fn start_outside_repositories(
     let started = async {
         let options = options.for_caller(ctx)?;
         options.check_name(ctx).await?;
-        check_parent(ctx, None, None, options.parent.as_deref()).await?;
+        check_parent(ctx, None, None, options.parent.as_ref()).await?;
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
         let settings = crate::client::workspaces::settings(&ctx.paths, repository.config()).await?;
         crate::config::modes::resolve(&settings.modes, &topic.mode, SpaceKind::Chat, false)?;
@@ -111,7 +112,7 @@ pub(super) async fn start_outside_repositories(
     }
     .await;
     handoff::report(&started);
-    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
 }
 
 /// `root_dir`, where a chat without a repository runs, which the daemon
@@ -134,7 +135,7 @@ pub(super) async fn start_in_workspace(
         options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
-        let parent = options.parent.as_deref();
+        let parent = options.parent.as_ref();
         check_parent(ctx, Some(&repo), Some(&workspace), parent).await?;
         let settings = settings(ctx, &repo).await?;
         options.check_agent(&settings)?;
@@ -160,7 +161,7 @@ pub(super) async fn start_in_workspace(
     }
     .await;
     handoff::report(&started);
-    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
 }
 
 /// Refuse `parent`, the space a chat in `repo`, or without one, in the
@@ -170,20 +171,14 @@ async fn check_parent(
     ctx: &Context,
     repo: Option<&Repository>,
     workspace: Option<&Workspace>,
-    parent: Option<&str>,
+    parent: Option<&SpaceSelector>,
 ) -> Result<()> {
     let Some(parent) = parent else {
         return Ok(());
     };
-    let workspace = workspace.map(|workspace| workspace.id.clone());
+    let workspace = workspace.map(|workspace| SpaceSelector::id(&workspace.id));
     let repository = repo.map(|repo| repo.id.clone().into());
-    crate::client::chats::check_parent(
-        &ctx.paths,
-        repository,
-        workspace.as_deref().map(SpaceSelector::parse),
-        parent.to_owned(),
-    )
-    .await
+    crate::client::chats::check_parent(&ctx.paths, repository, workspace, parent.clone()).await
 }
 
 /// `topic` in `repo` started on the issue `issue` names, if any.
@@ -210,12 +205,14 @@ async fn chosen_workspace(ctx: &Context, selector: Option<SpaceSelector>) -> Res
 
 /// The workspace `selector` names, by number, ID or name, refused before
 /// anything is asked unless a chat may run in it; the daemon checks again.
-pub(super) async fn hosting_workspace(ctx: &Context, selector: &str) -> Result<Workspace> {
-    let selected = SpaceSelector::parse(selector);
+pub(super) async fn hosting_workspace(
+    ctx: &Context,
+    selector: &SpaceSelector,
+) -> Result<Workspace> {
     let workspace = crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
-        .find(|workspace| selected.selects(&workspace.id, &workspace.name, workspace.number))
+        .find(|workspace| selector.selects(&workspace.id, &workspace.name, workspace.number))
         .with_context(|| format!("no space {selector}"))?;
     ensure_hosts_chat(&workspace)?;
     Ok(workspace)
@@ -270,13 +267,13 @@ pub(super) struct Options {
     pub fork: bool,
     /// The stopped chat, by ID, that this start restores under its own name
     /// instead of recording a new one.
-    pub restore: Option<String>,
+    pub restore: Option<SpaceId>,
     /// The handoff of a starter that waits on this place to start the chat,
     /// with its scope when it is scoped.
     pub handoff: Option<PathBuf>,
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     /// The narrowing of the mode's permissions.
     pub narrowing: Narrowing,
 }
@@ -466,8 +463,8 @@ impl Topic {
 /// `topic` with the issue the saved chat `restore` among `chats` is linked
 /// to, for its restored agent's rules; a restore relaunched in a new tab
 /// names only the chat.
-fn with_saved_issue(topic: Topic, chats: &[Chat], restore: &str) -> Topic {
-    let saved = chats.iter().find(|chat| chat.id == restore);
+fn with_saved_issue(topic: Topic, chats: &[Chat], restore: &SpaceId) -> Topic {
+    let saved = chats.iter().find(|chat| chat.id == *restore);
     Topic {
         linked_issue: saved.and_then(|chat| templates::IssueFields::linked(&chat.links)),
         ..topic
@@ -645,8 +642,8 @@ pub(super) async fn launch(
         args: &args,
         session: session.as_deref(),
         fork,
-        restore: restore.as_deref(),
-        parent: parent.as_deref(),
+        restore: restore.as_ref(),
+        parent: parent.as_ref(),
         narrowing,
     };
     let home = topic.home(&repo);
@@ -684,7 +681,6 @@ pub(super) async fn launch(
         return Ok(Started::Exited(0));
     }
     agents::trust_chat(ctx, &settings, agent.name(), repo.registered(), home).await;
-    let parent = parent.as_deref().map(SpaceSelector::parse);
     let new = crate::client::chats::NewChat {
         name: &name,
         agent: agent.name(),
@@ -698,11 +694,11 @@ pub(super) async fn launch(
         new,
         crate::terminal::current_place().await,
         false,
-        restore.as_deref(),
+        restore.as_ref(),
     )
     .await?;
     if crate::env::shown_chat() {
-        recent::record_chat_attach(ctx, &chat.id).await;
+        recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
     }
     agents::link_chat(ctx, &chat, &topic.links).await;
     let command = command(
@@ -911,8 +907,8 @@ struct Beside<'a> {
     args: &'a [OsString],
     session: Option<&'a str>,
     fork: bool,
-    restore: Option<&'a str>,
-    parent: Option<&'a str>,
+    restore: Option<&'a SpaceId>,
+    parent: Option<&'a SpaceSelector>,
     narrowing: Narrowing,
 }
 
@@ -943,11 +939,11 @@ impl Beside<'_> {
             }
         }
         if let Some(restore) = self.restore {
-            chat.extend(["--restore".into(), restore.into()]);
+            chat.extend(["--restore".into(), restore.as_str().into()]);
         }
         chat.extend(self.narrowing.args());
         if let Some(parent) = self.parent {
-            chat.extend(["--parent".into(), parent.into()]);
+            chat.extend(["--parent".into(), parent.to_string().into()]);
         }
         if let Some(handoff) = handoff {
             chat.extend(["--handoff".into(), handoff.into()]);

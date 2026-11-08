@@ -1,5 +1,6 @@
 //! A tracked execution from its daemon record to its reported completion: the
 //! launch it prepares, the runs of its command, and what follows each run.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::executions::ExecutionKindExt;
 use std::{
     ffi::OsString,
@@ -49,7 +50,7 @@ struct TrackedLaunch {
 
 pub(super) async fn run_tracked(
     paths: &Paths,
-    workspace: String,
+    workspace: SpaceSelector,
     command: Vec<OsString>,
     mode: Mode,
     agent: Option<super::TrackedAgent>,
@@ -297,7 +298,7 @@ async fn roll_back_failed_merge(plan: &ExecutionPlan, result: Result<i32>) -> Re
 
 async fn prepare_tracked_launch(
     paths: &Paths,
-    workspace: String,
+    workspace: SpaceSelector,
     command: Vec<OsString>,
     mode: &Mode,
     agent: Option<super::TrackedAgent>,
@@ -397,10 +398,11 @@ async fn prepare_taken_over_launch(
 /// the place it runs in, within [`takeover::PREPARATION_LIMIT`].
 async fn prepare_restore(
     paths: &Paths,
-    workspace: &str,
+    workspace: &SpaceId,
     agent: &super::TrackedAgent,
     mode: &Mode,
 ) -> Result<(Option<Origin>, Option<AgentLaunch>, recovery::Recovery)> {
+    let workspace = &SpaceSelector::id(workspace);
     takeover::within_preparation_limit(async {
         let place = terminal_place(mode).await;
         let auth =
@@ -448,7 +450,7 @@ async fn ready_command(
 
 async fn open_execution(
     paths: &Paths,
-    workspace: String,
+    workspace: SpaceSelector,
     mode: &Mode,
     agent: Option<&super::TrackedAgent>,
     recover: bool,
@@ -456,7 +458,7 @@ async fn open_execution(
 ) -> Result<(Link, ExecutionPlan)> {
     let wrapper = this_wrapper()?;
     let method = ExecutionMethod::Execute {
-        workspace: SpaceSelector::parse(&workspace),
+        workspace,
         wrapper: wrapper.clone(),
         kind: mode.kind(),
         queue_entry: agent
@@ -531,7 +533,7 @@ fn allow_reattach(
 
 async fn prepare_agent_launch(
     paths: &Paths,
-    workspace: &str,
+    workspace: &SpaceSelector,
     mode: &Mode,
     agent: Option<&super::TrackedAgent>,
     place: Option<&Origin>,
@@ -542,7 +544,7 @@ async fn prepare_agent_launch(
     }
     let (config, settings) = crate::client::workspaces::configuration(
         paths,
-        crate::protocol::ConfigTarget::Workspace(SpaceSelector::parse(workspace)),
+        crate::protocol::ConfigTarget::Workspace(workspace.clone()),
     )
     .await?;
     let secrets = if has_agent {
@@ -590,18 +592,18 @@ async fn prepare_agent_launch(
 /// pushes directly.
 async fn prepare_push_gate(
     paths: &Paths,
-    workspace: &str,
+    workspace: &SpaceSelector,
     agent: &crate::execution::TrackedAgent,
 ) -> Result<crate::push_gate::Launch> {
-    let selector = SpaceSelector::parse(workspace);
     let (mode, narrowing) = (agent.mode.clone(), agent.narrowing);
     let permissions =
-        crate::client::workspaces::launch_permissions(paths, selector, mode, narrowing).await?;
+        crate::client::workspaces::launch_permissions(paths, workspace.clone(), mode, narrowing)
+            .await?;
     if permissions.push.value == Pushes::Direct {
         return Ok(Default::default());
     }
     let method = crate::protocol::WorkspaceMethod::VerifyWorkspace {
-        workspace: SpaceSelector::parse(workspace),
+        workspace: workspace.clone(),
         on_branch: false,
     };
     let workspace: crate::model::Workspace = connection::request(paths, method).await?;

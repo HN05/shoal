@@ -1,4 +1,5 @@
 //! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
+use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -144,7 +145,7 @@ pub(super) async fn handle(
             parent,
         } => {
             let parent = manager.space_id(parent.as_ref()).await?;
-            (manager.ensure_parent_repository(&repository, parent.as_deref())).await?;
+            (manager.ensure_parent_repository(&repository, parent.as_ref())).await?;
             manager
                 .check_creation(
                     &repository,
@@ -176,7 +177,7 @@ pub(super) async fn handle(
         ),
         WorkspaceMethod::ListWorkspaces => {
             let root = manager.reach_root(caller).await?;
-            Body::Workspaces(manager.visible_workspaces(root.as_deref()).await?)
+            Body::Workspaces(manager.visible_workspaces(root.as_ref()).await?)
         }
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
@@ -246,7 +247,8 @@ pub(super) async fn handle(
             // The workspace may be removed already, so its ID stays as given.
             let workspace = match workspace {
                 SpaceSelector::Number(_) => manager.workspace(&workspace).await?.id,
-                SpaceSelector::IdOrName(id) | SpaceSelector::Id(id) => id,
+                SpaceSelector::Id(id) => id,
+                SpaceSelector::IdOrName(id) => SpaceId::from(id),
             };
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
         }
@@ -281,7 +283,7 @@ pub(super) async fn handle(
 }
 
 /// The places Shoal created for `workspace`, or for every workspace.
-async fn owned_places(manager: &Manager, workspace: Option<String>) -> Result<Body> {
+async fn owned_places(manager: &Manager, workspace: Option<SpaceId>) -> Result<Body> {
     Ok(Body::OwnedPlaces(
         manager
             .owned_places(workspace)

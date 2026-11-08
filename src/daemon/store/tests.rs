@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 
 // Reconstruct old schemas from a frozen pre-refactor snapshot, independently
@@ -523,7 +524,7 @@ fn migrates_recorded_versions_to_the_same_schema(remainder: i64) -> Result<()> {
         );
         if version > 0 {
             assert_eq!(
-                executions(&db, "workspace")?[0].state,
+                executions(&db, &SpaceId::from("workspace"))?[0].state,
                 ExecutionState::Running
             );
             assert_eq!(
@@ -1235,7 +1236,7 @@ fn failed_migration_rolls_back_all_pending_steps() -> Result<()> {
     db.execute_batch("ALTER TABLE executions DROP COLUMN wrapper;")?;
     migrate(&mut db)?;
     assert_eq!(
-        executions(&db, "workspace")?[0].state,
+        executions(&db, &SpaceId::from("workspace"))?[0].state,
         ExecutionState::Running
     );
     Ok(())
@@ -1318,7 +1319,7 @@ fn mappers_use_named_columns() -> Result<()> {
             "agent": "claude"
         }),
     )?;
-    assert!(setup_finished(&db, "workspace")?);
+    assert!(setup_finished(&db, &SpaceId::from("workspace"))?);
     Ok(())
 }
 
@@ -1530,9 +1531,9 @@ async fn migrates_original_database_without_losing_ownership_records() {
             )?;
             assert_eq!(workspace.name, "feature");
             assert!(workspace.base_commit.is_none() && workspace.base_ref.is_none());
-            assert!(setup_finished(db, "workspace")?);
+            assert!(setup_finished(db, &SpaceId::from("workspace"))?);
             assert_eq!(
-                executions(db, "workspace")?[0].state,
+                executions(db, &SpaceId::from("workspace"))?[0].state,
                 crate::state::ExecutionState::Running
             );
             assert!(ports(db, None)?.is_empty());
@@ -1546,7 +1547,7 @@ async fn migrates_original_database_without_losing_ownership_records() {
         .unwrap()
         .run(|db| {
             assert_eq!(
-                executions(db, "workspace")?[0].state,
+                executions(db, &SpaceId::from("workspace"))?[0].state,
                 crate::state::ExecutionState::Unknown
             );
             Ok(())
@@ -1641,9 +1642,9 @@ async fn migrates_setup_completion_without_losing_interrupted_state() {
     let migrated = Store::open(path).await.unwrap();
     migrated
         .run(|db| {
-            assert!(setup_finished(db, "ready")?);
-            assert!(!setup_finished(db, "preparing")?);
-            assert!(!setup_finished(db, "failed")?);
+            assert!(setup_finished(db, &SpaceId::from("ready"))?);
+            assert!(!setup_finished(db, &SpaceId::from("preparing"))?);
+            assert!(!setup_finished(db, &SpaceId::from("failed"))?);
             let state: WorkspaceState = db.query_row(
                 "SELECT state FROM workspaces WHERE id='preparing'",
                 [],
@@ -1657,7 +1658,7 @@ async fn migrates_setup_completion_without_losing_interrupted_state() {
     migrated.quarantine_interrupted_operations().await.unwrap();
     migrated
         .run(|db| {
-            assert!(!setup_finished(db, "preparing")?);
+            assert!(!setup_finished(db, &SpaceId::from("preparing"))?);
             assert_eq!(
                 db.query_row(
                     "SELECT state FROM workspaces WHERE id='preparing'",
@@ -1716,7 +1717,7 @@ fn workspaces_may_have_no_branch_once_migrated_and_keep_what_references_them() -
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(branches, [None, Some("worker".to_owned())]);
-    assert_eq!(executions(&db, "workspace")?.len(), 1);
+    assert_eq!(executions(&db, &SpaceId::from("workspace"))?.len(), 1);
     Ok(())
 }
 

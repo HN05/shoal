@@ -1,5 +1,6 @@
 //! Approval requests: what a workspace's agent asks the user, or a coordinating
 //! agent, to allow.
+use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use anyhow::{Result, bail, ensure};
@@ -252,7 +253,7 @@ pub struct ApprovalRequest {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub key: String,
     /// The space that made the request, a workspace or a chat.
-    pub space_id: String,
+    pub space_id: SpaceId,
     #[serde(default)]
     pub space: String,
     /// Whether the space is gone, which a proposed issue outlives.
@@ -278,7 +279,7 @@ pub struct ApprovalRequest {
     /// The space whose coordinating agent decides the request, the nearest
     /// above the requester with an agent; the user decides without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub decider: Option<String>,
+    pub decider: Option<SpaceId>,
     /// The issue or PR an approved proposal opened, or the issue a denied
     /// one duplicates; decided proposals are no longer stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]

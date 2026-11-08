@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::events::{EventItem, LinkEvent},
@@ -6,7 +7,7 @@ use crate::{
     model::LinkedItem,
 };
 
-async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>, String) {
+async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>, SpaceId) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     git(&path, &["config", "protocol.allow", "never"]);

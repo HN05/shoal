@@ -1,6 +1,7 @@
 //! Demos the daemon records with the executions that run them, so a demo
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::{Context, Result, ensure};
@@ -28,9 +29,7 @@ impl Manager {
             },
             None => None,
         };
-        self.store
-            .run(move |db| list(db, workspace.as_deref()))
-            .await
+        self.store.run(move |db| list(db, workspace.as_ref())).await
     }
 
     /// How far the start of `launch` in `selector`'s workspace got.
@@ -168,7 +167,7 @@ pub(super) fn execution_launch(db: &Connection, execution: &str) -> Result<Optio
 pub(super) fn record(
     tx: &Transaction<'_>,
     execution: &str,
-    workspace: &str,
+    workspace: &SpaceId,
     launch: &Launch,
 ) -> Result<()> {
     crate::demos::validate_name(&launch.name)?;
@@ -195,7 +194,7 @@ pub(super) fn record(
     Ok(())
 }
 
-fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
+fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
     let mut statement = db.prepare(
         "SELECT d.workspace_id,w.name,d.execution_id,d.started_at,d.record,d.has_run
          FROM demos d JOIN workspaces w ON w.id=d.workspace_id
@@ -203,7 +202,7 @@ fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
     )?;
     let rows = statement.query_map([workspace], |row| {
         Ok((
-            row.get::<_, String>(0)?,
+            row.get::<_, SpaceId>(0)?,
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
             row.get(3)?,

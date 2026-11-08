@@ -1,5 +1,6 @@
 //! `shoal work rename`: title a workspace or rename a chat, or ask its
 //! agent to choose.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use super::super::{chat, workspaces};
@@ -26,10 +27,8 @@ pub(super) async fn rename(
         SpaceName::parse(&title).map_err(|_| error)?;
     }
     match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::rename(ctx, chat, SpaceName::parse(&title)?).await,
-        Err(workspace) => {
-            workspaces::title(ctx, Some(SpaceSelector::parse(&workspace)), title).await
-        }
+        Ok(chat) => chat::rename(ctx, SpaceSelector::Id(chat), SpaceName::parse(&title)?).await,
+        Err(workspace) => workspaces::title(ctx, Some(workspace), title).await,
     }
 }
 
@@ -38,10 +37,8 @@ pub(super) async fn rename(
 pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     chat::ensure_scope_token(ctx)?;
     match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::request_name(ctx, chat).await,
-        Err(workspace) => {
-            workspaces::request_title(ctx, Some(SpaceSelector::parse(&workspace))).await
-        }
+        Ok(chat) => chat::request_name(ctx, SpaceSelector::Id(chat)).await,
+        Err(workspace) => workspaces::request_title(ctx, Some(workspace)).await,
     }
 }
 
@@ -51,7 +48,7 @@ pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Resu
 async fn chosen_chat(
     ctx: &Context,
     space: Option<SpaceSelector>,
-) -> Result<Result<String, String>> {
+) -> Result<Result<SpaceId, SpaceSelector>> {
     if space.is_none() && ui::current_chat(&None).is_none() {
         let chats = crate::client::chats::list(&ctx.paths).await?;
         if let Some(chat) = super::super::sessions::checkout_chat(ctx, &chats).await? {
@@ -60,9 +57,7 @@ async fn chosen_chat(
     }
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&space))
-            .await?
-        {
+        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
             Some(PresentSpace::Chat(chat)) => Ok(chat.id),
             _ => Err(space),
         },

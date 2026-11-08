@@ -1,6 +1,7 @@
 //! What the daemon measures about workspaces and the machine: activity that
 //! restarts idle timers, CPU readings and each workspace's process usage.
 //! Each is locked only inside an operation, never across an await.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     sync::{Mutex, MutexGuard, PoisonError},
@@ -11,7 +12,7 @@ use crate::daemon::{cpu_usage::CpuUsage, workspace_usage::WorkspaceUsages};
 #[derive(Default)]
 pub(crate) struct Usage {
     /// Per-workspace activity counters folded into cleanup fingerprints.
-    activity: Mutex<HashMap<String, u64>>,
+    activity: Mutex<HashMap<SpaceId, u64>>,
     /// Recent CPU readings for dynamic agent admission.
     cpu: Mutex<CpuUsage>,
     /// What each workspace's processes used at the latest sample.
@@ -20,16 +21,16 @@ pub(crate) struct Usage {
 
 impl Usage {
     /// Count activity in the workspace `id`.
-    pub(crate) fn record_activity(&self, id: &str) {
+    pub(crate) fn record_activity(&self, id: &SpaceId) {
         *lock(&self.activity).entry(id.to_owned()).or_default() += 1;
     }
 
-    pub(crate) fn activity(&self, id: &str) -> u64 {
+    pub(crate) fn activity(&self, id: &SpaceId) -> u64 {
         lock(&self.activity).get(id).copied().unwrap_or(0)
     }
 
     /// Forget the activity of a workspace that no longer exists.
-    pub(crate) fn forget_workspace(&self, id: &str) {
+    pub(crate) fn forget_workspace(&self, id: &SpaceId) {
         lock(&self.activity).remove(id);
     }
 

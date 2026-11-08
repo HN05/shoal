@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use serde_json::json;
 
@@ -171,12 +172,12 @@ async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
     // The chat's removal, which deletes its registration, ran first.
     let refused = manager
         .store
-        .write(move |tx| record_chat_change(tx, "removed-chat", change))
+        .write(move |tx| record_chat_change(tx, &SpaceId::from("removed-chat"), change))
         .await;
     assert!(refused.is_err());
     assert!(
         manager
-            .pr_registration("removed-chat")
+            .pr_registration(&SpaceId::from("removed-chat"))
             .await
             .unwrap()
             .is_none()

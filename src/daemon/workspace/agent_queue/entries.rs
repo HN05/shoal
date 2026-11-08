@@ -1,6 +1,7 @@
 //! Operations on one entry: adding a launch, listing entries, and a starting
 //! entry's way from its reservation to the agent that takes its slot or its
 //! failure.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -90,7 +91,7 @@ impl Manager {
         &self,
         workspace: &SpaceSelector,
         repository_id: &str,
-    ) -> Result<String> {
+    ) -> Result<SpaceId> {
         let workspace = self.workspace(workspace).await?;
         Self::ensure_holds_agents(&workspace)?;
         ensure!(
@@ -292,7 +293,7 @@ impl Manager {
 
     /// The workspaces in which an agent launch or restore waits in the queue
     /// or starts.
-    pub(crate) async fn queued_agent_workspaces(&self) -> Result<HashSet<String>> {
+    pub(crate) async fn queued_agent_workspaces(&self) -> Result<HashSet<SpaceId>> {
         self.store
             .run(|db| {
                 Ok(db

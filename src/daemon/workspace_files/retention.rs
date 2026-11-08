@@ -1,6 +1,7 @@
 //! How long attached files stay: a workspace's files go with it, except its
 //! results, which stay as long as its removal record; a chat's stay for the
 //! same retention after it ends; and every file goes with its repository.
+use crate::client::space_ids::SpaceId;
 use std::{path::Path, time::Duration};
 
 use anyhow::{Result, ensure};
@@ -116,7 +117,7 @@ impl Manager {
     /// Delete the files kept in `home` for the removed workspace or removed
     /// chat `space_id`, and then their records. Callers hold the gate of its
     /// files.
-    async fn delete_kept_files(&self, home: &FilesHome, space_id: String) -> Result<()> {
+    async fn delete_kept_files(&self, home: &FilesHome, space_id: SpaceId) -> Result<()> {
         if let Some(layout) = home.layout() {
             let id = space_id.clone();
             tokio::task::spawn_blocking(move || layout.remove_kept(&id)).await??;

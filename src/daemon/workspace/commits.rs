@@ -2,6 +2,7 @@
 //! their own, created from a revision or a PR's head. Worktrunk only creates
 //! worktrees on a branch, so plain Git creates theirs; removal goes through
 //! Worktrunk like any workspace's.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 
 use super::{Manager, restore::RestoredFiles};
@@ -34,7 +35,7 @@ impl Manager {
     pub async fn create_commit_workspace(
         &self,
         repository: crate::repository::Selector,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
         start: CommitStart,
         options: CreationOptions,
     ) -> Result<Workspace> {
@@ -48,7 +49,7 @@ impl Manager {
         }
         // Checked before resolving the start, which may fetch: a scoped
         // process reaches only its own repository.
-        self.ensure_parent_repository(&repository, parent.as_deref())
+        self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         self.create_at_start(&repo, parent, start, options).await
@@ -65,15 +66,15 @@ impl Manager {
         repository: crate::repository::Selector,
         url: String,
         head: PullHead,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
         options: CreationOptions,
         confined: bool,
     ) -> Result<OpenedWorkspace> {
-        self.ensure_parent_repository(&repository, parent.as_deref())
+        self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
-            if let Some(parent) = parent.as_deref().filter(|_| confined) {
+            if let Some(parent) = parent.as_ref().filter(|_| confined) {
                 anyhow::ensure!(
                     self.within_subtree(parent, &workspace.id).await?,
                     "{} is outside the space opening it; ask the user to open it",
@@ -112,7 +113,7 @@ impl Manager {
     async fn create_at_start(
         &self,
         repo: &Repository,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
         start: CommitStart,
         options: CreationOptions,
     ) -> Result<Workspace> {
@@ -241,7 +242,7 @@ impl Manager {
     /// lifecycle reservation excludes removal meanwhile.
     pub(crate) async fn move_job_workspace(
         &self,
-        id: &str,
+        id: &SpaceId,
         commit: &str,
         reference: Option<&str>,
     ) -> Result<()> {
@@ -279,7 +280,7 @@ impl Manager {
 
     /// Record `commit` as where the workspace `id` started, which is also
     /// what its diff compares with.
-    async fn record_starting_commit(&self, id: &str, commit: String) -> Result<()> {
+    async fn record_starting_commit(&self, id: &SpaceId, commit: String) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -294,7 +295,7 @@ impl Manager {
 
     /// Record `reference` as what the workspace `id`'s diff compares with,
     /// such as the base branch a PR now targets.
-    async fn record_diff_ref(&self, id: &str, reference: String) -> Result<()> {
+    async fn record_diff_ref(&self, id: &SpaceId, reference: String) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -344,7 +345,7 @@ impl Manager {
         name: &str,
         at: StartingCommit,
         diff_ref: Option<String>,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
         options: CreationOptions,
     ) -> Result<Workspace> {
         let name = self.free_workspace_name(name).await?;

@@ -1,5 +1,6 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
+use crate::client::space_ids::SpaceId;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Row, Transaction, TransactionBehavior};
@@ -194,7 +195,7 @@ enum NameHolder {
 fn name_holder(
     db: &Connection,
     name: &SpaceName,
-    except_id: Option<&str>,
+    except_id: Option<&SpaceId>,
 ) -> Result<Option<NameHolder>> {
     if exists(
         db,
@@ -217,7 +218,7 @@ fn name_holder(
 pub fn ensure_name_available(
     db: &Connection,
     name: &SpaceName,
-    except_id: Option<&str>,
+    except_id: Option<&SpaceId>,
 ) -> Result<()> {
     match name_holder(db, name, except_id)? {
         None => Ok(()),
@@ -264,13 +265,13 @@ pub fn ensure_name_and_branch_available(
     repository_id: &str,
     name: &SpaceName,
     branch: Option<&str>,
-    except_id: Option<&str>,
+    except_id: Option<&SpaceId>,
 ) -> Result<()> {
     ensure_name_available(db, name, except_id)?;
     let Some(branch) = branch else {
         return Ok(());
     };
-    let owner: Option<String> = db
+    let owner: Option<SpaceId> = db
         .query_row(
             "SELECT name FROM workspaces WHERE repository_id=?1 AND branch=?2
                 AND (?3 IS NULL OR id!=?3)",
@@ -290,7 +291,7 @@ pub fn ensure_name_and_branch_available(
 
 /// Fail while a workspace has an unfinished rename; lifecycle operations
 /// must wait for repair.
-pub fn ensure_no_pending_rename(db: &Connection, workspace_id: &str) -> Result<()> {
+pub fn ensure_no_pending_rename(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     ensure!(
         !exists(
             db,
@@ -303,7 +304,7 @@ pub fn ensure_no_pending_rename(db: &Connection, workspace_id: &str) -> Result<(
 }
 
 /// Refuse lifecycle changes while the workspace's repository directory moves.
-pub fn ensure_no_pending_move(db: &Connection, workspace_id: &str) -> Result<()> {
+pub fn ensure_no_pending_move(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     ensure!(
         !exists(
             db,
@@ -336,7 +337,7 @@ pub fn repository_has_workspaces(db: &Connection, repository_id: &str) -> Result
 }
 
 /// Fail unless the workspace is ready; resources may only change then.
-pub fn require_ready(db: &Connection, workspace_id: &str) -> Result<()> {
+pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     let ready: bool = db.query_row(
         "SELECT state=?2 FROM workspaces WHERE id=?1",
         rusqlite::params![workspace_id, WorkspaceState::Ready],
@@ -476,7 +477,7 @@ fn starting_commit(row: &Row<'_>) -> rusqlite::Result<Option<crate::model::Start
 }
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.
-pub fn space_links(db: &Connection, space_id: &str) -> rusqlite::Result<SpaceLinks> {
+pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<SpaceLinks> {
     let (issue, issue_title) = db
         .query_row(
             "SELECT url,title FROM space_issue WHERE space_id=?1",
@@ -513,7 +514,7 @@ pub fn space_links(db: &Connection, space_id: &str) -> rusqlite::Result<SpaceLin
 /// The workspace's items with a recorded relation, oldest first.
 pub fn recorded_items(
     db: &Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     relation: Relation,
 ) -> rusqlite::Result<Vec<LinkedItem>> {
     db.prepare(
@@ -547,7 +548,7 @@ fn ports_query(scoped: bool) -> String {
     format!("SELECT {PORT_COLUMNS} FROM ports {filter} ORDER BY workspace_id,name")
 }
 
-pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortReservation>> {
+pub fn ports(db: &Connection, workspace_id: Option<&SpaceId>) -> Result<Vec<PortReservation>> {
     Ok(db
         .prepare(&ports_query(workspace_id.is_some()))?
         .query_map(rusqlite::params_from_iter(workspace_id), port)?
@@ -591,7 +592,7 @@ pub fn find_execution(db: &Connection, id: &str) -> Result<Option<Execution>> {
         .optional()?)
 }
 
-pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>> {
+pub fn executions(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Execution>> {
     Ok(db
         .prepare(&executions_query())?
         .query_map([workspace_id], execution)?
@@ -631,8 +632,8 @@ impl AgentExecution {
 
 /// The agent execution saying most about each workspace's agent, by
 /// workspace ID.
-pub fn agent_executions(db: &mut Connection) -> Result<HashMap<String, AgentExecution>> {
-    let mut agents: HashMap<String, AgentExecution> = HashMap::new();
+pub fn agent_executions(db: &mut Connection) -> Result<HashMap<SpaceId, AgentExecution>> {
+    let mut agents: HashMap<SpaceId, AgentExecution> = HashMap::new();
     let mut statement = db.prepare(
         "SELECT workspace_id,agent,state,child IS NOT NULL FROM executions WHERE agent IS NOT NULL",
     )?;
@@ -642,7 +643,7 @@ pub fn agent_executions(db: &mut Connection) -> Result<HashMap<String, AgentExec
             state: row.get(2)?,
             started: row.get(3)?,
         };
-        Ok((row.get::<_, String>(0)?, execution))
+        Ok((row.get::<_, SpaceId>(0)?, execution))
     })?;
     for row in rows {
         let (workspace, execution) = row?;
@@ -674,7 +675,7 @@ pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
+pub fn setup_finished(db: &Connection, workspace_id: &SpaceId) -> Result<bool> {
     Ok(db.query_row(
         "SELECT setup_finished FROM workspaces WHERE id=?1",
         [workspace_id],

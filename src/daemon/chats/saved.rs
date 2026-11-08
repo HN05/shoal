@@ -3,6 +3,7 @@
 //! those whose agent exited. A stopped chat keeps its record, and with it its
 //! name, files, messages, workspaces and temporary directory, until a start
 //! restores it in a new process or it is removed.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -68,15 +69,15 @@ impl Manager {
     /// Save the running chat `id` for `shoal resume`, then stop the processes
     /// it owns, as [`Self::save_chats`] saves each chat; the process of the
     /// space `stopped_by` stops it, which may resume it.
-    pub(crate) async fn save_chat(&self, id: &str, stopped_by: Option<&str>) -> Result<()> {
+    pub(crate) async fn save_chat(&self, id: &SpaceId, stopped_by: Option<&SpaceId>) -> Result<()> {
         let _saving = self.chat_saves.lock().await;
         let _handoffs = self.chat_handoffs.write().await;
         self.stop_finished_chats().await?;
         let chat = id.to_owned();
-        let stopped_by = stopped_by.map(str::to_owned);
+        let stopped_by = stopped_by.cloned();
         let Saved { running, released } = self
             .store
-            .write(move |tx| save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_deref()))
+            .write(move |tx| save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref()))
             .await?;
         let (id, process) = running
             .into_iter()
@@ -94,7 +95,7 @@ impl Manager {
     /// that failed: it runs on while that process lives, and otherwise stays
     /// saved to come back as the save said. A restore or removal waits for
     /// what the stop left running.
-    async fn keep_after_failed_stop(&self, id: String, process: Identity) {
+    async fn keep_after_failed_stop(&self, id: SpaceId, process: Identity) {
         match identity::alive(&process) {
             Ok(true) => {
                 let chat = id.clone();
@@ -111,7 +112,7 @@ impl Manager {
     /// those it owns while that process runs, otherwise those it is proven
     /// to have left running. Members of the group it led prove no ownership
     /// once it ended, so they only hold its restore.
-    async fn stop_saved(&self, id: &str, process: &Identity) -> Result<()> {
+    async fn stop_saved(&self, id: &SpaceId, process: &Identity) -> Result<()> {
         let wrappers = self.execution_wrappers().await?;
         let stopped = self.stopped_chat_processes(id).await?;
         let record = |found| self.record_chat_stopping(id, found);
@@ -130,7 +131,7 @@ impl Manager {
     /// agent and start time.
     pub async fn restore_chat(
         &self,
-        id: &str,
+        id: &SpaceId,
         pid: u32,
         origin: Option<Origin>,
         hands_over: bool,
@@ -228,16 +229,16 @@ impl Manager {
     /// own `shoal resume` for that restart has no scope.
     pub async fn return_to_saved(
         &self,
-        id: &str,
+        id: &SpaceId,
         pid: u32,
         error: &str,
-        stopped_by: Option<&str>,
+        stopped_by: Option<&SpaceId>,
     ) -> Result<()> {
         let chat = id.to_owned();
         let owner = self.root_dir_owner();
-        let stopped_by = (stopped_by.map(str::to_owned)).or_else(|| self.chat_agents.stopper(id));
+        let stopped_by = stopped_by.cloned().or_else(|| self.chat_agents.stopper(id));
         let (saved, released) = (self.store)
-            .write(move |tx| resave(tx, &owner, &chat, pid, stopped_by.as_deref()))
+            .write(move |tx| resave(tx, &owner, &chat, pid, stopped_by.as_ref()))
             .await?;
         self.ask_user_about(&released).await;
         self.notify_restore_failed(&saved, error).await;
@@ -246,7 +247,7 @@ impl Manager {
 
     /// The space whose process stopped the stopped chat `id`; none when the
     /// user or Shoal stopped it, or its agent exited.
-    pub(crate) async fn chat_stopped_by(&self, id: &str) -> Result<Option<String>> {
+    pub(crate) async fn chat_stopped_by(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
         let id = id.to_owned();
         (self.store)
             .run(move |db| {
@@ -263,7 +264,7 @@ impl Manager {
     }
 
     /// The stopped chat `id`.
-    async fn saved_chat(&self, id: &str) -> Result<Chat> {
+    async fn saved_chat(&self, id: &SpaceId) -> Result<Chat> {
         self.chat_by_id(id)
             .await?
             .filter(|chat| chat.restore.is_some())
@@ -296,7 +297,7 @@ impl Manager {
 }
 
 /// The process the stopped chat `id` ran as.
-fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
+fn saved_process(db: &mut Connection, id: &SpaceId) -> Result<Identity> {
     let (pid, birth, unique): (u32, String, Option<String>) = db.query_row(
         "SELECT pid,birth,unique_id FROM chats WHERE id=?1",
         [id],
@@ -312,7 +313,7 @@ fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
 /// What [`save`] saved.
 struct Saved {
     /// The ID and process of each chat.
-    running: Vec<(String, Identity)>,
+    running: Vec<(SpaceId, Identity)>,
     /// The requests they decided, given back to the user, since a saved
     /// chat decides none.
     released: Vec<ApprovalRequest>,
@@ -324,8 +325,8 @@ struct Saved {
 fn save(
     tx: &rusqlite::Transaction<'_>,
     restore: ChatRestore,
-    only: Option<&str>,
-    stopped_by: Option<&str>,
+    only: Option<&SpaceId>,
+    stopped_by: Option<&SpaceId>,
 ) -> Result<Saved> {
     let mut running = super::recorded_processes(tx)?;
     running.retain(|(id, _)| only.is_none_or(|only| only == id));
@@ -358,9 +359,9 @@ fn live_unique_id(process: &Identity) -> Result<Option<String>> {
 fn resave(
     tx: &rusqlite::Transaction<'_>,
     owner: &std::path::Path,
-    id: &str,
+    id: &SpaceId,
     pid: u32,
-    stopped_by: Option<&str>,
+    stopped_by: Option<&SpaceId>,
 ) -> Result<(Chat, Vec<ApprovalRequest>)> {
     tx.execute(
         "UPDATE chats SET restore=?3,stopped_at=unixepoch(),saved=1
@@ -374,7 +375,7 @@ fn resave(
     )?;
     let chat = recorded(tx, owner)?
         .into_iter()
-        .find(|chat| chat.id == id)
+        .find(|chat| chat.id == *id)
         .context("the chat ended")?;
     ensure!(
         chat.restore.is_some(),
@@ -386,7 +387,7 @@ fn resave(
 }
 
 /// Return the chat `id`, saved while it ran as `process`, to running.
-fn unsave(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
+fn unsave(db: &mut Connection, id: &SpaceId, process: &Identity) -> Result<()> {
     db.execute(
         "UPDATE chats SET restore=NULL,stopped_at=NULL,saved=0
          WHERE id=?1 AND pid=?2 AND birth=?3",
@@ -410,10 +411,10 @@ pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
 
 /// A stopped chat that runs again.
 struct Restored {
-    id: String,
+    id: SpaceId,
     repository: Option<String>,
     /// The workspace whose worktree it runs in.
-    workspace: Option<String>,
+    workspace: Option<SpaceId>,
     /// The process it runs as, or that hands it to a session it starts.
     process: Identity,
     origin: Option<Origin>,
@@ -430,7 +431,7 @@ fn restore(
     restored: &Restored,
 ) -> Result<Chat> {
     let repository = restored.repository.as_deref();
-    ensure_place_free(tx, repository, restored.workspace.as_deref())?;
+    ensure_place_free(tx, repository, restored.workspace.as_ref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
             unique_id=?6,stopped_by=NULL

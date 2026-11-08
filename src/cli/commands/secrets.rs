@@ -18,7 +18,7 @@ use crate::{
 /// once approved or denied.
 pub(super) async fn acquire(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
     reason: Option<String>,
     queue: bool,
@@ -28,13 +28,7 @@ pub(super) async fn acquire(
             reason: reason.clone(),
             source: None,
         };
-        leases::acquire_secret(
-            &ctx.paths,
-            SpaceSelector::parse(&workspace),
-            name.clone(),
-            request,
-        )
-        .await
+        leases::acquire_secret(&ctx.paths, workspace.clone(), name.clone(), request).await
     })
     .await?;
     outcome.finish(
@@ -44,8 +38,11 @@ pub(super) async fn acquire(
     )
 }
 
-pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SecretCatalog> {
-    leases::secret_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await
+pub(super) async fn fetch_catalog(
+    ctx: &Context,
+    workspace: &SpaceSelector,
+) -> Result<SecretCatalog> {
+    leases::secret_catalog(&ctx.paths, workspace.clone()).await
 }
 
 pub(super) fn render_catalog(catalog: &SecretCatalog, palette: Palette) {

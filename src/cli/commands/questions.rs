@@ -58,7 +58,7 @@ pub(super) async fn ask(
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let question = questions::ask(
         &ctx.paths,
-        SpaceSelector::parse(&space),
+        space.clone(),
         ask,
         attachments,
         crate::env::chat(),
@@ -75,7 +75,7 @@ pub(super) async fn ask(
         return Ok(0);
     }
     // The space's ID stays valid if the space is renamed meanwhile.
-    let space = question.space_id.clone();
+    let space = SpaceSelector::id(&question.space_id);
     let question = if question.is_open() {
         await_answer(ctx, &space, &question, false).await?
     } else {
@@ -88,7 +88,7 @@ pub(super) async fn ask(
 /// Mark the caller's agent's turn as asking the user in its conversation.
 pub(super) async fn ask_in_chat(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
-    questions::ask_in_chat(&ctx.paths, SpaceSelector::parse(&space)).await?;
+    questions::ask_in_chat(&ctx.paths, space.clone()).await?;
     ctx.emit(
         "Ask your question as your final message and end your turn; it also reaches the user's questions.",
         InChat { in_chat: true },
@@ -104,14 +104,13 @@ pub(super) async fn resume(
     item: u32,
     ask: Ask,
 ) -> Result<i32> {
-    let space = space.to_string();
     let question = await_answer(ctx, &space, Asked { item, ask }, true).await?;
     print_answer(ctx, space, &question).await?;
     Ok(0)
 }
 
 /// Printed here, the answer's message need not reach the agent again.
-async fn print_answer(ctx: &Context, space: String, question: &Question) -> Result<()> {
+async fn print_answer(ctx: &Context, space: SpaceSelector, question: &Question) -> Result<()> {
     let QuestionStatus::Answered {
         answer, message_id, ..
     } = &question.status
@@ -123,12 +122,7 @@ async fn print_answer(ctx: &Context, space: String, question: &Question) -> Resu
     let Some(id) = *message_id else {
         return Ok(());
     };
-    crate::client::agent_messages::mark_delivered(
-        &ctx.paths,
-        SpaceSelector::parse(&space),
-        vec![id],
-    )
-    .await
+    crate::client::agent_messages::mark_delivered(&ctx.paths, space, vec![id]).await
 }
 
 /// The question a wait follows: its number within its space and what it
@@ -151,7 +145,7 @@ impl From<&Question> for Asked {
 /// resumes the wait for the same question.
 async fn await_answer(
     ctx: &Context,
-    space: &str,
+    space: &SpaceSelector,
     asked: impl Into<Asked>,
     restarted: bool,
 ) -> Result<Question> {
@@ -166,10 +160,10 @@ async fn await_answer(
 /// its number `item` in `space` without asking again. A wait an earlier
 /// release handed over names its workspace the earlier way, which the space
 /// replaces.
-fn resume_arguments(space: &str, item: u32) -> Vec<OsString> {
+fn resume_arguments(space: &SpaceSelector, item: u32) -> Vec<OsString> {
     let arguments = without_option(arguments(), "--workspace");
     let arguments = without_option(arguments, "-s");
-    let arguments = replace_option(arguments, "--space", space);
+    let arguments = replace_option(arguments, "--space", &space.to_string());
     replace_option(arguments, "--resume", &item.to_string())
 }
 

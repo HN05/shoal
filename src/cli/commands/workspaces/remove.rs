@@ -47,11 +47,11 @@ pub(in crate::cli::commands) async fn remove(
 
 /// The chats among the spaces `names` select, each once, and the other
 /// names, which name workspaces or nothing.
-fn named_chats(spaces: &Spaces, names: Vec<String>) -> (Vec<Chat>, Vec<String>) {
+fn named_chats(spaces: &Spaces, names: Vec<SpaceSelector>) -> (Vec<Chat>, Vec<SpaceSelector>) {
     let mut chats: Vec<Chat> = Vec::new();
     let mut others = Vec::new();
     for name in names {
-        match spaces.find(&SpaceSelector::parse(&name)) {
+        match spaces.find(&name) {
             Some(PresentSpace::Chat(chat)) => {
                 if !chats.iter().any(|named| named.id == chat.id) {
                     chats.push(chat);
@@ -67,7 +67,7 @@ fn named_chats(spaces: &Spaces, names: Vec<String>) -> (Vec<Chat>, Vec<String>) 
 /// leaves the others in place.
 async fn check_removals(
     ctx: &Context,
-    workspaces: Vec<String>,
+    workspaces: Vec<SpaceSelector>,
     yes: bool,
 ) -> Result<Vec<RemovalCheck>> {
     let mut checks = Vec::new();
@@ -75,12 +75,8 @@ async fn check_removals(
     let several = workspaces.len() > 1;
     for workspace in workspaces {
         let include_changes = ctx.interactive() && !yes;
-        let checked = crate::client::removal::check(
-            &ctx.paths,
-            SpaceSelector::parse(&workspace),
-            include_changes,
-        )
-        .await;
+        let checked =
+            crate::client::removal::check(&ctx.paths, workspace.clone(), include_changes).await;
         if !several {
             checks.push(checked?);
             continue;

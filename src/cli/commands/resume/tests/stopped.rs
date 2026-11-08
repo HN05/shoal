@@ -1,6 +1,7 @@
 //! Resuming stopped work through `shoal resume`, against the overload
 //! tests' fixture daemon.
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use std::{fs, os::unix::fs::PermissionsExt};
 
@@ -72,7 +73,7 @@ async fn stop_child() {
     }
     let root = std::env::var_os("SHOAL_TEST_ROOT").unwrap();
     let paths = crate::paths::Paths::for_test(root);
-    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let id = SpaceId::from(std::env::var("SHOAL_TEST_WORKSPACE").unwrap());
     crate::client::connection::request::<crate::model::StoppedWorkspace>(
         &paths,
         RemovalMethod::StopWorkspace {
@@ -93,7 +94,7 @@ async fn resume_child() {
     }
     let root = std::env::var_os("SHOAL_TEST_ROOT").unwrap();
     let paths = crate::paths::Paths::for_test(root);
-    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let id = SpaceId::from(std::env::var("SHOAL_TEST_WORKSPACE").unwrap());
     let discard = std::env::var("SHOAL_TEST_DISCARD").unwrap() == "true";
     let ctx = crate::cli::context::Context::new(paths, true);
     match crate::cli::commands::resume::run(&ctx, SpaceSelector::id(&id), None, discard, true).await

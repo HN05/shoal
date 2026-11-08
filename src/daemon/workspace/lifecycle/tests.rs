@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -1312,7 +1313,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     let id = bottom.id.clone();
-    let parent: Option<String> = manager
+    let parent: Option<SpaceId> = manager
         .store
         .run(move |db| {
             Ok(db.query_row(

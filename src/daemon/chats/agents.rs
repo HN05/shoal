@@ -1,5 +1,6 @@
 //! What the daemon keeps of chats' agents while it runs: their restarts,
 //! which outlive the requests that asked for them, as a workspace agent's do.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     sync::{Mutex, MutexGuard, PoisonError},
@@ -16,14 +17,14 @@ use crate::{
 
 /// The agents of chats, by chat ID.
 #[derive(Default)]
-pub(crate) struct ChatAgents(Mutex<HashMap<String, ChatAgent>>);
+pub(crate) struct ChatAgents(Mutex<HashMap<SpaceId, ChatAgent>>);
 
 #[derive(Default)]
 struct ChatAgent {
     restarts: Restarts,
     /// The space whose process asked for the restart in progress, which
     /// stops the chat.
-    stopped_by: Option<String>,
+    stopped_by: Option<SpaceId>,
 }
 
 /// A request to restart a chat's agent.
@@ -43,7 +44,7 @@ impl ChatAgents {
     /// agent `resumes` its session.
     pub(super) fn request(
         &self,
-        id: &str,
+        id: &SpaceId,
         chat: Option<&Chat>,
         resumes: bool,
         run: Option<String>,
@@ -86,7 +87,7 @@ impl ChatAgents {
     /// is joined.
     pub(super) fn join(
         &self,
-        id: &str,
+        id: &SpaceId,
         name: &str,
         of_run: &Option<String>,
         run: Option<String>,
@@ -98,7 +99,7 @@ impl ChatAgents {
     }
 
     /// End the restart of the chat `id` in progress with `outcome`.
-    pub(super) fn finish(&self, id: &str, outcome: &Outcome) {
+    pub(super) fn finish(&self, id: &SpaceId, outcome: &Outcome) {
         if let Some(agent) = self.lock().get_mut(id) {
             agent.restarts.finish_if(|_| true, outcome);
         }
@@ -131,7 +132,7 @@ impl ChatAgents {
                     restart,
                     stopped: None,
                     restarted_from: Vec::new(),
-                    execution: chat.id.clone(),
+                    execution: chat.id.to_string(),
                     space_id: chat.id,
                 })
             })
@@ -140,7 +141,7 @@ impl ChatAgents {
 
     /// Record that the process of the space `stopped_by` asked for the
     /// restart of the chat `id` that starts now.
-    pub(super) fn set_stopper(&self, id: &str, stopped_by: Option<String>) {
+    pub(super) fn set_stopper(&self, id: &SpaceId, stopped_by: Option<SpaceId>) {
         if let Some(agent) = self.lock().get_mut(id) {
             agent.stopped_by = stopped_by;
         }
@@ -148,14 +149,14 @@ impl ChatAgents {
 
     /// The space whose process asked for the restart of the chat `id` in
     /// progress, when one did.
-    pub(super) fn stopper(&self, id: &str) -> Option<String> {
+    pub(super) fn stopper(&self, id: &SpaceId) -> Option<SpaceId> {
         let agents = self.lock();
         let agent = agents.get(id)?;
         agent.restarts.current.as_ref()?;
         agent.stopped_by.clone()
     }
 
-    fn lock(&self) -> MutexGuard<'_, HashMap<String, ChatAgent>> {
+    fn lock(&self) -> MutexGuard<'_, HashMap<SpaceId, ChatAgent>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }

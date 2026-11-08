@@ -1,5 +1,6 @@
 use super::*;
 use crate::forge::items::link::LinkKind;
+use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 
 #[test]
@@ -183,11 +184,11 @@ fn the_spaces_below_a_space_include_those_below_them() {
             chat("planning", vec![space("grandchild", SpaceKind::Workspace)]),
         ],
     };
-    let below: Vec<String> = (spaces.below("talk").into_iter())
+    let below: Vec<SpaceId> = (spaces.below(&SpaceId::from("talk")).into_iter())
         .map(|space| space.id)
         .collect();
     assert_eq!(below, ["opened", "planning", "grandchild"]);
-    assert!(spaces.below("other").is_empty());
+    assert!(spaces.below(&SpaceId::from("other")).is_empty());
 }
 
 #[test]

@@ -1,5 +1,6 @@
 //! Opt-in storage benchmark: cargo test --release connection_setup -- --ignored --nocapture
 use super::*;
+use crate::client::space_ids::SpaceId;
 use std::{
     sync::{
         Arc, Mutex,
@@ -121,7 +122,7 @@ fn fixture(path: &std::path::Path, rows: usize) -> Result<()> {
     Ok(())
 }
 
-async fn inspection(backend: &Backend, metrics: &Arc<Metrics>, id: String) -> Result<()> {
+async fn inspection(backend: &Backend, metrics: &Arc<Metrics>, id: SpaceId) -> Result<()> {
     let selector = id.clone();
     backend
         .run(metrics.clone(), move |db| {
@@ -157,7 +158,7 @@ async fn inspection(backend: &Backend, metrics: &Arc<Metrics>, id: String) -> Re
 async fn allocation(
     backend: &Backend,
     metrics: &Arc<Metrics>,
-    id: String,
+    id: SpaceId,
     client: usize,
 ) -> Result<()> {
     let owner = id.clone();
@@ -218,7 +219,7 @@ async fn connection_setup() -> Result<()> {
                             let mut latencies = Vec::new();
                             for iteration in 0..200 {
                                 let start = Instant::now();
-                                let id = (client % rows).to_string();
+                                let id = SpaceId::from((client % rows).to_string());
                                 if mixed && iteration % 5 == 0 {
                                     allocation(&backend, &metrics, id, client).await?;
                                 } else {

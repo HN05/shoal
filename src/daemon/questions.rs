@@ -7,6 +7,7 @@
 //! closed question keeps its number until the space goes so that a late
 //! answer is refused. A question an agent asked in its conversation closes
 //! the same way when the user replies there.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
@@ -301,7 +302,7 @@ fn known(db: &Connection, number: ItemNumber) -> Result<Question> {
 /// returns it.
 fn repeated(
     tx: &Transaction<'_>,
-    space_id: &str,
+    space_id: &SpaceId,
     ask: &Ask,
     files: &[SentFile],
 ) -> Result<Option<Question>> {
@@ -488,7 +489,7 @@ fn queue_answer(tx: &Transaction<'_>, question: &Question, message: &str) -> Res
 }
 
 /// How many questions of the workspace or chat `space_id` are open.
-pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
+pub(crate) fn open_count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     let count: i64 = db.query_row(
         &format!("SELECT COUNT(*) FROM questions q WHERE {SPACE}=?1 AND {OPEN}"),
         [space_id],
@@ -499,7 +500,7 @@ pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
 
 /// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
-pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<ItemNumber>> {
+pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<ItemNumber>> {
     let closed = QuestionStatus::Closed {
         closed_at: crate::time::UnixTime::now(),
     };
@@ -518,7 +519,7 @@ fn withdraw(
     shown: Option<&Question>,
 ) -> Result<Question> {
     let mut question = by_number(tx, number)?
-        .filter(|question| question.space_id == space.id())
+        .filter(|question| question.space_id == *space.id())
         .ok_or_else(|| {
             Refusal::new(
                 Reason::NotFound,
@@ -606,15 +607,15 @@ fn record(
 #[derive(Debug, Clone)]
 pub(crate) enum Turn {
     Execution(String),
-    Chat(String),
+    Chat(SpaceId),
 }
 
 /// Mark or unmark `turn` as asking in the agent's conversation; whether that
 /// changed the mark.
 pub(crate) fn set_chat_mark(db: &Connection, turn: &Turn, marked: bool) -> Result<bool> {
     let (table, id) = match turn {
-        Turn::Execution(id) => ("executions", id),
-        Turn::Chat(id) => ("chats", id),
+        Turn::Execution(id) => ("executions", id.as_str()),
+        Turn::Chat(id) => ("chats", id.as_str()),
     };
     let changed = db.execute(
         &format!("UPDATE {table} SET asks_in_chat=?2 WHERE id=?1 AND asks_in_chat<>?2"),
@@ -626,7 +627,7 @@ pub(crate) fn set_chat_mark(db: &Connection, turn: &Turn, marked: bool) -> Resul
 /// Close the open questions the space's agents asked in their conversations,
 /// which the user replied to there, as withdrawn, retracting their unread
 /// notifications; each with whether there was one to retract.
-fn close_in_chat(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<(Question, bool)>> {
+fn close_in_chat(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<(Question, bool)>> {
     let open = query(
         tx,
         &format!("WHERE {SPACE}=?1 AND q.in_chat AND {OPEN}"),
@@ -655,7 +656,7 @@ fn close_in_chat(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<(Question, 
 /// `space_id`, once the message is delivered.
 pub(crate) fn delete_delivered(
     tx: &Transaction<'_>,
-    space_id: &str,
+    space_id: &SpaceId,
     message_id: i64,
 ) -> Result<()> {
     tx.execute(
@@ -790,8 +791,8 @@ impl Manager {
 
     /// The ID of the workspace or chat `selector` names, whose questions a
     /// listing keeps: a stopped chat keeps its open questions too.
-    async fn asking_space(&self, selector: &SpaceSelector) -> Result<String> {
-        Ok(self.space(selector).await?.id().to_owned())
+    async fn asking_space(&self, selector: &SpaceSelector) -> Result<SpaceId> {
+        Ok(self.space(selector).await?.id().clone())
     }
 
     /// Every open question, oldest first, which subscription snapshots page.
@@ -805,7 +806,7 @@ impl Manager {
         self.store.run(move |db| known(db, number)).await
     }
 
-    pub async fn has_open_questions(&self, space_id: &str) -> Result<bool> {
+    pub async fn has_open_questions(&self, space_id: &SpaceId) -> Result<bool> {
         let id = space_id.to_owned();
         self.store
             .run(move |db| {
@@ -953,7 +954,7 @@ impl Manager {
                 .store
                 .run(move |db| by_number(db, number))
                 .await?
-                .filter(|question| question.space_id == space.id() && question.ask == *ask)
+                .filter(|question| question.space_id == *space.id() && question.ask == *ask)
                 .with_context(|| {
                     format!(
                         "{} has no question {number} awaiting delivery; a delivered answer removes its question",

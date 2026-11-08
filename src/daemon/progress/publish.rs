@@ -3,6 +3,7 @@
 //! edit per space each [`INTERVAL`], the latest progress written in the
 //! end. A failed edit is logged and retried with the next change, without
 //! a notification.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, PoisonError},
@@ -31,22 +32,22 @@ const INTERVAL: Duration = Duration::from_secs(60);
 /// The spaces whose progress changed since the publisher last looked.
 #[derive(Default)]
 pub(crate) struct Publications {
-    requested: Mutex<HashSet<String>>,
+    requested: Mutex<HashSet<SpaceId>>,
     wake: Notify,
 }
 
 impl Publications {
     /// Publish the progress of the space `id` once its interval allows.
-    pub(crate) fn request(&self, id: &str) {
-        self.lock().insert(id.to_owned());
+    pub(crate) fn request(&self, id: &SpaceId) {
+        self.lock().insert(id.clone());
         self.wake.notify_one();
     }
 
-    fn take(&self) -> Vec<String> {
+    fn take(&self) -> Vec<SpaceId> {
         self.lock().drain().collect()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashSet<SpaceId>> {
         self.requested
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -57,14 +58,14 @@ impl Publications {
 /// did.
 #[derive(Default)]
 struct Schedule {
-    due: HashMap<String, Instant>,
-    published: HashMap<String, Instant>,
+    due: HashMap<SpaceId, Instant>,
+    published: HashMap<SpaceId, Instant>,
 }
 
 impl Schedule {
     /// Publish the space `id` as soon as its interval allows after `now`; a
     /// space already due keeps its time, and publishes what it has then.
-    fn request(&mut self, id: String, now: Instant) {
+    fn request(&mut self, id: SpaceId, now: Instant) {
         let earliest =
             (self.published.get(&id)).map_or(now, |published| now.max(*published + INTERVAL));
         self.due.entry(id).or_insert(earliest);
@@ -76,8 +77,8 @@ impl Schedule {
     }
 
     /// The spaces due at `now`, which publish then.
-    fn take_due(&mut self, now: Instant) -> Vec<String> {
-        let due: Vec<String> = (self.due.iter())
+    fn take_due(&mut self, now: Instant) -> Vec<SpaceId> {
+        let due: Vec<SpaceId> = (self.due.iter())
             .filter(|(_, at)| **at <= now)
             .map(|(id, _)| id.clone())
             .collect();
@@ -121,7 +122,7 @@ pub async fn run(manager: Arc<Manager>) {
 
 /// The open PRs the space `id` opened or was assigned and has not marked
 /// ready, which show its progress.
-fn publishing_pulls(db: &Connection, id: &str) -> Result<Vec<String>> {
+fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<String>> {
     let assigned = linked_items(db, id, Some(ItemKind::Pr))?
         .into_iter()
         .map(|(url, _)| url);
@@ -143,7 +144,7 @@ impl Manager {
     /// Write the progress of the space `id` into the progress section of
     /// each PR that shows it, unless `[pr] progress` is off, and record it
     /// as published once every one does.
-    pub(crate) async fn publish_progress(&self, id: &str) -> Result<()> {
+    pub(crate) async fn publish_progress(&self, id: &SpaceId) -> Result<()> {
         let space = self.link_space(&SpaceSelector::id(id)).await?;
         if !self.space_settings(&space).await?.pr.progress {
             return Ok(());
@@ -195,7 +196,7 @@ impl Manager {
     }
 
     /// The spaces whose progress changed after its sections last showed it.
-    async fn unpublished_progress(&self) -> Result<Vec<String>> {
+    async fn unpublished_progress(&self) -> Result<Vec<SpaceId>> {
         self.store
             .run(|db| {
                 Ok(db

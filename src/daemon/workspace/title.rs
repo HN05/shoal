@@ -1,5 +1,6 @@
 //! Workspace titles: what a workspace's agent calls its work, which the
 //! places hosting the workspace show.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
@@ -33,7 +34,7 @@ impl Manager {
 }
 
 /// Record `title` as the title of workspace `id`, or clear it without one.
-fn store_title(db: &mut Connection, id: &str, title: Option<&str>) -> Result<()> {
+fn store_title(db: &mut Connection, id: &SpaceId, title: Option<&str>) -> Result<()> {
     db.execute(
         "UPDATE workspaces SET title=?2 WHERE id=?1",
         params![id, title],

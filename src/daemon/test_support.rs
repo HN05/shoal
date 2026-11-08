@@ -3,7 +3,7 @@
 use std::{fs, path::Path, sync::Arc};
 
 pub(crate) use crate::test_support::*;
-use crate::{daemon::workspace::Manager, paths::Paths};
+use crate::{client::space_ids::SpaceId, daemon::workspace::Manager, paths::Paths};
 
 pub(crate) mod overload;
 
@@ -49,7 +49,7 @@ pub async fn chat(
     name: &str,
     mode: &str,
     repository: Option<&crate::model::Repository>,
-    parent: Option<&str>,
+    parent: Option<&SpaceId>,
 ) -> (crate::model::Chat, ProcessGroup) {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
@@ -60,7 +60,7 @@ pub async fn chat(
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent: parent.map(str::to_owned),
+        parent: parent.cloned(),
     };
     let repository = repository.map(|repository| repository.id.clone().into());
     let chat = manager.start_new_chat(repository, None, new).await.unwrap();
@@ -73,11 +73,11 @@ pub async fn workspace_below(
     manager: &Manager,
     repository: &crate::model::Repository,
     name: &str,
-    parent: &str,
+    parent: &SpaceId,
     mode: Option<&str>,
 ) -> crate::model::Workspace {
     let new = crate::daemon::workspace::NewWorkspace {
-        parent: Some(parent.to_owned()),
+        parent: Some(parent.clone()),
         ..Default::default()
     };
     let workspace = manager
@@ -105,7 +105,7 @@ pub async fn working_below(
     manager: &Manager,
     repository: &crate::model::Repository,
     name: &str,
-    parent: &str,
+    parent: &SpaceId,
     mode: &str,
 ) -> crate::model::Workspace {
     let workspace = workspace_below(manager, repository, name, parent, Some(mode)).await;

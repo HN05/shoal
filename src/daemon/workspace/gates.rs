@@ -1,6 +1,7 @@
 //! The daemon's gates: each orders one kind of change against the others
 //! that would conflict with it, and is taken through the operation named
 //! for it.
+use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -173,8 +174,8 @@ impl Gates {
 
     /// Exclude lifecycle transitions and overlapping permit hooks in the
     /// workspace `id`: a hook takes it exclusively, an operation shared.
-    pub(crate) fn resource_guard(&self, id: &str, mode: GuardMode) -> Result<ResourceGuard> {
-        let gate = self.resources.gate(id);
+    pub(crate) fn resource_guard(&self, id: &SpaceId, mode: GuardMode) -> Result<ResourceGuard> {
+        let gate = self.resources.gate(id.as_str());
         let guard = match mode {
             GuardMode::Exclusive => gate
                 .try_write_owned()

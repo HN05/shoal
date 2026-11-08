@@ -5,6 +5,7 @@ use crate::client::assignments;
 use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -60,14 +61,7 @@ pub async fn select(
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
         ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
-            run(
-                ctx,
-                SpaceSelector::parse(workspace),
-                execution,
-                discard,
-                focus,
-            )
-            .await
+            run(ctx, workspace.clone(), execution, discard, focus).await
         }
         ([], Some([workspace])) => {
             queue_workspace(ctx, workspace.clone(), execution, queuing).await
@@ -212,7 +206,7 @@ async fn queue_below(ctx: &Context, selected: Selected, execution: Option<String
 }
 
 /// Executions stopped so their workspaces could move, by workspace.
-pub(super) type Stopped = std::collections::BTreeMap<String, std::collections::BTreeSet<String>>;
+pub(super) type Stopped = std::collections::BTreeMap<SpaceId, std::collections::BTreeSet<String>>;
 
 /// Queue the restores of the agents among `stopped`; their workspaces'
 /// stopped commands go to them, and those of workspaces without one stay
@@ -221,7 +215,7 @@ pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Qu
     let mut queued = Vec::new();
     for (workspace, executions) in stopped {
         let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
                 .await?
                 .workspace;
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
@@ -238,10 +232,10 @@ pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Qu
 /// commands go to the restored agents.
 async fn stopped_agents(
     ctx: &Context,
-    selector: String,
+    selector: SpaceSelector,
     execution: Option<&str>,
 ) -> Result<(Workspace, Saved)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
         .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
@@ -265,14 +259,13 @@ async fn stopped_agents(
 /// for a noninteractive process through the queue, started now.
 async fn queue_workspace(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     execution: Option<String>,
     queuing: Queuing,
 ) -> Result<i32> {
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
-            .await?
-            .workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+        .await?
+        .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
@@ -357,7 +350,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
     let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
         anyhow::bail!("the queued restore names no stopped agent");
     };
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
         .await?
         .workspace;
     let settings = crate::client::workspaces::settings(
@@ -382,16 +375,25 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
 /// Record the place this restore runs in, one `host` opened in the
 /// background for it, as the workspace's, before anything runs there.
 pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets) {
-    if let [workspace] = targets.space.as_slice() {
-        terminal::record_owned_here(ctx, host, &workspace.to_string()).await;
+    if let Some(workspace) = background_workspace(targets) {
+        terminal::record_owned_here(ctx, host, &workspace).await;
     }
 }
 
 /// Close the place this restore runs in, one `host` opened in the
 /// background for it, once the one workspace `targets` names is done.
 pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &SpaceTargets) {
-    if let [workspace] = targets.space.as_slice() {
-        terminal::close_background_place_when_done(ctx, host, &workspace.to_string()).await;
+    if let Some(workspace) = background_workspace(targets) {
+        terminal::close_background_place_when_done(ctx, host, &workspace).await;
+    }
+}
+
+/// The one workspace a restore in a background place names, which
+/// [`start_queued`] passes by its ID.
+fn background_workspace(targets: &SpaceTargets) -> Option<SpaceId> {
+    match targets.space.as_slice() {
+        [workspace] => Some(SpaceId::from(workspace.to_string())),
+        _ => None,
     }
 }
 
@@ -676,7 +678,7 @@ async fn launch(
     terminal::label_current(&ctx.paths, crate::terminal::Owner::Workspace(&workspace.id)).await?;
     crate::execution::run_recovery(
         &ctx.paths,
-        workspace.id.clone(),
+        SpaceSelector::Id(workspace.id.clone()),
         recovery.command,
         agent,
         records,
@@ -1010,7 +1012,7 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
         let workspace = workspace.id.clone();
         let discarded = assignments::discard_stopped_work(
             &ctx.paths,
-            SpaceSelector::parse(&workspace),
+            SpaceSelector::id(&workspace),
             Some(execution),
         )
         .await?;
@@ -1024,15 +1026,14 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
 /// resume.
 async fn stopped_in(
     ctx: &Context,
-    selectors: &[String],
+    selectors: &[SpaceSelector],
     discard: bool,
 ) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
-        let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
-                .await?
-                .workspace;
+        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
+            .await?
+            .workspace;
         let saved = saved_work(ctx, &workspace, discard)?;
         ensure!(
             !saved.is_empty(),

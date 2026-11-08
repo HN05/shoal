@@ -1,6 +1,7 @@
 //! The labels pickers and lists show: aligned rows of workspaces, agent
 //! launches and repositories, with their status cells.
 use crate::cli::list_status::ListStatusExt;
+use crate::client::space_ids::SpaceId;
 use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;
@@ -106,7 +107,7 @@ pub fn usage_label(usage: &WorkspaceUsage) -> String {
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
-    stopped: &HashSet<String>,
+    stopped: &HashSet<SpaceId>,
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
@@ -127,7 +128,7 @@ pub fn workspace_rows(
 pub fn workspace_tree_rows(
     workspaces: &[Workspace],
     chats: &[Chat],
-    stopped: &HashSet<String>,
+    stopped: &HashSet<SpaceId>,
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
@@ -186,7 +187,7 @@ impl<'a> Listed<'a> {
 struct SpaceTree<'a> {
     workspaces: &'a [Workspace],
     chats: &'a [Chat],
-    stopped: &'a HashSet<String>,
+    stopped: &'a HashSet<SpaceId>,
     palette: Palette,
 }
 
@@ -233,7 +234,7 @@ fn indented(name: &str, depth: usize) -> String {
 fn tree_workspace_row(
     workspace: &Workspace,
     depth: usize,
-    stopped: &HashSet<String>,
+    stopped: &HashSet<SpaceId>,
     palette: Palette,
 ) -> (String, [Cell; 7]) {
     let name = indented(&workspace.name, depth);
@@ -301,7 +302,7 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
         .map(|(marker, row)| format!("{marker} {row}"));
     chats
         .iter()
-        .map(|chat| chat.id.clone())
+        .map(|chat| chat.id.to_string())
         .zip(labels)
         .collect()
 }

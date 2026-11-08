@@ -110,7 +110,7 @@ pub(super) async fn queue(
     let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
     crate::client::queue::restore(
         &ctx.paths,
-        SpaceSelector::parse(&workspace),
+        SpaceSelector::id(&workspace),
         execution,
         terminal::start_environment(),
         now,

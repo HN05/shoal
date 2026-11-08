@@ -1,4 +1,5 @@
 use crate::client::questions::QuestionStatus;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::execution::recovery::LastSessionExt;
@@ -615,7 +616,9 @@ async fn a_parent_must_be_a_space_of_the_same_repository() {
         .unwrap();
     let ensured = manager
         .store
-        .run(move |db| super::ensure_parent(db, Some(&repos[0].id), "new", &foreign.id))
+        .run(move |db| {
+            super::ensure_parent(db, Some(&repos[0].id), &SpaceId::from("new"), &foreign.id)
+        })
         .await;
     assert!(ensured.is_err());
 }

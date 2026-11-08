@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 use std::sync::Arc;
 
@@ -927,7 +928,7 @@ async fn serve_pieces(manager: &Arc<Manager>, method: serde_json::Value) -> (usi
 /// whose body is `body`, returning their IDs.
 async fn finished_reviews(
     manager: &Manager,
-    workspace: &str,
+    workspace: &SpaceId,
     count: usize,
     body: &str,
 ) -> Vec<ReviewId> {

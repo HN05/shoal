@@ -1,6 +1,7 @@
 //! Starting Shoal work beside this terminal: additions, restores, tracked
 //! agents and chats, focused or in the background, and the starts the
 //! daemon runs later for a terminal that queued them.
+use crate::client::space_names::SpaceSelector;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -504,7 +505,7 @@ pub(in crate::cli) async fn run_agent(
         }
     };
     if left_running {
-        recent::record_attach(ctx, &workspace.id).await;
+        recent::record_attach(ctx, &SpaceSelector::id(&workspace.id)).await;
     }
     Ok(Some(0))
 }
@@ -575,7 +576,7 @@ pub(in crate::cli) async fn start_chat(
     if let Some(attaches) = attaches {
         let session = attaches.run_chat(&start).await?;
         if report_detach(attaches, name, &session).await? {
-            recent::record_chat_attach(ctx, name).await;
+            recent::record_chat_attach(ctx, &SpaceSelector::parse(name)).await;
         }
         return Ok(true);
     }

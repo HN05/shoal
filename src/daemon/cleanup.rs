@@ -3,6 +3,7 @@
 //! directory was deleted outside Shoal; the user can remove the idle
 //! candidates on request. A chat has no worktree, so it meets every condition
 //! on one, and goes once its agent stopped and nothing keeps it.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
@@ -94,7 +95,7 @@ struct Idle {
 
 #[derive(Default)]
 pub struct Timers {
-    idle: HashMap<String, Idle>,
+    idle: HashMap<SpaceId, Idle>,
     merged: merged::State,
     kept_branches: kept_branches::State,
 }
@@ -102,7 +103,7 @@ pub struct Timers {
 impl Timers {
     /// Whether the timer has run for `delay` with unchanged `signals`; a
     /// change, or no timer, needs a full snapshot to start from.
-    fn expired(&self, id: &str, signals: u64, now: Instant, delay: Duration) -> Expiry {
+    fn expired(&self, id: &SpaceId, signals: u64, now: Instant, delay: Duration) -> Expiry {
         match self.idle.get(id) {
             Some(idle) if idle.snapshot.signals != signals => Expiry::Restart,
             Some(idle) if now.duration_since(idle.since) < delay => Expiry::Running,
@@ -111,9 +112,9 @@ impl Timers {
         }
     }
 
-    fn start(&mut self, id: &str, snapshot: Snapshot, now: Instant) {
+    fn start(&mut self, id: &SpaceId, snapshot: Snapshot, now: Instant) {
         self.idle.insert(
-            id.into(),
+            id.clone(),
             Idle {
                 snapshot,
                 since: now,

@@ -1,4 +1,5 @@
 //! Merge conflict checks for `shoal conflicts` and workspace watches.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 
 use super::Manager;
@@ -42,7 +43,7 @@ impl Manager {
     /// found changed on both sides.
     pub(crate) async fn recorded_changed_on_both_sides(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<Option<ChangedOnBothSides>> {
         let id = workspace_id.to_owned();
         self.store.run(move |db| recorded::get(db, &id)).await

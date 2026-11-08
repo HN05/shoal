@@ -4,6 +4,7 @@
 //! terminal host, and the daemon records that the interrupt ended the turn.
 //! Every target is resolved before Shoal types into any; a target Shoal then
 //! fails to type into does not keep it from the others.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
@@ -56,7 +57,7 @@ struct Interruption {
 
 /// The running turns of the agents in the workspaces `selected` names,
 /// refusing them all when Shoal cannot interrupt one.
-async fn running_turns(ctx: &Context, selected: Vec<String>) -> Result<Vec<Interruption>> {
+async fn running_turns(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<Vec<Interruption>> {
     let mut interruptions = Vec::new();
     for selector in selected {
         let (workspace, agents) = agents_of(ctx, selector).await?;
@@ -76,7 +77,7 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     let target = &interruption.target;
     crate::terminal::send_keys(&target.place, interruption.key).await?;
     let (workspace, execution) = (target.workspace_id.clone(), target.execution.clone());
-    crate::client::agents::interrupt_turn(&ctx.paths, SpaceSelector::parse(&workspace), execution)
+    crate::client::agents::interrupt_turn(&ctx.paths, SpaceSelector::id(&workspace), execution)
         .await?;
     Ok(())
 }
@@ -88,7 +89,10 @@ impl Continuation {
     /// The turns an interrupt ended of the agents in the workspaces
     /// `selectors` name, each once, with the selectors of the workspaces
     /// without one.
-    pub(super) async fn plan(ctx: &Context, selectors: Vec<String>) -> Result<(Self, Vec<String>)> {
+    pub(super) async fn plan(
+        ctx: &Context,
+        selectors: Vec<SpaceSelector>,
+    ) -> Result<(Self, Vec<SpaceSelector>)> {
         let mut targets = Vec::new();
         let mut rest = Vec::new();
         for selector in selectors {
@@ -141,9 +145,9 @@ fn runs_turn(state: Option<AgentState>) -> bool {
 /// The workspace `selector` names and its connected agents.
 pub(super) async fn agents_of(
     ctx: &Context,
-    selector: String,
+    selector: SpaceSelector,
 ) -> Result<(Workspace, Vec<RunningAgent>)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
         .workspace;
     let agents =
@@ -166,7 +170,7 @@ async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
 struct Target {
     workspace: String,
     agent: String,
-    workspace_id: String,
+    workspace_id: SpaceId,
     execution: String,
     place: Origin,
 }

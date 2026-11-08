@@ -28,7 +28,6 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let changes = changes(status, steps)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let space = SpaceSelector::parse(&space);
     let progress = match changes.is_empty() {
         true => progress::get(&ctx.paths, space).await?,
         false => apply(ctx, space, changes).await?,
@@ -72,7 +71,7 @@ pub(super) async fn report_plan(
         return Ok(0);
     };
     let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
-    progress::set(&ctx.paths, SpaceSelector::parse(&space), change).await?;
+    progress::set(&ctx.paths, space, change).await?;
     Ok(0)
 }
 

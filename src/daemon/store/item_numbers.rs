@@ -1,6 +1,7 @@
 //! Number the recorded questions and approval requests within their space,
 //! where both kinds now share one sequence, and name them that way in the
 //! notifications that told the user about them.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -80,7 +81,7 @@ fn separate_kinds(db: &Connection) -> Result<()> {
 /// it, and its number now.
 struct Request {
     previous: i64,
-    space_id: Option<String>,
+    space_id: Option<SpaceId>,
     number: ItemNumber,
 }
 
@@ -130,7 +131,7 @@ struct Notification {
     kind: String,
     message: String,
     subject: Option<String>,
-    space_id: Option<String>,
+    space_id: Option<SpaceId>,
     space_number: Option<u32>,
 }
 

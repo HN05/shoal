@@ -1,3 +1,4 @@
+use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +33,7 @@ pub enum NotificationMethod {
         attachments: Vec<crate::files::NewFile>,
         /// The chat whose agent sends the message, which attaches its files.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<String>,
+        sender_chat: Option<SpaceId>,
     },
     /// Delete the unread message `id` the space sent the user.
     WithdrawMessage {

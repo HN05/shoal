@@ -2,6 +2,7 @@
 //! identity, those its process started, and the members of the process group
 //! it leads, except a workspace's, such as an execution a command in the
 //! chat started, which goes on without it.
+use crate::client::space_ids::SpaceId;
 use crate::process::identity::IdentityExt;
 use anyhow::{Result, bail};
 
@@ -20,7 +21,7 @@ const ROUNDS: usize = 5;
 /// process ran in an earlier boot. Membership alone does not prove
 /// ownership, so only refusing counts it.
 pub(super) async fn survivors(
-    chat: &str,
+    chat: &SpaceId,
     recorded: &Identity,
     stopped: &[Identity],
     wrappers: &[Identity],
@@ -47,7 +48,7 @@ pub(super) async fn survivors(
 /// live, those carrying the chat's identity, and those they started, by the
 /// lineage of their never-reused IDs where recorded.
 pub(super) async fn owned(
-    chat: &str,
+    chat: &SpaceId,
     recorded: &Identity,
     stopped: &[Identity],
     wrappers: &[Identity],
@@ -84,7 +85,7 @@ fn living(processes: &[Identity]) -> Result<Vec<Identity>> {
 /// stops that signalled `stopped` stopped. Each round first has `record`
 /// keep what it signals.
 pub(super) async fn stop_owned<R>(
-    chat: &str,
+    chat: &SpaceId,
     recorded: &Identity,
     stopped: Vec<Identity>,
     wrappers: &[Identity],
@@ -155,7 +156,7 @@ pub(super) fn led_group(recorded: &Identity) -> Result<Option<u32>> {
 
 /// The processes of a running chat.
 pub(super) struct ChatProcesses<'a> {
-    chat: &'a str,
+    chat: &'a SpaceId,
     /// The wrappers of the executions running, which belong to their
     /// workspaces wherever they started.
     wrappers: Vec<Identity>,
@@ -171,7 +172,7 @@ impl<'a> ChatProcesses<'a> {
     /// The processes of chat `chat`, whose process was `recorded`, beside
     /// the execution `wrappers`; `None` once that process has ended.
     pub(super) fn of(
-        chat: &'a str,
+        chat: &'a SpaceId,
         recorded: &Identity,
         wrappers: Vec<Identity>,
     ) -> Result<Option<Self>> {

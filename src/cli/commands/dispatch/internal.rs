@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
@@ -115,7 +116,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 mode,
                 narrowing,
             });
-            crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
+            crate::execution::run_detached_wrapper(
+                &ctx.paths,
+                SpaceSelector::Id(workspace),
+                log,
+                command,
+                agent,
+            )
+            .await
         }
         InternalCommand::SecretTool {
             launchers,
@@ -163,7 +171,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         } => {
             let launch = serde_json::from_str(&launch)
                 .map_err(|error| anyhow::anyhow!("invalid demo launch: {error}"))?;
-            crate::execution::run_demo(&ctx.paths, workspace, launch, command).await
+            crate::execution::run_demo(&ctx.paths, SpaceSelector::Id(workspace), launch, command)
+                .await
         }
         InternalCommand::Session {
             workspace,
@@ -195,13 +204,26 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
 /// Run a session's tracked agent, consuming `records` once it starts.
 async fn run_session(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceId,
     agent: TrackedAgent,
     records: Vec<std::path::PathBuf>,
     command: Vec<std::ffi::OsString>,
 ) -> Result<i32> {
     if records.is_empty() {
-        return crate::execution::run(&ctx.paths, workspace, command, Some(agent)).await;
+        return crate::execution::run(
+            &ctx.paths,
+            SpaceSelector::Id(workspace),
+            command,
+            Some(agent),
+        )
+        .await;
     }
-    crate::execution::run_recovery(&ctx.paths, workspace, command, agent, records).await
+    crate::execution::run_recovery(
+        &ctx.paths,
+        SpaceSelector::Id(workspace),
+        command,
+        agent,
+        records,
+    )
+    .await
 }

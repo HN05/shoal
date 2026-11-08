@@ -57,13 +57,13 @@ pub(super) async fn open_pr(
 /// the daemon starts.
 pub(super) async fn publish(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     options: PullOptions,
 ) -> Result<OpenOutcome> {
     operations::run(
         ctx,
         OperationSpec::OpenPull {
-            workspace: SpaceSelector::parse(&workspace),
+            workspace: workspace.clone(),
             options,
         },
     )
@@ -103,7 +103,7 @@ async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let remote = git::push_remote(&workspace.path, branch).await?;
     let code = crate::execution::publish(
         &ctx.paths,
-        workspace.id.clone(),
+        SpaceSelector::Id(workspace.id.clone()),
         git::push_command(&remote, branch),
     )
     .await?;

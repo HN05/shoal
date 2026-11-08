@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::terminal::Closes;
 use crate::time::UnixTime;
 use crate::{
@@ -343,7 +344,7 @@ async fn inspect(
     if stopped {
         crate::execution::recovery::save_record(
             &paths,
-            "workspace",
+            &SpaceId::from("workspace"),
             "agent",
             &crate::execution::TrackedAgent::named("codex"),
             None,
@@ -396,7 +397,7 @@ async fn inspect(
         .await
         .unwrap();
     });
-    let lifecycle = workspace_lifecycle(&Context::new(paths, true), "workspace")
+    let lifecycle = workspace_lifecycle(&Context::new(paths, true), &SpaceId::from("workspace"))
         .await
         .unwrap();
     server.await.unwrap();
@@ -407,13 +408,19 @@ async fn inspect(
 fn a_closing_place_is_recorded_until_its_watcher_ends() {
     let root = tempfile::tempdir().unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
-    let path = Marker::path(&paths, "herdr", "workspace", "tab-1").unwrap();
-    let closing = Marker::record(&paths, "herdr", "workspace", "tab-1");
+    let path = Marker::path(&paths, "herdr", &SpaceId::from("workspace"), "tab-1").unwrap();
+    let closing = Marker::record(&paths, "herdr", &SpaceId::from("workspace"), "tab-1");
     assert!(path.exists());
     drop(closing);
     assert!(!path.exists());
-    assert_eq!(Marker::path(&paths, "herdr", "workspace", "a/b"), None);
-    assert_eq!(Marker::path(&paths, "herdr", "workspace", ""), None);
+    assert_eq!(
+        Marker::path(&paths, "herdr", &SpaceId::from("workspace"), "a/b"),
+        None
+    );
+    assert_eq!(
+        Marker::path(&paths, "herdr", &SpaceId::from("workspace"), ""),
+        None
+    );
 }
 
 #[tokio::test]

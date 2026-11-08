@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 use crate::{
     daemon::store::Store,
@@ -51,12 +52,12 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 model: Some("opus".into()),
                 effort: None,
             };
-            let first = queue(db, "work", &ReviewTarget::Workspace, "claude", &model, UnixTime::from_seconds(1))?;
+            let first = queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, "claude", &model, UnixTime::from_seconds(1))?;
             assert!(matches!(first, Queued::New(_)));
             assert_eq!(load(db, first.id())?.unwrap().model, model);
             let again = queue(
                 db,
-                "work",
+                &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
                 "codex",
                 &Default::default(),
@@ -72,18 +73,18 @@ async fn one_review_is_queued_or_running_per_workspace() {
             assert!(!waits_for_recovery(db, first.id())?);
             let refused = queue(
                 db,
-                "work",
+                &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
                 UnixTime::from_seconds(4),
             );
             assert!(refused.is_err());
-            assert!(cancel(db, first.id(), Some("work"), UnixTime::from_seconds(5))?);
+            assert!(cancel(db, first.id(), Some(&SpaceId::from("work")), UnixTime::from_seconds(5))?);
             assert_eq!(cancelled_by(db, first.id())?.as_deref(), Some("work"));
             assert!(!cancel(db, first.id(), None, UnixTime::from_seconds(6))?);
             assert!(matches!(
-                queue(db, "work", &ReviewTarget::Workspace, "claude", &Default::default(), UnixTime::from_seconds(7))?,
+                queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, "claude", &Default::default(), UnixTime::from_seconds(7))?,
                 Queued::New(id) if id > first.id()
             ));
             Ok(())
@@ -100,7 +101,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
         .write(|tx| {
             let first = queue(
                 tx,
-                "work",
+                &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
@@ -143,7 +144,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
 
             let second = queue(
                 tx,
-                "work",
+                &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
                 "codex",
                 &Default::default(),
@@ -191,10 +192,10 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 listed.iter().map(|review| review.id).collect::<Vec<_>>(),
                 [second, first]
             );
-            assert_eq!(latest(tx, "work")?.unwrap().id, second);
-            let status = latest_status(tx, "work")?.unwrap();
+            assert_eq!(latest(tx, &SpaceId::from("work"))?.unwrap().id, second);
+            let status = latest_status(tx, &SpaceId::from("work"))?.unwrap();
             assert_eq!((status.id, status.unresolved), (second, 0));
-            assert_eq!(earlier(tx, "work", second)?.len(), 1);
+            assert_eq!(earlier(tx, &SpaceId::from("work"), second)?.len(), 1);
 
             resolve(tx, finding, None)?;
             assert_eq!(load(tx, first)?.unwrap().unresolved().count(), 1);
@@ -234,7 +235,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
         .run(|db| {
             let id = queue(
                 db,
-                "work",
+                &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),
@@ -269,7 +270,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
         .write(|tx| {
             let id = queue(
                 tx,
-                "work",
+                &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
                 "claude",
                 &Default::default(),

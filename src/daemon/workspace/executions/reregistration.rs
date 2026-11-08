@@ -1,6 +1,7 @@
 //! A running execution's wrapper registers again after continuing from the
 //! installed binary: it gets a new plan and records what its registration
 //! records.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
 use std::collections::BTreeMap;
@@ -29,7 +30,7 @@ impl Manager {
     pub(crate) async fn reregister_execution(
         &self,
         id: &str,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         place: Option<ExecutionPlace>,
     ) -> Result<ExecutionPlan> {
         let workspace = self.workspace_by_id(workspace_id).await?;
@@ -76,7 +77,7 @@ impl Manager {
 fn register_again(
     tx: &rusqlite::Transaction<'_>,
     id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     place: Option<ExecutionPlace>,
     repository: &Repository,
     caches: &BTreeMap<String, Cache>,

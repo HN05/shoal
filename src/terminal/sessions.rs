@@ -1,5 +1,6 @@
 //! The agent sessions hosts keep, whom each runs for, and whether a
 //! terminal shows one.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use serde::Serialize;
 
@@ -14,8 +15,8 @@ use crate::{
 /// sessions labels them with it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Owner<'a> {
-    Workspace(&'a str),
-    Chat(&'a str),
+    Workspace(&'a SpaceId),
+    Chat(&'a SpaceId),
 }
 
 /// What kind of [`Owner`] a session has.

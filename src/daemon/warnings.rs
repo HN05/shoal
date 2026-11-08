@@ -1,5 +1,6 @@
 //! Message running agents when machine load nears a protection's stop
 //! threshold, so they can reduce it before Shoal stops or cleans anything.
+use crate::client::space_ids::SpaceId;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
 
@@ -24,7 +25,7 @@ impl Signal {
 /// When each workspace was last warned about each signal.
 #[derive(Default)]
 pub(super) struct Warnings {
-    sent: HashMap<(String, Signal), Instant>,
+    sent: HashMap<(SpaceId, Signal), Instant>,
 }
 
 impl Warnings {

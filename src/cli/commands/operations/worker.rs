@@ -104,12 +104,12 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
                 .map(Outcome::Opened)
         }
         OperationSpec::Merge { workspace, options } => {
-            workspaces::merge_branch(ctx, workspace.to_string(), options, reporter)
+            workspaces::merge_branch(ctx, workspace, options, reporter)
                 .await
                 .map(Outcome::Merged)
         }
         OperationSpec::Unmerge { workspace } => {
-            workspaces::unmerge_branch(ctx, workspace.to_string(), reporter)
+            workspaces::unmerge_branch(ctx, workspace, reporter)
                 .await
                 .map(Outcome::Unmerged)
         }
@@ -117,7 +117,7 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
             workspace,
             approval,
             push,
-        } => approvals::push_approved(ctx, workspace.to_string(), approval, push, reporter)
+        } => approvals::push_approved(ctx, workspace, approval, push, reporter)
             .await
             .map(Outcome::Decided),
     }

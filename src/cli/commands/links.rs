@@ -30,10 +30,10 @@ use crate::{
 
 /// The space and the items selected in it, with the kind of a bare number
 /// resolved.
-pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Selection)> {
+pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(SpaceSelector, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = super::items::space_context(ctx, SpaceSelector::parse(&space)).await?;
+    let context = super::items::space_context(ctx, space.clone()).await?;
     let selection = resolve_kind(ctx, context, selection).await?;
     Ok((space, selection))
 }
@@ -97,7 +97,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = super::items::space_context(ctx, SpaceSelector::parse(&space)).await?;
+    let context = super::items::space_context(ctx, space.clone()).await?;
     let selected = resolve_kind(ctx, context.clone(), selected).await?;
     let (kind, input) = match selected {
         Selection {
@@ -188,7 +188,7 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (space, selected) = select(ctx, items).await?;
     crate::client::items::unlink(
         &ctx.paths,
-        SpaceSelector::parse(&space),
+        space.clone(),
         relation,
         selected.kind,
         selected.input,
@@ -215,8 +215,7 @@ pub(super) async fn watch(
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let outcomes =
-        assignments::mark_ready(&ctx.paths, SpaceSelector::parse(&space), selection).await?;
+    let outcomes = assignments::mark_ready(&ctx.paths, space.clone(), selection).await?;
     let ReadyMarks { marks, skipped } = outcomes.into();
     for skipped in &skipped {
         eprintln!("Skipped PR {}: {}", skipped.url, skipped.reason);
@@ -235,9 +234,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let marks =
-        assignments::clear_ready(&ctx.paths, SpaceSelector::parse(&space), selection, draft)
-            .await?;
+    let marks = assignments::clear_ready(&ctx.paths, space.clone(), selection, draft).await?;
     let message = format!(
         "Ready-for-review marks cleared:\n{}",
         review_lines(&marks, itself)
@@ -248,10 +245,9 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
 
 /// What a mark on the space `space` itself is called: `workspace` or
 /// `chat`.
-async fn space_kind(ctx: &Context, space: &str) -> Result<&'static str> {
+async fn space_kind(ctx: &Context, space: &SpaceSelector) -> Result<&'static str> {
     Ok(
-        (crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(space))
-            .await?)
+        (crate::client::workspaces::present_space(&ctx.paths, space).await?)
             .map_or("workspace", |space| space.kind()),
     )
 }

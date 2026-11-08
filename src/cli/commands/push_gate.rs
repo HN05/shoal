@@ -155,13 +155,18 @@ impl Session {
 
     /// Ask the daemon whether the push `refspec` names may go ahead from
     /// `workspace`.
-    async fn request(&self, ctx: &Context, workspace: &str, refspec: &str) -> Result<PushOutcome> {
+    async fn request(
+        &self,
+        ctx: &Context,
+        workspace: &SpaceSelector,
+        refspec: &str,
+    ) -> Result<PushOutcome> {
         let push = self.specification(refspec).await?;
         let workspace = workspace.to_owned();
         client::request(
             &ctx.paths,
             ApprovalMethod::RequestPush {
-                workspace: SpaceSelector::parse(&workspace),
+                workspace: workspace.clone(),
                 push,
             },
         )
@@ -288,7 +293,7 @@ fn one_line(message: &str) -> String {
 
 /// The workspace the push comes from: the one Git runs in, else the
 /// caller's own.
-async fn workspace(ctx: &Context) -> Result<String> {
+async fn workspace(ctx: &Context) -> Result<SpaceSelector> {
     match ui::choose_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
         Err(error) if error.downcast_ref::<NoCurrentWorkspace>().is_some() => {
             ui::choose_workspace(ctx, None, Fallback::OwnWorkspace).await

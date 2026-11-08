@@ -1,5 +1,6 @@
 //! Where executions run in terminal hosts, as their wrappers report it, and
 //! the places Shoal created for workspaces, which it closes with them.
+use crate::client::space_ids::SpaceId;
 use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -23,7 +24,7 @@ pub(crate) struct ExecutionPlace {
 pub(super) fn record_execution_place(
     tx: &rusqlite::Transaction<'_>,
     execution: &str,
-    workspace: &str,
+    workspace: &SpaceId,
     place: &ExecutionPlace,
 ) -> Result<()> {
     tx.execute(
@@ -69,10 +70,10 @@ impl Manager {
     /// workspace's.
     pub(crate) async fn owned_places(
         &self,
-        workspace: Option<String>,
-    ) -> Result<Vec<(String, Origin)>> {
+        workspace: Option<SpaceId>,
+    ) -> Result<Vec<(SpaceId, Origin)>> {
         self.store
-            .run(move |db| owned(db, workspace.as_deref()))
+            .run(move |db| owned(db, workspace.as_ref()))
             .await
     }
 
@@ -86,7 +87,7 @@ impl Manager {
     ) -> Result<PlaceOwnership> {
         let workspace = self.workspace(selector).await?;
         if let Some((owner, _)) = self.place_owner(place).await? {
-            return Ok(if owner.as_deref() == Some(workspace.id.as_str()) {
+            return Ok(if owner.as_ref() == Some(&workspace.id) {
                 PlaceOwnership::Workspace
             } else {
                 PlaceOwnership::Elsewhere
@@ -107,7 +108,7 @@ impl Manager {
     pub(super) async fn place_owner(
         &self,
         place: &Origin,
-    ) -> Result<Option<(Option<String>, Origin)>> {
+    ) -> Result<Option<(Option<SpaceId>, Origin)>> {
         let (host, server, place) = (place.host, place.server(), place.id().to_owned());
         self.store
             .run(move |db| {
@@ -115,7 +116,7 @@ impl Manager {
                     "SELECT workspace_id,origin FROM owned_places
                      WHERE host=?1 AND server=?2 AND place=?3",
                     params![host, server, place],
-                    |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?)),
+                    |row| Ok((row.get::<_, Option<SpaceId>>(0)?, row.get::<_, String>(1)?)),
                 )
                 .optional()?
                 .map(|(workspace, origin)| Ok((workspace, serde_json::from_str(&origin)?)))
@@ -161,7 +162,7 @@ fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
 /// Record `origin` as owned by `workspace` unless that place is recorded
 /// already. A record of an earlier instance under the same ID, which a host
 /// that reuses IDs left, gives way to it.
-fn insert_owned(db: &Connection, workspace: &str, origin: &Origin) -> Result<()> {
+fn insert_owned(db: &Connection, workspace: &SpaceId, origin: &Origin) -> Result<()> {
     db.execute(
         "INSERT INTO owned_places(host,server,place,workspace_id,origin)
          VALUES (?1,?2,?3,?4,?5) ON CONFLICT(host,server,place) DO UPDATE
@@ -180,14 +181,17 @@ fn insert_owned(db: &Connection, workspace: &str, origin: &Origin) -> Result<()>
     Ok(())
 }
 
-pub(super) fn owned(db: &Connection, workspace: Option<&str>) -> Result<Vec<(String, Origin)>> {
+pub(super) fn owned(
+    db: &Connection,
+    workspace: Option<&SpaceId>,
+) -> Result<Vec<(SpaceId, Origin)>> {
     let mut statement = db.prepare(
         "SELECT workspace_id,origin FROM owned_places
          WHERE workspace_id IS NOT NULL AND (?1 IS NULL OR workspace_id=?1)
          ORDER BY rowid",
     )?;
     let rows = statement.query_map([workspace], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        Ok((row.get::<_, SpaceId>(0)?, row.get::<_, String>(1)?))
     })?;
     rows.map(|row| {
         let (workspace, origin) = row?;

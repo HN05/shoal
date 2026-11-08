@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use crate::{
+    client::space_ids::SpaceId,
     daemon::{
         events::EventCause,
         log,
@@ -16,7 +17,7 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Announced<'a> {
     kind: SpaceKind,
-    id: &'a str,
+    id: &'a SpaceId,
     name: &'a str,
 }
 
@@ -130,7 +131,7 @@ impl Cleanup<'_> {
 
     /// The cause the journal records for the workspace `id` the cleanup
     /// retained.
-    async fn cause(self, manager: &Manager, id: &str) -> Result<EventCause> {
+    async fn cause(self, manager: &Manager, id: &SpaceId) -> Result<EventCause> {
         Ok(match self {
             Self::Idle => EventCause::Idle,
             Self::Merged => EventCause::Merged,

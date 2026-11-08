@@ -1,6 +1,7 @@
 //! Cooperative caller scope. The daemon validates every scoped request,
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
@@ -16,7 +17,7 @@ pub(in crate::daemon) use access::NOT_NOW;
 /// The space and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
 pub struct Caller {
-    pub space_id: String,
+    pub space_id: SpaceId,
     pub execution: Option<ScopedExecution>,
 }
 
@@ -158,7 +159,7 @@ pub(super) fn denied() -> anyhow::Error {
 pub(super) async fn inspect_owner(
     manager: &Manager,
     caller: Option<&Caller>,
-    workspace: &str,
+    workspace: &SpaceId,
     kind: &str,
 ) -> Result<()> {
     if let Some(caller) = caller {

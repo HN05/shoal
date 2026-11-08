@@ -1,5 +1,6 @@
 //! What the daemon knows of workspaces' agents: running, queued, or stopped
 //! with a session to restore.
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use std::collections::HashMap;
 
@@ -20,11 +21,11 @@ use crate::{
 pub(super) struct Agents {
     /// The agent execution saying most about each workspace's agent, by
     /// workspace ID.
-    executions: HashMap<String, AgentExecution>,
+    executions: HashMap<SpaceId, AgentExecution>,
     /// Queued launches and restores, by the workspace they start in.
-    queued: HashMap<String, QueueEntry>,
+    queued: HashMap<SpaceId, QueueEntry>,
     /// The first stopped agent with a session to restore, by workspace ID.
-    stopped: HashMap<String, String>,
+    stopped: HashMap<SpaceId, String>,
 }
 
 impl Agents {
@@ -100,7 +101,7 @@ pub(super) async fn load(manager: &Manager, workspaces: &[Workspace]) -> Result<
 }
 
 /// The first queued launch or restore of each workspace.
-async fn queued(manager: &Manager) -> Result<HashMap<String, QueueEntry>> {
+async fn queued(manager: &Manager) -> Result<HashMap<SpaceId, QueueEntry>> {
     let mut queued = HashMap::new();
     for entry in manager.queue_entries().await? {
         if let Some(workspace) = entry.workspace() {
@@ -113,7 +114,7 @@ async fn queued(manager: &Manager) -> Result<HashMap<String, QueueEntry>> {
 /// The agent each of `workspaces` can resume: its first stopped agent,
 /// which protection or a restart stopped, or else its first last session,
 /// which a normal stop or exit keeps.
-fn stopped(manager: &Manager, workspaces: &[Workspace]) -> Result<HashMap<String, String>> {
+fn stopped(manager: &Manager, workspaces: &[Workspace]) -> Result<HashMap<SpaceId, String>> {
     let mut stopped = HashMap::new();
     for workspace in workspaces {
         let paths = &manager.paths;

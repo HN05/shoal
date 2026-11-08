@@ -2,6 +2,7 @@
 //! a running chat, which acts in its repository's registered checkout and
 //! links items the same way, without a branch or an assignment that
 //! completes.
+use crate::client::space_ids::SpaceId;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -32,7 +33,7 @@ impl From<Workspace> for LinkSpace {
 }
 
 impl LinkSpace {
-    pub(crate) fn id(&self) -> &str {
+    pub(crate) fn id(&self) -> &SpaceId {
         match self {
             Self::Workspace(workspace) => &workspace.id,
             Self::Chat { chat, .. } => &chat.id,
@@ -179,7 +180,7 @@ impl Manager {
     /// `repository` when it is a chat without a repository.
     pub(crate) async fn find_link_space(
         &self,
-        id: &str,
+        id: &SpaceId,
         repository: Option<&str>,
     ) -> Result<Option<LinkSpace>> {
         let owned = id.to_owned();
@@ -307,13 +308,13 @@ fn ensure_one(named: &str, found: &[Repository]) -> Result<()> {
 }
 
 /// Whether `id` names a recorded chat, whose links change whenever it runs.
-pub(crate) fn is_chat(db: &Connection, id: &str) -> Result<bool> {
+pub(crate) fn is_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
     store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [id])
 }
 
 /// Refuse a change to the links, cursor or marks of a workspace that is not
 /// ready; a chat takes one whenever it is recorded.
-pub(crate) fn require_ready_space(db: &Connection, id: &str) -> Result<()> {
+pub(crate) fn require_ready_space(db: &Connection, id: &SpaceId) -> Result<()> {
     if is_chat(db, id)? {
         return Ok(());
     }

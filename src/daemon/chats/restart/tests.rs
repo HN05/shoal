@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::{
         chats::{
@@ -52,7 +53,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
 
-    let coordinator = Some("coordinator".to_owned());
+    let coordinator = Some(SpaceId::from("coordinator"));
     let error = (manager.restart_chat(&chat.id, run("a"), coordinator.clone()))
         .await
         .unwrap_err();
@@ -82,7 +83,7 @@ async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
         .await
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
-    let coordinator = Some("coordinator".to_owned());
+    let coordinator = Some(SpaceId::from("coordinator"));
     let restart = manager.restart_chat(&chat.id, run("a"), coordinator);
     assert!(restart.await.is_err());
     process.wait().unwrap();
@@ -110,18 +111,18 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
         .await
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
-    let coordinator = Some("coordinator");
-    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.map(str::to_owned));
+    let coordinator = Some(SpaceId::from("coordinator"));
+    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.clone());
     assert!(restart.await.is_err());
     process.wait().unwrap();
-    let fail_restore = |stopped_by| {
+    let fail_restore = |stopped_by: Option<SpaceId>| {
         let manager = &manager;
         let id = &chat.id;
         async move {
             let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
             let pid = restoring.id();
             manager.restore_chat(id, pid, None, false).await.unwrap();
-            (manager.return_to_saved(id, pid, "failed", stopped_by))
+            (manager.return_to_saved(id, pid, "failed", stopped_by.as_ref()))
                 .await
                 .unwrap();
             restoring.kill();
@@ -130,7 +131,7 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
     };
 
     assert_eq!(fail_restore(None).await, None);
-    assert_eq!(fail_restore(coordinator).await.as_deref(), coordinator);
+    assert_eq!(fail_restore(coordinator.clone()).await, coordinator);
 }
 
 /// The daemon restores a chat for a restart without the scope of the space
@@ -148,7 +149,7 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
     let restart = tokio::spawn({
         let (manager, id) = (manager.clone(), chat.id.clone());
         async move {
-            let coordinator = Some("coordinator".to_owned());
+            let coordinator = Some(SpaceId::from("coordinator"));
             manager.restart_chat(&id, run("a"), coordinator).await
         }
     });

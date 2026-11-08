@@ -1,5 +1,6 @@
 //! Persistent identity for directories Shoal owns: Git administrative
 //! directories and repository checkouts.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
@@ -23,10 +24,12 @@ pub(in crate::daemon) fn marked_owner(git_dir: &Path) -> Result<Option<String>> 
     }
 }
 
-pub(in crate::daemon) fn mark_owner(git_dir: &Path, workspace_id: &str) -> Result<()> {
+/// Mark the admin directory as `owner`'s: a workspace's ID, or the seed
+/// build's owner.
+pub(in crate::daemon) fn mark_owner(git_dir: &Path, owner: &str) -> Result<()> {
     // Rename into place so a crash never leaves a truncated marker.
     let partial = git_dir.join(format!("{OWNER_MARKER}.partial"));
-    fs::write(&partial, format!("{workspace_id}\n")).context("write Git worktree owner marker")?;
+    fs::write(&partial, format!("{owner}\n")).context("write Git worktree owner marker")?;
     fs::rename(&partial, git_dir.join(OWNER_MARKER)).context("write Git worktree owner marker")
 }
 
@@ -43,12 +46,12 @@ pub(super) fn clear_owner(git_dir: &Path) -> Result<()> {
 /// made before markers existed, by the recorded filesystem identity.
 pub(super) fn verify_owner(
     git_dir: &Path,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     recorded: Option<&str>,
 ) -> Result<()> {
     match marked_owner(git_dir)? {
         Some(owner) => ensure!(
-            owner == workspace_id,
+            owner == *workspace_id,
             "Git worktree metadata is marked as another Shoal workspace's; ownership cannot be verified"
         ),
         None => {

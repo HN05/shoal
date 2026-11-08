@@ -1,6 +1,7 @@
 //! Locations of Shoal's per-user state, where apps find the daemon's socket.
 //! Every file the daemon or CLI touches under the state directory is named
 //! here.
+use crate::space_ids::SpaceId;
 use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -125,7 +126,7 @@ impl Paths {
 
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
-    pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {
+    pub fn workspace_state(&self, workspace_id: &SpaceId) -> PathBuf {
         self.state.join("workspaces").join(workspace_id)
     }
 }

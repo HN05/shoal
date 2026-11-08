@@ -1,5 +1,6 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
 //! terminal to one of a workspace's or a running chat's.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 
 use crate::client::space_names::SpaceSelector;
@@ -58,8 +59,8 @@ pub(super) async fn attach(
 
 /// The name of the session `shoal attach` takes in which the daemon
 /// recorded the agent of the workspace with the ID `id` running.
-pub(super) async fn agent_session(ctx: &Context, id: &str) -> Result<Option<String>> {
-    let target = Target::inspected(ctx, id.to_owned()).await?;
+pub(super) async fn agent_session(ctx: &Context, id: &SpaceId) -> Result<Option<String>> {
+    let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
     let sessions = target.attachable(ctx, None).await?.unwrap_or_default();
     Ok(sessions
         .into_iter()
@@ -109,13 +110,12 @@ impl Target {
         name: Option<SpaceSelector>,
         fallback: Fallback,
     ) -> Result<Self> {
-        let id = ui::choose_workspace(ctx, name, fallback).await?;
-        Self::inspected(ctx, id).await
+        let workspace = ui::choose_workspace(ctx, name, fallback).await?;
+        Self::inspected(ctx, workspace).await
     }
 
-    async fn inspected(ctx: &Context, id: String) -> Result<Self> {
-        let inspection =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id)).await?;
+    async fn inspected(ctx: &Context, workspace: SpaceSelector) -> Result<Self> {
+        let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
         Ok(Self::Workspace(Box::new(inspection)))
     }
 
@@ -124,7 +124,7 @@ impl Target {
         let attachable = terminal::session_owners(&chat_places(&chats));
         let chats: Vec<_> = chats
             .into_iter()
-            .filter(|chat| attachable.contains(&chat.id))
+            .filter(|chat| attachable.contains(chat.id.as_str()))
             .collect();
         let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
@@ -132,11 +132,11 @@ impl Target {
     }
 
     /// The one of `chats` with the ID `id`, else the workspace with it.
-    async fn space(ctx: &Context, chats: Vec<Chat>, id: String) -> Result<Self> {
+    async fn space(ctx: &Context, chats: Vec<Chat>, id: SpaceId) -> Result<Self> {
         if let Some(chat) = chats.into_iter().find(|chat| chat.id == id) {
             return Ok(Self::Chat(Box::new(chat)));
         }
-        Self::inspected(ctx, id).await
+        Self::inspected(ctx, SpaceSelector::Id(id)).await
     }
 
     /// Remember a workspace or chat once its session was shown and still
@@ -145,9 +145,9 @@ impl Target {
     async fn record_detach(&self, ctx: &Context) {
         match self {
             Self::Workspace(inspection) => {
-                recent::record_attach(ctx, &inspection.workspace.id).await;
+                recent::record_attach(ctx, &SpaceSelector::id(&inspection.workspace.id)).await;
             }
-            Self::Chat(chat) => recent::record_chat_attach(ctx, &chat.id).await,
+            Self::Chat(chat) => recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await,
         }
     }
 

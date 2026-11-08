@@ -1,5 +1,6 @@
 //! Durable lifecycle records, independent of notification delivery and read state.
 
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
@@ -137,7 +138,7 @@ const SPACE_FIELDS: &str = "'workspace_id',workspace_id,'chat_id',chat_id,
 /// Append in the transaction that owns the transition, before deleting ownership.
 pub(crate) fn record(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     kind: EventKind,
     cause: EventCause,
     error: Option<&str>,
@@ -162,7 +163,7 @@ pub(crate) fn record(
 /// Record a link mutation in the transaction that changes its association.
 pub(crate) fn record_link(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     event_kind: EventKind,
     relation: crate::model::Relation,
     kind: impl Into<crate::forge::items::link::LinkKind>,
@@ -188,7 +189,7 @@ pub(crate) fn record_link(
 /// Record a change Shoal made to one of the space's issues or PRs.
 pub(crate) fn record_item(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     kind: impl Into<crate::forge::items::link::LinkKind>,
     url: &str,
     action: &str,
@@ -209,7 +210,7 @@ pub(crate) fn record_item(
 /// Record activity observed on an issue or PR by the background poller.
 pub(crate) fn record_item_activity(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     kind: crate::forge::items::link::LinkKind,
     url: &str,
     update: &crate::forge::updates::Update,
@@ -237,7 +238,7 @@ pub(crate) fn record_item_activity(
 /// Record `kind` for the space `id`, with `payload` as its field `field`.
 fn record_with(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     kind: EventKind,
     field: &str,
     payload: &impl serde::Serialize,
@@ -256,7 +257,7 @@ fn record_with(
 /// Record the new `progress` of the space `id`.
 pub(crate) fn record_progress(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     progress: &crate::client::progress::Progress,
 ) -> Result<()> {
     record_with(db, id, EventKind::ProgressChanged, "progress", progress)
@@ -265,7 +266,7 @@ pub(crate) fn record_progress(
 /// Record that the agent of the space `id` started, stopped or exited. An
 /// execution's agent ends once: a stop that saved it for a restore, then its
 /// wrapper's end, records one stop.
-fn record_agent(db: &Connection, id: &str, kind: EventKind, agent: &AgentEvent) -> Result<()> {
+fn record_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEvent) -> Result<()> {
     ensure!(matches!(
         kind,
         EventKind::AgentStarted | EventKind::AgentStopped | EventKind::AgentExited
@@ -277,7 +278,7 @@ fn record_agent(db: &Connection, id: &str, kind: EventKind, agent: &AgentEvent) 
 }
 
 /// Whether the space's newest agent event is the end of `execution`'s agent.
-fn agent_ended(db: &Connection, id: &str, execution: Option<&str>) -> Result<bool> {
+fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&str>) -> Result<bool> {
     let newest: Option<(EventKind, Option<String>)> = db
         .query_row(
             "SELECT json_extract(record,'$.kind'),json_extract(record,'$.agent.execution_id')
@@ -322,8 +323,8 @@ impl Manager {
     /// Record an agent's start, stop or exit in the space `id`'s log; a
     /// failure is logged, never returned, as it must not fail the agent's
     /// lifecycle.
-    pub(crate) async fn record_agent(&self, id: &str, kind: EventKind, agent: AgentEvent) {
-        let space = id.to_owned();
+    pub(crate) async fn record_agent(&self, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
+        let space = id.clone();
         let recorded = self
             .store
             .run(move |db| record_agent(db, &space, kind, &agent))
@@ -335,8 +336,8 @@ impl Manager {
 
     /// Record the alert the space `id` sent, which reached its coordinator
     /// or the user.
-    pub(crate) async fn record_alert(&self, id: &str, message: String) {
-        let space = id.to_owned();
+    pub(crate) async fn record_alert(&self, id: &SpaceId, message: String) {
+        let space = id.clone();
         let recorded = self
             .store
             .run(move |db| {
@@ -407,7 +408,7 @@ impl Manager {
     }
     pub(crate) async fn retain_workspace(
         &self,
-        id: &str,
+        id: &SpaceId,
         state: crate::state::WorkspaceState,
         cause: EventCause,
         error: &anyhow::Error,
@@ -428,7 +429,7 @@ impl Manager {
 
     pub(crate) async fn record_retained(
         &self,
-        id: &str,
+        id: &SpaceId,
         cause: EventCause,
         error: &anyhow::Error,
     ) -> Result<()> {

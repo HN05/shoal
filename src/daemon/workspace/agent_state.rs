@@ -1,5 +1,6 @@
 //! The turn state agents report from their hooks: a status signal for
 //! integrations that never notifies, completes, or changes cleanup.
+use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
 use anyhow::{Result, ensure};
@@ -16,7 +17,7 @@ use crate::{
     time::UnixTime,
 };
 
-pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
+pub(crate) fn get(db: &Connection, id: &SpaceId) -> Result<Option<AgentStatus>> {
     Ok(db
         .query_row(
             "SELECT state,since,prompt_cache_expires_at FROM space_agent_state
@@ -31,7 +32,7 @@ pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
 /// from outside a tracked execution, or from one that runs. An `unknown`
 /// execution may have died with its wrapper or may reattach after a daemon
 /// restart, so its state stays recorded and shows again once it runs.
-pub(crate) fn current(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
+pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<AgentStatus>> {
     Ok(db
         .query_row(
             "SELECT s.state,s.since,s.prompt_cache_expires_at FROM space_agent_state s
@@ -52,7 +53,7 @@ fn status(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentStatus> {
 }
 
 /// Every space's last reported state.
-pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
+pub(crate) fn all(db: &Connection) -> Result<Vec<(SpaceId, AgentState)>> {
     Ok(db
         .prepare("SELECT space_id,state FROM space_agent_state")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -61,7 +62,7 @@ pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
 
 /// The turn a stopped execution last reported, while its record lasts.
 struct StoppedTurn {
-    workspace: String,
+    workspace: SpaceId,
     state: AgentState,
     execution: Option<Execution>,
 }
@@ -86,7 +87,7 @@ impl StoppedTurn {
 }
 
 fn reported_by(db: &Connection, id: &str) -> Result<Option<StoppedTurn>> {
-    let reported: Option<(String, AgentState)> = db
+    let reported: Option<(SpaceId, AgentState)> = db
         .query_row(
             "SELECT space_id,state FROM space_agent_state WHERE execution_id=?1",
             [id],
@@ -372,7 +373,7 @@ fn unrecorded(state: AgentState, now: UnixTime) -> AgentStatus {
 
 /// A state report as the store records it.
 struct Report {
-    space: String,
+    space: SpaceId,
     state: AgentState,
     execution: Option<String>,
     /// When it arrived.
@@ -403,7 +404,7 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
 /// Whether the space `id` takes a state report: a workspace, or a chat
 /// whose agent runs. A chat's stop or removal clears its state, so a report
 /// checked against the chat before either would otherwise outlive it.
-fn takes_report(db: &Connection, id: &str) -> Result<bool> {
+fn takes_report(db: &Connection, id: &SpaceId) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS (SELECT 1 FROM workspaces WHERE id=?1)
             OR EXISTS (SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL)",

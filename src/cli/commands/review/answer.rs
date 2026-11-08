@@ -23,12 +23,7 @@ pub(super) async fn cancel(
         Some(id) => (None, Some(id)),
         None => cancelled(ctx, space).await?,
     };
-    let review = reviews::cancel(
-        &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::parse),
-        id,
-    )
-    .await?;
+    let review = reviews::cancel(&ctx.paths, workspace, id).await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
 }
@@ -39,7 +34,7 @@ pub(super) async fn cancel(
 async fn cancelled(
     ctx: &Context,
     space: Option<SpaceSelector>,
-) -> Result<(Option<String>, Option<ReviewId>)> {
+) -> Result<(Option<SpaceSelector>, Option<ReviewId>)> {
     Ok(match super::select(ctx, space).await? {
         super::Space::Chat(chat) => (None, Some(active_review(ctx, &chat).await?)),
         super::Space::Workspace(workspace) => (Some(workspace), None),

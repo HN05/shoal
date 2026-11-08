@@ -10,6 +10,7 @@ mod queue;
 mod source;
 mod target;
 
+use crate::client::space_names::SpaceSelector;
 pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
@@ -58,7 +59,7 @@ pub(in crate::cli::commands) struct AddOptions {
     pub prompt: Option<String>,
     /// The space the workspace goes below, instead of the chat this runs in
     /// or, for a workspace process, its own space.
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     /// The session the agent starts from a fork of.
     pub fork: Option<String>,
 }
@@ -129,7 +130,7 @@ pub(in crate::cli::commands) async fn add(
     );
     let mut creation = absolute(ctx, creation)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
-    check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
+    check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
     ensure_narrowing_fits(&settings, &options.narrowing, options.mode.as_ref()).await?;
@@ -144,7 +145,7 @@ pub(in crate::cli::commands) async fn add(
     let issue = load_add_issue(ctx, &target, issue.or(picked)).await?;
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.
-    check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
+    check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     ensure_narrowing_fits_chosen(&settings, &options.narrowing, mode.as_deref()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
@@ -189,7 +190,7 @@ pub(in crate::cli::commands) async fn check_target(
     ctx: &Context,
     repository: Option<String>,
     issue: Option<&str>,
-    parent: Option<&str>,
+    parent: Option<&SpaceSelector>,
 ) -> Result<crate::repository::Selector> {
     let target = resolve_add_target(ctx, repository, issue).await?;
     check_add_creation(ctx, &target, &Creation::default(), parent).await?;

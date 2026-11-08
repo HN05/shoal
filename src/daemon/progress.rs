@@ -2,6 +2,7 @@
 //! its plan, as its plan tool reports them or `shoal progress --steps` sets
 //! them. The record outlives the agent until the space goes; each change is
 //! a `progress_changed` event, and none notifies anyone.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -99,13 +100,13 @@ impl Plan {
 
 /// The progress of the space `id`; none before its agent reported any or
 /// once it cleared all of it.
-pub(crate) fn current(db: &Connection, id: &str) -> Result<Option<Progress>> {
+pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<Progress>> {
     Ok(stored(db, id)?
         .filter(|(plan, _)| !plan.is_empty())
         .map(|(plan, updated_at)| plan.progress(updated_at)))
 }
 
-fn stored(db: &Connection, id: &str) -> Result<Option<(Plan, UnixTime)>> {
+fn stored(db: &Connection, id: &SpaceId) -> Result<Option<(Plan, UnixTime)>> {
     let row: Option<(String, UnixTime)> = db
         .query_row(
             "SELECT record,updated_at FROM space_progress WHERE space_id=?1",
@@ -119,7 +120,7 @@ fn stored(db: &Connection, id: &str) -> Result<Option<(Plan, UnixTime)>> {
 
 /// Record that the PRs of the space `id` show `plan`, unless it changed
 /// after they were written.
-fn mark_published(db: &Connection, id: &str, plan: &Plan) -> Result<()> {
+fn mark_published(db: &Connection, id: &SpaceId, plan: &Plan) -> Result<()> {
     db.execute(
         "UPDATE space_progress SET published_at=updated_at WHERE space_id=?1 AND record=?2",
         params![id, serde_json::to_string(plan)?],
@@ -131,7 +132,7 @@ fn mark_published(db: &Connection, id: &str, plan: &Plan) -> Result<()> {
 /// caller's transaction, journaling it; `None` when it changes nothing.
 fn save(
     tx: &Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     change: ProgressChange,
     now: UnixTime,
 ) -> Result<Option<Progress>> {
@@ -156,7 +157,7 @@ fn save(
 /// changed.
 pub(crate) fn record_status(
     tx: &Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     status: Option<&str>,
     now: UnixTime,
 ) -> Result<bool> {

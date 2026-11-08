@@ -1,5 +1,6 @@
 //! The records a subscription covers, as they are now: those of the topics
 //! it asked for that its caller may read.
+use crate::client::space_ids::SpaceId;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;
@@ -116,13 +117,13 @@ struct Visible {
     workspaces: Vec<Workspace>,
     /// Each workspace's name by ID, for the topics that filter or name
     /// records by workspace.
-    names: HashMap<String, String>,
+    names: HashMap<SpaceId, String>,
 }
 
 impl Visible {
     async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
         let root = manager.reach_root(caller).await?;
-        let root = root.as_deref();
+        let root = root.as_ref();
         if topics.has(Topic::Workspaces) || topics.has(Topic::Links) || topics.has(Topic::Sessions)
         {
             let workspaces = manager.list_workspaces_within(root).await?;
@@ -150,7 +151,7 @@ impl Visible {
         Ok(Self::default())
     }
 
-    fn contains(&self, id: &str) -> bool {
+    fn contains(&self, id: &SpaceId) -> bool {
         self.names.contains_key(id)
     }
 }
@@ -342,7 +343,7 @@ async fn messages(
 }
 
 /// A message queued for the agent of the workspace with this ID and name.
-fn agent_message(message: AgentMessage, workspace_id: String, workspace: String) -> Message {
+fn agent_message(message: AgentMessage, workspace_id: SpaceId, workspace: String) -> Message {
     Message {
         id: format!("agent/{}", message.id),
         recipient: MessageRecipient::Agent,
@@ -378,17 +379,17 @@ async fn notifications(manager: &Manager) -> Result<Vec<Record>> {
 
 /// What the daemon last observed of each linked item on its forge, by
 /// workspace ID and URL.
-async fn item_activity(manager: &Manager) -> Result<HashMap<String, HashMap<String, Snapshot>>> {
+async fn item_activity(manager: &Manager) -> Result<HashMap<SpaceId, HashMap<String, Snapshot>>> {
     let rows = manager
         .store
         .run(|db| {
             Ok(db
                 .prepare("SELECT space_id,url,record FROM space_item_activity")?
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-                .collect::<rusqlite::Result<Vec<(String, String, String)>>>()?)
+                .collect::<rusqlite::Result<Vec<(SpaceId, String, String)>>>()?)
         })
         .await?;
-    let mut activity: HashMap<String, HashMap<String, Snapshot>> = HashMap::new();
+    let mut activity: HashMap<SpaceId, HashMap<String, Snapshot>> = HashMap::new();
     for (workspace, url, record) in rows {
         // An unreadable observation shows the link without one.
         if let Ok(snapshot) = serde_json::from_str(&record) {
@@ -399,7 +400,7 @@ async fn item_activity(manager: &Manager) -> Result<HashMap<String, HashMap<Stri
 }
 
 /// Every message queued for a workspace's agent, with its workspace's ID.
-async fn agent_messages(manager: &Manager) -> Result<Vec<(String, AgentMessage)>> {
+async fn agent_messages(manager: &Manager) -> Result<Vec<(SpaceId, AgentMessage)>> {
     manager
         .store
         .run(|db| {

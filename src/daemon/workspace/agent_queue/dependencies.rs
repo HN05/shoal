@@ -3,6 +3,7 @@
 //! opened its workspace, which then stands in for it, and every issue has
 //! closed or is done in a workspace of the repository that links it. It
 //! builds on the branch of the done dependency that contains the others.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
@@ -94,7 +95,7 @@ fn work(
     repository: &str,
     selector: &str,
 ) -> Result<(DependencyKind, String)> {
-    let workspace: Option<String> = db
+    let workspace: Option<SpaceId> = db
         .query_row(
             "SELECT id FROM workspaces WHERE repository_id=?1 AND (id=?2 OR name=?2)",
             params![repository, selector],
@@ -102,7 +103,7 @@ fn work(
         )
         .optional()?;
     if let Some(id) = workspace {
-        return Ok((DependencyKind::Workspace, id));
+        return Ok((DependencyKind::Workspace, id.into()));
     }
     let launch: Option<(String, Option<String>)> = db
         .query_row(
@@ -120,7 +121,7 @@ fn work(
 }
 
 /// Let `workspace`, which launch `entry` opened, stand for the launch.
-pub(super) fn replace_launch(db: &Connection, entry: &str, workspace: &str) -> Result<()> {
+pub(super) fn replace_launch(db: &Connection, entry: &str, workspace: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE OR IGNORE agent_queue_dependencies SET kind=?3,target=?2 WHERE kind=?4 AND target=?1",
         params![
@@ -195,7 +196,7 @@ impl Manager {
             DependencyKind::Workspace => {
                 match self
                     .store
-                    .run(move |db| workspace_by_id(db, &target))
+                    .run(move |db| workspace_by_id(db, &SpaceId::from(target)))
                     .await?
                 {
                     Some(workspace) => self.workspace_progress(workspace).await,
@@ -310,7 +311,7 @@ fn launch_name(db: &Connection, id: &str) -> Result<Option<String>> {
         .optional()?)
 }
 
-fn workspace_by_id(db: &Connection, id: &str) -> Result<Option<Workspace>> {
+fn workspace_by_id(db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
     recorded_workspace(db, "id=?1", [id])
 }
 

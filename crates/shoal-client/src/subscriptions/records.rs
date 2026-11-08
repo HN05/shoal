@@ -3,6 +3,7 @@
 //! the sessions each space's agents reported, open questions, pending
 //! approval requests, messages and notifications, each named by a
 //! [`RecordKey`].
+use crate::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -83,9 +84,9 @@ impl Record {
     pub fn key(&self) -> RecordKey {
         let (kind, id) = match self {
             Self::Repository(record) => (RecordKind::Repository, record.id.clone()),
-            Self::Workspace(record) => (RecordKind::Workspace, record.workspace.id.clone()),
+            Self::Workspace(record) => (RecordKind::Workspace, record.workspace.id.to_string()),
             Self::Link(record) => (RecordKind::Link, record.id.clone()),
-            Self::Sessions(record) => (RecordKind::Sessions, record.space_id.clone()),
+            Self::Sessions(record) => (RecordKind::Sessions, record.space_id.to_string()),
             Self::Question(record) => (RecordKind::Question, record.number.to_string()),
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
             Self::Message(record) => (RecordKind::Message, record.id.clone()),
@@ -144,7 +145,7 @@ pub struct AgentActivity {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Link {
     pub id: String,
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub kind: LinkKind,
     pub url: String,
     pub relation: Relation,
@@ -167,7 +168,7 @@ pub struct Link {
 /// [`crate::transcripts`] finds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportedSessions {
-    pub space_id: String,
+    pub space_id: SpaceId,
     pub sessions: Vec<ReportedSession>,
 }
 
@@ -204,7 +205,7 @@ pub struct Message {
     pub id: String,
     pub recipient: MessageRecipient,
     /// The workspace's ID, for a message to its agent.
-    pub workspace_id: Option<String>,
+    pub workspace_id: Option<SpaceId>,
     /// The workspace's name.
     pub workspace: Option<String>,
     /// Empty when the message is only its attachments.

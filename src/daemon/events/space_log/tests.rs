@@ -103,7 +103,7 @@ async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
     };
     assert_eq!(
         narrowed("plan", "fix").await.unwrap(),
-        SpaceSelector::id("fix-id")
+        SpaceSelector::id(&SpaceId::from("fix-id"))
     );
     assert!(narrowed("plan", "plan").await.is_ok());
     assert!(narrowed("other", "fix").await.is_err());

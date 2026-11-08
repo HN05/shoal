@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
@@ -28,13 +29,13 @@ fn marker_proves_ownership_before_any_recorded_identity() -> Result<()> {
     let git_dir = temp.path();
     let stale = "0:0";
     let current = directory_identity(git_dir)?;
-    verify_owner(git_dir, "workspace", Some(&current))?;
-    assert!(verify_owner(git_dir, "workspace", Some(stale)).is_err());
-    assert!(verify_owner(git_dir, "workspace", None).is_err());
+    verify_owner(git_dir, &SpaceId::from("workspace"), Some(&current))?;
+    assert!(verify_owner(git_dir, &SpaceId::from("workspace"), Some(stale)).is_err());
+    assert!(verify_owner(git_dir, &SpaceId::from("workspace"), None).is_err());
     mark_owner(git_dir, "workspace")?;
     assert_eq!(marked_owner(git_dir)?.as_deref(), Some("workspace"));
-    verify_owner(git_dir, "workspace", Some(stale))?;
-    assert!(verify_owner(git_dir, "other", Some(&current)).is_err());
+    verify_owner(git_dir, &SpaceId::from("workspace"), Some(stale))?;
+    assert!(verify_owner(git_dir, &SpaceId::from("other"), Some(&current)).is_err());
     mark_owner(git_dir, "other")?;
     assert_eq!(marked_owner(git_dir)?.as_deref(), Some("other"));
     assert!(!git_dir.join(format!("{OWNER_MARKER}.partial")).exists());

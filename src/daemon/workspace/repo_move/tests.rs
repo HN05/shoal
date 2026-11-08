@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support,
@@ -807,7 +808,7 @@ async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_tempor
     // directory is there again.
     (manager.outside_tmp_layout())
         .context("no layout")?
-        .prepare("leftover")?;
+        .prepare(&SpaceId::from("leftover"))?;
     manager.move_repositories(Layout::Excluded).await?;
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     assert!(!root.join(".tmp").exists());

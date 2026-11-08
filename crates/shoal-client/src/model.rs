@@ -1,4 +1,5 @@
 //! Records shared by the daemon, its SQLite store, and CLI output.
+use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -71,7 +72,7 @@ pub struct MovedRepository {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
-    pub id: String,
+    pub id: SpaceId,
     /// Unique among the spaces that exist, workspaces and chats; freed when
     /// it goes.
     #[serde(default)]
@@ -243,7 +244,7 @@ impl std::fmt::Display for MadeFor {
 /// Another workspace a record refers to, with its current name and branch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceRef {
-    pub id: String,
+    pub id: SpaceId,
     pub name: String,
     pub branch: Option<String>,
 }
@@ -252,7 +253,7 @@ pub struct WorkspaceRef {
 /// when it is a workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceRef {
-    pub id: String,
+    pub id: SpaceId,
     pub name: String,
     pub kind: SpaceKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -397,7 +398,7 @@ crate::state::states!(
 /// A workspace's HEAD and unsaved files, kept until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Checkpoint {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub repository_id: String,
     /// Counts the workspace's checkpoints from 1.
     pub number: u64,
@@ -459,7 +460,7 @@ pub struct BranchTarget {
 /// What `shoal work restore` recreates of a removed workspace until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemovedWorkspace {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub repository_id: String,
     pub name: SpaceName,
     /// The checkpoint taken at removal.
@@ -596,7 +597,7 @@ pub struct AgentStatus {
 /// A caller-named claim that a workspace is still in use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceHold {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub name: String,
     pub reason: Option<String>,
     pub created_at: crate::time::UnixTime,
@@ -626,7 +627,7 @@ impl Workspace {
     ) -> Self {
         Self {
             narrowing: Default::default(),
-            id: uuid::Uuid::new_v4().to_string(),
+            id: SpaceId::generate(),
             number: 0,
             repository_id,
             name,
@@ -699,7 +700,7 @@ pub fn no_branch(name: &str, action: &str) -> anyhow::Error {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Execution {
     pub id: String,
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub state: ExecutionState,
     pub wrapper: Option<Identity>,
     pub child: Option<Identity>,
@@ -830,7 +831,7 @@ pub enum SpaceDetail {
 }
 
 impl SpaceDetail {
-    pub fn id(&self) -> &str {
+    pub fn id(&self) -> &SpaceId {
         match self {
             Self::Workspace(status) => &status.workspace.id,
             Self::Chat { chat } => &chat.id,
@@ -1090,7 +1091,7 @@ pub struct ExecutionPlan {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortReservation {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub name: String,
     pub port: u16,
     pub env_var: String,
@@ -1099,7 +1100,7 @@ pub struct PortReservation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortSuggestion {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub name: String,
     pub requested_port: u16,
     pub suggested_port: u16,
@@ -1125,7 +1126,7 @@ pub struct PortCatalog {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiffBase {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub commit: String,
     /// The worktree, verified as the workspace's.
     pub path: PathBuf,
@@ -1134,7 +1135,7 @@ pub struct DiffBase {
 /// Whether a workspace's committed HEAD merges cleanly into a target.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictCheck {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub target: String,
     pub target_commit: String,
     pub head: String,
@@ -1234,7 +1235,7 @@ pub struct SyncedRepository {
 /// A workspace branch merged into its repository's default branch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergedBranch {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub repository_id: String,
     pub branch: String,
     pub default_branch: String,
@@ -1292,7 +1293,7 @@ pub struct UnmergePlan {
 /// `commit`, which no longer contains the branch's commits.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Unmerged {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub repository_id: String,
     pub branch: String,
     pub default_branch: String,
@@ -1367,7 +1368,7 @@ pub struct MergeConfirmation {
 /// user to confirm or approve before it happens.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergePreview {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub branch: String,
     /// The branch's commit that merges.
     pub head: String,
@@ -1475,7 +1476,7 @@ pub fn chat_mode() -> String {
 /// in a workspace's worktree without being its agent, until it is removed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chat {
-    pub id: String,
+    pub id: SpaceId,
     /// Unique among the spaces that exist, workspaces and chats; freed when
     /// it goes.
     #[serde(default)]
@@ -1609,7 +1610,7 @@ pub enum PresentSpace {
 }
 
 impl PresentSpace {
-    pub fn id(&self) -> &str {
+    pub fn id(&self) -> &SpaceId {
         match self {
             Self::Workspace(workspace) => &workspace.id,
             Self::Chat(chat) => &chat.id,
@@ -1693,10 +1694,10 @@ impl Spaces {
     }
 
     /// The spaces below the space `id`, nearest first.
-    pub fn below(&self, id: &str) -> Vec<SpaceRef> {
-        let children = |id: &str| {
-            let workspace = self.workspaces.iter().find(|workspace| workspace.id == id);
-            let chat = self.chats.iter().find(|chat| chat.id == id);
+    pub fn below(&self, id: &SpaceId) -> Vec<SpaceRef> {
+        let children = |id: &SpaceId| {
+            let workspace = self.workspaces.iter().find(|workspace| workspace.id == *id);
+            let chat = self.chats.iter().find(|chat| chat.id == *id);
             (workspace.map(|workspace| workspace.children.clone()))
                 .or_else(|| chat.map(|chat| chat.children.clone()))
                 .unwrap_or_default()
@@ -1714,10 +1715,10 @@ impl Spaces {
     /// Every space a removal of the space `id` takes before it, nearest
     /// first: the spaces below it, and the chats in the worktree of each
     /// workspace among them and of `id` itself.
-    pub fn taken_with(&self, id: &str) -> Vec<SpaceRef> {
-        let first = |id: &str| -> Vec<SpaceRef> {
+    pub fn taken_with(&self, id: &SpaceId) -> Vec<SpaceRef> {
+        let first = |id: &SpaceId| -> Vec<SpaceRef> {
             let mut resident: Vec<SpaceRef> = (self.chats.iter())
-                .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == id))
+                .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == *id))
                 .map(|chat| SpaceRef {
                     id: chat.id.clone(),
                     name: chat.name.to_string(),
@@ -1726,8 +1727,8 @@ impl Spaces {
                 })
                 .collect();
             resident.sort_by(|a, b| a.name.cmp(&b.name));
-            let workspace = self.workspaces.iter().find(|workspace| workspace.id == id);
-            let chat = self.chats.iter().find(|chat| chat.id == id);
+            let workspace = self.workspaces.iter().find(|workspace| workspace.id == *id);
+            let chat = self.chats.iter().find(|chat| chat.id == *id);
             resident.extend(
                 (workspace.map(|workspace| workspace.children.clone()))
                     .or_else(|| chat.map(|chat| chat.children.clone()))
@@ -1749,7 +1750,7 @@ impl Spaces {
 /// A place Shoal created for a workspace, which closes with it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedPlace {
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub origin: crate::sessions::Origin,
 }
 
@@ -1758,7 +1759,7 @@ pub struct OwnedPlace {
 pub struct RunningAgent {
     pub execution: String,
     /// The workspace it runs in, or the chat it is the agent of.
-    pub space_id: String,
+    pub space_id: SpaceId,
     /// `None` for an execution whose wrapper is gone, which may have run an agent.
     pub agent: Option<String>,
     /// Whether its wrapper can start its session again.
@@ -1846,13 +1847,13 @@ pub struct QueueEntry {
     pub position: Option<usize>,
     pub created_at: crate::time::UnixTime,
     /// The workspace a starting launch opened, or a restore's own.
-    pub workspace_id: Option<String>,
+    pub workspace_id: Option<SpaceId>,
     /// The stopped execution a restore restores.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<String>,
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub opens: Option<String>,
+    pub opens: Option<SpaceId>,
     /// The work a waiting launch still waits for: workspace and queued launch
     /// names and issue URLs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1877,13 +1878,13 @@ pub struct QueuedJob {
     pub run: crate::forge::ci::runner::JobRun,
     /// The workspace that links the run's PR, or owns the branch it ran on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace_id: Option<String>,
+    pub workspace_id: Option<SpaceId>,
 }
 
 impl QueueEntry {
     /// The workspace the entry starts its agent in, once known.
-    pub fn workspace(&self) -> Option<&str> {
-        self.opens.as_deref().or(self.workspace_id.as_deref())
+    pub fn workspace(&self) -> Option<&SpaceId> {
+        self.opens.as_ref().or(self.workspace_id.as_ref())
     }
 }
 

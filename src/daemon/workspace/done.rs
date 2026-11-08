@@ -1,4 +1,5 @@
 //! Assignment completion is a signal; the cleanup sweep owns removal.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use crate::{
 };
 
 impl Manager {
-    pub async fn completion(&self, id: &str) -> Result<Option<Completion>> {
+    pub async fn completion(&self, id: &SpaceId) -> Result<Option<Completion>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -137,7 +138,7 @@ impl Manager {
     /// Record `completion`, with its summary as the status line, and close
     /// the workspace's open questions, which the finished assignment waits on
     /// no longer, waking waits on them.
-    async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Persisted> {
+    async fn persist_completion(&self, id: &SpaceId, completion: &Completion) -> Result<Persisted> {
         let id = id.to_owned();
         let completion = completion.clone();
         let now = crate::time::UnixTime::now();
@@ -249,7 +250,7 @@ impl Manager {
         // An ancestor's completion that takes the workspace changes under
         // the ancestor's gate, so that one is held too.
         let gated = self.completed_ancestor(&listed.id).await?;
-        let gates = std::iter::once(listed.id.as_str()).chain(gated.as_ref().map(|a| a.id()));
+        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| a.id()));
         let _guard = self.gates.lock_prs(gates).await;
         let Some(workspace) = self.find_workspace(&listed.id).await? else {
             return Ok(());
@@ -292,7 +293,7 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn completion_cause(&self, id: &str) -> Result<EventCause> {
+    pub(crate) async fn completion_cause(&self, id: &SpaceId) -> Result<EventCause> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -308,7 +309,7 @@ impl Manager {
             .await
     }
 
-    async fn record_completion_error(&self, id: &str, error: &anyhow::Error) -> Result<()> {
+    async fn record_completion_error(&self, id: &SpaceId, error: &anyhow::Error) -> Result<()> {
         let id = id.to_owned();
         let error = format!("{error:#}");
         self.store
@@ -340,7 +341,7 @@ struct Persisted {
 /// in any field, or that record is unreadable.
 fn record_completion(
     tx: &rusqlite::Transaction,
-    id: &str,
+    id: &SpaceId,
     completion: &Completion,
 ) -> Result<bool> {
     let recorded: Option<String> = tx

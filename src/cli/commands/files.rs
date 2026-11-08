@@ -35,9 +35,9 @@ pub(super) async fn list(
     listing: Listing,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let files = crate::client::files::list(&ctx.paths, SpaceSelector::parse(&space)).await?;
+    let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
     if listing == Listing::Menu && ctx.interactive_output() {
-        return menu::choose(ctx, SpaceSelector::parse(&space), &files).await;
+        return menu::choose(ctx, space.clone(), &files).await;
     }
     let paths = listing == Listing::Paths;
     ctx.show(&files, |files| {
@@ -68,13 +68,8 @@ pub(super) async fn add(
 ) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let added = crate::client::files::add(
-        &ctx.paths,
-        SpaceSelector::parse(&space),
-        files,
-        crate::env::chat(),
-    )
-    .await?;
+    let added =
+        crate::client::files::add(&ctx.paths, space.clone(), files, crate::env::chat()).await?;
     ctx.show(&added, |added| {
         let now = crate::time::UnixTime::now();
         let rows = added.iter().map(|file| cells(file, now)).collect();
@@ -107,16 +102,10 @@ pub(super) async fn remove(
     if let Some(space) = &space {
         check_selected(ctx, space, &names, &ids).await?;
     }
-    if !yes && let Some(action) = confirmation(ctx, space.as_deref()).await? {
+    if !yes && let Some(action) = confirmation(ctx, space.as_ref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
-    let deleted = crate::client::files::remove(
-        &ctx.paths,
-        space.as_deref().map(SpaceSelector::parse),
-        names,
-        ids,
-    )
-    .await?;
+    let deleted = crate::client::files::remove(&ctx.paths, space, names, ids).await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),
         1 => "Deleted 1 file".to_owned(),
@@ -128,11 +117,16 @@ pub(super) async fn remove(
 
 /// Refuse names and records the owner's files do not have before asking
 /// anything; the daemon checks again as it deletes.
-async fn check_selected(ctx: &Context, space: &str, names: &[String], ids: &[i64]) -> Result<()> {
+async fn check_selected(
+    ctx: &Context,
+    space: &SpaceSelector,
+    names: &[String],
+    ids: &[i64],
+) -> Result<()> {
     if names.is_empty() && ids.is_empty() {
         return Ok(());
     }
-    let files = crate::client::files::list(&ctx.paths, SpaceSelector::parse(space)).await?;
+    let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
     let missing = crate::client::files::missing_selection(&files, names, ids);
     ensure!(
         missing.is_empty(),
@@ -144,7 +138,7 @@ async fn check_selected(ctx: &Context, space: &str, names: &[String], ids: &[i64
 
 /// What deleting the files of `space`, a workspace or chat, or of every
 /// workspace, asks the user to confirm, if anything.
-async fn confirmation(ctx: &Context, space: Option<&str>) -> Result<Option<String>> {
+async fn confirmation(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<String>> {
     let Some(space) = space else {
         return Ok(Some(
             "Delete the attached files of every workspace without a running agent or command, \
@@ -159,9 +153,9 @@ async fn confirmation(ctx: &Context, space: Option<&str>) -> Result<Option<Strin
 
 /// The name of the workspace where an agent or command runs, or of the
 /// running chat, that `selector` names.
-async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> {
+async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option<String>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    Ok(match spaces.find(&SpaceSelector::parse(selector)) {
+    Ok(match spaces.find(selector) {
         Some(PresentSpace::Workspace(workspace)) => {
             workspace.running.then(|| workspace.name.to_string())
         }

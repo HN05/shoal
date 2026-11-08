@@ -1,6 +1,7 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
 use crate::cli::commands::resume::queue::QueuedExt;
+use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, ensure};
@@ -30,7 +31,7 @@ pub(super) async fn checkpoint(
     let checkpoint: Checkpoint = ctx
         .progress(
             "Taking checkpoint",
-            recovery::checkpoint(&ctx.paths, SpaceSelector::parse(&workspace), name),
+            recovery::checkpoint(&ctx.paths, workspace.clone(), name),
         )
         .await?;
     let files = if checkpoint.files_omitted {
@@ -84,11 +85,11 @@ async fn choose_removed(ctx: &Context) -> Result<i32> {
     }
     let entries = removed
         .iter()
-        .map(|workspace| workspace.workspace_id.clone())
+        .map(|workspace| workspace.workspace_id.to_string())
         .zip(removed_lines(&removed))
         .collect();
-    let workspace = ui::pick(ctx, "Removed workspace> ", entries)?;
-    reopen(ctx, SpaceSelector::id(&workspace)).await
+    let workspace = SpaceId::from(ui::pick(ctx, "Removed workspace> ", entries)?);
+    reopen(ctx, SpaceSelector::Id(workspace)).await
 }
 
 /// Return the workspace to the checkpoint the user picks, or list its

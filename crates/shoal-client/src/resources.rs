@@ -1,4 +1,5 @@
 //! Resource pools: their configuration, leases and what they have free.
+use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Result, bail, ensure};
@@ -175,7 +176,7 @@ pub struct ResourceLease {
     pub repository: Option<RepositoryView>,
     pub mode: LockMode,
     pub id: String,
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     pub scope: Scope,
     pub pool: String,
     /// Caller-chosen lease name; one workspace may hold several per pool.

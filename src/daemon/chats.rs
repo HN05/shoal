@@ -6,6 +6,7 @@
 //! under pressure. A chat runs while its process lives; once its agent exits
 //! or Shoal saves it, the chat is stopped until it is restored, and it lasts
 //! until it is removed.
+use crate::client::space_ids::SpaceId;
 use std::{path::Path, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -138,7 +139,7 @@ impl Manager {
         let host = self.workspace(workspace).await?;
         let parent = self.space(parent).await?;
         ensure!(
-            parent.id() != host.id,
+            *parent.id() != host.id,
             "a chat in the worktree of {} cannot go below it; name another --parent",
             host.name
         );
@@ -200,7 +201,7 @@ impl Manager {
             self.release_place(origin).await?;
         }
         let chat = Chat {
-            id: Uuid::new_v4().to_string(),
+            id: SpaceId::generate(),
             number: 0,
             repository_id: (home.repository.as_ref()).map(|repository| repository.id.clone()),
             name,
@@ -291,9 +292,9 @@ impl Manager {
         self.store.run(move |db| store::free_name(db, &base)).await
     }
 
-    /// Give the chat `chat`, by ID or name, the name `name`, which must be
-    /// free as a new chat's, and move its files to that name.
-    pub async fn rename_chat(&self, chat: String, name: SpaceName) -> Result<RenamedChat> {
+    /// Give the chat `chat` the name `name`, which must be free as a new
+    /// chat's, and move its files to that name.
+    pub async fn rename_chat(&self, chat: SpaceId, name: SpaceName) -> Result<RenamedChat> {
         let (paths, owner) = (self.paths.clone(), self.root_dir_owner());
         // The store's one thread moves the files after the rename commits,
         // so no other rename or chat start reaches either name in between.
@@ -316,7 +317,7 @@ impl Manager {
     }
 
     /// Make process `pid` the one whose life a running chat lasts.
-    pub async fn move_chat(&self, chat: &str, pid: u32) -> Result<Chat> {
+    pub async fn move_chat(&self, chat: &SpaceId, pid: u32) -> Result<Chat> {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let chat = chat.to_owned();
         let _handoff = self.chat_handoffs.write().await;
@@ -327,7 +328,7 @@ impl Manager {
     }
 
     /// Record `session` as the agent session the running chat `id` continues.
-    pub(crate) async fn record_chat_session(&self, id: &str, session: String) -> Result<()> {
+    pub(crate) async fn record_chat_session(&self, id: &SpaceId, session: String) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -355,20 +356,20 @@ impl Manager {
     }
 
     /// The running chat with the ID `id`.
-    pub(crate) async fn running_chat_by_id(&self, id: &str) -> Result<Option<Chat>> {
+    pub(crate) async fn running_chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
         Ok((self.chat_by_id(id).await?).filter(|chat| chat.restore.is_none()))
     }
 
     /// The running or stopped chat with the ID `id`.
-    pub(crate) async fn chat_by_id(&self, id: &str) -> Result<Option<Chat>> {
-        Ok(self.chats().await?.into_iter().find(|chat| chat.id == id))
+    pub(crate) async fn chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
+        Ok(self.chats().await?.into_iter().find(|chat| chat.id == *id))
     }
 
     /// Stop the running chat `id`: stop every process it owns, so none goes
     /// on writing the agent's session, then record the chat stopped, as when
     /// the process it runs as exits. Until the stop finishes, the chat stays
     /// running, so nothing restores it meanwhile.
-    pub(crate) async fn stop_chat(&self, id: &str) -> Result<()> {
+    pub(crate) async fn stop_chat(&self, id: &SpaceId) -> Result<()> {
         self.stop_chat_recording(id, |found| self.record_chat_stopping(id, found))
             .await
     }
@@ -377,7 +378,7 @@ impl Manager {
     /// stop signals before it does.
     async fn stop_chat_recording<R>(
         &self,
-        id: &str,
+        id: &SpaceId,
         record: impl Fn(Vec<Identity>) -> R,
     ) -> Result<()>
     where
@@ -412,7 +413,7 @@ impl Manager {
 
     /// Whether Shoal saved the stopped chat `id`'s session, rather than its
     /// agent exiting.
-    pub(crate) async fn chat_saved(&self, id: &str) -> Result<bool> {
+    pub(crate) async fn chat_saved(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -427,7 +428,7 @@ impl Manager {
 
     /// The chats running or stopped in the worktree of the workspace `id`,
     /// by name.
-    pub(crate) async fn chats_in(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    pub(crate) async fn chats_in(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -448,7 +449,7 @@ impl Manager {
 
     /// The workspace in whose worktree the space `id` runs, when it is a
     /// chat there.
-    pub(crate) async fn chat_home(&self, id: &str) -> Result<Option<String>> {
+    pub(crate) async fn chat_home(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -464,7 +465,7 @@ impl Manager {
     }
 
     /// Whether a chat runs in the worktree of the workspace `id`.
-    pub(crate) async fn chat_runs_in(&self, id: &str) -> Result<bool> {
+    pub(crate) async fn chat_runs_in(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -479,7 +480,7 @@ impl Manager {
 
     /// Whether Shoal saved the session of a stopped chat in the worktree of
     /// the workspace `id`.
-    pub(crate) async fn chat_saved_in(&self, id: &str) -> Result<bool> {
+    pub(crate) async fn chat_saved_in(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -493,7 +494,10 @@ impl Manager {
     }
 
     /// When the chat `id`'s agent stopped, while it is stopped.
-    pub(crate) async fn chat_stopped_at(&self, id: &str) -> Result<Option<crate::time::UnixTime>> {
+    pub(crate) async fn chat_stopped_at(
+        &self,
+        id: &SpaceId,
+    ) -> Result<Option<crate::time::UnixTime>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -599,7 +603,7 @@ impl Manager {
     }
 
     /// The scope token the agent of the chat `id` carries.
-    pub(crate) async fn chat_scope(&self, id: &str) -> Result<String> {
+    pub(crate) async fn chat_scope(&self, id: &SpaceId) -> Result<String> {
         let id = id.to_owned();
         let token = self.store.run(move |db| scope_token(db, &id)).await?;
         token.context("no such chat")
@@ -618,7 +622,7 @@ pub struct NewChat {
     pub pid: u32,
     pub origin: Option<crate::sessions::Origin>,
     pub hands_over: bool,
-    pub parent: Option<String>,
+    pub parent: Option<SpaceId>,
 }
 
 /// The reference a chat's record gives to the workspace it runs in.
@@ -647,12 +651,9 @@ fn insert(
     mut chat: Chat,
     process: &Identity,
     hands_over: bool,
-    parent: Option<(String, Removing)>,
+    parent: Option<(SpaceId, Removing)>,
 ) -> Result<Chat> {
-    let workspace = chat
-        .workspace
-        .as_ref()
-        .map(|workspace| workspace.id.as_str());
+    let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_deref(), workspace)?;
     store::ensure_name_available(tx, &chat.name, None)?;
     tx.execute(
@@ -695,7 +696,7 @@ fn insert(
 }
 
 /// The scope token of the chat `id`, which its agent carries.
-pub(crate) fn scope_token(db: &Connection, id: &str) -> Result<Option<String>> {
+pub(crate) fn scope_token(db: &Connection, id: &SpaceId) -> Result<Option<String>> {
     Ok(db
         .query_row("SELECT scope_token FROM chats WHERE id=?1", [id], |row| {
             row.get(0)
@@ -721,7 +722,7 @@ pub(super) fn unique_id(process: &Identity) -> Result<Option<String>> {
 fn ensure_place_free(
     tx: &rusqlite::Transaction<'_>,
     repository_id: Option<&str>,
-    workspace: Option<&str>,
+    workspace: Option<&SpaceId>,
 ) -> Result<()> {
     if let Some(repository_id) = repository_id {
         ensure!(
@@ -760,7 +761,7 @@ fn rename(
 ) -> Result<(Chat, Chat)> {
     let old = recorded(tx, owner)?
         .into_iter()
-        .find(|running| running.id == chat || running.name == chat)
+        .find(|running| running.id == *chat)
         .with_context(|| format!("no running chat {chat}"))?;
     if old.name != *name {
         // The starting chat's files are not open yet under its name.
@@ -804,7 +805,7 @@ fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> R
 /// Make `process` the one the running chat `chat` runs as. A stopped
 /// chat's agent was stopped, so a session started for it is refused, which
 /// its launcher then stops.
-fn move_to(db: &mut Connection, owner: &Path, chat: &str, process: &Identity) -> Result<Chat> {
+fn move_to(db: &mut Connection, owner: &Path, chat: &SpaceId, process: &Identity) -> Result<Chat> {
     let moved = db.execute(
         "UPDATE chats SET pid=?2,birth=?3,unique_id=?4,starting=0 WHERE id=?1 AND restore IS NULL",
         params![chat, process.pid, process.birth, unique_id(process)?],
@@ -812,7 +813,7 @@ fn move_to(db: &mut Connection, owner: &Path, chat: &str, process: &Identity) ->
     anyhow::ensure!(moved == 1, "no running chat {chat}");
     recorded(db, owner)?
         .into_iter()
-        .find(|running| running.id == chat)
+        .find(|running| running.id == *chat)
         .context("the chat ended")
 }
 
@@ -831,7 +832,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
              ORDER BY chats.started_at, chats.rowid",
     )?
     .query_map([], |row| {
-        let id: String = row.get(0)?;
+        let id: SpaceId = row.get(0)?;
         let repository_id: Option<String> = row.get(1)?;
         let root_dir = row
             .get::<_, Option<String>>(16)?
@@ -852,7 +853,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             agent: row.get(3)?,
             mode: row.get(15)?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
-            workspace: match row.get::<_, Option<String>>(11)? {
+            workspace: match row.get::<_, Option<SpaceId>>(11)? {
                 Some(id) => Some(WorkspaceRef {
                     id,
                     name: row.get(12)?,
@@ -891,7 +892,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
 }
 
 /// The process the chat `id` runs as, unless it is stopped.
-fn recorded_process(db: &mut Connection, id: &str) -> Result<Option<Identity>> {
+fn recorded_process(db: &mut Connection, id: &SpaceId) -> Result<Option<Identity>> {
     Ok(db
         .query_row(
             "SELECT pid,birth FROM chats WHERE id=?1 AND restore IS NULL",
@@ -908,7 +909,7 @@ fn recorded_process(db: &mut Connection, id: &str) -> Result<Option<Identity>> {
 }
 
 /// The process each running chat runs as.
-fn recorded_processes(db: &Connection) -> Result<Vec<(String, Identity)>> {
+fn recorded_processes(db: &Connection) -> Result<Vec<(SpaceId, Identity)>> {
     Ok(db
         .prepare("SELECT id,pid,birth FROM chats WHERE restore IS NULL")?
         .query_map([], |row| {
@@ -926,7 +927,7 @@ fn recorded_processes(db: &Connection) -> Result<Vec<(String, Identity)>> {
 
 /// The chats whose process no longer has its recorded identity. A process
 /// that cannot be read keeps its chat.
-fn finished(recorded: Vec<(String, Identity)>) -> Vec<(String, Identity)> {
+fn finished(recorded: Vec<(SpaceId, Identity)>) -> Vec<(SpaceId, Identity)> {
     recorded
         .into_iter()
         .filter(|(id, process)| match identity::capture(process.pid) {
@@ -944,7 +945,7 @@ fn finished(recorded: Vec<(String, Identity)>) -> Vec<(String, Identity)> {
 /// given back to the user, since a stopped chat decides none.
 fn stop(
     tx: &rusqlite::Transaction<'_>,
-    exited: &[(String, Identity)],
+    exited: &[(SpaceId, Identity)],
 ) -> Result<Vec<ApprovalRequest>> {
     let mut released = Vec::new();
     for (id, process) in exited {
@@ -962,7 +963,7 @@ fn stop(
 
 /// Delete the record of the chat `id`, just started as `process`, which
 /// never ran.
-fn forget_unstarted(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
+fn forget_unstarted(db: &mut Connection, id: &SpaceId, process: &Identity) -> Result<()> {
     db.execute(
         "DELETE FROM chats WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
         params![id, process.pid, process.birth],

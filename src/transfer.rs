@@ -368,7 +368,7 @@ pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
 fn chat_session(chat: &Chat) -> LastSession {
     LastSession {
         narrowing: chat.narrowing,
-        execution: chat.id.clone(),
+        execution: chat.id.to_string(),
         agent: chat.agent.clone(),
         session: chat.session.clone(),
         moved: false,

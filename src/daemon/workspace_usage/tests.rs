@@ -1,8 +1,9 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 
 const SECOND: u64 = 1_000_000_000;
 
-fn process(pid: u32, parent: u32, workspace: &str, cpu: u64) -> (Identity, (String, Reading)) {
+fn process(pid: u32, parent: u32, workspace: &str, cpu: u64) -> (Identity, (SpaceId, Reading)) {
     reaping(pid, parent, workspace, cpu, 0)
 }
 
@@ -13,7 +14,7 @@ fn reaping(
     workspace: &str,
     cpu: u64,
     reaped: u64,
-) -> (Identity, (String, Reading)) {
+) -> (Identity, (SpaceId, Reading)) {
     (
         Identity {
             pid,
@@ -34,7 +35,7 @@ fn reaping(
 
 fn sample(
     time: Instant,
-    processes: impl IntoIterator<Item = (Identity, (String, Reading))>,
+    processes: impl IntoIterator<Item = (Identity, (SpaceId, Reading))>,
 ) -> Sample {
     Sample {
         time,
@@ -127,7 +128,7 @@ async fn exited_children_count_once_their_parent_reaps_them() {
 #[test]
 fn processes_exiting_after_the_scan_are_followed_unreaped() {
     let own = own_process();
-    let candidates = vec![("a".to_owned(), own.clone())];
+    let candidates = vec![(SpaceId::from("a"), own.clone())];
     let exited = read(candidates.clone(), Vec::new(), usage::read, |_| {
         Ok(State::Unreaped)
     })
@@ -141,7 +142,7 @@ fn processes_exiting_after_the_scan_are_followed_unreaped() {
 #[test]
 fn processes_the_scan_misses_count_only_while_unreaped() {
     let own = own_process();
-    let missed = || vec![("a".to_owned(), own.clone())];
+    let missed = || vec![(SpaceId::from("a"), own.clone())];
     // Running without the identity, such as after an exec that dropped it.
     let running = read(Vec::new(), missed(), usage::read, |_| Ok(State::Running)).unwrap();
     assert!(running.processes.is_empty());
@@ -354,7 +355,7 @@ async fn processes_reaped_elsewhere_lower_no_usage() {
 
 #[tokio::test]
 async fn readings_cover_the_processes_carrying_a_workspace_identity() {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = SpaceId::generate();
     // The test binary's own helper, since platform binaries such as
     // macOS's sh hide their environment.
     let child = crate::daemon::test_support::spawn_marked_child(
@@ -377,11 +378,17 @@ async fn failed_and_stalled_samples_report_nothing() {
     let start = Instant::now();
     let mut usages = WorkspaceUsages::default();
     usages.record(Ok(sample(start, [process(10, 1, "a", 0)])));
-    assert_eq!(usages.get("a", start).unwrap().processes, 1);
-    assert_eq!(usages.get("a", start + STALE + SAMPLE_INTERVAL), None);
+    assert_eq!(usages.get(&SpaceId::from("a"), start).unwrap().processes, 1);
+    assert_eq!(
+        usages.get(&SpaceId::from("a"), start + STALE + SAMPLE_INTERVAL),
+        None
+    );
     let late = start + STALE + SAMPLE_INTERVAL;
     usages.record(Ok(sample(late, [process(10, 1, "a", SECOND)])));
-    assert_eq!(usages.get("a", late).unwrap().cpu_percent, None);
+    assert_eq!(
+        usages.get(&SpaceId::from("a"), late).unwrap().cpu_percent,
+        None
+    );
     usages.record(Err(anyhow::anyhow!("unavailable")));
-    assert_eq!(usages.get("a", late), None);
+    assert_eq!(usages.get(&SpaceId::from("a"), late), None);
 }

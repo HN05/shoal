@@ -2,6 +2,7 @@
 //! that the last conflict check of the merged head found changed on both
 //! sides. It reads that record and checks nothing again, so merging stays as
 //! fast without one.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 
 use crate::client::space_names::SpaceSelector;
@@ -103,7 +104,7 @@ impl Manager {
 }
 
 /// Whether the workspace `id` links the PR at `url`.
-fn links_pull(db: &rusqlite::Connection, id: &str, url: &str) -> Result<bool> {
+fn links_pull(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
     let links = super::wait::linked_items(db, id, Some(ItemKind::Pr))?;
     Ok(links.iter().any(|(linked, _)| linked == url))
 }

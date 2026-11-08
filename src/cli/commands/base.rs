@@ -31,8 +31,7 @@ pub(super) async fn run(
                 Change::Set(None) => Some(pick(ctx, &workspace).await?),
                 Change::Clear => None,
             };
-            crate::client::workspaces::set_base(&ctx.paths, SpaceSelector::parse(&workspace), base)
-                .await?
+            crate::client::workspaces::set_base(&ctx.paths, workspace.clone(), base).await?
         }
         None => find(
             &crate::client::workspaces::list(&ctx.paths).await?,
@@ -59,16 +58,15 @@ enum Change {
     Clear,
 }
 
-fn find<'a>(workspaces: &'a [Workspace], selector: &str) -> Result<&'a Workspace> {
-    let selected = SpaceSelector::parse(selector);
+fn find<'a>(workspaces: &'a [Workspace], selector: &SpaceSelector) -> Result<&'a Workspace> {
     workspaces
         .iter()
-        .find(|w| selected.selects(&w.id, &w.name, w.number))
+        .find(|w| selector.selects(&w.id, &w.name, w.number))
         .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
 }
 
 /// Choose another workspace of the same repository as the base.
-async fn pick(ctx: &Context, selector: &str) -> Result<String> {
+async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let workspace = find(&workspaces, selector)?;
     let candidates: Vec<_> = workspaces
@@ -82,7 +80,7 @@ async fn pick(ctx: &Context, selector: &str) -> Result<String> {
         !candidates.is_empty(),
         "no other workspace in this repository"
     );
-    ui::pick_workspace(ctx, candidates, "base").await
+    Ok(ui::pick_workspace(ctx, candidates, "base").await?.into())
 }
 
 /// The base and stacked workspaces, when the workspace has any.

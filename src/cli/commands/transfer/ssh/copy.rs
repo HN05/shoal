@@ -1,5 +1,6 @@
 //! `shoal move ssh --keep`: copy spaces to another machine's Shoal, which
 //! opens each as a new space, leaving them running here.
+use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 
 use super::{super::export, Remote, arrived, summary};
@@ -49,7 +50,7 @@ async fn copy_one(
     resume: bool,
 ) -> Result<Imported> {
     let file = directory.file(space.name());
-    export::copy::copy(ctx, space.id().to_owned(), checkpoint, file.clone()).await?;
+    export::copy::copy(ctx, SpaceSelector::id(space.id()), checkpoint, file.clone()).await?;
     remote.import(&file, resume).await
 }
 

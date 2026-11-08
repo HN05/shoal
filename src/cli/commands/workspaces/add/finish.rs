@@ -1,4 +1,5 @@
 //! Opening a planned workspace, setting it up and launching its agent.
+use crate::client::space_ids::SpaceId;
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -123,7 +124,7 @@ pub(super) async fn add_planned(
     };
     let start = AddStart {
         creation,
-        parent: parent.or(chat),
+        parent: parent.or(chat.map(SpaceSelector::Id)),
         workspace,
         agent: launch.clone(),
     };
@@ -269,8 +270,8 @@ async fn enters_added(
 /// without one.
 struct AddStart {
     creation: Creation,
-    parent: Option<String>,
-    workspace: Option<String>,
+    parent: Option<SpaceSelector>,
+    workspace: Option<SpaceId>,
     /// The agent its preparation queues.
     agent: Option<Box<QueuedLaunch>>,
 }
@@ -299,7 +300,7 @@ async fn start_add_workspace(
         copy,
     } = creation;
     let start = match (workspace, pull_head, existing, copy) {
-        (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::parse(&workspace)),
+        (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
         (None, Some(head), ..) => WorkspaceStart::PullHead {
             url: pr.clone().context("a PR head needs its PR")?,
             head,
@@ -319,7 +320,7 @@ async fn start_add_workspace(
         base,
         path,
         git_profile,
-        parent: parent.as_deref().map(SpaceSelector::parse),
+        parent,
         options,
         issue: issue.map(|issue| issue.url.clone()),
         pr,

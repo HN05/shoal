@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::daemon::test_support;
 use crate::daemon::workspace::WorkspaceSource;
 use std::os::unix::fs::MetadataExt;
@@ -40,7 +41,7 @@ async fn removal_waits_for_queued_workspace_creation() {
         },
     )]);
     crate::caches::directories(&repo, &caches).unwrap();
-    crate::tmp_dirs::directory(&repo, "chat-id").unwrap();
+    crate::tmp_dirs::directory(&repo, &SpaceId::from("chat-id")).unwrap();
     let mut removing = Box::pin(manager.remove_repository(&repo.id));
     test_support::assert_pending(&mut removing).await;
     drop(gate);

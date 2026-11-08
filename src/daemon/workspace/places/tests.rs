@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
@@ -67,24 +68,24 @@ async fn a_later_instance_under_a_reused_id_takes_its_record() -> Result<()> {
         instance: Some(instance.into()),
         ..Origin::created(HostName::Zmx, "shared".into())
     };
-    let owner = async || -> Result<Option<String>> {
+    let owner = async || -> Result<Option<SpaceId>> {
         Ok(manager
             .place_owner(&Origin::created(HostName::Zmx, "shared".into()))
             .await?
             .and_then(|(owner, _)| owner))
     };
     manager
-        .record_owned_place(&SpaceSelector::parse(&workspaces[0]), session("1:1"))
+        .record_owned_place(&SpaceSelector::id(&workspaces[0]), session("1:1"))
         .await?;
     // The session ended and another under its name began, before any agent
     // registered in it.
     manager
-        .record_owned_place(&SpaceSelector::parse(&workspaces[1]), session("2:2"))
+        .record_owned_place(&SpaceSelector::id(&workspaces[1]), session("2:2"))
         .await?;
     assert_eq!(owner().await?.as_ref(), Some(&workspaces[1]));
     // A late record of the same instance keeps the owner it has.
     manager
-        .record_owned_place(&SpaceSelector::parse(&workspaces[2]), session("2:2"))
+        .record_owned_place(&SpaceSelector::id(&workspaces[2]), session("2:2"))
         .await?;
     assert_eq!(owner().await?.as_ref(), Some(&workspaces[1]));
     Ok(())
@@ -111,7 +112,7 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
         ..Origin::created(HostName::Zmx, "shared".into())
     };
     manager
-        .record_owned_place(&SpaceSelector::parse(&workspaces[0]), session("1:1"))
+        .record_owned_place(&SpaceSelector::id(&workspaces[0]), session("1:1"))
         .await?;
     // A close read the first record, then a later session's record replaced
     // it before the close forgot what it read.
@@ -120,7 +121,7 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
         .await?
         .context("the first record")?;
     manager
-        .record_owned_place(&SpaceSelector::parse(&workspaces[1]), session("2:2"))
+        .record_owned_place(&SpaceSelector::id(&workspaces[1]), session("2:2"))
         .await?;
     manager.forget_owned_place(closed).await?;
     let (owner, kept) = manager

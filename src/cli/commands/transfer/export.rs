@@ -1,5 +1,6 @@
 //! `shoal move export`: end spaces here, removing workspaces and stopping
 //! chats' agents, and write each to a file, or to standard output.
+use crate::client::space_ids::SpaceId;
 use crate::transfer::ManifestExt;
 use std::{
     io::Write,
@@ -60,10 +61,9 @@ pub(super) async fn export(
     let named = names.into_iter().next();
     // The export ends its space, so it never takes the chat it runs in.
     let selector = ui::select_other_space(ctx, named, Fallback::CurrentDirectory).await?;
-    let space =
-        crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&selector))
-            .await?
-            .with_context(|| format!("no space {selector}"))?;
+    let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
+        .await?
+        .with_context(|| format!("no space {selector}"))?;
     let exported = export_space(ctx, space, yes, &output).await?;
     output.report(ctx, &exported)
 }
@@ -89,10 +89,9 @@ pub(super) async fn selected_spaces(
 ) -> Result<Vec<PresentSpace>> {
     let mut spaces = Vec::new();
     for selector in ui::select_spaces(ctx, names, true).await? {
-        let space =
-            crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&selector))
-                .await?
-                .with_context(|| format!("no space {selector}"))?;
+        let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
+            .await?
+            .with_context(|| format!("no space {selector}"))?;
         spaces.push(space);
     }
     Ok(spaces)
@@ -250,7 +249,7 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
             let unsaved = UnsavedWork::confirming(check);
             let exported = crate::client::transfer::export(
                 &ctx.paths,
-                SpaceSelector::parse(&space),
+                SpaceSelector::id(&space),
                 unsaved,
                 output.file(),
             );
@@ -361,11 +360,11 @@ fn check_chat_export(chat: Chat) -> Result<Chat> {
 /// files a checkpoint cannot keep and an output the removal would cut off.
 async fn check_workspace_export(
     ctx: &Context,
-    workspace: &str,
+    workspace: &SpaceId,
     output: &Output,
 ) -> Result<RemovalCheck> {
     let check =
-        crate::client::removal::check(&ctx.paths, SpaceSelector::parse(workspace), true).await?;
+        crate::client::removal::check(&ctx.paths, SpaceSelector::id(workspace), true).await?;
     // Its removal keeps no record, which the package is built from.
     ensure!(
         !check.workspace.disposable,

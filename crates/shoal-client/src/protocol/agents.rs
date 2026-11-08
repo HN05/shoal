@@ -1,3 +1,4 @@
+use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -121,7 +122,7 @@ pub enum AgentMethod {
         attachments: Vec<crate::files::NewFile>,
         /// The chat whose agent sends the message, which attaches its files.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<String>,
+        sender_chat: Option<SpaceId>,
     },
     /// [`Self::SendAgentMessage`] to every workspace and chat with a running
     /// agent, of one repository when it names one, answered with the spaces
@@ -134,7 +135,7 @@ pub enum AgentMethod {
         attachments: Vec<crate::files::NewFile>,
         /// The chat whose agent sends the message, which attaches its files.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<String>,
+        sender_chat: Option<SpaceId>,
     },
     /// The undelivered messages of the agents of a workspace or running
     /// chat, oldest first.

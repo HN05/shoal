@@ -77,6 +77,7 @@ pub(crate) use tree::{
     set_parent, spaces_above,
 };
 
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{client::space_names::SpaceName, model::SpaceKind};
@@ -110,7 +111,7 @@ pub(crate) struct NewWorkspace<'a> {
     pub options: CreationOptions,
     /// The space it goes below, a chat or a workspace, recorded with it so
     /// that one whose creation fails is still there.
-    pub parent: Option<String>,
+    pub parent: Option<SpaceId>,
 }
 
 enum WorkspaceSource {
@@ -118,7 +119,7 @@ enum WorkspaceSource {
     /// workspace.
     New {
         base: Option<String>,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
     },
     /// An existing branch, with an optional base ref overriding the default
     /// branch, and the unsaved files a restore writes into it.
@@ -282,8 +283,8 @@ impl Manager {
 
     /// `root` and every workspace below it, or every workspace without
     /// `root`, by name. Only the selected workspaces load their details.
-    pub async fn list_workspaces_within(&self, root: Option<&str>) -> Result<Vec<Workspace>> {
-        let root = root.map(str::to_owned);
+    pub async fn list_workspaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Workspace>> {
+        let root = root.cloned();
         self.store
             .run(move |db| {
                 let mut workspaces = db
@@ -298,7 +299,7 @@ impl Manager {
             .await
     }
 
-    pub async fn workspace_ids(&self) -> Result<HashSet<String>> {
+    pub async fn workspace_ids(&self) -> Result<HashSet<SpaceId>> {
         self.store
             .run(|db| {
                 Ok(db
@@ -310,7 +311,7 @@ impl Manager {
     }
 
     /// What the workspace's processes use, from the latest sample.
-    pub(crate) fn workspace_usage(&self, id: &str) -> Option<crate::model::WorkspaceUsage> {
+    pub(crate) fn workspace_usage(&self, id: &SpaceId) -> Option<crate::model::WorkspaceUsage> {
         let now = tokio::time::Instant::now();
         self.usage.with_workspaces(|usages| usages.get(id, now))
     }
@@ -320,13 +321,13 @@ impl Manager {
     /// own subtree with its own workspace first, since scoped commands
     /// without a target act on the first one; a chat in a workspace's
     /// worktree also sees that workspace, last.
-    pub async fn visible_workspaces(&self, owner: Option<&str>) -> Result<Vec<Workspace>> {
+    pub async fn visible_workspaces(&self, owner: Option<&SpaceId>) -> Result<Vec<Workspace>> {
         let mut workspaces = self.list_workspaces_within(owner).await?;
         if let Some(owner) = owner {
             if let Some(home) = self.chat_home(owner).await? {
                 workspaces.push(self.workspace(&SpaceSelector::id(&home)).await?);
             }
-            workspaces.sort_by_key(|w| w.id != owner);
+            workspaces.sort_by_key(|w| w.id != *owner);
         }
         let deadline = review::check_deadline();
         futures_util::stream::iter(&mut workspaces)
@@ -343,7 +344,7 @@ impl Manager {
     }
 
     /// Whether the workspace has any recorded execution, in any state.
-    pub(super) async fn workspace_has_executions(&self, id: &str) -> Result<bool> {
+    pub(super) async fn workspace_has_executions(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -353,13 +354,13 @@ impl Manager {
     }
 
     /// Read recorded executions in every state for a known workspace ID.
-    pub(super) async fn workspace_executions(&self, id: &str) -> Result<Vec<Execution>> {
+    pub(super) async fn workspace_executions(&self, id: &SpaceId) -> Result<Vec<Execution>> {
         let id = id.to_owned();
         self.store.run(move |db| store::executions(db, &id)).await
     }
 
     /// Count recorded executions in every state without decoding their details.
-    pub(super) async fn workspace_execution_count(&self, id: &str) -> Result<usize> {
+    pub(super) async fn workspace_execution_count(&self, id: &SpaceId) -> Result<usize> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -374,7 +375,7 @@ impl Manager {
     }
 
     /// The workspace with the ID `id`, which is never read as a name.
-    pub async fn workspace_by_id(&self, id: &str) -> Result<Workspace> {
+    pub async fn workspace_by_id(&self, id: &SpaceId) -> Result<Workspace> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -398,7 +399,7 @@ impl Manager {
     }
 
     /// The workspace with this ID, unless it was removed.
-    pub async fn find_workspace(&self, id: &str) -> Result<Option<Workspace>> {
+    pub async fn find_workspace(&self, id: &SpaceId) -> Result<Option<Workspace>> {
         let owned = id.to_owned();
         let exists = self
             .store
@@ -414,7 +415,7 @@ impl Manager {
     pub async fn workspace_filter(
         &self,
         selector: Option<&SpaceSelector>,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<SpaceId>> {
         match selector {
             Some(selector) => Ok(Some(self.workspace(selector).await?.id)),
             None => Ok(None),
@@ -634,7 +635,7 @@ impl Manager {
         &self,
         record: Workspace,
         base_branch: Option<String>,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
     ) -> Result<Workspace> {
         let marker = match record.git_dir.clone() {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
@@ -870,7 +871,7 @@ impl Manager {
 
     pub(crate) async fn set_state(
         &self,
-        id: &str,
+        id: &SpaceId,
         state: WorkspaceState,
         error: Option<String>,
     ) -> Result<()> {
@@ -886,7 +887,7 @@ impl Manager {
             .await
     }
 
-    async fn finish_materialization(&self, id: &str, needs_setup: bool) -> Result<()> {
+    async fn finish_materialization(&self, id: &SpaceId, needs_setup: bool) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -911,7 +912,7 @@ impl Manager {
     /// excluding every other lifecycle operation until it is restored.
     pub(crate) async fn reserve_lifecycle(
         &self,
-        id: &str,
+        id: &SpaceId,
         state: WorkspaceState,
     ) -> Result<WorkspaceState> {
         self.reserve_lifecycle_inner(id, Some(state), RemovalRules::default())
@@ -920,7 +921,7 @@ impl Manager {
 
     /// Refuse what [`Self::reserve_lifecycle`] would refuse now, without
     /// reserving, so a batch can check every target before acting on any.
-    pub(crate) async fn check_lifecycle(&self, id: &str) -> Result<()> {
+    pub(crate) async fn check_lifecycle(&self, id: &SpaceId) -> Result<()> {
         self.reserve_lifecycle_inner(id, None, RemovalRules::default())
             .await?;
         Ok(())
@@ -928,7 +929,7 @@ impl Manager {
 
     async fn reserve_lifecycle_for_removal(
         &self,
-        id: &str,
+        id: &SpaceId,
         rules: RemovalRules,
     ) -> Result<WorkspaceState> {
         self.reserve_lifecycle_inner(id, Some(WorkspaceState::Removing), rules)
@@ -939,7 +940,7 @@ impl Manager {
     /// without `state`.
     async fn reserve_lifecycle_inner(
         &self,
-        id: &str,
+        id: &SpaceId,
         state: Option<WorkspaceState>,
         rules: RemovalRules,
     ) -> Result<WorkspaceState> {
@@ -1004,7 +1005,7 @@ impl Manager {
 
     /// Record activity so automatic cleanup restarts its idle timer, and its
     /// time for idle periods that must survive a restart.
-    pub async fn touch(&self, id: &str) {
+    pub async fn touch(&self, id: &SpaceId) {
         self.usage.record_activity(id);
         let id = id.to_owned();
         let recorded = self
@@ -1024,7 +1025,7 @@ impl Manager {
 
     /// When the workspace was last recorded active; one without any starts
     /// its idle period now.
-    pub(crate) async fn active_at(&self, id: &str) -> Result<crate::time::UnixTime> {
+    pub(crate) async fn active_at(&self, id: &SpaceId) -> Result<crate::time::UnixTime> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -1042,7 +1043,7 @@ impl Manager {
     }
 
     /// Drop in-memory bookkeeping for a workspace that no longer exists.
-    pub(crate) async fn forget_workspace(&self, id: &str) {
+    pub(crate) async fn forget_workspace(&self, id: &SpaceId) {
         self.usage.forget_workspace(id);
         self.rejected_configs.forget(id);
         self.executions.forget_workspace(id).await;

@@ -1,4 +1,5 @@
 //! Linking the PR a workspace was opened on.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
@@ -23,7 +24,7 @@ pub(in crate::cli::commands) async fn link_pull(
 
 /// Link PR `url` as the one workspace `id` was opened on; whether it did,
 /// a refused link having warned.
-pub(super) async fn link_or_warn(ctx: &Context, id: &str, url: &str) -> bool {
+pub(super) async fn link_or_warn(ctx: &Context, id: &SpaceId, url: &str) -> bool {
     let linked =
         crate::client::items::watch_pr(&ctx.paths, SpaceSelector::id(id), url.to_owned()).await;
     if let Err(error) = &linked {

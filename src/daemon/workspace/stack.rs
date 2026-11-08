@@ -1,4 +1,5 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
+use crate::client::space_ids::SpaceId;
 use std::path::Path;
 
 use crate::client::space_names::SpaceSelector;
@@ -58,7 +59,7 @@ impl Manager {
 fn change_base(
     tx: &rusqlite::Transaction<'_>,
     repository_id: &str,
-    id: &str,
+    id: &SpaceId,
     base: Option<&str>,
 ) -> Result<()> {
     let base = match base {
@@ -91,7 +92,7 @@ fn change_base(
 }
 
 /// Journal the workspace's current base workspace.
-pub(crate) fn record_base_changed(db: &Connection, id: &str, cause: EventCause) -> Result<()> {
+pub(crate) fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCause) -> Result<()> {
     db.execute(
         "INSERT INTO workspace_events(record) SELECT json_object(
             'kind',?2,'workspace_id',stacked.id,'repository_id',stacked.repository_id,
@@ -106,7 +107,7 @@ pub(crate) fn record_base_changed(db: &Connection, id: &str, cause: EventCause) 
 
 /// A workspace of the repository named by number, ID or name, else by
 /// branch.
-fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Result<String> {
+fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Result<SpaceId> {
     let named = match crate::daemon::spaces::selected(db, &SpaceSelector::parse(selector))? {
         Some((crate::model::SpaceKind::Workspace, id)) => {
             let repository = db.query_row(
@@ -176,7 +177,7 @@ pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String
 }
 
 /// The workspace in `repository_id` that owns `branch`.
-pub(super) fn owner(db: &Connection, repository_id: &str, branch: &str) -> Result<Option<String>> {
+pub(super) fn owner(db: &Connection, repository_id: &str, branch: &str) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
             "SELECT id FROM workspaces WHERE repository_id=?1 AND branch=?2",

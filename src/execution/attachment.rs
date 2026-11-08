@@ -60,7 +60,7 @@ pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, shown: Shown) -> Monito
         loop {
             if let Some(attached) = shown.attached().await {
                 let report = AgentMethod::ReportAttached {
-                    workspace: SpaceSelector::parse(&workspace),
+                    workspace: SpaceSelector::id(&workspace),
                     execution: execution.clone(),
                     attached,
                 };

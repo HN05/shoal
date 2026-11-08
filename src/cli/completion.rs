@@ -486,7 +486,7 @@ impl Typed {
         let mut names = vec![];
         match target {
             Target::Pools | Target::Members | Target::ResourceNames => {
-                let overview = leases::resources(&paths, SpaceSelector::parse(&workspace)).await?;
+                let overview = leases::resources(&paths, SpaceSelector::id(&workspace)).await?;
                 match target {
                     Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
                     Target::Members => names.extend(
@@ -508,16 +508,15 @@ impl Typed {
             Target::Ports | Target::ReservedPorts => {
                 if matches!(target, Target::Ports) {
                     let catalog =
-                        leases::port_catalog(&paths, SpaceSelector::parse(&workspace)).await?;
+                        leases::port_catalog(&paths, SpaceSelector::id(&workspace)).await?;
                     names.extend(catalog.configured.into_keys());
                 }
-                let overview = leases::ports(&paths, SpaceSelector::parse(&workspace)).await?;
+                let overview = leases::ports(&paths, SpaceSelector::id(&workspace)).await?;
                 names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {
                 let simulators =
-                    leases::simulator_devices(&paths, Some(SpaceSelector::parse(&workspace)))
-                        .await?;
+                    leases::simulator_devices(&paths, Some(SpaceSelector::id(&workspace))).await?;
                 names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
             }
             Target::Commands
@@ -613,7 +612,7 @@ async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidat
     let attachable = terminal::session_owners(&places);
     Ok(chats
         .into_iter()
-        .filter(|chat| attachable.contains(&chat.id))
+        .filter(|chat| attachable.contains(chat.id.as_str()))
         .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
         .collect())
 }

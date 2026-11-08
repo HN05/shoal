@@ -48,22 +48,15 @@ async fn report_state(
         ..turn_end(ctx, integration)
     });
     let session = event.as_ref().and_then(session_of);
-    let status = agents::set_state(
-        &ctx.paths,
-        SpaceSelector::parse(&space),
-        state,
-        session,
-        turn_end,
-    )
-    .await?;
+    let status = agents::set_state(&ctx.paths, space.clone(), state, session, turn_end).await?;
     emit(ctx, status)
 }
 
 /// Report the agent of `space` working on the turn a wake starts, which no
 /// hook of its own reports starting. Whether the turn starts: a stop of the
 /// agent that came first leaves the update for its restore.
-pub(super) async fn start_woken_turn(ctx: &Context, space: String) -> Result<bool> {
-    agents::start_woken_turn(&ctx.paths, SpaceSelector::parse(&space)).await
+pub(super) async fn start_woken_turn(ctx: &Context, space: SpaceSelector) -> Result<bool> {
+    agents::start_woken_turn(&ctx.paths, space.clone()).await
 }
 
 /// Report the turn that the hook event of an agent with `integration`
@@ -91,7 +84,7 @@ async fn report_turn_failure(
     let turn_end = turn_end(ctx, integration);
     let status = agents::report_turn_failure(
         &ctx.paths,
-        SpaceSelector::parse(&space),
+        space.clone(),
         failure,
         session_of(&event),
         turn_end,

@@ -158,7 +158,7 @@ pub(super) async fn release(
 /// also be of the requested kind.
 async fn select_held(
     ctx: &Context,
-    workspace: &str,
+    workspace: &SpaceSelector,
     kind: Option<ReleaseKind>,
 ) -> Result<Vec<Held>> {
     match &kind {
@@ -173,8 +173,7 @@ async fn select_held(
         }
         _ => {}
     }
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace)).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
     let ports = inspection
         .ports
         .into_iter()
@@ -197,12 +196,11 @@ async fn select_held(
             }
         }
     });
-    let requests =
-        crate::client::approvals::list(&ctx.paths, Some(SpaceSelector::parse(workspace)))
-            .await?
-            .into_iter()
-            .filter(|request| request.active)
-            .filter_map(requested);
+    let requests = crate::client::approvals::list(&ctx.paths, Some(workspace.clone()))
+        .await?
+        .into_iter()
+        .filter(|request| request.active)
+        .filter_map(requested);
     let mut selected = Vec::new();
     for held in ports.chain(simulators).chain(resources).chain(requests) {
         if matches_kind(&held, kind.as_ref()) && !selected.contains(&held) {
@@ -278,27 +276,21 @@ fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {
     }
 }
 
-async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> {
+async fn release_one(ctx: &Context, workspace: &SpaceSelector, held: &Held) -> Result<()> {
     let workspace = workspace.to_owned();
     match held {
         Held::Port { name } => {
-            leases::release_port(&ctx.paths, SpaceSelector::parse(&workspace), name.clone()).await
+            leases::release_port(&ctx.paths, workspace.clone(), name.clone()).await
         }
         Held::Sim { name } => {
-            leases::release_simulator(&ctx.paths, SpaceSelector::parse(&workspace), name.clone())
-                .await
+            leases::release_simulator(&ctx.paths, workspace.clone(), name.clone()).await
         }
         Held::Resource { pool, name } | Held::Repo { pool, name } => {
-            leases::release_resource(
-                &ctx.paths,
-                SpaceSelector::parse(&workspace),
-                pool.clone(),
-                name.clone(),
-            )
-            .await
+            leases::release_resource(&ctx.paths, workspace.clone(), pool.clone(), name.clone())
+                .await
         }
         Held::Secret { name } => {
-            leases::release_secret(&ctx.paths, SpaceSelector::parse(&workspace), name.clone()).await
+            leases::release_secret(&ctx.paths, workspace.clone(), name.clone()).await
         }
     }
 }
@@ -318,7 +310,7 @@ pub(super) async fn show(
             let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
                 return workspace_overviews(
                     ctx,
-                    async |workspace| fetch_leases(ctx, &workspace.id).await,
+                    async |workspace| fetch_leases(ctx, &SpaceSelector::id(&workspace.id)).await,
                     render_leases,
                 )
                 .await;
@@ -332,9 +324,9 @@ pub(super) async fn show(
     }
 }
 
-async fn fetch_leases(ctx: &Context, workspace: &str) -> Result<Leases> {
-    let ports = leases::ports(&ctx.paths, SpaceSelector::parse(workspace)).await?;
-    let simulators = leases::simulators(&ctx.paths, Some(SpaceSelector::parse(workspace))).await?;
+async fn fetch_leases(ctx: &Context, workspace: &SpaceSelector) -> Result<Leases> {
+    let ports = leases::ports(&ctx.paths, workspace.clone()).await?;
+    let simulators = leases::simulators(&ctx.paths, Some(workspace.clone())).await?;
     let resources = resources::fetch_overview(ctx, workspace.to_owned(), Members::All).await?;
     Ok(Leases {
         workspace: ports.workspace.clone(),

@@ -1,5 +1,6 @@
 //! `shoal run` and `shoal <name>`: configured commands use the same workspace
 //! selection and wrapper as arbitrary commands.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::BTreeSet,
     ffi::{OsStr, OsString},
@@ -92,15 +93,12 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
     let Some(workspace) = current_workspace(&workspaces)? else {
         return Ok(ConfigLayers::default());
     };
-    workspace_layers(ctx, workspace.id.clone()).await
+    workspace_layers(ctx, SpaceSelector::id(&workspace.id)).await
 }
 
-async fn workspace_layers(ctx: &Context, workspace: String) -> Result<ConfigLayers> {
-    crate::client::workspaces::config_layers(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
-    )
-    .await
+async fn workspace_layers(ctx: &Context, workspace: SpaceSelector) -> Result<ConfigLayers> {
+    crate::client::workspaces::config_layers(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+        .await
 }
 
 /// The name `shoal <name>` runs.
@@ -149,7 +147,7 @@ pub(super) enum Definition {
     /// the one picked.
     Global(Option<SpaceSelector>),
     /// The named or current workspace's configuration.
-    Workspace(String),
+    Workspace(SpaceId),
     /// Only these other workspaces define it; the user picks one.
     Elsewhere(Vec<Workspace>),
 }
@@ -213,7 +211,7 @@ async fn selected_workspace<'a>(
         return current_workspace(workspaces);
     };
     let selector = match recent::is_previous(&selector) {
-        true => SpaceSelector::id(&recent::previous(ctx).await?),
+        true => SpaceSelector::Id(recent::previous(ctx).await?),
         false => selector,
     };
     let spaces = crate::client::model::Spaces {
@@ -221,7 +219,7 @@ async fn selected_workspace<'a>(
         chats: Vec::new(),
     };
     let found = spaces.find(&selector);
-    Ok(found.and_then(|space| workspaces.iter().find(|known| known.id == space.id())))
+    Ok(found.and_then(|space| workspaces.iter().find(|known| known.id == *space.id())))
 }
 
 /// The workspace of the current directory, else the caller's scope.
@@ -235,8 +233,8 @@ pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Opti
     ))
 }
 
-async fn defines(ctx: &Context, workspace: &str, name: &str) -> Result<bool> {
-    let target = ConfigTarget::Workspace(SpaceSelector::parse(workspace));
+async fn defines(ctx: &Context, workspace: &SpaceId, name: &str) -> Result<bool> {
+    let target = ConfigTarget::Workspace(SpaceSelector::id(workspace));
     Ok(crate::client::workspaces::settings(&ctx.paths, target)
         .await?
         .commands
@@ -280,17 +278,16 @@ pub(super) async fn run_defined(
         Definition::Global(named) => {
             ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?
         }
-        Definition::Workspace(workspace) => workspace,
-        Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining, "workspace").await?,
+        Definition::Workspace(workspace) => SpaceSelector::Id(workspace),
+        Definition::Elsewhere(defining) => {
+            SpaceSelector::Id(ui::pick_workspace(ctx, defining, "workspace").await?)
+        }
     };
     recent::record(ctx, &workspace).await;
-    let settings = crate::client::workspaces::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
-    )
-    .await?;
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let command = expand(
         &ctx.paths,
         &settings.commands,
@@ -299,7 +296,12 @@ pub(super) async fn run_defined(
         args,
     )
     .await?;
-    execution::run_command(&ctx.paths, workspace, command).await
+    execution::run_command(
+        &ctx.paths,
+        SpaceSelector::Id(inspection.workspace.id),
+        command,
+    )
+    .await
 }
 
 async fn expand(

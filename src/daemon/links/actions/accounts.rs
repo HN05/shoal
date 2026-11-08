@@ -1,5 +1,6 @@
 //! The forge and the accounts item actions go out with: the user's own
 //! logins for reads and the user's decisions, the agent account for the rest.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail};
 
 use crate::{
@@ -18,7 +19,7 @@ use crate::{
 /// registered checkout of a repository without either.
 pub(in crate::daemon::links) enum Place {
     Workspace(Box<Workspace>),
-    Chat { id: String, checkout: Repository },
+    Chat { id: SpaceId, checkout: Repository },
     Checkout(Repository),
 }
 
@@ -32,7 +33,7 @@ impl Place {
 
     /// The workspace or chat, whose linked items an action may default to
     /// and which records the changes it makes.
-    pub(in crate::daemon::links) fn space_id(&self) -> Option<&str> {
+    pub(in crate::daemon::links) fn space_id(&self) -> Option<&SpaceId> {
         match self {
             Self::Workspace(workspace) => Some(&workspace.id),
             Self::Chat { id, .. } => Some(id),

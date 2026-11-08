@@ -2,6 +2,7 @@
 //! bases and places, their status, environment and settings, and the Git
 //! state the daemon reads in their worktrees; and the spaces, workspaces and
 //! chats together.
+use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
@@ -233,13 +234,13 @@ pub async fn places(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Ve
 /// closes it once the workspace is removed.
 pub async fn record_owned_place(
     daemon: &impl Daemon,
-    workspace: &str,
+    workspace: &SpaceId,
     origin: Origin,
 ) -> Result<()> {
     call(
         daemon,
         WorkspaceMethod::RecordOwnedPlace {
-            workspace: SpaceSelector::parse(workspace),
+            workspace: SpaceSelector::id(workspace),
             origin,
         },
     )
@@ -251,13 +252,13 @@ pub async fn record_owned_place(
 /// daemon knows it.
 pub async fn place_ownership(
     daemon: &impl Daemon,
-    workspace: &str,
+    workspace: &SpaceId,
     place: &Origin,
 ) -> Result<PlaceOwnership> {
     request(
         daemon,
         WorkspaceMethod::PlaceOwnership {
-            workspace: SpaceSelector::parse(workspace),
+            workspace: SpaceSelector::id(workspace),
             place: place.clone(),
         },
     )
@@ -268,13 +269,13 @@ pub async fn place_ownership(
 /// still records it as that workspace's.
 pub async fn close_owned_place(
     daemon: &impl Daemon,
-    workspace: &str,
+    workspace: &SpaceId,
     place: &Origin,
 ) -> Result<PlaceClose> {
     request(
         daemon,
         WorkspaceMethod::CloseOwnedPlace {
-            workspace: SpaceSelector::parse(workspace),
+            workspace: SpaceSelector::id(workspace),
             place: place.clone(),
         },
     )
@@ -321,13 +322,13 @@ pub async fn revoke_environment(
 /// repository's removal.
 pub async fn keep_agent_environment(
     daemon: &impl Daemon,
-    workspace: &str,
+    workspace: &SpaceId,
     environment: BTreeMap<String, String>,
 ) -> Result<()> {
     call(
         daemon,
         WorkspaceMethod::KeepAgentEnvironment {
-            workspace: SpaceSelector::parse(workspace),
+            workspace: SpaceSelector::id(workspace),
             environment,
         },
     )

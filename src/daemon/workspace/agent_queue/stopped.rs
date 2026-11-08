@@ -5,6 +5,7 @@
 //! agent registers, or while waiting once what it restores is gone, as after
 //! `shoal resume --now` or a discard. A restart's restore starts at once, in
 //! the slot its agent kept.
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use std::{
@@ -28,7 +29,7 @@ use crate::{
 /// The workspace a stopped agent restores in.
 #[derive(Clone)]
 struct Target {
-    id: String,
+    id: SpaceId,
     repository: String,
     name: String,
 }
@@ -168,7 +169,7 @@ fn recorded_executions(db: &Connection) -> Result<HashSet<String>> {
 }
 
 /// Every workspace's ID.
-fn all_workspaces(db: &Connection) -> Result<Vec<String>> {
+fn all_workspaces(db: &Connection) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM workspaces")?
         .query_map([], |row| row.get(0))?
@@ -176,7 +177,7 @@ fn all_workspaces(db: &Connection) -> Result<Vec<String>> {
 }
 
 /// The workspaces with a restore in the queue.
-fn restoring_workspaces(db: &Connection) -> Result<HashSet<String>> {
+fn restoring_workspaces(db: &Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
         .prepare("SELECT DISTINCT workspace_id FROM agent_queue WHERE kind=?1")?
         .query_map([QueueKind::Restore], |row| row.get(0))?
@@ -191,7 +192,7 @@ fn stopped_restores(db: &Connection) -> Result<HashSet<String>> {
 }
 
 /// Each waiting restore the daemon starts: its ID, workspace and execution.
-fn waiting_restores(db: &Connection) -> Result<Vec<(String, String, String)>> {
+fn waiting_restores(db: &Connection) -> Result<Vec<(String, SpaceId, String)>> {
     Ok(db
         .prepare(
             "SELECT id,workspace_id,execution_id FROM agent_queue
@@ -205,7 +206,7 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(String, String, String)>> {
 
 /// The IDs of the `waiting` restores whose recovery record or last session
 /// is gone. A file whose existence cannot be read counts as kept.
-fn resolved_restores(paths: &Paths, waiting: Vec<(String, String, String)>) -> Vec<String> {
+fn resolved_restores(paths: &Paths, waiting: Vec<(String, SpaceId, String)>) -> Vec<String> {
     waiting
         .into_iter()
         .filter(|(_, workspace, execution)| {
@@ -219,7 +220,7 @@ fn resolved_restores(paths: &Paths, waiting: Vec<(String, String, String)>) -> V
 
 /// The agent stopped as `execution` in `workspace_id`, from its recovery
 /// record or else its last session.
-fn stopped_agent(paths: &Paths, workspace_id: &str, execution: &str) -> Result<Option<String>> {
+fn stopped_agent(paths: &Paths, workspace_id: &SpaceId, execution: &str) -> Result<Option<String>> {
     let record = recovery::Record::load(&recovery::record_path(paths, workspace_id, execution))?;
     if let Some(record) = record {
         return Ok(Some(record.agent));
@@ -229,7 +230,7 @@ fn stopped_agent(paths: &Paths, workspace_id: &str, execution: &str) -> Result<O
 }
 
 /// Delete the restores the daemon starts of `workspace_id`'s stopped agents.
-fn delete_stopped_restores(db: &Connection, workspace_id: &str) -> Result<()> {
+fn delete_stopped_restores(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     db.execute(
         "DELETE FROM agent_queue WHERE workspace_id=?1 AND kind=?2 AND env IS NOT NULL",
         params![workspace_id, QueueKind::Restore],
@@ -442,7 +443,7 @@ impl Manager {
     /// dispatch from queueing a request meanwhile, and a restart from
     /// recording its restore, and a restore whose agent already registered
     /// has left the queue.
-    pub(crate) async fn cancel_stopped_restores(&self, workspace_id: &str) -> Result<()> {
+    pub(crate) async fn cancel_stopped_restores(&self, workspace_id: &SpaceId) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         self.cancel_renewals(workspace_id).await;
         self.clear_restore_requests(workspace_id)?;
@@ -453,7 +454,7 @@ impl Manager {
     }
 
     /// Forget the restore requests of `workspace_id`'s stopped agents.
-    fn clear_restore_requests(&self, workspace_id: &str) -> Result<()> {
+    fn clear_restore_requests(&self, workspace_id: &SpaceId) -> Result<()> {
         for (execution, _) in recovery::restore_requests(&self.paths, workspace_id)? {
             recovery::forget_restore_request(&self.paths, workspace_id, &execution)?;
         }
@@ -466,7 +467,7 @@ impl Manager {
     /// recording its own, until it is released.
     pub(in crate::daemon::workspace) async fn pending_restore_workspaces(
         &self,
-    ) -> Result<HashSet<String>> {
+    ) -> Result<HashSet<SpaceId>> {
         let (workspaces, queued) = self
             .store
             .run(|db| Ok((all_workspaces(db)?, restoring_workspaces(db)?)))

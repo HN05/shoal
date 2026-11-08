@@ -1,6 +1,7 @@
 //! The command lines that start Shoal's workers: the hidden `internal`
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
+use crate::client::space_ids::SpaceId;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -46,7 +47,7 @@ pub enum Worker<'a> {
     /// `kept_at` predates the watch.
     PlaceWatch {
         host: HostName,
-        workspace: &'a str,
+        workspace: &'a SpaceId,
         place: &'a str,
         instance: Option<&'a str>,
         kept_at: Option<&'a str>,
@@ -60,7 +61,7 @@ pub enum Worker<'a> {
         result: &'a Path,
     },
     Detached {
-        workspace: &'a str,
+        workspace: &'a SpaceId,
         log: &'a Path,
         agent: Option<&'a TrackedAgent>,
         command: &'a [OsString],
@@ -78,7 +79,7 @@ pub enum Worker<'a> {
     /// recovery records the launch consumes once it starts. With `close_in`,
     /// the place of that host closes once the workspace is done.
     Session {
-        workspace: &'a str,
+        workspace: &'a SpaceId,
         agent: &'a TrackedAgent,
         records: &'a [PathBuf],
         command: &'a [OsString],
@@ -88,7 +89,7 @@ pub enum Worker<'a> {
     },
     /// A demo's wrapper; `launch` is its JSON [`crate::demos::Launch`].
     Demo {
-        workspace: &'a str,
+        workspace: &'a SpaceId,
         launch: &'a str,
         command: &'a [OsString],
     },
@@ -139,7 +140,7 @@ pub enum Worker<'a> {
     /// at descriptor `connection`, writing to `log` when detached. Wrappers
     /// of earlier releases start it, so it only gains optional arguments.
     TakeOver {
-        workspace: &'a str,
+        workspace: &'a SpaceId,
         agent: &'a TrackedAgent,
         connection: i32,
         record: Option<&'a Path>,
@@ -210,7 +211,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             args.extend([
                 PLACE_WATCH.into(),
                 host.as_str().into(),
-                workspace.into(),
+                workspace.as_str().into(),
                 place.into(),
             ]);
             if let Some(instance) = instance {
@@ -244,7 +245,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         } => {
             args.extend([
                 DETACHED.into(),
-                workspace.into(),
+                workspace.as_str().into(),
                 "--log".into(),
                 log.as_os_str().to_owned(),
             ]);
@@ -274,7 +275,11 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             host,
             close_in,
         } => {
-            args.extend([SESSION.into(), workspace.into(), agent.name.as_str().into()]);
+            args.extend([
+                SESSION.into(),
+                workspace.as_str().into(),
+                agent.name.as_str().into(),
+            ]);
             args.extend(model_args(&agent.model));
             args.extend(["--mode".into(), agent.mode.as_str().into()]);
             args.extend(narrowing_args(agent));
@@ -295,7 +300,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         } => {
             args.extend([
                 DEMO.into(),
-                workspace.into(),
+                workspace.as_str().into(),
                 "--launch".into(),
                 launch.into(),
                 "--".into(),
@@ -349,7 +354,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         } => {
             args.extend([
                 TAKE_OVER.into(),
-                workspace.into(),
+                workspace.as_str().into(),
                 "--agent".into(),
                 agent.name.as_str().into(),
             ]);

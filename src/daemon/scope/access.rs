@@ -117,7 +117,7 @@ impl Manager {
         refusal: &str,
     ) -> Result<&'a mut SpaceSelector> {
         ensure!(
-            self.space(space).await?.id() == caller.space_id,
+            self.space(space).await?.id() == &caller.space_id,
             "{refusal}"
         );
         Ok(space)
@@ -133,7 +133,7 @@ impl Manager {
         refusal: &str,
     ) -> Result<&'a mut SpaceSelector> {
         ensure!(
-            self.space(space).await?.id() != caller.space_id,
+            self.space(space).await?.id() != &caller.space_id,
             "{refusal}"
         );
         Ok(space)
@@ -299,7 +299,7 @@ impl Manager {
             let reached = self.reached_spaces(Some(caller)).await?;
             entries.retain(|entry| {
                 entry.workspace().is_some_and(|workspace| {
-                    workspace != caller.space_id
+                    workspace != &caller.space_id
                         && reached
                             .as_ref()
                             .is_none_or(|reached| reached.iter().any(|id| id == workspace))

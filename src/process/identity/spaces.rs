@@ -6,6 +6,7 @@ use super::{
     Identity, Inventory, Lineage, MAX_ANCESTRY, Marker, Marks, descends_from_detached, executable,
     inventory, owners, working_directory,
 };
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -16,7 +17,7 @@ use std::{
 /// What ties processes to a space.
 #[derive(Debug, Clone)]
 pub struct Space {
-    pub id: String,
+    pub id: SpaceId,
     /// Directories whose processes are the space's, such as its worktree and
     /// its directory for temporary files.
     pub directories: Vec<PathBuf>,
@@ -74,7 +75,7 @@ const TERMINAL_SERVERS: [&str; 5] = ["zmx", "tmux", "zellij", "screen", "herdr"]
 pub async fn survey(
     spaces: Vec<Space>,
     tracked: Vec<Identity>,
-) -> Result<HashMap<String, Vec<Untracked>>> {
+) -> Result<HashMap<SpaceId, Vec<Untracked>>> {
     let spaces: Vec<Space> = spaces.into_iter().map(Space::canonical).collect();
     inventory(&owners::OWNERS, move |inventory| {
         let survey = Survey::of(inventory, &tracked);

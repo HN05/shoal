@@ -1,5 +1,6 @@
 //! Audit trail for clean-device requests. Persisted before any destructive
 //! simctl action and retained after the workspace is gone.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
@@ -186,7 +187,7 @@ impl Manager {
             "history limit must be between 1 and 50"
         );
         self.store
-            .run(move |db| history(db, owner.as_deref(), limit, before))
+            .run(move |db| history(db, owner.as_ref(), limit, before))
             .await
     }
 }
@@ -195,7 +196,7 @@ impl Manager {
 /// workspace, newest first.
 fn history(
     db: &rusqlite::Connection,
-    owner: Option<&str>,
+    owner: Option<&SpaceId>,
     limit: u32,
     before: Option<i64>,
 ) -> Result<Vec<AuditEntry>> {

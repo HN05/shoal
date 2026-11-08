@@ -84,7 +84,7 @@ impl Selection {
                 && self
                     .spaces
                     .iter()
-                    .all(|space| Some(space.id()) != own.as_deref()),
+                    .all(|space| Some(space.id()) != own.as_ref()),
             "scoped processes restart only the spaces below their own; finish their own with shoal done"
         );
         Ok(())
@@ -105,7 +105,7 @@ impl Selection {
             let (stopped, agents): (Vec<_>, Vec<_>) = self
                 .agents
                 .iter()
-                .filter(|running| running.space_id == space.id())
+                .filter(|running| running.space_id == *space.id())
                 .filter(|running| {
                     agent.is_none() || running.agent.is_none() || running.agent.as_deref() == agent
                 })
@@ -194,16 +194,15 @@ fn every(spaces: Spaces) -> Vec<PresentSpace> {
 async fn in_order(
     ctx: &Context,
     spaces: &Spaces,
-    selected: Vec<String>,
+    selected: Vec<SpaceSelector>,
 ) -> Result<Vec<PresentSpace>> {
     let mut ordered: Vec<PresentSpace> = Vec::new();
     for selector in selected {
-        let space = match spaces.find(&SpaceSelector::parse(&selector)) {
+        let space = match spaces.find(&selector) {
             Some(space) => space,
             None => {
                 let inspection =
-                    crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
-                        .await?;
+                    crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
                 PresentSpace::Workspace(inspection.workspace)
             }
         };

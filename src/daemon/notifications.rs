@@ -1,6 +1,7 @@
 //! Events the daemon records for the user: conflicts it saw, agents that
 //! finished, workspaces it removed. Recording never fails the operation that
 //! caused the event; the CLI shows them and marks them read.
+use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -69,7 +70,7 @@ pub(crate) struct Recorded {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct About {
     pub name: Option<String>,
-    pub id: Option<String>,
+    pub id: Option<SpaceId>,
     pub subject: Option<String>,
 }
 
@@ -83,7 +84,7 @@ impl About {
     }
 
     /// The space `id`, which has `name`.
-    pub(crate) fn space(name: &str, id: &str) -> Self {
+    pub(crate) fn space(name: &str, id: &SpaceId) -> Self {
         Self {
             name: Some(name.to_owned()),
             id: Some(id.to_owned()),
@@ -165,7 +166,7 @@ pub(crate) fn insert(
 /// longer applies. Returns whether there was one.
 pub(crate) fn retract(
     tx: &rusqlite::Transaction<'_>,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     kind: NotificationKind,
     message: &str,
 ) -> Result<bool> {
@@ -282,7 +283,7 @@ impl Manager {
         workspace_files::check_sent(&attachments)?;
         let space = self.space(selector).await?;
         let about = About::space(space.name(), space.id());
-        let id = space.id().to_owned();
+        let id = space.id().clone();
         let (kind, text) = (NotificationKind::AgentMessage, message.clone());
         let notification = (self.send_with_files(
             &space.into(),
@@ -355,7 +356,7 @@ impl Manager {
     ) -> Result<Option<i64>> {
         if let (Some(source), Some(name)) = (kind.coordination(), &about.name) {
             let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
-            let (id, message) = (about.id.as_deref(), message.clone());
+            let (id, message) = (about.id.as_ref(), message.clone());
             if self
                 .tell_coordinator(name, id, Some(kind), message, paths, source)
                 .await
@@ -446,7 +447,7 @@ impl Manager {
     }
 
     /// Unread notifications about the workspace or chat `space_id`.
-    pub async fn unread_space_notifications(&self, space_id: &str) -> Result<u64> {
+    pub async fn unread_space_notifications(&self, space_id: &SpaceId) -> Result<u64> {
         let space_id = space_id.to_owned();
         self.store
             .run(move |db| {

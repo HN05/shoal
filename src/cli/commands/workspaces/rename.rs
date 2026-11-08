@@ -13,9 +13,7 @@ pub(in crate::cli::commands) async fn rename(
     branch: String,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let renamed =
-        crate::client::workspaces::rename(&ctx.paths, SpaceSelector::parse(&workspace), branch)
-            .await?;
+    let renamed = crate::client::workspaces::rename(&ctx.paths, workspace.clone(), branch).await?;
     ctx.show(&renamed, |workspace| {
         outln!(
             "Renamed workspace to {} ({})",

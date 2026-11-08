@@ -137,7 +137,7 @@ async fn start(
     // Before a picker opens or a running demo is replaced.
     overrides.validate()?;
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
         .await?
         .workspace;
     let settings = crate::client::workspaces::settings(
@@ -160,7 +160,7 @@ async fn start(
         let space = workspace.id.clone();
         crate::client::notifications::send(
             &ctx.paths,
-            SpaceSelector::parse(&space),
+            SpaceSelector::id(&space),
             message,
             Vec::new(),
             None,
@@ -323,7 +323,7 @@ async fn stop(
     name: Option<String>,
 ) -> Result<i32> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
         .await?
         .workspace;
     stop_named(ctx, &workspace, name.clone()).await?;
@@ -534,7 +534,7 @@ async fn send(
 /// The running demo `name` of the workspace given or chosen.
 async fn named(ctx: &Context, workspace: Option<SpaceSelector>, name: &str) -> Result<Running> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
         .await?
         .workspace;
     find(
@@ -569,12 +569,12 @@ async fn scope(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<Option
         }
         None => {
             let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-            ui::current_workspace(&workspaces)?.map(|workspace| workspace.id.clone())
+            ui::current_workspace(&workspaces)?.map(|workspace| SpaceSelector::id(&workspace.id))
         }
     };
     match id {
         Some(id) => Ok(Some(
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
+            crate::client::workspaces::inspect(&ctx.paths, id)
                 .await?
                 .workspace,
         )),

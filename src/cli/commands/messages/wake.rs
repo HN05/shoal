@@ -29,7 +29,7 @@ pub(in crate::cli::commands) async fn wake(
     resumed: bool,
 ) -> Result<i32> {
     let mut wait = WakeWait {
-        space: space.map(|space| space.to_string()),
+        space,
         inbox: None,
         restarted: resumed,
     };
@@ -74,12 +74,11 @@ async fn report_end(ctx: &Context, wait: &WakeWait, ended: WakeEnd) {
         let space = match &wait.inbox {
             Some(inbox) => inbox.space.clone(),
             None => {
-                Inbox::waited_for(ctx, wait.space.as_deref(), false)
+                Inbox::waited_for(ctx, wait.space.as_ref(), false)
                     .await?
                     .space
             }
         };
-        let space = SpaceSelector::parse(&space);
         crate::client::agents::report_wake_end(&ctx.paths, space, ended).await
     };
     let limit = crate::agents::hooks::MESSAGE_DAEMON_LIMIT;
@@ -195,7 +194,7 @@ async fn retry_next_updates(ctx: &Context, wait: &mut WakeWait) -> Option<(Inbox
 /// whether the daemon restarted before the next wait began, so it does not
 /// know the agent's scope until the agent's wrapper reattaches.
 struct WakeWait {
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     inbox: Option<Inbox>,
     restarted: bool,
 }
@@ -207,7 +206,7 @@ impl WakeWait {
         let inbox = match &self.inbox {
             Some(inbox) => inbox,
             None => {
-                let inbox = Inbox::waited_for(ctx, self.space.as_deref(), self.restarted).await?;
+                let inbox = Inbox::waited_for(ctx, self.space.as_ref(), self.restarted).await?;
                 self.inbox.insert(inbox)
             }
         };
@@ -223,11 +222,11 @@ impl WakeWait {
     /// release handed over names its workspace the earlier way, which the
     /// space replaces.
     fn resume_arguments(&self, arguments: Vec<OsString>) -> Vec<OsString> {
-        let space = self.inbox.as_ref().map(|inbox| inbox.space.as_str());
-        let arguments = match space.or(self.space.as_deref()) {
+        let space = self.inbox.as_ref().map(|inbox| &inbox.space);
+        let arguments = match space.or(self.space.as_ref()) {
             Some(space) => {
                 let arguments = without_option(arguments, "--workspace");
-                replace_option(arguments, "--space", space)
+                replace_option(arguments, "--space", &space.to_string())
             }
             None => arguments,
         };

@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::time::UnixTime;
 use crate::{
@@ -162,9 +163,9 @@ async fn polling_without_a_timeout_stays_unbounded() {
 #[tokio::test]
 async fn a_newer_wait_supersedes_the_older_one_per_workspace() {
     let waits = ActiveWaits::default();
-    let older = waits.start("one");
-    let other = waits.start("two");
-    let newer = waits.start("one");
+    let older = waits.start(&SpaceId::from("one"));
+    let other = waits.start(&SpaceId::from("two"));
+    let newer = waits.start(&SpaceId::from("one"));
     older.superseded.notified().await;
     assert!(!older.is_current());
     assert!(newer.is_current() && other.is_current());
@@ -959,7 +960,7 @@ fn combined_updates_fit_one_response_in_whole_deliveries() {
     const LIMIT: usize = crate::protocol::MAX_FRAME - 256;
     let batch = |deliveries: fn(usize) -> usize| {
         (0..63)
-            .map(|n| ("child".to_owned(), large_update(n, deliveries(n))))
+            .map(|n| (SpaceId::from("child"), large_update(n, deliveries(n))))
             .collect::<Batch>()
     };
     // 21 deliveries of three updates each, more than one response holds.
@@ -1595,7 +1596,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
                 .unwrap();
         }
     };
-    let delivered = |id: String| {
+    let delivered = |id: SpaceId| {
         let manager = &manager;
         async move {
             manager
@@ -2560,10 +2561,10 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
     assert_eq!(updates[0].kind, UpdateKind::MergeConflict);
 }
 
-fn resolved_branch(workspace_id: &str) -> Snapshot {
+fn resolved_branch(workspace_id: &SpaceId) -> Snapshot {
     branch_conflicts(
         Ok(crate::model::ConflictCheck {
-            workspace_id: workspace_id.into(),
+            workspace_id: workspace_id.clone(),
             target: "main".into(),
             target_commit: String::new(),
             head: String::new(),

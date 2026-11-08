@@ -1,5 +1,6 @@
 //! Issue and PR actions the daemon carries out for a workspace, so its
 //! scope rules apply and each change reaches the event journal.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result, bail};
 
@@ -90,7 +91,7 @@ impl Manager {
     }
 
     /// The one assigned item of `kind` of the space `id`.
-    pub(super) async fn linked_item(&self, id: &str, kind: ItemKind) -> Result<String> {
+    pub(super) async fn linked_item(&self, id: &SpaceId, kind: ItemKind) -> Result<String> {
         let id = id.to_owned();
         let assigned = self
             .store
@@ -235,7 +236,7 @@ impl Manager {
     /// [`Manager::lock_change_gates`] takes for the workspace.
     pub(super) async fn apply_own(
         &self,
-        id: &str,
+        id: &SpaceId,
         forge: &ForgeRepo,
         account: &Account,
         target: Target,
@@ -266,7 +267,7 @@ impl Manager {
     /// own, so polling does not report it back, and return the failure.
     async fn record_failed_post(
         &self,
-        id: &str,
+        id: &SpaceId,
         target: Target,
         action: &Action,
         error: anyhow::Error,
@@ -296,7 +297,7 @@ impl Manager {
     /// polling does not report the change back as someone else's.
     async fn record_own_action(
         &self,
-        id: &str,
+        id: &SpaceId,
         target: Target,
         name: &'static str,
         own: Own,
@@ -550,7 +551,7 @@ impl Manager {
     /// linked, and the warning.
     pub(super) async fn keep_created(
         &self,
-        space: &str,
+        space: &SpaceId,
         kind: ItemKind,
         item: &Item,
         link: bool,
@@ -588,7 +589,7 @@ impl Manager {
     }
 
     /// Whether the workspace still exists and takes link changes.
-    async fn accepts_links(&self, id: &str) -> Result<bool> {
+    async fn accepts_links(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| super::accepts_links(db, &id))
@@ -608,7 +609,7 @@ fn watch(item: &Item) -> super::pr::Action {
 /// the item exists either way.
 fn record_opened(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     kind: ItemKind,
     url: &str,
     title: &str,

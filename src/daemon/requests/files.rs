@@ -25,7 +25,7 @@ pub(super) async fn handle(
             files,
             sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
             manager.add_attached_files(&space, files, &attacher).await
         }
         FileMethod::RemoveFiles {

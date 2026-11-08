@@ -1,5 +1,6 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
@@ -37,7 +38,7 @@ async fn repositories(
 
 /// Start the chat `name` without a repository, below `parent` when given,
 /// running as the returned process.
-async fn outside(manager: &Manager, name: &str, parent: Option<&str>) -> (Chat, ProcessGroup) {
+async fn outside(manager: &Manager, name: &str, parent: Option<&SpaceId>) -> (Chat, ProcessGroup) {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = NewChat {
         narrowing: Default::default(),
@@ -47,7 +48,7 @@ async fn outside(manager: &Manager, name: &str, parent: Option<&str>) -> (Chat, 
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent: parent.map(str::to_owned),
+        parent: parent.cloned(),
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
     (chat, process)
@@ -59,7 +60,7 @@ async fn worked(
     manager: &Manager,
     repository: &Repository,
     name: &str,
-    parent: Option<&str>,
+    parent: Option<&SpaceId>,
 ) -> Workspace {
     let workspace = manager
         .create_workspace_below(
@@ -67,7 +68,7 @@ async fn worked(
             name.into(),
             None,
             Default::default(),
-            parent.map(str::to_owned),
+            parent.cloned(),
         )
         .await
         .unwrap();
@@ -99,7 +100,7 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     let other =
         crate::tmp_dirs::Layout::outside_repositories(&root_dir, &temp.path().join("other"));
     assert_eq!(other.list().unwrap(), Vec::<String>::new());
-    other.prepare("another").unwrap_err();
+    other.prepare(&SpaceId::from("another")).unwrap_err();
     manager.sweep_tmp_dirs().await.unwrap();
     assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
     // A new root_dir leaves it where the chat started, as a repository

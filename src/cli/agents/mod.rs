@@ -8,6 +8,7 @@ mod launch;
 mod sessions;
 mod trust;
 
+use crate::client::space_ids::SpaceId;
 use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
@@ -126,7 +127,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// The `--permission` narrowing of the mode's permissions.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below.
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,
@@ -136,7 +137,7 @@ pub(in crate::cli) struct ChatLaunch {
     pub model: ModelChoice,
     pub args: Vec<OsString>,
     /// The stopped chat, by ID, it restores instead of recording a new one.
-    pub restores: Option<String>,
+    pub restores: Option<SpaceId>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: Vec<(Relation, LinkedItem)>,
 }
@@ -156,7 +157,9 @@ pub(in crate::cli) async fn link_chat(
     links: &[(Relation, LinkedItem)],
 ) {
     for (relation, item) in links {
-        if let Err(error) = crate::client::items::link(&ctx.paths, &chat.id, *relation, item).await
+        if let Err(error) =
+            crate::client::items::link(&ctx.paths, &SpaceSelector::id(&chat.id), *relation, item)
+                .await
         {
             eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url);
         }
@@ -405,7 +408,7 @@ async fn agent_target(
         let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.clone()).await;
         return Ok(workspace
             .ok()
-            .map(|selected| ConfigTarget::Workspace(SpaceSelector::parse(&selected))));
+            .map(|selected| ConfigTarget::Workspace(selected.clone())));
     }
     // Without a daemon there is no workspace context, only the machine's.
     let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
@@ -716,7 +719,7 @@ pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
 }
 
 /// The agents the workspace saves for `shoal resume`.
-fn saved_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
+fn saved_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<String>> {
     let saved = recovery::Saved::load(paths, workspace_id)?;
     let mut agents = Vec::new();
     for agent in saved.agent_names() {

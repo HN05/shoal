@@ -26,8 +26,7 @@ pub(in crate::cli::commands) async fn title(
     crate::validate::title(title.trim())?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let retitled =
-        crate::client::workspaces::set_title(&ctx.paths, SpaceSelector::parse(&workspace), title)
-            .await?;
+        crate::client::workspaces::set_title(&ctx.paths, workspace.clone(), title).await?;
     // The title is recorded; a place left with its old label only warns.
     if let Err(error) = relabel(ctx, &retitled).await {
         eprintln!(

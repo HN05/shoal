@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
 use super::dependencies;
+use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
 use crate::{
     model::{QueueEntry, QueueRequest},
@@ -16,7 +17,7 @@ pub(super) struct QueuedRow {
     pub repository: String,
     pub kind: QueueKind,
     pub execution: Option<String>,
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceId>,
     /// Whether the daemon starts it, rather than a waiting wrapper.
     pub started_here: bool,
     /// Whether Shoal queued the restore on its own.
@@ -54,7 +55,7 @@ pub(super) struct Launch {
     pub request: QueueRequest,
     pub state: QueueState,
     /// The existing workspace the launch opens.
-    pub opens: Option<String>,
+    pub opens: Option<SpaceId>,
 }
 
 /// Record `launch` unless its repository already queues the same name or is

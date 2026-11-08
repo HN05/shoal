@@ -1,6 +1,7 @@
 //! The processes of a space that Shoal does not track, as
 //! [`spaces`](crate::process::identity::spaces) finds them, and the one path
 //! that stops them, for `shoal stop` and removal alike.
+use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
@@ -168,7 +169,7 @@ impl Manager {
         &self,
         spaces: Vec<Space>,
         requester: Option<Identity>,
-    ) -> Result<std::collections::HashMap<String, Vec<Untracked>>> {
+    ) -> Result<std::collections::HashMap<SpaceId, Vec<Untracked>>> {
         let mut tracked = self.tracked_processes().await?;
         tracked.extend(requester);
         spaces::survey(spaces, tracked).await

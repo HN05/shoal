@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::daemon::test_support::{manager, repository};
 
 #[tokio::test]
@@ -34,7 +35,7 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
 
     manager.recheck_startup_failures().await.unwrap();
 
-    let state = |id: String| {
+    let state = |id: SpaceId| {
         let manager = manager.clone();
         async move { manager.workspace_by_id(&id).await.unwrap() }
     };

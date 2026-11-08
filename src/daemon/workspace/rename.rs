@@ -2,6 +2,7 @@
 mod intent;
 
 use super::Manager;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{client::space_names::SpaceName, model::SpaceKind};
@@ -179,7 +180,11 @@ impl Manager {
     /// Move a ready or failed workspace without executions other than the
     /// caller's into reconciling for finishing its pending rename, without
     /// the resource guard its caller already holds.
-    async fn reserve_rename_repair(&self, id: &str, caller_execution: Option<&str>) -> Result<()> {
+    async fn reserve_rename_repair(
+        &self,
+        id: &SpaceId,
+        caller_execution: Option<&str>,
+    ) -> Result<()> {
         let id = id.to_owned();
         let caller_execution = caller_execution.map(str::to_owned);
         self.store
@@ -209,7 +214,7 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn ensure_no_pending_rename(&self, id: &str) -> Result<()> {
+    pub(crate) async fn ensure_no_pending_rename(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| store::ensure_no_pending_rename(db, &id))

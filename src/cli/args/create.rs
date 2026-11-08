@@ -1,4 +1,5 @@
 //! Arguments of commands that create workspaces.
+use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -165,7 +166,7 @@ pub struct StartArgs {
     /// Stopped chat, by ID, that this start restores under its own name,
     /// which shoal resume passes.
     #[arg(long, hide = true, requires_all = ["chat", "name"])]
-    pub restore: Option<String>,
+    pub restore: Option<SpaceId>,
     /// Issue, by URL, that an imported chat is linked to, whose fields its
     /// rules take without asking the forge, which shoal move import passes.
     #[arg(long, hide = true, requires = "chat")]

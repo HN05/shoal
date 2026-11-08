@@ -1,4 +1,5 @@
 //! Arguments of `shoal config`, `shoal update` and `shoal daemon`.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
@@ -91,7 +92,7 @@ pub struct ConfigSetupArgs {
     /// Stopped chat, by ID, that this start restores under its own name,
     /// which shoal resume passes.
     #[arg(long, hide = true, requires = "name")]
-    pub restore: Option<String>,
+    pub restore: Option<SpaceId>,
     /// Handoff of the starter that waits on this background place.
     #[arg(long, hide = true, requires = "here")]
     pub handoff: Option<PathBuf>,

@@ -1,5 +1,6 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
 //! whose agent opened it, or the user when one opened it outside any.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::params;
 
@@ -14,11 +15,11 @@ impl Manager {
     /// Give `workspace` to the space `parent` that opened it, or to the user
     /// when it was opened outside one or the parent is gone. A workspace
     /// split from another stays below it.
-    pub async fn assign_parent(&self, workspace: &str, parent: Option<String>) -> Result<()> {
+    pub async fn assign_parent(&self, workspace: &SpaceId, parent: Option<SpaceId>) -> Result<()> {
         let workspace = workspace.to_owned();
         let held = [self.chat_removals.clone(), self.chat_owners.clone()];
         self.store
-            .write(move |tx| assign(tx, &workspace, parent.as_deref(), &held))
+            .write(move |tx| assign(tx, &workspace, parent.as_ref(), &held))
             .await
     }
 
@@ -31,17 +32,17 @@ impl Manager {
         branch: &str,
         base: Option<String>,
         new: NewWorkspace<'_>,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
         confined: bool,
     ) -> Result<OpenedWorkspace> {
-        self.ensure_parent_repository(&repository, parent.as_deref())
+        self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
         let new = NewWorkspace {
             parent: parent.clone(),
             ..new
         };
         let mut opened = self.open_branch_with(repository, branch, base, new).await?;
-        if let Some(parent) = parent.as_deref().filter(|_| confined && opened.reused) {
+        if let Some(parent) = parent.as_ref().filter(|_| confined && opened.reused) {
             ensure!(
                 self.within_subtree(parent, &opened.workspace.id).await?,
                 "{} is outside the space opening it; ask the user to open it",
@@ -62,9 +63,9 @@ impl Manager {
         name: String,
         base: Option<String>,
         new: NewWorkspace<'_>,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
     ) -> Result<Workspace> {
-        self.ensure_parent_repository(&repository, parent.as_deref())
+        self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
         let new = NewWorkspace {
             parent: parent.clone(),
@@ -83,7 +84,7 @@ impl Manager {
     pub(crate) async fn ensure_parent_repository(
         &self,
         repository: &crate::repository::Selector,
-        parent: Option<&str>,
+        parent: Option<&SpaceId>,
     ) -> Result<()> {
         self.ensure_parent_takes(Some(repository), parent).await
     }
@@ -93,9 +94,9 @@ impl Manager {
     pub(crate) async fn ensure_parent_takes(
         &self,
         repository: Option<&crate::repository::Selector>,
-        parent: Option<&str>,
+        parent: Option<&SpaceId>,
     ) -> Result<()> {
-        let Some(parent) = parent.map(str::to_owned) else {
+        let Some(parent) = parent.cloned() else {
             return Ok(());
         };
         let repository = match repository {
@@ -114,7 +115,7 @@ impl Manager {
     pub(crate) async fn give_to_parent(
         &self,
         workspace: &SpaceSelector,
-        parent: Option<String>,
+        parent: Option<SpaceId>,
     ) -> Result<Workspace> {
         let id = self.workspace(workspace).await?.id;
         self.assign_parent(&id, parent).await?;
@@ -127,8 +128,8 @@ impl Manager {
 /// listed it after reserving the chat, on this one thread, and takes it.
 fn assign(
     tx: &rusqlite::Transaction<'_>,
-    workspace: &str,
-    parent: Option<&str>,
+    workspace: &SpaceId,
+    parent: Option<&SpaceId>,
     [removing, owners]: &[Removing; 2],
 ) -> Result<()> {
     // A removal decided by the space the workspace is below keeps it there.
@@ -146,10 +147,7 @@ fn assign(
     {
         return Ok(());
     }
-    if let Some(current) = current
-        .as_deref()
-        .filter(|current| Some(*current) != parent)
-    {
+    if let Some(current) = current.as_ref().filter(|current| Some(*current) != parent) {
         ensure!(
             !removing.reserved(current) && !owners.reserved(current),
             "a removal of the chat that opened the workspace, or of its workspaces, holds it"
@@ -163,7 +161,7 @@ fn assign(
         Some(parent) if spaces::space_kind(tx, parent)?.is_some() => Some(parent),
         _ => None,
     };
-    if parent != current.as_deref() {
+    if parent != current.as_ref() {
         if let Some(parent) = parent {
             let repository: String = tx.query_row(
                 "SELECT repository_id FROM workspaces WHERE id=?1",

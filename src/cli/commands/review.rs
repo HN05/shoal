@@ -65,7 +65,7 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
 /// A space a review command acts on.
 enum Space {
     Chat(Box<Chat>),
-    Workspace(String),
+    Workspace(SpaceSelector),
 }
 
 /// The space `space` names, else the current workspace or the chat this
@@ -73,9 +73,7 @@ enum Space {
 async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&selected))
-            .await?
-        {
+        match crate::client::workspaces::present_space(&ctx.paths, &selected).await? {
             Some(PresentSpace::Chat(chat)) => Space::Chat(Box::new(chat)),
             _ => Space::Workspace(selected),
         },
@@ -88,7 +86,7 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
     let named = match space {
         Some(space) => space.clone(),
         None if ui::current_chat(&None).is_some() => {
-            SpaceSelector::id(&ui::select_space(ctx, None, Fallback::CurrentDirectory).await?)
+            ui::select_space(ctx, None, Fallback::CurrentDirectory).await?
         }
         None => return Ok(None),
     };

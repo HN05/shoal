@@ -2,6 +2,7 @@
 //! user. Like agent messages, delivery deletes them; a chat removed before
 //! receiving them gives them to the user as the notifications they would
 //! have been.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::links::wait::UpdatesExt;
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
@@ -55,7 +56,7 @@ impl Manager {
     /// `attacher`.
     async fn queue_attached_chat_message(
         &self,
-        chat: String,
+        chat: SpaceId,
         message: String,
         attachments: Vec<Copy>,
         attacher: Attacher,
@@ -84,15 +85,15 @@ impl Manager {
     /// then. An identical unread message is not repeated.
     pub(crate) async fn queue_chat_message(
         &self,
-        chat: &str,
+        chat: &SpaceId,
         workspace: Option<&str>,
-        workspace_id: Option<&str>,
+        workspace_id: Option<&SpaceId>,
         kind: Option<NotificationKind>,
         message: String,
         attachments: Vec<PathBuf>,
     ) -> Result<()> {
         let (chat, workspace) = (chat.to_owned(), workspace.map(str::to_owned));
-        let workspace_id = workspace_id.map(str::to_owned);
+        let workspace_id = workspace_id.cloned();
         let queued = self
             .store
             .write(move |tx| {
@@ -113,7 +114,7 @@ impl Manager {
 
     /// The chat's unread messages, oldest first, each naming its workspace
     /// unless it comes from the user.
-    pub async fn chat_messages(&self, chat: &str) -> Result<Vec<AgentMessage>> {
+    pub async fn chat_messages(&self, chat: &SpaceId) -> Result<Vec<AgentMessage>> {
         let chat = chat.to_owned();
         self.store
             .run(move |db| {
@@ -145,7 +146,7 @@ impl Manager {
     /// messages, its leftovers, and the activity queued on its items.
     /// Delivery replaces a running wait, which would otherwise deliver them
     /// again.
-    pub async fn chat_updates(&self, chat: &str) -> Result<Updates> {
+    pub async fn chat_updates(&self, chat: &SpaceId) -> Result<Updates> {
         let delivery = self.chat_waits.start(chat);
         let messages = self.chat_messages(chat).await?;
         // The messages, then the leftovers, share the response with the
@@ -167,7 +168,7 @@ impl Manager {
 
     /// The chat's next messages or item activity, once it has any, unless a
     /// newer wait or delivery takes them first.
-    pub async fn wait_chat_messages(&self, chat: &str) -> Result<Updates> {
+    pub async fn wait_chat_messages(&self, chat: &SpaceId) -> Result<Updates> {
         let wait = self.chat_waits.start(chat);
         // Subscribe before reading, so what is queued in between still wakes.
         let mut queued = self.signals.watch_chat_messages();
@@ -200,7 +201,7 @@ impl Manager {
 
     /// Delete exactly these messages once the chat's agent has received
     /// them, with the questions whose answers they carried.
-    pub async fn mark_chat_messages_delivered(&self, chat: &str, ids: Vec<i64>) -> Result<()> {
+    pub async fn mark_chat_messages_delivered(&self, chat: &SpaceId, ids: Vec<i64>) -> Result<()> {
         let chat = chat.to_owned();
         self.store
             .write(move |tx| {
@@ -221,7 +222,7 @@ impl Manager {
 /// its ID, or `None` when an identical message is already unread.
 pub(crate) fn insert_from_user(
     tx: &Transaction<'_>,
-    chat: &str,
+    chat: &SpaceId,
     message: &str,
 ) -> Result<Option<i64>> {
     insert(tx, chat, &About::default(), None, message, &[])
@@ -233,7 +234,7 @@ pub(crate) fn insert_from_user(
 /// unread.
 fn insert(
     tx: &Transaction<'_>,
-    chat: &str,
+    chat: &SpaceId,
     about: &About,
     kind: Option<NotificationKind>,
     message: &str,
@@ -305,7 +306,7 @@ pub(crate) fn rebase_attachments(
 /// stand for, with the files they attach, in the transaction that deletes
 /// the chat and with it the messages. Returns the last notification
 /// recorded.
-pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &str) -> Result<Option<i64>> {
+pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &SpaceId) -> Result<Option<i64>> {
     let unread = tx
         .prepare(
             "SELECT workspace,workspace_id,kind,message,attachments FROM chat_messages

@@ -3,6 +3,7 @@
 //! stopped it, and finishes normally when recovery is cancelled or a restart
 //! leaves the agent to a new wrapper. Failed ownership checks never authorize
 //! a replacement process.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
@@ -67,7 +68,7 @@ impl Cancel {
 pub(super) async fn pause(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
     notices: Option<&mut OwnedWriteHalf>,
@@ -132,7 +133,7 @@ pub(super) async fn pause(
 async fn restart(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
     notices: Option<&mut OwnedWriteHalf>,
@@ -152,7 +153,7 @@ async fn restart(
 async fn restart_once_stopped(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
     notices: Option<&mut OwnedWriteHalf>,
@@ -223,7 +224,7 @@ async fn interrupted(
 async fn admit_restore(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     moved: bool,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Grant> {
@@ -251,7 +252,7 @@ fn restore_failed(error: anyhow::Error) -> Action {
 /// agent `protection` stopped nothing to do.
 async fn assignment_done(
     manager: &Manager,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     protection: &Protection,
 ) -> Result<bool> {
     Ok(protection.ends_with_assignment() && manager.completion(workspace_id).await?.is_some())
@@ -270,7 +271,7 @@ const SURVIVOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
 async fn await_stopped(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     stopped: Pause,
     notices: Option<&mut OwnedWriteHalf>,
 ) -> Result<()> {
@@ -302,7 +303,7 @@ async fn tell_restore_waits(notices: Option<&mut OwnedWriteHalf>, issue: String)
 
 /// A protection stop without automatic recovery still ends what the agent left
 /// running outside its process group, so `shoal resume` can restore it.
-pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, workspace_id: &str) {
+pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, workspace_id: &SpaceId) {
     if !manager.agent_was_overloaded(execution_id).await {
         return;
     }
@@ -320,7 +321,7 @@ pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, worksp
 
 /// A completed execution no longer needs the restore record its protection
 /// stop left; removal is best effort.
-pub(super) fn discard_handoff(manager: &Manager, workspace_id: &str, execution_id: &str) {
+pub(super) fn discard_handoff(manager: &Manager, workspace_id: &SpaceId, execution_id: &str) {
     let record = recovery::record_path(&manager.paths, workspace_id, execution_id);
     if let Err(error) = recovery::consume(&record) {
         log!("unused overload recovery handoff not removed: {error:#}");
@@ -348,7 +349,7 @@ async fn recovery_disabled(manager: &Manager) {
 async fn prepare_resume(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     grant: Grant,
     protection: &Protection,
 ) -> Result<Action> {
@@ -363,7 +364,7 @@ async fn prepare_resume(
 async fn resume(
     manager: &Manager,
     execution_id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     grant: Option<Grant>,
 ) -> Result<Action> {
     let ports = manager

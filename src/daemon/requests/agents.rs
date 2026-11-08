@@ -150,7 +150,7 @@ pub(super) async fn handle(
             attachments,
             sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
             manager
                 .send_space_message(&space, message, attachments, &attacher)
                 .await?;
@@ -162,9 +162,9 @@ pub(super) async fn handle(
             attachments,
             sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
             let below = manager.reach_root(caller).await?;
-            let below = below.as_deref();
+            let below = below.as_ref();
             Body::Reached(
                 manager
                     .send_all_message(
@@ -173,7 +173,7 @@ pub(super) async fn handle(
                         attachments,
                         &attacher,
                         below,
-                        sender_chat.as_deref(),
+                        sender_chat.as_ref(),
                     )
                     .await?,
             )

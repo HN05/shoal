@@ -1,4 +1,5 @@
 //! The user's notifications: what the daemon recorded for the user to read.
+use crate::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::{io::BufReader, net::UnixStream};
@@ -147,7 +148,7 @@ pub async fn send(
     space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
-    sender_chat: Option<String>,
+    sender_chat: Option<SpaceId>,
 ) -> Result<Sent> {
     let method = NotificationMethod::SendMessage {
         space,

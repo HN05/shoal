@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 use std::path::Path;
 
@@ -15,16 +16,11 @@ use crate::{
 async fn create(
     manager: &super::Manager,
     repo: &str,
-    parent: Option<&str>,
+    parent: Option<&SpaceId>,
     start: CommitStart,
 ) -> anyhow::Result<Workspace> {
     manager
-        .create_commit_workspace(
-            repo.into(),
-            parent.map(str::to_owned),
-            start,
-            Default::default(),
-        )
+        .create_commit_workspace(repo.into(), parent.cloned(), start, Default::default())
         .await
 }
 
@@ -463,7 +459,7 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
         .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
         .unwrap();
-    let create = |parent: Option<String>| {
+    let create = |parent: Option<SpaceId>| {
         manager.create_commit_workspace(
             repo.id.as_str().into(),
             parent,
@@ -682,7 +678,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
         start("first").await.unwrap(),
         start("second").await.unwrap(),
     );
-    let open = |chat: Option<String>, confined: bool| {
+    let open = |chat: Option<SpaceId>, confined: bool| {
         manager.open_pull_head(
             repo.id.as_str().into(),
             "https://forge.example/team/repo/pulls/4".into(),
@@ -776,7 +772,7 @@ async fn a_parent_of_another_repository_is_refused_before_any_fetch() {
     let refused = create(
         &manager,
         &other_repo.id,
-        Some(&parent.name),
+        Some(&parent.id),
         CommitStart::Revision(Some("remote-only".into())),
     )
     .await;

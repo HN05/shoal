@@ -27,7 +27,7 @@ pub(super) async fn shortcut_workspace(
 ) -> Result<Workspace> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     Ok(
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
+        crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
             .await?
             .workspace,
     )
@@ -85,9 +85,22 @@ pub(super) async fn tracked(
     }
     terminal::label_current(&ctx.paths, crate::terminal::Owner::Workspace(&workspace.id)).await?;
     if replaces.is_empty() {
-        return execution::run(&ctx.paths, workspace.id, command, Some(agent)).await;
+        return execution::run(
+            &ctx.paths,
+            SpaceSelector::Id(workspace.id),
+            command,
+            Some(agent),
+        )
+        .await;
     }
-    execution::run_recovery(&ctx.paths, workspace.id, command, agent, replaces).await
+    execution::run_recovery(
+        &ctx.paths,
+        SpaceSelector::Id(workspace.id),
+        command,
+        agent,
+        replaces,
+    )
+    .await
 }
 
 /// The agent's configured command with the arguments that fork a session,

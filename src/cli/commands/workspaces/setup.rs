@@ -59,8 +59,7 @@ pub(in crate::cli::commands) async fn setup(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
     let Some(set_up) = setup_workspace(ctx, &inspection.workspace, true).await? else {
         return Ok(1);
     };
@@ -80,10 +79,9 @@ pub(in crate::cli::commands) async fn skip_setup(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
-            .await?
-            .workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+        .await?
+        .workspace;
     ensure!(
         workspace.state == WorkspaceState::Failed,
         "{} is {}; only a failed setup can be skipped",

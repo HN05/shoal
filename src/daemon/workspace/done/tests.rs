@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -991,7 +992,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     let (_root, manager, parent) = fixture().await;
     // The parent's own unpushed commit keeps it, but not its children.
     commit_file(&parent.path, "parent-work");
-    let split = |name: &'static str, parent: String| {
+    let split = |name: &'static str, parent: SpaceId| {
         let manager = manager.clone();
         async move {
             manager
@@ -1293,7 +1294,7 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(ancestor.id(), chat.id);
+    assert_eq!(ancestor.id(), &chat.id);
 
     // The user opens it outside the chat before the removal reserves it.
     manager.assign_parent(&worker.id, None).await.unwrap();
@@ -1362,7 +1363,7 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(ancestor.id(), chat.id);
+    assert_eq!(ancestor.id(), &chat.id);
 
     // While a removal under the chat holds its workspaces, the root that
     // puts the split child below the chat stays there...

@@ -1,6 +1,7 @@
 //! The push the user approved, in the operation approving it started: the
 //! approved commit as a tracked command, as `shoal pr open` pushes, then the
 //! daemon decides the request, opening the PR it proposed.
+use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
 
 pub(in crate::cli::commands) async fn push_approved(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     approval: String,
     push: PushSpecification,
     reporter: &Reporter<'_>,

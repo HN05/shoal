@@ -101,7 +101,7 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
         Some(chat) => chat,
         None => {
             let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&owner))
+            crate::client::workspaces::inspect(&ctx.paths, owner.clone())
                 .await?
                 .workspace
                 .id
@@ -300,8 +300,7 @@ async fn escalate(
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let space = ui::select_space(ctx, None, ui::Fallback::OwnWorkspace).await?;
-    let request =
-        approvals::escalate(&ctx.paths, SpaceSelector::parse(&space), number, shown).await?;
+    let request = approvals::escalate(&ctx.paths, space.clone(), number, shown).await?;
     let decider = match &request.decider {
         Some(_) => "the space above",
         None => "the user",
@@ -326,7 +325,7 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
 /// longer needs.
 pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
     let space = numbered(ctx, number).await?.space_id;
-    let request = approvals::withdraw(&ctx.paths, SpaceSelector::parse(&space), number).await?;
+    let request = approvals::withdraw(&ctx.paths, SpaceSelector::id(&space), number).await?;
     ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }

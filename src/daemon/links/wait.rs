@@ -1,4 +1,5 @@
 //! Workspace-owned activity cursors; waiting does not change completion policy.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -67,9 +68,9 @@ const NO_LINKED_ITEMS: &str = "no linked items of the selected kind; register on
 /// supersedes the older one instead of competing for its updates.
 #[derive(Clone)]
 pub(crate) struct ActiveWaits {
-    running: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+    running: Arc<Mutex<HashMap<SpaceId, Arc<Notify>>>>,
     /// When the last wait of each space ended.
-    ended: Arc<Mutex<HashMap<String, Instant>>>,
+    ended: Arc<Mutex<HashMap<SpaceId, Instant>>>,
     /// When the daemon began tracking waits, for a space none ran in since.
     since: Instant,
 }
@@ -86,12 +87,12 @@ impl Default for ActiveWaits {
 
 pub(crate) struct ActiveWait<'a> {
     waits: &'a ActiveWaits,
-    workspace: String,
+    workspace: SpaceId,
     pub(crate) superseded: Arc<Notify>,
 }
 
 impl ActiveWaits {
-    pub(crate) fn start(&self, workspace: &str) -> ActiveWait<'_> {
+    pub(crate) fn start(&self, workspace: &SpaceId) -> ActiveWait<'_> {
         let superseded = Arc::new(Notify::new());
         let older = self
             .running
@@ -109,7 +110,7 @@ impl ActiveWaits {
     }
 
     /// Whether no wait has run for the space `key` for `delay`.
-    fn unwatched_for(&self, key: &str, delay: Duration) -> bool {
+    fn unwatched_for(&self, key: &SpaceId, delay: Duration) -> bool {
         let running = self.running.lock().expect("active waits lock");
         if running.contains_key(key) {
             return false;
@@ -127,12 +128,12 @@ impl ActiveWaits {
     /// either while it runs. Every caller locks them in that order.
     fn with_unwatched(
         [workspaces, chats]: [&Self; 2],
-        paths: &[Vec<String>],
-        operation: impl FnOnce(&[String]) -> Result<()>,
+        paths: &[Vec<SpaceId>],
+        operation: impl FnOnce(&[SpaceId]) -> Result<()>,
     ) -> Result<()> {
         let workspaces = workspaces.running.lock().expect("active waits lock");
         let chats = chats.running.lock().expect("active waits lock");
-        let waiting = |space: &String| workspaces.contains_key(space) || chats.contains_key(space);
+        let waiting = |space: &SpaceId| workspaces.contains_key(space) || chats.contains_key(space);
         let unwatched = paths
             .iter()
             .filter(|path| !path.iter().any(waiting))
@@ -153,7 +154,7 @@ impl ActiveWaits {
 }
 
 impl ActiveWait<'_> {
-    fn is_current_in(&self, waits: &HashMap<String, Arc<Notify>>) -> bool {
+    fn is_current_in(&self, waits: &HashMap<SpaceId, Arc<Notify>>) -> bool {
         waits
             .get(&self.workspace)
             .is_some_and(|current| Arc::ptr_eq(current, &self.superseded))
@@ -486,7 +487,7 @@ impl Manager {
     /// recorded for the workspace's agent, read without the PR gates, so a
     /// caller holding them, as cleanup does, sees every update their holders
     /// queued.
-    pub(crate) async fn agent_updates_recorded(&self, workspace_id: &str) -> Result<bool> {
+    pub(crate) async fn agent_updates_recorded(&self, workspace_id: &SpaceId) -> Result<bool> {
         let workspace = self.workspace_by_id(workspace_id).await?;
         if self
             .unread_agent_messages(&SpaceSelector::id(&workspace.id))
@@ -552,7 +553,7 @@ impl Manager {
     /// [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait. A turn
     /// that ran that long without a delivery leaves no wait behind it either,
     /// so the hook starting as it ends gets the delay too.
-    async fn hook_cannot_wake(&self, id: &str, execution: &str, idle: &AgentStatus) -> bool {
+    async fn hook_cannot_wake(&self, id: &SpaceId, execution: &str, idle: &AgentStatus) -> bool {
         self.turn_interrupted(execution).await
             || (idled_for(idle, UNWATCHED_WAKE_DELAY)
                 && self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
@@ -565,7 +566,7 @@ impl Manager {
     /// the newest of them receives what is pending.
     async fn wait_chat_items(
         &self,
-        id: &str,
+        id: &SpaceId,
         selection: &Selection,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<Updates> {
@@ -599,7 +600,7 @@ impl Manager {
     /// The chat's messages once it has any.
     async fn next_chat_messages(
         &self,
-        id: &str,
+        id: &SpaceId,
         queued: &mut tokio::sync::watch::Receiver<u64>,
     ) -> Result<Vec<AgentMessage>> {
         loop {
@@ -613,7 +614,7 @@ impl Manager {
 
     async fn next_agent_messages(
         &self,
-        id: &str,
+        id: &SpaceId,
         queued: &mut tokio::sync::watch::Receiver<u64>,
     ) -> Result<Vec<AgentMessage>> {
         loop {
@@ -625,7 +626,7 @@ impl Manager {
         }
     }
 
-    async fn poll_item_activity(&self, id: &str, selection: &Selection) -> Result<Vec<Update>> {
+    async fn poll_item_activity(&self, id: &SpaceId, selection: &Selection) -> Result<Vec<Update>> {
         // A selected item is the workspace's own.
         let children = match selection.input {
             Some(_) => Vec::new(),
@@ -685,7 +686,7 @@ impl Manager {
     /// the rest stay pending for the next.
     async fn deliver_observed(
         &self,
-        id: &str,
+        id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
         report: BranchReport,
@@ -702,7 +703,7 @@ impl Manager {
     /// to the forge, and the repository lists no sensitive files.
     async fn branch_observation(
         &self,
-        id: &str,
+        id: &SpaceId,
         branch: String,
         report: BranchReport,
     ) -> Option<(String, Snapshot)> {
@@ -903,7 +904,7 @@ impl Manager {
     /// holds one of their PR gates, when they wait for a later delivery.
     pub(crate) async fn queued_chat_updates(
         &self,
-        chat: &str,
+        chat: &SpaceId,
         reserved: usize,
     ) -> Result<Option<Vec<Update>>> {
         let children = self.delegated_spaces(chat).await?;
@@ -925,7 +926,7 @@ impl Manager {
     /// them without a running watch, and wake the watches that wait for them.
     async fn queue_background_updates(
         &self,
-        id: &str,
+        id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         observed_at: UnixTime,
     ) -> Result<()> {
@@ -944,7 +945,7 @@ impl Manager {
     /// Record what changed since the last poll; returns whether an item merged.
     async fn record_background_activity(
         &self,
-        id: &str,
+        id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
     ) -> Result<bool> {
         let id = id.to_owned();
@@ -1081,7 +1082,7 @@ impl Manager {
     #[cfg(test)]
     async fn record_pr_activity(
         &self,
-        id: &str,
+        id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
     ) -> Result<Vec<Update>> {
         self.record_activity(
@@ -1098,7 +1099,7 @@ impl Manager {
     #[cfg(test)]
     async fn record_activity(
         &self,
-        id: &str,
+        id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
     ) -> Result<Vec<Update>> {
@@ -1112,7 +1113,7 @@ impl Manager {
     /// which checked the branch for `report`.
     async fn record_observed(
         &self,
-        id: &str,
+        id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
         report: BranchReport,
@@ -1132,7 +1133,7 @@ impl Manager {
     }
 
     #[cfg(test)]
-    async fn pending_pr_activity(&self, id: &str) -> Result<Vec<Update>> {
+    async fn pending_pr_activity(&self, id: &SpaceId) -> Result<Vec<Update>> {
         let id_owned = id.to_owned();
         let urls = self
             .store
@@ -1146,7 +1147,7 @@ impl Manager {
         self.pending_activity(id, &urls).await
     }
 
-    async fn pending_activity(&self, id: &str, urls: &[String]) -> Result<Vec<Update>> {
+    async fn pending_activity(&self, id: &SpaceId, urls: &[String]) -> Result<Vec<Update>> {
         let urls = urls.to_vec();
         let id = id.to_owned();
         self.store
@@ -1206,7 +1207,7 @@ struct Poll {
 /// items the watch no longer follows are dropped.
 fn record_observations(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     observations: Vec<(String, Snapshot)>,
     poll: &Poll,
     agents: &crate::daemon::workspace::TrackedAgents,
@@ -1235,7 +1236,7 @@ fn record_observations(
 /// records every observation.
 fn recorded_urls(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     poll: &Poll,
     agents: &crate::daemon::workspace::TrackedAgents,
 ) -> Result<Option<Vec<String>>> {
@@ -1268,7 +1269,7 @@ fn recorded_urls(
 
 /// The branch of the workspace `id`; a chat or a workspace at a commit has
 /// none.
-fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String>> {
+fn workspace_branch(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
     Ok(db
         .query_row("SELECT branch FROM workspaces WHERE id=?1", [id], |row| {
             row.get::<_, Option<String>>(0)
@@ -1279,8 +1280,8 @@ fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String
 
 /// The IDs of space `id` and of `children`, whose activity its agent
 /// receives: the PR gates a delivery to that agent holds.
-fn receiving<'a>(id: &'a str, children: &'a [SpaceRef]) -> impl Iterator<Item = &'a str> {
-    children.iter().map(|child| child.id.as_str()).chain([id])
+fn receiving<'a>(id: &'a SpaceId, children: &'a [SpaceRef]) -> impl Iterator<Item = &'a SpaceId> {
+    children.iter().map(|child| &child.id).chain([id])
 }
 
 /// A change the workspace's agent made to `url` through Shoal, which its
@@ -1299,7 +1300,7 @@ pub(crate) struct OwnChange<'a> {
 /// first.
 pub(crate) fn record_own_change(
     db: &rusqlite::Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     change: OwnChange<'_>,
 ) -> Result<()> {
     let mut record = cursor_record(db, workspace_id, change.url)?.unwrap_or_default();
@@ -1314,7 +1315,7 @@ pub(crate) fn record_own_change(
 /// gates of these spaces from before the change.
 pub(super) fn record_received_change(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     change: OwnChange<'_>,
     agents: &crate::daemon::workspace::TrackedAgents,
 ) -> Result<()> {
@@ -1327,7 +1328,7 @@ pub(super) fn record_received_change(
 }
 
 /// Whether the space `id` follows the item at `url`.
-fn follows(db: &rusqlite::Connection, id: &str, url: &str) -> Result<bool> {
+fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
     Ok(followed_items(db, id, None)?
         .iter()
         .any(|(followed, _)| followed == url))
@@ -1337,7 +1338,7 @@ fn follows(db: &rusqlite::Connection, id: &str, url: &str) -> Result<bool> {
 /// newly observed activity.
 pub(super) fn queue_update(
     db: &rusqlite::Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     update: Update,
 ) -> Result<()> {
     let mut pending = pending_updates(db, workspace_id, &update.url)?;
@@ -1350,7 +1351,7 @@ pub(super) fn queue_update(
 /// updates queued after them stay pending.
 fn acknowledge_deliveries(
     db: &rusqlite::Connection,
-    ids: &[String],
+    ids: &[SpaceId],
     deliveries: &[String],
 ) -> Result<()> {
     for (id, url, mut pending) in all_pending(db, ids)? {
@@ -1365,8 +1366,12 @@ fn acknowledge_deliveries(
 
 /// The updates pending on the cursor of the space `id` for the items at
 /// `urls`.
-fn pending_on_cursor(db: &rusqlite::Connection, id: &str, urls: &[String]) -> Result<Vec<Update>> {
-    Ok(all_pending(db, &[id.to_owned()])?
+fn pending_on_cursor(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    urls: &[String],
+) -> Result<Vec<Update>> {
+    Ok(all_pending(db, std::slice::from_ref(id))?
         .into_iter()
         .filter(|(_, url, _)| urls.contains(url))
         .flat_map(|(_, _, pending)| pending)
@@ -1375,9 +1380,9 @@ fn pending_on_cursor(db: &rusqlite::Connection, id: &str, urls: &[String]) -> Re
 
 /// Pending updates for one response, each with the workspace whose cursor
 /// holds it.
-type Batch = Vec<(String, Update)>;
+type Batch = Vec<(SpaceId, Update)>;
 
-fn own_batch(id: &str, updates: Vec<Update>) -> Batch {
+fn own_batch(id: &SpaceId, updates: Vec<Update>) -> Batch {
     updates
         .into_iter()
         .map(|update| (id.to_owned(), update))
@@ -1440,13 +1445,13 @@ fn frame_cut(batch: &Batch, limit: usize) -> Cut {
 /// first `kept` to a new delivery, so acknowledging `delivery` keeps them.
 fn redeliver_after(
     db: &rusqlite::Connection,
-    workspace: &str,
+    workspace: &SpaceId,
     delivery: &str,
     kept: usize,
 ) -> Result<()> {
     let next = uuid::Uuid::new_v4().to_string();
     let mut seen = 0;
-    for (id, url, mut pending) in all_pending(db, &[workspace.to_owned()])? {
+    for (id, url, mut pending) in all_pending(db, std::slice::from_ref(workspace))? {
         let mut moved = false;
         for update in &mut pending {
             if update.delivery == delivery {
@@ -1519,7 +1524,7 @@ fn listed(files: &[String]) -> String {
 /// receives, links an item of `kind`; every workspace has items of no kind.
 fn links_kind(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     kind: Option<LinkKind>,
     agents: &crate::daemon::workspace::TrackedAgents,
 ) -> Result<bool> {
@@ -1537,13 +1542,13 @@ fn links_kind(
 /// The workspace's items of a kind, or of every kind, that one use of its
 /// links covers.
 type LinkedItems =
-    fn(&rusqlite::Connection, &str, Option<LinkKind>) -> Result<Vec<(String, LinkKind)>>;
+    fn(&rusqlite::Connection, &SpaceId, Option<LinkKind>) -> Result<Vec<(String, LinkKind)>>;
 
 /// The items a watch of `kind`, or of every kind, follows: the assigned
 /// issue and PRs, and the linked runs whose finish it has yet to deliver.
 pub(crate) fn followed_items(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     kind: Option<LinkKind>,
 ) -> Result<Vec<(String, LinkKind)>> {
     with_runs(db, id, kind, unfinished_runs)
@@ -1552,7 +1557,10 @@ pub(crate) fn followed_items(
 /// The items the background poll reads for integrations: the assigned issue
 /// and PRs, and the linked runs its own baseline has not seen finish, apart
 /// from what watches delivered.
-pub(crate) fn polled_items(db: &rusqlite::Connection, id: &str) -> Result<Vec<(String, LinkKind)>> {
+pub(crate) fn polled_items(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+) -> Result<Vec<(String, LinkKind)>> {
     with_runs(db, id, None, unpolled_runs)
 }
 
@@ -1560,7 +1568,7 @@ pub(crate) fn polled_items(db: &rusqlite::Connection, id: &str) -> Result<Vec<(S
 /// issue and PRs, and every linked run.
 fn shown_items(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     kind: Option<LinkKind>,
 ) -> Result<Vec<(String, LinkKind)>> {
     with_runs(db, id, kind, linked_runs)
@@ -1570,9 +1578,9 @@ fn shown_items(
 /// `runs` lists when the kind takes runs.
 fn with_runs(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     kind: Option<LinkKind>,
-    runs: fn(&rusqlite::Connection, &str) -> Result<Vec<String>>,
+    runs: fn(&rusqlite::Connection, &SpaceId) -> Result<Vec<String>>,
 ) -> Result<Vec<(String, LinkKind)>> {
     let assigned = match kind {
         None => linked_items(db, id, None)?,
@@ -1592,7 +1600,7 @@ fn with_runs(
 }
 
 /// Every run the workspace links, oldest first, once.
-fn linked_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
     let urls = db
         .prepare(
             "SELECT url FROM space_items WHERE space_id=?1 AND kind=?2
@@ -1611,7 +1619,7 @@ fn linked_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
 
 /// The workspace's linked runs, except those whose finish the workspace's
 /// cursor holds as delivered, which ends their watch.
-fn unfinished_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
     let mut runs = linked_runs(db, id)?;
     let mut delivered = Vec::new();
     for url in &runs {
@@ -1628,7 +1636,7 @@ fn unfinished_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
 /// The workspace's linked runs the background poll has yet to see finish,
 /// or to queue the finish of on the workspace's cursor; the two are
 /// recorded apart, so a run is polled until both have it.
-fn unpolled_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
     let mut runs = linked_runs(db, id)?;
     let mut finished = Vec::new();
     for url in &runs {
@@ -1647,7 +1655,7 @@ fn unpolled_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
 /// The workspace's assigned issue and PRs, of `kind` or every kind.
 pub(crate) fn linked_items(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     kind: Option<ItemKind>,
 ) -> Result<Vec<(String, ItemKind)>> {
     let mut items = Vec::new();
@@ -1684,12 +1692,12 @@ pub(crate) fn linked_items(
 
 /// Whether the workspace watches a PR that no poll has seen merged or
 /// closed, so its activity is still to come.
-pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &str) -> Result<bool> {
+pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
     Ok(!open_prs(db, id)?.is_empty())
 }
 
 /// The PRs the workspace watches that no poll has seen merged or closed.
-pub(crate) fn open_prs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
     let mut open = Vec::new();
     for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
         if observed_item(db, id, &url)?.is_none_or(|snapshot| !snapshot.concluded()) {
@@ -1700,7 +1708,7 @@ pub(crate) fn open_prs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String
 }
 
 /// The item as the workspace's last poll saw it, if one has.
-fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Option<Snapshot>> {
+fn observed_item(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<Snapshot>> {
     let record: Option<String> = db
         .query_row(
             "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
@@ -1715,7 +1723,7 @@ fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Optio
 
 /// Whether the workspace's watch saw the item's activity end, as
 /// [`Snapshot::activity_ended`] decides.
-fn activity_ended(db: &rusqlite::Connection, id: &str, url: &str, done: bool) -> Result<bool> {
+fn activity_ended(db: &rusqlite::Connection, id: &SpaceId, url: &str, done: bool) -> Result<bool> {
     let record = cursor_record(db, id, url)?;
     Ok(record.is_some_and(|record| record.snapshot.activity_ended(done)))
 }

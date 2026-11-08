@@ -19,12 +19,11 @@ use crate::{
 /// its own workspace asks its coordinator or the user first.
 pub(super) async fn acquire(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
     reason: Option<String>,
 ) -> Result<i32> {
-    let outcome =
-        leases::acquire_hold(&ctx.paths, SpaceSelector::parse(&workspace), name, reason).await?;
+    let outcome = leases::acquire_hold(&ctx.paths, workspace.clone(), name, reason).await?;
     outcome.finish(
         ctx,
         |hold| {
@@ -41,12 +40,16 @@ pub(super) async fn acquire(
     )
 }
 
-pub(super) async fn release(ctx: &Context, workspace: String, name: Option<String>) -> Result<i32> {
+pub(super) async fn release(
+    ctx: &Context,
+    workspace: SpaceSelector,
+    name: Option<String>,
+) -> Result<i32> {
     let name = match name {
         Some(name) => name,
         None => pick(ctx, &workspace).await?,
     };
-    leases::release_hold(&ctx.paths, SpaceSelector::parse(&workspace), name).await?;
+    leases::release_hold(&ctx.paths, workspace.clone(), name).await?;
     ctx.emit_styled(Style::Success, "Hold released", Released { released: true })?;
     Ok(0)
 }
@@ -65,13 +68,13 @@ pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
         })?;
         return Ok(0);
     };
-    let holds = leases::holds(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let holds = leases::holds(&ctx.paths, workspace.clone()).await?;
     ctx.show(&holds, |holds| render(holds))?;
     Ok(0)
 }
 
-async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
-    let holds = leases::holds(&ctx.paths, SpaceSelector::parse(workspace)).await?;
+async fn pick(ctx: &Context, workspace: &SpaceSelector) -> Result<String> {
+    let holds = leases::holds(&ctx.paths, workspace.clone()).await?;
     ensure!(!holds.is_empty(), "no holds on this workspace");
     let entries = holds
         .into_iter()

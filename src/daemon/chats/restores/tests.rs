@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use std::sync::{Arc, Mutex};
 
 use super::restore_automatic;
@@ -14,7 +15,7 @@ use crate::{
 };
 
 /// The chats the daemon ran `shoal resume` for, by ID.
-pub(in crate::daemon::chats) static RESUMED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+pub(in crate::daemon::chats) static RESUMED: Mutex<Vec<SpaceId>> = Mutex::new(Vec::new());
 /// The chats, by name, whose `shoal resume` fails.
 pub(in crate::daemon::chats) static UNRESUMABLE: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// The chats, by name, whose `shoal resume` runs until they leave the list.

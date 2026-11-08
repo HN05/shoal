@@ -32,7 +32,7 @@ pub(super) async fn handle(
             attachments,
             sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
             let asked = manager.ask_question(&space, ask, attachments, &attacher);
             Body::Question(asked.await?)
         }

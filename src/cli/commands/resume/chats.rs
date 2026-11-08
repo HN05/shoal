@@ -2,6 +2,7 @@
 //! name, continuing its session, in a background place where a restored
 //! agent opens, or in this terminal with `--focus`; `--discard` removes it
 //! instead.
+use crate::client::space_names::SpaceSelector;
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
@@ -122,7 +123,7 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
     // The restored agent keeps its mode's rules; its subject was sent once.
     let topic = match (&chat.workspace, &repo) {
         (Some(workspace), _) => chat::Topic::workspace(
-            chat::hosting_workspace(ctx, &workspace.id).await?,
+            chat::hosting_workspace(ctx, &SpaceSelector::id(&workspace.id)).await?,
             &chat.mode,
         ),
         (None, ChatRepository::Registered(repo)) => chat::Topic::repository(repo, &chat.mode),

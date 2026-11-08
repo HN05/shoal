@@ -1,6 +1,7 @@
 //! Issues and PRs a scoped caller proposed instead of opening them. The user
 //! approves a proposal, with any edits, and the daemon opens it; a decided
 //! proposal is no longer stored.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
@@ -246,7 +247,7 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
 
 /// The name and repository of the space `id`, a workspace or a chat, which
 /// may have none.
-fn space_record(db: &Connection, id: &str) -> Result<(String, Option<String>)> {
+fn space_record(db: &Connection, id: &SpaceId) -> Result<(String, Option<String>)> {
     Ok(db.query_row(
         "SELECT name,repository_id FROM workspaces WHERE id=?1
             UNION ALL SELECT name,repository_id FROM chats WHERE id=?1",
@@ -290,7 +291,7 @@ pub fn remove(tx: &Transaction<'_>, key: &str) -> Result<()> {
 
 /// Whether a push request of the workspace waits for the user, which keeps
 /// the workspace from unattended removal.
-pub fn push_pending(db: &Connection, workspace: &str) -> Result<bool> {
+pub fn push_pending(db: &Connection, workspace: &SpaceId) -> Result<bool> {
     Ok(super::list(db, Some(workspace))?
         .iter()
         .any(|r| r.target == Target::Push && r.active && r.status == DecisionStatus::Pending))
@@ -298,7 +299,7 @@ pub fn push_pending(db: &Connection, workspace: &str) -> Result<bool> {
 
 /// Whether the workspace's PR proposal waits for the user, which keeps the
 /// workspace from unattended removal.
-pub fn pull_pending(db: &Connection, workspace: &str) -> Result<bool> {
+pub fn pull_pending(db: &Connection, workspace: &SpaceId) -> Result<bool> {
     Ok(current(db, workspace, &Target::PrOpen, PR)?
         .is_some_and(|request| request.status == DecisionStatus::Pending))
 }

@@ -1,4 +1,5 @@
 //! Messages for the agents working in a workspace, from the user or the daemon.
+use crate::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -32,7 +33,7 @@ pub async fn send(
     space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
-    sender_chat: Option<String>,
+    sender_chat: Option<SpaceId>,
 ) -> Result<()> {
     let method = AgentMethod::SendAgentMessage {
         space,
@@ -51,7 +52,7 @@ pub async fn send_to_all(
     repository: Option<Selector>,
     message: String,
     attachments: Vec<NewFile>,
-    sender_chat: Option<String>,
+    sender_chat: Option<SpaceId>,
 ) -> Result<Reached> {
     let method = AgentMethod::SendAllAgentMessage {
         repository,
@@ -89,9 +90,13 @@ pub async fn updates(daemon: &impl Daemon, space: SpaceSelector) -> Result<Updat
 /// The next messages or item updates of `space`, waiting for them across
 /// daemon restarts; `restarted` says the daemon restarted before the wait
 /// began.
-pub async fn await_updates(daemon: &impl Daemon, space: &str, restarted: bool) -> Result<Updates> {
+pub async fn await_updates(
+    daemon: &impl Daemon,
+    space: &SpaceSelector,
+    restarted: bool,
+) -> Result<Updates> {
     let method = || AgentMethod::WaitAgentUpdates {
-        space: SpaceSelector::parse(space),
+        space: space.clone(),
     };
     Updates::try_from(await_reply(daemon, method, restarted).await?)
 }

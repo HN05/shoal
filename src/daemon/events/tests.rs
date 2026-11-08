@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -270,7 +271,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         }
         assert!(manager.workspace_by_id(&workspace.id).await.is_err());
         let events = manager.workspace_events(None, 100).await.unwrap();
-        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id() == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
+        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id() == Some(&workspace.id) && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
     }
     let workspace = manager
         .create_workspace(&repo.id, "retain".into(), None, None, None)
@@ -300,7 +301,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .iter()
         .filter_map(|e| match e {
             EventItem::Event(e)
-                if e.details.space_id() == workspace.id
+                if e.details.space_id() == Some(&workspace.id)
                     && e.details.kind == EventKind::Retained =>
             {
                 Some(e.details.error.as_deref().unwrap())
@@ -392,7 +393,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
                      VALUES ('w','r','worker','/work','worker','ready');",
             )?;
             for (kind, agent) in &recorded {
-                record_agent(db, "w", *kind, agent)?;
+                record_agent(db, &SpaceId::from("w"), *kind, agent)?;
             }
             Ok(())
         })

@@ -315,12 +315,10 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
     let own = if crate::env::workspace_scoped() {
         Some(ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?)
     } else {
-        crate::env::chat()
+        crate::env::chat().map(SpaceSelector::Id)
     };
     if let Some(space) = own
-        && let Some(space) =
-            crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&space))
-                .await?
+        && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
         && space.repository_id() == Some(repo.id.as_str())
     {
         return Ok(match space {

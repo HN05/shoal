@@ -1,5 +1,6 @@
 //! The place this process runs in: recording it as a workspace's, and
 //! closing it with the workspace.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use super::closing;
@@ -15,7 +16,7 @@ use crate::{
 /// or whose host labels it as the workspace's session.
 pub(in crate::cli) async fn closes_with(
     paths: &crate::paths::Paths,
-    workspace: &str,
+    workspace: &SpaceId,
 ) -> Result<bool> {
     if closing::closes_with(paths, workspace).await {
         return Ok(true);
@@ -32,7 +33,7 @@ pub(in crate::cli) async fn closes_with(
 /// Record `place`, one Shoal created for `workspace`, so the daemon closes
 /// it once the workspace is removed. Without the record the place stays
 /// open, so a failure only warns.
-pub(super) async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
+pub(super) async fn record_owned(ctx: &Context, workspace: &SpaceId, place: Origin) {
     if let Err(error) =
         crate::client::workspaces::record_owned_place(&ctx.paths, workspace, place).await
     {
@@ -42,7 +43,7 @@ pub(super) async fn record_owned(ctx: &Context, workspace: &str, place: Origin) 
 
 /// Record the place this process runs in, one the host named `host`
 /// created for `workspace`, as [`record_owned`] does.
-pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: HostName, workspace: &str) {
+pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: HostName, workspace: &SpaceId) {
     if let Some(place) = created_here(named(host)).await {
         record_owned(ctx, workspace, place).await;
     }
@@ -67,7 +68,11 @@ pub(super) async fn created_here(host: &dyn Host) -> Option<Origin> {
 /// Close the place of the host named `host` that this process runs in once
 /// `workspace` is done. Without a watcher the place stays open, so a
 /// failure only warns.
-pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: HostName, workspace: &str) {
+pub(in crate::cli) async fn close_here_when_done(
+    ctx: &Context,
+    host: HostName,
+    workspace: &SpaceId,
+) {
     if let Err(error) = watch_here(ctx, host, workspace, false).await {
         eprintln!("warning: {error:#}");
     }
@@ -81,7 +86,7 @@ pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: HostName, 
 pub(in crate::cli) async fn close_background_place_when_done(
     ctx: &Context,
     host: HostName,
-    workspace: &str,
+    workspace: &SpaceId,
 ) {
     if let Err(error) = watch_here(ctx, host, workspace, true).await {
         eprintln!("warning: {error:#}");
@@ -90,7 +95,7 @@ pub(in crate::cli) async fn close_background_place_when_done(
 
 /// Watch the place of the host named `host` that this process runs in,
 /// labelling it with `workspace` first when `label`.
-async fn watch_here(ctx: &Context, host: HostName, workspace: &str, label: bool) -> Result<()> {
+async fn watch_here(ctx: &Context, host: HostName, workspace: &SpaceId, label: bool) -> Result<()> {
     let host = named(host);
     let place = place_here(host)
         .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;

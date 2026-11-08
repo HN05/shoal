@@ -1,6 +1,7 @@
 //! A chat's `shoal done`: it records the chat's work as finished, while its
 //! agent and session keep running until completion cleanup, when requested,
 //! removes the chat as it removes a workspace.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
@@ -26,7 +27,7 @@ impl Manager {
     /// `attacher`; its open questions close, as a finished workspace's do.
     pub async fn mark_chat_done(
         &self,
-        selector: &str,
+        selector: &SpaceId,
         done: Done,
         attacher: &Attacher,
     ) -> Result<Completion> {
@@ -97,7 +98,7 @@ impl Manager {
         // An ancestor's completion that takes the chat changes under the
         // ancestor's gate, so that one is held too.
         let gated = self.completed_ancestor(&listed.id).await?;
-        let gates = std::iter::once(listed.id.as_str()).chain(gated.as_ref().map(|a| a.id()));
+        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| a.id()));
         let _guard = self.gates.lock_prs(gates).await;
         let Some(chat) = self.chat_by_id(&listed.id).await? else {
             return Ok(());
@@ -145,7 +146,7 @@ impl Manager {
     }
 
     /// Withdraw the completion the chat `id` recorded.
-    pub async fn undo_chat_done(&self, id: &str) -> Result<Completion> {
+    pub async fn undo_chat_done(&self, id: &SpaceId) -> Result<Completion> {
         // A stopped chat withdraws it too, so completion cleanup leaves it.
         let chat = (self.chat_by_id(id).await?).with_context(|| format!("no chat {id}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
@@ -153,7 +154,7 @@ impl Manager {
         self.store.write(move |tx| take_completion(tx, &id)).await
     }
 
-    async fn done_chat(&self, id: &str) -> Result<Chat> {
+    async fn done_chat(&self, id: &SpaceId) -> Result<Chat> {
         (self.running_chat_by_id(id).await?).with_context(|| format!("no running chat {id}"))
     }
 
@@ -176,7 +177,7 @@ impl Manager {
 /// it `progressed`, fails.
 fn record_completion(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     completion: &Completion,
     progressed: bool,
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
@@ -204,7 +205,7 @@ fn record_completion(
 }
 
 /// Delete and return the completion the chat `id` recorded.
-fn take_completion(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Completion> {
+fn take_completion(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Completion> {
     let record: String = tx
         .query_row(
             "SELECT completion FROM chats WHERE id=?1 AND completion IS NOT NULL",

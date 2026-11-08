@@ -1,4 +1,5 @@
 //! What a terminal host does, and the work generic code hands it.
+use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;
@@ -183,7 +184,7 @@ pub(crate) enum PlaceState {
 /// from a later place under the same ID when the watch began.
 pub(crate) struct Watched {
     pub id: String,
-    pub workspace: String,
+    pub workspace: SpaceId,
     pub instance: Option<String>,
 }
 
@@ -334,7 +335,7 @@ pub(crate) struct Demo<'a> {
     pub launch: &'a str,
     pub state: &'a Path,
     pub origin: Option<&'a Origin>,
-    pub workspace: &'a str,
+    pub workspace: &'a SpaceId,
     pub cwd: &'a Path,
     pub label: &'a str,
     pub env: &'a [(&'a str, String)],

@@ -1,5 +1,6 @@
 //! A space's status: the workspace's worktree status or the chat, with the
 //! state of the items it links and what awaits the user.
+use crate::client::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -99,7 +100,7 @@ impl Manager {
     }
 
     /// What the chat `id` records about its links, with its `completion`.
-    async fn chat_records(&self, id: &str, completion: Option<Completion>) -> Result<Records> {
+    async fn chat_records(&self, id: &SpaceId, completion: Option<Completion>) -> Result<Records> {
         Ok(Records {
             issue: self.issue_registration(id).await?,
             pr_cleanup: self.pr_registration(id).await?,

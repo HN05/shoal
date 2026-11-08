@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use std::os::unix::ffi::OsStringExt;
 
 use clap::Parser;
@@ -77,7 +78,7 @@ fn place_watch_round_trips_its_place_and_baseline() {
         } = parse(
             Worker::PlaceWatch {
                 host: HostName::Zmx,
-                workspace: "workspace-id",
+                workspace: &SpaceId::from("workspace-id"),
                 place: "fix-login",
                 instance,
                 kept_at,
@@ -139,7 +140,7 @@ fn demo_round_trips_its_launch_and_literal_command() {
         command: parsed_command,
     } = parse(
         Worker::Demo {
-            workspace: "workspace-id",
+            workspace: &SpaceId::from("workspace-id"),
             launch,
             command: &command,
         },
@@ -247,7 +248,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
                 command: parsed_command,
             } = parse(
                 Worker::Detached {
-                    workspace: "workspace-id",
+                    workspace: &SpaceId::from("workspace-id"),
                     log,
                     agent,
                     command: &command,
@@ -330,7 +331,7 @@ fn session_round_trips_records_and_literal_arguments() {
             close_in: parsed_close_in,
         } = parse(
             Worker::Session {
-                workspace: "workspace-id",
+                workspace: &SpaceId::from("workspace-id"),
                 agent: &crate::execution::TrackedAgent {
                     narrowing: Default::default(),
                     mode: "chat".into(),
@@ -416,7 +417,7 @@ fn take_over_round_trips_the_agent_and_its_connection() {
             log: parsed_log,
         } = parse(
             Worker::TakeOver {
-                workspace: "workspace-id",
+                workspace: &SpaceId::from("workspace-id"),
                 agent: &agent,
                 connection: 7,
                 record,

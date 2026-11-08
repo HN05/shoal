@@ -1626,7 +1626,7 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
         agent: "claude".into(),
         chat: chat.id.clone(),
     };
-    assert_eq!(manager.attacher(None, Some(&chat.name)).await, as_chat);
+    assert_eq!(manager.attacher(None, Some(&chat.id)).await, as_chat);
     // Workspace scope comes first, as for a command a chat's agent runs
     // in a workspace.
     let terminal = Caller {

@@ -1,6 +1,7 @@
 //! What a command needs of the workspace it acts on, so completion and
 //! pickers can say why a workspace would be refused instead of offering it
 //! as if it would work.
+use crate::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use crate::space_names::SpaceSelector;
@@ -59,10 +60,10 @@ pub enum Fit {
 pub struct Availability {
     pub need: Need,
     /// Workspace IDs with agent sessions, loaded only for [`Need::Session`].
-    pub sessions: HashSet<String>,
+    pub sessions: HashSet<SpaceId>,
     /// Workspace IDs with an execution that blocks setup, loaded only for
     /// [`Need::Setup`].
-    pub busy: HashSet<String>,
+    pub busy: HashSet<SpaceId>,
 }
 
 impl Availability {
@@ -73,7 +74,7 @@ impl Availability {
         need: Need,
         daemon: &impl Daemon,
         workspaces: &[Workspace],
-        sessions: impl AsyncFnOnce() -> HashSet<String>,
+        sessions: impl AsyncFnOnce() -> HashSet<SpaceId>,
     ) -> Self {
         let sessions = if need == Need::Session {
             sessions().await
@@ -156,7 +157,7 @@ impl Availability {
 /// Workspaces whose running executions would block setup. Setup exempts
 /// the caller's own execution, so the caller's workspace counts only with
 /// another execution, as its inspection lists them.
-async fn busy_workspaces(daemon: &impl Daemon, workspaces: &[Workspace]) -> HashSet<String> {
+async fn busy_workspaces(daemon: &impl Daemon, workspaces: &[Workspace]) -> HashSet<SpaceId> {
     let own = std::env::var(crate::env::EXECUTION_ID).ok();
     let mut busy = HashSet::new();
     for workspace in workspaces.iter().filter(|w| w.running) {

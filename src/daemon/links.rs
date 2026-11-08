@@ -24,6 +24,7 @@ pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
@@ -172,7 +173,7 @@ impl Manager {
     /// Record opened or related items in one transaction.
     pub(crate) async fn record_items(
         &self,
-        id: &str,
+        id: &SpaceId,
         items: Vec<(Relation, LinkedItem)>,
     ) -> Result<()> {
         let id = id.to_owned();
@@ -191,7 +192,7 @@ impl Manager {
     /// many were removed.
     async fn remove_items(
         &self,
-        id: &str,
+        id: &SpaceId,
         relation: Relation,
         kind: Option<LinkKind>,
         url: Option<String>,
@@ -279,7 +280,7 @@ fn nothing(kind: Option<LinkKind>) -> String {
 /// the first record and fills in a newly known title.
 pub(crate) fn record(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     relation: Relation,
     kind: impl Into<LinkKind>,
     url: &str,
@@ -310,7 +311,7 @@ pub(crate) fn record(
 /// Remove recorded items, returning how many were removed.
 fn remove(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     relation: Relation,
     kind: Option<LinkKind>,
     url: Option<&str>,
@@ -334,7 +335,11 @@ fn remove(
 
 /// Drop the replay cursors of the runs among `removed` that no relation
 /// links any more, so linking one again watches it afresh.
-fn forget_unlinked_runs(db: &Connection, id: &str, removed: &[(LinkKind, String)]) -> Result<()> {
+fn forget_unlinked_runs(
+    db: &Connection,
+    id: &SpaceId,
+    removed: &[(LinkKind, String)],
+) -> Result<()> {
     let mut unlinked = Vec::new();
     for (kind, url) in removed {
         let linked: bool = db.query_row(
@@ -353,7 +358,7 @@ fn forget_unlinked_runs(db: &Connection, id: &str, removed: &[(LinkKind, String)
 /// marks, and journal each as unlinked.
 pub(crate) fn forget_assigned(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     kind: ItemKind,
     urls: &[String],
 ) -> Result<()> {
@@ -366,7 +371,7 @@ pub(crate) fn forget_assigned(
 }
 
 /// Drop the replay cursors of items that are no longer linked.
-fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
+fn forget_activity(db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()> {
     let urls = serde_json::to_string(urls)?;
     for table in ["pr_activity", "pending_updates", "space_item_activity"] {
         db.execute(
@@ -383,7 +388,7 @@ fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
 /// Refuse changes while the workspace is removed or otherwise in transition,
 /// so a removal record taken during removal holds its final links; a chat
 /// takes them whenever it runs.
-pub(crate) fn ensure_accepts_links(db: &Connection, id: &str) -> Result<()> {
+pub(crate) fn ensure_accepts_links(db: &Connection, id: &SpaceId) -> Result<()> {
     if space::is_chat(db, id)? {
         return Ok(());
     }
@@ -397,7 +402,7 @@ pub(crate) fn ensure_accepts_links(db: &Connection, id: &str) -> Result<()> {
 
 /// Whether the workspace still exists and its state takes link changes now,
 /// or the chat still runs.
-pub(crate) fn accepts_links(db: &Connection, id: &str) -> Result<bool> {
+pub(crate) fn accepts_links(db: &Connection, id: &SpaceId) -> Result<bool> {
     if space::is_chat(db, id)? {
         return Ok(true);
     }
@@ -409,7 +414,7 @@ pub(crate) fn accepts_links(db: &Connection, id: &str) -> Result<bool> {
     Ok(state.is_some_and(WorkspaceState::accepts_links))
 }
 
-fn state(db: &Connection, id: &str) -> Result<WorkspaceState> {
+fn state(db: &Connection, id: &SpaceId) -> Result<WorkspaceState> {
     Ok(
         db.query_row("SELECT state FROM workspaces WHERE id=?1", [id], |row| {
             row.get(0)

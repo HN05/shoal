@@ -1,6 +1,7 @@
 //! Ready-for-review marks: an agent's statement that linked work is ready at a
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
+use crate::client::space_ids::SpaceId;
 use std::{collections::BTreeMap, ffi::OsString, path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -37,7 +38,7 @@ pub(super) fn check_deadline() -> tokio::time::Instant {
     tokio::time::Instant::now() + CHECK_LIMIT
 }
 
-pub(crate) fn list(db: &Connection, id: &str) -> Result<Vec<ReviewMark>> {
+pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
     Ok(db
         .prepare(
             "SELECT url,kind,head,created_at FROM space_review
@@ -58,7 +59,7 @@ pub(crate) fn list(db: &Connection, id: &str) -> Result<Vec<ReviewMark>> {
 }
 
 /// Unlinking an item withdraws its mark in the same transaction.
-pub(crate) fn forget(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
+pub(crate) fn forget(db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()> {
     db.execute(
         "DELETE FROM space_review WHERE space_id=?1
          AND url IN (SELECT value FROM json_each(?2))",
@@ -217,7 +218,7 @@ impl Manager {
     /// a PR at its own head among the `pulls`, which leave out those they skip.
     async fn record_marks(
         &self,
-        id: &str,
+        id: &SpaceId,
         kind: Option<ItemKind>,
         explicit: Option<(String, ItemKind)>,
         head: String,
@@ -301,7 +302,7 @@ impl Manager {
     /// explicit item must be marked.
     async fn selected_marks(
         &self,
-        id: &str,
+        id: &SpaceId,
         kind: Option<ItemKind>,
         explicit: Option<(String, ItemKind)>,
     ) -> Result<Vec<ReviewMark>> {
@@ -328,7 +329,7 @@ impl Manager {
             .await
     }
 
-    async fn delete_marks(&self, id: &str, marks: &[ReviewMark]) -> Result<()> {
+    async fn delete_marks(&self, id: &SpaceId, marks: &[ReviewMark]) -> Result<()> {
         let id = id.to_owned();
         let urls: Vec<String> = marks
             .iter()

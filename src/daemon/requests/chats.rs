@@ -1,4 +1,5 @@
 //! The daemon's answers to [`ChatMethod`] requests, and who may send them.
+use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -61,7 +62,7 @@ pub(super) async fn handle(
         ChatMethod::CheckChatRestore { .. } => Body::Ok,
         ChatMethod::SaveChat { chat, pid, error } => {
             let id = manager.chat(&chat).await?.id;
-            let stopped_by = caller.map(|caller| caller.space_id.as_str());
+            let stopped_by = caller.map(|caller| &caller.space_id);
             manager
                 .return_to_saved(&id, pid, &error, stopped_by)
                 .await?;
@@ -92,7 +93,7 @@ pub(super) async fn handle(
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
             }
             let parent = manager.space_id(parent.as_ref()).await?;
-            (manager.ensure_parent_takes(repository.as_ref(), parent.as_deref())).await?;
+            (manager.ensure_parent_takes(repository.as_ref(), parent.as_ref())).await?;
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
@@ -123,11 +124,13 @@ pub(super) async fn handle(
 }
 
 /// The ID of the chat a restart names, or of one that ended meanwhile,
-/// which a joined restart answers for as it did.
-async fn restarted_chat(manager: &Manager, chat: SpaceSelector) -> Result<String> {
+/// which a joined restart answers for as it did; a joined restart names
+/// its chat by ID.
+async fn restarted_chat(manager: &Manager, chat: SpaceSelector) -> Result<SpaceId> {
     match (manager.chat(&chat).await, chat) {
         (Ok(chat), _) => Ok(chat.id),
-        (Err(_), SpaceSelector::IdOrName(id) | SpaceSelector::Id(id)) => Ok(id),
+        (Err(_), SpaceSelector::Id(id)) => Ok(id),
+        (Err(_), SpaceSelector::IdOrName(id)) => Ok(SpaceId::from(id)),
         (Err(error), SpaceSelector::Number(_)) => Err(error),
     }
 }

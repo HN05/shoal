@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use std::os::unix::fs::PermissionsExt;
 
 use crate::client::space_names::SpaceSelector;
@@ -160,7 +161,9 @@ async fn the_sweep_deletes_temporary_directories_without_a_record() {
         .unwrap();
     let layout = crate::tmp_dirs::Layout::of(&repo).unwrap();
     let kept = layout.prepare(&workspace.id).unwrap();
-    let orphan = layout.prepare("removed-workspace-id").unwrap();
+    let orphan = layout
+        .prepare(&SpaceId::from("removed-workspace-id"))
+        .unwrap();
     std::fs::write(orphan.join("scratch"), "garbage").unwrap();
 
     manager.sweep_tmp_dirs().await.unwrap();

@@ -4,6 +4,7 @@
 //! connection, and the installed release registers again and starts the
 //! agent. The daemon sends nothing between its resume and the restored
 //! child's start, so the handover loses no control.
+use crate::client::space_ids::SpaceId;
 use std::{
     os::{
         fd::{FromRawFd as _, RawFd},
@@ -77,7 +78,7 @@ pub(super) fn ensure_restorable(recovery: &super::recovery::Recovery) -> Result<
 /// The agent a wrapper hands over, which the binary it continues from
 /// restores.
 pub(super) struct Handover<'a> {
-    pub workspace: &'a str,
+    pub workspace: &'a SpaceId,
     pub agent: &'a super::TrackedAgent,
     /// The recovery record the agent resumes from.
     pub record: Option<&'a Path>,

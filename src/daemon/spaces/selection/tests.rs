@@ -36,7 +36,7 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
         manager.chat(&number(chat.number)).await.unwrap().id,
         chat.id
     );
-    assert_eq!(manager.space(&"talk".into()).await.unwrap().id(), chat.id);
+    assert_eq!(manager.space(&"talk".into()).await.unwrap().id(), &chat.id);
 
     let refused = manager.workspace(&number(chat.number)).await.unwrap_err();
     assert!(refused.to_string().contains("is a chat"), "{refused}");

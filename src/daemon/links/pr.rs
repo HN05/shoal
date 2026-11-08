@@ -1,4 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
@@ -34,7 +35,7 @@ pub(crate) enum WatchCheck {
 const STACK_ERROR: &str = "could not move the workspaces stacked on it";
 
 impl Manager {
-    pub async fn pr_registration(&self, id: &str) -> Result<Option<Registration>> {
+    pub async fn pr_registration(&self, id: &SpaceId) -> Result<Option<Registration>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -96,7 +97,11 @@ impl Manager {
 
     /// Applies `change` to the PR registration of the chat `id`, unless the
     /// chat was removed meanwhile, which deleted its registration.
-    async fn record_chat_registration(&self, id: String, change: RegistrationChange) -> Result<()> {
+    async fn record_chat_registration(
+        &self,
+        id: SpaceId,
+        change: RegistrationChange,
+    ) -> Result<()> {
         self.store
             .write(move |tx| record_chat_change(tx, &id, change))
             .await
@@ -173,7 +178,7 @@ impl Manager {
     }
 
     /// The PR watches of the space `id` with `url` among them.
-    async fn adding_pr_watch(&self, id: &str, url: String) -> Result<RegistrationKind> {
+    async fn adding_pr_watch(&self, id: &SpaceId, url: String) -> Result<RegistrationKind> {
         let (mut urls, mut merged_head) = match self.pr_registration(id).await? {
             Some(Registration {
                 kind: RegistrationKind::Watch { urls, merged_head },
@@ -193,7 +198,7 @@ impl Manager {
     async fn without_pr_watch(
         &self,
         checkout: &std::path::Path,
-        id: &str,
+        id: &SpaceId,
         input: &str,
     ) -> Result<Option<RegistrationKind>> {
         let (_, _, url) = self.pr_forge(checkout, input).await?;
@@ -291,7 +296,7 @@ impl Manager {
     /// workspaces stacked on it, while it is ready. One that had a workspace
     /// stacked on it since the listing waits for the next sweep.
     async fn lock_for_pr_sweep(&self, listed: &Workspace) -> Result<Option<(Workspace, PrGuard)>> {
-        let locked = |id: &str| listed.stacked_workspaces.iter().any(|held| held.id == id);
+        let locked = |id: &SpaceId| listed.stacked_workspaces.iter().any(|held| held.id == *id);
         let stacked = listed.stacked_workspaces.iter().map(|stacked| &stacked.id);
         let guard = self.gates.lock_prs(stacked.chain([&listed.id])).await;
         let Some(workspace) = self.find_workspace(&listed.id).await? else {
@@ -380,7 +385,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn save_registration(&self, id: &str, registration: &Registration) -> Result<()> {
+    async fn save_registration(&self, id: &SpaceId, registration: &Registration) -> Result<()> {
         let (id, record) = (id.to_owned(), serde_json::to_string(registration)?);
         self.store
             .run(move |db| {
@@ -496,7 +501,7 @@ impl RegistrationChange {
     /// Store the registration within the caller's transaction. A dropped watch
     /// takes its replay cursors and review mark with it, and every watch added
     /// or dropped is journaled as an assigned PR link change.
-    fn apply(&self, db: &Connection, id: &str) -> Result<()> {
+    fn apply(&self, db: &Connection, id: &SpaceId) -> Result<()> {
         super::forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
         store_registration(db, id, self.registration.as_ref())?;
         for url in &self.added {
@@ -525,7 +530,7 @@ fn watched_urls(registration: Option<&Registration>) -> &[String] {
 
 fn store_registration(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     registration: Option<&Registration>,
 ) -> Result<()> {
     match registration {
@@ -608,7 +613,7 @@ pub(crate) fn origin<'a>(
 /// to change, and writing one would outlive it.
 fn record_chat_change(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     change: RegistrationChange,
 ) -> Result<()> {
     ensure!(

@@ -1,6 +1,7 @@
 //! Removal records: every removal of an existing worktree takes a checkpoint
 //! and records what `shoal work restore` needs to reopen the workspace, until the
 //! record expires.
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use std::path::Path;
 
@@ -273,7 +274,7 @@ impl Manager {
         repo: &Repository,
         removed: RemovedWorkspace,
     ) -> Result<RemovedWorkspace> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = SpaceId::generate();
         let mut checkpoint = removed.checkpoint;
         checkpoint.workspace_id = id.clone();
         let name = match &checkpoint.branch {
@@ -338,7 +339,7 @@ impl Manager {
 
     /// Link the restored workspace's issue and recorded items again; the
     /// caller links its PRs. Each failure becomes a warning.
-    async fn relink(&self, workspace_id: &str, links: &SpaceLinks) -> Vec<String> {
+    async fn relink(&self, workspace_id: &SpaceId, links: &SpaceLinks) -> Vec<String> {
         let mut warnings = Vec::new();
         if let Some(url) = &links.issue
             && let Err(error) = self

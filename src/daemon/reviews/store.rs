@@ -1,5 +1,6 @@
 //! Review rows: queueing, the state changes of a run, and the answers to
 //! findings, each in the caller's connection or transaction.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -33,7 +34,7 @@ impl Queued {
 /// running review refuses another.
 pub(crate) fn queue(
     db: &Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     target: &ReviewTarget,
     agent: &str,
     model: &ModelChoice,
@@ -281,7 +282,7 @@ pub(crate) fn fail(
 pub(crate) fn cancel(
     db: &Connection,
     id: ReviewId,
-    by: Option<&str>,
+    by: Option<&SpaceId>,
     now: crate::time::UnixTime,
 ) -> Result<bool> {
     Ok(db.execute(
@@ -398,7 +399,7 @@ fn load_record(db: &Connection, id: ReviewId) -> Result<Option<Review>> {
 }
 
 /// The reviews of the workspaces `ids`, newest first.
-pub(crate) fn list(db: &Connection, ids: &[String]) -> Result<Vec<Review>> {
+pub(crate) fn list(db: &Connection, ids: &[SpaceId]) -> Result<Vec<Review>> {
     let reviews = db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM reviews JOIN workspaces ON workspaces.id=workspace_id
@@ -413,7 +414,7 @@ pub(crate) fn list(db: &Connection, ids: &[String]) -> Result<Vec<Review>> {
 }
 
 /// The IDs of the repository's workspaces, or of every workspace.
-pub(crate) fn workspaces(db: &Connection, repository: Option<&str>) -> Result<Vec<String>> {
+pub(crate) fn workspaces(db: &Connection, repository: Option<&str>) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM workspaces WHERE ?1 IS NULL OR repository_id=?1")?
         .query_map([repository], |row| row.get(0))?
@@ -423,7 +424,7 @@ pub(crate) fn workspaces(db: &Connection, repository: Option<&str>) -> Result<Ve
 /// The workspace's newest finished review of commit `head`.
 pub(crate) fn finished_at(
     db: &Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     head: &str,
 ) -> Result<Option<Review>> {
     let id: Option<ReviewId> = db.query_row(
@@ -438,7 +439,7 @@ pub(crate) fn finished_at(
 }
 
 /// The workspace's newest review.
-pub(crate) fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Review>> {
+pub(crate) fn latest(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Review>> {
     match latest_id(db, workspace_id)? {
         Some(id) => load(db, id),
         None => Ok(None),
@@ -446,7 +447,10 @@ pub(crate) fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Revie
 }
 
 /// The workspace's newest review as lists show it, which reads no replies.
-pub(crate) fn latest_status(db: &Connection, workspace_id: &str) -> Result<Option<ReviewStatus>> {
+pub(crate) fn latest_status(
+    db: &Connection,
+    workspace_id: &SpaceId,
+) -> Result<Option<ReviewStatus>> {
     let Some(id) = latest_id(db, workspace_id)? else {
         return Ok(None);
     };
@@ -457,7 +461,7 @@ pub(crate) fn latest_status(db: &Connection, workspace_id: &str) -> Result<Optio
     Ok(Some((&review).into()))
 }
 
-fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<ReviewId>> {
+fn latest_id(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ReviewId>> {
     Ok(db.query_row(
         "SELECT MAX(id) FROM reviews WHERE workspace_id=?1",
         [workspace_id],
@@ -467,7 +471,11 @@ fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<ReviewId>> {
 
 /// The workspace's reviews before `id` that returned findings, oldest
 /// first: the history a new review receives.
-pub(crate) fn earlier(db: &Connection, workspace_id: &str, id: ReviewId) -> Result<Vec<Review>> {
+pub(crate) fn earlier(
+    db: &Connection,
+    workspace_id: &SpaceId,
+    id: ReviewId,
+) -> Result<Vec<Review>> {
     let ids: Vec<ReviewId> = db
         .prepare("SELECT id FROM reviews WHERE workspace_id=?1 AND id<?2 AND state=?3 ORDER BY id")?
         .query_map(params![workspace_id, id, ReviewState::Finished], |row| {

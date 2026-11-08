@@ -1,5 +1,6 @@
 //! The proxy a tracked agent's wrapper runs, the key its requests name,
 //! and the reports it sends the daemon.
+use crate::client::space_ids::SpaceId;
 use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use anyhow::Context;
 use anyhow::Result;
@@ -52,7 +53,7 @@ impl Running {
     pub fn report_turns(
         &mut self,
         paths: &crate::paths::Paths,
-        workspace: &str,
+        workspace: &SpaceId,
         execution: &str,
         ends_turns: bool,
     ) {
@@ -177,15 +178,19 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
 /// reported once another replaces it or none runs: the retry it waited to
 /// make and its upstream's reset; whether the daemon took both. A report
 /// that fails leaves them to the execution's end.
-pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execution: &str) -> bool {
+pub async fn forget_reports(
+    paths: &crate::paths::Paths,
+    workspace: &SpaceId,
+    execution: &str,
+) -> bool {
     use crate::protocol::AgentMethod;
     let retry = AgentMethod::ReportProxyRetry {
-        workspace: SpaceSelector::parse(workspace),
+        workspace: SpaceSelector::id(workspace),
         execution: execution.to_owned(),
         retry: None,
     };
     let reset = AgentMethod::ReportUpstreamReset {
-        workspace: SpaceSelector::parse(workspace),
+        workspace: SpaceSelector::id(workspace),
         execution: execution.to_owned(),
         resets_at: None,
     };
@@ -196,7 +201,7 @@ pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execut
 /// Reports a proxied agent's ended turns to the daemon.
 pub(super) struct Reporter {
     pub(super) paths: crate::paths::Paths,
-    pub(super) workspace: String,
+    pub(super) workspace: SpaceId,
     pub(super) execution: String,
     /// Whether a failure stream ends the agent's turn.
     pub(super) ends_turns: bool,
@@ -280,7 +285,7 @@ impl Reporter {
     /// Whether the daemon took the clearing of the upstream's reset.
     async fn reset_cleared(&self) -> bool {
         self.send(crate::protocol::AgentMethod::ReportUpstreamReset {
-            workspace: SpaceSelector::parse(&self.workspace),
+            workspace: SpaceSelector::id(&self.workspace),
             execution: self.execution.clone(),
             resets_at: None,
         })
@@ -296,7 +301,7 @@ impl Reporter {
 
     async fn retried(&self, retry: Option<crate::client::executions::ProxyRetry>) -> bool {
         self.send(crate::protocol::AgentMethod::ReportProxyRetry {
-            workspace: SpaceSelector::parse(&self.workspace),
+            workspace: SpaceSelector::id(&self.workspace),
             execution: self.execution.clone(),
             retry,
         })
@@ -321,7 +326,7 @@ impl Reporter {
         }
         let delivered = self
             .send(crate::protocol::AgentMethod::ReportUpstreamReset {
-                workspace: SpaceSelector::parse(&self.workspace),
+                workspace: SpaceSelector::id(&self.workspace),
                 execution: self.execution.clone(),
                 resets_at: Some(resets_at),
             })
@@ -333,7 +338,7 @@ impl Reporter {
 
     async fn turn_failed(&self, failure: crate::state::TurnFailure) {
         self.send(crate::protocol::AgentMethod::ReportTurnFailure {
-            workspace: SpaceSelector::parse(&self.workspace),
+            workspace: SpaceSelector::id(&self.workspace),
             failure,
             session: None,
             execution: Some(self.execution.clone()),

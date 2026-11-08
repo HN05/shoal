@@ -17,11 +17,10 @@ const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work
 /// its own chat.
 pub(in crate::cli::commands) async fn rename(
     ctx: &Context,
-    chat: String,
+    chat: SpaceSelector,
     name: SpaceName,
 ) -> Result<i32> {
-    let renamed =
-        crate::client::chats::rename(&ctx.paths, SpaceSelector::parse(&chat), name).await?;
+    let renamed = crate::client::chats::rename(&ctx.paths, chat, name).await?;
     if let Err(error) = relabel(ctx, &renamed).await {
         eprintln!(
             "warning: cannot relabel the place of chat {}: {error:#}",
@@ -36,16 +35,13 @@ pub(in crate::cli::commands) async fn rename(
 
 /// Ask the agent of the running `chat`, by ID or name, to choose its name.
 /// A chat runs as long as its agent, so the message always has a reader.
-pub(in crate::cli::commands) async fn request_name(ctx: &Context, chat: String) -> Result<i32> {
+pub(in crate::cli::commands) async fn request_name(
+    ctx: &Context,
+    chat: SpaceSelector,
+) -> Result<i32> {
     super::ensure_scope_token(ctx)?;
-    crate::client::agent_messages::send(
-        &ctx.paths,
-        SpaceSelector::parse(&chat),
-        NAME_REQUEST.into(),
-        Vec::new(),
-        None,
-    )
-    .await?;
+    crate::client::agent_messages::send(&ctx.paths, chat, NAME_REQUEST.into(), Vec::new(), None)
+        .await?;
     ctx.emit("Asked the chat's agent to choose its name.", ())?;
     Ok(0)
 }

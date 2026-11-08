@@ -3,6 +3,7 @@
 //! `shoal resume` does, in a background place where a restored agent opens.
 //! The restart goes on without the requests that asked for it, and answers
 //! each once the chat runs again, with the place it runs in.
+use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
@@ -23,9 +24,9 @@ impl Manager {
     /// the restart in progress, returning the place it runs in again.
     pub(crate) async fn restart_chat(
         self: &Arc<Self>,
-        id: &str,
+        id: &SpaceId,
         run: Option<String>,
-        stopped_by: Option<String>,
+        stopped_by: Option<SpaceId>,
     ) -> Result<Option<Origin>> {
         let chat = self.running_chat_by_id(id).await?;
         let resumes = match &chat {
@@ -53,13 +54,13 @@ impl Manager {
     /// restarts the chat for `run` too.
     pub(crate) async fn join_chat_restart(
         &self,
-        id: &str,
+        id: &SpaceId,
         of_run: Option<String>,
         run: Option<String>,
     ) -> Result<Option<Origin>> {
         let name = match self.chat_by_id(id).await? {
             Some(chat) => chat.name.into(),
-            None => id.to_owned(),
+            None => id.to_string(),
         };
         match self.chat_agents.join(id, &name, &of_run, run) {
             Ok(answer) => restarted(answer).await,
@@ -105,8 +106,8 @@ impl Manager {
 
     /// Restart `chat` for the process of the space `stopped_by` and answer
     /// the requests for it with how that ended.
-    async fn run_chat_restart(&self, chat: Chat, stopped_by: Option<String>) {
-        let outcome = self.save_and_restore(&chat, stopped_by.as_deref()).await;
+    async fn run_chat_restart(&self, chat: Chat, stopped_by: Option<SpaceId>) {
+        let outcome = self.save_and_restore(&chat, stopped_by.as_ref()).await;
         let outcome = outcome.map_err(|error| format!("{error:#}"));
         self.chat_agents.finish(&chat.id, &outcome);
     }
@@ -118,7 +119,7 @@ impl Manager {
     async fn save_and_restore(
         &self,
         chat: &Chat,
-        stopped_by: Option<&str>,
+        stopped_by: Option<&SpaceId>,
     ) -> Result<Option<Origin>> {
         self.save_chat(&chat.id, stopped_by).await?;
         let restored = resume(&self.paths, chat)

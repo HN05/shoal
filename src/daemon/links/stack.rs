@@ -1,4 +1,5 @@
 //! Move stacked workspaces down when their base workspace's PRs merge.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::params;
 
@@ -65,7 +66,7 @@ impl Manager {
         // Reload: they may have moved since. The caller holds the PR gates of
         // those stacked when it read `base`, so one stacked since waits.
         let stacked = self.workspace_by_id(&base.id).await?.stacked_workspaces;
-        let held = |id: &str| base.stacked_workspaces.iter().any(|held| held.id == id);
+        let held = |id: &SpaceId| base.stacked_workspaces.iter().any(|held| held.id == *id);
         if !stacked.iter().all(|stacked| held(&stacked.id)) {
             return Ok(Some(anyhow::anyhow!(
                 "a workspace was stacked on it during the sweep"
@@ -225,8 +226,8 @@ fn base_merged_update(
 /// moved it.
 fn record_restack(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
-    base_id: &str,
+    id: &SpaceId,
+    base_id: &SpaceId,
     updates: Vec<Update>,
     retargeted: Vec<(String, Edited)>,
 ) -> Result<()> {

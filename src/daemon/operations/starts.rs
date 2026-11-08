@@ -1,6 +1,7 @@
 //! Opening a workspace and starting its preparation in one request, as
 //! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it.
+use crate::client::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
@@ -31,7 +32,7 @@ pub(crate) struct Opening<'a> {
     pub start: WorkspaceStart,
     pub base: Option<String>,
     pub new: NewWorkspace<'a>,
-    pub parent: Option<String>,
+    pub parent: Option<SpaceId>,
 }
 
 /// The child a split creates: on the new branch `name` from `base`, or a

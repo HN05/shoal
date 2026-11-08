@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::daemon::resources;
 use rusqlite::StatementStatus;
 
@@ -141,11 +142,11 @@ fn resource_lists_preserve_global_order_and_owner_selection() -> Result<()> {
             .filter(|l| l.workspace_id == owner)
             .collect();
         assert_eq!(
-            serde_json::to_value(ports(&db, Some(owner))?)?,
+            serde_json::to_value(ports(&db, Some(&SpaceId::from(owner)))?)?,
             serde_json::to_value(expected_ports)?
         );
         assert_eq!(
-            serde_json::to_value(resources::leases(&db, Some(owner))?)?,
+            serde_json::to_value(resources::leases(&db, Some(&SpaceId::from(owner)))?)?,
             serde_json::to_value(expected_leases)?
         );
     }
@@ -160,16 +161,19 @@ fn resource_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
         UPDATE ports SET port=-port WHERE workspace_id='owner-0';
         UPDATE resource_leases SET mode='invalid' WHERE workspace_id='owner-0';",
     )?;
-    for owner in [None, Some("owner-0")] {
-        assert!(ports(&db, owner).is_err());
-        assert!(resources::leases(&db, owner).is_err());
+    for owner in [None, Some(SpaceId::from("owner-0"))] {
+        assert!(ports(&db, owner.as_ref()).is_err());
+        assert!(resources::leases(&db, owner.as_ref()).is_err());
     }
-    assert_eq!(ports(&db, Some("owner-1"))?.len(), 2);
-    assert_eq!(resources::leases(&db, Some("owner-1"))?.len(), 2);
+    assert_eq!(ports(&db, Some(&SpaceId::from("owner-1")))?.len(), 2);
+    assert_eq!(
+        resources::leases(&db, Some(&SpaceId::from("owner-1")))?.len(),
+        2
+    );
     db.execute_batch("DROP TABLE ports; DROP TABLE resource_leases;")?;
-    for owner in [None, Some("owner-0")] {
-        assert!(ports(&db, owner).is_err());
-        assert!(resources::leases(&db, owner).is_err());
+    for owner in [None, Some(SpaceId::from("owner-0"))] {
+        assert!(ports(&db, owner.as_ref()).is_err());
+        assert!(resources::leases(&db, owner.as_ref()).is_err());
     }
     Ok(())
 }
@@ -266,9 +270,15 @@ async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Re
                         .collect::<rusqlite::Result<Vec<_>>>()?;
                     assert_eq!(columns, [column]);
                 }
-                assert_eq!(executions(db, "owner-0")?[0].state, ExecutionState::Running);
-                assert_eq!(ports(db, Some("owner-0"))?.len(), 2);
-                assert_eq!(resources::leases(db, Some("owner-0"))?.len(), 2);
+                assert_eq!(
+                    executions(db, &SpaceId::from("owner-0"))?[0].state,
+                    ExecutionState::Running
+                );
+                assert_eq!(ports(db, Some(&SpaceId::from("owner-0")))?.len(), 2);
+                assert_eq!(
+                    resources::leases(db, Some(&SpaceId::from("owner-0")))?.len(),
+                    2
+                );
                 Ok(())
             })
             .await?;

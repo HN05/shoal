@@ -56,7 +56,7 @@ async fn a_retained_chat_records_no_retention() {
     let (_root, manager) = manager().await;
     let chat = Announced {
         kind: SpaceKind::Chat,
-        id: "chat-id",
+        id: &SpaceId::from("chat-id"),
         name: "notes",
     };
 
@@ -74,9 +74,10 @@ async fn a_retained_chat_records_no_retention() {
 
 #[test]
 fn only_a_workspace_with_a_checkpoint_is_restorable() {
+    let id = SpaceId::from("id");
     let space = |kind| Announced {
         kind,
-        id: "id",
+        id: &id,
         name: "topic",
     };
     let restorable =

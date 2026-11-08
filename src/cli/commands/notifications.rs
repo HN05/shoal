@@ -75,7 +75,7 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
 
 pub(super) async fn withdraw(ctx: &Context, space: Option<SpaceSelector>, id: i64) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let withdrawn = notifications::withdraw(&ctx.paths, SpaceSelector::parse(&space), id).await?;
+    let withdrawn = notifications::withdraw(&ctx.paths, space.clone(), id).await?;
     ctx.emit(
         &format!("Withdrew notification {id}: {}", withdrawn.message),
         &withdrawn,
@@ -93,14 +93,8 @@ pub(super) async fn send(
     crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let sender_chat = crate::env::chat();
-    let sent = notifications::send(
-        &ctx.paths,
-        SpaceSelector::parse(&space),
-        message,
-        attachments,
-        sender_chat,
-    )
-    .await?;
+    let sent =
+        notifications::send(&ctx.paths, space.clone(), message, attachments, sender_chat).await?;
     let text = match sent.notification {
         Some(id) => format!("Notification {id} sent."),
         None => "Sent to the coordinating agent.".to_owned(),

@@ -125,7 +125,7 @@ async fn workspaces<const N: usize>(
 }
 
 /// The progress events of the journal, as the space and its status line.
-async fn progress_events(manager: &Manager) -> Vec<(Option<String>, Option<String>)> {
+async fn progress_events(manager: &Manager) -> Vec<(Option<SpaceId>, Option<String>)> {
     (manager
         .workspace_events(None, 100)
         .await

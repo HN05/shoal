@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 
 use crate::{
+    client::space_ids::SpaceId,
     config::{
         Config,
         permissions::{self, Permissions, PermissionsConfig, SpaceMode},
@@ -44,7 +45,7 @@ impl Manager {
     /// in the global config.
     pub(crate) async fn space_permissions(
         &self,
-        id: &str,
+        id: &SpaceId,
         repository: Option<&str>,
     ) -> Result<Permissions> {
         let space = self.space_by_id(id).await?;
@@ -102,7 +103,7 @@ impl Manager {
     async fn parent_permissions(
         &self,
         config: &Config,
-        id: &str,
+        id: &SpaceId,
         repository: Option<&str>,
     ) -> Result<Option<Permissions>> {
         let mut effective: Option<Permissions> = None;

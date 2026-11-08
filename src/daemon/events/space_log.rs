@@ -8,6 +8,7 @@ use super::{EventCursor, EventItem, EventKind, decode};
 use crate::time::UnixTime;
 use crate::{
     client::{
+        space_ids::SpaceId,
         space_names::SpaceSelector,
         work::{LogEntry, LogFilter, LogTopic},
     },
@@ -65,8 +66,8 @@ impl Manager {
     /// The space `id` when it exists, else the nearest one that existed
     /// above it when it was removed, through the spaces removed above it;
     /// none once that walk leaves the tree.
-    async fn nearest_existing(&self, id: &str) -> Result<Option<String>> {
-        let mut space = id.to_owned();
+    async fn nearest_existing(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
+        let mut space = id.clone();
         for _ in 0..REMOVED_ANCESTORS {
             if self.space_by_id(&space).await.is_ok() {
                 return Ok(Some(space));
@@ -85,9 +86,9 @@ impl Manager {
 
     /// The ID of the space `selector` names: one that exists, else a
     /// removed one whose events the journal keeps.
-    async fn log_space(&self, selector: &SpaceSelector) -> Result<String> {
+    async fn log_space(&self, selector: &SpaceSelector) -> Result<SpaceId> {
         let error = match self.space(selector).await {
-            Ok(space) => return Ok(space.id().to_owned()),
+            Ok(space) => return Ok(space.id().clone()),
             Err(error) => error,
         };
         let name = selector.id_or_name().map(str::to_owned);
@@ -100,7 +101,7 @@ impl Manager {
 }
 
 /// Every event of the space `id`, oldest first.
-fn events_of(db: &Connection, id: &str) -> Result<Vec<LogEntry>> {
+fn events_of(db: &Connection, id: &SpaceId) -> Result<Vec<LogEntry>> {
     let mut statement = db.prepare(
         "SELECT id,created_at,record FROM workspace_events WHERE space_id=?1 ORDER BY id",
     )?;
@@ -142,7 +143,7 @@ fn shown(events: Vec<LogEntry>, filter: LogFilter, limit: u32) -> Vec<LogEntry> 
 
 /// The removed space whose last name or ID is `name`, the most recently
 /// removed first.
-fn removed(db: &Connection, name: &str) -> Result<Option<String>> {
+fn removed(db: &Connection, name: &str) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
             "SELECT space_id FROM workspace_events
@@ -160,7 +161,7 @@ fn removed(db: &Connection, name: &str) -> Result<Option<String>> {
 
 /// The space the removed space `id` was below when it went, as that
 /// space's log recorded it.
-fn parent_at_removal(db: &Connection, id: &str) -> Result<Option<String>> {
+fn parent_at_removal(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
             "SELECT space_id FROM workspace_events

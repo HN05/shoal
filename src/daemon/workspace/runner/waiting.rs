@@ -2,6 +2,7 @@
 //! the jobs a repository's runner may take, with the run each belongs to and
 //! the workspace that run links, and drops the entries of jobs the forge no
 //! longer lists as waiting, which another runner took or a cancel ended.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -88,7 +89,7 @@ impl Manager {
         forge: &ForgeRepo,
         repository_id: &str,
         run: &JobRun,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<SpaceId>> {
         let workspaces = self.list_workspaces().await?;
         let mut own = workspaces
             .into_iter()

@@ -3,6 +3,7 @@
 //! the user.
 mod place;
 
+use crate::client::space_ids::SpaceId;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -62,7 +63,7 @@ impl Manager {
     }
 
     /// Refuse a workspace that cannot record links, as one being removed.
-    async fn ensure_links_accepted(&self, id: &str) -> Result<()> {
+    async fn ensure_links_accepted(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| super::ensure_accepts_links(db, &id))
@@ -72,7 +73,7 @@ impl Manager {
     /// Link the started run where Shoal reads it. The run has started
     /// whatever happens here, so a failure to link it is a warning, which
     /// keeps a retry from starting another run.
-    async fn link_started(&self, id: &str, forge: &ForgeRepo, started: &mut StartedRun) {
+    async fn link_started(&self, id: &SpaceId, forge: &ForgeRepo, started: &mut StartedRun) {
         let Some(item) = started_link(forge, started) else {
             return;
         };
@@ -204,7 +205,7 @@ impl Manager {
     }
 
     /// The one PR linked to the space `id`, if any.
-    async fn linked_pr(&self, id: &str) -> Result<Option<String>> {
+    async fn linked_pr(&self, id: &SpaceId) -> Result<Option<String>> {
         let id = id.to_owned();
         let prs = (self.store)
             .run(move |db| super::wait::linked_items(db, &id, Some(ItemKind::Pr)))

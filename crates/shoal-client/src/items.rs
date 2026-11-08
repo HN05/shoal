@@ -20,12 +20,12 @@ use crate::{
 /// Link `item` to `space` as `relation`.
 pub async fn link(
     daemon: &impl Daemon,
-    space: &str,
+    space: &SpaceSelector,
     relation: Relation,
     item: &LinkedItem,
 ) -> Result<()> {
     let method = ItemMethod::LinkItem {
-        space: SpaceSelector::parse(space),
+        space: space.clone(),
         kind: item.kind,
         url: item.url.clone(),
         relation,
@@ -64,13 +64,13 @@ pub async fn watch_pr(daemon: &impl Daemon, space: SpaceSelector, url: String) -
 /// began. Waiting acknowledges nothing.
 pub async fn await_updates(
     daemon: &impl Daemon,
-    space: &str,
+    space: &SpaceSelector,
     selection: Selection,
     deadline: Option<Instant>,
     restarted: bool,
 ) -> Result<Updates> {
     let method = || ItemMethod::WatchItems {
-        space: SpaceSelector::parse(space),
+        space: space.clone(),
         selection: selection.clone(),
         timeout_secs: seconds_left(deadline),
     };

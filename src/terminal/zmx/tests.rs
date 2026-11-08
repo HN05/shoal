@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::sessions::zmx::parse_list;
 
 #[test]
@@ -12,11 +13,11 @@ fn names_fit_the_socket_path_and_skip_taken_ones() {
 #[test]
 fn relabelling_replaces_the_other_owner_kind_and_a_demo() {
     assert_eq!(
-        replacement_labels(Owner::Workspace("w1")),
+        replacement_labels(Owner::Workspace(&SpaceId::from("w1"))),
         "shoal.workspace=w1 shoal.chat= shoal.demo="
     );
     assert_eq!(
-        replacement_labels(Owner::Chat("c1")),
+        replacement_labels(Owner::Chat(&SpaceId::from("c1"))),
         "shoal.chat=c1 shoal.workspace= shoal.demo="
     );
 }

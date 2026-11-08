@@ -1,6 +1,7 @@
 //! Stop idle agents to free memory, saving each as protection does so that an
 //! update restores it. Only an agent whose prompt cache has expired stops,
 //! since restoring one rewrites its cache.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use std::collections::HashMap;
 
@@ -12,7 +13,7 @@ use crate::state::AgentState;
 /// A connected agent idle with no prompt cache left.
 struct Candidate {
     execution: String,
-    workspace_id: String,
+    workspace_id: SpaceId,
     workspace: String,
     /// The agent's [`super::Agent::turns_started`] when it was chosen.
     turns_started: u64,

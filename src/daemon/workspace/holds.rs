@@ -1,4 +1,5 @@
 //! Caller-named claims of workspace use, independent of assignment completion.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -159,7 +160,7 @@ impl Manager {
         Ok(self.workspace(selector).await?.holds)
     }
 
-    pub(crate) async fn has_holds(&self, id: &str) -> Result<bool> {
+    pub(crate) async fn has_holds(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -185,7 +186,7 @@ enum Authority {
 }
 
 impl Authority {
-    fn ensure(self, tx: &rusqlite::Transaction<'_>, id: &str, name: &str) -> Result<()> {
+    fn ensure(self, tx: &rusqlite::Transaction<'_>, id: &SpaceId, name: &str) -> Result<()> {
         if let Authority::Caller = self {
             return Ok(());
         }
@@ -208,7 +209,7 @@ impl Authority {
 /// return it as it stands: a held name keeps the hold as it was placed.
 fn place(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     name: &str,
     reason: Option<&str>,
     placed_by: HoldPlacer,
@@ -230,7 +231,7 @@ fn place(
 /// another.
 fn release(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &SpaceId,
     name: &str,
     released_by: HoldPlacer,
 ) -> Result<()> {
@@ -269,7 +270,7 @@ pub(crate) fn place_approved(
 /// Insert the hold unless the workspace already has one by that name.
 fn insert(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     name: &str,
     reason: Option<&str>,
     placed_by: HoldPlacer,
@@ -284,7 +285,7 @@ fn insert(
 
 const COLUMNS: &str = "SELECT workspace_id,name,reason,created_at,placed_by FROM workspace_holds";
 
-pub(super) fn list(db: &Connection, id: &str) -> Result<Vec<WorkspaceHold>> {
+pub(super) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<WorkspaceHold>> {
     Ok(db
         .prepare(&format!("{COLUMNS} WHERE workspace_id=?1 ORDER BY name"))?
         .query_map([id], row)?

@@ -21,18 +21,14 @@ use super::workspace_overviews;
 /// is taken. Exit 2 means nothing was reserved.
 pub(super) async fn acquire(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
     mut request: PortRequest,
 ) -> Result<i32> {
     loop {
-        let acquired = leases::acquire_port(
-            &ctx.paths,
-            SpaceSelector::parse(&workspace),
-            name.clone(),
-            request.clone(),
-        )
-        .await?;
+        let acquired =
+            leases::acquire_port(&ctx.paths, workspace.clone(), name.clone(), request.clone())
+                .await?;
         match acquired {
             PortAcquisition::Reserved(reservation) => {
                 ctx.emit(
@@ -106,7 +102,7 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
         )
         .await;
     };
-    let overview = leases::ports(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let overview = leases::ports(&ctx.paths, workspace.clone()).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;
@@ -114,7 +110,7 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
 }
 
 /// Choose a configured port of the workspace's repository.
-pub(super) async fn pick_configured(ctx: &Context, workspace: &str) -> Result<String> {
+pub(super) async fn pick_configured(ctx: &Context, workspace: &SpaceSelector) -> Result<String> {
     let catalog = fetch_catalog(ctx, workspace).await?;
     ensure!(
         !catalog.configured.is_empty(),
@@ -144,8 +140,8 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
     }
 }
 
-pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<PortCatalog> {
-    leases::port_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await
+pub(super) async fn fetch_catalog(ctx: &Context, workspace: &SpaceSelector) -> Result<PortCatalog> {
+    leases::port_catalog(&ctx.paths, workspace.clone()).await
 }
 
 pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {

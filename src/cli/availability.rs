@@ -1,6 +1,7 @@
 //! What each CLI command needs of its workspace, and the facts the CLI
 //! judges its workspaces against, which [`crate::client::availability`]
 //! decides with.
+use crate::client::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 pub(crate) use crate::client::availability::*;
@@ -119,7 +120,7 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 /// running agents were recorded in and those Shoal created for them, such as
 /// a session left at its shell after a failed launch, but not the session
 /// of an agent Shoal stopped to restore later.
-async fn session_workspaces(paths: &Paths) -> HashSet<String> {
+async fn session_workspaces(paths: &Paths) -> HashSet<SpaceId> {
     let agents = crate::client::agents::all(paths).await.unwrap_or_default();
     let owned = crate::client::workspaces::owned_places(paths)
         .await
@@ -139,7 +140,7 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         .collect();
     let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
     owners.extend(terminal::open_session_owners(&recorded, &places.stopped, &settings).await);
-    owners
+    owners.into_iter().map(SpaceId::from).collect()
 }
 
 /// Where agents were recorded running, as (workspace ID, place) pairs.

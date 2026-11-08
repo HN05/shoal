@@ -522,11 +522,11 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
 
     // The new name is refused where a new chat's would be.
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
-    assert!(rename("talk", "worker").await.is_err());
-    assert!(rename("talk", "other").await.is_err());
+    assert!(rename(&talk.id, "worker").await.is_err());
+    assert!(rename(&talk.id, "other").await.is_err());
     assert!(rename("gone", "topic").await.is_err());
     assert_eq!(
-        rename("talk", "talk").await.unwrap(),
+        rename(&talk.id, "talk").await.unwrap(),
         RenamedChat {
             chat: talk.clone(),
             previous_name: "talk".into(),
@@ -627,7 +627,7 @@ async fn concurrent_renames_keep_each_chats_files_under_its_name() {
                 .unwrap();
             let log = manager.paths.chat_files(&chat).with_extension("log");
             std::fs::create_dir_all(log.parent().unwrap()).unwrap();
-            std::fs::write(&log, &chat.id).unwrap();
+            std::fs::write(&log, chat.id.as_str()).unwrap();
             chats.push(chat);
         }
         // The second chat takes the first's name while the first leaves it,

@@ -4,6 +4,7 @@
 //! calls live in [`crate::client::queue`] and the daemon's runner in
 //! `daemon::queued_starts`. Entries queued by an earlier version still
 //! start, so the format only gains fields with defaults.
+use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
@@ -130,13 +131,13 @@ pub(crate) struct AddPlan {
     /// The chat that planned the addition, which the workspace belongs to
     /// unless `parent` names another space.
     #[serde(default)]
-    pub chat: Option<String>,
+    pub chat: Option<SpaceId>,
     /// The space the workspace goes below, which `--parent` names.
     #[serde(default)]
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     /// The existing workspace a launch in it reopens; it never creates one.
     #[serde(default)]
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceId>,
 }
 
 impl AddPlan {

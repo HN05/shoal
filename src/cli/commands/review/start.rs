@@ -1,5 +1,6 @@
 //! `shoal review run`: queue a review of a workspace's changes or a PR, or
 //! run the configured `review` command.
+use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -133,15 +134,7 @@ pub(super) async fn start(
                     "--post and --no-post apply to PR reviews; workspace reviews stay local"
                 );
                 let subject = Subject::Changes;
-                run(
-                    ctx,
-                    Some(SpaceSelector::parse(&workspace)),
-                    reviewer,
-                    subject,
-                    model,
-                    args,
-                )
-                .await
+                run(ctx, Some(workspace), reviewer, subject, model, args).await
             }
         },
         Target::Pull {
@@ -253,7 +246,7 @@ async fn pull_request(
         let subject = Subject::Pull { pull, post };
         return run(
             ctx,
-            Some(SpaceSelector::parse(&workspace)),
+            Some(SpaceSelector::Id(workspace)),
             reviewer,
             subject,
             model,
@@ -320,7 +313,7 @@ async fn pull_request(
     let subject = Subject::Pull { pull, post };
     run(
         ctx,
-        Some(SpaceSelector::parse(&workspace)),
+        Some(SpaceSelector::id(&workspace)),
         reviewer,
         subject,
         model,
@@ -336,7 +329,7 @@ async fn fork_pull_workspace(
     ctx: &Context,
     repo: &Repository,
     pull: &PullRequest,
-) -> Result<String> {
+) -> Result<SpaceId> {
     let start = WorkspaceStart::PullHead {
         url: pull.url.clone(),
         head: super::super::links::fork_head(repo, pull).await?,
@@ -409,11 +402,9 @@ async fn run(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings = crate::client::workspaces::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
-    )
-    .await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
     let post = match &subject {
         Subject::Changes => None,
         Subject::Pull { post, .. } => *post,
@@ -447,8 +438,7 @@ async fn run(
             if matches!(subject, Subject::Pull { .. }) {
                 ensure_at_pull_head(ctx, &workspace).await?;
             }
-            super::super::configured::run(ctx, MANUAL, Some(SpaceSelector::parse(&workspace)), args)
-                .await
+            super::super::configured::run(ctx, MANUAL, Some(workspace.clone()), args).await
         }
     }
 }
@@ -456,8 +446,8 @@ async fn run(
 /// Refuse a manual PR review in a workspace at a commit whose HEAD moved past
 /// the PR head it was opened at: the review command reads the checkout, so
 /// it would review commits the PR does not have.
-async fn ensure_at_pull_head(ctx: &Context, workspace: &str) -> Result<()> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
+async fn ensure_at_pull_head(ctx: &Context, workspace: &SpaceSelector) -> Result<()> {
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
         .workspace;
     let Some(at) = &workspace.at else {
@@ -486,7 +476,7 @@ fn configured_reviewer(settings: &Effective) -> Option<Agent> {
 /// with `model`.
 async fn queue(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     settings: &Effective,
     agent: Option<Agent>,
     model: ModelChoice,
@@ -502,14 +492,8 @@ async fn queue(
     // Refused here, before the daemon queues a review it could not run.
     super::super::chat::check_model(settings, &agent, &model)?;
     crate::cli::agents::ensure_reviewer_available(agent.name(), settings)?;
-    let review = crate::client::reviews::run(
-        &ctx.paths,
-        SpaceSelector::parse(&workspace),
-        target,
-        agent,
-        model,
-    )
-    .await?;
+    let review =
+        crate::client::reviews::run(&ctx.paths, workspace.clone(), target, agent, model).await?;
     let message = format!(
         "Review {id} of {} is queued for {}; its findings arrive as a message. Wait for it with \
          shoal watch review {id}.",

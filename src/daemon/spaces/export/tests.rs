@@ -214,7 +214,7 @@ async fn a_chat_ends_without_the_workspace_executions_it_started() {
             db.execute(
                 "INSERT INTO executions(id,workspace_id,state,wrapper)
                  VALUES ('worker-run',?1,'running',?2)",
-                [&workspace.id, &recorded],
+                rusqlite::params![workspace.id, recorded],
             )?;
             Ok(())
         })

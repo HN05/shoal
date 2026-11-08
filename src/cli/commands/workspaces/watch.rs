@@ -10,7 +10,7 @@ use crate::client::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn watch_items(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     selection: crate::forge::items::link::Selection,
     timeout: Option<u64>,
     resumed: bool,
@@ -50,7 +50,7 @@ pub(in crate::cli::commands) async fn watch_items(
     let messages = updates.messages.iter().map(|message| message.id).collect();
     crate::client::agent_messages::acknowledge(
         &ctx.paths,
-        SpaceSelector::parse(&workspace),
+        workspace.clone(),
         deliveries,
         messages,
         Vec::new(),
@@ -63,11 +63,11 @@ pub(in crate::cli::commands) async fn watch_items(
 /// the installed release does after an upgrade restarted the daemon. A wait
 /// an earlier release handed over names its workspace the earlier way, which
 /// the space replaces.
-fn resume_watch_arguments(space: &str, deadline: Option<Instant>) -> Vec<OsString> {
+fn resume_watch_arguments(space: &SpaceSelector, deadline: Option<Instant>) -> Vec<OsString> {
     use crate::cli::installed::{arguments, replace_option, with_flag, without_option};
     let resumed = without_option(arguments(), "--workspace");
     let resumed = without_option(resumed, "-s");
-    let mut resumed = replace_option(resumed, "--space", space);
+    let mut resumed = replace_option(resumed, "--space", &space.to_string());
     if let Some(seconds) = items::seconds_left(deadline) {
         resumed = replace_option(resumed, "--timeout", &seconds.to_string());
     }

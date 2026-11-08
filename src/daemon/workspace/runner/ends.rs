@@ -5,6 +5,7 @@
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
 //! run there, and the forge's runner then stops it.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -29,7 +30,7 @@ pub(crate) struct ClaimedJob {
     /// The ID its queue entry had.
     pub id: String,
     pub repository_id: String,
-    pub workspace_id: String,
+    pub workspace_id: SpaceId,
     /// The execution running the forge's runner, once it started.
     pub execution_id: Option<String>,
     /// When that execution started.
@@ -172,7 +173,7 @@ impl Manager {
     /// `workspace_id` before the daemon stops its runner, returning whether
     /// the workspace holds a job; a forge that refuses is told to the user,
     /// and the run times out there.
-    pub(crate) async fn cancel_job_before_stopping(&self, workspace_id: &str) -> bool {
+    pub(crate) async fn cancel_job_before_stopping(&self, workspace_id: &SpaceId) -> bool {
         let Ok(Some(job)) = self.workspace_claim(workspace_id).await else {
             return false;
         };
@@ -200,12 +201,12 @@ impl Manager {
     }
 
     /// The job claimed in the workspace `workspace_id`, if any.
-    async fn workspace_claim(&self, workspace_id: &str) -> Result<Option<ClaimedJob>> {
+    async fn workspace_claim(&self, workspace_id: &SpaceId) -> Result<Option<ClaimedJob>> {
         Ok(self
             .claimed_jobs()
             .await?
             .into_iter()
-            .find(|job| job.workspace_id == workspace_id))
+            .find(|job| job.workspace_id == *workspace_id))
     }
 
     /// Cancel `job`'s run on the forge its URL names, or the run its
@@ -230,7 +231,7 @@ impl Manager {
     /// marker or in its process group. Verified survivors are stopped and
     /// checked again on the next pass; a launch whose identity was never
     /// recorded proves nothing and keeps the job.
-    async fn job_execution_runs(&self, workspace_id: &str, id: &str) -> Result<bool> {
+    async fn job_execution_runs(&self, workspace_id: &SpaceId, id: &str) -> Result<bool> {
         let workspace = self.workspace_by_id(workspace_id).await?;
         let execution = self
             .workspace_executions(workspace_id)

@@ -4,6 +4,7 @@
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
 //! has stopped syncing.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::questions::QuestionExt;
 use std::collections::HashSet;
 
@@ -71,7 +72,7 @@ impl Inbox {
         );
         let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-        let existing: HashSet<String> = workspaces.iter().map(|w| w.id.clone()).collect();
+        let existing: HashSet<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| filter.keeps_workspace(w, stopped.contains(&w.id)));
         // Scoped processes see the chats of their own tree. A stopped chat
         // keeps its open questions.
@@ -166,10 +167,10 @@ fn repository_of<'a>(workspaces: &'a [Workspace], chats: &'a [Chat], item: &'a I
     let space = item.space_id();
     workspaces
         .iter()
-        .find(|w| w.id == space)
+        .find(|w| Some(&w.id) == space)
         .map(|w| w.repository_id.as_str())
         .or_else(|| {
-            let chat = chats.iter().find(|chat| chat.id == space);
+            let chat = chats.iter().find(|chat| Some(&chat.id) == space);
             chat.and_then(|chat| chat.repository_id.as_deref())
         })
         .or_else(|| item.repository_id())
@@ -179,7 +180,7 @@ fn repository_of<'a>(workspaces: &'a [Workspace], chats: &'a [Chat], item: &'a I
 /// The item's note, after the workspace its chat runs in, if it is one.
 fn note(chats: &[Chat], item: &Item) -> String {
     let space = item.space_id();
-    let place = (chats.iter().find(|chat| chat.id == space))
+    let place = (chats.iter().find(|chat| Some(&chat.id) == space))
         .and_then(|chat| chat.workspace.as_ref())
         .map(|workspace| format!("in {}", workspace.name));
     let note = Some(item.note()).filter(|note| !note.is_empty());
@@ -196,8 +197,8 @@ fn decision_items(
     chats: &[Chat],
     detached: impl Fn(&ApprovalRequest) -> bool,
 ) -> Vec<Item> {
-    let kept = |id: &str| workspaces.iter().any(|w| w.id == id);
-    let asked = |id: &str| kept(id) || chats.iter().any(|chat| chat.id == id);
+    let kept = |id: &SpaceId| workspaces.iter().any(|w| w.id == *id);
+    let asked = |id: &SpaceId| kept(id) || chats.iter().any(|chat| chat.id == *id);
     let questions = questions
         .into_iter()
         .filter(|question| asked(&question.space_id))
@@ -215,7 +216,7 @@ fn decision_items(
 
 /// Workspaces whose agent needs input, then failed ones, then each mark made at
 /// the current commit.
-fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<String>) -> Vec<Item> {
+fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<Item> {
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
         .iter()
@@ -262,8 +263,8 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
 
 /// Operations on the client type [`Item`] that only the `shoal` command uses.
 pub(crate) trait ItemExt {
-    /// The workspace or chat it belongs to.
-    fn space_id(&self) -> &str;
+    /// The workspace or chat it belongs to, if any.
+    fn space_id(&self) -> Option<&SpaceId>;
 
     /// The repository that owns a proposed issue, which outlives the
     /// workspace that proposed it, or an untracked worktree.
@@ -286,18 +287,18 @@ pub(crate) trait ItemExt {
 }
 
 impl ItemExt for Item {
-    fn space_id(&self) -> &str {
+    fn space_id(&self) -> Option<&SpaceId> {
         match self {
-            Self::Question { question } => &question.space_id,
-            Self::Approval { request } => &request.space_id,
+            Self::Question { question } => Some(&question.space_id),
+            Self::Approval { request } => Some(&request.space_id),
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
-            | Self::Ready { workspace, .. } => &workspace.id,
+            | Self::Ready { workspace, .. } => Some(&workspace.id),
             Self::ChatNeedsInput { chat }
             | Self::ChatReady { chat, .. }
-            | Self::ChatDone { chat } => &chat.id,
-            Self::Demo { demo } => &demo.workspace_id,
-            Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => "",
+            | Self::ChatDone { chat } => Some(&chat.id),
+            Self::Demo { demo } => Some(&demo.workspace_id),
+            Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => None,
         }
     }
 

@@ -2,6 +2,7 @@
 //! starts again at once and outside the agent queue, since the agent keeps its
 //! slot: in a new wrapper, which the agent queue starts once the old one
 //! finished, or in place, where the old wrapper starts it.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
@@ -71,7 +72,7 @@ impl Manager {
         execution: &str,
         run: Option<String>,
         in_place: bool,
-        stopped_by: Option<&str>,
+        stopped_by: Option<&SpaceId>,
     ) -> Result<Option<Origin>> {
         let answer = self
             .request_restart(execution, run, in_place, stopped_by)
@@ -120,7 +121,7 @@ impl Manager {
         id: &str,
         run: Option<String>,
         in_place: bool,
-        stopped_by: Option<&str>,
+        stopped_by: Option<&SpaceId>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         self.executions
             .with_restarts(|agents, renewals| {
@@ -145,7 +146,7 @@ impl Manager {
         agent: Option<&mut Agent>,
         run: Option<String>,
         in_place: bool,
-        stopped_by: Option<&str>,
+        stopped_by: Option<&SpaceId>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,

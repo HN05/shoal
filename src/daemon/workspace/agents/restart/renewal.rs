@@ -2,6 +2,7 @@
 //! finishes with the agent's record, which the agent queue restores at once,
 //! in the slot the agent kept, and the restart follows the agent to the
 //! execution the new wrapper registers, which answers it once the agent runs.
+use crate::client::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
@@ -28,7 +29,7 @@ pub(crate) enum Renewal {
 pub(crate) struct Handover {
     /// The agent's name and workspace.
     pub(super) name: String,
-    pub(super) workspace_id: String,
+    pub(super) workspace_id: SpaceId,
     pub(super) restarts: Restarts,
     /// The agent queue entry whose start runs the new wrapper, once recorded.
     entry: Option<String>,
@@ -241,7 +242,7 @@ impl Manager {
 
     /// The workspaces whose agent a restart starts in a new wrapper that
     /// has not registered it yet.
-    pub(crate) async fn renewing_workspaces(&self) -> HashSet<String> {
+    pub(crate) async fn renewing_workspaces(&self) -> HashSet<SpaceId> {
         self.executions
             .with_restarts(|_, renewals| {
                 renewals
@@ -258,14 +259,14 @@ impl Manager {
     /// Cancel the restarts that would start an agent of `workspace_id` in a
     /// new wrapper, leaving its record for `shoal resume`. Requires the
     /// queue gate, which a restart holds while it records its restore.
-    pub(crate) async fn cancel_renewals(&self, workspace_id: &str) {
+    pub(crate) async fn cancel_renewals(&self, workspace_id: &SpaceId) {
         let cancelled: Vec<Handover> = self
             .executions
             .with_restarts(|_, renewals| {
                 let ids: Vec<String> = renewals
                     .iter()
                     .filter(|(_, renewal)| {
-                        matches!(renewal, Renewal::Starting(handover) if handover.workspace_id == workspace_id)
+                        matches!(renewal, Renewal::Starting(handover) if handover.workspace_id == *workspace_id)
                     })
                     .map(|(execution, _)| execution.clone())
                     .collect();

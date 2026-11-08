@@ -15,8 +15,11 @@ use crate::{
     client::sim::{AuditEntry, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview},
 };
 
-pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SimulatorCatalog> {
-    leases::simulator_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await
+pub(super) async fn fetch_catalog(
+    ctx: &Context,
+    workspace: &SpaceSelector,
+) -> Result<SimulatorCatalog> {
+    leases::simulator_catalog(&ctx.paths, workspace.clone()).await
 }
 
 pub(super) fn render_catalog(catalog: &SimulatorCatalog, palette: Palette) {
@@ -80,13 +83,7 @@ pub(super) async fn history(
     before: Option<i64>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
-    let entries = leases::simulator_history(
-        &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::parse),
-        limit,
-        before,
-    )
-    .await?;
+    let entries = leases::simulator_history(&ctx.paths, workspace.clone(), limit, before).await?;
     ctx.show(&entries, |entries| {
         for entry in entries {
             render_history_entry(entry);
@@ -100,14 +97,13 @@ pub(super) async fn history(
 
 /// Exit 2 means the simulator is busy or awaiting approval; a queued request
 /// returns only once acquired or denied.
-pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimRequest) -> Result<i32> {
+pub(super) async fn acquire(
+    ctx: &Context,
+    workspace: SpaceSelector,
+    request: SimRequest,
+) -> Result<i32> {
     let outcome = obtain(ctx, "a simulator", request.queue, async || {
-        leases::acquire_simulator(
-            &ctx.paths,
-            SpaceSelector::parse(&workspace),
-            request.clone(),
-        )
-        .await
+        leases::acquire_simulator(&ctx.paths, workspace.clone(), request.clone()).await
     })
     .await?;
     outcome.finish(
@@ -119,8 +115,7 @@ pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimReques
 
 pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
-    let overview =
-        leases::simulators(&ctx.paths, workspace.as_deref().map(SpaceSelector::parse)).await?;
+    let overview = leases::simulators(&ctx.paths, workspace.clone()).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;

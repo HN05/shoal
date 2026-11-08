@@ -1,6 +1,7 @@
 //! `shoal pr revert`: open a PR that undoes a merged one for a workspace or
 //! chat, through the forge where it reverts PRs, and otherwise from a new
 //! workspace whose branch reverts the merge with `git revert`.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use super::{
@@ -46,7 +47,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
         let space = from.id().to_owned();
         let outcome = items::revert_pull(
             &ctx.paths,
-            SpaceSelector::parse(&space),
+            SpaceSelector::id(&space),
             selector.item,
             options,
         )
@@ -68,7 +69,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
             merged.item.url, reverting.name
         )));
     }
-    let outcome = publish(ctx, reverting.id.clone(), options)
+    let outcome = publish(ctx, SpaceSelector::id(&reverting.id), options)
         .await
         .with_context(|| {
             format!(
@@ -93,24 +94,18 @@ enum Reverting {
 
 impl Reverting {
     /// The workspace or running chat `space` names.
-    async fn of(ctx: &Context, space: String) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&space))
-            .await?
-        {
+    async fn of(ctx: &Context, space: SpaceSelector) -> Result<Self> {
+        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
             Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat)),
             _ => {
-                let workspace = crate::client::workspaces::verify(
-                    &ctx.paths,
-                    SpaceSelector::parse(&space),
-                    false,
-                )
-                .await?;
+                let workspace =
+                    crate::client::workspaces::verify(&ctx.paths, space.clone(), false).await?;
                 Ok(Self::Workspace(Box::new(workspace)))
             }
         }
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &SpaceId {
         match self {
             Self::Workspace(workspace) => &workspace.id,
             Self::Chat(chat) => &chat.id,
@@ -185,11 +180,11 @@ async fn start_workspace(
     repository: String,
     name: String,
     base: Option<String>,
-    chat: Option<String>,
+    chat: Option<SpaceId>,
 ) -> Result<StartedWorkspace> {
     let new = NewWorkspace {
         base,
-        parent: chat.as_deref().map(SpaceSelector::parse),
+        parent: chat.map(SpaceSelector::Id),
         ..NewWorkspace::new(Selector::Value(repository), WorkspaceStart::Name(name))
     };
     operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
@@ -216,7 +211,9 @@ async fn revert_merge(
         head_ref: merged.head_ref.as_deref(),
     };
     let merge = Merge::of(path, &facts).await?;
-    let run = async |command| execution::publish(&ctx.paths, workspace.id.clone(), command).await;
+    let run = async |command| {
+        execution::publish(&ctx.paths, SpaceSelector::Id(workspace.id.clone()), command).await
+    };
     match git_revert::revert(path, &merge, message, run).await? {
         Reverted::Committed => Ok(()),
         Reverted::Conflicts(paths) => anyhow::bail!(
@@ -242,7 +239,7 @@ async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let space = workspace.id.clone();
     crate::client::assignments::mark_done(
         &ctx.paths,
-        SpaceSelector::parse(&space),
+        SpaceSelector::id(&space),
         crate::client::assignments::Done {
             cleanup: true,
             ..Default::default()

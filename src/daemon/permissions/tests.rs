@@ -1,5 +1,6 @@
 //! Effective permissions in a tree of chats and workspaces.
 use crate::{
+    client::space_ids::SpaceId,
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
     daemon::{
         test_support::{chat, manager, repository, workspace_below as workspace},
@@ -23,7 +24,7 @@ async fn a_space_never_has_more_than_the_space_above_it() {
     let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker")).await;
     let split = workspace(&manager, &repo, "split", &worker.id, None).await;
-    let of = |id: String| {
+    let of = |id: SpaceId| {
         let manager = manager.clone();
         let repository = repo.id.clone();
         async move {
@@ -82,7 +83,7 @@ async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() 
         .unwrap();
     let (master, _process) = chat(&manager, "master", "orchestrate", None, None).await;
     let (child, _child) = chat(&manager, "child", "chat", Some(&repo), Some(&master.id)).await;
-    let merge = |id: String, repository: Option<String>| {
+    let merge = |id: SpaceId, repository: Option<String>| {
         let manager = manager.clone();
         async move {
             let permissions = manager.space_permissions(&id, repository.as_deref());
@@ -143,13 +144,13 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
 
 /// Record `assignments` as the narrowing the agent of the space `id`, in
 /// `table`, started with.
-async fn narrow(manager: &Manager, table: &str, id: &str, assignments: &[&str]) {
+async fn narrow(manager: &Manager, table: &str, id: &SpaceId, assignments: &[&str]) {
     let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
     let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
     let json = serde_json::to_string(&narrowing).unwrap();
     let (sql, id) = (
         format!("UPDATE {table} SET narrowing=?2 WHERE id=?1"),
-        id.to_owned(),
+        id.clone(),
     );
     manager
         .store
@@ -167,7 +168,7 @@ async fn a_narrowing_narrows_its_space_and_the_spaces_below() {
     let split = workspace(&manager, &repo, "split", &worker.id, None).await;
     narrow(&manager, "chats", &top.id, &["merge=propose"]).await;
     narrow(&manager, "workspaces", &worker.id, &["push=propose"]).await;
-    let of = |id: String| {
+    let of = |id: SpaceId| {
         let manager = manager.clone();
         let repository = repo.id.clone();
         async move {

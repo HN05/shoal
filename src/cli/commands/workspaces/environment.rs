@@ -23,21 +23,14 @@ pub(in crate::cli::commands) async fn environment(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(token) = revoke {
-        crate::client::workspaces::revoke_environment(
-            &ctx.paths,
-            SpaceSelector::parse(&workspace),
-            token,
-        )
-        .await?;
+        crate::client::workspaces::revoke_environment(&ctx.paths, workspace.clone(), token).await?;
         ctx.emit_styled(
             Style::Success,
             "Workspace environment revoked",
             Revoked { revoked: true },
         )?;
     } else {
-        let values =
-            crate::client::workspaces::environment(&ctx.paths, SpaceSelector::parse(&workspace))
-                .await?;
+        let values = crate::client::workspaces::environment(&ctx.paths, workspace.clone()).await?;
         let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
         ctx.show(&values, |values| {
             for (name, value) in values {

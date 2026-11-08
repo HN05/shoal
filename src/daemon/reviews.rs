@@ -1,6 +1,7 @@
 //! Local reviews of workspaces and PRs: queueing them, running each once in
 //! a detached checkout, and recording what the reviewer found and how the
 //! workspace's agent answered it.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -138,7 +139,7 @@ impl Manager {
         &self,
         selector: Option<&SpaceSelector>,
         id: Option<ReviewId>,
-        by: Option<String>,
+        by: Option<SpaceId>,
     ) -> Result<Review> {
         let id = match (id, selector) {
             (Some(id), _) => id,
@@ -148,7 +149,7 @@ impl Manager {
         let now = UnixTime::now();
         let cancelled = self
             .store
-            .run(move |db| store::cancel(db, id, by.as_deref(), now))
+            .run(move |db| store::cancel(db, id, by.as_ref(), now))
             .await?;
         ensure!(cancelled, "review {id} has already ended");
         if let Some(cancel) = self.reviews.cancels.lock().unwrap().get(&id) {
@@ -199,7 +200,7 @@ impl Manager {
         &self,
         workspace: Option<&SpaceSelector>,
         repository: Option<crate::repository::Selector>,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SpaceId>> {
         if let Some(workspace) = workspace {
             return Ok(vec![self.workspace(workspace).await?.id]);
         }
@@ -213,7 +214,7 @@ impl Manager {
     }
 
     /// The reviews of the workspaces `ids`, newest first.
-    pub async fn reviews(&self, ids: Vec<String>) -> Result<Vec<Review>> {
+    pub async fn reviews(&self, ids: Vec<SpaceId>) -> Result<Vec<Review>> {
         let mut reviews = self.store.run(move |db| store::list(db, &ids)).await?;
         self.annotate_reviews(&mut reviews).await;
         Ok(reviews)
@@ -285,7 +286,7 @@ impl Manager {
     }
 
     /// The workspace review `id` is of.
-    pub(crate) async fn review_workspace(&self, id: ReviewId) -> Result<String> {
+    pub(crate) async fn review_workspace(&self, id: ReviewId) -> Result<SpaceId> {
         let review = self.store.run(move |db| store::load(db, id)).await?;
         Ok(review
             .with_context(|| format!("review {id} does not exist"))?
@@ -364,7 +365,7 @@ impl Manager {
 
     /// Stop the workspace's running review, as its removal does; the removal
     /// then deletes its reviews.
-    pub(crate) async fn stop_workspace_review(&self, workspace_id: &str) {
+    pub(crate) async fn stop_workspace_review(&self, workspace_id: &SpaceId) {
         let id = workspace_id.to_owned();
         let active = self.store.run(move |db| store::active(db, &id)).await;
         match active {

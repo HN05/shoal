@@ -24,21 +24,14 @@ use crate::{
 /// queued request returns only once acquired or denied.
 pub(super) async fn acquire(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     request: ResourceRequest,
 ) -> Result<i32> {
     let outcome = obtain(
         ctx,
         &format!("pool {}", request.pool),
         request.queue,
-        async || {
-            leases::acquire_resource(
-                &ctx.paths,
-                SpaceSelector::parse(&workspace),
-                request.clone(),
-            )
-            .await
-        },
+        async || leases::acquire_resource(&ctx.paths, workspace.clone(), request.clone()).await,
     )
     .await?;
     outcome.finish(
@@ -128,20 +121,20 @@ impl Members {
 
 pub(super) async fn fetch_overview(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     members: Members,
 ) -> Result<Overview> {
-    let mut overview = leases::resources(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let mut overview = leases::resources(&ctx.paths, workspace.clone()).await?;
     members.retain(&mut overview);
     Ok(overview)
 }
 
 pub(super) async fn fetch_catalog(
     ctx: &Context,
-    workspace: &str,
+    workspace: &SpaceSelector,
     members: Members,
 ) -> Result<Catalog> {
-    let mut catalog = leases::resource_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await?;
+    let mut catalog = leases::resource_catalog(&ctx.paths, workspace.clone()).await?;
     members.retain_catalog(&mut catalog);
     Ok(catalog)
 }
@@ -180,7 +173,7 @@ pub(super) fn render_catalog(catalog: &Catalog, palette: Palette) {
 /// for the command's `argument`.
 pub(super) async fn pick_pool(
     ctx: &Context,
-    workspace: &str,
+    workspace: &SpaceSelector,
     members: Members,
     argument: &str,
 ) -> Result<String> {
@@ -207,7 +200,8 @@ pub(super) async fn overview(
         return workspace_overviews(
             ctx,
             async |workspace| {
-                let overview = fetch_overview(ctx, workspace.id.clone(), members).await?;
+                let overview =
+                    fetch_overview(ctx, SpaceSelector::Id(workspace.id.clone()), members).await?;
                 Ok(WorkspaceOverview {
                     workspace: workspace.clone(),
                     overview,

@@ -1,5 +1,6 @@
 //! Copies of attached files the daemon keeps, so the files stay as they
 //! were when attached.
+use crate::client::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -20,7 +21,7 @@ pub(crate) struct Copies {
 /// copy is never reused.
 pub(crate) fn keep_copies(
     root: &Path,
-    owner: &str,
+    owner: &SpaceId,
     body: &str,
     attachments: &[Attachment],
 ) -> Result<Copies> {
@@ -59,7 +60,7 @@ pub(crate) fn keep_copies(
 /// deleted one.
 pub(crate) fn incomplete_copies(
     root: &Path,
-    owner: &str,
+    owner: &SpaceId,
     body: &str,
     attachments: &[Attachment],
 ) -> Result<Option<PathBuf>> {
@@ -73,10 +74,10 @@ pub(crate) fn incomplete_copies(
 
 /// A name for the files attached with this owner, text and attachments,
 /// their contents included.
-fn content_key(owner: &str, body: &str, attachments: &[Attachment]) -> Result<String> {
+fn content_key(owner: &SpaceId, body: &str, attachments: &[Attachment]) -> Result<String> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
-    for part in [owner, body] {
+    for part in [owner.as_str(), body] {
         hasher.update(part.as_bytes());
         hasher.update([0]);
     }

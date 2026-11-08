@@ -1,4 +1,5 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -221,14 +222,13 @@ impl Recovery {
 
     pub(super) async fn for_launch(
         paths: &Paths,
-        workspace_id: &str,
+        workspace: &SpaceSelector,
         agent: &super::TrackedAgent,
     ) -> Self {
         let resolved = async {
-            let workspace =
-                crate::client::workspaces::inspect(paths, SpaceSelector::id(workspace_id))
-                    .await?
-                    .workspace;
+            let workspace = crate::client::workspaces::inspect(paths, workspace.clone())
+                .await?
+                .workspace;
             let restored = Restored {
                 agent: &agent.name,
                 model: &agent.model,
@@ -357,7 +357,7 @@ impl Recovery {
     pub(super) fn save(
         &self,
         paths: &Paths,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         id: &str,
         reason: Option<&str>,
         place: Option<Origin>,
@@ -372,7 +372,7 @@ impl Recovery {
     pub(super) fn save_stopping(
         &self,
         paths: &Paths,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         id: &str,
         reason: Option<&str>,
         place: Option<Origin>,
@@ -386,7 +386,7 @@ impl Recovery {
 /// Save `record` with what `restorer` needs to bring its agent back.
 fn save_restorable(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     mut record: Record,
     restorer: Restorer,
@@ -519,7 +519,7 @@ impl RecordExt for Record {
 /// the handoff recoverable if the wrapper is terminated before it can write it.
 pub(crate) fn save_record(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     agent: &super::TrackedAgent,
     reason: Option<&str>,
@@ -532,16 +532,16 @@ pub(crate) fn save_record(
 /// space `stopped_by` asked for when given, which may resume the agent.
 pub(crate) fn save_record_stopped_by(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     agent: &super::TrackedAgent,
     reason: Option<&str>,
     turn: Option<AgentState>,
-    stopped_by: Option<&str>,
+    stopped_by: Option<&SpaceId>,
 ) -> Result<PathBuf> {
     let record = Record {
         turn,
-        stopped_by: stopped_by.map(str::to_owned),
+        stopped_by: stopped_by.cloned(),
         ..Record::new(agent, reason, Stage::Stopping, None)
     };
     write_record(paths, workspace_id, id, record)
@@ -552,7 +552,7 @@ pub(crate) fn save_record_stopped_by(
 /// saved no record stopped nothing.
 pub(crate) fn save_turn(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     turn: AgentState,
 ) -> Result<()> {
@@ -571,7 +571,7 @@ pub(crate) fn save_turn(
 
 fn write_record(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     mut record: Record,
 ) -> Result<PathBuf> {
@@ -612,7 +612,7 @@ fn write_record(
 /// forgetting it never replaces a record a resume may hold.
 fn request_restore(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     env: &BTreeMap<String, String>,
 ) -> Result<()> {
@@ -632,7 +632,7 @@ fn request_restore(
 /// nothing.
 pub(crate) fn restore_requests(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
 ) -> Result<Vec<(String, BTreeMap<String, String>)>> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
@@ -661,11 +661,15 @@ pub(crate) fn restore_requests(
 }
 
 /// Forget the restore request of the agent stopped as `id`.
-pub(crate) fn forget_restore_request(paths: &Paths, workspace_id: &str, id: &str) -> Result<()> {
+pub(crate) fn forget_restore_request(
+    paths: &Paths,
+    workspace_id: &SpaceId,
+    id: &str,
+) -> Result<()> {
     consume(&request_path(paths, workspace_id, id))
 }
 
-fn request_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+fn request_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join(format!("{id}{REQUEST_SUFFIX}"))
@@ -674,7 +678,7 @@ fn request_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
 /// Whether a stop saved an agent of the workspace, as a recovery record or a
 /// last session. It reads only the file names, so a record that does not
 /// parse still counts.
-pub(crate) fn saves_agent(paths: &Paths, workspace_id: &str) -> Result<bool> {
+pub(crate) fn saves_agent(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -698,7 +702,7 @@ pub(crate) fn saves_agent(paths: &Paths, workspace_id: &str) -> Result<bool> {
 /// The workspace's stopped agents, for its removal record. Their wrappers have
 /// exited, so none waits to restore them, and the restored workspace waits
 /// for `shoal resume` to restore them.
-pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<StoppedAgent>> {
+pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<StoppedAgent>> {
     let mut agents = Vec::new();
     for (execution, path) in Saved::load(paths, workspace_id)?.agents {
         if let Some(mut record) = Record::load(&path)? {
@@ -717,7 +721,7 @@ pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<St
 /// Save a removed workspace's stopped agents for the workspace restoring it.
 pub(crate) fn save_stopped_agents(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     agents: &[StoppedAgent],
 ) -> Result<()> {
     for agent in agents {
@@ -732,10 +736,10 @@ pub(crate) fn save_stopped_agents(
 /// when given, or else the space its record names.
 pub(crate) fn keep_as_last_session(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     path: &Path,
-    stopped_by: Option<&str>,
+    stopped_by: Option<&SpaceId>,
 ) -> Result<()> {
     let _claim = claim(path)?;
     let Some(record) = Record::load(path)? else {
@@ -743,7 +747,7 @@ pub(crate) fn keep_as_last_session(
     };
     let last = record.into_last_session(id.to_owned(), path);
     LastSession {
-        stopped_by: stopped_by.map(str::to_owned).or(last.stopped_by),
+        stopped_by: stopped_by.cloned().or(last.stopped_by),
         ..last
     }
     .write(paths, workspace_id)?;
@@ -752,7 +756,7 @@ pub(crate) fn keep_as_last_session(
 
 /// Remove a record whose stop never reached the agent, returning whether it
 /// did. A record the wrapper saved after stopping the agent is kept.
-pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -> Result<bool> {
+pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &SpaceId, id: &str) -> Result<bool> {
     let path = record_path(paths, workspace_id, id);
     match Record::load(&path)? {
         Some(record) if record.stage == Some(Stage::Stopping) => {
@@ -765,7 +769,11 @@ pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -
 
 /// The space whose process stopped the agent that execution `id` of
 /// `workspace_id` keeps as stopped work or a last session, when one did.
-pub(crate) fn stopped_by(paths: &Paths, workspace_id: &str, id: &str) -> Result<Option<String>> {
+pub(crate) fn stopped_by(
+    paths: &Paths,
+    workspace_id: &SpaceId,
+    id: &str,
+) -> Result<Option<SpaceId>> {
     if let Some(record) = Record::load(&record_path(paths, workspace_id, id))? {
         return Ok(record.stopped_by);
     }
@@ -775,7 +783,7 @@ pub(crate) fn stopped_by(paths: &Paths, workspace_id: &str, id: &str) -> Result<
 
 /// The file keeping the agent stopped as `id`: its recovery record, or else
 /// its last session.
-pub(crate) fn saved_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+pub(crate) fn saved_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
     let record = record_path(paths, workspace_id, id);
     if record.exists() {
         return record;
@@ -795,7 +803,7 @@ pub(crate) fn saved_place(path: &Path) -> Option<Origin> {
     serde_json::from_slice::<Placed>(&bytes).ok()?.origin
 }
 
-pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+pub(crate) fn record_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join(format!("{id}{AGENT_SUFFIX}"))
@@ -819,7 +827,7 @@ pub(crate) fn valid_session(session: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
-fn session_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+fn session_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join(format!("{id}{SESSION_SUFFIX}"))
@@ -829,7 +837,7 @@ fn session_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
 /// change; whether it changed.
 pub(crate) fn save_session(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     session: &str,
 ) -> Result<bool> {
@@ -849,14 +857,14 @@ pub(crate) fn save_session(
 }
 
 /// The session the hooks of execution `id` last reported.
-pub(crate) fn reported_session(paths: &Paths, workspace_id: &str, id: &str) -> Option<String> {
+pub(crate) fn reported_session(paths: &Paths, workspace_id: &SpaceId, id: &str) -> Option<String> {
     std::fs::read_to_string(session_path(paths, workspace_id, id))
         .ok()
         .filter(|session| valid_session(session))
 }
 
 /// Forget the session of an execution that has ended.
-pub(crate) fn forget_session(paths: &Paths, workspace_id: &str, id: &str) -> Result<()> {
+pub(crate) fn forget_session(paths: &Paths, workspace_id: &SpaceId, id: &str) -> Result<()> {
     consume(&session_path(paths, workspace_id, id))
 }
 
@@ -865,24 +873,28 @@ pub(crate) trait LastSessionExt: Sized {
     /// This session where it is not available, which starts a new one.
     fn moved(self) -> Self;
 
-    fn path(paths: &Paths, workspace_id: &str, execution: &str) -> PathBuf;
+    fn path(paths: &Paths, workspace_id: &SpaceId, execution: &str) -> PathBuf;
 
     /// Save execution `id` of `agent` as one of the workspace's last
     /// sessions.
-    fn save(paths: &Paths, workspace_id: &str, agent: &super::TrackedAgent, id: &str)
-    -> Result<()>;
+    fn save(
+        paths: &Paths,
+        workspace_id: &SpaceId,
+        agent: &super::TrackedAgent,
+        id: &str,
+    ) -> Result<()>;
 
     /// Save this as one of the workspace's last sessions.
-    fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()>;
+    fn write(&self, paths: &Paths, workspace_id: &SpaceId) -> Result<()>;
 
     /// Read the last session saved at `path`, `None` once it is consumed.
     fn load(path: &Path) -> Result<Option<Self>>;
 
     /// The workspace's last sessions; an unreadable one is left out.
-    fn all(paths: &Paths, workspace_id: &str) -> Result<Vec<Self>>;
+    fn all(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<Self>>;
 
     /// Forget every last session of the workspace.
-    fn forget_all(paths: &Paths, workspace_id: &str) -> Result<()>;
+    fn forget_all(paths: &Paths, workspace_id: &SpaceId) -> Result<()>;
 }
 
 impl LastSessionExt for LastSession {
@@ -895,7 +907,7 @@ impl LastSessionExt for LastSession {
         }
     }
 
-    fn path(paths: &Paths, workspace_id: &str, execution: &str) -> PathBuf {
+    fn path(paths: &Paths, workspace_id: &SpaceId, execution: &str) -> PathBuf {
         paths
             .workspace_state(workspace_id)
             .join(format!("{execution}{LAST_SESSION_SUFFIX}"))
@@ -903,7 +915,7 @@ impl LastSessionExt for LastSession {
 
     fn save(
         paths: &Paths,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         agent: &super::TrackedAgent,
         id: &str,
     ) -> Result<()> {
@@ -923,7 +935,7 @@ impl LastSessionExt for LastSession {
         .write(paths, workspace_id)
     }
 
-    fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()> {
+    fn write(&self, paths: &Paths, workspace_id: &SpaceId) -> Result<()> {
         std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
         crate::fsutil::replace_atomically(
             &Self::path(paths, workspace_id, &self.execution),
@@ -956,7 +968,7 @@ impl LastSessionExt for LastSession {
         }
     }
 
-    fn all(paths: &Paths, workspace_id: &str) -> Result<Vec<Self>> {
+    fn all(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<Self>> {
         Ok(Saved::load(paths, workspace_id)?
             .sessions
             .iter()
@@ -964,7 +976,7 @@ impl LastSessionExt for LastSession {
             .collect())
     }
 
-    fn forget_all(paths: &Paths, workspace_id: &str) -> Result<()> {
+    fn forget_all(paths: &Paths, workspace_id: &SpaceId) -> Result<()> {
         for (_, path) in Saved::load(paths, workspace_id)?.sessions {
             consume(&path)?;
         }
@@ -974,7 +986,7 @@ impl LastSessionExt for LastSession {
 
 /// Give a workspace's single last session from before workspaces kept one
 /// per agent a file of its own. A concurrent reader may already have.
-fn name_unnamed_session(paths: &Paths, workspace_id: &str) -> Result<()> {
+fn name_unnamed_session(paths: &Paths, workspace_id: &SpaceId) -> Result<()> {
     let unnamed = paths
         .workspace_state(workspace_id)
         .join(UNNAMED_LAST_SESSION);
@@ -995,7 +1007,7 @@ pub(crate) struct CommandRecord {
 
 pub(super) fn save_command(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     argv: &[OsString],
 ) -> Result<PathBuf> {
@@ -1102,7 +1114,7 @@ pub(crate) struct SavedCommand {
 }
 
 impl Saved {
-    pub fn load(paths: &Paths, workspace_id: &str) -> Result<Self> {
+    pub fn load(paths: &Paths, workspace_id: &SpaceId) -> Result<Self> {
         let mut saved = Self::default();
         name_unnamed_session(paths, workspace_id)?;
         let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
@@ -1222,20 +1234,20 @@ pub fn any_pending(paths: &Paths) -> bool {
         entry
             .file_name()
             .to_str()
-            .is_some_and(|id| resumable(paths, id).unwrap_or(false))
+            .is_some_and(|id| resumable(paths, &SpaceId::from(id.to_owned())).unwrap_or(false))
     })
 }
 
 /// Whether the workspace has stopped work that waits for `shoal resume`,
 /// which an agent whose wrapper still waits to restore it is not.
-pub fn resumable(paths: &Paths, workspace_id: &str) -> Result<bool> {
+pub fn resumable(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
     let mut saved = Saved::load(paths, workspace_id)?;
     saved.retain_unattended();
     Ok(saved.is_unfinished())
 }
 
 /// Pending recovery is unfinished work even when its Git tree is clean.
-pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
+pub fn pending(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
     pending_except(paths, workspace_id, |_| false)
 }
 
@@ -1243,7 +1255,7 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
 /// those `excepted` selects.
 pub(crate) fn pending_except(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     excepted: impl Fn(&str) -> bool,
 ) -> Result<bool> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
@@ -1266,7 +1278,7 @@ pub(crate) fn pending_except(
 }
 
 /// The executions of stopped agents that wait for `shoal resume` in the workspace.
-pub fn agent_records(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
+pub fn agent_records(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<String>> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

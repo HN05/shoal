@@ -1,3 +1,4 @@
+use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -76,7 +77,7 @@ pub enum ChatMethod {
     RemoveChat {
         chat: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        children: Option<Vec<String>>,
+        children: Option<Vec<SpaceId>>,
     },
     /// Give the running chat `chat`, by ID or name, the name `name`; the
     /// reply also names the chat as it was before.

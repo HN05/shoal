@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 
 #[test]
 fn agents_default_to_json_unless_their_launcher_carries_a_setting() {
@@ -167,7 +168,7 @@ fn configured_paths_preserve_non_utf8_bytes() {
 
 #[test]
 fn a_workspace_process_a_chat_started_belongs_to_the_workspace() {
-    let chat = || Some("chat".to_owned());
+    let chat = || Some(SpaceId::from("chat"));
     assert_eq!(own_chat(None, chat()), chat());
     assert_eq!(own_chat(Some(OsString::new()), chat()), chat());
     // A command a chat ran in a workspace keeps the chat's marker.

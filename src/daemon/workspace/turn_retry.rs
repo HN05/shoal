@@ -5,6 +5,7 @@
 //! persisted, so it outlasts a daemon restart, and knows no agent: any
 //! report of a failed turn schedules one, or tells of a turn Shoal does not
 //! retry.
+use crate::client::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -38,7 +39,7 @@ const RESET_MARGIN: Duration = Duration::from_secs(30);
 /// How often the loop looks again without a retry to wait for.
 const IDLE_RECHECK: Duration = Duration::from_secs(60 * 60);
 
-pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<TurnRetry>> {
+pub(crate) fn get(db: &Connection, workspace_id: &SpaceId) -> Result<Option<TurnRetry>> {
     Ok(db
         .query_row(
             "SELECT failure,attempt,due_at,delivered FROM workspace_turn_retries
@@ -58,7 +59,11 @@ pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<TurnRetr
 
 /// Follow a reported turn state: a new turn cancels a retry not delivered
 /// yet, and the end of the turn a delivered retry started finishes it.
-pub(super) fn follow_state(db: &Connection, workspace_id: &str, state: AgentState) -> Result<()> {
+pub(super) fn follow_state(
+    db: &Connection,
+    workspace_id: &SpaceId,
+    state: AgentState,
+) -> Result<()> {
     let delivered = match state {
         AgentState::Working => false,
         AgentState::Idle => true,
@@ -95,7 +100,7 @@ fn spread() -> f64 {
 /// same transaction as a report of it, so neither can slip between.
 fn record_failure(
     tx: &Transaction<'_>,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     execution: &str,
     failure: TurnFailure,
     now: UnixTime,
@@ -162,7 +167,7 @@ struct PreviousAttempt {
 }
 
 /// Decode the workspace's most recent attempt, when one is recorded.
-fn previous_attempt(db: &Connection, workspace_id: &str) -> Result<Option<PreviousAttempt>> {
+fn previous_attempt(db: &Connection, workspace_id: &SpaceId) -> Result<Option<PreviousAttempt>> {
     Ok(db
         .query_row(
             "SELECT execution_id,failure,attempt,due_at,delivered FROM workspace_turn_retries
@@ -206,7 +211,7 @@ fn next_attempt(
 /// Persist the next attempt, replacing a previous one for the workspace.
 fn save_retry(
     db: &Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     execution: &str,
     failure: TurnFailure,
     attempt: u32,
@@ -223,7 +228,7 @@ fn save_retry(
 }
 
 /// Drop the workspace's retry.
-pub(super) fn cancel(db: &Connection, workspace_id: &str) -> Result<()> {
+pub(super) fn cancel(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     db.execute(
         "DELETE FROM workspace_turn_retries WHERE workspace_id=?1",
         [workspace_id],
@@ -240,7 +245,7 @@ struct Due {
 }
 
 /// The workspaces whose retry is due at `now`.
-fn due_workspaces(db: &Connection, now: UnixTime) -> Result<Vec<String>> {
+fn due_workspaces(db: &Connection, now: UnixTime) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(
             "SELECT workspace_id FROM workspace_turn_retries WHERE delivered=0 AND due_at<=?1",
@@ -250,7 +255,7 @@ fn due_workspaces(db: &Connection, now: UnixTime) -> Result<Vec<String>> {
 }
 
 /// The workspace's retry when it is still due at `now`.
-fn due(db: &Connection, workspace_id: &str, now: UnixTime) -> Result<Option<Due>> {
+fn due(db: &Connection, workspace_id: &SpaceId, now: UnixTime) -> Result<Option<Due>> {
     Ok(db
         .query_row(
             "SELECT r.failure,r.attempt,
@@ -278,7 +283,7 @@ struct Delivered {
     queued: bool,
     /// The workspaces whose retry could not be delivered, with why; each is
     /// tried again after the first delay.
-    failed: Vec<(String, anyhow::Error)>,
+    failed: Vec<(SpaceId, anyhow::Error)>,
     /// When the next retry is due.
     next: Option<UnixTime>,
 }
@@ -319,7 +324,7 @@ fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
 /// delivered together, or drop a retry that may not be. One transaction
 /// checks and delivers, so a turn that starts meanwhile never receives a
 /// cancelled retry. Whether a message was queued.
-fn deliver(tx: &Transaction<'_>, workspace_id: &str, now: UnixTime) -> Result<bool> {
+fn deliver(tx: &Transaction<'_>, workspace_id: &SpaceId, now: UnixTime) -> Result<bool> {
     let Some(due) = due(tx, workspace_id, now)? else {
         return Ok(false);
     };
@@ -340,7 +345,7 @@ fn deliver(tx: &Transaction<'_>, workspace_id: &str, now: UnixTime) -> Result<bo
     Ok(due.deliverable)
 }
 
-fn postpone(db: &Connection, workspace_id: &str, due_at: UnixTime) -> Result<()> {
+fn postpone(db: &Connection, workspace_id: &SpaceId, due_at: UnixTime) -> Result<()> {
     db.execute(
         "UPDATE workspace_turn_retries SET due_at=?2 WHERE workspace_id=?1 AND delivered=0",
         params![workspace_id, due_at],

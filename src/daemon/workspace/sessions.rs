@@ -5,6 +5,7 @@
 //! places Shoal created.
 pub(super) mod pending;
 
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use super::Manager;
@@ -33,10 +34,10 @@ impl Manager {
     async fn close_host_workspace_sessions(
         &self,
         host: &dyn crate::sessions::Host,
-        workspace: &str,
+        workspace: &SpaceId,
     ) -> Result<()> {
         for session in host.sessions(&self.paths.state).await? {
-            if session.workspace == workspace {
+            if session.workspace == *workspace {
                 self.close_session(host, &session.name, Owner::Workspace(session.workspace))
                     .await;
             }
@@ -50,7 +51,7 @@ impl Manager {
         &self,
         host: HostName,
         place: &str,
-        workspace: &str,
+        workspace: &SpaceId,
     ) -> Result<bool> {
         let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) else {
             return Ok(false);
@@ -58,7 +59,7 @@ impl Manager {
         let sessions = host.sessions(&self.paths.state).await?;
         Ok(sessions
             .iter()
-            .any(|session| session.name == place && session.workspace == workspace))
+            .any(|session| session.name == place && session.workspace == *workspace))
     }
 
     /// Read ownership fresh for each session: a stale list must not classify a
@@ -85,7 +86,7 @@ impl Manager {
 
     /// Close the places Shoal created for `workspace`, which removal ended,
     /// or for every workspace whose record is gone.
-    async fn close_owned_places(&self, workspace: Option<String>) {
+    async fn close_owned_places(&self, workspace: Option<SpaceId>) {
         let sweep = workspace.is_none();
         let places = match self.owned_places(workspace).await {
             Ok(places) => places,
@@ -105,7 +106,7 @@ impl Manager {
     /// close places of leaves that to the place's watcher.
     pub(crate) async fn close_recorded_place(
         &self,
-        workspace: &str,
+        workspace: &SpaceId,
         place: &Origin,
     ) -> Result<PlaceClose> {
         let _ownership = self.place_ownership.lock().await;
@@ -136,7 +137,11 @@ impl Manager {
     /// Close `place`, which the daemon keeps no record of, when its host
     /// labels it as `workspace`'s session, as zmx does a session from before
     /// Shoal recorded them; the host's close verifies the labels again.
-    async fn close_labelled_session(&self, workspace: &str, place: &Origin) -> Result<PlaceClose> {
+    async fn close_labelled_session(
+        &self,
+        workspace: &SpaceId,
+        place: &Origin,
+    ) -> Result<PlaceClose> {
         if !self
             .labels_session(place.host, place.id(), workspace)
             .await?

@@ -7,6 +7,7 @@ use super::{
     registry,
     spotlight::{self, Layout},
 };
+use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::{log, store},
     fsutil::{self, off_runtime},
@@ -673,7 +674,7 @@ fn movable_records(
     db: &rusqlite::Connection,
     id: &str,
     running: Running,
-) -> Result<BTreeMap<String, WorkspaceState>> {
+) -> Result<BTreeMap<SpaceId, WorkspaceState>> {
     ensure!(
         !store::exists(
             db,
@@ -703,7 +704,7 @@ fn movable_records(
     let states = db
         .prepare("SELECT id,state FROM workspaces WHERE repository_id=?1")?
         .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<BTreeMap<String, WorkspaceState>>>()?;
+        .collect::<rusqlite::Result<BTreeMap<SpaceId, WorkspaceState>>>()?;
     for (workspace, state) in &states {
         ensure!(
             matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),

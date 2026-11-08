@@ -1,4 +1,5 @@
 use super::Delivery;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
@@ -301,7 +302,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             .await
             .unwrap();
     }
-    let send = |repository: Option<&String>, below: Option<String>| {
+    let send = |repository: Option<&String>, below: Option<SpaceId>| {
         let manager = &manager;
         let repository = repository.cloned().map(Into::into);
         async move {
@@ -311,8 +312,8 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                     "Rebase onto main".into(),
                     Vec::new(),
                     &Attacher::User,
-                    below.as_deref(),
-                    Some("sender"),
+                    below.as_ref(),
+                    Some(&SpaceId::from("sender")),
                 )
                 .await
                 .unwrap()

@@ -63,8 +63,8 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         .await;
     // Workspace processes list, ask for and release their own holds, but
     // never reach outside their tree.
-    for target in [&workspace.name.to_string(), &other.id] {
-        let own = workspace.name == *target;
+    for target in [workspace.name.as_str(), other.id.as_str()] {
+        let own = workspace.name == target;
         let mut list = HoldMethod::HoldList {
             workspace: SpaceSelector::parse(target),
         };

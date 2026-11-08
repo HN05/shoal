@@ -1,5 +1,6 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, RemovalRules, executions::StopPolicy};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::refusal::{Reason, Refusal};
@@ -97,7 +98,7 @@ enum Removal<'a> {
         release_holds: bool,
         /// The IDs of the only spaces it may take first, when the caller
         /// narrows what `unsaved` confirms.
-        taking: Option<&'a [String]>,
+        taking: Option<&'a [SpaceId]>,
     },
     /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
     Automatic {
@@ -120,7 +121,7 @@ enum Removal<'a> {
     Parent {
         cause: EventCause,
         refuse_holds: bool,
-        confirmed: Option<&'a [String]>,
+        confirmed: Option<&'a [SpaceId]>,
     },
 }
 
@@ -256,7 +257,7 @@ impl<'a> Removal<'a> {
 
     /// The IDs of the workspaces below the workspace that a manual removal
     /// confirmed, the only ones it takes; `None` takes whatever is below.
-    fn confirmed_children(self) -> Option<&'a [String]> {
+    fn confirmed_children(self) -> Option<&'a [SpaceId]> {
         match self {
             Removal::Manual {
                 unsaved, taking, ..
@@ -504,7 +505,7 @@ impl Manager {
     /// still disregards.
     async fn cleanup_executions(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
     ) -> Result<CleanupExecutions> {
         let mut executions = CleanupExecutions {
@@ -562,7 +563,7 @@ impl Manager {
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
-        taking: &[String],
+        taking: &[SpaceId],
     ) -> Result<RemovalResult> {
         let unsaved = &unsaved;
         self.remove(
@@ -605,7 +606,7 @@ impl Manager {
     /// any change to them.
     pub async fn idle_timer_signals(
         &self,
-        id: &str,
+        id: &SpaceId,
         users: &process::DirectoryUsers,
     ) -> Result<Option<u64>> {
         let path = self.workspace_by_id(id).await?.path;
@@ -615,7 +616,7 @@ impl Manager {
 
     async fn timer_signals(
         &self,
-        id: &str,
+        id: &SpaceId,
         path: &Path,
         users: &process::DirectoryUsers,
     ) -> Result<Option<u64>> {
@@ -634,7 +635,7 @@ impl Manager {
 
     /// The HEAD and recorded activity of the workspace at `path`, hashed for
     /// comparison between sweeps.
-    async fn current_signals(&self, id: &str, path: &Path) -> Result<u64> {
+    async fn current_signals(&self, id: &SpaceId, path: &Path) -> Result<u64> {
         let head = git::revision(path, "HEAD", git::run).await?;
         let activity = self.usage.activity(id);
         Ok(crate::daemon::cleanup::signals(&head, activity))
@@ -642,7 +643,7 @@ impl Manager {
 
     /// [`Self::swept_snapshot`], scanning the processes in the worktree.
     #[cfg(test)]
-    pub(crate) async fn cleanup_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
+    pub(crate) async fn cleanup_snapshot(&self, id: &SpaceId) -> Result<Option<Snapshot>> {
         self.swept_snapshot(id, &process::DirectoryUsers::default())
             .await
     }
@@ -652,14 +653,14 @@ impl Manager {
     /// processes in the worktree read from `users`.
     pub async fn swept_snapshot(
         &self,
-        id: &str,
+        id: &SpaceId,
         users: &process::DirectoryUsers,
     ) -> Result<Option<Snapshot>> {
         Ok(self.idle_candidacy(id, &[], users).await?.ok())
     }
 
     /// The snapshot of a cleanup candidate, or why it is not one.
-    pub async fn cleanup_candidacy(&self, id: &str) -> Result<Result<Snapshot, CleanupReason>> {
+    pub async fn cleanup_candidacy(&self, id: &SpaceId) -> Result<Result<Snapshot, CleanupReason>> {
         self.idle_candidacy(id, &[], &process::DirectoryUsers::default())
             .await
     }
@@ -668,7 +669,7 @@ impl Manager {
     /// removal stopped, or why it is not one.
     async fn idle_candidacy(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Result<Snapshot, CleanupReason>> {
@@ -725,7 +726,7 @@ impl Manager {
     /// [`Self::cleanup_candidate`], inspected under [`Manager::check_access`].
     async fn checked_cleanup_candidate(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
@@ -739,7 +740,7 @@ impl Manager {
     /// processes in the worktree are read from `users`.
     async fn cleanup_candidate(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
@@ -769,7 +770,7 @@ impl Manager {
     /// [`Self::merged_candidate`], inspected under [`Manager::check_access`].
     async fn checked_merged_candidate(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Option<(PathBuf, u64)>> {
@@ -786,7 +787,7 @@ impl Manager {
     /// and the processes in the worktree are read from `users`.
     async fn merged_candidate(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Option<(PathBuf, u64)>> {
@@ -823,21 +824,21 @@ impl Manager {
     /// files a full snapshot takes.
     pub async fn merged_signals(
         &self,
-        id: &str,
+        id: &SpaceId,
         users: &process::DirectoryUsers,
     ) -> Result<Option<(PathBuf, u64)>> {
         self.checked_merged_candidate(id, &[], users).await
     }
 
     /// The full snapshot of a merged cleanup candidate.
-    pub async fn merged_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
+    pub async fn merged_snapshot(&self, id: &SpaceId) -> Result<Option<Snapshot>> {
         self.merged_snapshot_after(id, &[], &process::DirectoryUsers::default())
             .await
     }
 
     async fn merged_snapshot_after(
         &self,
-        id: &str,
+        id: &SpaceId,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Option<Snapshot>> {
@@ -860,7 +861,7 @@ impl Manager {
     /// candidate, with the processes in the worktree scanned afresh.
     async fn automatic_signals(
         &self,
-        id: &str,
+        id: &SpaceId,
         rule: Rule,
         cancelled: &[IdleRestore],
     ) -> Result<Option<u64>> {
@@ -880,7 +881,7 @@ impl Manager {
 
     async fn automatic_snapshot(
         &self,
-        id: &str,
+        id: &SpaceId,
         rule: Rule,
         cancelled: &[IdleRestore],
     ) -> Result<Option<Snapshot>> {
@@ -898,7 +899,7 @@ impl Manager {
     /// does its work.
     async fn recorded_cleanup_reason(
         &self,
-        id: &str,
+        id: &SpaceId,
         executions: &CleanupExecutions,
     ) -> Result<Option<CleanupReason>> {
         if let Some(retention) = self.keep_reason(id).await? {
@@ -927,7 +928,7 @@ impl Manager {
 
     /// What keeps the workspace from every unattended removal, completion
     /// and PR cleanup included, read fresh on each call.
-    pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<Retention>> {
+    pub(crate) async fn keep_reason(&self, id: &SpaceId) -> Result<Option<Retention>> {
         if self.has_holds(id).await? {
             return Ok(Some(Retention::Held));
         }
@@ -950,7 +951,7 @@ impl Manager {
     }
 
     /// Assignment state whose own cleanup path decides removal.
-    async fn assignment_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+    async fn assignment_reason(&self, id: &SpaceId) -> Result<Option<CleanupReason>> {
         let workspace = self.workspace_by_id(id).await?;
         if let Some(ancestor) = self.completed_ancestor(&workspace.id).await? {
             return Ok(Some(CleanupReason::AncestorCompleted {
@@ -975,7 +976,7 @@ impl Manager {
     /// not imply use.
     async fn usage_reason(
         &self,
-        id: &str,
+        id: &SpaceId,
         executions: &CleanupExecutions,
     ) -> Result<Option<CleanupReason>> {
         if executions.running > 0 {
@@ -1255,7 +1256,7 @@ impl Manager {
     /// that outlives its workspace, back to the user; those given back.
     async fn commit_workspace_removal(
         &self,
-        id: &str,
+        id: &SpaceId,
         cause: EventCause,
     ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
         let id = id.to_owned();
@@ -1328,7 +1329,7 @@ impl Manager {
     }
 
     /// Session logs are run data owned by the record just deleted.
-    fn delete_session_logs(&self, id: &str) {
+    fn delete_session_logs(&self, id: &SpaceId) {
         let _ = std::fs::remove_dir_all(self.paths.workspace_state(id));
     }
 

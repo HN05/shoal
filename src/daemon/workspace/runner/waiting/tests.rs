@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
@@ -182,7 +183,7 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
         })
         .await
         .unwrap();
-    let queued = |handle: &str, workspace: Option<String>| QueuedJob {
+    let queued = |handle: &str, workspace: Option<SpaceId>| QueuedJob {
         job: serde_json::from_value(json!({
             "handle": handle, "id": 1, "run": 2, "name": handle, "labels": ["shoal"],
         }))

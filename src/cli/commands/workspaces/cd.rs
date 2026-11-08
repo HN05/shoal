@@ -11,15 +11,14 @@ pub(in crate::cli::commands) async fn cd(
 ) -> Result<i32> {
     let workspace = match workspace {
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
-        None => ui::workspace_picker(ctx).await?,
+        None => SpaceSelector::Id(ui::workspace_picker(ctx).await?),
     };
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     ensure!(
         inspection.workspace.path.is_dir(),
         "workspace directory is missing"
     );
-    recent::record_move(ctx, &inspection.workspace.id).await;
+    recent::record_move(ctx, &SpaceSelector::id(&inspection.workspace.id)).await;
     navigate(ctx, &inspection.workspace.path)?;
     Ok(0)
 }

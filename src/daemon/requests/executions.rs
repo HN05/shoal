@@ -76,7 +76,7 @@ pub(super) async fn handle(
         } => Body::RestartedPlace(match join {
             Some(joined) => manager.join_restart(&execution, joined.run, run).await?,
             None => {
-                let stopped_by = caller.map(|caller| caller.space_id.as_str());
+                let stopped_by = caller.map(|caller| &caller.space_id);
                 manager
                     .restart_agent(&execution, run, in_place, stopped_by)
                     .await?

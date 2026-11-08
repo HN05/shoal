@@ -1,10 +1,11 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use rusqlite::StatementStatus;
 
 const INDEX_SCHEMA: &str = include_str!("../../../store/simulator_owner.sql");
 
-fn owner(index: usize) -> String {
-    format!("10000000-0000-0000-0000-{index:012}")
+fn owner(index: usize) -> SpaceId {
+    SpaceId::from(format!("10000000-0000-0000-0000-{index:012}"))
 }
 
 fn populate(db: &mut Connection, count: usize) -> Result<()> {

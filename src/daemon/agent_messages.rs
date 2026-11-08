@@ -3,6 +3,7 @@
 //! messages through `shoal messages`, watches and agent hooks, and a delivered
 //! message is deleted. Files attached to a message outlive it, until their
 //! workspace is removed (see [`crate::daemon::workspace_files`]).
+use crate::client::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
@@ -37,7 +38,7 @@ pub(crate) const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN
 /// takes none, since removal decides from the messages it has.
 pub(crate) fn insert(
     tx: &Transaction<'_>,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     message: &str,
     attachments: &[PathBuf],
 ) -> Result<Option<i64>> {
@@ -61,7 +62,7 @@ pub(crate) enum Delivery {
 /// waits check again whether work runs.
 pub(crate) fn insert_delivered(
     tx: &Transaction<'_>,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     message: &str,
     attachments: &[PathBuf],
     delivery: Delivery,
@@ -245,8 +246,8 @@ impl Manager {
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
-        below: Option<&str>,
-        sender_chat: Option<&str>,
+        below: Option<&SpaceId>,
+        sender_chat: Option<&SpaceId>,
     ) -> Result<Reached> {
         let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
         let mut reached = Reached::default();
@@ -281,8 +282,8 @@ impl Manager {
     async fn recipients(
         &self,
         repository: Option<&Selector>,
-        below: Option<&str>,
-        sender_chat: Option<&str>,
+        below: Option<&SpaceId>,
+        sender_chat: Option<&SpaceId>,
     ) -> Result<(Vec<(Workspace, bool)>, Vec<Chat>)> {
         let repository = match repository {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
@@ -307,14 +308,14 @@ impl Manager {
     async fn workspace_recipients(
         &self,
         repository: Option<&String>,
-        below: Option<&str>,
+        below: Option<&SpaceId>,
     ) -> Result<Vec<(Workspace, bool)>> {
         let running = self.running_agent_workspaces().await;
         let recorded = self.recorded_agent_workspaces().await?;
         let queued = self.queued_agent_workspaces().await?;
         let mut recipients = Vec::new();
         for workspace in self.list_workspaces_within(below).await? {
-            if Some(workspace.id.as_str()) == below
+            if Some(&workspace.id) == below
                 || repository.is_some_and(|repository| *repository != workspace.repository_id)
                 || workspace.state == WorkspaceState::Removing
             {
@@ -337,12 +338,12 @@ impl Manager {
     async fn chat_recipients(
         &self,
         repository: Option<&String>,
-        sender_chat: Option<&str>,
+        sender_chat: Option<&SpaceId>,
     ) -> Result<Vec<Chat>> {
         let mut chats = self.chats().await?;
         chats.retain(|chat| {
             repository.is_none_or(|repository| Some(repository) == chat.repository_id.as_ref())
-                && sender_chat.is_none_or(|sender| sender != chat.id && chat.name != sender)
+                && sender_chat.is_none_or(|sender| *sender != chat.id)
         });
         chats.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(chats)
@@ -350,7 +351,7 @@ impl Manager {
 
     pub(crate) async fn queue_agent_message(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: String,
     ) -> Result<()> {
         self.queue_agent_message_delivered(workspace_id, message, Delivery::Wake)
@@ -362,7 +363,7 @@ impl Manager {
     /// coordinator.
     pub(crate) async fn queue_agent_message_attached(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: String,
         attachments: Vec<PathBuf>,
     ) -> Result<()> {
@@ -382,7 +383,7 @@ impl Manager {
 
     pub(crate) async fn queue_agent_message_delivered(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: String,
         delivery: Delivery,
     ) -> Result<()> {
@@ -395,7 +396,7 @@ impl Manager {
     /// `attacher`.
     async fn queue_attached_message(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         message: String,
         attachments: Vec<Copy>,
         attacher: Option<Attacher>,
@@ -460,7 +461,7 @@ impl Manager {
 
     /// The workspace's unread messages, with whether one always wakes an
     /// idle agent and whether one wakes it while work runs.
-    async fn read_unread(&self, workspace_id: String) -> Result<(Unread, bool)> {
+    async fn read_unread(&self, workspace_id: SpaceId) -> Result<(Unread, bool)> {
         self.store
             .run(move |db| {
                 let mut unread = Unread::default();

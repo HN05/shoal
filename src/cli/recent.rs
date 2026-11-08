@@ -1,4 +1,5 @@
 //! The spaces each command last acted on, so `-` can name the previous one.
+use crate::client::space_ids::SpaceId;
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, ensure};
@@ -34,7 +35,7 @@ const LIMIT: usize = 8;
 
 /// Workspace and chat IDs by command name, most recent first.
 #[derive(Debug, Default, Serialize, Deserialize)]
-struct History(BTreeMap<String, Vec<String>>);
+struct History(BTreeMap<String, Vec<SpaceId>>);
 
 impl History {
     /// An unreadable history is empty: it only saves typing a name.
@@ -72,7 +73,7 @@ impl History {
         Ok(())
     }
 
-    fn record(&mut self, command: &str, space_id: &str) {
+    fn record(&mut self, command: &str, space_id: &SpaceId) {
         let ids = self.0.entry(command.to_owned()).or_default();
         ids.retain(|id| id != space_id);
         ids.insert(0, space_id.to_owned());
@@ -80,18 +81,23 @@ impl History {
     }
 
     /// The most recent of the space IDs `spaces` not in `current`.
-    fn previous(&self, command: &str, spaces: &[&str], current: &[&str]) -> Option<String> {
+    fn previous(
+        &self,
+        command: &str,
+        spaces: &[&SpaceId],
+        current: &[&SpaceId],
+    ) -> Option<SpaceId> {
         self.0
             .get(command)?
             .iter()
-            .filter(|id| !current.contains(&id.as_str()))
-            .find(|id| spaces.contains(&id.as_str()))
+            .filter(|id| !current.contains(id))
+            .find(|id| spaces.contains(id))
             .cloned()
     }
 }
 
 /// The workspace the command last acted on other than the current one.
-pub async fn previous(ctx: &Context) -> Result<String> {
+pub async fn previous(ctx: &Context) -> Result<SpaceId> {
     let command = command(ctx)?;
     previous_among(ctx, command, &[])
         .await?
@@ -100,7 +106,7 @@ pub async fn previous(ctx: &Context) -> Result<String> {
 
 /// The workspace or one of the running `chats` the command last acted on,
 /// other than the current workspace and the chat this process runs in.
-pub async fn previous_space(ctx: &Context, chats: &[Chat]) -> Result<String> {
+pub async fn previous_space(ctx: &Context, chats: &[Chat]) -> Result<SpaceId> {
     let command = command(ctx)?;
     previous_among(ctx, command, chats)
         .await?
@@ -123,24 +129,24 @@ fn command(ctx: &Context) -> Result<&str> {
 
 /// The most recent of the workspaces and `chats` in `command`'s history
 /// other than the current workspace and chat.
-async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<String>> {
+async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<SpaceId>> {
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let current_chat = crate::env::chat();
-    let current: Vec<&str> = ui::current_workspace(&workspaces)?
-        .map(|workspace| workspace.id.as_str())
+    let current: Vec<&SpaceId> = ui::current_workspace(&workspaces)?
+        .map(|workspace| &workspace.id)
         .into_iter()
-        .chain(current_chat.as_deref())
+        .chain(current_chat.as_ref())
         .collect();
-    let spaces: Vec<&str> = workspaces
+    let spaces: Vec<&SpaceId> = workspaces
         .iter()
-        .map(|workspace| workspace.id.as_str())
-        .chain(chats.iter().map(|chat| chat.id.as_str()))
+        .map(|workspace| &workspace.id)
+        .chain(chats.iter().map(|chat| &chat.id))
         .collect();
     Ok(History::load(&ctx.paths).previous(command, &spaces, &current))
 }
 
 /// Remember that the command acted on the workspace `selector` names.
-pub async fn record(ctx: &Context, selector: &str) {
+pub async fn record(ctx: &Context, selector: &SpaceSelector) {
     if let Some(command) = ctx.recent.as_deref() {
         remember(ctx, command, selector, false).await;
     }
@@ -148,7 +154,7 @@ pub async fn record(ctx: &Context, selector: &str) {
 
 /// Remember that the command moved from the current workspace to the one
 /// `selector` names, so `-` returns to the one it left.
-pub async fn record_move(ctx: &Context, selector: &str) {
+pub async fn record_move(ctx: &Context, selector: &SpaceSelector) {
     if let Some(command) = ctx.recent.as_deref() {
         remember(ctx, command, selector, true).await;
     }
@@ -157,29 +163,28 @@ pub async fn record_move(ctx: &Context, selector: &str) {
 /// Remember that this terminal showed an agent session of the workspace
 /// `selector` names and left it running, so `attach -` returns to it
 /// whichever command showed it.
-pub async fn record_attach(ctx: &Context, selector: &str) {
+pub async fn record_attach(ctx: &Context, selector: &SpaceSelector) {
     remember(ctx, ATTACH, selector, false).await;
 }
 
 /// Remember that this terminal showed the agent session of the running chat
 /// `selector` names or identifies and left it running, as [`record_attach`]
 /// does for a workspace. Failing to keep it never fails the command.
-pub async fn record_chat_attach(ctx: &Context, selector: &str) {
+pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
     if !keeps_history(ctx) {
         return;
     }
     let Ok(chats) = crate::client::chats::list(&ctx.paths).await else {
         return;
     };
-    let selected = SpaceSelector::parse(selector);
-    let named = |chat: &&Chat| selected.selects(&chat.id, &chat.name, chat.number);
+    let named = |chat: &&Chat| selector.selects(&chat.id, &chat.name, chat.number);
     if let Some(chat) = chats.iter().find(named) {
         let _ = History::update(&ctx.paths, |history| history.record(ATTACH, &chat.id));
     }
 }
 
 /// Failing to keep the history never fails the command.
-async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bool) {
+async fn remember(ctx: &Context, command: &str, selector: &SpaceSelector, from_current: bool) {
     if !keeps_history(ctx) {
         return;
     }
@@ -187,7 +192,7 @@ async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bo
         return;
     };
     let Some(target) = WorkspaceContext::from_directory(&workspaces, None).resolve(
-        Some(&SpaceSelector::parse(selector)),
+        Some(selector),
         false,
         ScopeOrder::AfterDirectory,
     ) else {

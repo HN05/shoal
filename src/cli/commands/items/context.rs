@@ -46,7 +46,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     }
     if space.is_some() || ui::current_chat(&space).is_some() {
         let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
-        return space_context(ctx, SpaceSelector::parse(&space)).await;
+        return space_context(ctx, space.clone()).await;
     }
     if let Some(context) = current_context(ctx).await? {
         return Ok(context);
@@ -56,7 +56,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     }
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
-    space_context(ctx, SpaceSelector::parse(&space)).await
+    space_context(ctx, space.clone()).await
 }
 
 /// The context of the workspace or running chat `space` names.
@@ -142,7 +142,7 @@ async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
         return Ok(false);
     };
     let space =
-        crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::parse(&chat)).await?;
+        crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::id(&chat)).await?;
     Ok(matches!(space, Some(PresentSpace::Chat(chat)) if chat.repository_id.is_none()))
 }
 
@@ -167,15 +167,13 @@ pub(in crate::cli::commands) async fn current_context(
 ) -> Result<Option<ItemContext>> {
     match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
         Ok(workspace) => {
-            return Ok(Some(ItemContext::Workspace(SpaceSelector::parse(
-                &workspace,
-            ))));
+            return Ok(Some(ItemContext::Workspace(workspace)));
         }
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
         Err(error) => return Err(error),
     }
     if let Some(chat) = ui::current_chat(&None) {
-        return Ok(Some(ItemContext::Chat(SpaceSelector::parse(&chat))));
+        return Ok(Some(ItemContext::Chat(SpaceSelector::id(&chat))));
     }
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let checkout = super::super::issues::current_checkout(&repos).await?;

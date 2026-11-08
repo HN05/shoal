@@ -3,8 +3,9 @@
 //! scoped ancestors' state directories and the working directories of a
 //! space's untracked processes leave this module.
 pub(crate) use crate::client::processes::Identity;
-#[cfg(any(target_os = "macos", test))]
 use crate::client::processes::UniqueId;
+#[cfg(any(target_os = "macos", test))]
+use crate::client::space_ids::SpaceId;
 use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -260,8 +261,8 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
 
 /// Live same-user processes carrying the identity of chat `id`: its agent
 /// and what the agent started with its environment.
-pub async fn scan_chat(id: &str) -> Result<Vec<Identity>> {
-    let scan = scan_marked(Marker::Chat, HashSet::from([id.to_owned()])).await?;
+pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {
+    let scan = scan_marked(Marker::Chat, HashSet::from([id.to_string()])).await?;
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
@@ -269,12 +270,13 @@ pub async fn scan_chat(id: &str) -> Result<Vec<Identity>> {
 /// `ids`: their tracked executions, hooks and processes started with their
 /// exported environment, each paired with the workspace it carries.
 /// Unreadable environments cannot be attributed and are left out.
-pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identity)>> {
+pub async fn scan_workspaces(ids: HashSet<SpaceId>) -> Result<Vec<(SpaceId, Identity)>> {
+    let ids = ids.into_iter().map(String::from).collect();
     let scan = scan_marked(Marker::Workspace, ids).await?;
     Ok(scan
         .processes
         .into_iter()
-        .map(|p| (p.execution_id, p.identity))
+        .map(|p| (SpaceId::from(p.execution_id), p.identity))
         .collect())
 }
 

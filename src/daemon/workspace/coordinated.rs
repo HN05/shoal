@@ -4,6 +4,7 @@
 //! coordinator's subagents work there from inside its agent, reporting
 //! under its scope from its directory, so Shoal cannot tell which such
 //! workspace a subagent works in; each counts as its coordinator's work.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Connection;
 
@@ -15,7 +16,7 @@ impl Manager {
     /// the turn state that coordinator's agent reports.
     pub(super) async fn load_coordinator_states(&self, workspaces: &mut [Workspace]) -> Result<()> {
         let agents = self.tracked_agents().await;
-        let ids: Vec<String> = workspaces.iter().map(|w| w.id.clone()).collect();
+        let ids: Vec<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
         let states = self
             .store
             .run(move |db| {
@@ -33,7 +34,7 @@ impl Manager {
     /// Whether the agent of the coordinator that does the work of workspace
     /// `id` runs, in any turn state, since its subagents may work on past
     /// its turn.
-    pub(super) async fn coordinator_runs(&self, id: &str) -> Result<bool> {
+    pub(super) async fn coordinator_runs(&self, id: &SpaceId) -> Result<bool> {
         let agents = self.tracked_agents().await;
         let id = id.to_owned();
         self.store
@@ -49,7 +50,7 @@ impl Manager {
 /// workspace `id` reports.
 fn coordinator_state(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     agents: &TrackedAgents,
 ) -> Result<Option<AgentState>> {
     let Some(coordinator) = working_coordinator(db, id, agents)? else {
@@ -62,9 +63,9 @@ fn coordinator_state(
 /// there.
 fn working_coordinator(
     db: &Connection,
-    id: &str,
+    id: &SpaceId,
     agents: &TrackedAgents,
-) -> Result<Option<String>> {
+) -> Result<Option<SpaceId>> {
     let agentless = store::exists(
         db,
         "SELECT 1 FROM workspaces WHERE id=?1 AND mode IS NULL",

@@ -1,5 +1,6 @@
 //! What removing a workspace would discard, whether the caller lets it, and
 //! what the removal did.
+use crate::space_ids::SpaceId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -63,7 +64,7 @@ pub struct RemovalCheck {
     /// The IDs of the `children` that are disposable, which removal takes
     /// without asking.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub disposable_children: Vec<String>,
+    pub disposable_children: Vec<SpaceId>,
 }
 
 /// What a manual removal may delete that neither a branch nor a remote
@@ -83,7 +84,7 @@ pub enum UnsavedWork {
         #[serde(default)]
         files_restorable: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        children: Option<Vec<String>>,
+        children: Option<Vec<SpaceId>>,
     },
     /// Everything, for removals that delete more than the workspace.
     All,
@@ -122,7 +123,7 @@ impl UnsavedWork {
 
     /// The IDs of the workspaces below it the caller saw and lets removal
     /// take, or `None` when it may take any.
-    pub fn children(&self) -> Option<&[String]> {
+    pub fn children(&self) -> Option<&[SpaceId]> {
         match self {
             Self::Confirmed { children, .. } => children.as_deref(),
             Self::All => None,

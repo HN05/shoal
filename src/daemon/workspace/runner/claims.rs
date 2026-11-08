@@ -6,6 +6,7 @@
 //! start, and either stays with the forge for other runners, as do the jobs
 //! of a repository whose runner was turned off. A job admitted as the system
 //! shuts down waits in the queue again.
+use crate::client::space_ids::SpaceId;
 use std::{
     io::Write as _,
     os::unix::fs::OpenOptionsExt as _,
@@ -235,7 +236,7 @@ impl Manager {
     pub(super) async fn record_claim(
         &self,
         entry: &QueueEntry,
-        workspace: &str,
+        workspace: &SpaceId,
         forge: &ForgeRepo,
         job: &QueuedJob,
     ) -> Result<()> {
@@ -404,7 +405,7 @@ impl Manager {
     }
 
     /// Remove a job's workspace whatever it holds; its claim goes with it.
-    pub(super) async fn remove_job_workspace(&self, workspace_id: &str) -> Result<()> {
+    pub(super) async fn remove_job_workspace(&self, workspace_id: &SpaceId) -> Result<()> {
         self.remove_workspace(
             &SpaceSelector::id(workspace_id),
             crate::removal::UnsavedWork::All,
@@ -487,7 +488,7 @@ fn job_env(workspace: &Workspace) -> Vec<(String, String)> {
             crate::env::WORKSPACE_PATH.into(),
             workspace.path.to_string_lossy().into_owned(),
         ),
-        (crate::env::WORKSPACE_ID.into(), workspace.id.clone()),
+        (crate::env::WORKSPACE_ID.into(), workspace.id.to_string()),
     ]
 }
 

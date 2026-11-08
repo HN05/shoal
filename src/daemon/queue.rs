@@ -1,5 +1,6 @@
 //! First-come order for queued acquisitions; each allocator keeps its own
 //! capacity rules and consults the queue only before claiming capacity.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Mutex,
@@ -19,7 +20,7 @@ const ABANDONED_AFTER: Duration = Duration::from_secs(30);
 pub(crate) struct Queues(Mutex<HashMap<Target, VecDeque<Waiter>>>);
 
 struct Waiter {
-    workspace_id: String,
+    workspace_id: SpaceId,
     name: String,
     seen: Instant,
     in_progress: usize,
@@ -30,7 +31,7 @@ struct Waiter {
 pub(crate) struct Place<'a> {
     queues: &'a Queues,
     target: Target,
-    workspace_id: String,
+    workspace_id: SpaceId,
     name: String,
     /// Whether this request counts toward a waiter's requests in progress.
     held: bool,
@@ -42,7 +43,7 @@ impl Queues {
     pub(crate) fn enter(
         &self,
         target: Target,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         name: &str,
         join: bool,
     ) -> Place<'_> {
@@ -56,7 +57,7 @@ impl Queues {
             true
         } else if join {
             queue.push_back(Waiter {
-                workspace_id: workspace_id.into(),
+                workspace_id: workspace_id.clone(),
                 name: name.into(),
                 seen: now,
                 in_progress: 1,
@@ -71,7 +72,7 @@ impl Queues {
         Place {
             queues: self,
             target,
-            workspace_id: workspace_id.into(),
+            workspace_id: workspace_id.clone(),
             name: name.into(),
             held,
             keep: false,
@@ -80,8 +81,8 @@ impl Queues {
 }
 
 impl Waiter {
-    fn is(&self, workspace_id: &str, name: &str) -> bool {
-        self.workspace_id == workspace_id && self.name == name
+    fn is(&self, workspace_id: &SpaceId, name: &str) -> bool {
+        self.workspace_id == *workspace_id && self.name == name
     }
 }
 

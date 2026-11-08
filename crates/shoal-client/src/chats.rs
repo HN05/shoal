@@ -1,5 +1,6 @@
 //! Chats: starting, restoring and handing over their agents, their names,
 //! parents and scope, listing them and removing them.
+use crate::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::space_names::SpaceName;
@@ -70,19 +71,19 @@ pub async fn check_parent(
     daemon: &impl Daemon,
     repository: Option<Selector>,
     workspace: Option<SpaceSelector>,
-    parent: String,
+    parent: SpaceSelector,
 ) -> Result<()> {
     let method = ChatMethod::CheckChatParent {
         repository,
         workspace,
-        parent: Some(SpaceSelector::parse(&parent)),
+        parent: Some(parent),
     };
     request::<()>(daemon, method).await
 }
 
 /// Refuse the restore of the stopped chat `chat`, by ID, that the daemon
 /// would refuse this process, before anything opens a place for it.
-pub async fn check_restore(daemon: &impl Daemon, chat: &str) -> Result<()> {
+pub async fn check_restore(daemon: &impl Daemon, chat: &SpaceId) -> Result<()> {
     let chat = SpaceSelector::id(chat);
     request::<()>(daemon, ChatMethod::CheckChatRestore { chat }).await
 }
@@ -147,7 +148,7 @@ pub async fn record(
     chat: NewChat<'_>,
     origin: Option<Origin>,
     hands_over: bool,
-    restores: Option<&str>,
+    restores: Option<&SpaceId>,
 ) -> Result<Chat> {
     match restores {
         Some(restored) => restore(daemon, restored, origin, hands_over).await,
@@ -159,14 +160,14 @@ pub async fn record(
 /// records a new chat.
 pub async fn restore(
     daemon: &impl Daemon,
-    chat: &str,
+    chat: &SpaceId,
     origin: Option<Origin>,
     hands_over: bool,
 ) -> Result<Chat> {
     request(
         daemon,
         ChatMethod::RestoreChat {
-            chat: SpaceSelector::parse(chat),
+            chat: SpaceSelector::id(chat),
             pid: std::process::id(),
             origin,
             hands_over,
@@ -177,11 +178,11 @@ pub async fn restore(
 
 /// Report that this process could not restore the stopped chat `chat`, which
 /// waits for `shoal resume` again if this process had taken it over.
-pub async fn save(daemon: &impl Daemon, chat: &str, error: &anyhow::Error) -> Result<()> {
+pub async fn save(daemon: &impl Daemon, chat: &SpaceId, error: &anyhow::Error) -> Result<()> {
     request::<()>(
         daemon,
         ChatMethod::SaveChat {
-            chat: SpaceSelector::parse(chat),
+            chat: SpaceSelector::id(chat),
             pid: std::process::id(),
             error: format!("{error:#}"),
         },
@@ -194,7 +195,7 @@ pub async fn save(daemon: &impl Daemon, chat: &str, error: &anyhow::Error) -> Re
 /// process had taken it over, and the user learns why.
 pub async fn keep_failed_restore<T>(
     daemon: &impl Daemon,
-    restores: Option<&str>,
+    restores: Option<&SpaceId>,
     ran: Result<T>,
 ) -> Result<T> {
     if let (Err(failure), Some(chat)) = (&ran, restores)
@@ -210,13 +211,13 @@ pub async fn keep_failed_restore<T>(
 /// saw and the only ones it takes.
 pub async fn remove(
     daemon: &impl Daemon,
-    chat: &str,
-    children: Option<Vec<String>>,
+    chat: &SpaceId,
+    children: Option<Vec<SpaceId>>,
 ) -> Result<RemovedChat> {
     request(
         daemon,
         ChatMethod::RemoveChat {
-            chat: SpaceSelector::parse(chat),
+            chat: SpaceSelector::id(chat),
             children,
         },
     )

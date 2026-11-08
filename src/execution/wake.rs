@@ -4,6 +4,7 @@
 //! hook has stopped waiting. While it is idle so with undelivered updates,
 //! the wrapper types a fixed prompt into the terminal session it runs in,
 //! and the prompt's `UserPromptSubmit` hook delivers them.
+use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -97,7 +98,7 @@ where
 /// Wait until whether the agent is idle with updates matches `due`, where
 /// the hook of the agent the `hooked` execution runs cannot wake it when
 /// given, waiting out a restarting or failing daemon.
-async fn await_wake(paths: &Paths, workspace: &str, due: bool, hooked: Option<String>) {
+async fn await_wake(paths: &Paths, workspace: &SpaceId, due: bool, hooked: Option<String>) {
     loop {
         match request(paths, workspace, due, hooked.clone()).await {
             Ok(()) => return,
@@ -110,9 +111,14 @@ async fn await_wake(paths: &Paths, workspace: &str, due: bool, hooked: Option<St
 /// failure does not spin.
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
-async fn request(paths: &Paths, workspace: &str, due: bool, hooked: Option<String>) -> Result<()> {
+async fn request(
+    paths: &Paths,
+    workspace: &SpaceId,
+    due: bool,
+    hooked: Option<String>,
+) -> Result<()> {
     let method = AgentMethod::AwaitAgentWake {
-        workspace: SpaceSelector::parse(workspace),
+        workspace: SpaceSelector::id(workspace),
         due,
         hooked,
     };

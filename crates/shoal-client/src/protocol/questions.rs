@@ -1,3 +1,4 @@
+use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -18,7 +19,7 @@ pub enum QuestionMethod {
         attachments: Vec<crate::files::NewFile>,
         /// The chat whose agent asks, which attaches its files.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<String>,
+        sender_chat: Option<SpaceId>,
     },
     /// Open questions, in every space unless one is named.
     ListQuestions { space: Option<SpaceSelector> },

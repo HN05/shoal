@@ -1,4 +1,5 @@
 //! Questions agents ask the user.
+use crate::space_ids::SpaceId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -28,7 +29,7 @@ pub struct Question {
     #[serde(flatten)]
     pub number: ItemNumber,
     /// The workspace or chat whose agent asked it.
-    pub space_id: String,
+    pub space_id: SpaceId,
     /// The space's current name.
     pub space: String,
     pub created_at: crate::time::UnixTime,
@@ -103,7 +104,7 @@ pub async fn ask(
     space: SpaceSelector,
     ask: Ask,
     attachments: Vec<NewFile>,
-    sender_chat: Option<String>,
+    sender_chat: Option<SpaceId>,
 ) -> Result<Question> {
     let method = QuestionMethod::AskQuestion {
         space,
@@ -119,13 +120,13 @@ pub async fn ask(
 /// before the wait began.
 pub async fn await_answer(
     daemon: &impl Daemon,
-    space: &str,
+    space: &SpaceSelector,
     item: u32,
     ask: &Ask,
     restarted: bool,
 ) -> Result<Question> {
     let method = || QuestionMethod::AwaitAnswer {
-        space: SpaceSelector::parse(space),
+        space: space.clone(),
         item,
         ask: ask.clone(),
     };

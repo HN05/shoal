@@ -1,6 +1,7 @@
 //! How automatic cleanup is doing: whether its passes fail, in which
 //! workspaces, or have stalled, and telling the user once when they start
 //! failing.
+use crate::client::space_ids::SpaceId;
 use std::{collections::HashMap, sync::PoisonError, time::Duration};
 use tokio::time::Instant;
 
@@ -26,7 +27,7 @@ pub struct Health {
     /// Consecutive passes with failures that concern no workspace.
     failure: Option<Failure>,
     /// Each workspace's consecutive passes with failures, by its ID.
-    workspaces: HashMap<String, Failure>,
+    workspaces: HashMap<SpaceId, Failure>,
 }
 
 /// A point in time measured both ways: the monotonic clock excludes sleep, so
@@ -83,7 +84,7 @@ impl Failure {
 #[derive(Debug, PartialEq, Eq)]
 struct Unreported {
     /// The ID and name of the workspace it concerns, if any.
-    workspace: Option<(String, String)>,
+    workspace: Option<(SpaceId, String)>,
     error: String,
 }
 
@@ -101,7 +102,7 @@ impl CleanupHealth {
         self.lock().problem(now)
     }
 
-    fn workspace_problem(&self, id: &str) -> Option<String> {
+    fn workspace_problem(&self, id: &SpaceId) -> Option<String> {
         self.lock().workspace_problem(id)
     }
 
@@ -151,7 +152,7 @@ impl Health {
     }
 
     /// A short description of the failures in the workspace `id`.
-    fn workspace_problem(&self, id: &str) -> Option<String> {
+    fn workspace_problem(&self, id: &SpaceId) -> Option<String> {
         self.workspaces.get(id).map(Failure::describe)
     }
 
@@ -212,7 +213,7 @@ impl Manager {
     }
 
     /// Why automatic cleanup fails in the workspace `id`, if it does.
-    pub fn workspace_cleanup_problem(&self, id: &str) -> Option<String> {
+    pub fn workspace_cleanup_problem(&self, id: &SpaceId) -> Option<String> {
         self.cleanup_health.workspace_problem(id)
     }
 

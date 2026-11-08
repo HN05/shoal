@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     ffi::OsString,
@@ -25,7 +26,7 @@ use crate::{
 type Launched = (JobCommand, StartedExecution);
 
 /// Each test launch, by workspace.
-static LAUNCHED: LazyLock<Mutex<HashMap<String, Launched>>> = LazyLock::new(Default::default);
+static LAUNCHED: LazyLock<Mutex<HashMap<SpaceId, Launched>>> = LazyLock::new(Default::default);
 
 /// Record `command` as run in `workspace` by an execution the test ends.
 pub(super) async fn launch(
@@ -815,7 +816,7 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
         .run(move |db| {
             db.execute(
                 "UPDATE ci_jobs SET execution_id=?1 WHERE workspace_id=?2",
-                [plan.id, claimed],
+                rusqlite::params![plan.id, claimed],
             )?;
             Ok(())
         })

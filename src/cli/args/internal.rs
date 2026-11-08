@@ -1,4 +1,5 @@
 //! Arguments of commands Shoal, its agent hooks and integrations run.
+use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
@@ -127,7 +128,7 @@ pub enum InternalCommand {
     #[command(name = workers::PLACE_WATCH)]
     PlaceWatch {
         host: HostName,
-        workspace: String,
+        workspace: SpaceId,
         place: String,
         /// What told the place apart when the watch began.
         #[arg(long)]
@@ -139,11 +140,11 @@ pub enum InternalCommand {
     /// The Herdr tab watcher of earlier releases, which continues here after
     /// an upgrade.
     #[command(name = workers::HERDR_WATCH)]
-    HerdrWatch { workspace: String, tab: String },
+    HerdrWatch { workspace: SpaceId, tab: String },
     /// Detached execution wrapper; reports the launch on stdout, then keeps tracking it.
     #[command(name = workers::DETACHED)]
     Detached {
-        workspace: String,
+        workspace: SpaceId,
         #[arg(long)]
         log: PathBuf,
         #[arg(long)]
@@ -194,7 +195,7 @@ pub enum InternalCommand {
     /// Tracked agent inside a new place; consumes recovery records once started.
     #[command(name = workers::SESSION)]
     Session {
-        workspace: String,
+        workspace: SpaceId,
         agent: String,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
@@ -218,7 +219,7 @@ pub enum InternalCommand {
     /// A demo's wrapper, restarting its command until the demo is stopped.
     #[command(name = workers::DEMO)]
     Demo {
-        workspace: String,
+        workspace: SpaceId,
         #[arg(long)]
         launch: String,
         #[arg(last = true, required = true)]
@@ -232,7 +233,7 @@ pub enum InternalCommand {
     /// upgrade put in place of its own, over the daemon connection it hands over.
     #[command(name = workers::TAKE_OVER)]
     TakeOver {
-        workspace: String,
+        workspace: SpaceId,
         #[arg(long)]
         agent: String,
         #[command(flatten)]

@@ -143,7 +143,7 @@ async fn start_launch(ctx: &Context, entry: &str) -> Result<()> {
     let (queued, plan) = plan(ctx, entry).await?;
     if let Some(workspace) = &queued.entry.opens {
         let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
                 .await?
                 .workspace;
         anyhow::ensure!(

@@ -2,6 +2,7 @@
 //! move it to another place, and the cancelling of the launches a stopped
 //! workspace waits for. Each holds the queue gate, so dispatch cannot start
 //! the entry meanwhile.
+use crate::client::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -172,7 +173,7 @@ impl Manager {
     /// One already starting belongs to its agent.
     pub(crate) async fn cancel_waiting_launches(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<Vec<QueueEntry>> {
         let _gate = self.agent_queue.lock_admission().await;
         let workspace_id = workspace_id.to_owned();
@@ -185,7 +186,7 @@ impl Manager {
     /// keeps them waiting until it is released.
     pub(in crate::daemon::workspace) async fn waiting_launch_workspaces(
         &self,
-    ) -> Result<HashSet<String>> {
+    ) -> Result<HashSet<SpaceId>> {
         self.store
             .run(|db| {
                 Ok(db
@@ -358,7 +359,7 @@ fn delete_waiting(db: &rusqlite::Connection, id: &str) -> Result<bool> {
 /// queue order.
 fn delete_waiting_launches(
     tx: &rusqlite::Transaction<'_>,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
 ) -> Result<Vec<QueueEntry>> {
     const WAITING: &str = "FROM agent_queue WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3";
     let selection = params![workspace_id, QueueKind::Launch, QueueState::Queued];

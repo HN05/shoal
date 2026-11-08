@@ -428,7 +428,7 @@ fn with_background(script: &str) -> String {
 async fn run_tracked_agent(script: &str) {
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);
-    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let code = crate::execution::run(
         &paths,
         id,
@@ -452,7 +452,7 @@ async fn tracked_command_child() {
     }
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);
-    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let code = crate::execution::run_command(
         &paths,
         id,

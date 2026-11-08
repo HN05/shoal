@@ -2,6 +2,7 @@
 //! agent started after the agent exits, and those processes may use the
 //! chat's temporary directory, so the chat keeps its record and directory
 //! until the stop finishes, whoever finds its agent exited meanwhile.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     sync::{Mutex, PoisonError},
@@ -9,11 +10,11 @@ use std::{
 
 /// How many stops of each chat are under way, by chat.
 #[derive(Default)]
-pub(crate) struct Stopping(Mutex<HashMap<String, usize>>);
+pub(crate) struct Stopping(Mutex<HashMap<SpaceId, usize>>);
 
 impl Stopping {
     /// Keep the chat `id` from ending until the returned hold drops.
-    pub(super) fn hold(&self, id: &str) -> Hold<'_> {
+    pub(super) fn hold(&self, id: &SpaceId) -> Hold<'_> {
         *self.lock().entry(id.to_owned()).or_default() += 1;
         Hold {
             stopping: self,
@@ -22,11 +23,11 @@ impl Stopping {
     }
 
     /// Whether a stop of the chat `id` is under way.
-    pub(super) fn under_way(&self, id: &str) -> bool {
+    pub(super) fn under_way(&self, id: &SpaceId) -> bool {
         self.lock().contains_key(id)
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, usize>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<SpaceId, usize>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
@@ -34,7 +35,7 @@ impl Stopping {
 /// A stop of a chat under way, until it finishes.
 pub(super) struct Hold<'a> {
     stopping: &'a Stopping,
-    id: String,
+    id: SpaceId,
 }
 
 impl Drop for Hold<'_> {

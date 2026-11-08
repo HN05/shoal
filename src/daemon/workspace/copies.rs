@@ -1,6 +1,7 @@
 //! Copies: workspaces that start from another workspace's current files or
 //! from one of its checkpoints, and record what they started with in a
 //! starting checkpoint of their own.
+use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
@@ -32,7 +33,7 @@ pub(crate) enum CopyPlace {
 /// What a copy starts from, resolved from its request: a live or removed
 /// workspace's HEAD, diff base and files.
 struct Source {
-    workspace_id: String,
+    workspace_id: SpaceId,
     repository_id: String,
     name: String,
     branch: Option<String>,
@@ -79,7 +80,7 @@ impl Manager {
         place: CopyPlace,
         new: NewWorkspace<'_>,
     ) -> Result<Workspace> {
-        self.ensure_parent_repository(&repository, new.parent.as_deref())
+        self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         let source = self.copy_source(source).await?;
@@ -180,7 +181,7 @@ impl Manager {
 
     /// Checkpoint `number` of workspace `id`, named `name`, refused when it
     /// could not keep the unsaved files.
-    async fn copied_checkpoint(&self, id: &str, name: &str, number: u64) -> Result<Checkpoint> {
+    async fn copied_checkpoint(&self, id: &SpaceId, name: &str, number: u64) -> Result<Checkpoint> {
         let id = id.to_owned();
         let checkpoint = self
             .store
@@ -357,7 +358,7 @@ impl Manager {
     /// the tree of the index it started with.
     async fn record_copied_from(
         &self,
-        id: &str,
+        id: &SpaceId,
         source: &Source,
         starting: u64,
         index: String,
@@ -406,7 +407,7 @@ pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
              WHERE copy.id=?1",
             [&workspace.id],
             |row| {
-                let workspace = match row.get::<_, Option<String>>(0)? {
+                let workspace = match row.get::<_, Option<SpaceId>>(0)? {
                     Some(id) => Some(WorkspaceRef {
                         id,
                         name: row.get(1)?,

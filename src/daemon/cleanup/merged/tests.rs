@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::RecordExt;
 use std::{fs, sync::Arc};
 
@@ -506,12 +507,15 @@ async fn a_failed_fetch_keeps_merged_workspaces() {
 #[tokio::test(start_paused = true)]
 async fn a_failed_removal_is_retried_after_a_while_or_once_changed() {
     let mut state = State::default();
-    assert!(!state.waits("w", 1));
+    assert!(!state.waits(&SpaceId::from("w"), 1));
     state.retained.insert("w".into(), (1, Instant::now()));
-    assert!(state.waits("w", 1));
-    assert!(!state.waits("w", 2), "HEAD or activity changed");
+    assert!(state.waits(&SpaceId::from("w"), 1));
+    assert!(
+        !state.waits(&SpaceId::from("w"), 2),
+        "HEAD or activity changed"
+    );
     tokio::time::advance(RETRY_AFTER).await;
-    assert!(!state.waits("w", 1));
+    assert!(!state.waits(&SpaceId::from("w"), 1));
 }
 
 #[tokio::test]

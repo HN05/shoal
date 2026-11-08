@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 
 #[test]
 fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
@@ -7,9 +8,13 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
     failed.step("result expiry", Err(anyhow::anyhow!("disk is full")));
     for step in ["idle agents", "merged cleanup"] {
         let mut workspaces = SpaceFailures::default();
-        workspaces.push("id-a", "a", &anyhow::anyhow!("{step} failed in a"));
+        workspaces.push(
+            &SpaceId::from("id-a"),
+            "a",
+            &anyhow::anyhow!("{step} failed in a"),
+        );
         if step == "idle agents" {
-            workspaces.push("id-b", "b", &anyhow::anyhow!("bad config"));
+            workspaces.push(&SpaceId::from("id-b"), "b", &anyhow::anyhow!("bad config"));
         }
         failed.step(step, workspaces.into_result());
     }
@@ -19,11 +24,11 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
         Some("result expiry: disk is full")
     );
     assert_eq!(
-        failed.space("id-a").as_deref(),
+        failed.space(&SpaceId::from("id-a")).as_deref(),
         Some("idle agents: idle agents failed in a; merged cleanup: merged cleanup failed in a")
     );
     assert_eq!(
-        failed.space("id-b").as_deref(),
+        failed.space(&SpaceId::from("id-b")).as_deref(),
         Some("idle agents: bad config")
     );
 }

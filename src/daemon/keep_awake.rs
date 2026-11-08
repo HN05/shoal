@@ -2,6 +2,7 @@
 //! `keep_awake` opts in, so an idle timeout or a closed laptop lid does not
 //! suspend it. The inhibitor lasts only as long as a pipe the daemon holds
 //! open, so it ends with the daemon however that stops.
+use crate::client::space_ids::SpaceId;
 use std::{process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, anyhow};
@@ -124,7 +125,11 @@ fn agents_have_work(db: &Connection, agents: &TrackedAgents) -> Result<bool> {
 
 /// Whether the workspace, or a child workspace whose activity its agent
 /// receives, watches an open PR.
-fn receives_open_pr_activity(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+fn receives_open_pr_activity(
+    db: &Connection,
+    id: &SpaceId,
+    agents: &TrackedAgents,
+) -> Result<bool> {
     let children = delegated(db, id, agents)?.into_iter().map(|child| child.id);
     for workspace in std::iter::once(id.to_owned()).chain(children) {
         if watches_open_pr(db, &workspace)? {

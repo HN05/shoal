@@ -1,5 +1,6 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the agent account of the workspace or registered checkout.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 
 use crate::{
@@ -51,7 +52,7 @@ impl Manager {
         })
     }
 
-    async fn record_ci_action(&self, id: &str, url: &str, action: CiAction) -> Result<()> {
+    async fn record_ci_action(&self, id: &SpaceId, url: &str, action: CiAction) -> Result<()> {
         let (id, url) = (id.to_owned(), url.to_owned());
         self.store
             .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, action.as_str()))

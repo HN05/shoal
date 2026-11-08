@@ -1,4 +1,5 @@
 //! The workspace and chat event journal, as `shoal events` replays it.
+use crate::space_ids::SpaceId;
 use std::{fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result};
@@ -190,10 +191,10 @@ states!(EventCause {
 pub struct EventDetails {
     pub kind: EventKind,
     /// Null for a chat's event.
-    pub workspace_id: Option<String>,
+    pub workspace_id: Option<SpaceId>,
     /// Null for a workspace's event.
     #[serde(default)]
-    pub chat_id: Option<String>,
+    pub chat_id: Option<SpaceId>,
     /// Null for a chat without a repository.
     pub repository_id: Option<String>,
     pub name: String,
@@ -287,11 +288,8 @@ pub struct EventDetails {
 
 impl EventDetails {
     /// The workspace or chat the event belongs to.
-    pub fn space_id(&self) -> &str {
-        self.workspace_id
-            .as_deref()
-            .or(self.chat_id.as_deref())
-            .unwrap_or_default()
+    pub fn space_id(&self) -> Option<&SpaceId> {
+        self.workspace_id.as_ref().or(self.chat_id.as_ref())
     }
 }
 
@@ -443,9 +441,9 @@ pub struct FileEvent {
 pub struct FileEventDetails {
     pub kind: FileEventKind,
     /// Null for a chat's file.
-    pub workspace_id: Option<String>,
+    pub workspace_id: Option<SpaceId>,
     /// Null for a workspace's file.
-    pub chat_id: Option<String>,
+    pub chat_id: Option<SpaceId>,
     /// Null for the file of a chat without a repository.
     pub repository_id: Option<String>,
     /// The record as `shoal files` lists it.

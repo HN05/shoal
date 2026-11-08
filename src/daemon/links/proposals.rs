@@ -1,6 +1,7 @@
 //! Issues and PRs a space's permissions make scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::daemon::approvals::proposals::ProposalExt;
 use anyhow::{Context, Result, bail, ensure};
@@ -145,7 +146,7 @@ impl Manager {
     /// too.
     async fn keep_attachments(
         &self,
-        owner: &str,
+        owner: &SpaceId,
         body: &mut String,
         attachments: &mut Vec<Attachment>,
     ) -> Result<()> {
@@ -230,7 +231,7 @@ impl Manager {
         approve: bool,
         decision: ProposalDecision,
         env: Option<std::collections::BTreeMap<String, String>>,
-        routed_to: Option<&str>,
+        routed_to: Option<&SpaceId>,
     ) -> Result<ApprovalRequest> {
         decision.validate(&request.target, approve)?;
         // Cleanup holds the space's gate, so it cannot remove the space
@@ -239,7 +240,7 @@ impl Manager {
         // A proposal this one duplicates takes its finding, so its gate is
         // held too.
         let duplicated = self.duplicated_proposal(&decision).await?;
-        let changed = duplicated.iter().map(|original| original.space_id.as_str());
+        let changed = duplicated.iter().map(|original| &original.space_id);
         let changed = changed.collect::<Vec<_>>();
         let _gate = self.lock_change_gates(&request.space_id, &changed).await?;
         let request = self.pending_proposal(request).await?;
@@ -904,7 +905,7 @@ async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<Stri
 /// A pending request for the space `id` to open what `specification`
 /// describes.
 pub(super) fn proposal(
-    id: &str,
+    id: &SpaceId,
     target: Target,
     name: &str,
     specification: Specification,

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 
 fn spaces(db: &Connection) -> Result<()> {
     db.execute_batch(
@@ -41,18 +42,21 @@ async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
         .store
         .run(|db| {
             spaces(db)?;
-            let first = next(db, "first")?;
+            let first = next(db, &SpaceId::from("first"))?;
             assert_eq!(first, ItemNumber { space: 1, item: 1 });
             question(db, "first", first)?;
-            let second = next(db, "first")?;
+            let second = next(db, &SpaceId::from("first"))?;
             assert_eq!(second, ItemNumber { space: 1, item: 2 });
             request(db, "web", second)?;
-            assert_eq!(next(db, "first")?.item, 3);
+            assert_eq!(next(db, &SpaceId::from("first"))?.item, 3);
             // Another space counts from 1 on its own.
-            assert_eq!(next(db, "chat")?, ItemNumber { space: 2, item: 1 });
+            assert_eq!(
+                next(db, &SpaceId::from("chat"))?,
+                ItemNumber { space: 2, item: 1 }
+            );
             // A deleted item frees its number for the next.
             db.execute("DELETE FROM questions", [])?;
-            assert_eq!(next(db, "first")?.item, 1);
+            assert_eq!(next(db, &SpaceId::from("first"))?.item, 1);
             Ok(())
         })
         .await

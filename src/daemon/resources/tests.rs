@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 
 #[test]
@@ -51,8 +52,8 @@ fn leases_use_named_columns() -> Result<()> {
         "name": "default", "resource": "member", "reason": null, "created_at": 123, "mode": "read"
     });
     assert_eq!(serde_json::to_value(&leases(&db, None)?[0])?, expected);
-    assert_eq!(leases(&db, Some("workspace"))?.len(), 1);
-    assert!(leases(&db, Some("other"))?.is_empty());
+    assert_eq!(leases(&db, Some(&SpaceId::from("workspace")))?.len(), 1);
+    assert!(leases(&db, Some(&SpaceId::from("other")))?.is_empty());
     let reordered = LEASE_COLUMNS.split(',').rev().collect::<Vec<_>>().join(",");
     let lease = db.query_row(
         &format!("SELECT {reordered} FROM resource_leases"),
@@ -116,10 +117,10 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     }
     let selected = pool_leases(&db, &Scope::Global, "target")?;
     assert_eq!(selected.len(), 2);
-    let existing = named_lease(&db, "a", "target", "three")?.unwrap();
+    let existing = named_lease(&db, &SpaceId::from("a"), "target", "three")?.unwrap();
     assert_eq!(existing.scope, Scope::Repo("a".into()));
-    assert!(named_lease(&db, "b", "target", "three")?.is_none());
-    assert!(named_lease(&db, "a", "other", "three")?.is_none());
+    assert!(named_lease(&db, &SpaceId::from("b"), "target", "three")?.is_none());
+    assert!(named_lease(&db, &SpaceId::from("a"), "other", "three")?.is_none());
     let request = ResourceRequest {
         mode: None,
         kind: None,
@@ -138,7 +139,7 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     );
     assert!(renewed.is_err());
     renew_lease(db.transaction()?, &existing, &existing.scope, request)?;
-    let renewed = named_lease(&db, "a", "target", "three")?.unwrap();
+    let renewed = named_lease(&db, &SpaceId::from("a"), "target", "three")?.unwrap();
     assert_eq!(renewed.id, existing.id);
     assert_eq!(renewed.reason.as_deref(), Some("renewed"));
     Ok(())

@@ -1,4 +1,5 @@
 //! Finding the spaces that link an issue, PR or CI run, or hold a resource.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
@@ -17,7 +18,7 @@ impl Manager {
     pub async fn find_spaces(
         &self,
         target: &SpaceTarget,
-        within: Option<Vec<String>>,
+        within: Option<Vec<SpaceId>>,
     ) -> Result<Vec<PresentSpace>> {
         let ids = match target {
             SpaceTarget::Item { kind, input } => self.linking_spaces(*kind, input, within).await?,
@@ -36,8 +37,8 @@ impl Manager {
         &self,
         kind: LinkKind,
         input: &str,
-        within: Option<Vec<String>>,
-    ) -> Result<Vec<String>> {
+        within: Option<Vec<SpaceId>>,
+    ) -> Result<Vec<SpaceId>> {
         let label = kind.noun();
         let wanted = match IssueInput::parse(input) {
             IssueInput::Url => Some(link::item(kind, input)?),
@@ -57,7 +58,7 @@ impl Manager {
             .run(move |db| {
                 let ids = db
                     .prepare("SELECT id FROM workspaces UNION ALL SELECT id FROM chats")?
-                    .query_map([], |row| row.get::<_, String>(0))?
+                    .query_map([], |row| row.get::<_, SpaceId>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut links = Vec::new();
                 for id in ids.into_iter().filter(|id| within_ids(&within, id)) {
@@ -78,7 +79,7 @@ impl Manager {
                 Ok(links)
             })
             .await?;
-        let mut matches: Vec<(String, ForgeRepo)> = Vec::new();
+        let mut matches: Vec<(SpaceId, ForgeRepo)> = Vec::new();
         for (id, url) in links {
             let Ok((repository, linked)) = link::item(kind, &url) else {
                 continue;
@@ -104,8 +105,8 @@ impl Manager {
     async fn holding_workspaces(
         &self,
         name: &str,
-        within: Option<Vec<String>>,
-    ) -> Result<Vec<String>> {
+        within: Option<Vec<SpaceId>>,
+    ) -> Result<Vec<SpaceId>> {
         let name = name.to_owned();
         let label = name.clone();
         let mut ids = self
@@ -116,7 +117,7 @@ impl Manager {
                         "SELECT DISTINCT workspace_id FROM resource_leases
                          WHERE pool=?1 OR resource=?1",
                     )?
-                    .query_map([name], |row| row.get::<_, String>(0))?
+                    .query_map([name], |row| row.get::<_, SpaceId>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .await?;
@@ -127,7 +128,7 @@ impl Manager {
 }
 
 /// Whether a lookup confined to the spaces `within`, or to none, covers `id`.
-fn within_ids(within: &Option<Vec<String>>, id: &str) -> bool {
+fn within_ids(within: &Option<Vec<SpaceId>>, id: &SpaceId) -> bool {
     within
         .as_ref()
         .is_none_or(|within| within.iter().any(|within| within == id))

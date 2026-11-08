@@ -1,5 +1,6 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
 //! until they expire, which `shoal work restore` returns the workspace to.
+use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -50,7 +51,7 @@ impl Manager {
     /// Keep the state an agent left when it exits or is stopped. A workspace
     /// in another lifecycle operation or removed meanwhile takes none, and a
     /// failure is only logged.
-    pub(crate) async fn checkpoint_after_agent(&self, workspace_id: &str) {
+    pub(crate) async fn checkpoint_after_agent(&self, workspace_id: &SpaceId) {
         let Ok(workspace) = self.workspace_by_id(workspace_id).await else {
             return;
         };
@@ -319,7 +320,7 @@ impl Manager {
     /// A recorded execution in the workspace other than `own`.
     async fn other_execution(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         own: Option<&str>,
     ) -> Result<Option<String>> {
         let (id, own) = (workspace_id.to_owned(), own.map(str::to_owned));
@@ -342,7 +343,7 @@ impl Manager {
     pub(super) async fn adopt_removal(
         &self,
         removed: &RemovedWorkspace,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<()> {
         let (from, to) = (removed.workspace_id.clone(), workspace_id.to_owned());
         self.store
@@ -492,7 +493,7 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
 }
 
 /// Give `to` the unexpired checkpoints of `from`.
-fn reassign(db: &Connection, from: &str, to: &str) -> Result<()> {
+fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
     db.execute(
         "INSERT INTO checkpoint_numbers(workspace_id,last)
             SELECT ?2, last FROM checkpoint_numbers WHERE workspace_id=?1
@@ -561,7 +562,7 @@ fn kept_commits(db: &Connection, repository_id: &str) -> Result<HashSet<String>>
         .collect()
 }
 
-fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Checkpoint>> {
+fn latest(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Checkpoint>> {
     let record: Option<String> = db
         .query_row(
             &format!(
@@ -578,7 +579,11 @@ fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Checkpoint>> {
 }
 
 /// An unexpired checkpoint of the workspace.
-pub(super) fn find(db: &Connection, workspace_id: &str, number: u64) -> Result<Option<Checkpoint>> {
+pub(super) fn find(
+    db: &Connection,
+    workspace_id: &SpaceId,
+    number: u64,
+) -> Result<Option<Checkpoint>> {
     let record: Option<String> = db
         .query_row(
             &format!(
@@ -606,7 +611,7 @@ const NAME_LIMIT: usize = 200;
 
 /// The checkpoints numbered after `after`, oldest first, as many as fit in
 /// [`PAGE_BYTES`] and at least one.
-fn checkpoint_page(db: &Connection, workspace_id: &str, after: u64) -> Result<Vec<Checkpoint>> {
+fn checkpoint_page(db: &Connection, workspace_id: &SpaceId, after: u64) -> Result<Vec<Checkpoint>> {
     let mut statement = db.prepare(&format!(
         "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number > ?2 AND {KEPT}
             ORDER BY number"
@@ -625,7 +630,7 @@ fn checkpoint_page(db: &Connection, workspace_id: &str, after: u64) -> Result<Ve
 }
 
 /// The workspace's unexpired checkpoints, oldest first.
-fn workspace_checkpoints(db: &Connection, workspace_id: &str) -> Result<Vec<Checkpoint>> {
+fn workspace_checkpoints(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Checkpoint>> {
     db.prepare(&format!(
         "SELECT record FROM checkpoints WHERE workspace_id=?1 AND {KEPT} ORDER BY number"
     ))?

@@ -3,6 +3,7 @@
 //! assignment was marked done. Idle time comes from recorded activity and file
 //! change times, so it survives daemon restarts. A chat has no branch, so it
 //! goes once its agent has been stopped for that period.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     fs,
@@ -33,37 +34,37 @@ pub struct State {
     /// HEAD or recorded activity changes or after [`RETRY_AFTER`], so a
     /// passing failure does not keep them. A file change makes the workspace
     /// wait for its idle period again.
-    retained: HashMap<String, (u64, Instant)>,
+    retained: HashMap<SpaceId, (u64, Instant)>,
     /// The newest file change each workspace's last walk saw, no later than
     /// that walk. Change times only move forward, so until
     /// the idle period passes that change, another walk could only find the
     /// workspace in use; a modification time set into the future does not
     /// defer walks past it.
-    changed: HashMap<String, UnixTime>,
+    changed: HashMap<SpaceId, UnixTime>,
 }
 
 impl State {
     /// Whether a failed removal of this unchanged workspace is too recent to retry.
-    fn waits(&self, id: &str, signals: u64) -> bool {
+    fn waits(&self, id: &SpaceId, signals: u64) -> bool {
         self.retained
             .get(id)
             .is_some_and(|(retained, at)| *retained == signals && at.elapsed() < RETRY_AFTER)
     }
 
     /// Whether the last walk saw a file change after `deadline`.
-    fn changed_after(&self, id: &str, deadline: UnixTime) -> bool {
+    fn changed_after(&self, id: &SpaceId, deadline: UnixTime) -> bool {
         self.changed
             .get(id)
             .is_some_and(|changed| *changed > deadline)
     }
 
     /// Remember the newest change a walk at `now` saw, no later than the walk.
-    fn remember_change(&mut self, id: &str, changed: UnixTime, now: UnixTime) {
+    fn remember_change(&mut self, id: &SpaceId, changed: UnixTime, now: UnixTime) {
         self.changed.insert(id.to_owned(), changed.min(now));
     }
 
     fn forget_removed(&mut self, workspaces: &[Workspace], chats: &[Chat]) {
-        let present = |id: &String| {
+        let present = |id: &SpaceId| {
             workspaces.iter().any(|workspace| &workspace.id == id)
                 || chats.iter().any(|chat| &chat.id == id)
         };

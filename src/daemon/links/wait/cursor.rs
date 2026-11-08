@@ -2,6 +2,7 @@
 //! watch last saw of the item, and the updates delivered from it that are
 //! not acknowledged yet, stored apart so reading them reads none of the
 //! item's history.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 
@@ -11,7 +12,7 @@ use crate::forge::updates::{Update, WatchRecord};
 /// its watch saw of the item, or updates queued from it before any watch did.
 pub(super) fn cursor_record(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     url: &str,
 ) -> Result<Option<WatchRecord>> {
     let record: Option<String> = db
@@ -36,7 +37,7 @@ pub(super) fn cursor_record(
 /// Store `record` as the item's record on the workspace's watch cursor.
 pub(super) fn save_cursor_record(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     url: &str,
     record: &WatchRecord,
 ) -> Result<()> {
@@ -52,7 +53,7 @@ pub(super) fn save_cursor_record(
 /// are not acknowledged yet.
 pub(super) fn pending_updates(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     url: &str,
 ) -> Result<Vec<Update>> {
     let updates: Option<String> = db
@@ -72,7 +73,7 @@ pub(super) fn pending_updates(
 /// watch cursor.
 pub(super) fn save_pending(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &SpaceId,
     url: &str,
     updates: &[Update],
 ) -> Result<()> {
@@ -95,8 +96,8 @@ pub(super) fn save_pending(
 /// with their space and URL.
 pub(super) fn all_pending(
     db: &rusqlite::Connection,
-    ids: &[String],
-) -> Result<Vec<(String, String, Vec<Update>)>> {
+    ids: &[SpaceId],
+) -> Result<Vec<(SpaceId, String, Vec<Update>)>> {
     let mut statement = db.prepare("SELECT url, updates FROM pending_updates WHERE space_id=?1")?;
     let mut pending = Vec::new();
     for id in ids {

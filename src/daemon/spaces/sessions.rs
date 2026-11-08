@@ -1,5 +1,6 @@
 //! The agent sessions a space's agents reported, which clients find the
 //! files of; the daemon never reads them.
+use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use std::collections::BTreeSet;
 
@@ -88,7 +89,7 @@ impl Manager {
 }
 
 /// The sessions of the workspace's stopped agents.
-fn stopped_sessions(paths: &Paths, workspace_id: &str) -> Result<Vec<ReportedSession>> {
+fn stopped_sessions(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<ReportedSession>> {
     Ok(recovery::stopped_agents(paths, workspace_id)?
         .into_iter()
         .filter_map(|stopped| {
@@ -103,7 +104,7 @@ fn stopped_sessions(paths: &Paths, workspace_id: &str) -> Result<Vec<ReportedSes
 }
 
 /// The sessions of the agents that exited, the workspace's last sessions.
-fn last_sessions(paths: &Paths, workspace_id: &str) -> Result<Vec<ReportedSession>> {
+fn last_sessions(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<ReportedSession>> {
     Ok(LastSession::all(paths, workspace_id)?
         .into_iter()
         .filter_map(|last| {

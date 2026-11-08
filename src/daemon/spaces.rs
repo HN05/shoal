@@ -1,5 +1,6 @@
 //! Spaces: workspaces and chats, which share one namespace of IDs and names,
 //! so a request naming a space acts on whichever of them it names.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use super::{workspace::Manager, workspace_files::Attacher};
@@ -14,7 +15,7 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct About<'a> {
     pub name: &'a str,
-    pub id: Option<&'a str>,
+    pub id: Option<&'a SpaceId>,
     /// The notification the event would be for the user.
     pub kind: Option<NotificationKind>,
 }
@@ -53,7 +54,7 @@ impl Manager {
     /// announcement gate may queue one.
     pub(crate) async fn queue_space_message(
         &self,
-        id: &str,
+        id: &SpaceId,
         about: Option<About<'_>>,
         message: String,
         attachments: Vec<std::path::PathBuf>,
@@ -91,7 +92,7 @@ impl Manager {
 }
 
 /// The kind of the space `id`, while it exists.
-pub(crate) fn space_kind(db: &rusqlite::Connection, id: &str) -> Result<Option<SpaceKind>> {
+pub(crate) fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceKind>> {
     use rusqlite::OptionalExtension as _;
     Ok(db
         .query_row(

@@ -2,6 +2,8 @@
 use super::super::resume::Stopped;
 use crate::cli::commands::resume::queue::QueuedExt;
 use crate::client::output::resume::Queued;
+use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
 use crate::config_file::ConfigExt;
 use std::{
     collections::BTreeSet,
@@ -98,7 +100,12 @@ async fn stop_running(
         let result = ctx
             .progress(
                 "Stopping commands and agents",
-                super::super::stop::stop(ctx, workspace, confirmed, QueuedLaunches::Keep),
+                super::super::stop::stop(
+                    ctx,
+                    &SpaceSelector::id(workspace),
+                    confirmed,
+                    QueuedLaunches::Keep,
+                ),
             )
             .await;
         // A CI job's workspace goes with the job, leaving nothing to resume.
@@ -123,9 +130,9 @@ async fn stop_running(
 }
 
 /// Whether the daemon still lists `workspace`.
-async fn workspace_listed(ctx: &Context, workspace: &str) -> Result<bool> {
+async fn workspace_listed(ctx: &Context, workspace: &SpaceId) -> Result<bool> {
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    Ok(workspaces.iter().any(|listed| listed.id == workspace))
+    Ok(workspaces.iter().any(|listed| listed.id == *workspace))
 }
 
 /// How long a move waits for a cancelled CI job's runner to stop it.
@@ -133,7 +140,7 @@ const JOB_END: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
 /// Wait until the workspace of a CI job whose run was cancelled is gone,
 /// which the daemon removes once the forge's runner stops the job.
-async fn job_ended(ctx: &Context, workspace: &str) -> Result<()> {
+async fn job_ended(ctx: &Context, workspace: &SpaceId) -> Result<()> {
     let deadline = tokio::time::Instant::now() + JOB_END;
     loop {
         if !workspace_listed(ctx, workspace).await? {
@@ -148,7 +155,7 @@ async fn job_ended(ctx: &Context, workspace: &str) -> Result<()> {
 }
 
 /// The executions whose stopped work the workspace saves for `shoal resume`.
-fn saved_executions(ctx: &Context, workspace: &str) -> Result<BTreeSet<String>> {
+fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<String>> {
     Ok(Saved::load(&ctx.paths, workspace)?
         .execution_ids()
         .into_iter()

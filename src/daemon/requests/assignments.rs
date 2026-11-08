@@ -39,7 +39,7 @@ pub(super) async fn handle(
             done,
             sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
             Body::Completion(manager.mark_space_done(&space, done, &attacher).await?)
         }
     }))

@@ -1,5 +1,6 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
@@ -73,7 +74,7 @@ pub(super) async fn decider(
     manager: &Manager,
     workspace: &Workspace,
     secret: &str,
-) -> Option<String> {
+) -> Option<SpaceId> {
     let requested = manager
         .request_approval(ApprovalRequest::new(
             &workspace.id,
@@ -473,7 +474,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent: parent.map(|parent| parent.to_string()),
+        parent: parent.map(|parent| SpaceId::from(parent.to_string())),
     };
     let auditing = manager
         .start_new_chat(repository, workspace.as_ref(), new)

@@ -35,11 +35,9 @@ pub(in crate::cli::commands) async fn merge(
     yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings = crate::client::workspaces::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
-    )
-    .await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
     let push = push.unwrap_or(settings.merge.push);
     let confirmed = match yes {
         true => None,
@@ -52,7 +50,7 @@ pub(in crate::cli::commands) async fn merge(
     };
     let options = MergeOptions { push, confirmed };
     let spec = OperationSpec::Merge {
-        workspace: SpaceSelector::parse(&workspace),
+        workspace: workspace.clone(),
         options,
     };
     match operations::run(ctx, spec).await {
@@ -74,13 +72,12 @@ pub(in crate::cli::commands) async fn merge(
 /// user declines changes nothing.
 async fn confirm_merge(
     ctx: &Context,
-    workspace: &str,
+    workspace: &SpaceSelector,
     push: bool,
     pushing: bool,
 ) -> Result<Option<MergeConfirmation>> {
     let preview =
-        crate::client::workspaces::preview_merge(&ctx.paths, SpaceSelector::parse(workspace), push)
-            .await?;
+        crate::client::workspaces::preview_merge(&ctx.paths, workspace.clone(), push).await?;
     if !pushing && preview.warning.is_none() {
         return Ok(None);
     }
@@ -120,7 +117,7 @@ fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
 /// tracked execution whose worker writes what it merged to a file.
 pub(in crate::cli::commands) async fn merge_branch(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     options: MergeOptions,
     reporter: &Reporter<'_>,
 ) -> Result<MergedBranch> {
@@ -132,7 +129,7 @@ pub(in crate::cli::commands) async fn merge_branch(
 /// or why it could not, from the file the worker writes.
 async fn run_merge(
     paths: &Paths,
-    workspace: String,
+    workspace: SpaceSelector,
     options: MergeOptions,
 ) -> Result<MergedBranch> {
     let result = tempfile::NamedTempFile::new().context("create the merge result file")?;

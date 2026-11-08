@@ -1,4 +1,5 @@
 //! Cooperative TCP port reservations owned by a worktree.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 pub(crate) use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
@@ -185,7 +186,7 @@ impl Manager {
     ) -> Result<Vec<PortReservation>> {
         let workspace_id = self.workspace_filter(selector).await?;
         self.store
-            .run(move |db| store::ports(db, workspace_id.as_deref()))
+            .run(move |db| store::ports(db, workspace_id.as_ref()))
             .await
     }
 
@@ -214,7 +215,7 @@ impl Manager {
 /// A named port request resolved against the repository's port settings:
 /// caller overrides win over the port's definition, then the range defaults.
 struct PortClaim {
-    workspace_id: String,
+    workspace_id: SpaceId,
     name: String,
     /// The caller's explicit settings, which an existing reservation must match.
     request: PortRequest,
@@ -229,7 +230,7 @@ struct PortClaim {
 
 impl PortClaim {
     fn resolve(
-        workspace_id: String,
+        workspace_id: SpaceId,
         name: String,
         request: PortRequest,
         ports: Ports,

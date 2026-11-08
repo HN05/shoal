@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::params;
 
+use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
 use crate::{
     daemon::workspace::{Manager, capacity::Activity},
@@ -20,7 +21,7 @@ pub(crate) struct Slot {
 /// What the store records toward used slots, read in one pass.
 struct PersistedSlots {
     /// Each workspace that is not done, by ID, with its repository ID.
-    open: HashMap<String, String>,
+    open: HashMap<SpaceId, String>,
     /// Executions whose state is unknown, other than CI jobs' runners:
     /// agents that may still run.
     unknown: Vec<UnknownExecution>,
@@ -31,14 +32,14 @@ struct PersistedSlots {
 /// An execution in the unknown state.
 struct UnknownExecution {
     id: String,
-    workspace: String,
+    workspace: SpaceId,
 }
 
 /// A starting queue entry.
 struct StartingEntry {
     repository: String,
     /// The workspace it starts in, once known.
-    workspace: Option<String>,
+    workspace: Option<SpaceId>,
     /// When its holder was last seen.
     seen_at: Option<UnixTime>,
     /// The execution a restore resumes; a launch has none.
@@ -106,7 +107,7 @@ impl Manager {
         let starting_since = |seen_at: Option<UnixTime>| {
             Activity::Starting(now.duration_since(seen_at.unwrap_or(now)))
         };
-        let stopped = |workspace: String| (workspace, Activity::Stopped);
+        let stopped = |workspace: SpaceId| (workspace, Activity::Stopped);
         for UnknownExecution { id, workspace } in unknown {
             agents.entry(id).or_insert_with(|| stopped(workspace));
         }

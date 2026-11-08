@@ -6,6 +6,7 @@
 //! such as a tab opened before Shoal recorded its places. A marker the
 //! watcher keeps tells commands run in the place that it closes with the
 //! workspace.
+use crate::client::space_ids::SpaceId;
 use std::{
     cell::{Cell, RefCell},
     future::Future,
@@ -48,7 +49,7 @@ pub(super) async fn start_watcher(
     ctx: &Context,
     host: &dyn Host,
     place: &str,
-    workspace: &str,
+    workspace: &SpaceId,
 ) -> Result<()> {
     let instance = match host.watches() {
         Some(watches) => watches.place_instance(place).await?,
@@ -93,9 +94,9 @@ fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result
 }
 
 /// The HEAD of `workspace`'s kept completion, if it has one.
-async fn kept_completion(ctx: &Context, workspace: &str) -> Result<Option<String>> {
+async fn kept_completion(ctx: &Context, workspace: &SpaceId) -> Result<Option<String>> {
     let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace)).await?;
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace)).await?;
     Ok(inspection
         .completion
         .filter(|completion| !completion.cleanup)
@@ -172,7 +173,7 @@ pub async fn watch(
 /// removed, as the daemon says; `None` while it cannot say. A place another
 /// workspace or a chat took over is the daemon's to keep: only one it does
 /// not know is the watcher's.
-async fn at_removal(ctx: &Context, workspace: &str, record: &Origin) -> Option<AtRemoval> {
+async fn at_removal(ctx: &Context, workspace: &SpaceId, record: &Origin) -> Option<AtRemoval> {
     match crate::client::workspaces::place_ownership(&ctx.paths, workspace, record).await {
         Ok(PlaceOwnership::Workspace | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
         Ok(PlaceOwnership::Unknown) => Some(AtRemoval::Watcher),
@@ -331,7 +332,7 @@ fn discard_inherited_directive() {
 struct Marker(Option<PathBuf>);
 
 impl Marker {
-    fn path(paths: &Paths, host: &str, workspace: &str, place: &str) -> Option<PathBuf> {
+    fn path(paths: &Paths, host: &str, workspace: &SpaceId, place: &str) -> Option<PathBuf> {
         (!place.is_empty() && !place.contains('/')).then(|| {
             paths
                 .workspace_state(workspace)
@@ -341,7 +342,7 @@ impl Marker {
 
     /// The places of `host` whose watchers keep a marker for `workspace`,
     /// with the tabs Herdr watchers of earlier releases mark by another name.
-    fn watched(paths: &Paths, host: &str, workspace: &str) -> Vec<String> {
+    fn watched(paths: &Paths, host: &str, workspace: &SpaceId) -> Vec<String> {
         let prefix = format!("closing-{host}-");
         let Ok(entries) = std::fs::read_dir(paths.workspace_state(workspace)) else {
             return Vec::new();
@@ -358,7 +359,7 @@ impl Marker {
     }
 
     /// Best effort: without the record, commands in the place cannot tell.
-    fn record(paths: &Paths, host: &str, workspace: &str, place: &str) -> Self {
+    fn record(paths: &Paths, host: &str, workspace: &SpaceId, place: &str) -> Self {
         let path = Self::path(paths, host, workspace, place).filter(|path| {
             path.parent()
                 .is_some_and(|parent| std::fs::create_dir_all(parent).is_ok())
@@ -378,7 +379,7 @@ impl Drop for Marker {
 
 /// Whether this process runs in a place that closes once `workspace` is
 /// removed: one a watcher closes, or that closing a watched place ends.
-pub(super) async fn closes_with(paths: &Paths, workspace: &str) -> bool {
+pub(super) async fn closes_with(paths: &Paths, workspace: &SpaceId) -> bool {
     for host in hosts() {
         let (Some(here), Some(watches)) = (super::here::place_here(host), host.watches()) else {
             continue;
@@ -423,8 +424,8 @@ impl Lifecycle {
     }
 }
 
-async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle> {
-    match crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace)).await {
+async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifecycle> {
+    match crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace)).await {
         // Completion cleanup keeps the place until removal, after its grace period.
         Ok(Inspection {
             completion: Some(completion),
@@ -442,7 +443,7 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle
             if crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .iter()
-                .any(|item| item.id == workspace)
+                .any(|item| item.id == *workspace)
             {
                 return Err(error);
             }

@@ -1,4 +1,5 @@
 //! Persist issue associations.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use std::path::Path;
@@ -23,7 +24,7 @@ pub(crate) struct OpenIssue {
 }
 
 impl Manager {
-    pub async fn issue_registration(&self, id: &str) -> Result<Option<Registration>> {
+    pub async fn issue_registration(&self, id: &SpaceId) -> Result<Option<Registration>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -72,7 +73,7 @@ impl Manager {
 
     async fn persist_issue_assignment(
         &self,
-        id: &str,
+        id: &SpaceId,
         url: String,
         title: Option<String>,
     ) -> Result<()> {
@@ -131,7 +132,7 @@ impl Manager {
 
 /// Assign an issue within the caller's transaction, retaining a known title
 /// when none is supplied and recording only a new association as linked.
-fn assign(db: &Connection, id: &str, url: &str, title: Option<&str>) -> Result<()> {
+fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
     let existing: Option<String> = db
         .query_row(
@@ -164,7 +165,7 @@ fn assign(db: &Connection, id: &str, url: &str, title: Option<&str>) -> Result<(
 
 /// Remove the workspace's issue, which must be `selected` when one is named,
 /// along with what its link kept.
-fn unlink(db: &Connection, id: &str, selected: Option<&str>) -> Result<()> {
+fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
     let existing: Option<String> = db
         .query_row(

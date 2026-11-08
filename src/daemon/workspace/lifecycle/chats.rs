@@ -2,6 +2,7 @@
 //! below it go first, whatever keeps them, then its agent and its record.
 //! Unattended removals follow a workspace's rules, where the chat meets
 //! every condition on a worktree.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::{Removal, Retention};
@@ -26,7 +27,7 @@ impl Manager {
     pub async fn remove_chat(
         &self,
         selector: &SpaceSelector,
-        children: Option<Vec<String>>,
+        children: Option<Vec<SpaceId>>,
     ) -> Result<RemovedChat> {
         let chat = self.chat(selector).await?;
         let unsaved = UnsavedWork::Confirmed {
@@ -234,7 +235,7 @@ impl Manager {
     }
 
     /// The chat `id` as recorded now, once `removal` still applies to it.
-    async fn recheck_chat(&self, id: &str, removal: Removal<'_>) -> Result<Chat> {
+    async fn recheck_chat(&self, id: &SpaceId, removal: Removal<'_>) -> Result<Chat> {
         let chat = self
             .chat_by_id(id)
             .await?

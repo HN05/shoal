@@ -1,4 +1,5 @@
 //! Human decisions authorize cooperative allocations; they never reserve capacity.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use std::fmt;
@@ -154,7 +155,7 @@ fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
 
 /// The requests routed to the space `id`, in the order they were made; a
 /// malformed record of another space's history stays out of the selection.
-fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
+fn list_decided(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
             ORDER BY rowid"
@@ -167,7 +168,7 @@ fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
 /// The issues the chat `id` proposed and the requests routed to it to
 /// decide, in the order they were made. A chat proposes nothing else, and
 /// its issue proposals belong to its repository.
-fn list_of_chat(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
+fn list_of_chat(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE {REPOSITORY_OWNED}
             OR CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
@@ -180,7 +181,7 @@ fn list_of_chat(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
 
 /// How many requests of the space `id` wait for a decision: those a
 /// workspace made, or those a `chat` made or decides.
-pub(crate) fn pending_count(db: &Connection, id: &str, chat: bool) -> Result<usize> {
+pub(crate) fn pending_count(db: &Connection, id: &SpaceId, chat: bool) -> Result<usize> {
     let requests = match chat {
         true => list_of_chat(db, id)?,
         false => list(db, Some(id))?,
@@ -192,7 +193,10 @@ pub(crate) fn pending_count(db: &Connection, id: &str, chat: bool) -> Result<usi
 /// Give the pending requests the space `id` decides back to the user, as
 /// it ends, is saved or is removed, in the caller's transaction; the
 /// requests given back.
-pub(crate) fn release_decided_by(tx: &Transaction<'_>, id: &str) -> Result<Vec<ApprovalRequest>> {
+pub(crate) fn release_decided_by(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+) -> Result<Vec<ApprovalRequest>> {
     let mut released = list_decided(tx, id)?;
     released.retain(|request| request.status == DecisionStatus::Pending);
     for request in &mut released {
@@ -204,11 +208,11 @@ pub(crate) fn release_decided_by(tx: &Transaction<'_>, id: &str) -> Result<Vec<A
 
 /// Give the request stored under `key` back to the user while it is pending
 /// and still `decider`'s, in the caller's transaction.
-fn give_back(tx: &Transaction<'_>, key: &str, decider: Option<&str>) -> Result<()> {
+fn give_back(tx: &Transaction<'_>, key: &str, decider: Option<&SpaceId>) -> Result<()> {
     let Some(mut stored) = by_key(tx, key)? else {
         return Ok(());
     };
-    if stored.status == DecisionStatus::Pending && stored.decider.as_deref() == decider {
+    if stored.status == DecisionStatus::Pending && stored.decider.as_ref() == decider {
         stored.decider = None;
         write_record(tx, &stored)?;
     }
@@ -230,7 +234,7 @@ fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalReque
 
 /// Every request, or those `owner` made, including the issues it proposed
 /// for its repository.
-pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<ApprovalRequest>> {
+pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
             OR {REPOSITORY_OWNED}
@@ -243,7 +247,7 @@ pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<ApprovalRequest>
 
 pub fn current(
     db: &Connection,
-    owner: &str,
+    owner: &SpaceId,
     target: &Target,
     name: &str,
 ) -> Result<Option<ApprovalRequest>> {
@@ -319,7 +323,7 @@ fn reusable_grant(db: &Connection, request: &ApprovalRequest) -> Result<bool> {
 /// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
 pub(crate) trait ApprovalRequestExt {
     fn new(
-        owner: &str,
+        owner: &SpaceId,
         target: Target,
         name: &str,
         specification: Specification,
@@ -345,7 +349,7 @@ pub(crate) trait ApprovalRequestExt {
 
 impl ApprovalRequestExt for ApprovalRequest {
     fn new(
-        owner: &str,
+        owner: &SpaceId,
         target: Target,
         name: &str,
         specification: Specification,
@@ -355,7 +359,7 @@ impl ApprovalRequestExt for ApprovalRequest {
         Self {
             number: ItemNumber::default(),
             key: String::new(),
-            space_id: owner.into(),
+            space_id: owner.clone(),
             space: String::new(),
             space_removed: false,
             repository_id: None,
@@ -423,7 +427,7 @@ impl ApprovalRequestExt for ApprovalRequest {
 /// Whether the workspace holds an approved grant for the same target and
 /// settings as `request`, which lets its agent decide the request for the
 /// workspaces below it.
-fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Result<bool> {
+fn holds_grant(db: &Connection, workspace: &SpaceId, request: &ApprovalRequest) -> Result<bool> {
     let candidates = db
         .prepare(CANDIDATES)?
         .query_map(params![workspace, request.target], record_row)?
@@ -439,7 +443,7 @@ fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> R
 /// Whether the coordinating agent of `workspace` may approve `request` as
 /// far as grants go: one that needs no grant, one its permissions decide
 /// instead, or one it holds a grant for.
-fn may_decide(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Result<bool> {
+fn may_decide(db: &Connection, workspace: &SpaceId, request: &ApprovalRequest) -> Result<bool> {
     Ok(!request.target.needs_grant()
         || !governing(request).is_empty()
         || holds_grant(db, workspace, request)?)
@@ -451,8 +455,8 @@ fn may_decide(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Re
 fn route(
     tx: &Transaction<'_>,
     key: &str,
-    candidates: &[String],
-    from: Option<&str>,
+    candidates: &[SpaceId],
+    from: Option<&SpaceId>,
 ) -> Result<ApprovalRequest> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
     ensure!(
@@ -510,7 +514,7 @@ fn own_request(
     number: ItemNumber,
 ) -> Result<ApprovalRequest> {
     by_number(db, number)?
-        .filter(|request| request.space_id == space.id())
+        .filter(|request| request.space_id == *space.id())
         .with_context(|| {
             format!(
                 "{} {} has no approval request {number}",
@@ -549,7 +553,7 @@ fn withdraw(tx: &Transaction<'_>, selected: &ApprovalRequest) -> Result<Approval
 }
 
 /// Cancel requests or end lease grants; retain approved workspace grants.
-pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -> Result<bool> {
+pub fn release(tx: &Transaction<'_>, owner: &SpaceId, target: &Target, name: &str) -> Result<bool> {
     let Some(request) = current(tx, owner, target, name)? else {
         return Ok(false);
     };
@@ -651,7 +655,7 @@ impl Manager {
     }
 
     /// Whether a PR proposal of the workspace waits for the user's decision.
-    pub async fn has_pending_pull_proposal(&self, workspace_id: &str) -> Result<bool> {
+    pub async fn has_pending_pull_proposal(&self, workspace_id: &SpaceId) -> Result<bool> {
         let id = workspace_id.to_owned();
         self.store
             .run(move |db| proposals::pull_pending(db, &id))
@@ -659,7 +663,7 @@ impl Manager {
     }
 
     /// Whether a push request of the workspace waits for the user's decision.
-    pub async fn has_pending_push(&self, workspace_id: &str) -> Result<bool> {
+    pub async fn has_pending_push(&self, workspace_id: &SpaceId) -> Result<bool> {
         let id = workspace_id.to_owned();
         self.store
             .run(move |db| proposals::push_pending(db, &id))
@@ -669,7 +673,7 @@ impl Manager {
     /// [`release`] in its own transaction, once the workspace is ready.
     pub async fn release_approval(
         &self,
-        owner: String,
+        owner: SpaceId,
         target: Target,
         name: String,
     ) -> Result<bool> {
@@ -798,7 +802,7 @@ impl Manager {
             return self.store.run(move |db| list_of_chat(db, &chat.id)).await;
         }
         let owner = self.workspace_filter(selector).await?;
-        self.store.run(move |db| list(db, owner.as_deref())).await
+        self.store.run(move |db| list(db, owner.as_ref())).await
     }
 
     /// Decide request `number` as `caller`: a scoped process decides only
@@ -866,7 +870,7 @@ impl Manager {
     /// with a reason or as a duplicate, or passes it up.
     pub async fn decide_routed_approval(
         &self,
-        coordinator: &str,
+        coordinator: &SpaceId,
         number: ItemNumber,
         approve: bool,
         shown: Option<ApprovalRequest>,
@@ -905,7 +909,7 @@ impl Manager {
     /// of the request's action.
     async fn ensure_permitted(
         &self,
-        coordinator: &str,
+        coordinator: &SpaceId,
         request: &ApprovalRequest,
         keys: &[PermissionKey],
     ) -> Result<()> {
@@ -933,10 +937,14 @@ impl Manager {
     /// Refuse `coordinator`'s marking a proposal a duplicate of proposal
     /// `number` unless its scope reaches the space that made it, since the
     /// finding changes that proposal.
-    async fn ensure_reaches_proposal(&self, coordinator: &str, number: ItemNumber) -> Result<()> {
+    async fn ensure_reaches_proposal(
+        &self,
+        coordinator: &SpaceId,
+        number: ItemNumber,
+    ) -> Result<()> {
         let original = self.show_approval(number).await?;
         let caller = Caller {
-            space_id: coordinator.to_owned(),
+            space_id: coordinator.clone(),
             execution: None,
         };
         ensure!(
@@ -951,7 +959,7 @@ impl Manager {
     /// for it.
     async fn record_routed_decision(
         &self,
-        coordinator: &str,
+        coordinator: &SpaceId,
         request: &ApprovalRequest,
         approve: bool,
     ) -> Result<Decision> {
@@ -1004,7 +1012,7 @@ impl Manager {
 
     /// Queue `message` for the agent of the requesting space. Failure only
     /// logs; the decision stands.
-    pub(crate) async fn tell_space(&self, id: &str, message: String) {
+    pub(crate) async fn tell_space(&self, id: &SpaceId, message: String) {
         let queued = self.queue_space_message(id, None, message, Vec::new());
         if let Err(error) = queued.await {
             log!("approval decision message not queued: {error:#}");
@@ -1099,11 +1107,11 @@ impl Manager {
     async fn route_approval(
         &self,
         request: &ApprovalRequest,
-        above: Option<&str>,
+        above: Option<&SpaceId>,
     ) -> Result<ApprovalRequest> {
         let agents = self.tracked_agents().await;
         let (key, workspace) = (request.key.clone(), request.space_id.clone());
-        let above = above.map(str::to_owned);
+        let above = above.cloned();
         self.store
             .write(move |tx| {
                 // Passed up, it goes on above its decider, whatever became
@@ -1112,7 +1120,7 @@ impl Manager {
                     Some(above) => crate::daemon::workspace::spaces_above(tx, above, &agents)?,
                     None => crate::daemon::workspace::deciders(tx, &workspace, &agents)?,
                 };
-                let routed = route(tx, &key, &candidates, above.as_deref())?;
+                let routed = route(tx, &key, &candidates, above.as_ref())?;
                 Ok(routed)
             })
             .await
@@ -1178,7 +1186,7 @@ impl Manager {
         let (key, decider) = (request.key.clone(), request.decider.clone());
         let released = self
             .store
-            .write(move |tx| give_back(tx, &key, decider.as_deref()))
+            .write(move |tx| give_back(tx, &key, decider.as_ref()))
             .await;
         if let Err(error) = released {
             log!("approval {} not given back: {error:#}", request.number);
@@ -1187,7 +1195,7 @@ impl Manager {
 
     /// Queue `message` for the agent of the space `space`; false when it
     /// cannot be.
-    async fn tell_agent(&self, space: &str, message: String) -> bool {
+    async fn tell_agent(&self, space: &SpaceId, message: String) -> bool {
         let queued = (self.queue_space_message(space, None, message, Vec::new())).await;
         match queued {
             Ok(()) => true,

@@ -1,6 +1,7 @@
 //! Long-lived execution connections: the daemon side of the wrapper protocol.
 //! The wrapper reports its child and completion; the daemon relays stop and
 //! recovery controls and records the outcome.
+use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use std::sync::Arc;
 
@@ -538,7 +539,7 @@ async fn relay(
 async fn register_again(
     manager: &Manager,
     id: &str,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     place: Option<ExecutionPlace>,
 ) -> Control {
     match manager.reregister_execution(id, workspace_id, place).await {

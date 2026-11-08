@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::state::WorkspaceState;
 
 fn workspace(name: &str, path: &Path) -> Workspace {
@@ -23,7 +24,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         disposable: false,
         usage: None,
         job: None,
-        id: format!("id-{name}"),
+        id: SpaceId::from(format!("id-{name}")),
         repository_id: "repo".into(),
         name: name.into(),
         title: None,

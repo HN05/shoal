@@ -34,7 +34,7 @@ pub(super) async fn handle(
             acknowledge_unproven,
             launches,
         } => {
-            let stopped_by = caller.map(|caller| caller.space_id.as_str());
+            let stopped_by = caller.map(|caller| &caller.space_id);
             Body::StoppedWorkspace(
                 manager
                     .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by, launches)

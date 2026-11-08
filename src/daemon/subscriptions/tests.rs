@@ -46,6 +46,7 @@ fn changes_name_each_new_changed_and_removed_record() {
 }
 
 mod streams {
+    use crate::client::space_ids::SpaceId;
     use crate::client::space_names::SpaceSelector;
     use crate::daemon::approvals::ApprovalRequestExt;
     use crate::execution::recovery::LastSessionExt;
@@ -394,7 +395,7 @@ mod streams {
         let mut subscription = subscribe(daemon.connector(), &[Topic::Sessions]).await;
         let records = snapshot(&mut subscription).await;
         assert_eq!(records.len(), 2, "{records:?}");
-        let reported = |space: String, session: &'static str| {
+        let reported = |space: SpaceId, session: &'static str| {
             move |update: &Update| {
                 matches!(update, Update::Changed(record) if matches!(&**record,
                     Record::Sessions(sessions) if sessions.space_id == space
@@ -506,7 +507,7 @@ mod streams {
         assert!(records.iter().all(|record| matches!(
             record,
             Record::LogEntry(entry) if matches!(&**entry, LogEntry::Event(event)
-                if event.details.space_id() == own.id)
+                if event.details.space_id() == Some(&own.id))
         )));
         assert!(!records.is_empty());
         daemon

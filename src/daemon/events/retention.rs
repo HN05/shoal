@@ -8,13 +8,14 @@ use anyhow::Result;
 use rusqlite::{Connection, Transaction, params};
 
 use crate::{
+    client::space_ids::SpaceId,
     daemon::{log, workspace::Manager},
     time::UnixTime,
 };
 
 /// A space that is gone, with its repository and when it went.
 struct Gone {
-    id: String,
+    id: SpaceId,
     repository_id: Option<String>,
     removed_at: UnixTime,
 }
@@ -29,7 +30,7 @@ impl Manager {
 
     /// The IDs of the `gone` spaces whose retention after their removal
     /// has passed, reading each repository's retention once.
-    async fn expired(&self, gone: Vec<Gone>) -> Vec<String> {
+    async fn expired(&self, gone: Vec<Gone>) -> Vec<SpaceId> {
         let now = UnixTime::now();
         let mut retention = HashMap::new();
         let mut expired = Vec::new();
@@ -96,7 +97,7 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
 }
 
 /// Forget the events of the spaces `ids`, unless one came back meanwhile.
-fn forget(tx: &Transaction<'_>, ids: &[String]) -> Result<()> {
+fn forget(tx: &Transaction<'_>, ids: &[SpaceId]) -> Result<()> {
     for id in ids {
         tx.execute(
             "UPDATE journal_pruned SET id=MAX(id, (SELECT COALESCE(MAX(id),0)

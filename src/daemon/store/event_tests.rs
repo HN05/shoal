@@ -1,5 +1,6 @@
 //! Lifecycle events must share the mutation's transaction and survive removal.
 use super::*;
+use crate::client::space_ids::SpaceId;
 
 #[test]
 fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
@@ -88,7 +89,7 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
     )?;
     crate::daemon::events::record_link(
         &db,
-        "w",
+        &SpaceId::from("w"),
         crate::daemon::events::EventKind::Linked,
         crate::model::Relation::Assigned,
         crate::forge::items::link::ItemKind::Pr,
@@ -131,7 +132,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
     };
     crate::daemon::events::record_item_activity(
         &db,
-        "w",
+        &SpaceId::from("w"),
         crate::forge::items::link::LinkKind::Pr,
         &update.url,
         &update,
@@ -367,7 +368,7 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
     let url = "https://forge.example/team/repo/actions/runs/2765";
     crate::daemon::events::record_link(
         &db,
-        "w",
+        &SpaceId::from("w"),
         crate::daemon::events::EventKind::Linked,
         crate::model::Relation::Related,
         LinkKind::Ci,
@@ -381,8 +382,14 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
         check: None,
         workspace: None,
     };
-    crate::daemon::events::record_item_activity(&db, "w", LinkKind::Ci, url, &update)?;
-    crate::daemon::events::record_item(&db, "w", LinkKind::Ci, url, "approve")?;
+    crate::daemon::events::record_item_activity(
+        &db,
+        &SpaceId::from("w"),
+        LinkKind::Ci,
+        url,
+        &update,
+    )?;
+    crate::daemon::events::record_item(&db, &SpaceId::from("w"), LinkKind::Ci, url, "approve")?;
     let records = db
         .prepare("SELECT record FROM workspace_events ORDER BY id")?
         .query_map([], |row| row.get::<_, String>(0))?
@@ -417,7 +424,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     )?;
     crate::daemon::events::record_link(
         &db,
-        "c",
+        &SpaceId::from("c"),
         EventKind::Linked,
         crate::model::Relation::Assigned,
         crate::forge::items::link::LinkKind::Issue,
@@ -457,7 +464,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     );
     for (space, event) in &events {
         assert_eq!(*space, "c");
-        assert_eq!(event.space_id(), "c");
+        assert_eq!(event.space_id().map(SpaceId::as_str), Some("c"));
         assert_eq!(event.workspace_id, None);
         assert_eq!(event.name, "planner");
     }
@@ -503,7 +510,7 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
         .into_iter()
         .filter(|event| !matches!(event.kind, EventKind::Created | EventKind::Ready))
         .map(|event| {
-            let space = event.space_id().to_owned();
+            let space = event.space_id().map(SpaceId::to_string).unwrap_or_default();
             let detail = match event.kind {
                 EventKind::ChildCreated | EventKind::ChildRemoved => {
                     event.child.map(|child| child.name.to_string())

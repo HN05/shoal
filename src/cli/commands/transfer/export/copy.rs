@@ -82,7 +82,13 @@ async fn copy_one(
     checkpoint: Option<u64>,
 ) -> Result<ExportedSpace> {
     let output = Output::reserve(&directory.file(space.name()))?;
-    copy(ctx, space.id().to_owned(), checkpoint, output.file()).await
+    copy(
+        ctx,
+        SpaceSelector::id(space.id()),
+        checkpoint,
+        output.file(),
+    )
+    .await
 }
 
 /// Refuse `--checkpoint` for `count` spaces other than one, since its
@@ -102,13 +108,11 @@ pub(in super::super) fn ensure_one_at_checkpoint(
 /// `checkpoint` or a new one, warning about what the copy lacks.
 pub(in super::super) async fn copy(
     ctx: &Context,
-    space: String,
+    space: SpaceSelector,
     checkpoint: Option<u64>,
     file: PathBuf,
 ) -> Result<ExportedSpace> {
-    let exported =
-        crate::client::transfer::copy(&ctx.paths, SpaceSelector::parse(&space), checkpoint, file)
-            .await?;
+    let exported = crate::client::transfer::copy(&ctx.paths, space, checkpoint, file).await?;
     warn(&exported);
     if let Some(number) = checkpoint {
         eprintln!(

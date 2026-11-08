@@ -1,6 +1,7 @@
 //! The spaces a scope reaches: the caller's own space and those below it,
 //! or, for a chat without a repository, which manages the spaces of every
 //! repository, every space.
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use super::Caller;
@@ -13,7 +14,7 @@ impl Manager {
     pub(in crate::daemon) async fn reach_root(
         &self,
         caller: Option<&Caller>,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<SpaceId>> {
         let Some(caller) = caller else {
             return Ok(None);
         };
@@ -31,7 +32,7 @@ impl Manager {
     }
 
     /// Whether `caller`'s scope reaches the space `id`.
-    pub(in crate::daemon) async fn reaches(&self, caller: &Caller, id: &str) -> Result<bool> {
+    pub(in crate::daemon) async fn reaches(&self, caller: &Caller, id: &SpaceId) -> Result<bool> {
         match self.reach_root(Some(caller)).await? {
             Some(root) => self.within_subtree(&root, id).await,
             None => Ok(true),
@@ -43,7 +44,7 @@ impl Manager {
     pub(in crate::daemon) async fn reached_spaces(
         &self,
         caller: Option<&Caller>,
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<Option<Vec<SpaceId>>> {
         match self.reach_root(caller).await? {
             Some(root) => Ok(Some(self.subtree(&root).await?)),
             None => Ok(None),

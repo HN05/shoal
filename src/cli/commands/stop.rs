@@ -3,6 +3,7 @@
 //! and with `--processes` or `--leftovers` those of a chat, stop for good,
 //! and the agent launches waiting in the queue leave it, having nothing to
 //! save.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 
@@ -49,13 +50,13 @@ pub(super) async fn run(
     }
 }
 
-async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
+async fn stop_one(ctx: &Context, workspace: SpaceSelector, yes: bool) -> Result<i32> {
     let stopped = stop(ctx, &workspace, yes, QueuedLaunches::Cancel).await?;
     if let Some(run) = &stopped.cancelled_run {
         // The job runs until its runner stops it, and its workspace goes then.
         ctx.emit_styled(
             Style::Success,
-            &cancelled_run_message(&workspace, run),
+            &cancelled_run_message(&workspace.to_string(), run),
             WorkspaceStopped {
                 stopped: false,
                 saved: false,
@@ -68,10 +69,9 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     }
     let cancelled = stopped.cancelled;
     let other = stop_untracked(ctx, &workspace, Selection::Processes).await?;
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
-            .await?
-            .workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+        .await?
+        .workspace;
     let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
@@ -123,7 +123,7 @@ pub(super) async fn processes(
                 let message = stopped_message(&stopped, selection);
                 report.done(ctx, &message, stopped);
             }
-            Err(error) => report.failed(ctx, &selector, &error),
+            Err(error) => report.failed(ctx, &selector.to_string(), &error),
         }
     }
     report.finish(ctx, "", |stopped, failed| StoppedProcesses {
@@ -134,13 +134,12 @@ pub(super) async fn processes(
 
 /// Refuse `selectors` before any stops when one names neither a running
 /// chat nor a workspace that stopping accepts.
-async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
+async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()> {
     let chats = crate::client::chats::list(&ctx.paths).await?;
-    let workspaces: Vec<String> = selectors
+    let workspaces: Vec<SpaceSelector> = selectors
         .iter()
         .filter(|selector| {
-            let selected = SpaceSelector::parse(selector);
-            !(chats.iter()).any(|chat| selected.selects(&chat.id, &chat.name, chat.number))
+            !(chats.iter()).any(|chat| selector.selects(&chat.id, &chat.name, chat.number))
         })
         .cloned()
         .collect();
@@ -150,15 +149,13 @@ async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
 
 /// Stop the untracked processes of `space` that `selection` takes, other
 /// than this one and the processes that started it.
-async fn stop_untracked(ctx: &Context, space: &str, selection: Selection) -> Result<Stopped> {
+async fn stop_untracked(
+    ctx: &Context,
+    space: &SpaceSelector,
+    selection: Selection,
+) -> Result<Stopped> {
     let requester = Some(std::process::id());
-    crate::client::stopping::stop_processes(
-        &ctx.paths,
-        SpaceSelector::parse(space),
-        selection,
-        requester,
-    )
-    .await
+    crate::client::stopping::stop_processes(&ctx.paths, space.clone(), selection, requester).await
 }
 
 /// What a stop of `selection` reports for `stopped`.
@@ -205,14 +202,14 @@ fn other_processes(count: usize) -> String {
 /// it did, or with `yes`.
 pub(super) async fn stop(
     ctx: &Context,
-    workspace: &str,
+    workspace: &SpaceSelector,
     yes: bool,
     launches: QueuedLaunches,
 ) -> Result<StoppedWorkspace> {
     let request_stop = |acknowledge_unproven| {
         crate::client::stopping::stop_workspace(
             &ctx.paths,
-            SpaceSelector::parse(workspace),
+            workspace.clone(),
             acknowledge_unproven,
             launches,
         )
@@ -235,14 +232,14 @@ pub(super) async fn stop(
     request_stop(true).await
 }
 
-/// The IDs of the workspaces `selectors` name, each followed by the
+/// The workspaces `selectors` name, by ID, each followed by the
 /// workspaces below it, through spaces of either kind, which a stop of it
 /// stops too: their agents work for it.
-async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<String>> {
+async fn with_children(ctx: &Context, selectors: Vec<SpaceSelector>) -> Result<Vec<SpaceSelector>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    let mut found: Vec<String> = Vec::new();
+    let mut found: Vec<SpaceId> = Vec::new();
     for selector in selectors {
-        let id = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
+        let id = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
             .await?
             .workspace
             .id;
@@ -254,7 +251,7 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
             }
         }
     }
-    Ok(found)
+    Ok(found.into_iter().map(SpaceSelector::Id).collect())
 }
 
 /// Refuse a stop in a scoped process, a workspace's or a chat's agent, that
@@ -262,13 +259,13 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
 /// workspace not below the caller's space, which needs the scope token;
 /// refusing its own here, before any stops, keeps the stop from taking the
 /// workspaces below it alone.
-pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<()> {
+pub(super) async fn ensure_below(ctx: &Context, selected: &[SpaceSelector]) -> Result<()> {
     const REFUSAL: &str =
         "scoped processes stop only the workspaces below theirs; finish their own with shoal done";
     let own = crate::env::own_space().context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
     for selector in selected {
-        let id = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
+        let id = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
             .await?
             .workspace
             .id;
@@ -280,20 +277,18 @@ pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<(
 /// The workspaces `selectors` name, refusing them all before any stops when
 /// one is unknown or stopping it would be refused now, as while another
 /// lifecycle operation or a resource hook runs.
-async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspace>> {
+async fn inspect_each(ctx: &Context, selectors: &[SpaceSelector]) -> Result<Vec<Workspace>> {
     let mut workspaces = Vec::new();
     let mut refusals = Vec::new();
     for selector in selectors {
-        let workspace =
-            match crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
-                .await
-            {
-                Ok(inspection) => inspection.workspace,
-                Err(error) => {
-                    refusals.push(format!("{selector}: {error:#}"));
-                    continue;
-                }
-            };
+        let workspace = match crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await
+        {
+            Ok(inspection) => inspection.workspace,
+            Err(error) => {
+                refusals.push(format!("{selector}: {error:#}"));
+                continue;
+            }
+        };
         match crate::client::stopping::check(&ctx.paths, SpaceSelector::id(&workspace.id)).await {
             Ok(()) => workspaces.push(workspace),
             Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
@@ -350,7 +345,10 @@ async fn stop_each(
         .await?;
         let other = match stopped.cancelled_run {
             Some(_) => None,
-            None => Some(stop_untracked(ctx, &workspace.id, Selection::Processes).await?),
+            None => Some(
+                stop_untracked(ctx, &SpaceSelector::id(&workspace.id), Selection::Processes)
+                    .await?,
+            ),
         };
         anyhow::Ok((other, stopped))
     }))

@@ -1,5 +1,6 @@
 //! An app's calls through `shoal_client`, as the user and as a
 //! workspace's agent, against a daemon on an isolated state directory.
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
@@ -516,11 +517,11 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
         .register_repository(other.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let check = |repository: &Repository, workspace: Option<&str>, parent: &str| {
+    let check = |repository: &Repository, workspace: Option<&SpaceId>, parent: &SpaceId| {
         crate::protocol::ChatMethod::CheckChatParent {
             repository: Some(repository.id.clone().into()),
             workspace: workspace.map(SpaceSelector::id),
-            parent: Some(SpaceSelector::parse(parent)),
+            parent: Some(SpaceSelector::id(parent)),
         }
     };
     let refused = |method| async { connection::request::<()>(&app, method).await.is_err() };

@@ -8,6 +8,7 @@
 //! requests. Agents, renewals and stop requests are reached only through
 //! closures, which cannot await another lock, or through [`Connections`],
 //! which already holds the first.
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{
@@ -232,11 +233,11 @@ impl Executions {
     }
 
     /// Forget the scope tokens of a workspace that no longer exists.
-    pub(crate) async fn forget_workspace(&self, workspace_id: &str) {
+    pub(crate) async fn forget_workspace(&self, workspace_id: &SpaceId) {
         self.scopes
             .lock()
             .await
-            .retain(|_, caller| caller.space_id != workspace_id);
+            .retain(|_, caller| caller.space_id != *workspace_id);
     }
 
     /// The scope tokens issued, for tests that pause registration.
@@ -286,7 +287,7 @@ impl Connections<'_> {
         &mut self,
         id: &str,
         kind: ExecutionKind,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         scope_token: String,
         agent: Option<String>,
         stopped: bool,

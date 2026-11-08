@@ -30,7 +30,7 @@ pub(in crate::cli::commands) async fn list(
         return Ok(0);
     }
     let workspace = match (workspace, &repository) {
-        (Some(workspace), _) => Some(workspace.to_string()),
+        (Some(workspace), _) => Some(workspace),
         (None, Some(_)) => None,
         (None, None) => ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly)
             .await
@@ -40,12 +40,7 @@ pub(in crate::cli::commands) async fn list(
         Some(repository) => Some(ui::repository_selector(repository)?),
         None => None,
     };
-    let reviews = reviews::list(
-        &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::parse),
-        repository,
-    )
-    .await?;
+    let reviews = reviews::list(&ctx.paths, workspace, repository).await?;
     ctx.show(&reviews, |reviews| render_list(reviews, ctx.json))?;
     Ok(0)
 }
@@ -58,12 +53,7 @@ pub(in crate::cli::commands) async fn view(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review = reviews::show(
-        &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::parse),
-        id,
-    )
-    .await?;
+    let review = reviews::show(&ctx.paths, workspace, id).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -79,13 +69,9 @@ pub(in crate::cli::commands) async fn watch(
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
     let executable = Executable::current();
-    let id = reviews::await_ended(
-        &ctx.paths,
-        workspace.as_deref().map(SpaceSelector::parse),
-        id,
-    )
-    .await
-    .map_err(|error| executable.resume_or(error, arguments))?;
+    let id = reviews::await_ended(&ctx.paths, workspace, id)
+        .await
+        .map_err(|error| executable.resume_or(error, arguments))?;
     let review = reviews::show(&ctx.paths, None, Some(id)).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
@@ -104,7 +90,7 @@ async fn selected(
     ctx: &Context,
     id: Option<ReviewId>,
     workspace: Option<SpaceSelector>,
-) -> Result<Option<String>> {
+) -> Result<Option<SpaceSelector>> {
     Ok(match id {
         Some(_) => None,
         None => Some(ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?),

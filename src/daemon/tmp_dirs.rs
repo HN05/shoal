@@ -1,5 +1,6 @@
 //! Deleting the temporary directories of workspaces and chats once they are
 //! gone.
+use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
 use anyhow::{Result, ensure};
@@ -14,7 +15,7 @@ use crate::{
 impl Manager {
     /// Delete the temporary directory of the workspace or chat `id` of the
     /// repository `repository_id` once its record is gone.
-    pub(crate) async fn delete_tmp_dir(&self, repository_id: &str, id: &str) -> Result<()> {
+    pub(crate) async fn delete_tmp_dir(&self, repository_id: &str, id: &SpaceId) -> Result<()> {
         let repo = self.repository(repository_id).await?;
         let Some(layout) = Layout::of(&repo) else {
             return Ok(());
@@ -85,7 +86,7 @@ impl Manager {
 
     /// The IDs of the repository's workspaces and chats, or of the chats
     /// without a repository.
-    async fn recorded_ids(&self, repository_id: Option<&str>) -> Result<BTreeSet<String>> {
+    async fn recorded_ids(&self, repository_id: Option<&str>) -> Result<BTreeSet<SpaceId>> {
         let repository_id = repository_id.map(str::to_owned);
         self.store
             .run(move |db| recorded_ids(db, repository_id.as_deref()))
@@ -94,18 +95,21 @@ impl Manager {
 }
 
 /// The IDs whose temporary directories `layout` holds.
-async fn list(layout: Layout) -> Result<Vec<String>> {
-    tokio::task::spawn_blocking(move || layout.list()).await?
+/// The spaces with a temporary directory in `layout`, which names each by
+/// its space's ID.
+async fn list(layout: Layout) -> Result<Vec<SpaceId>> {
+    let names = tokio::task::spawn_blocking(move || layout.list()).await??;
+    Ok(names.into_iter().map(SpaceId::from).collect())
 }
 
 /// Delete the temporary directories of `ids` in `layout`.
-async fn remove(layout: Layout, ids: Vec<String>) -> Result<()> {
+async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<()> {
     tokio::task::spawn_blocking(move || ids.iter().try_for_each(|id| layout.remove_one(id))).await?
 }
 
 /// The IDs of the repository's workspaces and chats, or of the chats
 /// without a repository.
-fn recorded_ids(db: &mut Connection, repository_id: Option<&str>) -> Result<BTreeSet<String>> {
+fn recorded_ids(db: &mut Connection, repository_id: Option<&str>) -> Result<BTreeSet<SpaceId>> {
     Ok(db
         .prepare(
             "SELECT id FROM workspaces WHERE repository_id IS ?1

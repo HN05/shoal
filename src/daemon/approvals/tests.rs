@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::resources::{Definition, LockMode, Scope};
 
@@ -71,7 +72,7 @@ fn item(space: u32, item: u32) -> ItemNumber {
     ItemNumber { space, item }
 }
 
-fn sample(owner: &str, target: Target) -> ApprovalRequest {
+fn sample(owner: &SpaceId, target: Target) -> ApprovalRequest {
     ApprovalRequest::new(
         owner,
         target,
@@ -93,17 +94,18 @@ async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result
                 ("other-owner", "other", target.clone()),
                 ("other-target", "owner", Target::Resource { scope: Scope::Global, pool: "other".into() }),
             ] {
+                let owner = &SpaceId::from(owner);
                 let mut request = sample(owner, target.clone());
                 request.key = id.into();
                 save(db, &request)?;
                 assert_eq!(current(db, owner, &target, "default")?.unwrap().key, id);
             }
             db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('history','owner',?1,'default','invalid',0,100)", [&target])?;
-            assert!(list(db, Some("owner")).is_err());
-            assert_eq!(current(db, "owner", &target, "default")?.unwrap().key, "wanted");
-            assert!(current(db, "owner", &target, "absent")?.is_none());
+            assert!(list(db, Some(&SpaceId::from("owner"))).is_err());
+            assert_eq!(current(db, &SpaceId::from("owner"), &target, "default")?.unwrap().key, "wanted");
+            assert!(current(db, &SpaceId::from("owner"), &target, "absent")?.is_none());
             let tx = db.transaction()?;
-            let request = sample("owner", target.clone());
+            let request = sample(&SpaceId::from("owner"), target.clone());
             assert_eq!(check(&tx, request.clone())?.unwrap().key, "wanted");
             let mut changed = request.clone();
             changed.lifetime = Lifetime::Lease;
@@ -112,7 +114,7 @@ async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result
             changed.reason = "different reason".into();
             assert!(check(&tx, changed).is_err());
             tx.execute("UPDATE access_requests SET record='invalid' WHERE id='wanted'", [])?;
-            assert!(current(&tx, "owner", &target, "default").is_err());
+            assert!(current(&tx, &SpaceId::from("owner"), &target, "default").is_err());
             Ok(())
         }).await
 }
@@ -123,7 +125,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     manager.store.run(|db| {
             owners(db)?;
             for key in ["approve", "deny"] {
-                let mut request = sample("owner", Target::Simulator);
+                let mut request = sample(&SpaceId::from("owner"), Target::Simulator);
                 request.key = key.into();
                 request.name = key.into();
                 save(db, &request)?;
@@ -238,7 +240,7 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
             let mut requests = Vec::new();
             for head in ["first", "second", "third"] {
                 let request = ApprovalRequest::new(
-                    "owner",
+                    &SpaceId::from("owner"),
                     Target::Merge,
                     MERGE,
                     Specification::Merge(MergeSpecification {
@@ -277,7 +279,7 @@ async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> 
             let tx = db.transaction()?;
             let request = |reason: &str| {
                 ApprovalRequest::new(
-                    "owner",
+                    &SpaceId::from("owner"),
                     Target::Merge,
                     MERGE,
                     Specification::Merge(MergeSpecification {
@@ -467,10 +469,23 @@ async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> 
         .run(|db| {
             owners(db)?;
             let tx = db.transaction()?;
-            let selected = check(&tx, sample("owner", Target::Port("web".into())))?.unwrap();
+            let selected = check(
+                &tx,
+                sample(&SpaceId::from("owner"), Target::Port("web".into())),
+            )?
+            .unwrap();
             // Decided and gone while the withdrawal waited for its gate.
-            release(&tx, "owner", &Target::Port("web".into()), "default")?;
-            let later = check(&tx, sample("owner", Target::Port("api".into())))?.unwrap();
+            release(
+                &tx,
+                &SpaceId::from("owner"),
+                &Target::Port("web".into()),
+                "default",
+            )?;
+            let later = check(
+                &tx,
+                sample(&SpaceId::from("owner"), Target::Port("api".into())),
+            )?
+            .unwrap();
             assert_eq!(later.number, selected.number);
             assert!(withdraw(&tx, &selected).is_err());
             let stored = by_key(&tx, &later.key)?.unwrap();
@@ -482,7 +497,7 @@ async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> 
 
 #[test]
 fn decision_messages_name_the_request_target_and_next_step() {
-    let mut request = sample("owner", Target::Port("web".into()));
+    let mut request = sample(&SpaceId::from("owner"), Target::Port("web".into()));
     request.number = item(2, 7);
     request.status = DecisionStatus::Approved;
     let approved = request.decision_message();
@@ -507,7 +522,7 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
                 ("global", Scope::Global, DecisionStatus::Denied),
                 ("repo", Scope::Repo("repo".into()), DecisionStatus::Approved),
             ] {
-                let mut request = sample("owner", Target::Resource { scope, pool: "lock".into() });
+                let mut request = sample(&SpaceId::from("owner"), Target::Resource { scope, pool: "lock".into() });
                 request.key = id.into();
                 request.status = status;
                 save(db, &request)?;
@@ -546,7 +561,7 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
                     .get::<_, i64>(0))?,
                 0
             );
-            assert!(list(db, Some("owner")).is_err());
+            assert!(list(db, Some(&SpaceId::from("owner"))).is_err());
             Ok(())
         })
         .await
@@ -577,11 +592,11 @@ async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()
                 scope: Scope::Global,
                 pool: "lock".into(),
             };
-            let request = sample("owner", target.clone());
+            let request = sample(&SpaceId::from("owner"), target.clone());
             let mut grant = check(&tx, request.clone())?.unwrap();
             grant.status = DecisionStatus::Approved;
             save(&tx, &grant)?;
-            assert!(release(&tx, "owner", &target, "default")?);
+            assert!(release(&tx, &SpaceId::from("owner"), &target, "default")?);
             assert!(!by_key(&tx, &grant.key)?.unwrap().active);
             assert!(check(&tx, request.clone())?.is_none());
             let mut another = request.clone();
@@ -605,7 +620,7 @@ async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()
             grant.active = false;
             save(&tx, &grant)?;
             assert!(check(&tx, request.clone())?.is_some());
-            assert!(release(&tx, "owner", &target, "default")?);
+            assert!(release(&tx, &SpaceId::from("owner"), &target, "default")?);
             grant.status = DecisionStatus::Approved;
             save(&tx, &grant)?;
 
@@ -629,8 +644,8 @@ async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()
                 assert!(by_key(&tx, "broken").is_err());
             }
             assert!(list(&tx, None).is_err());
-            assert!(list(&tx, Some("owner")).is_err());
-            assert!(list(&tx, Some("missing"))?.is_empty());
+            assert!(list(&tx, Some(&SpaceId::from("owner"))).is_err());
+            assert!(list(&tx, Some(&SpaceId::from("missing")))?.is_empty());
             Ok(())
         })
         .await
@@ -666,7 +681,7 @@ async fn bundled_planner_bounds_lookups_and_limits_candidate_decoding() -> Resul
     manager.store.run(|db| {
             owners(db)?;
             let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
-            let mut request = sample("owner", target.clone());
+            let mut request = sample(&SpaceId::from("owner"), target.clone());
             request.key = "wanted".into();
             save(db, &request)?;
             request.key = "released".into();
@@ -806,11 +821,11 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
             for lifetime in [Lifetime::Lease, Lifetime::Workspace] {
                 let tx = db.transaction()?;
                 let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
-                let request = ApprovalRequest::new("owner", target, "default",
+                let request = ApprovalRequest::new(&SpaceId::from("owner"), target, "default",
                     resource(LockMode::Read), lifetime, Some("read shared data"));
                 let pending = check(&tx, request.clone())?.unwrap();
                 assert_eq!(check(&tx, request.clone())?.unwrap().number, pending.number);
-                assert_eq!(list(&tx, Some("owner"))?.len(), 1);
+                assert_eq!(list(&tx, Some(&SpaceId::from("owner")))?.len(), 1);
                 let mut changed = request.clone();
                 changed.specification = resource(LockMode::Write);
                 assert!(check(&tx, changed).is_err());
@@ -821,7 +836,7 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
                 decision.status = DecisionStatus::Approved;
                 tx.execute("UPDATE access_requests SET record=?2 WHERE id=?1", params![decision.key,serde_json::to_string(&decision)?])?;
                 assert!(check(&tx, request.clone())?.is_none());
-                assert!(release(&tx, "owner", &request.target, "default")?);
+                assert!(release(&tx, &SpaceId::from("owner"), &request.target, "default")?);
                 let result = check(&tx, request.clone())?;
                 assert_eq!(result.is_some(), lifetime == Lifetime::Lease);
                 if lifetime == Lifetime::Workspace {

@@ -695,7 +695,7 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
         )
         .await
         .unwrap();
-    std::fs::write(&id_file, &chat.id).unwrap();
+    std::fs::write(&id_file, chat.id.as_str()).unwrap();
     let child = wait_for_child(&started).await;
     let child = crate::process::identity::capture(child).unwrap().unwrap();
     let agent = crate::process::identity::capture(chat.pid)

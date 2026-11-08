@@ -93,7 +93,7 @@ fn a_running_chat_whose_agent_needs_input_is_listed() {
     let listed: Vec<String> = super::chat_items(&chats)
         .into_iter()
         .map(|item| match item {
-            Item::ChatNeedsInput { chat } => chat.id,
+            Item::ChatNeedsInput { chat } => chat.id.into(),
             _ => "other".into(),
         })
         .collect();

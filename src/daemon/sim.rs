@@ -7,6 +7,7 @@ mod planning;
 pub(crate) mod records;
 mod simctl;
 
+use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::params;
 use uuid::Uuid;
@@ -32,12 +33,12 @@ trait SimulatorExt {
     fn new(profile: Profile) -> Self;
 
     /// Take ownership for a lease; persist it before any simctl mutation.
-    fn claim(&mut self, workspace_id: &str, request: SimRequest);
+    fn claim(&mut self, workspace_id: &SpaceId, request: SimRequest);
 
     /// Lease a booted device, or mark a failed boot while keeping the claim.
-    fn finish_boot(&mut self, workspace_id: String, result: &Result<()>);
+    fn finish_boot(&mut self, workspace_id: SpaceId, result: &Result<()>);
 
-    fn is_leased_by(&self, workspace_id: &str, name: &str) -> bool;
+    fn is_leased_by(&self, workspace_id: &SpaceId, name: &str) -> bool;
 
     fn device<'a>(&self, inventory: &'a Inventory) -> Option<&'a simctl::Device>;
 
@@ -65,7 +66,7 @@ impl SimulatorExt for Simulator {
         }
     }
 
-    fn claim(&mut self, workspace_id: &str, request: SimRequest) {
+    fn claim(&mut self, workspace_id: &SpaceId, request: SimRequest) {
         self.workspace_id = Some(workspace_id.to_owned());
         self.lease_name = Some(request.name);
         self.reason = request.reason;
@@ -73,7 +74,7 @@ impl SimulatorExt for Simulator {
         self.error = None;
     }
 
-    fn finish_boot(&mut self, workspace_id: String, result: &Result<()>) {
+    fn finish_boot(&mut self, workspace_id: SpaceId, result: &Result<()>) {
         self.last_used = UnixTime::now();
         self.last_workspace_id = Some(workspace_id);
         match result {
@@ -85,7 +86,7 @@ impl SimulatorExt for Simulator {
         }
     }
 
-    fn is_leased_by(&self, workspace_id: &str, name: &str) -> bool {
+    fn is_leased_by(&self, workspace_id: &SpaceId, name: &str) -> bool {
         self.workspace_id.as_deref() == Some(workspace_id)
             && self.lease_name.as_deref() == Some(name)
     }
@@ -146,14 +147,14 @@ impl Manager {
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<Simulator>> {
         let owner = self.workspace_filter(selector).await?;
-        self.list_simulators(owner.as_deref()).await
+        self.list_simulators(owner.as_ref()).await
     }
 
     /// Managed simulators; current ownership takes precedence over last ownership.
-    pub async fn list_simulators(&self, owner: Option<&str>) -> Result<Vec<Simulator>> {
-        let owner = owner.map(str::to_owned);
+    pub async fn list_simulators(&self, owner: Option<&SpaceId>) -> Result<Vec<Simulator>> {
+        let owner = owner.cloned();
         self.store
-            .run(move |db| records::list(db, owner.as_deref()))
+            .run(move |db| records::list(db, owner.as_ref()))
             .await
     }
 
@@ -556,7 +557,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn release_simulator_access(&self, owner: String, name: String) -> Result<bool> {
+    async fn release_simulator_access(&self, owner: SpaceId, name: String) -> Result<bool> {
         self.store
             .write(move |tx| {
                 let released =
@@ -566,7 +567,7 @@ impl Manager {
             .await
     }
 
-    pub async fn remove_simulators(&self, owner: &str) -> Result<()> {
+    pub async fn remove_simulators(&self, owner: &SpaceId) -> Result<()> {
         let _guard = self.gates.lock_simulators().await;
         for mut sim in self.list_simulators(Some(owner)).await? {
             self.delete_sim(&mut sim).await?;

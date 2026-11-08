@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::cleanup::SpaceFailures;
 
@@ -9,7 +10,7 @@ fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepF
     let result = match workspace {
         Some(id) => {
             let mut failures = SpaceFailures::default();
-            failures.push(id, id, &error);
+            failures.push(&SpaceId::from(id), id, &error);
             failures.into_result()
         }
         None => Err(error),
@@ -21,7 +22,7 @@ fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepF
 
 fn unreported(workspace: Option<&str>, error: &str) -> Unreported {
     Unreported {
-        workspace: workspace.map(|id| (id.to_owned(), id.to_owned())),
+        workspace: workspace.map(|id| (SpaceId::from(id), id.to_owned())),
         error: error.to_owned(),
     }
 }
@@ -83,13 +84,13 @@ fn health_keeps_workspace_failures_to_their_workspace() {
     assert_eq!(health.record(moment(60), &failed), []);
 
     assert_eq!(health.problem(moment(60).at), None);
-    assert_eq!(health.workspace_problem("other"), None);
-    let problem = health.workspace_problem("quay").unwrap();
+    assert_eq!(health.workspace_problem(&SpaceId::from("other")), None);
+    let problem = health.workspace_problem(&SpaceId::from("quay")).unwrap();
     assert!(problem.contains(" 2 "), "{problem}");
     assert!(problem.ends_with(error), "{problem}");
 
     assert_eq!(health.record(moment(90), &Ok(())), []);
-    assert_eq!(health.workspace_problem("quay"), None);
+    assert_eq!(health.workspace_problem(&SpaceId::from("quay")), None);
 }
 
 #[tokio::test]

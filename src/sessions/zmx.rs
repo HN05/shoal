@@ -1,4 +1,5 @@
 //! zmx session discovery and termination, shared by launchers and cleanup.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -152,7 +153,7 @@ impl super::Host for Zmx {
                 .into_iter()
                 .filter(|(_, fields)| in_state(fields, &state_label))
                 .filter_map(|(name, fields)| {
-                    let workspace = workspace_owner(&fields)?.to_owned();
+                    let workspace = SpaceId::from(workspace_owner(&fields)?.to_owned());
                     Some(super::Session { name, workspace })
                 })
                 .collect())

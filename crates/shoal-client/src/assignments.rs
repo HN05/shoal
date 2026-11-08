@@ -1,5 +1,6 @@
 //! A space's assignment: marking it done or ready for review, and
 //! forgetting the stopped work it leaves.
+use crate::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +50,7 @@ pub async fn mark_done(
     daemon: &impl Daemon,
     space: SpaceSelector,
     done: Done,
-    sender_chat: Option<String>,
+    sender_chat: Option<SpaceId>,
 ) -> Result<Completion> {
     let method = AssignmentMethod::MarkDone {
         space,

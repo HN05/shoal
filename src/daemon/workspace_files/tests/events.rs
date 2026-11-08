@@ -1,5 +1,6 @@
 use super::{Attacher, FileSource, chat, workspace};
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::events::{EventItem, FileEventDetails, FileEventKind},
@@ -28,7 +29,7 @@ fn summary(events: &[FileEventDetails]) -> Vec<(FileEventKind, &str, FileSource)
         .collect()
 }
 
-async fn remove(manager: &Manager, id: &str) {
+async fn remove(manager: &Manager, id: &SpaceId) {
     manager
         .remove_workspace(
             &SpaceSelector::id(id),

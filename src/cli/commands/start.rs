@@ -1,6 +1,7 @@
 //! `shoal start`: start an agent in a mode, which decides what the agent is
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -34,7 +35,7 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         "workspace processes start agents only with their scope token"
     );
     if let Some(parent) = &args.parent {
-        args.parent = Some(SpaceSelector::id(&space_id(ctx, parent).await?));
+        args.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     ensure_copy_fits(&args)?;
     match start_of(ctx, &mut args).await? {
@@ -92,14 +93,14 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
 }
 
 /// The ID of the space `selector` names, by number, ID or name.
-async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
+async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
     let space = crate::client::workspaces::spaces(&ctx.paths)
         .await?
         .find(selector);
     Ok(space
         .with_context(|| format!("no space {selector}"))?
         .id()
-        .to_owned())
+        .clone())
 }
 
 /// Where a start goes, and in which mode.
@@ -296,8 +297,7 @@ async fn checked_repository(
         false,
     )?;
     let issue = issue.flatten();
-    let parent = args.parent.as_ref().map(ToString::to_string);
-    let parent = parent.as_deref();
+    let parent = args.parent.as_ref();
     let selector =
         workspaces::check_target(ctx, repository.clone(), issue.as_deref(), parent).await?;
     let named = Some(selector.value().to_owned());
@@ -413,11 +413,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
             )
             .await?
         }
-        false => (
-            args.parent.map(|parent| parent.to_string()),
-            args.agent,
-            None,
-        ),
+        false => (args.parent, args.agent, None),
     };
     // A copy goes in the copied workspace's repository unless one is named,
     // which the daemon refuses when it is another.
@@ -481,14 +477,10 @@ async fn fork_from(
     copied: Option<SpaceSelector>,
     parent: Option<SpaceSelector>,
     agent: Option<Agent>,
-) -> Result<(Option<String>, Option<Agent>, Option<String>)> {
+) -> Result<(Option<SpaceSelector>, Option<Agent>, Option<String>)> {
     if copied.is_some() {
         let (_, agent, session) = forked(ctx, copied, agent).await?;
-        return Ok((
-            parent.map(|parent| parent.to_string()),
-            Some(agent),
-            Some(session),
-        ));
+        return Ok((parent, Some(agent), Some(session)));
     }
     let (parent, agent, session) = forked(ctx, parent, agent).await?;
     Ok((Some(parent), Some(agent), Some(session)))
@@ -502,18 +494,18 @@ async fn forked(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
     agent: Option<Agent>,
-) -> Result<(String, Agent, String)> {
+) -> Result<(SpaceSelector, Agent, String)> {
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let AgentSession {
         agent: running,
         session,
         ..
-    } = crate::client::agents::session(&ctx.paths, SpaceSelector::parse(&parent)).await?;
+    } = crate::client::agents::session(&ctx.paths, parent.clone()).await?;
     let agent = match agent {
         Some(agent) => agent,
         None => running.parse()?,
     };
-    let target = ConfigTarget::Workspace(SpaceSelector::parse(&parent));
+    let target = ConfigTarget::Workspace(parent.clone());
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, agent.name())?;
     Ok((parent, agent, session))
@@ -578,7 +570,7 @@ fn chat_options(args: &mut StartArgs) -> chat::Options {
         fork: args.fork_session,
         restore: args.restore.take(),
         handoff: args.handoff.take(),
-        parent: args.parent.take().map(|parent| parent.to_string()),
+        parent: args.parent.take(),
         narrowing: match args.recorded_narrowing.take() {
             Some(recorded) => chat::Narrowing::Recorded(recorded),
             None => chat::Narrowing::Requested(PermissionsConfig::combined(&args.narrowing)),

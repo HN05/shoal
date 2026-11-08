@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_ids::SpaceId;
 
 fn database() -> Result<Connection> {
     let mut db = Connection::open_in_memory()?;
@@ -20,7 +21,8 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
     let mut db = database()?;
     let tx = db.transaction()?;
     // Creation and rename differ only in whether the caller's own record is excluded.
-    for except_id in [None, Some("renaming")] {
+    let renaming = SpaceId::from("renaming");
+    for except_id in [None, Some(&renaming)] {
         for repository_id in ["repo", "other"] {
             for name in ["worker", "reserved"] {
                 let error = ensure_name_and_branch_available(
@@ -49,7 +51,13 @@ fn rename_can_retain_its_own_name_and_branch() -> Result<()> {
     let mut db = database()?;
     let tx = db.transaction()?;
     for (name, branch) in [("worker", "topic"), ("worker", "new"), ("new", "topic")] {
-        ensure_name_and_branch_available(&tx, "repo", &name.into(), Some(branch), Some("owner"))?;
+        ensure_name_and_branch_available(
+            &tx,
+            "repo",
+            &name.into(),
+            Some(branch),
+            Some(&SpaceId::from("owner")),
+        )?;
         assert!(
             ensure_name_and_branch_available(&tx, "repo", &name.into(), Some(branch), None)
                 .is_err()
