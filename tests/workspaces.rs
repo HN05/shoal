@@ -20694,7 +20694,10 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
     let sent = fixture.ok(&["messages", "send", "--repo", repo, "Rebase onto main"]);
     assert_eq!(
         sent,
-        serde_json::json!({"workspaces": [], "chats": ["planning"]})
+        serde_json::json!({
+            "now": {"workspaces": [], "chats": ["planning"]},
+            "on_start": {"workspaces": [], "chats": []}
+        })
     );
     // A --repo without a value means the current repository.
     let output = fixture
@@ -20707,13 +20710,19 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
     let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         sent,
-        serde_json::json!({"workspaces": [], "chats": ["planning"]})
+        serde_json::json!({
+            "now": {"workspaces": [], "chats": ["planning"]},
+            "on_start": {"workspaces": [], "chats": []}
+        })
     );
     // --all reaches every repository, from outside any of them.
     let sent = fixture.ok(&["messages", "send", "--all", "The network works again"]);
     assert_eq!(
         sent,
-        serde_json::json!({"workspaces": [], "chats": ["planning"]})
+        serde_json::json!({
+            "now": {"workspaces": [], "chats": ["planning"]},
+            "on_start": {"workspaces": [], "chats": []}
+        })
     );
     assert_eq!(fixture.ok(&["messages", "idle"]), serde_json::json!([]));
     agent.kill().unwrap();
