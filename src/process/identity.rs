@@ -3,8 +3,8 @@
 //! scoped ancestors' state directories and the working directories of a
 //! space's untracked processes leave this module.
 pub(crate) use crate::client::processes::Identity;
-use crate::client::processes::UniqueId;
 #[cfg(any(target_os = "macos", test))]
+use crate::client::processes::UniqueId;
 use crate::client::space_ids::SpaceId;
 use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
