@@ -8,7 +8,7 @@ use super::{EventItem, EventKind, decode};
 use crate::{
     client::{
         space_names::SpaceSelector,
-        work::{LogEntry, LogFilter},
+        work::{LogEntry, LogFilter, LogTopic},
     },
     daemon::{scope::Caller, workspace::Manager},
 };
@@ -49,6 +49,16 @@ impl Manager {
         );
         *selector = SpaceSelector::id(&id);
         Ok(())
+    }
+
+    /// `topic` naming its space by ID, so a rename, or a later space taking
+    /// its name, does not change the log a subscription follows.
+    pub(in crate::daemon) async fn pin_log(&self, topic: LogTopic) -> Result<LogTopic> {
+        let id = self.log_space(&topic.space).await?;
+        Ok(LogTopic {
+            space: SpaceSelector::id(&id),
+            ..topic
+        })
     }
 
     /// The space `id` when it exists, else the nearest one that existed

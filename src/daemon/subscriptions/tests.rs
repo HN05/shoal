@@ -534,6 +534,41 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn a_log_subscription_keeps_following_its_space_after_a_rename() {
+        use crate::client::work::{LogEntry, LogFilter, LogTopic};
+        let daemon = TestDaemon::start().await;
+        let own = daemon.workspace("own").await;
+        let topic = LogTopic {
+            space: SpaceSelector::parse("own"),
+            filter: LogFilter::Entries,
+            limit: 50,
+        };
+        let mut subscription = Subscription::follow_log(daemon.connector(), topic)
+            .await
+            .unwrap();
+        snapshot(&mut subscription).await;
+        let id = own.id.clone();
+        (daemon.manager.store)
+            .run(move |db| {
+                db.execute("UPDATE workspaces SET name='renamed' WHERE id=?1", [&id])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let Update::Changed(record) = until(&mut subscription, changed(RecordKind::LogEntry)).await
+        else {
+            unreachable!();
+        };
+        let Record::LogEntry(entry) = *record else {
+            unreachable!();
+        };
+        let LogEntry::Event(event) = *entry else {
+            panic!("expected the rename");
+        };
+        assert_eq!(event.details.name, "renamed");
+    }
+
+    #[tokio::test]
     async fn a_scoped_subscription_without_workspace_records_names_its_tree() {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;

@@ -47,13 +47,21 @@ impl Subscriber {
         startup: OperationGuard,
     ) -> Result<()> {
         let manager = &self.manager;
-        let topics = Topics::new(&topics, log, self.caller.as_ref());
         // Watch before reading, so a change in between still wakes it.
         let mut stored = manager.store.watch_changes();
         let mut agents = manager.signals.watch_agents();
         let (mut reader, mut writer) = stream.into_split();
-        let mut sent = match snapshot::take(manager, self.caller.as_ref(), &topics).await {
-            Ok(records) => records,
+        let taken = async {
+            let log = match log {
+                Some(log) => Some(manager.pin_log(log).await?),
+                None => None,
+            };
+            let topics = Topics::new(&topics, log, self.caller.as_ref());
+            let records = snapshot::take(manager, self.caller.as_ref(), &topics).await?;
+            anyhow::Ok((topics, records))
+        };
+        let (topics, mut sent) = match taken.await {
+            Ok(taken) => taken,
             Err(error) => {
                 let body = answer::failure(&error);
                 return answer::write_frames(&mut writer, Response::new(id, body)).await;
