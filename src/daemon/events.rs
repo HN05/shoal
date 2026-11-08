@@ -23,6 +23,11 @@ enum Record {
     Workspace(Box<EventDetails>),
 }
 
+/// The fields that open every event of a space, from its `journal_spaces`
+/// row: a workspace's or a chat's identity.
+const SPACE_FIELDS: &str = "'workspace_id',workspace_id,'chat_id',chat_id,
+    'repository_id',repository_id,'name',name,'path',path,'branch',branch";
+
 /// Append in the transaction that owns the transition, before deleting ownership.
 pub(crate) fn record(
     db: &Connection,
@@ -33,15 +38,16 @@ pub(crate) fn record(
 ) -> Result<()> {
     // Repeated cleanup failures are unchanged state, even when notifications are read.
     db.execute(
-        "INSERT INTO workspace_events(record)
-         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
-             'name',name,'path',path,'branch',branch,'cause',?3,'error',?4)
-         FROM workspaces WHERE id=?1 AND NOT EXISTS (
-             SELECT 1 FROM workspace_events WHERE id=(
-                 SELECT MAX(id) FROM workspace_events WHERE json_extract(record,'$.workspace_id')=?1
-             ) AND json_extract(record,'$.kind')=?2 AND json_extract(record,'$.cause')=?3
-                 AND json_extract(record,'$.error') IS ?4
-         )",
+        &format!(
+            "INSERT INTO workspace_events(record)
+             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',?3,'error',?4)
+             FROM journal_spaces WHERE id=?1 AND NOT EXISTS (
+                 SELECT 1 FROM workspace_events WHERE id=(
+                     SELECT MAX(id) FROM workspace_events WHERE space_id=?1
+                 ) AND json_extract(record,'$.kind')=?2 AND json_extract(record,'$.cause')=?3
+                     AND json_extract(record,'$.error') IS ?4
+             )"
+        ),
         params![id, kind, cause, error],
     )?;
     Ok(())
@@ -62,17 +68,18 @@ pub(crate) fn record_link(
         EventKind::Linked | EventKind::Unlinked
     ));
     db.execute(
-        "INSERT INTO workspace_events(record)
-         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
-             'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
-             'link',json_object('kind',?3,'url',?4,'relation',?5))
-         FROM workspaces WHERE id=?1",
+        &format!(
+            "INSERT INTO workspace_events(record)
+             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
+                 'link',json_object('kind',?3,'url',?4,'relation',?5))
+             FROM journal_spaces WHERE id=?1"
+        ),
         params![id, event_kind, kind, url, relation],
     )?;
     Ok(())
 }
 
-/// Record a change Shoal made to one of the workspace's issues or PRs.
+/// Record a change Shoal made to one of the space's issues or PRs.
 pub(crate) fn record_item(
     db: &Connection,
     id: &str,
@@ -82,11 +89,12 @@ pub(crate) fn record_item(
 ) -> Result<()> {
     let kind = kind.into();
     db.execute(
-        "INSERT INTO workspace_events(record)
-         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
-             'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
-             'item',json_object('kind',?3,'url',?4,'action',?5))
-         FROM workspaces WHERE id=?1",
+        &format!(
+            "INSERT INTO workspace_events(record)
+             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
+                 'item',json_object('kind',?3,'url',?4,'action',?5))
+             FROM journal_spaces WHERE id=?1"
+        ),
         params![id, EventKind::ItemChanged, kind, url, action],
     )?;
     Ok(())
@@ -101,12 +109,13 @@ pub(crate) fn record_item_activity(
     update: &crate::forge::updates::Update,
 ) -> Result<()> {
     db.execute(
-        "INSERT INTO workspace_events(record)
-         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
-             'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
-             'item_activity',json_object('kind',?3,'url',?4,
-                 'update',json_object('kind',?5,'message',?6)))
-         FROM workspaces WHERE id=?1",
+        &format!(
+            "INSERT INTO workspace_events(record)
+             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
+                 'item_activity',json_object('kind',?3,'url',?4,
+                     'update',json_object('kind',?5,'message',?6)))
+             FROM journal_spaces WHERE id=?1"
+        ),
         params![
             id,
             EventKind::ItemActivity,

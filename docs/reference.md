@@ -4910,8 +4910,9 @@ all retained history; without `--follow`, the command exits after that backlog.
 Scoped callers cannot read events.
 
 Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
-workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
-`branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
+the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
+other null), `repository_id` (null for a chat without a repository), `name`,
+`path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
 `review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired` and `simulator_released`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`

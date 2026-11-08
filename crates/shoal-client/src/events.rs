@@ -101,13 +101,20 @@ states!(EventCause {
     ParentCompletion => "parent_completion",
 });
 
+/// An event of a space, a workspace or a chat.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventDetails {
     pub kind: EventKind,
-    pub workspace_id: String,
-    pub repository_id: String,
+    /// Null for a chat's event.
+    pub workspace_id: Option<String>,
+    /// Null for a workspace's event.
+    #[serde(default)]
+    pub chat_id: Option<String>,
+    /// Null for a chat without a repository.
+    pub repository_id: Option<String>,
     pub name: String,
-    pub path: PathBuf,
+    /// Null for a chat.
+    pub path: Option<PathBuf>,
     /// Observed branch for branch changes; null for a detached HEAD.
     pub branch: Option<String>,
     pub cause: Option<EventCause>,
@@ -162,6 +169,16 @@ pub struct EventDetails {
     /// The simulator lease acquired or released.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator: Option<SimulatorEvent>,
+}
+
+impl EventDetails {
+    /// The workspace or chat the event belongs to.
+    pub fn space_id(&self) -> &str {
+        self.workspace_id
+            .as_deref()
+            .or(self.chat_id.as_deref())
+            .unwrap_or_default()
+    }
 }
 
 /// Distinguish an absent field from an explicit null.

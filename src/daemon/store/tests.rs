@@ -447,6 +447,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 139 {
         super::space_names::rename_invalid_names(&db)?;
     }
+    if version >= 140 {
+        db.execute_batch(include_str!("space_events.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

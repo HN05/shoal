@@ -253,7 +253,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         }
         assert!(manager.workspace_by_id(&workspace.id).await.is_err());
         let events = manager.workspace_events(None, 100).await.unwrap();
-        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.workspace_id == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
+        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id() == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
     }
     let workspace = manager
         .create_workspace(&repo.id, "retain".into(), None, None, None)
@@ -283,7 +283,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .iter()
         .filter_map(|e| match e {
             EventItem::Event(e)
-                if e.details.workspace_id == workspace.id
+                if e.details.space_id() == workspace.id
                     && e.details.kind == EventKind::Retained =>
             {
                 Some(e.details.error.as_deref().unwrap())

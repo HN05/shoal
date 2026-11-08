@@ -176,6 +176,15 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // The journal knows no spaces, and only workspaces record into it.
+    db.execute_batch(
+        "DROP TRIGGER chat_completed; DROP TRIGGER chat_undone;
+         DROP TRIGGER space_review_ready; DROP TRIGGER space_review_ready_again;
+         DROP TRIGGER space_review_cleared; DROP TRIGGER space_agent_state_set;
+         DROP TRIGGER space_agent_state_changed; DROP TRIGGER space_agent_state_cleared;
+         DROP VIEW journal_spaces;
+         DROP INDEX workspace_events_space; ALTER TABLE workspace_events DROP COLUMN space_id;",
+    )?;
     // Workspaces record no copies again.
     db.execute_batch(
         "ALTER TABLE workspaces DROP COLUMN copied_from;
@@ -368,5 +377,65 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
         })
         .collect::<Vec<_>>();
     assert_eq!(kinds, [LinkKind::Ci, LinkKind::Ci, LinkKind::Ci]);
+    Ok(())
+}
+
+#[test]
+fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
+    use crate::daemon::events::{EventDetails, EventKind};
+    let mut db = Connection::open_in_memory()?;
+    migrate(&mut db)?;
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('c','repo','planner','claude',1,'birth',1);
+         INSERT INTO space_review(space_id,url,kind,head) VALUES ('c','',NULL,'abc');",
+    )?;
+    crate::daemon::events::record_link(
+        &db,
+        "c",
+        EventKind::Linked,
+        crate::model::Relation::Assigned,
+        crate::forge::items::link::LinkKind::Issue,
+        "https://forge.example/team/repo/issues/1",
+    )?;
+    db.execute_batch(
+        "UPDATE chats SET completion='{\"head\":\"abc\",\"cleanup\":true,\"error\":null}' WHERE id='c';
+         UPDATE chats SET completion=NULL WHERE id='c';",
+    )?;
+    let rows = db
+        .prepare(
+            "SELECT space_id,record FROM workspace_events
+                WHERE json_extract(record,'$.kind') NOT LIKE 'chat_%' ORDER BY id",
+        )?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let events = rows
+        .iter()
+        .map(|(space, record)| {
+            Ok((
+                space.as_str(),
+                serde_json::from_str::<EventDetails>(record)?,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let kinds: Vec<_> = events.iter().map(|(_, event)| event.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            EventKind::ReviewReady,
+            EventKind::Linked,
+            EventKind::Completed,
+            EventKind::Undone
+        ]
+    );
+    for (space, event) in &events {
+        assert_eq!(*space, "c");
+        assert_eq!(event.space_id(), "c");
+        assert_eq!(event.workspace_id, None);
+        assert_eq!(event.name, "planner");
+    }
     Ok(())
 }

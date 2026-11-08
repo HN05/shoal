@@ -75,7 +75,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
         .iter()
         .filter_map(|item| match item {
             EventItem::Event(event)
-                if event.details.workspace_id == upper.id
+                if event.details.space_id() == upper.id
                     && matches!(
                         event.details.kind,
                         EventKind::Created | EventKind::BaseChanged
@@ -189,7 +189,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
         .iter()
         .filter_map(|item| match item {
             EventItem::Event(event) if event.details.kind == EventKind::BaseChanged => Some((
-                event.details.workspace_id.clone(),
+                event.details.space_id().to_owned(),
                 event.details.cause,
                 event.details.base_workspace.clone(),
             )),
