@@ -34,8 +34,9 @@ const STARTED: &str = "started";
 /// The file the place holds locked from taking the handoff until it exits.
 const PLACE: &str = "place";
 /// How long the starter waits for the place to take the handoff, a hang
-/// guard for a place that never runs Shoal.
-const PICKUP: Duration = Duration::from_secs(60);
+/// guard for a place that never runs Shoal, generous since a loaded
+/// machine may take minutes to open a place and start Shoal in it.
+const PICKUP: Duration = Duration::from_secs(10 * 60);
 const POLL: Duration = Duration::from_millis(100);
 
 /// The directory the starter hands the place its scope token in and waits
@@ -82,8 +83,8 @@ impl Handoff {
             match place {
                 Place::Waiting => ensure!(
                     tokio::time::Instant::now() < deadline,
-                    "the background place did not run Shoal within {} seconds",
-                    PICKUP.as_secs()
+                    "the background place did not run Shoal within {} minutes",
+                    PICKUP.as_secs() / 60
                 ),
                 Place::Running => {}
                 Place::Ended => bail!("the background place ended before the chat started"),
