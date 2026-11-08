@@ -1969,7 +1969,7 @@ reads pages only until the limit is met. `shoal forge api` passes any request un
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
-unless `[permissions] api_writes` accepts that its writes may merge, approve or skip
+unless its `api_writes` permission accepts that its writes may merge, approve or skip
 required labels, and only GET in another repository, which that setting does
 not speak for; the path stays under the API root, so the login reaches only
 the API of the forge its repository is on. `shoal forge download` reads a file
@@ -2089,7 +2089,7 @@ stops and restores, that covers the chat and the spaces below it, so only the
 user's own terminal acts unscoped. The agent follows the workspace-agent rules
 without what needs a worktree: it opens workspaces and chats only below its
 chat and in its repository, never takes over one outside it, and renames only
-its own chat. It proposes issues where `[permissions]` says so, as a workspace's agent
+its own chat. It proposes issues where its permissions say so, as a workspace's agent
 does, recording no branch or commit, since it has none; approval opens the
 issue from the chat's checkout and records it as the chat's. It starts at once from the default branch the
 background sync keeps current, so an offline or diverged checkout still gets its
@@ -2199,8 +2199,8 @@ subtree reports as any parent does, and acts on other spaces as a coordinator
 acts below it, while what the scope keeps from every agent stays the user's,
 so the user can hand coordination to a tracked, scoped agent. Every registered
 repository counts as its own, so its forge actions take the repository they
-act in and that repository's `[permissions]`, and its proposals belong to
-that repository; it links nothing, since its links would name no one
+act in and their permissions as that repository's config resolves them, and
+its proposals belong to that repository; it links nothing, since its links would name no one
 repository.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
@@ -2434,7 +2434,7 @@ A decided proposal is deleted, since the message carries the outcome. An issue
 proposal belongs to the repository rather than the space that made it, because
 agents file follow-ups just before `done`; it opens through the repository's
 checkout and agent account once the space is gone. A PR proposal is bound to the branch and its
-commit like a merge request: the push still happens unless `[permissions] push`
+commit like a merge request: the push still happens unless the `push` permission
 holds it back, and a renamed branch or another
 commit, locally or where the push went, outdates it at approval or when the agent
 proposes again, and a pending one keeps the workspace
@@ -2442,7 +2442,7 @@ from unattended removal. Other agent writes, such as comments, edits and closing
 stay direct.
 
 A proposed PR still publishes its branch, and agents push with plain Git too, so
-`[permissions] push = "propose"` holds a scoped caller's pushes to the workspace
+a `push` permission of `"propose"` holds a scoped caller's pushes to the workspace
 repository's remotes for the user (`"direct"` is the default; unscoped callers
 always push); `"deny"` refuses them outright for repositories that should get
 no agent push, through the same helper and `pr open` check, recording nothing.
@@ -2464,7 +2464,7 @@ operation whose end decides the request, with the agent's Git profile as
 `pr open`'s push has. Nothing decides, withdraws or replaces a request while its
 push runs, since the push lands regardless. Pushes Shoal authorized itself run
 without the rewrites. Unless `push` is `"direct"`, a scoped `merge` needs approval
-whatever `[permissions] merge` says, since it may push the default branch, and a
+whatever the `merge` permission says, since it may push the default branch, and a
 forge's `pr revert`, which pushes at once, is refused for scoped callers. A
 pending push request keeps the workspace from unattended removal. Approving a merge
 request whose branch moved since it was requested is refused as stale and marks it outdated.
@@ -2493,8 +2493,8 @@ repository's checkout is the place to act in, so it reaches PR, view and CI
 commands from anywhere, and an item URL of a registered repository selects it
 outside a workspace and checkout. Where `--repo` already names any repository to
 read, a registered one is read through its checkout the same way.
-People outside the project see such an issue, so `[permissions] issue_other_repositories`
-governs scoped callers separately from `issue_open`: `"propose"` by default,
+People outside the project see such an issue, so the `issue_other_repositories`
+permission governs scoped callers separately from `issue_open`: `"propose"` by default,
 `"direct"`, or `"deny"`. The workspace's required labels and templates describe
 its own repository and do not apply there, and the issue cannot be linked, since
 an assignment's cleanup follows the workspace's repository. A proposal records

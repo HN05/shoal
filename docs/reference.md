@@ -1841,8 +1841,8 @@ is unscoped. It acts on the chat and the spaces below it as a workspace's agent
 acts on its own, under the [scoped workspace commands](#scoped-workspace-commands)
 rules, without those that need a worktree. It opens workspaces and chats only
 below the chat and in its repository, renames only its own chat, decides the requests
-routed to it only with a grant, and opens issues only where `[permissions]`
-lets agents open them directly. Merging, branch deletion, PR verdicts, CI
+routed to it only with a grant, and opens issues only where its
+[permissions](#mode-permissions) let it open them directly. Merging, branch deletion, PR verdicts, CI
 approval, your notifications and administration stay with you. `--parent`
 names the space the chat goes below, by name, ID or number; a workspace's or a
 chat's agent that starts a chat starts it below its own space, or below one
@@ -2173,8 +2173,8 @@ ordinary executions keep their settings. When the profile sets `user.name` or
 `user.email`, inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables for that
 field are dropped. Push credentials follow profile settings such as
 `core.sshCommand`. An undefined profile fails before the agent starts. Where
-[`[permissions] push`](#approval-for-agent-pushes) is `"propose"` or `"deny"`,
-the same variables carry the rewrites that hold or refuse the agent's pushes.
+the agent's [`push` permission](#approval-for-agent-pushes) at launch is
+`"propose"` or `"deny"`, the same variables carry the rewrites that hold or refuse the agent's pushes.
 
 ### Agent secrets
 
@@ -3038,7 +3038,7 @@ when:
 - the replay does not apply cleanly.
 
 The default branch has the same requirements as for `merge`, and an agent's scoped
-`unmerge` needs approval under the same `[permissions] merge` and `push` settings: the
+`unmerge` needs approval under the same `merge` and `push` permissions: the
 request names the merge it undoes, and after approval the agent's retry undoes it.
 
 ### Diff
@@ -4065,8 +4065,8 @@ title defaults to `Revert "<title>"`, its description to `Reverts #<number>`,
 and its labels to the reverted PR's. Where the forge reverts PRs (the
 `revert_prs` capability, GitHub only), the forge opens it from a branch it
 creates, and the workspace records it as opened without linking it; a
-workspace process cannot have it opened where `[permissions] pr_open` asks for
-the user's approval, since the forge's revert cannot wait for it. Elsewhere
+workspace process cannot have it opened where its `pr_open` permission asks
+for approval, since the forge's revert cannot wait for it. Elsewhere
 Shoal creates a workspace on branch `revert-<number>` from the base branch as
 `origin` has it, set up as any new workspace and a child of the workspace a
 workspace process runs in. As that workspace's tracked commands, it reverts
@@ -4175,7 +4175,7 @@ space is removed, keeping its number: no new space takes that space's number
 until its last such proposal is decided, and lists show it with the space's
 name marked `(removed)` (`space_removed` in `--json`).
 A proposed `pr open` pushes the branch as usual, unless
-[`[permissions] push`](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
+the [`push` permission](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
 there is one, and otherwise records the PR it would open, with its defaults
 filled in, at the branch's current commit. Running it again at the same commit
 returns that request; at a newer commit it replaces it, and the old one stays
@@ -4223,8 +4223,8 @@ the opened item.
 #### Approval for agent pushes
 
 A proposed PR still shows its branch and commits on the forge before you
-decide, and an agent can push with plain `git push` at any time. `[permissions]
-push = "propose"` keeps an agent's pushes to the workspace repository's remotes
+decide, and an agent can push with plain `git push` at any time. A `push`
+permission of `"propose"` keeps an agent's pushes to the workspace repository's remotes
 off the forge until you approve them; `"deny"` refuses them; `"direct"`, the
 default, pushes at once. Unscoped callers always push
 directly.
