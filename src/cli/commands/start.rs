@@ -579,7 +579,10 @@ fn chat_options(args: &mut StartArgs) -> chat::Options {
         restore: args.restore.take(),
         handoff: args.handoff.take(),
         parent: args.parent.take().map(|parent| parent.to_string()),
-        narrowing: PermissionsConfig::combined(&args.narrowing),
+        narrowing: match args.recorded_narrowing.take() {
+            Some(recorded) => chat::Narrowing::Recorded(recorded),
+            None => chat::Narrowing::Requested(PermissionsConfig::combined(&args.narrowing)),
+        },
     }
 }
 

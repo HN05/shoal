@@ -274,8 +274,8 @@ pub(super) struct Options {
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
     pub parent: Option<String>,
-    /// The `--permission` narrowing of the mode's permissions.
-    pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// The narrowing of the mode's permissions.
+    pub narrowing: Narrowing,
 }
 
 /// Where a chat runs.
@@ -499,19 +499,52 @@ pub(super) async fn begin(
     }
 }
 
-/// Refuse `narrowing` where it is wider than the permissions of the chat
-/// mode `mode` in `settings`, before anything is asked. A chat `restore`
-/// names, or one continuing a `session`, keeps the narrowing it was given.
+/// A chat's narrowing of its mode's permissions, by where it came from.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Narrowing {
+    /// The `--permission` its starter asked for, which the mode bounds.
+    Requested(crate::config::permissions::PermissionsConfig),
+    /// The narrowing a restored or imported chat recorded, which it keeps
+    /// whatever its mode allows now.
+    Recorded(crate::config::permissions::PermissionsConfig),
+}
+
+impl Narrowing {
+    fn value(self) -> crate::config::permissions::PermissionsConfig {
+        match self {
+            Self::Requested(narrowing) | Self::Recorded(narrowing) => narrowing,
+        }
+    }
+
+    /// The `shoal start` arguments that give this narrowing again.
+    fn args(self) -> Vec<OsString> {
+        match self {
+            Self::Requested(narrowing) => (narrowing.assignments().into_iter())
+                .flat_map(|assignment| ["--permission".into(), assignment.into()])
+                .collect(),
+            Self::Recorded(narrowing) if narrowing.is_empty() => Vec::new(),
+            Self::Recorded(narrowing) => vec![
+                "--recorded-narrowing".into(),
+                serde_json::to_string(&narrowing)
+                    .expect("a narrowing serializes")
+                    .into(),
+            ],
+        }
+    }
+}
+
+/// Refuse a requested `narrowing` where it is wider than the permissions
+/// of the chat mode `mode` in `settings`, before anything is asked; a
+/// recorded one stays as it is.
 fn ensure_narrowing_fits(
     settings: &Effective,
-    narrowing: &crate::config::permissions::PermissionsConfig,
+    narrowing: Narrowing,
     mode: &str,
     repo: &ChatRepository,
-    (restore, session): (Option<&str>, Option<&str>),
 ) -> Result<()> {
-    if restore.is_some() || session.is_some() {
+    let Narrowing::Requested(narrowing) = narrowing else {
         return Ok(());
-    }
+    };
     let mode = crate::config::permissions::SpaceMode {
         name: mode,
         kind: crate::model::SpaceKind::Chat,
@@ -552,8 +585,7 @@ pub(super) async fn launch(
         parent,
         narrowing,
     } = options;
-    let started = (restore.as_deref(), session.as_deref());
-    ensure_narrowing_fits(&settings, &narrowing, &topic.mode, &repo, started)?;
+    ensure_narrowing_fits(&settings, narrowing, &topic.mode, &repo)?;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
     let topic = match &restore {
@@ -579,7 +611,7 @@ pub(super) async fn launch(
     let launch = agents::ChatLaunch {
         name,
         mode: topic.mode.clone(),
-        narrowing,
+        narrowing: narrowing.value(),
         parent: parent.clone(),
         instructions: brief.system,
         opening: brief.first_message,
@@ -613,7 +645,7 @@ pub(super) async fn launch(
         fork,
         restore: restore.as_deref(),
         parent: parent.as_deref(),
-        narrowing: &narrowing,
+        narrowing,
     };
     let home = topic.home(&repo);
     if place == ChatPlace::Background {
@@ -655,7 +687,7 @@ pub(super) async fn launch(
         name: &name,
         agent: agent.name(),
         mode: &topic.mode,
-        narrowing,
+        narrowing: narrowing.value(),
         parent: parent.as_ref(),
     };
     let chat = crate::client::chats::record(
@@ -884,7 +916,7 @@ struct Beside<'a> {
     fork: bool,
     restore: Option<&'a str>,
     parent: Option<&'a str>,
-    narrowing: &'a crate::config::permissions::PermissionsConfig,
+    narrowing: Narrowing,
 }
 
 impl Beside<'_> {
@@ -916,9 +948,7 @@ impl Beside<'_> {
         if let Some(restore) = self.restore {
             chat.extend(["--restore".into(), restore.into()]);
         }
-        for assignment in self.narrowing.assignments() {
-            chat.extend(["--permission".into(), assignment.into()]);
-        }
+        chat.extend(self.narrowing.args());
         if let Some(parent) = self.parent {
             chat.extend(["--parent".into(), parent.into()]);
         }

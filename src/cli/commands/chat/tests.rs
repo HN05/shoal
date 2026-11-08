@@ -21,7 +21,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
     };
     let args = [OsString::from("--search")];
     let beside = Beside {
-        narrowing: &Default::default(),
+        narrowing: Narrowing::Requested(Default::default()),
         topic: &topic,
         name: &"named".into(),
         agent: &agent,
@@ -93,7 +93,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
     assert_eq!(topic.name, "worker-chat");
     let agent: Agent = "claude".parse().unwrap();
     let beside = Beside {
-        narrowing: &Default::default(),
+        narrowing: Narrowing::Requested(Default::default()),
         topic: &topic,
         name: &"worker-chat".into(),
         agent: &agent,
@@ -226,7 +226,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let agent: Agent = "claude".parse().unwrap();
     let topic = Topic::imported(&repo, "plan", &links);
     let beside = Beside {
-        narrowing: &Default::default(),
+        narrowing: Narrowing::Requested(Default::default()),
         topic: &topic,
         name: &"shoal-plan-7".into(),
         agent: &agent,
@@ -285,4 +285,22 @@ fn a_chat_whose_agent_cannot_fork_starts_a_new_session() {
     assert!(!forked.of(&settings, &claude).unwrap().is_empty());
     let opencode: Agent = "opencode".parse().unwrap();
     assert!(forked.of(&settings, &opencode).unwrap().is_empty());
+}
+
+#[test]
+fn a_relaunch_keeps_whether_a_narrowing_was_asked_for_or_recorded() {
+    let assignments = ["push=propose".to_owned()];
+    let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
+    assert_eq!(
+        Narrowing::Requested(narrowing).args(),
+        [OsString::from("--permission"), "push=propose".into()]
+    );
+    let recorded = Narrowing::Recorded(narrowing).args();
+    assert_eq!(recorded[0], "--recorded-narrowing");
+    let json = recorded[1].to_str().unwrap();
+    assert_eq!(
+        serde_json::from_str::<crate::config::permissions::PermissionsConfig>(json).unwrap(),
+        narrowing
+    );
+    assert!(Narrowing::Recorded(Default::default()).args().is_empty());
 }

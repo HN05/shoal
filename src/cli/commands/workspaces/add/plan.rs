@@ -98,16 +98,11 @@ pub(super) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
         .collect()
 }
 
-/// Start `plan`'s agent in `mode` with `narrowing`, below the space
-/// `options` names, from a fork of the session it names.
-pub(super) fn start_as(
-    plan: &mut AddPlan,
-    options: &AddOptions,
-    mode: Option<String>,
-    narrowing: crate::config::permissions::PermissionsConfig,
-) {
+/// Start `plan`'s agent in `mode` with the narrowing `options` gives,
+/// below the space it names, from a fork of the session it names.
+pub(super) fn start_as(plan: &mut AddPlan, options: &AddOptions, mode: Option<String>) {
     plan.mode = mode;
-    plan.narrowing = narrowing;
+    plan.narrowing = options.narrowing;
     plan.prompt.clone_from(&options.prompt);
     plan.parent.clone_from(&options.parent);
     plan.fork.clone_from(&options.fork);

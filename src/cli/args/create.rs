@@ -71,6 +71,10 @@ pub struct StartArgs {
     /// than the parent space's gets no more than the parent's.
     #[arg(long = "permission", value_name = "KEY=VALUE", value_parser = assignment)]
     pub narrowing: Vec<crate::config::permissions::PermissionsConfig>,
+    /// The narrowing a restored or imported chat recorded, as JSON, which a
+    /// start in a background place keeps unchecked.
+    #[arg(long, hide = true, value_parser = recorded, conflicts_with = "narrowing")]
+    pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
     /// Start in a chat, whatever the mode's kind.
     #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub chat: bool,
@@ -256,4 +260,9 @@ pub struct ContributeArgs {
 fn assignment(text: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
     crate::config::permissions::PermissionsConfig::assigned(&[text.to_owned()])
         .map_err(|error| format!("{error:#}"))
+}
+
+/// A recorded narrowing passed on as JSON.
+fn recorded(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
+    serde_json::from_str(json).map_err(|error| error.to_string())
 }

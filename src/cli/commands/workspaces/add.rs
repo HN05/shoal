@@ -149,7 +149,7 @@ pub(in crate::cli::commands) async fn add(
     ensure_narrowing_fits_chosen(&settings, &options.narrowing, mode.as_deref()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
-    start_as(&mut plan, &options, mode, options.narrowing);
+    start_as(&mut plan, &options, mode);
     ensure!(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"

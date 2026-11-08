@@ -132,7 +132,7 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         (None, ChatRepository::Outside(_)) => chat::Topic::outside_repositories(&chat.mode),
     };
     let options = chat::Options {
-        narrowing: chat.narrowing,
+        narrowing: chat::Narrowing::Recorded(chat.narrowing),
         agent: Some(chat.agent.parse()?),
         place,
         name: Some(chat.name.clone()),
