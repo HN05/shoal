@@ -73,7 +73,7 @@ impl Manager {
     /// repository's or the one a chat without a repository acts in, as a
     /// checkout opens one, and record it as opened by the chat, or assign it
     /// to the chat with `link`. The chat's own agent, a scoped `caller`,
-    /// records it for the user's approval instead where `[permissions]` says
+    /// records it for approval instead where its permissions say
     /// so, as a workspace's does. A chat without a repository acting in no
     /// registered one opens it as [`Self::open_outside_issue`] does, and
     /// records nothing.
@@ -204,8 +204,8 @@ impl Manager {
 
     /// Open the issue for the workspace and record it as opened there. A
     /// workspace process's issue is recorded for the user's approval instead
-    /// when `[permissions] issue_open`, or for another repository
-    /// `[permissions] issue_other_repositories`, says so.
+    /// when the caller's `issue_open` permission, or for another repository
+    /// its `issue_other_repositories` permission, says so.
     async fn open_workspace_issue(
         &self,
         selector: &SpaceSelector,

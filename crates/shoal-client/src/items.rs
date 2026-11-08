@@ -98,7 +98,7 @@ pub fn seconds_left(deadline: Option<Instant>) -> Option<u64> {
 }
 
 /// Open the PR of `workspace`'s branch with `options`; `push_held` says
-/// `[permissions] push` held the branch's push back for approval.
+/// the `push` permission held the branch's push back for approval.
 pub async fn open_pull(
     daemon: &impl Daemon,
     workspace: SpaceSelector,

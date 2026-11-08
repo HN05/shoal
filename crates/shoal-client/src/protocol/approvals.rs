@@ -42,7 +42,7 @@ pub enum ApprovalMethod {
         space: SpaceSelector,
         number: ItemNumber,
     },
-    /// Whether `[permissions] push` holds back the push of the workspace's
+    /// Whether the `push` permission holds back the push of the workspace's
     /// branch that `shoal pr open` would run.
     BranchPush {
         workspace: SpaceSelector,

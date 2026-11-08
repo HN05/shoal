@@ -366,7 +366,7 @@ impl Manager {
     /// account and link it; only a removal that starts meanwhile leaves it
     /// unlinked. A workspace process's new PR is recorded for the user's
     /// approval instead when its `pr_open` permission says so, or when
-    /// `push_held` says `[permissions] push` held back the branch's push,
+    /// `push_held` says the `push` permission held back the branch's push,
     /// which approving it runs first; a held push to an open PR is recorded
     /// on its own.
     pub async fn open_pull(

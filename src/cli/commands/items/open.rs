@@ -71,7 +71,7 @@ pub(super) async fn publish(
 }
 
 /// In an operation's worker: verify the worktree before anything leaves it,
-/// push without forcing unless `[permissions] push` holds the push back for
+/// push without forcing unless the `push` permission holds the push back for
 /// the user, then let the daemon find or open the PR and link it, or record
 /// what waits for the user.
 pub(in crate::cli::commands) async fn push_and_open(

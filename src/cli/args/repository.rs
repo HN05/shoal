@@ -81,7 +81,7 @@ pub enum ForgeCommand {
     /// Send a request to the repository's forge API and print its JSON response.
     ///
     /// Workspace processes send it as the agent account, and only GET unless
-    /// `[permissions] api_writes` lets agents send others to the workspace's
+    /// their space's `api_writes` permission lets them send others to its
     /// repository; anyone else sends any request with your own logins.
     Api(ApiArgs),
     /// Download an image or attached file from the repository's forge.

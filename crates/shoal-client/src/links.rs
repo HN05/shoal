@@ -31,7 +31,7 @@ pub enum PushOutcome {
     Proposed(Proposed),
 }
 
-/// Whether `[permissions] push` holds back the push of the workspace's
+/// Whether the `push` permission holds back the push of the workspace's
 /// branch that `shoal pr open` would run.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BranchPush {

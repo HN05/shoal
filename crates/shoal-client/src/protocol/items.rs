@@ -50,7 +50,7 @@ pub enum ItemMethod {
     OpenPull {
         workspace: SpaceSelector,
         options: crate::forge::items::create::PullOptions,
-        /// `[permissions] push` held back the branch's push, which approving
+        /// the `push` permission held back the branch's push, which approving
         /// the PR runs first.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         push_held: bool,

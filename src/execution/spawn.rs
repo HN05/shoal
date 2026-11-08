@@ -13,8 +13,8 @@ use crate::{config::value::Value, env, model::ExecutionPlan, paths::Paths};
 /// and the output default.
 pub(super) struct AgentLaunch {
     pub(super) git: crate::agent_git::Launch,
-    /// The helper that holds back an agent's pushes where `[permissions]
-    /// push` asks, whose rewrites `git` carries.
+    /// The helper that holds back an agent's pushes where its `push`
+    /// permission asks, whose rewrites `git` carries.
     pub(super) push_gate: crate::push_gate::Launch,
     pub(super) secrets: crate::secrets::Launch,
     pub(super) output: Option<(&'static str, &'static str)>,

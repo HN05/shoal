@@ -355,8 +355,8 @@ pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut SpaceS
 /// The space a change from `context` is made by, which [`context_workspace`]
 /// names; a caller whose scope reaches every space, which has every
 /// registered repository for its own, changes the items of a registered
-/// checkout as its own space acting there, under that repository's
-/// `[permissions]`.
+/// checkout as its own space acting there, under its permissions in that
+/// repository's config.
 pub(super) async fn change_context_space<'a>(
     manager: &Manager,
     caller: &Caller,

@@ -1,4 +1,4 @@
-//! Pushes a repository's `[permissions] push` holds back for the user's
+//! Pushes a space's `push` permission holds back for the user's
 //! approval: whether one is held, recording it, and pushing what the user
 //! approved in an operation whose end decides the request, opening the PR a
 //! proposal held back with it.
@@ -10,7 +10,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::links::PushOutcome,
-    config::permissions::Pushes,
+    config::permissions::{Permission, PermissionSource, Pushes},
     daemon::{
         approvals::{
             ApprovalRequest, DecisionStatus, PushSpecification, Specification, Target,
@@ -28,13 +28,18 @@ use crate::{
 
 use super::proposals::{Proposed, Proposer, proposal};
 
-/// Why a scoped push is refused under `[permissions] push = "deny"`.
-const DENIED: &str = "[permissions] push = \"deny\": agents cannot push to this repository's remotes; ask the user to push";
+/// Why a scoped push is refused under a `push` permission of `"deny"`.
+fn denied(push: Permission<Pushes>) -> anyhow::Error {
+    anyhow!(
+        "agents cannot push to this repository's remotes: {}; ask the user to push",
+        push.cited("push")
+    )
+}
 
 impl Manager {
     /// Whether the push of the workspace's branch that `shoal pr open` runs
-    /// waits for the user: one from a scoped caller under `[permissions]
-    /// push = "propose"`, unless the remote has the branch's commit already.
+    /// waits for approval: one from a scoped caller whose `push` permission
+    /// is `"propose"`, unless the remote has the branch's commit already.
     /// `"deny"` refuses it.
     pub async fn branch_push_held(
         &self,
@@ -43,7 +48,7 @@ impl Manager {
     ) -> Result<bool> {
         let workspace = self.workspace(selector).await?;
         let pushes = self.scoped_pushes(&workspace, caller).await?;
-        if pushes == Pushes::Direct {
+        if pushes.value == Pushes::Direct {
             return Ok(false);
         }
         let push = branch_push(&workspace, None).await?;
@@ -56,29 +61,34 @@ impl Manager {
         if pushed == push.commit {
             return Ok(false);
         }
-        anyhow::ensure!(pushes != Pushes::Deny, DENIED);
+        if pushes.value == Pushes::Deny {
+            return Err(denied(pushes));
+        }
         Ok(true)
     }
 
-    /// What the `push` permission of `caller` does with the pushes it makes
-    /// from the workspace; unscoped callers always push.
+    /// The `push` permission `caller` pushes from the workspace under;
+    /// unscoped callers always push, so theirs is `"direct"`.
     pub(super) async fn scoped_pushes(
         &self,
         workspace: &Workspace,
         caller: Option<&Caller>,
-    ) -> Result<Pushes> {
+    ) -> Result<Permission<Pushes>> {
         let Some(caller) = caller else {
-            return Ok(Pushes::Direct);
+            return Ok(Permission {
+                value: Pushes::Direct,
+                from: PermissionSource::Mode,
+            });
         };
         let permissions = self
             .caller_permissions(caller, &workspace.repository_id)
             .await?;
-        Ok(permissions.push.value)
+        Ok(permissions.push)
     }
 
     /// The push of the workspace's branch that `shoal pr open` from
-    /// `caller` left to the user's approval, which `[permissions] push` must
-    /// still hold back.
+    /// `caller` left to approval, which its `push` permission must still
+    /// hold back.
     pub(super) async fn held_push(
         &self,
         workspace: &Workspace,
@@ -86,8 +96,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<PushSpecification> {
         anyhow::ensure!(
-            self.scoped_pushes(workspace, caller).await? == Pushes::Propose,
-            "[permissions] push no longer holds back this push; run shoal pr open again"
+            self.scoped_pushes(workspace, caller).await?.value == Pushes::Propose,
+            "the push permission no longer holds back this push; run shoal pr open again"
         );
         branch_push(workspace, proposer.and_then(|p| p.agent.clone())).await
     }
@@ -101,9 +111,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<PushOutcome> {
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
-        match self.scoped_pushes(&workspace, caller).await? {
+        let pushes = self.scoped_pushes(&workspace, caller).await?;
+        match pushes.value {
             Pushes::Direct => return Ok(PushOutcome::Direct),
-            Pushes::Deny => bail!(DENIED),
+            Pushes::Deny => return Err(denied(pushes)),
             Pushes::Propose => {}
         }
         self.ensure_workspace_not_pushing(&workspace).await?;

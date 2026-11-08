@@ -1,4 +1,4 @@
-//! Issues and PRs a repository's `[permissions]` makes scoped callers propose
+//! Issues and PRs a space's permissions make scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
 use crate::daemon::approvals::ApprovalRequestExt;
@@ -49,8 +49,8 @@ impl OpenOutcomeExt for OpenOutcome {
     }
 }
 
-/// A scoped caller, which proposes what `[permissions]` keeps it from opening
-/// directly.
+/// A scoped caller, which proposes what its permissions keep it from
+/// opening directly.
 #[derive(Debug, Clone, Default)]
 pub struct Proposer {
     /// The agent running the command, when Shoal tracks one.

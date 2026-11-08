@@ -352,12 +352,12 @@ pub struct PullSpecification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow_up: Option<Edit>,
     /// The push of the branch that approval runs before opening the PR,
-    /// when `[permissions] push` held it back.
+    /// when the `push` permission held it back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<PushSpecification>,
 }
 
-/// A push of one ref that `[permissions] push` held back, which approval
+/// A push of one ref that the `push` permission held back, which approval
 /// runs as recorded: the commit, not whatever the branch has by then.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -638,7 +638,7 @@ pub async fn withdraw(
     request(daemon, ApprovalMethod::WithdrawApproval { space, number }).await
 }
 
-/// Whether `[permissions] push` holds back the push of `workspace`'s branch.
+/// Whether the `push` permission holds back the push of `workspace`'s branch.
 pub async fn push_held(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<bool> {
     let BranchPush { held } = request(daemon, ApprovalMethod::BranchPush { workspace }).await?;
     Ok(held)

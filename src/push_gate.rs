@@ -1,5 +1,5 @@
 //! Holding a tracked agent's `git push` for the user's approval where
-//! `[permissions] push = "propose"`, or refusing it where it is `"deny"`.
+//! its `push` permission is `"propose"`, or refusing it where it is `"deny"`.
 //! Git settings in the agent's environment rewrite the push URLs of the
 //! workspace repository's remotes to the `shoal::` transport, so Git hands
 //! every push to them to Shoal's remote helper, which asks the daemon before
@@ -69,7 +69,7 @@ fn rewrites(urls: &git::RemoteUrls) -> Result<Vec<(String, String)>> {
             .find(|fetch| fetch.starts_with(url.as_str()))
         {
             anyhow::bail!(
-                "the push URL {url} would also rewrite fetches from {fetch}, so Shoal cannot gate pushes to it; change or remove that pushurl, or set [permissions] push = \"direct\""
+                "the push URL {url} would also rewrite fetches from {fetch}, so Shoal cannot gate pushes to it; change or remove that pushurl, or give the agent a push permission of \"direct\""
             );
         }
     }
