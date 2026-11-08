@@ -13,6 +13,34 @@ use crate::{
 
 mod transfer;
 
+// TEMPORARY: what a surviving process looks like on the Linux runner.
+fn report(pid: u32) -> String {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+    let chat = fs::read(format!("/proc/{pid}/environ"))
+        .map(|environ| {
+            environ
+                .split(|byte| *byte == 0)
+                .filter(|entry| entry.starts_with(crate::env::CHAT.as_bytes()))
+                .map(|entry| String::from_utf8_lossy(entry).into_owned())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let parent = stat
+        .rsplit_once(") ")
+        .and_then(|(_, rest)| rest.split_whitespace().nth(1))
+        .unwrap_or("?")
+        .to_owned();
+    let parent_cmdline = fs::read(format!("/proc/{parent}/cmdline"))
+        .map(|cmdline| String::from_utf8_lossy(&cmdline).replace('\0', " "))
+        .unwrap_or_default();
+    let own_parent = std::os::unix::process::parent_id();
+    format!(
+        "stat={stat:?} chat={chat:?} parent={parent} parent_cmdline={parent_cmdline:?} \
+         test_pid={} test_parent={own_parent}",
+        std::process::id()
+    )
+}
+
 /// A manager with a chat `name` about a registered repository, whose
 /// process this test reaps once a signal ends it, so the chat ends with it.
 async fn chat(name: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
@@ -138,7 +166,7 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
     export(&manager, "launched", &root.path().join("launched.shoal"))
         .await
         .unwrap();
-    assert!(!identity::alive(&agent).unwrap());
+    assert!(!identity::alive(&agent).unwrap(), "{}", report(agent.pid));
     assert_eq!(identity::capture(pid).unwrap(), None);
 }
 
@@ -175,7 +203,7 @@ async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
-    assert_eq!(identity::capture(late).unwrap(), None);
+    assert_eq!(identity::capture(late).unwrap(), None, "{}", report(late));
     assert_eq!(identity::capture(pid).unwrap(), None);
 }
 
