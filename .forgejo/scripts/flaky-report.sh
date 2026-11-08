@@ -91,12 +91,20 @@ while [ "$round" -le "$ROUNDS" ]; do
   echo "round $round of $ROUNDS: $(grep -c . "$WORK/failed-$round" || true) failed" >&2
   if [ -s "$WORK/failed-$round" ]; then
     echo "::group::round $round failure output" >&2
-    # The summary repeats every failed test's output; each one bounded.
-    awk -v max=200 '
-      /^ *Summary \[/ { printing = 1 }
-      !printing { next }
-      $0 ~ ENVIRON["FINISHED"] { lines = 0; print; next }
-      {
+    # Each failed test's output, bounded: from the summary, which repeats
+    # them all, or, in a round stopped before it, from each test's line.
+    summary=0
+    grep -q '^ *Summary \[' "$log" && summary=1
+    awk -v max=200 -v summary="$summary" '
+      /^ *Summary \[/ { reached = 1; print; next }
+      summary && !reached { next }
+      $0 ~ ENVIRON["FINISHED"] {
+        failed = $0 !~ /^ *(PASS|LEAK) /
+        lines = 0
+        if (failed) print
+        next
+      }
+      failed {
         if (++lines <= max) print
         else if (lines == max + 1) print "[output truncated]"
       }' "$log" >&2

@@ -117,10 +117,15 @@ class FlakyReportTests(unittest.TestCase):
         self.assertIn("No test failed.", result.stdout)
 
     def test_nextest_killed_after_a_failed_test_breaks_the_round(self):
-        result = self.report(START + FAILED, 137)
+        # More passes than the end of the log shows, so only the failure
+        # output can show the failed test's.
+        passes = "".join(f"        PASS [   0.010s] ({n:>3}/300) a tests::p{n}\n" for n in range(4, 160))
+        result = self.report(START + FAILED + passes, 137)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("| `b tests::bad` | 1 of 1 | `src/lib.rs:6:38: nope` |", result.stdout)
         self.assertIn("round 1 of 1 broke: nextest exited with status 137", result.stderr)
+        self.assertIn("thread 'tests::bad' (415442519) panicked", result.stderr)
+        self.assertNotIn("a tests::p4\n", result.stderr)
 
     def test_a_build_error_breaks_the_round_and_prints_the_error(self):
         result = self.report(BUILD_ERROR, 101)
