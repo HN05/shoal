@@ -13,6 +13,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     fsutil::{create_marked_dir, is_marked_dir},
     model::{RemovedWorkspace, Repository},
@@ -52,12 +53,26 @@ impl Manager {
 
     /// Forget the session files `repo` keeps for the workspace
     /// `workspace_id`.
-    pub(super) async fn discard_imported_sessions(&self, repo: &Repository, workspace_id: &str) {
+    pub(super) async fn discard_imported_sessions(
+        &self,
+        repo: &Repository,
+        workspace_id: &str,
+    ) -> Result<()> {
         let Some(layout) = Layout::of(repo) else {
-            return;
+            return Ok(());
         };
         let workspace_id = workspace_id.to_owned();
-        let _ = tokio::task::spawn_blocking(move || layout.remove_one(&workspace_id)).await;
+        tokio::task::spawn_blocking(move || layout.remove_one(&workspace_id))
+            .await
+            .context("delete the kept session files")?
+    }
+
+    /// Forget the session files the restore that opened `workspace` handed
+    /// over, once the caller has put them in place.
+    pub async fn drop_restored_sessions(&self, workspace: &SpaceSelector) -> Result<()> {
+        let workspace = self.workspace(workspace).await?;
+        let repo = self.repository(&workspace.repository_id).await?;
+        self.discard_imported_sessions(&repo, &workspace.id).await
     }
 
     /// Give the session files kept for `removed` to the workspace `to` that

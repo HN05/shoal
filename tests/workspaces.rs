@@ -6819,6 +6819,14 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
         fs::read_to_string(project.join("profiled-session.jsonl")).unwrap(),
         "{}\n"
     );
+    // Placed, the daemon's kept copies go.
+    let kept = path.parent().unwrap().join(".sessions");
+    let left: Vec<_> = fs::read_dir(&kept)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|entry| entry.is_dir())
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
 }
 
 /// Import the export `file` while a branch named `branch`, the workspace's,

@@ -86,6 +86,10 @@ pub(super) async fn handle(
         RemovalMethod::RestoreWorkspace { workspace } => {
             Body::RestoredWorkspace(Box::new(manager.restore_workspace(&workspace).await?))
         }
+        RemovalMethod::DropRestoredSessions { workspace } => {
+            manager.drop_restored_sessions(&workspace).await?;
+            Body::Ok
+        }
         RemovalMethod::ExportSpace {
             space,
             unsaved,

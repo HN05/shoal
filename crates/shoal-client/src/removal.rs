@@ -335,3 +335,9 @@ pub async fn restore(
 ) -> Result<Box<RestoredWorkspace>> {
     request(daemon, RemovalMethod::RestoreWorkspace { workspace }).await
 }
+
+/// Delete the session files the restore that opened `workspace` returned,
+/// which the caller has put in place.
+pub async fn drop_restored_sessions(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
+    request(daemon, RemovalMethod::DropRestoredSessions { workspace }).await
+}

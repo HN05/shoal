@@ -2810,12 +2810,13 @@ daemon reports the sessions a space's agents reported, and `shoal_client`
 finds each one's files by ID where its tool keeps them, under the client's
 environment or one the repository's agents ran with, as an export does. An
 export copies each reported session's files unread, and an import puts them at the
-same path under the importing agent's session directory, a workspace's once the
-restore that opens it reads the workspace's configuration, which may define the
-agent, so the daemon keeps them with the removal record until then, replacing a file there
+same path under the importing agent's session directory, replacing a file there
 only with one that continues it, as a session that went away and came back does,
 and leaving that to the installed Shoal in a development build; a session whose
-files cannot be read is left out with a warning and starts over. The export records the agents' sessions, with the
+files cannot be read is left out with a warning and starts over. A workspace's
+files go in place once the restore that opens it reads the workspace's
+configuration, which may define the agent, so the daemon keeps them with the
+removal record until then and deletes them once the client has placed them. The export records the agents' sessions, with the
 exporting machine's ID when it has one, beside the moved records, which older
 importers read. An import on that machine, one that received the session's
 files, or one told to keep sessions, keeps the session IDs, which the agents resume from any directory, dropping another

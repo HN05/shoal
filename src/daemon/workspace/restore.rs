@@ -328,7 +328,8 @@ impl Manager {
             .write(move |tx| record_imported(tx, record))
             .await
         {
-            self.discard_imported_sessions(repo, &removed.workspace_id)
+            let _ = self
+                .discard_imported_sessions(repo, &removed.workspace_id)
                 .await;
             return Err(error);
         }

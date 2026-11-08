@@ -104,22 +104,22 @@ pub(in crate::cli) async fn install_session_files(
 
 /// Put `files`, which the daemon kept with the removal record `restored`,
 /// where the agents of the workspace `workspace` that restores it look for
-/// them, then delete them, since nothing reads them again.
+/// them, then have the daemon delete them, since nothing reads them again.
 pub(in crate::cli) async fn install_kept_session_files(
     ctx: &Context,
     workspace: &Workspace,
     restored: &RemovedWorkspace,
     files: &[CarriedSessionFile],
 ) {
+    if files.is_empty() {
+        return;
+    }
     let existing = Existing::of_copy(restored.is_copy());
     install_session_files(ctx, SessionHome::Workspace(workspace), files, existing).await;
-    // Left behind, they go with the workspace.
-    let kept: std::collections::BTreeSet<_> = files
-        .iter()
-        .filter_map(|file| file.contents.parent())
-        .collect();
-    for directory in kept {
-        let _ = std::fs::remove_dir_all(directory);
+    // Left behind, they go with the workspace's removal record.
+    let selector = SpaceSelector::id(&workspace.id);
+    if let Err(error) = crate::client::removal::drop_restored_sessions(&ctx.paths, selector).await {
+        eprintln!("warning: cannot delete the kept session files: {error:#}");
     }
 }
 
