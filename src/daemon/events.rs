@@ -45,6 +45,59 @@ fn decode(id: i64, created_at: i64, record: &str) -> Result<EventItem> {
     })
 }
 
+/// The events after `cursor`, after a gap where the journal lost some of
+/// them: the cursor is outside it, or retention deleted events after the
+/// cursor. Per-space retention deletes events anywhere, so for the client's
+/// own cursor (`known_pruned` none) any deletion above it is a gap, and for
+/// a later batch only one since the batch before.
+fn replay(
+    db: &Connection,
+    cursor: Option<i64>,
+    known_pruned: Option<i64>,
+    limit: u32,
+) -> Result<(Vec<EventItem>, i64)> {
+    let (oldest, latest, pruned): (Option<i64>, Option<i64>, i64) = db.query_row(
+        "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    // Deleting the newest event does not move a follower's cursor ahead.
+    let latest = latest.unwrap_or(0).max(pruned);
+    let oldest = oldest.unwrap_or(1);
+    let mut items = Vec::new();
+    let cursor = match cursor {
+        None => oldest - 1,
+        Some(cursor) => {
+            let outside = cursor < oldest - 1 || cursor > latest;
+            let deleted = pruned > cursor.max(known_pruned.unwrap_or(-1));
+            let resume = if outside { oldest - 1 } else { cursor };
+            if outside || deleted {
+                items.push(EventItem::Gap {
+                    since: cursor,
+                    oldest_id: resume + 1,
+                    latest_id: latest,
+                });
+            }
+            resume
+        }
+    };
+    let mut statement = db.prepare(
+        "SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2",
+    )?;
+    let rows = statement.query_map(params![cursor, limit], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, created_at, record) = row?;
+        items.push(decode(id, created_at, &record)?);
+    }
+    Ok((items, pruned))
+}
+
 /// The fields that open every event of a space, from its `journal_spaces`
 /// row: a workspace's or a chat's identity.
 const SPACE_FIELDS: &str = "'workspace_id',workspace_id,'chat_id',chat_id,
@@ -283,42 +336,31 @@ impl Manager {
             .await
     }
 
-    /// A consistent replay batch, including an explicit expired or future cursor.
+    /// A consistent replay batch from a client's cursor, including an
+    /// explicit expired or future one.
+    #[cfg(test)]
     pub async fn workspace_events(&self, since: Option<i64>, limit: u32) -> Result<Vec<EventItem>> {
-        ensure!(
-            since.is_none_or(|id| id >= 0),
-            "event cursor must be nonnegative"
-        );
-        self.store.run(move |db| {
-            let (oldest, latest, pruned): (Option<i64>, Option<i64>, i64) = db.query_row(
-                "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
-                [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))
-            )?;
-            // Deleting the newest event does not move a follower's cursor ahead.
-            let latest = latest.unwrap_or(0).max(pruned);
-            let oldest = oldest.unwrap_or(1);
-            let mut items = Vec::new();
-            let cursor = match since {
-                None => oldest - 1,
-                // Per-space retention deletes events anywhere below the
-                // highest it pruned, so a cursor below that missed some.
-                Some(cursor) => {
-                    let resume = (oldest - 1).max(pruned);
-                    if cursor < resume || cursor > latest {
-                        items.push(EventItem::Gap { since: cursor, oldest_id: resume + 1, latest_id: latest });
-                        resume
-                    } else { cursor }
-                }
-            };
-            let mut stmt = db.prepare("SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2")?;
-            for row in stmt.query_map(params![cursor,limit], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))? {
-                let (id,created_at,record) = row?;
-                items.push(decode(id, created_at, &record)?);
-            }
-            Ok(items)
-        }).await
+        let (items, _) = self.workspace_events_page(since, None, limit).await?;
+        Ok(items)
     }
 
+    /// A replay batch after `cursor` and the highest ID retention had
+    /// deleted, `pruned`, when the previous batch read it; none for the
+    /// client's own cursor. Returns that ID as of this batch, for the next.
+    pub(crate) async fn workspace_events_page(
+        &self,
+        cursor: Option<i64>,
+        pruned: Option<i64>,
+        limit: u32,
+    ) -> Result<(Vec<EventItem>, i64)> {
+        ensure!(
+            cursor.is_none_or(|id| id >= 0),
+            "event cursor must be nonnegative"
+        );
+        self.store
+            .run(move |db| replay(db, cursor, pruned, limit))
+            .await
+    }
     pub(crate) async fn retain_workspace(
         &self,
         id: &str,

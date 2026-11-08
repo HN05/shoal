@@ -414,9 +414,11 @@ pub(in crate::daemon) async fn watch_workspace_events(
     };
     let (mut reader, mut writer) = stream.split();
     let mut cursor = since;
+    let mut pruned = None;
     loop {
         let operation = manager.gates.operation().await;
-        let items = manager.workspace_events(cursor, 100).await?;
+        let (items, now_pruned) = (manager.workspace_events_page(cursor, pruned, 100)).await?;
+        pruned = Some(now_pruned);
         let mut delivered = false;
         for item in items {
             if let Some(id) = item.event_id() {

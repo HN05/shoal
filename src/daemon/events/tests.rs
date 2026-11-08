@@ -423,7 +423,7 @@ async fn a_cursor_below_what_retention_pruned_reports_the_gap() {
         behind[0],
         EventItem::Gap {
             since: 50,
-            oldest_id: 102,
+            oldest_id: 51,
             latest_id: 602
         }
     ));
@@ -432,4 +432,25 @@ async fn a_cursor_below_what_retention_pruned_reports_the_gap() {
     assert!(matches!(&past[0], EventItem::Event(event) if event.id == 102));
     let all = manager.workspace_events(None, 1000).await.unwrap();
     assert!(matches!(&all[0], EventItem::Event(event) if event.id == 1));
+}
+
+#[tokio::test]
+async fn a_paged_full_replay_keeps_every_event_retention_left() {
+    let (_temp, manager) = manager().await;
+    seed(&manager, 1).await;
+    // Another space's turns, of which retention deletes ids 2 to 101.
+    seed_turns(&manager, 600).await;
+    seed(&manager, 1).await;
+    let (mut stream, task) = connect(manager, None, false).await;
+    let mut ids = Vec::new();
+    loop {
+        match receive(&mut stream).await {
+            Body::EventItem(EventItem::Event(event)) => ids.push(event.id),
+            Body::Ok => break,
+            body => panic!("expected only events: {body:?}"),
+        }
+    }
+    task.await.unwrap().unwrap();
+    assert_eq!(ids.len(), 502);
+    assert_eq!((ids[0], ids[1], ids[501]), (1, 102, 602));
 }
