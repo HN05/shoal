@@ -64,20 +64,14 @@ fn working_directory(pid: u32) -> Result<Option<WorkingDirectory>> {
     }))
 }
 
-/// A `/proc` read, or `None` when the process exited or hides the entry,
-/// as a kernel thread hides its working directory.
+/// A `/proc` read, or `None` when the process exited, even partway through
+/// the read, or hides the entry, as a kernel thread hides its working
+/// directory.
 #[cfg(target_os = "linux")]
 fn present<T>(read: std::io::Result<T>) -> Result<Option<T>> {
     match read {
         Ok(value) => Ok(Some(value)),
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-            ) =>
-        {
-            Ok(None)
-        }
+        Err(error) if super::identity::process_record_unavailable(error.raw_os_error()) => Ok(None),
         Err(error) => Err(error.into()),
     }
 }

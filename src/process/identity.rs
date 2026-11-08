@@ -1387,7 +1387,7 @@ pub(super) fn read_process_stat(path: &str) -> Result<Option<String>> {
 }
 
 #[cfg(target_os = "linux")]
-fn process_record_unavailable(errno: Option<i32>) -> bool {
+pub(super) fn process_record_unavailable(errno: Option<i32>) -> bool {
     // Linux returns ESRCH if the process exits between open and read. A
     // `hidepid` mount shows another user's PID but refuses its records, as
     // `ps` finds; this user's own are never refused.
