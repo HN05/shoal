@@ -402,9 +402,11 @@ impl Manager {
                 kept_commits(db, &repository_id)
             })
             .await?;
-        self.expire_imported_sessions(repo).await?;
+        // An unreadable session file keeps no ref.
+        let sessions = self.expire_imported_sessions(repo).await;
         self.adopt_legacy_refs(repo, &kept).await?;
-        self.delete_unowned_refs(repo, &kept).await
+        self.delete_unowned_refs(repo, &kept).await?;
+        sessions
     }
 
     /// A ref no checkpoint keeps is left by deleted checkpoints, or by a
