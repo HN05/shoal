@@ -36,14 +36,14 @@ struct RestoreRow {
 }
 
 /// Every restore entry of the queue that waits for an update when its
-/// agent stopped between turns: one a waiting wrapper carries out, or one
-/// Shoal queued on its own.
+/// agent stopped between turns: one Shoal queued on its own, for a waiting
+/// wrapper or for the daemon to start.
 fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
     Ok(db
         .prepare(
             "SELECT id,workspace_id,execution_id FROM agent_queue
              WHERE kind=?1 AND workspace_id IS NOT NULL AND execution_id IS NOT NULL
-                AND (env IS NULL OR automatic)",
+                AND automatic",
         )?
         .query_map([QueueKind::Restore], |row| {
             Ok(RestoreRow {
@@ -104,7 +104,7 @@ impl Manager {
                     Work::Launch | Work::OneShot { .. } | Work::Job { .. } => continue,
                 }
             } else if waiters.contains(&restore.execution) {
-                self.restore_wake(workspace_id, &restore.execution, false)
+                self.restore_wake(workspace_id, &restore.execution, restore.automatic, false)
                     .await?
             } else {
                 continue;
@@ -134,18 +134,21 @@ impl Manager {
         Ok(waiting)
     }
 
-    /// What the queued restore of `execution` in `workspace_id` waits for:
-    /// a slot after `shoal queue move`, otherwise what its recovery record
-    /// says. Whether an update is due only matters once its agent `waits`,
-    /// and free disk space must have recovered as for any other restore,
-    /// since disk protection stops agents that start below it.
+    /// What the queued restore of `execution` in `workspace_id`, which a
+    /// waiting wrapper carries out, waits for: a slot after `shoal queue
+    /// move` or once `shoal resume` asked for it, no longer `automatic`,
+    /// otherwise what its recovery record says. Whether an update is due
+    /// only matters once its agent `waits`, and free disk space must have
+    /// recovered as for any other restore, since disk protection stops
+    /// agents that start below it.
     pub(super) async fn restore_wake(
         &self,
         workspace_id: &str,
         execution: &str,
+        automatic: bool,
         waits: bool,
     ) -> Result<Wake> {
-        if self.moved_in_queue(execution).await {
+        if !automatic || self.moved_in_queue(execution).await {
             return Ok(Wake::Slot);
         }
         if !self.restore_waits_for_update(workspace_id, execution) {

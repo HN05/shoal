@@ -79,11 +79,14 @@ impl Restore {
 /// Record `restore` behind the work already waiting, unless its execution
 /// already has one, which a resume keeps in place and makes no longer
 /// automatic; one that starts at once refuses it. Its workspace must be
-/// ready and its execution ended, since a recorded one runs, waits for its
-/// wrapper's restore or is unresolved.
+/// ready and its execution ended, since a recorded one runs or is
+/// unresolved, unless its wrapper waits to restore it.
 fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
     crate::daemon::store::require_ready(tx, &restore.target.id)
         .context("restore agents in a ready workspace")?;
+    if restore.state == QueueState::Queued && keep_wrapper_restore(tx, restore)? {
+        return Ok(());
+    }
     ensure!(
         !crate::daemon::store::exists(
             tx,
@@ -124,6 +127,18 @@ fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
         ],
     )?;
     Ok(())
+}
+
+/// Keep the restore a waiting wrapper carries out for `restore`'s execution
+/// in place, no longer automatic unless `restore` is, returning whether the
+/// wrapper has one.
+fn keep_wrapper_restore(db: &Connection, restore: &Restore) -> Result<bool> {
+    let kept = db.execute(
+        "UPDATE agent_queue SET automatic=automatic AND ?2
+         WHERE execution_id=?1 AND kind=?3 AND env IS NULL",
+        params![restore.execution, restore.automatic, QueueKind::Restore],
+    )?;
+    Ok(kept == 1)
 }
 
 /// The ready workspaces whose assignment is not done, where stopped agents
@@ -236,8 +251,9 @@ fn delete_waiting(db: &Connection, ids: &[String]) -> Result<()> {
 impl Manager {
     /// Queue the restore of the agent stopped as `execution` in `workspace`,
     /// or of its last session, which the daemon starts with `env` once
-    /// admitted, and return its entry. Queueing it again keeps its place,
-    /// and the agent no longer waits for an update there.
+    /// admitted, and return its entry. Queueing it again, or one its waiting
+    /// wrapper carries out, keeps its place, and the agent no longer waits
+    /// for an update or healthy readings there.
     pub async fn queue_stopped_restore(
         &self,
         workspace: &SpaceSelector,

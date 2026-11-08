@@ -451,6 +451,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 140 {
         db.execute_batch(include_str!("space_events.sql"))?;
     }
+    if version >= 141 {
+        db.execute_batch(AUTOMATIC_WRAPPER_RESTORES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1189,6 +1192,26 @@ fn migration_moves_pending_updates_out_of_activity_records() -> Result<()> {
     db.execute_batch("DELETE FROM executions; DELETE FROM workspaces;")?;
     let left: i64 = db.query_row("SELECT COUNT(*) FROM pending_updates", [], |r| r.get(0))?;
     assert_eq!(left, 0);
+    Ok(())
+}
+
+#[test]
+fn migration_makes_the_restores_waiting_wrappers_carry_out_automatic() -> Result<()> {
+    let mut db = historical_database(140)?;
+    db.execute_batch(
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,workspace_id)
+            VALUES ('wrapper','restore','repo','worker','claude',NULL,'execution','queued',1,'workspace'),
+                ('resumed','restore','repo','worker','claude','{}','ended','queued',1,'workspace');",
+    )?;
+    migrate(&mut db)?;
+    let automatic = db
+        .prepare("SELECT id,automatic FROM agent_queue ORDER BY id")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        automatic,
+        [("resumed".into(), false), ("wrapper".into(), true)]
+    );
     Ok(())
 }
 

@@ -5,8 +5,12 @@ use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         test_support::{global_config, manager},
-        workspace::agent_queue::tests::{
-            add, connected_agent, create, limit_globally, queue, register, started,
+        workspace::agent_queue::{
+            Grant,
+            tests::{
+                add, await_restore, bounded, connected_agent, create, limit_globally, queue,
+                register, started, stopped_agents,
+            },
         },
         workspace_files::Attacher,
     },
@@ -246,6 +250,55 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&entry(&manager, "idle-agent").await.id));
+}
+
+#[tokio::test]
+async fn resuming_an_agent_its_wrapper_waits_for_admits_the_wrappers_restore() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let mut workspaces = Vec::new();
+    for name in ["idle", "resumed", "now"] {
+        workspaces.push(create(&manager, &repo, name).await);
+    }
+    let agents = stopped_agents(&manager, &workspaces.iter().collect::<Vec<_>>()).await;
+    let mut restoring = Vec::new();
+    for (workspace, (execution, _)) in workspaces.iter().zip(&agents) {
+        stop(&manager, workspace, execution, IDLE);
+        restoring.push(await_restore(&manager, execution).await);
+    }
+    manager.dispatch_queue().await.unwrap();
+    let waiting = entry(&manager, &agents[1].0).await;
+    assert!(waiting.waits_for_update && waiting.state == Queued);
+
+    // The wrapper's restore keeps its place and waits only for a slot.
+    let resumed = manager
+        .queue_stopped_restore(&"resumed".into(), &agents[1].0, herdr())
+        .await
+        .unwrap();
+    assert_eq!(resumed.id, waiting.id);
+    assert!(!entry(&manager, &agents[1].0).await.waits_for_update);
+    manager.dispatch_queue().await.unwrap();
+    let mut restoring = restoring.into_iter();
+    let idle = restoring.next().unwrap();
+    assert_eq!(
+        bounded(restoring.next().unwrap()).await.unwrap().unwrap(),
+        Grant::Queue
+    );
+    assert!(entry(&manager, &agents[0].0).await.waits_for_update);
+
+    // Started now, it goes beyond the limit in its wrapper.
+    let now = manager
+        .start_stopped_restore(&"now".into(), &agents[2].0, herdr())
+        .await
+        .unwrap();
+    assert_eq!(now.state, Starting);
+    assert_eq!(
+        bounded(restoring.next().unwrap()).await.unwrap().unwrap(),
+        Grant::Queue
+    );
+    assert!(!started(&now.id) && !idle.is_finished());
+    assert_eq!(manager.queue_entries().await.unwrap().len(), 3);
 }
 
 #[tokio::test]

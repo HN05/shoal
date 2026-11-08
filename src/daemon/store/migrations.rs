@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 140;
+pub(super) const SCHEMA_VERSION: i64 = 141;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -403,6 +403,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (138, CHAT_STOPPERS, None),
     (139, "", Some(super::space_names::rename_invalid_names)),
     (140, include_str!("space_events.sql"), None),
+    (141, AUTOMATIC_WRAPPER_RESTORES, None),
 ];
 
 /// The space whose process stopped a stopped chat, such as by a restart
@@ -665,6 +666,11 @@ pub(super) const PROMPT_CACHE_EXPIRY: &str =
 /// `shoal resume`: one of an agent stopped between turns waits for an update.
 pub(super) const AUTOMATIC_RESTORES: &str = "ALTER TABLE agent_queue
     ADD COLUMN automatic INTEGER NOT NULL DEFAULT 0 CHECK(automatic IN (0,1));";
+
+/// The restores waiting wrappers carry out are Shoal's own too, until
+/// `shoal resume` asks for one.
+pub(super) const AUTOMATIC_WRAPPER_RESTORES: &str =
+    "UPDATE agent_queue SET automatic=1 WHERE kind='restore' AND env IS NULL;";
 
 /// The demo each running execution runs; a demo ends with its execution.
 pub(super) const DEMOS: &str = "CREATE TABLE demos (

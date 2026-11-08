@@ -217,7 +217,9 @@ impl Manager {
                 }
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {
                     let waits = waiters.contains(&execution);
-                    let wake = self.restore_wake(&workspace, &execution, waits).await?;
+                    let wake = self
+                        .restore_wake(&workspace, &execution, automatic, waits)
+                        .await?;
                     restores.insert(id.clone(), (execution, wake));
                     Work::Restore {
                         waiting: waits,

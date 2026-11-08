@@ -111,8 +111,9 @@ pub(super) struct WaitingRestore {
     pub agent: String,
 }
 
-/// Record `restore` behind the work already waiting, returning its entry's
-/// ID. One already recorded keeps its place and waits again.
+/// Record `restore` behind the work already waiting, as Shoal's own,
+/// returning its entry's ID. One already recorded keeps its place and waits
+/// again.
 pub(super) fn record_waiting_restore(
     db: &rusqlite::Connection,
     restore: &WaitingRestore,
@@ -120,8 +121,8 @@ pub(super) fn record_waiting_restore(
     let now = UnixTime::now();
     let workspace = &restore.workspace;
     db.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id,automatic)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9,1)
          ON CONFLICT(execution_id) DO UPDATE SET state=excluded.state,seen_at=excluded.seen_at",
         params![
             uuid::Uuid::new_v4().to_string(),
