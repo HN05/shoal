@@ -395,7 +395,8 @@ pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &Spac
 
 /// Resume `workspace`'s stopped agent, the `execution` one when given, or
 /// forget its stopped work for `discard`. The agent restores in this
-/// terminal when `here`, otherwise where it stopped or in the background.
+/// terminal when `here`, otherwise where it stopped or in the background;
+/// one whose wrapper waits to restore it starts there at once.
 pub async fn run(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -434,6 +435,11 @@ pub async fn run(
         return Ok(0);
     }
     let (selected_id, selected) = select_agent(ctx, &saved.agents, agent_label)?;
+    if waits_for_restore(&inspection, &selected_id) {
+        saved.retain_execution(&selected_id, false);
+        let stopped = vec![(workspace.clone(), saved)];
+        return queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), true).await;
+    }
     ensure!(
         !active(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
@@ -733,9 +739,18 @@ fn stop_time(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// Whether the execution `id` of the workspace `inspection` describes is an
+/// agent Shoal stopped whose wrapper waits to restore it, which its queued
+/// restore starts rather than a new one beside it.
+fn waits_for_restore(inspection: &Inspection, id: &str) -> bool {
+    (inspection.executions.iter())
+        .any(|execution| execution.id == id && execution.stopped.is_some())
+}
+
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
 /// records are still safe to use once the daemon has rechecked that execution's
-/// recorded processes are gone, so make that repair part of resume itself.
+/// recorded processes are gone, so make that repair part of resume itself. An
+/// agent whose wrapper waits to restore it is stopped, not active.
 async fn reconcile_stale_execution(
     ctx: &Context,
     inspection: &Inspection,
@@ -752,7 +767,7 @@ async fn reconcile_stale_execution(
         return Ok(());
     };
     ensure!(
-        execution.state != ExecutionState::Running,
+        execution.state != ExecutionState::Running || execution.stopped.is_some(),
         "selected execution is active; stop it before resuming"
     );
     if execution.state != ExecutionState::Unknown {

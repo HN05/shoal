@@ -186,7 +186,10 @@ session recovery is automatic for built-in Codex and Claude resume commands, or
 when explicitly configured for another agent, and load and disk space have
 recovered, except that an agent stopped between turns has nothing to do until
 an update arrives for it, so that update restores it instead, and its restore
-holds no agent slot until then. Manual and automatic restores prompt the agent to continue its
+holds no agent slot until then. `shoal resume` of an agent whose wrapper
+waits is the user asking for it, so it uses the wrapper's queued restore,
+which then waits only for a slot, rather than refusing the agent as running
+or starting a second beside it. Manual and automatic restores prompt the agent to continue its
 unfinished assignment, naming when and why it stopped, which every stop that
 saves an agent records and a last session keeps, and that its subagents and
 background commands ended; configured restore commands receive that prompt through

@@ -2085,6 +2085,9 @@ binary an upgrade removed can, leaves the restore in the queue as a signal
 stop's restore waits there, opening where the agent ran. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
+`shoal resume` of an agent whose wrapper waits uses this entry: the restore
+keeps its place and waits only for a slot, as after `shoal queue move`, and
+`--now` or `--focus` starts it at once in its wrapper.
 
 A restore that `shoal resume` or a signal stop queues joins the back of the
 queue and needs a free slot, or room for its load, as a launch does. A signal
