@@ -97,7 +97,7 @@ fn summary(count: usize, starting: bool) -> String {
 /// Queue the restore of the agent stopped as `execution` in `workspace`,
 /// once an execution a daemon restart left unknown is proven ended,
 /// starting it at once when `now`.
-async fn queue(
+pub(super) async fn queue(
     ctx: &Context,
     workspace: &Workspace,
     execution: &str,

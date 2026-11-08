@@ -1123,17 +1123,20 @@ impl Saved {
             .collect()
     }
 
-    /// Drop agents whose wrapper is still waiting to restore them, since
-    /// `shoal resume` has nothing to do for them.
+    /// Drop agents whose wrapper is still waiting to restore them, which
+    /// restore on their own and only through that wrapper.
     pub fn retain_unattended(&mut self) {
-        self.agents.retain(|(_, path)| {
-            !Record::load(path).is_ok_and(|record| {
-                record
-                    .and_then(|record| record.waiting)
-                    .is_some_and(|wrapper| identity::alive(&wrapper).unwrap_or(false))
-            })
-        });
+        self.agents.retain(|(_, path)| !waits_in_wrapper(path));
     }
+}
+
+/// Whether a live wrapper waits to restore the agent saved at `path`.
+pub fn waits_in_wrapper(path: &Path) -> bool {
+    Record::load(path).is_ok_and(|record| {
+        record
+            .and_then(|record| record.waiting)
+            .is_some_and(|wrapper| identity::alive(&wrapper).unwrap_or(false))
+    })
 }
 
 /// Whether any workspace has stopped work that waits for `shoal resume`;

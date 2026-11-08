@@ -8,6 +8,7 @@ use crate::client::output::resume::{
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use crate::execution::recovery::waits_in_wrapper;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
     client::recovery::ReconcileOptions,
@@ -167,7 +168,7 @@ async fn resume_each(
 ) -> Result<i32> {
     let stopped = match &selected.workspaces {
         None => stopped_work(ctx, discard).await?,
-        Some(workspaces) => stopped_in(ctx, workspaces).await?,
+        Some(workspaces) => stopped_in(ctx, workspaces, discard).await?,
     };
     if stopped.is_empty() && selected.chats.is_empty() {
         return report_nothing(ctx, discard || queuing == Queuing::Here { now: true });
@@ -296,10 +297,12 @@ async fn queue_workspace(
 }
 
 /// Refuse, before any is queued, the restores of `stopped` agents that the
-/// daemon would start from the background when no host can take them there.
+/// daemon would start from the background when no host can take them there;
+/// a waiting wrapper restores its agent where it stopped.
 async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<()> {
     for (workspace, saved) in stopped {
-        if saved.agents.is_empty() && saved.sessions.is_empty() {
+        let mut agents = saved.agents.iter().chain(&saved.sessions);
+        if agents.all(|(_, path)| waits_in_wrapper(path)) {
             continue;
         }
         let settings = crate::client::workspaces::settings(
@@ -843,9 +846,10 @@ async fn run_all(
 }
 
 /// Start each of the stopped agents `sessions` lists, by workspace,
-/// execution and saved file, where it stopped or in the background; `single`
-/// resumes the only one in this terminal when neither is possible. Reports
-/// them with what `output` holds already.
+/// execution and saved file, through the wrapper that waits for it, where it
+/// stopped or in the background; `single` resumes the only one in this
+/// terminal when none is possible. Reports them with what `output` holds
+/// already.
 async fn start_sessions(
     ctx: &Context,
     sessions: Vec<(Workspace, String, PathBuf)>,
@@ -853,6 +857,7 @@ async fn start_sessions(
     mut output: Resumed,
 ) -> Result<i32> {
     let mut listed = Vec::new();
+    let mut in_wrappers = 0;
     let mut place = None;
     for (workspace, id, record) in &sessions {
         let (reused, started) = match start_session(ctx, workspace, id, record, single).await {
@@ -862,6 +867,16 @@ async fn start_sessions(
                 return Box::pin(run(ctx, SpaceSelector::id(&workspace.id), id, false, true)).await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
+            Ok(Started::InWrapper) => {
+                in_wrappers += 1;
+                output.agents.push(ResumedAgent {
+                    workspace: workspace.name.to_string(),
+                    execution: id.clone(),
+                    background: false,
+                    reused: true,
+                });
+                continue;
+            }
             Err(error) => {
                 let failure = ui::failure(ctx, "resume", &workspace.name, &error);
                 output.failed.push(failure);
@@ -880,8 +895,12 @@ async fn start_sessions(
         });
     }
     ctx.show(&output, |output| {
+        if in_wrappers > 0 {
+            let noun = if in_wrappers == 1 { "agent" } else { "agents" };
+            outln!("Starting {in_wrappers} {noun} where they wait to restore");
+        }
         if let Some(place) = place {
-            let started = output.agents.len() - listed.len();
+            let started = output.agents.len() - listed.len() - in_wrappers;
             let noun = if started == 1 { "agent" } else { "agents" };
             outln!("Resuming {started} {noun} in {place}");
         }
@@ -905,6 +924,9 @@ async fn start_sessions(
 
 /// Where a stopped agent resumes.
 enum Started {
+    /// Through the wrapper that waits to restore it, which its queued
+    /// restore lets go.
+    InWrapper,
     /// In this terminal, as the only agent to resume where the backend can
     /// start nothing elsewhere.
     Here,
@@ -916,9 +938,9 @@ enum Started {
     },
 }
 
-/// Start the stopped agent `id` of `workspace` where it stopped or in the
-/// background; when neither is possible, `single` resumes the only one in
-/// this terminal.
+/// Start the stopped agent `id` of `workspace` through the wrapper that
+/// waits for it, where it stopped or in the background; when none is
+/// possible, `single` resumes the only one in this terminal.
 async fn start_session(
     ctx: &Context,
     workspace: &Workspace,
@@ -926,6 +948,10 @@ async fn start_session(
     record: &Path,
     single: bool,
 ) -> Result<Started> {
+    if waits_in_wrapper(record) {
+        queue::queue(ctx, workspace, id, true).await?;
+        return Ok(Started::InWrapper);
+    }
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
@@ -1001,16 +1027,20 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
 }
 
 /// The stopped work and last sessions of the workspaces `selectors` name,
-/// refusing one with nothing to resume.
-async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspace, Saved)>> {
+/// as [`saved_work`] keeps them for `discard`, refusing one with nothing to
+/// resume.
+async fn stopped_in(
+    ctx: &Context,
+    selectors: &[String],
+    discard: bool,
+) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
         let workspace =
             crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
                 .await?
                 .workspace;
-        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-        saved.retain_unattended();
+        let saved = saved_work(ctx, &workspace, discard)?;
         ensure!(
             !saved.is_empty(),
             "{} has no stopped agents or commands to resume",
@@ -1021,22 +1051,32 @@ async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspac
     Ok(stopped)
 }
 
-/// The workspaces with stopped work or last sessions that no waiting wrapper
-/// restores. A done assignment needs no agent, so its workspace is included
-/// only to `discard`.
+/// The workspaces with stopped work or last sessions, as [`saved_work`]
+/// keeps them for `discard`. A done assignment needs no agent, so its
+/// workspace is included only to `discard`.
 async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for workspace in crate::client::workspaces::list(&ctx.paths).await? {
         if workspace.done && !discard {
             continue;
         }
-        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-        saved.retain_unattended();
+        let saved = saved_work(ctx, &workspace, discard)?;
         if !saved.is_empty() {
             stopped.push((workspace, saved));
         }
     }
     Ok(stopped)
+}
+
+/// `workspace`'s stopped work and last sessions: with the agents waiting in
+/// their wrappers, which a resume starts there, except to `discard`, which
+/// leaves them to their wrappers.
+fn saved_work(ctx: &Context, workspace: &Workspace, discard: bool) -> Result<Saved> {
+    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    if discard {
+        saved.retain_unattended();
+    }
+    Ok(saved)
 }
 
 /// Only one resume reports a command; another holding its lock skips it.
