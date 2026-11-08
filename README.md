@@ -203,7 +203,7 @@ shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Network is back"  # Message every running agent
-shoal work log fix-login      # The workspace's log: creation, agent, PRs, ready, done; --follow keeps printing
+shoal work log fix-login      # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
 shoal files fix-login         # The files attached to the workspace
 shoal files my-project-chat   # The files a chat's agent attached
 shoal questions               # Pick a question and answer it

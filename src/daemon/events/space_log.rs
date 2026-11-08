@@ -40,32 +40,37 @@ impl Manager {
         selector: &mut SpaceSelector,
     ) -> Result<()> {
         let id = self.log_space(selector).await?;
-        let mut above = id.clone();
-        let mut reached = false;
-        for _ in 0..REMOVED_ANCESTORS {
-            if self.space_by_id(&above).await.is_ok() {
-                reached = self.reaches(caller, &above).await?;
-                break;
-            }
-            let removed = above.clone();
-            match self
-                .store
-                .run(move |db| parent_at_removal(db, &removed))
-                .await?
-            {
-                Some(parent) => above = parent,
-                None => {
-                    reached = self.reach_root(Some(caller)).await?.is_none();
-                    break;
-                }
-            }
-        }
+        let reached = match self.nearest_existing(&id).await? {
+            Some(space) => self.reaches(caller, &space).await?,
+            None => self.reach_root(Some(caller)).await?.is_none(),
+        };
         ensure!(
             reached,
             "workspace processes can only read the logs of their own space and those below it"
         );
         *selector = SpaceSelector::id(&id);
         Ok(())
+    }
+
+    /// The space `id` when it exists, else the nearest one that existed
+    /// above it when it was removed, through the spaces removed above it;
+    /// none once that walk leaves the tree.
+    async fn nearest_existing(&self, id: &str) -> Result<Option<String>> {
+        let mut space = id.to_owned();
+        for _ in 0..REMOVED_ANCESTORS {
+            if self.space_by_id(&space).await.is_ok() {
+                return Ok(Some(space));
+            }
+            let removed = space.clone();
+            match (self.store)
+                .run(move |db| parent_at_removal(db, &removed))
+                .await?
+            {
+                Some(parent) => space = parent,
+                None => return Ok(None),
+            }
+        }
+        Ok(None)
     }
 
     /// The ID of the space `selector` names: one that exists, else a
