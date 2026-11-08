@@ -2422,7 +2422,17 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     fixture.respond(json!({}));
     fixture.requests();
     fixture.ok(&["unlink", "10", "related", "--space", "topic"]);
-    assert!(fixture.requests().is_empty());
+    // The daemon's background syncs and polls may ask about other items.
+    let asked: Vec<Value> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| {
+            request[0]
+                .as_str()
+                .is_some_and(|key| key.split(['/', '?']).any(|part| part == "10"))
+        })
+        .collect();
+    assert!(asked.is_empty(), "{asked:?}");
     let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
 }
