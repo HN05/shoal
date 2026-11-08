@@ -1153,6 +1153,16 @@ impl Saved {
         }
     }
 
+    /// The agent of each saved agent and then each last session, `None` for
+    /// one consumed since the workspace's state was read.
+    pub fn agent_names(&self) -> impl Iterator<Item = Result<Option<String>>> + '_ {
+        let records = (self.agents.iter())
+            .map(|(_, path)| Record::load(path).map(|record| record.map(|r| r.agent)));
+        let sessions = (self.sessions.iter())
+            .map(|(_, path)| LastSession::load(path).map(|last| last.map(|l| l.agent)));
+        records.chain(sessions)
+    }
+
     /// Keep only the records of the executions `keep` selects.
     pub fn retain(&mut self, keep: impl Fn(&str) -> bool) {
         self.agents.retain(|(id, _)| keep(id));

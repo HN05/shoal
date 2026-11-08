@@ -2,8 +2,6 @@
 //! picking one, `shoal <name>`, launching one from a command in a
 //! workspace or a chat, handing a workspace to a desktop app, and the trust
 //! and session files those launches prepare.
-use crate::execution::recovery::LastSessionExt;
-use crate::execution::recovery::RecordExt;
 mod desktop;
 mod detached;
 mod launch;
@@ -721,11 +719,8 @@ pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
 fn saved_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
     let saved = recovery::Saved::load(paths, workspace_id)?;
     let mut agents = Vec::new();
-    for (_, path) in &saved.agents {
-        agents.extend(recovery::Record::load(path)?.map(|record| record.agent));
-    }
-    for (_, path) in &saved.sessions {
-        agents.extend(recovery::LastSession::load(path)?.map(|last| last.agent));
+    for agent in saved.agent_names() {
+        agents.extend(agent?);
     }
     Ok(agents)
 }

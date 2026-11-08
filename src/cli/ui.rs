@@ -5,7 +5,8 @@
 //! - [`prompt`]: `[y/N]` confirmations naming what an action loses
 //!   ([`confirm`]), offers to run a fix ([`offer`]), choices among a few
 //!   lettered answers, and free text ([`input`]), also with a default
-//!   ([`input_with_default`]).
+//!   ([`input_with_default`]) or asked again until a check accepts it
+//!   ([`input_until`]).
 //! - [`picker`]: an fzf picker over `(id, label)` [`Entries`] that returns
 //!   the chosen id ([`pick`]), a typed value ([`pick_choice`]), an issue or
 //!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]), or

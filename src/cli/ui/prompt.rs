@@ -220,6 +220,29 @@ pub fn input_with_default(ctx: &Context, prompt: &str, default: &str) -> Result<
     Ok(or_default(value, default))
 }
 
+/// Ask for `prompt`, offering `default` when there is one, until `check`
+/// accepts the value, showing each refusal before asking again.
+pub async fn input_until<T, Checked>(
+    ctx: &Context,
+    prompt: &str,
+    default: Option<&str>,
+    check: impl Fn(String) -> Checked,
+) -> Result<T>
+where
+    Checked: Future<Output = Result<T>>,
+{
+    loop {
+        let value = match default {
+            Some(default) => input_with_default(ctx, prompt, default)?,
+            None => input(ctx, prompt)?,
+        };
+        match check(value).await {
+            Ok(accepted) => return Ok(accepted),
+            Err(error) => eprintln!("{error:#}"),
+        }
+    }
+}
+
 /// The typed value, or `default` for blank input.
 fn or_default(value: String, default: &str) -> String {
     match value.trim() {

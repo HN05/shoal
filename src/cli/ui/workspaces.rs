@@ -2,8 +2,6 @@
 //! one, or one from a picker.
 use crate::cli::availability::NeedExt;
 use crate::cli::list_status::ListStatusExt;
-use crate::execution::recovery::LastSessionExt;
-use crate::execution::recovery::RecordExt;
 use std::{collections::HashSet, io};
 
 use anyhow::{Result, ensure};
@@ -267,16 +265,8 @@ pub fn resumable(paths: &Paths, workspace_id: &str) -> Option<(String, bool)> {
     if saved.is_empty() {
         return None;
     }
-    let records = saved
-        .agents
-        .iter()
-        .map(|(_, path)| recovery::Record::load(path).map(|record| record.map(|r| r.agent)));
-    let sessions = saved
-        .sessions
-        .iter()
-        .map(|(_, path)| recovery::LastSession::load(path).map(|last| last.map(|l| l.agent)));
-    let mut parts = records
-        .chain(sessions)
+    let mut parts = saved
+        .agent_names()
         .map(|agent| agent.ok().flatten().unwrap_or_else(|| "agent".to_owned()))
         .collect::<Vec<_>>();
     match saved.commands.len() {

@@ -794,17 +794,12 @@ async fn initial_name(
 
 /// Ask for the chat's name, offering `default`, until the daemon accepts one.
 async fn ask_name(ctx: &Context, default: &str) -> Result<SpaceName> {
-    loop {
-        let name = ui::input_with_default(ctx, "Chat name", default)?;
-        let checked = match SpaceName::parse(&name) {
-            Ok(name) => (crate::client::chats::check_name(&ctx.paths, &name).await).map(|()| name),
-            Err(error) => Err(error),
-        };
-        match checked {
-            Ok(name) => return Ok(name),
-            Err(error) => eprintln!("{error:#}"),
-        }
-    }
+    ui::input_until(ctx, "Chat name", Some(default), |name| async move {
+        let name = SpaceName::parse(&name)?;
+        crate::client::chats::check_name(&ctx.paths, &name).await?;
+        Ok(name)
+    })
+    .await
 }
 
 /// `shoal work --chats`.

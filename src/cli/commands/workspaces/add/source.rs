@@ -111,13 +111,11 @@ pub(super) async fn select_add_creation(
     }
     ui::require_argument(ctx, "branch", "branch")?;
     // Check here so a typo can be corrected before creating work.
-    creation.branch = Some(loop {
-        let name = ui::input(ctx, "Branch name")?;
-        match git::check_branch_name(None, &name).await {
-            Ok(()) => break name,
-            Err(error) => eprintln!("{error:#}"),
-        }
+    let branch = ui::input_until(ctx, "Branch name", None, |name| async move {
+        git::check_branch_name(None, &name).await?;
+        Ok(name)
     });
+    creation.branch = Some(branch.await?);
     Ok(creation)
 }
 
