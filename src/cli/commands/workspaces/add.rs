@@ -79,18 +79,22 @@ impl AddOptions {
 }
 
 /// Refuse `narrowing` where it is wider than the permissions of the
-/// workspace mode `mode`, the default mode without one, in the
-/// repository's `settings`.
+/// workspace mode `choice` names, the default mode without one, in the
+/// repository's `settings`; a mode still to be picked is checked once it
+/// is.
 async fn ensure_narrowing_fits(
     settings: &AddSettings<'_>,
     narrowing: &crate::config::permissions::PermissionsConfig,
-    mode: Option<&str>,
+    choice: Option<&ModeChoice>,
 ) -> Result<()> {
-    if narrowing.is_empty() {
-        return Ok(());
-    }
+    let name = match choice {
+        _ if narrowing.is_empty() => return Ok(()),
+        Some(ModeChoice::Pick { .. }) => return Ok(()),
+        Some(ModeChoice::Named(mode)) => mode.as_str(),
+        None => crate::config::modes::DEFAULT,
+    };
     let mode = crate::config::permissions::SpaceMode {
-        name: mode.unwrap_or(crate::config::modes::DEFAULT),
+        name,
         kind: crate::model::SpaceKind::Workspace,
         repository: true,
     };
@@ -117,15 +121,7 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
-    // A named or default mode is known now; a picked one once picked.
-    let picks_mode = matches!(options.mode, Some(ModeChoice::Pick { .. }));
-    if !picks_mode {
-        let named = match &options.mode {
-            Some(ModeChoice::Named(mode)) => Some(mode.as_str()),
-            _ => None,
-        };
-        ensure_narrowing_fits(&settings, &options.narrowing, named).await?;
-    }
+    ensure_narrowing_fits(&settings, &options.narrowing, options.mode.as_ref()).await?;
     let agent = choose_add_agent(&settings, agent).await?;
     check_chosen_model(&settings, &agent, &options.model).await?;
     let picked = match issue {
@@ -140,9 +136,8 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    if picks_mode {
-        ensure_narrowing_fits(&settings, &options.narrowing, mode.as_deref()).await?;
-    }
+    let picked = mode.clone().map(ModeChoice::Named);
+    ensure_narrowing_fits(&settings, &options.narrowing, picked.as_ref()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     start_as(&mut plan, &options, mode, options.narrowing);
     ensure!(

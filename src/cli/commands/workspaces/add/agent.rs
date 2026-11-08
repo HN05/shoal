@@ -157,7 +157,7 @@ pub(super) async fn resolve_add_agent(
 }
 
 /// What a launch in an added workspace tells its agent: the `opening`, in
-/// its mode with `permissions` narrowing it, the agent's `args`, and the
+/// its mode with `narrowing` applied, the agent's `args`, and the
 /// session it starts from a fork of.
 pub(super) struct Launch {
     pub opening: agents::Opening,

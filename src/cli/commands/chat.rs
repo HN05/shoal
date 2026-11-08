@@ -500,13 +500,18 @@ pub(super) async fn begin(
 }
 
 /// Refuse `narrowing` where it is wider than the permissions of the chat
-/// mode `mode` in `settings`, before anything is asked.
+/// mode `mode` in `settings`, before anything is asked. A chat `restore`
+/// names, or one continuing a `session`, keeps the narrowing it was given.
 fn ensure_narrowing_fits(
     settings: &Effective,
     narrowing: &crate::config::permissions::PermissionsConfig,
     mode: &str,
     repo: &ChatRepository,
+    (restore, session): (Option<&str>, Option<&str>),
 ) -> Result<()> {
+    if restore.is_some() || session.is_some() {
+        return Ok(());
+    }
     let mode = crate::config::permissions::SpaceMode {
         name: mode,
         kind: crate::model::SpaceKind::Chat,
@@ -547,10 +552,8 @@ pub(super) async fn launch(
         parent,
         narrowing,
     } = options;
-    // A restore or an imported session keeps the narrowing it was given.
-    if restore.is_none() && session.is_none() {
-        ensure_narrowing_fits(&settings, &narrowing, &topic.mode, &repo)?;
-    }
+    let started = (restore.as_deref(), session.as_deref());
+    ensure_narrowing_fits(&settings, &narrowing, &topic.mode, &repo, started)?;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
     let topic = match &restore {
