@@ -17303,10 +17303,18 @@ fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         )
         .unwrap();
         fs::write(fixture.repo.join(".merge_file_ABC123"), "preexisting\n").unwrap();
+        // Only the default checkout has the driver: the daemon's cleanup
+        // sweep makes trial merges in the workspace, where the driver's
+        // temporary inputs would leave the workspace unclean to merge.
+        git(
+            &fixture.repo,
+            &["config", "extensions.worktreeConfig", "true"],
+        );
         git(
             &fixture.repo,
             &[
                 "config",
+                "--worktree",
                 "merge.slow.driver",
                 "echo $$ > .git/merge-driver.pid.tmp; mv .git/merge-driver.pid.tmp .git/merge-driver.pid; exec sleep 60",
             ],
