@@ -215,6 +215,7 @@ impl Manager {
             review: Vec::new(),
             completion: None,
             agent_state: None,
+            progress: None,
             parent: None,
             children: Vec::new(),
         };
@@ -862,6 +863,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             review: Vec::new(),
             completion: store::json_column(row, "completion")?,
             agent_state: None,
+            progress: None,
             parent: None,
             children: Vec::new(),
         })
@@ -874,6 +876,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         chat.parent = workspace::parent(db, &chat.id)?;
         chat.children = workspace::children(db, &chat.id)?;
         chat.agent_state = workspace::agent_state::current(db, &chat.id)?;
+        chat.progress = crate::daemon::progress::current(db, &chat.id)?;
         Ok(chat)
     })
     .collect()

@@ -454,6 +454,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 141 {
         db.execute_batch(AUTOMATIC_WRAPPER_RESTORES)?;
     }
+    if version >= 142 {
+        db.execute_batch(include_str!("space_progress.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

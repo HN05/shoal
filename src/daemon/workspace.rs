@@ -1159,6 +1159,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.review = review::list(db, &workspace.id)?;
     workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
     workspace.agent_state = agent_state::current(db, &workspace.id)?;
+    workspace.progress = crate::daemon::progress::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
     tree::load(db, workspace)?;

@@ -32,6 +32,7 @@ pub mod output;
 pub mod paths;
 pub mod processes;
 pub mod profile;
+pub mod progress;
 pub mod protocol;
 pub mod questions;
 pub mod queue;

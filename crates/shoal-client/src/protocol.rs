@@ -621,6 +621,7 @@ response_bodies! {
     ReviewMarks(Vec<crate::model::ReviewMark>),
     ReadyOutcomes(Vec<crate::model::ReadyOutcome>),
     AgentStatus(crate::model::AgentStatus),
+    Progress(Option<crate::progress::Progress>),
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),

@@ -418,6 +418,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         review: Vec::new(),
         latest_review: None,
         agent_state: None,
+        progress: None,
         coordinator_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),

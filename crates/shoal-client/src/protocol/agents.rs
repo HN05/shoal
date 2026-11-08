@@ -18,6 +18,16 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         turn_end: Option<TurnEnd>,
     },
+    /// Change the space's progress, as its agent or its plan tool's hook
+    /// reports it; answers with the progress after the change.
+    SetProgress {
+        space: SpaceSelector,
+        change: crate::progress::ProgressChange,
+    },
+    /// The space's progress.
+    Progress {
+        space: SpaceSelector,
+    },
     /// [`Self::SetAgentState`] working for the turn a wake hook starts with
     /// an update, unless a stop of the caller's agent came first, which
     /// leaves the update for its restore. Answers whether the turn starts.

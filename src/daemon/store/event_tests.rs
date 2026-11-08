@@ -199,6 +199,11 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Spaces keep no progress again.
+    db.execute_batch(
+        "DROP TRIGGER workspace_progress_removed; DROP TRIGGER chat_progress_removed;
+         DROP TABLE space_progress;",
+    )?;
     db.execute_batch(include_str!("space_events_undo.sql"))?;
     // Workspaces record no copies again.
     db.execute_batch(

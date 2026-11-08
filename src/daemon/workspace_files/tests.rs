@@ -1239,7 +1239,10 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 
 /// Return a current state database to version 87, before Shoal recorded
 /// attached files, undoing the later migrations that cannot run twice.
-const BEFORE_ATTACHED_FILES: &str = "ALTER TABLE chats DROP COLUMN root_dir;
+const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_progress_removed;
+    DROP TRIGGER chat_progress_removed;
+    DROP TABLE space_progress;
+    ALTER TABLE chats DROP COLUMN root_dir;
     ALTER TABLE workspaces DROP COLUMN copied_from;
     ALTER TABLE workspaces DROP COLUMN copied_from_checkpoint;
     ALTER TABLE workspaces DROP COLUMN starting_checkpoint;

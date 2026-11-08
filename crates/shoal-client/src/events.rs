@@ -132,6 +132,8 @@ states!(EventKind {
     ApprovalDecided => "approval_decided",
     /// The space's agent sent an alert.
     AlertSent => "alert_sent",
+    /// The space's agent changed its status line or plan steps.
+    ProgressChanged => "progress_changed",
     /// A space was created below the space, which `child` names.
     ChildCreated => "child_created",
     /// A space below the space was removed.
@@ -274,6 +276,10 @@ pub struct EventDetails {
     /// The alert sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alert: Option<AlertEvent>,
+    /// The space's progress after a change, as `shoal progress --json`
+    /// shows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::progress::Progress>,
     /// The space created or removed below this one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child: Option<crate::model::SpaceRef>,

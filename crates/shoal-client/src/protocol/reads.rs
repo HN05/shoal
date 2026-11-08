@@ -13,7 +13,11 @@ impl Operation {
         matches!(
             self,
             Self::Daemon(DaemonMethod::Status)
-                | Self::Agent(AgentMethod::AgentMessages { .. } | AgentMethod::AgentUpdates { .. })
+                | Self::Agent(
+                    AgentMethod::AgentMessages { .. }
+                        | AgentMethod::AgentUpdates { .. }
+                        | AgentMethod::Progress { .. }
+                )
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )

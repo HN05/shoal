@@ -58,6 +58,7 @@ fn chat(mode: &str, repository_id: Option<&str>, tmp_dir: Option<std::path::Path
         review: Vec::new(),
         completion: None,
         agent_state: None,
+        progress: None,
         parent: None,
         children: Vec::new(),
     }

@@ -26,3 +26,14 @@ fn reads_that_finish_work_run_to_the_end() {
     };
     assert!(!Operation::from(plan).reads_only());
 }
+
+#[test]
+fn reading_progress_is_a_read_and_setting_it_is_not() {
+    let read = AgentMethod::Progress { space: "w".into() };
+    assert!(Operation::from(read).reads_only());
+    let set = AgentMethod::SetProgress {
+        space: "w".into(),
+        change: crate::progress::ProgressChange::Status(None),
+    };
+    assert!(!Operation::from(set).reads_only());
+}

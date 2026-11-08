@@ -253,6 +253,15 @@ fn record_with(
     Ok(())
 }
 
+/// Record the new `progress` of the space `id`.
+pub(crate) fn record_progress(
+    db: &Connection,
+    id: &str,
+    progress: &crate::client::progress::Progress,
+) -> Result<()> {
+    record_with(db, id, EventKind::ProgressChanged, "progress", progress)
+}
+
 /// Record that the agent of the space `id` started, stopped or exited. An
 /// execution's agent ends once: a stop that saved it for a restore, then its
 /// wrapper's end, records one stop.

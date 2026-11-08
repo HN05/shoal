@@ -36,6 +36,7 @@ mod overload_tests;
 pub(crate) mod ownership;
 mod permissions;
 pub mod ports;
+pub(crate) mod progress;
 pub mod questions;
 pub(crate) mod queue;
 pub(crate) mod queued_starts;

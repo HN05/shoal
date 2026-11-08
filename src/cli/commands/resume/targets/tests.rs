@@ -31,6 +31,7 @@ fn spaces() -> Spaces {
         review: Vec::new(),
         completion: None,
         agent_state: None,
+        progress: None,
         parent: None,
         children: Vec::new(),
     };

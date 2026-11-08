@@ -200,6 +200,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 review: Vec::new(),
                 completion: None,
                 agent_state: None,
+                progress: None,
                 parent: None,
                 children: Vec::new(),
             }])
@@ -279,6 +280,7 @@ fn resume_completes_resumable_spaces() {
         review: Vec::new(),
         completion: None,
         agent_state: None,
+        progress: None,
         parent: None,
         children: Vec::new(),
     };

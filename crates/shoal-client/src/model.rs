@@ -110,6 +110,9 @@ pub struct Workspace {
     pub latest_review: Option<crate::reviews::ReviewStatus>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentStatus>,
+    /// Where its agent is in its work, as it last reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::progress::Progress>,
     /// In a list, the turn state its coordinator's agent reports while no
     /// agent of its own has started here, so that agent does its work.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -635,6 +638,7 @@ impl Workspace {
             review: Vec::new(),
             latest_review: None,
             agent_state: None,
+            progress: None,
             coordinator_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
@@ -1498,6 +1502,9 @@ pub struct Chat {
     /// The turn state its running agent last reported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentStatus>,
+    /// Where its agent is in its work, as it last reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::progress::Progress>,
     /// The space above it.
     #[serde(default)]
     pub parent: Option<SpaceRef>,

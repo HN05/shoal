@@ -75,6 +75,10 @@ pub(super) async fn handle(
                     .await?
             }
         }),
+        AgentMethod::SetProgress { space, change } => {
+            Body::Progress(manager.set_progress(&space, change).await?)
+        }
+        AgentMethod::Progress { space } => Body::Progress(manager.space_progress(&space).await?),
         AgentMethod::StartWokenTurn { workspace } => Body::WokenTurn(WokenTurn {
             starts: manager
                 .start_woken_turn(&workspace, execution(caller))
@@ -201,6 +205,7 @@ impl Scoped for AgentMethod {
             | AgentMethod::AgentUpdates { space }
             | AgentMethod::WaitAgentUpdates { space }
             | AgentMethod::ReportWakeEnd { space, .. }
+            | AgentMethod::Progress { space }
             | AgentMethod::AcknowledgePrUpdates { space, .. } => Some(space),
             AgentMethod::ReportTurnFailure {
                 execution: Some(_), ..
@@ -224,6 +229,15 @@ impl Scoped for AgentMethod {
                         caller,
                         workspace,
                         "workspace processes report agent state only for their own workspace",
+                    )
+                    .await?,
+            ),
+            AgentMethod::SetProgress { space, .. } => Some(
+                manager
+                    .own_workspace(
+                        caller,
+                        space,
+                        "scoped processes set progress only for their own space",
                     )
                     .await?,
             ),

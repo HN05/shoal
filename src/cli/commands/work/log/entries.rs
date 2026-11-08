@@ -61,6 +61,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
             "Alert sent",
             (event.alert.as_ref()).map_or_else(String::new, |alert| alert.message.clone()),
         ),
+        EventKind::ProgressChanged => fixed("Progress", progress(event)),
         EventKind::ChildCreated => fixed("Child created", child(event)),
         EventKind::ChildRemoved => fixed("Child removed", child(event)),
         EventKind::Ready => fixed("Setup finished", String::new()),
@@ -84,6 +85,18 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::DemoStopped => fixed("Demo stopped", demo(event)),
         EventKind::SimulatorAcquired => fixed("Simulator acquired", simulator(event)),
         EventKind::SimulatorReleased => fixed("Simulator released", simulator(event)),
+    }
+}
+
+/// How many steps are done and the status line, as `2/5 steps: Reproduced`.
+fn progress(event: &EventDetails) -> String {
+    let Some(progress) = &event.progress else {
+        return String::new();
+    };
+    let steps = format!("{}/{} steps", progress.done(), progress.steps.len());
+    match &progress.status {
+        Some(status) => format!("{steps}: {status}"),
+        None => steps,
     }
 }
 

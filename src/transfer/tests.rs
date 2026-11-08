@@ -97,6 +97,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         review: Vec::new(),
         completion: None,
         agent_state: None,
+        progress: None,
         parent: None,
         children: Vec::new(),
     };
