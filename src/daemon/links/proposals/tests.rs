@@ -372,6 +372,22 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .unwrap()
         .unwrap();
     assert_eq!(original.findings().len(), 1);
+    // A proposal outside its reach takes no finding of its.
+    let outsider = manager
+        .create_workspace(&repo.id, "outsider".into(), None, None, None)
+        .await
+        .unwrap();
+    let outside = store_issue_proposal(&manager, &outsider.into()).await;
+    let duplicate = ProposalDecision {
+        duplicate_of: Some(Duplicate::Approval(outside.number)),
+        ..ProposalDecision::default()
+    };
+    let decided = manager
+        .decide_routed_approval(&parent.id, original.number, false, None, duplicate)
+        .await;
+    assert!(decided.is_err());
+    let outside = manager.approval_request(outside.number).await.unwrap();
+    assert!(outside.unwrap().findings().is_empty());
     let denied = manager
         .decide_routed_approval(
             &parent.id,

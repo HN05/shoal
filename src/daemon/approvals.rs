@@ -879,6 +879,9 @@ impl Manager {
         )?;
         self.ensure_permitted(coordinator, &request, needed(&request, approve, &details))
             .await?;
+        if let Some(proposals::Duplicate::Approval(original)) = &details.duplicate_of {
+            self.ensure_reaches_proposal(coordinator, *original).await?;
+        }
         if request.target.is_proposal() {
             return self
                 .decide_proposal(request, approve, details, None, Some(coordinator))
@@ -924,6 +927,22 @@ impl Manager {
                 "approval {id}: {withheld}; deny it or pass it up with shoal approvals --escalate {id}"
             );
         }
+        Ok(())
+    }
+
+    /// Refuse `coordinator`'s marking a proposal a duplicate of proposal
+    /// `number` unless its scope reaches the space that made it, since the
+    /// finding changes that proposal.
+    async fn ensure_reaches_proposal(&self, coordinator: &str, number: ItemNumber) -> Result<()> {
+        let original = self.show_approval(number).await?;
+        let caller = Caller {
+            space_id: coordinator.to_owned(),
+            execution: None,
+        };
+        ensure!(
+            self.reaches(&caller, &original.space_id).await?,
+            "approval request {number} is not this space's or below it; deny the duplicate with --reason or pass it up"
+        );
         Ok(())
     }
 
