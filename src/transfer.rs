@@ -14,7 +14,8 @@ use std::{
 use anyhow::{Context, Result, ensure};
 
 pub(crate) use crate::client::transfer::{
-    ExportedSpace, Manifest, PackagedChat, PackagedWorkspace, SessionFile, Sessions, Space,
+    CarriedSessionFile, ExportedSpace, Manifest, PackagedChat, PackagedWorkspace, SessionFile,
+    Sessions, Space,
 };
 use crate::{
     client::transcripts::{self, Environments},
@@ -456,6 +457,16 @@ pub struct Import {
 pub struct ImportedSessionFile {
     pub file: SessionFile,
     pub contents: tempfile::NamedTempFile,
+}
+
+impl ImportedSessionFile {
+    /// The file with its contents where they are now, while it lives.
+    pub fn carried(&self) -> CarriedSessionFile {
+        CarriedSessionFile {
+            file: self.file.clone(),
+            contents: self.contents.path().to_owned(),
+        }
+    }
 }
 
 impl Import {

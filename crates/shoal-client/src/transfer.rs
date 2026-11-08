@@ -90,6 +90,13 @@ pub struct SessionFile {
     pub size: u64,
 }
 
+/// A session file with its contents at `contents`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CarriedSessionFile {
+    pub file: SessionFile,
+    pub contents: PathBuf,
+}
+
 /// A package's stopped agents and last sessions as the exporting machine
 /// recorded them; a chat's agent is its one last session.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

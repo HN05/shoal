@@ -16,7 +16,7 @@ use crate::{
     config::Effective,
     model::Workspace,
     protocol::ConfigTarget,
-    transfer::ImportedSessionFile,
+    transfer::CarriedSessionFile,
 };
 
 /// Whose agents an import's session files go to.
@@ -40,6 +40,16 @@ pub(in crate::cli) enum Existing {
     Kept,
 }
 
+impl Existing {
+    /// What the import of a space does, a `copy` or not.
+    pub(in crate::cli) fn of_copy(copy: bool) -> Self {
+        match copy {
+            true => Self::Kept,
+            false => Self::Continued,
+        }
+    }
+}
+
 /// Put the session files an import carried where the agents of `home` look
 /// for them, as [`place`] does with the files there as `existing` says. A
 /// development build leaves them to the installed Shoal. Failures only
@@ -47,7 +57,7 @@ pub(in crate::cli) enum Existing {
 pub(in crate::cli) async fn install_session_files(
     ctx: &Context,
     home: SessionHome<'_>,
-    files: &[ImportedSessionFile],
+    files: &[CarriedSessionFile],
     existing: Existing,
 ) {
     if files.is_empty() || !crate::build::changes_user_files() {
@@ -119,7 +129,7 @@ fn session_dir(
 /// continues the file, as a session that went to another machine and came
 /// back does; one that differs otherwise is a conflict, which keeps it and
 /// warns.
-fn place(directory: &Path, imported: &ImportedSessionFile, existing: Existing) -> Result<()> {
+fn place(directory: &Path, imported: &CarriedSessionFile, existing: Existing) -> Result<()> {
     let destination = directory.join(&imported.file.path);
     let replaces = destination.exists();
     if replaces && existing == Existing::Kept {
@@ -127,7 +137,7 @@ fn place(directory: &Path, imported: &ImportedSessionFile, existing: Existing) -
     }
     if replaces {
         ensure!(
-            continues(&destination, imported.contents.path())?,
+            continues(&destination, &imported.contents)?,
             "{} differs from the session's file here, which stays",
             destination.display()
         );
@@ -135,7 +145,7 @@ fn place(directory: &Path, imported: &ImportedSessionFile, existing: Existing) -
     let parent = destination.parent().unwrap_or(directory);
     std::fs::create_dir_all(parent)?;
     let partial = tempfile::NamedTempFile::new_in(parent)?;
-    std::fs::copy(imported.contents.path(), partial.path())?;
+    std::fs::copy(&imported.contents, partial.path())?;
     match replaces {
         true => partial.persist(&destination)?,
         false => partial.persist_noclobber(&destination)?,

@@ -1,6 +1,7 @@
 use std::fs;
 
 use super::*;
+use crate::transfer::ImportedSessionFile;
 
 fn imported(path: &str, contents: &str) -> ImportedSessionFile {
     let file = tempfile::NamedTempFile::new().unwrap();
@@ -22,7 +23,7 @@ fn placing_a_session_file_keeps_one_here_unless_the_import_continues_it() {
     let read = |path: &str| fs::read_to_string(directory.path().join(path)).unwrap();
     place(
         directory.path(),
-        &imported("p/new.jsonl", "a\n"),
+        &imported("p/new.jsonl", "a\n").carried(),
         Existing::Continued,
     )
     .unwrap();
@@ -30,7 +31,7 @@ fn placing_a_session_file_keeps_one_here_unless_the_import_continues_it() {
     // The session went on elsewhere and came back.
     place(
         directory.path(),
-        &imported("p/new.jsonl", "a\nb\n"),
+        &imported("p/new.jsonl", "a\nb\n").carried(),
         Existing::Continued,
     )
     .unwrap();
@@ -39,7 +40,7 @@ fn placing_a_session_file_keeps_one_here_unless_the_import_continues_it() {
     for other in ["a\n", "a\nc\nd\n"] {
         let error = place(
             directory.path(),
-            &imported("p/new.jsonl", other),
+            &imported("p/new.jsonl", other).carried(),
             Existing::Continued,
         );
         if other == "a\n" {
@@ -64,7 +65,7 @@ fn a_copy_never_replaces_a_session_file_here() {
     for contents in ["a\n", "a\nb\n", "x\n"] {
         place(
             directory.path(),
-            &imported("p/live.jsonl", contents),
+            &imported("p/live.jsonl", contents).carried(),
             Existing::Kept,
         )
         .unwrap();
@@ -73,7 +74,7 @@ fn a_copy_never_replaces_a_session_file_here() {
     }
     place(
         directory.path(),
-        &imported("p/copied.jsonl", "c\n"),
+        &imported("p/copied.jsonl", "c\n").carried(),
         Existing::Kept,
     )
     .unwrap();

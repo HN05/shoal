@@ -27,7 +27,8 @@ use crate::{
     execution::recovery::Copied,
     model::RestoredWorkspace,
     transfer::{
-        Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace, Sessions, Space,
+        CarriedSessionFile, Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace,
+        Sessions, Space,
     },
 };
 
@@ -171,7 +172,8 @@ impl Package {
             Ok(restored) => SessionHome::Workspace(&restored.opened.workspace),
             Err(_) => SessionHome::Repository(self.repository.clone()),
         };
-        agents::install_session_files(ctx, home, &self.carried, self.existing()).await;
+        let existing = agents::Existing::of_copy(self.copy.is_some());
+        agents::install_session_files(ctx, home, &self.carried(), existing).await;
         restored
     }
 
@@ -192,13 +194,12 @@ impl Package {
         .await
     }
 
-    /// What the import does with session files already here: a copy keeps
-    /// them, since the original's agents may still write to them.
-    fn existing(&self) -> agents::Existing {
-        match self.copy {
-            Some(_) => agents::Existing::Kept,
-            None => agents::Existing::Continued,
-        }
+    /// The session files the package carries for the agents kept here.
+    fn carried(&self) -> Vec<CarriedSessionFile> {
+        self.carried
+            .iter()
+            .map(ImportedSessionFile::carried)
+            .collect()
     }
 
     /// Put the packaged chat's session files in place, then start the chat
@@ -215,8 +216,8 @@ impl Package {
         agents::install_session_files(
             ctx,
             SessionHome::Repository(self.repository.clone()),
-            &self.carried,
-            self.existing(),
+            &self.carried(),
+            agents::Existing::of_copy(self.copy.is_some()),
         )
         .await;
         let settings = chat::settings(ctx, &repo).await?;
