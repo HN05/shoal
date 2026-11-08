@@ -150,6 +150,7 @@ impl Manager {
 /// it reported; `None` for an execution without an agent.
 fn running_record(execution: &Execution, session: Option<String>) -> Option<Record> {
     Some(Record {
+        permissions: execution.permissions,
         // Named as recovery records name it.
         agent: execution.agent.as_ref()?.replace(' ', "-"),
         stop_reason: None,

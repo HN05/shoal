@@ -118,7 +118,10 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
     let child = workspace(&manager, &repo, "child", &top.id, None).await;
     let launch = |mode: &'static str| {
         let (manager, child) = (manager.clone(), child.clone());
-        async move { manager.launch_permissions(child, mode).await.unwrap().push }
+        async move {
+            let permissions = manager.launch_permissions(child, mode, Default::default());
+            permissions.await.unwrap().push
+        }
     };
     let review = launch("review").await;
     assert_eq!(review.value, Pushes::Deny);
@@ -136,4 +139,83 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
         .await
         .unwrap();
     assert_eq!(recorded.push.value, Pushes::Direct);
+}
+
+/// Record `assignments` as the narrowing the agent of the space `id`, in
+/// `table`, started with.
+async fn narrow(manager: &Manager, table: &str, id: &str, assignments: &[&str]) {
+    let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
+    let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
+    let json = serde_json::to_string(&narrowing).unwrap();
+    let (sql, id) = (
+        format!("UPDATE {table} SET permissions=?2 WHERE id=?1"),
+        id.to_owned(),
+    );
+    manager
+        .store
+        .run(move |db| Ok(db.execute(&sql, rusqlite::params![id, json])?))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_narrowing_narrows_its_space_and_the_spaces_below() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker")).await;
+    let split = workspace(&manager, &repo, "split", &worker.id, None).await;
+    narrow(&manager, "chats", &top.id, &["merge=propose"]).await;
+    narrow(&manager, "workspaces", &worker.id, &["push=propose"]).await;
+    let of = |id: String| {
+        let manager = manager.clone();
+        let repository = repo.id.clone();
+        async move {
+            let permissions = manager.space_permissions(&id, Some(&repository));
+            permissions.await.unwrap()
+        }
+    };
+    let chat = of(top.id.clone()).await;
+    assert_eq!(chat.merge.value, Opening::Propose);
+    assert_eq!(chat.merge.from, PermissionSource::Narrowing);
+    let below = of(worker.id.clone()).await;
+    assert_eq!(below.push.value, Pushes::Propose);
+    assert_eq!(below.push.from, PermissionSource::Narrowing);
+    let split = of(split.id.clone()).await;
+    assert_eq!(split.push.value, Pushes::Propose);
+    assert_eq!(split.push.from, PermissionSource::Parent);
+}
+
+#[tokio::test]
+async fn a_narrowing_is_refused_above_its_mode_and_lowered_to_its_parent() {
+    use crate::config::permissions::{PermissionsConfig, SpaceMode};
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    narrow(&manager, "chats", &top.id, &["push=propose"]).await;
+    let worker = SpaceMode {
+        name: "worker",
+        kind: crate::model::SpaceKind::Workspace,
+        repository: true,
+    };
+    let check = |assignments: &[&str]| {
+        let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
+        let narrowing = PermissionsConfig::assigned(&assignments).unwrap();
+        let manager = manager.clone();
+        let (repository, parent) = (repo.id.clone(), top.id.clone());
+        async move {
+            let checked =
+                manager.checked_narrowing(Some(&repository), Some(&parent), worker, narrowing);
+            checked.await
+        }
+    };
+    // A worker merges only after approval, so it cannot be given more.
+    assert!(check(&["merge=direct"]).await.is_err());
+    // The parent proposes its pushes, so a worker's are lowered to that.
+    let lowered = check(&["push=direct", "api_writes=deny"]).await.unwrap();
+    assert_eq!(lowered.push, Some(Pushes::Propose));
+    assert_eq!(
+        lowered.api_writes,
+        Some(crate::config::permissions::ApiWrites::Deny)
+    );
 }

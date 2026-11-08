@@ -153,6 +153,9 @@ pub enum InternalCommand {
         /// The mode the agent started in.
         #[arg(long, default_value = crate::config::modes::DEFAULT)]
         mode: String,
+        /// The `--permission` narrowing it started with, as JSON.
+        #[arg(long, value_parser = narrowing, default_value = "{}")]
+        permissions: crate::config::permissions::PermissionsConfig,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
@@ -198,6 +201,9 @@ pub enum InternalCommand {
         /// The mode the agent started in.
         #[arg(long, default_value = crate::config::modes::DEFAULT)]
         mode: String,
+        /// The `--permission` narrowing it started with, as JSON.
+        #[arg(long, value_parser = narrowing, default_value = "{}")]
+        permissions: crate::config::permissions::PermissionsConfig,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
         /// The host that opened the place.
@@ -234,6 +240,9 @@ pub enum InternalCommand {
         /// The mode the agent started in.
         #[arg(long, default_value = crate::config::modes::DEFAULT)]
         mode: String,
+        /// The `--permission` narrowing it started with, as JSON.
+        #[arg(long, value_parser = narrowing, default_value = "{}")]
+        permissions: crate::config::permissions::PermissionsConfig,
         /// The descriptor of the wrapper's daemon connection.
         #[arg(long)]
         connection: i32,
@@ -250,4 +259,9 @@ pub enum InternalCommand {
         #[arg(last = true)]
         setup_cmd: Option<PathBuf>,
     },
+}
+
+/// A `--permission` narrowing a worker receives as JSON.
+fn narrowing(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
+    serde_json::from_str(json).map_err(|error| error.to_string())
 }

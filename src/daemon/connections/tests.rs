@@ -106,6 +106,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         .unwrap()
         .unwrap();
     let execute = ExecutionMethod::Execute {
+        permissions: Default::default(),
         mode: None,
         model: Default::default(),
         workspace: SpaceSelector::parse(&workspace.name),
@@ -128,6 +129,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         assert!(matches!(reply, Body::Error { .. }), "{reply:?}");
     }
     let reattach = Method::Reattach(protocol::Reattachment::Reattach(protocol::Reattach {
+        permissions: Default::default(),
         mode: None,
         model: Default::default(),
         execution: "running".into(),

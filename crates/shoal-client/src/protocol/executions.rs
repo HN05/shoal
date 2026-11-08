@@ -22,6 +22,12 @@ pub enum ExecutionMethod {
         /// The mode the agent started in.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,
+        /// The `--permission` narrowing of the mode's permissions.
+        #[serde(
+            default,
+            skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+        )]
+        permissions: crate::config::permissions::PermissionsConfig,
         #[serde(default)]
         recover: bool,
         /// The wrapper keeps its command running when the daemon goes away

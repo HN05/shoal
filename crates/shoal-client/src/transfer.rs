@@ -76,6 +76,13 @@ pub struct PackagedChat {
     /// chat mode.
     #[serde(default = "crate::model::chat_mode")]
     pub mode: String,
+    /// The `--permission` narrowing it ran with; none from a package an
+    /// earlier release wrote.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
 }
 
 /// A file of an agent's session, copied unread.

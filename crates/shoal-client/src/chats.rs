@@ -21,6 +21,8 @@ pub struct NewChat<'a> {
     pub name: &'a SpaceName,
     pub agent: &'a str,
     pub mode: &'a str,
+    /// The `--permission` narrowing of the mode's permissions.
+    pub permissions: crate::config::permissions::PermissionsConfig,
     /// The space it goes below; a scoped caller's daemon puts it below the
     /// caller's own space without one.
     pub parent: Option<&'a SpaceSelector>,
@@ -46,6 +48,7 @@ pub async fn start(
             name: chat.name.clone(),
             agent: chat.agent.to_owned(),
             mode: Some(chat.mode.to_owned()),
+            permissions: chat.permissions,
             pid: std::process::id(),
             origin,
             hands_over,

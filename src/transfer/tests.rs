@@ -69,6 +69,7 @@ fn an_earlier_package_of_an_all_digit_workspace_imports_under_its_derived_name()
 #[test]
 fn a_chat_package_names_its_kind_and_continues_its_session() {
     let chat = Chat {
+        permissions: Default::default(),
         mode: "plan".into(),
         number: 1,
         id: "c1".into(),
@@ -108,6 +109,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
             agent: chat.agent.clone(),
             links: chat.links.clone(),
             mode: chat.mode.clone(),
+            permissions: chat.permissions,
         }),
         sessions: Some(Sessions {
             machine: Some("m1".into()),
@@ -236,6 +238,7 @@ fn manifest_with_sessions() -> Manifest {
         stopped_at: UnixTime::from_seconds(1),
     };
     let last = LastSession {
+        permissions: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         execution: "quit".into(),

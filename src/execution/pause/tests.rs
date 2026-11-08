@@ -32,6 +32,7 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
 #[test]
 fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues_its_restore() {
     let recovery = |automatic| recovery::Recovery {
+        permissions: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "claude".into(),

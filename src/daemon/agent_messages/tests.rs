@@ -415,6 +415,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
         .unwrap();
     // The user stopped its agent, which `shoal resume` restores.
     crate::execution::recovery::LastSession {
+        narrowing: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         execution: "stopped".into(),

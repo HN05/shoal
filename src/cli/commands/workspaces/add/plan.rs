@@ -55,6 +55,7 @@ pub(super) async fn plan_addition(
         args,
         prompt: None,
         mode: None,
+        permissions: Default::default(),
         fork: None,
         queue_entry: None,
         chat: env::in_chat(),
@@ -97,10 +98,16 @@ pub(super) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
         .collect()
 }
 
-/// Start `plan`'s agent in `mode`, below the space `options` names, from a
-/// fork of the session it names.
-pub(super) fn start_as(plan: &mut AddPlan, options: &AddOptions, mode: Option<String>) {
+/// Start `plan`'s agent in `mode` with `narrowing`, below the space
+/// `options` names, from a fork of the session it names.
+pub(super) fn start_as(
+    plan: &mut AddPlan,
+    options: &AddOptions,
+    mode: Option<String>,
+    narrowing: crate::config::permissions::PermissionsConfig,
+) {
     plan.mode = mode;
+    plan.permissions = narrowing;
     plan.prompt.clone_from(&options.prompt);
     plan.parent.clone_from(&options.parent);
     plan.fork.clone_from(&options.fork);

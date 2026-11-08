@@ -286,12 +286,35 @@ pub async fn launch_permissions(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     mode: String,
+    narrowing: crate::config::permissions::PermissionsConfig,
 ) -> Result<crate::config::permissions::Permissions> {
-    request(
-        daemon,
-        WorkspaceMethod::LaunchPermissions { workspace, mode },
-    )
-    .await
+    let method = WorkspaceMethod::LaunchPermissions {
+        workspace,
+        mode,
+        narrowing,
+    };
+    request(daemon, method).await
+}
+
+/// `narrowing` as an agent starting in `mode` below `parent` records it,
+/// in the registered repository `repository` or without one, in a chat
+/// when `chat`; refused where it is wider than the mode's permissions.
+pub async fn check_narrowing(
+    daemon: &impl Daemon,
+    repository: Option<String>,
+    parent: Option<SpaceSelector>,
+    mode: String,
+    chat: bool,
+    narrowing: crate::config::permissions::PermissionsConfig,
+) -> Result<crate::config::permissions::PermissionsConfig> {
+    let method = WorkspaceMethod::CheckNarrowing {
+        repository,
+        parent,
+        mode,
+        chat,
+        narrowing,
+    };
+    request(daemon, method).await
 }
 
 /// The environment `workspace`'s configuration gives its commands.

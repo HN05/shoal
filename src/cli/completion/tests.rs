@@ -182,6 +182,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             Method::Operation(Operation::Chat(ChatMethod::ListChats))
         ) {
             Body::Chats(vec![Chat {
+                permissions: Default::default(),
                 mode: "chat".into(),
                 number: 1,
                 id: "c1".into(),
@@ -262,6 +263,7 @@ fn resume_completes_resumable_spaces() {
         Some(Target::ResumeSpaces)
     );
     let chat = |name: &str, restore| Chat {
+        permissions: Default::default(),
         mode: "chat".into(),
         number: 1,
         id: name.into(),

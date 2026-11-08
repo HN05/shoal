@@ -16,7 +16,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback, ModeChoice},
     },
-    config::{self, Effective, modes, templates},
+    config::{self, Effective, modes, permissions::PermissionsConfig, templates},
     forge::{
         IssueInput,
         items::link::{Link, LinkTarget},
@@ -453,6 +453,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         after: args.after,
         model: args.model.into(),
         mode: Some(mode),
+        permissions: PermissionsConfig::assigned(&args.permissions)?,
         prompt: None,
         parent,
         fork,
@@ -578,6 +579,7 @@ fn chat_options(args: &mut StartArgs) -> chat::Options {
         restore: args.restore.take(),
         handoff: args.handoff.take(),
         parent: args.parent.take().map(|parent| parent.to_string()),
+        permissions: std::mem::take(&mut args.permissions),
     }
 }
 

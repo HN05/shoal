@@ -163,6 +163,9 @@ pub(crate) struct Agent {
     model: ModelChoice,
     /// The mode it started in, which its recovery records keep.
     mode: String,
+    /// The `--permission` narrowing it started with, which its recovery
+    /// records keep.
+    permissions: crate::config::permissions::PermissionsConfig,
     workspace: String,
     workspace_id: String,
     started: Instant,
@@ -197,6 +200,7 @@ impl Agent {
             name: self.name.clone(),
             model: self.model.clone(),
             mode: self.mode.clone(),
+            permissions: self.permissions,
         }
     }
 
@@ -451,6 +455,7 @@ impl Manager {
             name: tracked.name.clone(),
             model: tracked.model.clone(),
             mode: tracked.mode.clone(),
+            permissions: tracked.permissions,
             workspace: workspace.into(),
             workspace_id: workspace_id.into(),
             started: Instant::now()
@@ -471,28 +476,32 @@ impl Manager {
             .await;
     }
 
-    /// Keep the name, model, effort and mode of the agent execution `id`
-    /// runs with its record, which outlives this daemon, unlike the tracked
-    /// agent; the mode becomes its workspace's.
+    /// Keep the name, model, effort, mode and narrowing of the agent
+    /// execution `id` runs with its record, which outlives this daemon,
+    /// unlike the tracked agent; the mode and narrowing become its
+    /// workspace's.
     async fn record_execution_agent(&self, id: &str, agent: &TrackedAgent) {
         let (execution, agent) = (id.to_owned(), agent.clone());
         let recorded = self
             .store
             .run(move |db| {
+                let narrowing = crate::daemon::store::narrowing_column(&agent.permissions)?;
                 db.execute(
-                    "UPDATE executions SET agent=?2,model=?3,effort=?4,mode=?5 WHERE id=?1",
+                    "UPDATE executions SET agent=?2,model=?3,effort=?4,mode=?5,permissions=?6
+                     WHERE id=?1",
                     rusqlite::params![
                         execution,
                         agent.name,
                         agent.model.model,
                         agent.model.effort,
-                        agent.mode
+                        agent.mode,
+                        narrowing
                     ],
                 )?;
                 db.execute(
-                    "UPDATE workspaces SET mode=?2
+                    "UPDATE workspaces SET mode=?2,permissions=?3
                      WHERE id=(SELECT workspace_id FROM executions WHERE id=?1)",
-                    rusqlite::params![execution, agent.mode],
+                    rusqlite::params![execution, agent.mode, narrowing],
                 )?;
                 Ok(())
             })

@@ -45,6 +45,7 @@ pub(super) async fn start(
         args,
         model,
         mode,
+        permissions,
         ..
     } = launch;
     crate::agents::ensure_available(&name, &settings)?;
@@ -69,6 +70,7 @@ pub(super) async fn start(
         name: app.execution_agent(),
         model,
         mode,
+        permissions,
     };
     let (launch, prepared) = launch_session(
         ctx,
@@ -282,6 +284,7 @@ pub(super) async fn start_chat(
         repository,
         name: chat_name,
         mode,
+        permissions,
         parent,
         settings,
         model,
@@ -309,6 +312,7 @@ pub(super) async fn start_chat(
         name: chat_name,
         agent: name,
         mode,
+        permissions: *permissions,
         parent: parent.as_ref(),
     };
     let record =

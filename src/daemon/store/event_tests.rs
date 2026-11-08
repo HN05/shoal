@@ -341,6 +341,10 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
          ALTER TABLE workspaces DROP COLUMN disposable;",
     )?;
     db.execute_batch(
+        "ALTER TABLE workspaces DROP COLUMN permissions;
+         ALTER TABLE executions DROP COLUMN permissions;",
+    )?;
+    db.execute_batch(
         "ALTER TABLE workspaces DROP COLUMN mode; ALTER TABLE executions DROP COLUMN mode;",
     )?;
     Ok(())

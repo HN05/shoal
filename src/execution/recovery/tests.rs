@@ -32,6 +32,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
     assert_eq!(record.stage, Some(Stage::Stopping));
     assert!(pending(&paths, "workspace").unwrap());
     let recovery = Recovery {
+        permissions: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "codex".into(),
@@ -99,6 +100,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        permissions: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "claude".into(),
@@ -145,6 +147,7 @@ fn only_agents_outside_a_waiting_wrapper_receive_the_stopped_commands() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        narrowing: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "claude".into(),
@@ -203,6 +206,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
     save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
     let recovery = Recovery {
+        permissions: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "codex".into(),
@@ -224,6 +228,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        permissions: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "claude".into(),
@@ -335,6 +340,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     assert_eq!(
         LastSession::all(&paths, "workspace").unwrap(),
         [LastSession {
+            permissions: Default::default(),
             mode: "worker".into(),
             model: Default::default(),
             execution: "execution".into(),
@@ -466,6 +472,7 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
     )
     .unwrap();
     let recovery = Recovery {
+        narrowing: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
         agent: "codex".into(),

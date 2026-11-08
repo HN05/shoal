@@ -1077,6 +1077,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
     let mut chats = Vec::new();
     for (name, agent) in ["sub", "nested"].into_iter().zip(&agents) {
         let start = crate::daemon::chats::NewChat {
+            permissions: Default::default(),
             mode: "chat".into(),
             name: name.into(),
             agent: "claude".into(),

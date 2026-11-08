@@ -38,6 +38,7 @@ async fn chat(
 ) -> (Chat, ProcessGroup) {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = NewChat {
+        permissions: Default::default(),
         name: name.into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),

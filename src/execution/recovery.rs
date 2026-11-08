@@ -35,6 +35,8 @@ pub(crate) struct Recovery {
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
     pub mode: String,
+    /// The `--permission` narrowing it started with, which its restore keeps.
+    pub permissions: crate::config::permissions::PermissionsConfig,
     pub command: Vec<OsString>,
     pub automatic: bool,
     /// Whether `command` carries the handoff message as the agent's prompt.
@@ -196,11 +198,13 @@ impl RestoreCommand<'_> {
 }
 
 /// The agent a restore continues: its name, the model and effort it ran
-/// with, the mode it started in, and the session it reported, if any.
+/// with, the mode and narrowing it started with, and the session it
+/// reported, if any.
 pub(crate) struct Restored<'a> {
     pub agent: &'a str,
     pub model: &'a ModelChoice,
     pub mode: &'a str,
+    pub permissions: crate::config::permissions::PermissionsConfig,
     pub session: Option<&'a str>,
 }
 
@@ -211,6 +215,7 @@ impl Recovery {
             name: self.agent.clone(),
             model: self.model.clone(),
             mode: self.mode.clone(),
+            permissions: self.permissions,
         }
     }
 
@@ -228,6 +233,7 @@ impl Recovery {
                 agent: &agent.name,
                 model: &agent.model,
                 mode: &agent.mode,
+                permissions: agent.permissions,
                 session: None,
             };
             Self::resolve(paths, &workspace, restored, None, None).await
@@ -239,6 +245,7 @@ impl Recovery {
                 agent: agent.name.replace(' ', "-"),
                 model: agent.model.clone(),
                 mode: agent.mode.clone(),
+                permissions: agent.permissions,
                 command: vec![],
                 automatic: false,
                 handoff_delivered: false,
@@ -304,6 +311,7 @@ impl Recovery {
             agent: name,
             model: restored.model.clone(),
             mode: restored.mode.to_owned(),
+            permissions: restored.permissions,
             command,
             automatic,
             handoff_delivered: handoff_delivered && handoff.is_some(),
@@ -328,6 +336,7 @@ impl Recovery {
         };
         let stop = Stop::of(&record, path);
         let restored = Restored {
+            permissions: self.permissions,
             agent: &self.agent,
             model: &self.model,
             mode: &self.mode,
@@ -454,6 +463,7 @@ impl RecordExt for Record {
             turn: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
+            permissions: agent.permissions,
         }
     }
 
@@ -470,6 +480,7 @@ impl RecordExt for Record {
             stop: Some(stop),
             model: self.model,
             mode: self.mode,
+            permissions: self.permissions,
         }
     }
 
@@ -907,6 +918,7 @@ impl LastSessionExt for LastSession {
             stop: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
+            permissions: agent.permissions,
         }
         .write(paths, workspace_id)
     }

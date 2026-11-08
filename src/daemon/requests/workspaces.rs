@@ -198,9 +198,42 @@ pub(super) async fn handle(
         WorkspaceMethod::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
-        WorkspaceMethod::LaunchPermissions { workspace, mode } => {
+        WorkspaceMethod::LaunchPermissions {
+            workspace,
+            mode,
+            narrowing,
+        } => {
             let workspace = manager.workspace(&workspace).await?;
-            Body::Permissions(manager.launch_permissions(workspace, &mode).await?)
+            Body::Permissions(
+                manager
+                    .launch_permissions(workspace, &mode, narrowing)
+                    .await?,
+            )
+        }
+        WorkspaceMethod::CheckNarrowing {
+            repository,
+            parent,
+            mode,
+            chat,
+            narrowing,
+        } => {
+            let parent = match parent {
+                Some(parent) => Some(manager.space(&parent).await?.id().to_owned()),
+                None => None,
+            };
+            let mode = crate::config::permissions::SpaceMode {
+                name: &mode,
+                kind: match chat {
+                    true => crate::model::SpaceKind::Chat,
+                    false => crate::model::SpaceKind::Workspace,
+                },
+                repository: repository.is_some(),
+            };
+            Body::Narrowing(
+                manager
+                    .checked_narrowing(repository.as_deref(), parent.as_deref(), mode, narrowing)
+                    .await?,
+            )
         }
         WorkspaceMethod::WorkspaceEnv { workspace } => {
             Body::WorkspaceEnv(manager.workspace_environment(&workspace).await?)
@@ -328,7 +361,8 @@ impl Scoped for WorkspaceMethod {
             }
             // A start it checks goes where the start would: below its own
             // space unless it names one below it.
-            WorkspaceMethod::CheckCreation { parent, .. } => {
+            WorkspaceMethod::CheckCreation { parent, .. }
+            | WorkspaceMethod::CheckNarrowing { parent, .. } => {
                 manager.parent_below(caller, parent).await?;
                 None
             }

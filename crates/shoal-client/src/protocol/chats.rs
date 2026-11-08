@@ -21,6 +21,12 @@ pub enum ChatMethod {
         /// The mode its agent starts in; `chat` when omitted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,
+        /// The `--permission` narrowing of the mode's permissions.
+        #[serde(
+            default,
+            skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+        )]
+        permissions: crate::config::permissions::PermissionsConfig,
         pid: u32,
         /// Where the chat runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]

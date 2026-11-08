@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 142;
+pub(super) const SCHEMA_VERSION: i64 = 143;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -405,6 +405,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (140, include_str!("space_events.sql"), None),
     (141, AUTOMATIC_WRAPPER_RESTORES, None),
     (142, include_str!("space_progress.sql"), None),
+    (143, PERMISSION_NARROWINGS, None),
 ];
 
 /// The space whose process stopped a stopped chat, such as by a restart
@@ -467,6 +468,13 @@ ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'chat';
 UPDATE executions SET mode='worker' WHERE agent IS NOT NULL;
 UPDATE workspaces SET mode='worker'
 WHERE id IN (SELECT workspace_id FROM executions WHERE agent IS NOT NULL);";
+
+/// The `--permission` narrowing each agent started with, beside its mode: a
+/// JSON object of the keys it narrows, or none.
+pub(super) const PERMISSION_NARROWINGS: &str = "ALTER TABLE workspaces ADD COLUMN permissions TEXT;
+ALTER TABLE executions ADD COLUMN permissions TEXT;
+ALTER TABLE agent_queue ADD COLUMN permissions TEXT;
+ALTER TABLE chats ADD COLUMN permissions TEXT;";
 
 /// The workspace whose worktree a chat runs in instead of its repository's
 /// checkout. Removing the workspace removes its chats first, so nothing

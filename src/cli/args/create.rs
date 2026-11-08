@@ -66,6 +66,11 @@ pub struct StartArgs {
     /// --chat or --in, else worker.
     #[arg(short = 'm', long)]
     pub mode: Option<String>,
+    /// Narrow a permission of the mode, as KEY=VALUE such as push=propose;
+    /// repeatable. A value wider than the mode's is refused, and one wider
+    /// than the parent space's is lowered to it.
+    #[arg(long = "permission", value_name = "KEY=VALUE")]
+    pub permissions: Vec<String>,
     /// Start in a chat, whatever the mode's kind.
     #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub chat: bool,

@@ -99,6 +99,7 @@ pub(super) async fn add_planned(
         args,
         prompt,
         mode,
+        permissions,
         fork,
         queue_entry,
         chat,
@@ -111,12 +112,12 @@ pub(super) async fn add_planned(
     let told = (&prompt, args.as_slice(), &fork);
     let (launch, placed) = match start {
         AgentStart::Queued { now } => (
-            queued_launch(&agent, issue.as_ref(), &mode, told, now)?,
+            queued_launch(&agent, issue.as_ref(), (&mode, permissions), told, now)?,
             None,
         ),
         AgentStart::Placed { now } => (
             None,
-            queued_launch(&agent, issue.as_ref(), &mode, told, now)?,
+            queued_launch(&agent, issue.as_ref(), (&mode, permissions), told, now)?,
         ),
         AgentStart::Here => (None, None),
     };
@@ -178,6 +179,7 @@ pub(super) async fn add_planned(
     let here = HereLaunch {
         agent,
         opening,
+        permissions,
         args,
         fork,
     };
@@ -187,15 +189,18 @@ pub(super) async fn add_planned(
     }
 }
 
-/// The launch of `agent` in `mode` that preparing the added workspace
-/// queues, prompted with `issue` or else the plan's own prompt, with its
+/// The launch of `agent` in `mode` with its narrowing that preparing the
+/// added workspace queues, prompted with `issue` or else the plan's own prompt, with its
 /// arguments and fork, at once regardless of the limits when `now`. The
 /// daemon starts it outside this process, so it gets the workspace's own
 /// scope.
 fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
-    mode: &Option<String>,
+    (mode, permissions): (
+        &Option<String>,
+        crate::config::permissions::PermissionsConfig,
+    ),
     (prompt, args, fork): (&Option<String>, &[OsString], &Option<String>),
     now: bool,
 ) -> Result<Option<Box<QueuedLaunch>>> {
@@ -206,6 +211,7 @@ fn queued_launch(
         agent: chosen.clone().into(),
         prompt: prompt.clone(),
         mode: mode.clone(),
+        permissions,
         model: agent.model.clone(),
         args: super::plan::launch_args(args.to_vec())?,
         fork: fork.clone(),

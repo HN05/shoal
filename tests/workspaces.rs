@@ -19669,6 +19669,53 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert_eq!(fixture.ok(&["work"]), before);
 }
 
+/// `--permission` narrows the started agent's mode, which the workspace
+/// records with the mode and its status shows; a value wider than the
+/// mode's is refused before anything is created.
+#[test]
+fn start_narrows_the_agents_permissions_and_records_them() {
+    let fixture = Fixture::with_config(Some(
+        "agent.default = 'helper'\n[agents.helper]\ncommand = ['fake-agent']\n",
+    ));
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    install_test_script_with_mode(bin.join("fake-agent"), "#!/bin/sh\nexit 7\n", 0o700);
+    let repo = fixture.repo.to_str().unwrap();
+    let start = [
+        "--json", "start", repo, "narrowed", "--here", "--agent", "helper",
+    ];
+    let output = fixture.run(&[&start[..], &["--permission", "push=propose"]].concat());
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let status = fixture.ok(&["work", "status", "narrowed"]);
+    assert_eq!(
+        status["workspace"]["permissions"]["push"], "propose",
+        "{status}"
+    );
+    let push = &status["permissions"]["push"];
+    assert_eq!(
+        (push["value"].as_str(), push["from"].as_str()),
+        (Some("propose"), Some("narrowing"))
+    );
+    assert_eq!(status["permissions"]["merge"]["from"], "mode", "{status}");
+
+    let before = fixture.ok(&["work"]);
+    let wider = ["start", repo, "wider", "--here", "--agent", "helper"];
+    let wider = [&wider[..], &["--permission", "merge=direct"]].concat();
+    let output = fixture.run(&wider);
+    assert!(!output.status.success(), "{output:?}");
+    let unknown = [
+        "start",
+        repo,
+        "unknown",
+        "--here",
+        "--permission",
+        "pushes=deny",
+    ];
+    let output = fixture.run(&unknown);
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["work"]), before);
+}
+
 /// A repository's own mode decides the kind of space, its rules and the
 /// instructions after the subject; `--worktree` starts a chat mode in a
 /// workspace; the workspace records the mode of its latest agent.

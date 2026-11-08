@@ -2,7 +2,7 @@
 //! at once, after approval, or not at all. Each value is ordered from the
 //! narrowest to the widest, `deny` < `propose` < `direct`, so a space below
 //! another never gets more than its parent.
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -57,20 +57,26 @@ states!(
 
 /// What a scoped agent may do at once, after approval, or not at all, as
 /// one layer writes it; [`resolve`] fills what no layer sets.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Self)]
 pub struct PermissionsConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub issue_open: Option<Opening>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pr_open: Option<Opening>,
     /// Opening an issue in another repository than the space's.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub issue_other_repositories: Option<OtherRepositories>,
     /// Merging a branch with `shoal merge`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub merge: Option<Opening>,
     /// Pushing to the workspace repository's remotes, with `shoal pr open`
     /// or plain `git push`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub push: Option<Pushes>,
     /// Forge API requests through `shoal forge api` that are not reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub api_writes: Option<ApiWrites>,
 }
 
@@ -92,6 +98,94 @@ impl PermissionsConfig {
         merge: Some(Opening::Direct),
         ..Self::KEY_DEFAULTS
     };
+
+    /// The narrowing `--permission KEY=VALUE` gives with each of
+    /// `assignments`, a later one of a key replacing an earlier one,
+    /// refusing an unknown key or value.
+    pub fn assigned(assignments: &[String]) -> Result<Self> {
+        let mut narrowing = Self::default();
+        for assignment in assignments {
+            let (key, value) = (assignment.split_once('='))
+                .with_context(|| format!("--permission {assignment}: give KEY=VALUE"))?;
+            let one: Self = toml::from_str(&format!("{} = {:?}", key.trim(), value.trim()))
+                .with_context(|| format!("--permission {assignment}"))?;
+            narrowing.merge(one, Merge::SameLevel);
+        }
+        Ok(narrowing)
+    }
+
+    /// Whether the narrowing sets no key.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The value this narrowing sets for `key`, as config names it.
+    pub fn get(&self, key: PermissionKey) -> Option<&'static str> {
+        match key {
+            PermissionKey::IssueOpen => self.issue_open.map(Opening::as_str),
+            PermissionKey::PrOpen => self.pr_open.map(Opening::as_str),
+            PermissionKey::IssueOtherRepositories => {
+                (self.issue_other_repositories).map(OtherRepositories::as_str)
+            }
+            PermissionKey::Merge => self.merge.map(Opening::as_str),
+            PermissionKey::Push => self.push.map(Pushes::as_str),
+            PermissionKey::ApiWrites => self.api_writes.map(ApiWrites::as_str),
+        }
+    }
+
+    /// The `--permission KEY=VALUE` assignments that give this narrowing.
+    pub fn assignments(&self) -> Vec<String> {
+        (PermissionKey::ALL.iter())
+            .filter_map(|&key| Some(format!("{key}={}", self.get(key)?)))
+            .collect()
+    }
+
+    /// Refuse a key this narrowing sets wider than `mode`, the permissions
+    /// of the agent's mode, which a narrowing never widens.
+    pub fn ensure_within(&self, mode: &Permissions) -> Result<()> {
+        fn within<T: Ord + Copy + std::fmt::Display>(
+            key: PermissionKey,
+            value: Option<T>,
+            mode: Permission<T>,
+        ) -> Result<()> {
+            match value {
+                Some(value) if value > mode.value => bail!(
+                    "--permission {key}={value} is wider than \"{}\", the {key} permission of the agent's mode",
+                    mode.value
+                ),
+                _ => Ok(()),
+            }
+        }
+        within(PermissionKey::IssueOpen, self.issue_open, mode.issue_open)?;
+        within(PermissionKey::PrOpen, self.pr_open, mode.pr_open)?;
+        within(
+            PermissionKey::IssueOtherRepositories,
+            self.issue_other_repositories,
+            mode.issue_other_repositories,
+        )?;
+        within(PermissionKey::Merge, self.merge, mode.merge)?;
+        within(PermissionKey::Push, self.push, mode.push)?;
+        within(PermissionKey::ApiWrites, self.api_writes, mode.api_writes)
+    }
+
+    /// This narrowing with each key it sets lowered to `limit`, the
+    /// effective permissions of the space above.
+    pub fn lowered(self, limit: &Permissions) -> Self {
+        fn lower<T: Ord + Copy>(value: Option<T>, limit: Permission<T>) -> Option<T> {
+            value.map(|value| value.min(limit.value))
+        }
+        Self {
+            issue_open: lower(self.issue_open, limit.issue_open),
+            pr_open: lower(self.pr_open, limit.pr_open),
+            issue_other_repositories: lower(
+                self.issue_other_repositories,
+                limit.issue_other_repositories,
+            ),
+            merge: lower(self.merge, limit.merge),
+            push: lower(self.push, limit.push),
+            api_writes: lower(self.api_writes, limit.api_writes),
+        }
+    }
 }
 
 states!(
@@ -111,6 +205,9 @@ states!(
     PermissionSource {
         /// Its agent's mode, with `[permissions]` and the key's default.
         Mode => "mode",
+        /// The `--permission` its agent was started, resumed or restarted
+        /// with.
+        Narrowing => "narrowing",
         /// The space above it, whose permission is narrower.
         Parent => "parent",
     }
@@ -128,6 +225,18 @@ impl<T: Ord + Copy> Permission<T> {
         Self {
             value: value.expect("every key has a default"),
             from: PermissionSource::Mode,
+        }
+    }
+
+    /// This permission narrowed to `value`, where a narrowing sets one
+    /// narrower.
+    fn narrowed(self, value: Option<T>) -> Self {
+        match value {
+            Some(value) if value < self.value => Self {
+                value,
+                from: PermissionSource::Narrowing,
+            },
+            _ => self,
         }
     }
 
@@ -155,6 +264,7 @@ impl<T: std::fmt::Display> Permission<T> {
 fn cite(key: &str, value: &dyn std::fmt::Display, from: PermissionSource) -> String {
     let from = match from {
         PermissionSource::Mode => "its agent's mode",
+        PermissionSource::Narrowing => "the --permission its agent started with",
         PermissionSource::Parent => "the space above it",
     };
     format!("the space's {key} permission is \"{value}\", from {from}")
@@ -172,6 +282,19 @@ pub struct Permissions {
 }
 
 impl Permissions {
+    /// These permissions with `narrowing`'s keys where they are narrower.
+    pub fn narrowed(self, narrowing: &PermissionsConfig) -> Self {
+        Self {
+            issue_open: self.issue_open.narrowed(narrowing.issue_open),
+            pr_open: self.pr_open.narrowed(narrowing.pr_open),
+            issue_other_repositories: (self.issue_other_repositories)
+                .narrowed(narrowing.issue_other_repositories),
+            merge: self.merge.narrowed(narrowing.merge),
+            push: self.push.narrowed(narrowing.push),
+            api_writes: self.api_writes.narrowed(narrowing.api_writes),
+        }
+    }
+
     /// These permissions of a space below one with `parent`, none wider
     /// than the parent's.
     pub fn below(self, parent: &Self) -> Self {

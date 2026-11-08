@@ -367,6 +367,16 @@ pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
 }
 
 /// Parse an optional JSON text column, reporting failures as SQL conversions.
+/// The column value of a `--permission` narrowing: its JSON, or none for
+/// one that narrows nothing.
+pub(crate) fn narrowing_column(
+    narrowing: &crate::config::permissions::PermissionsConfig,
+) -> Result<Option<String>> {
+    Ok((!narrowing.is_empty())
+        .then(|| serde_json::to_string(narrowing))
+        .transpose()?)
+}
+
 pub(crate) fn json_column<T: DeserializeOwned>(
     row: &Row<'_>,
     name: &str,
@@ -410,7 +420,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,mode,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
+pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,mode,permissions,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -437,6 +447,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         name: row.get("name")?,
         title: row.get("title")?,
         mode: row.get("mode")?,
+        permissions: json_column(row, "permissions")?.unwrap_or_default(),
         path: PathBuf::from(row.get::<_, String>("path")?),
         branch: row.get("branch")?,
         at: starting_commit(row)?,
@@ -544,7 +555,7 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
 }
 
 const EXECUTION_COLUMNS: &str =
-    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort,mode";
+    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,permissions";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -561,6 +572,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
             effort: row.get("effort")?,
         },
         mode: row.get("mode")?,
+        permissions: json_column(row, "permissions")?.unwrap_or_default(),
         stopped: None,
     })
 }

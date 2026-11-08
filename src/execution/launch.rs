@@ -467,6 +467,7 @@ async fn open_execution(
         agent: agent.map(|agent| agent.name.clone()),
         model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
         mode: agent.map(|agent| agent.mode.clone()),
+        permissions: agent.map(|agent| agent.permissions).unwrap_or_default(),
         recover,
         reattach: mode.reattaches(),
         demo: match mode {
@@ -519,6 +520,7 @@ fn allow_reattach(
             agent: agent.map(|agent| agent.name.clone()),
             model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
             mode: agent.map(|agent| agent.mode.clone()),
+            permissions: agent.map(|agent| agent.permissions).unwrap_or_default(),
             recover,
             running_ms: 0,
             awaiting_restore: None,
@@ -555,7 +557,7 @@ async fn prepare_agent_launch(
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
     let push_gate = match agent {
-        Some(agent) => prepare_push_gate(paths, workspace, &agent.mode).await?,
+        Some(agent) => prepare_push_gate(paths, workspace, agent).await?,
         None => Default::default(),
     };
     let mut git = crate::agent_git::Launch::prepare(
@@ -582,17 +584,19 @@ async fn prepare_agent_launch(
     }))
 }
 
-/// The helper that holds back the pushes of an agent starting in `mode` to
-/// the remotes of `workspace`'s repository for approval, or refuses them,
-/// as its `push` permission at launch says; none where it pushes directly.
+/// The helper that holds back the pushes of `agent`, starting in its mode
+/// and narrowing, to the remotes of `workspace`'s repository for approval,
+/// or refuses them, as its `push` permission at launch says; none where it
+/// pushes directly.
 async fn prepare_push_gate(
     paths: &Paths,
     workspace: &str,
-    mode: &str,
+    agent: &crate::execution::TrackedAgent,
 ) -> Result<crate::push_gate::Launch> {
     let selector = SpaceSelector::parse(workspace);
+    let (mode, narrowing) = (agent.mode.clone(), agent.permissions);
     let permissions =
-        crate::client::workspaces::launch_permissions(paths, selector, mode.to_owned()).await?;
+        crate::client::workspaces::launch_permissions(paths, selector, mode, narrowing).await?;
     if permissions.push.value == Pushes::Direct {
         return Ok(Default::default());
     }

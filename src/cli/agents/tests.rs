@@ -40,6 +40,7 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
 
 fn chat(mode: &str, repository_id: Option<&str>, tmp_dir: Option<std::path::PathBuf>) -> Chat {
     Chat {
+        permissions: Default::default(),
         mode: mode.into(),
         number: 1,
         id: "chat-id".into(),

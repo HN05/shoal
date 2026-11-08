@@ -84,6 +84,13 @@ pub struct Workspace {
     /// The mode its latest agent started in; none before it had one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// The `--permission` narrowing its latest agent started with, which narrows the
+    /// permissions of its mode.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
     pub path: PathBuf,
     /// Its branch; `None` for a workspace at a commit, which `at` describes.
     pub branch: Option<String>,
@@ -618,6 +625,7 @@ impl Workspace {
         state: WorkspaceState,
     ) -> Self {
         Self {
+            permissions: Default::default(),
             id: uuid::Uuid::new_v4().to_string(),
             number: 0,
             repository_id,
@@ -708,6 +716,13 @@ pub struct Execution {
     /// The mode its agent started in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// The `--permission` narrowing its agent started with, which narrows the
+    /// permissions of its mode.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
     /// Why Shoal stopped its agent, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped: Option<crate::protocol::Protection>,
@@ -1474,6 +1489,13 @@ pub struct Chat {
     /// The mode its agent started in, which its restores keep.
     #[serde(default = "chat_mode")]
     pub mode: String,
+    /// The `--permission` narrowing its agent started with, which narrows the
+    /// permissions of its mode.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
     /// The workspace whose worktree it runs in; none for a chat in the
     /// registered checkout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1811,6 +1833,13 @@ pub struct QueueEntry {
     /// its agent's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// The `--permission` narrowing a launch's agent started with, which narrows the
+    /// permissions of its mode.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
     pub issue_title: Option<String>,
     pub state: QueueState,
     /// The 1-based place among waiting entries; `None` once starting.
@@ -1910,6 +1939,13 @@ pub struct QueueRequest {
     /// The mode the agent starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// The `--permission` narrowing the agent started with, which narrows the
+    /// permissions of its mode.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
     pub issue_title: Option<String>,
     pub plan: String,
     /// Terminal multiplexer variables the start needs to reach the same window,

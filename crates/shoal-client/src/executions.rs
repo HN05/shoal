@@ -123,6 +123,13 @@ pub struct Record {
     /// The mode the agent started in, which its restore keeps.
     #[serde(default = "default_mode")]
     pub mode: String,
+    /// The `--permission` narrowing it started with, which its restore
+    /// keeps.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
 }
 
 /// How an agent of a copied workspace starts: from a fork of the session
@@ -205,6 +212,13 @@ pub struct LastSession {
     /// The mode the agent started in, which its restore keeps.
     #[serde(default = "default_mode")]
     pub mode: String,
+    /// The `--permission` narrowing it started with, which its restore
+    /// keeps.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub permissions: crate::config::permissions::PermissionsConfig,
 }
 
 /// The key of a last session saved without its execution.

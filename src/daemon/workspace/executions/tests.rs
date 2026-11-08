@@ -605,6 +605,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         .unwrap();
     assert!(manager.caller(&token).await.unwrap().is_none());
     let request = Reattach {
+        permissions: Default::default(),
         mode: None,
         model: Default::default(),
         execution: id.clone(),
@@ -680,6 +681,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
         .unwrap();
     let id = started.plan.id.clone();
     let request = Reattach {
+        permissions: Default::default(),
         mode: None,
         model: Default::default(),
         execution: id.clone(),
@@ -732,6 +734,7 @@ async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
         .unwrap();
     let id = started.plan.id.clone();
     let request = Reattach {
+        permissions: Default::default(),
         mode: None,
         model: Default::default(),
         execution: id.clone(),
@@ -787,6 +790,7 @@ async fn setup_executions_cannot_reattach() {
     manager.detach_execution(&started.plan.id).await;
     manager
         .reattach_execution(&Reattach {
+            permissions: Default::default(),
             mode: None,
             model: Default::default(),
             execution: started.plan.id.clone(),

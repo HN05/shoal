@@ -52,6 +52,8 @@ pub(in crate::cli::commands) struct AddOptions {
     pub model: crate::agent::ModelChoice,
     /// The mode the agent starts in; the default mode when `None`.
     pub mode: Option<ModeChoice>,
+    /// The `--permission` narrowing of the mode's permissions.
+    pub permissions: crate::config::permissions::PermissionsConfig,
     /// The agent's subject when no issue gives it one.
     pub prompt: Option<String>,
     /// The space the workspace goes below, instead of the chat this runs in
@@ -74,6 +76,33 @@ impl AddOptions {
             || self.focus
             || (self.after.is_empty() && waits_for_user && focus_setting != Some(false))
     }
+}
+
+/// `options`' narrowing of `mode`, the default mode without one, as the
+/// daemon records it below the space the workspace goes below: refused
+/// where wider than the mode's permissions and lowered to the parent's.
+async fn checked_narrowing(
+    ctx: &Context,
+    target: &target::AddTarget,
+    options: &AddOptions,
+    mode: Option<&str>,
+) -> Result<crate::config::permissions::PermissionsConfig> {
+    if options.permissions.is_empty() {
+        return Ok(options.permissions);
+    }
+    let repository = target.repository(ctx).await?.id.clone();
+    let parent = (options.parent.clone().or_else(crate::env::in_chat))
+        .map(|parent| crate::client::space_names::SpaceSelector::parse(&parent));
+    let mode = mode.unwrap_or(crate::config::modes::DEFAULT).to_owned();
+    crate::client::workspaces::check_narrowing(
+        &ctx.paths,
+        Some(repository),
+        parent,
+        mode,
+        false,
+        options.permissions,
+    )
+    .await
 }
 
 pub(in crate::cli::commands) async fn add(
@@ -110,8 +139,9 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
+    let narrowing = checked_narrowing(ctx, &target, &options, mode.as_deref()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
-    start_as(&mut plan, &options, mode);
+    start_as(&mut plan, &options, mode, narrowing);
     ensure!(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"

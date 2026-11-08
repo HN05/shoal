@@ -156,23 +156,32 @@ pub(super) async fn resolve_add_agent(
     Ok(ResolvedAddAgent { agent, model })
 }
 
-/// Start `resolved`'s agent in `workspace` told `opening`, from a fork of
-/// session `fork` when given, else open a shell there.
+/// What a launch in an added workspace tells its agent: the `opening`, in
+/// its mode with `permissions` narrowing it, the agent's `args`, and the
+/// session it starts from a fork of.
+pub(super) struct Launch {
+    pub opening: agents::Opening,
+    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub args: Vec<OsString>,
+    pub fork: Option<String>,
+}
+
+/// Start `resolved`'s agent in `workspace` as `launch` says, else open a
+/// shell there.
 pub(super) async fn launch(
     ctx: &Context,
     resolved: ResolvedAddAgent,
     workspace: Workspace,
-    opening: agents::Opening,
-    args: Vec<OsString>,
-    fork: Option<String>,
+    launch: Launch,
 ) -> Result<i32> {
     let Some(agent) = resolved.agent else {
         return terminal::open_shell(ctx, &workspace.path).await;
     };
     let options = agents::LaunchOptions {
-        fork,
+        fork: launch.fork,
         model: agents::ModelRequest::Override(resolved.model),
+        permissions: launch.permissions,
         ..Default::default()
     };
-    agents::launch_agent(ctx, agent, workspace, opening, args, options).await
+    agents::launch_agent(ctx, agent, workspace, launch.opening, launch.args, options).await
 }

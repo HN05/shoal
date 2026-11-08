@@ -108,3 +108,39 @@ fn only_direct_permissions_are_held_for_a_decision() {
     assert!(worker.withheld(&[Merge, Push]).is_some());
     assert!(worker.withheld(&[ApiWrites]).is_some());
 }
+
+#[test]
+fn a_narrowing_takes_known_keys_and_values_and_round_trips() {
+    let assignments = ["push=deny".to_owned(), "merge = propose".to_owned()];
+    let narrowing = PermissionsConfig::assigned(&assignments).unwrap();
+    assert_eq!(narrowing.push, Some(Pushes::Deny));
+    assert_eq!(narrowing.merge, Some(Opening::Propose));
+    assert_eq!(
+        PermissionsConfig::assigned(&narrowing.assignments()).unwrap(),
+        narrowing
+    );
+    // A later assignment of a key replaces an earlier one.
+    let again = ["push=deny".to_owned(), "push=propose".to_owned()];
+    let replaced = PermissionsConfig::assigned(&again).unwrap();
+    assert_eq!(replaced.push, Some(Pushes::Propose));
+    for refused in ["push", "pushes=deny", "push=never", "issue_open=deny"] {
+        assert!(PermissionsConfig::assigned(&[refused.to_owned()]).is_err());
+    }
+}
+
+#[test]
+fn a_narrowing_never_widens_the_mode_or_the_parent() {
+    let settings = settings("", "");
+    let worker = resolve(&settings, mode("worker")).unwrap();
+    let wider = PermissionsConfig::assigned(&["merge=direct".to_owned()]).unwrap();
+    assert!(wider.ensure_within(&worker).is_err());
+    let narrower = PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap();
+    assert!(narrower.ensure_within(&worker).is_ok());
+    let narrowed = worker.narrowed(&narrower);
+    assert_eq!(narrowed.push.value, Pushes::Propose);
+    assert_eq!(narrowed.push.from, PermissionSource::Narrowing);
+    assert_eq!(narrowed.merge, worker.merge);
+    // A value above the parent's is lowered to it.
+    let parent = worker.narrowed(&PermissionsConfig::assigned(&["push=deny".to_owned()]).unwrap());
+    assert_eq!(narrower.lowered(&parent).push, Some(Pushes::Deny));
+}

@@ -21,6 +21,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
     };
     let args = [OsString::from("--search")];
     let beside = Beside {
+        permissions: &Default::default(),
         topic: &topic,
         name: &"named".into(),
         agent: &agent,
@@ -92,6 +93,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
     assert_eq!(topic.name, "worker-chat");
     let agent: Agent = "claude".parse().unwrap();
     let beside = Beside {
+        permissions: &Default::default(),
         topic: &topic,
         name: &"worker-chat".into(),
         agent: &agent,
@@ -224,6 +226,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let agent: Agent = "claude".parse().unwrap();
     let topic = Topic::imported(&repo, "plan", &links);
     let beside = Beside {
+        permissions: &Default::default(),
         topic: &topic,
         name: &"shoal-plan-7".into(),
         agent: &agent,

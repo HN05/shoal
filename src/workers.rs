@@ -157,6 +157,20 @@ fn model_args(model: &ModelChoice) -> Vec<OsString> {
         .collect()
 }
 
+/// The worker option that carries `agent`'s `--permission` narrowing, as
+/// JSON; none without one.
+fn narrowing_args(agent: &crate::execution::TrackedAgent) -> Vec<OsString> {
+    match agent.permissions.is_empty() {
+        true => Vec::new(),
+        false => vec![
+            "--permissions".into(),
+            serde_json::to_string(&agent.permissions)
+                .expect("a narrowing serializes")
+                .into(),
+        ],
+    }
+}
+
 /// This executable for a command a terminal or session runs as typed,
 /// naming the state directory even when it is the default, so a
 /// `SHOAL_STATE_DIR` in the place's environment cannot redirect it. It shows
@@ -238,6 +252,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 args.extend(["--agent".into(), agent.name.as_str().into()]);
                 args.extend(model_args(&agent.model));
                 args.extend(["--mode".into(), agent.mode.as_str().into()]);
+                args.extend(narrowing_args(agent));
             }
             args.push("--".into());
             args.extend_from_slice(command);
@@ -262,6 +277,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             args.extend([SESSION.into(), workspace.into(), agent.name.as_str().into()]);
             args.extend(model_args(&agent.model));
             args.extend(["--mode".into(), agent.mode.as_str().into()]);
+            args.extend(narrowing_args(agent));
             args.extend(["--host".into(), host.as_str().into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
@@ -339,6 +355,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             ]);
             args.extend(model_args(&agent.model));
             args.extend(["--mode".into(), agent.mode.as_str().into()]);
+            args.extend(narrowing_args(agent));
             args.extend(["--connection".into(), connection.to_string().into()]);
             if let Some(record) = record {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
