@@ -463,15 +463,19 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   callers before fixing them or rejecting them with evidence in the thread.
   Agents cannot merge PRs; leave merging to the user instead of asking for
   permission to merge.
-- Every push after the first review needs a new one: a push does not request
-  it. After each push that fixes findings, resolves merge conflicts, rebases
-  or adds commits, run `shoal pr edit --add-label review/default`, wait for
-  that review, and handle its findings. Run `shoal ready` only once the latest
-  review covers the current head and comes back clean; green CI alone is not
-  enough, nor is replying to or resolving every thread. A review covers the
-  head whose SHA is its `commit_id` in
-  `shoal forge api 'repos/{owner}/{repo}/pulls/<number>/reviews'`; check that
-  it matches `git rev-parse HEAD` before `shoal ready`.
+- Every push after the first review that changes what the PR does needs a new
+  one: a push does not request it. After each push that fixes findings, adds
+  commits or resolves merge conflicts by changing the PR's own code, run
+  `shoal pr edit --add-label review/default`, wait for that review, and handle
+  its findings. A rebase that only replays the PR's changes onto a newer base
+  needs none: `git range-diff origin/main <reviewed> HEAD` shows its commits
+  unchanged, or changed only in context lines or in conflicts resolved by
+  keeping both sides. Run `shoal ready` only once the latest review covers the
+  current head and comes back clean; green CI alone is not enough, nor is
+  replying to or resolving every thread. A review covers the head whose SHA is
+  its `commit_id` in
+  `shoal forge api 'repos/{owner}/{repo}/pulls/<number>/reviews'`, and every
+  head that only rebases it; check that before `shoal ready`.
 
 ## Shoal feedback
 
