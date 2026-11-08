@@ -109,8 +109,10 @@ class Sandbox:
         return result
 
     def clear(self):
-        """Remove the last run's sandbox, stopping a daemon an interrupted run left."""
-        if (self.bin_dir / "shoal").exists():
+        """Remove the last run's sandbox, stopping a daemon an interrupted run left.
+        No daemon runs once its outside directory is gone, as /tmp is at reboot,
+        and the stop would run from the home inside it."""
+        if (self.bin_dir / "shoal").exists() and outside_directory(self.path).exists():
             self.run(["daemon", "stop"], check=False)
         remove(self.path)
 
