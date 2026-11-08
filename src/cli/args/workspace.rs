@@ -126,6 +126,25 @@ pub enum WorkCommand {
         #[arg(long, conflicts_with = "space")]
         request: bool,
     },
+    /// Show a space's log: its creation, agent, work, issues and PRs,
+    /// questions, approvals and alerts, and the spaces below it.
+    ///
+    /// Without a space, shows the log of the space this runs in, else
+    /// offers a picker. A removed space is named by its last name while its
+    /// log lasts. Entries print oldest first, by local time.
+    Log {
+        space: Option<SpaceSelector>,
+        /// Show every event Shoal recorded for the space, such as agent
+        /// turn states, forge comments and checks, demos and attached files.
+        #[arg(short = 'A', long)]
+        all: bool,
+        /// Show the newest this many entries.
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=1000))]
+        limit: u32,
+        /// Keep printing new entries as Shoal records them.
+        #[arg(long)]
+        follow: bool,
+    },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.
     Checkpoint {
         workspace: Option<SpaceSelector>,

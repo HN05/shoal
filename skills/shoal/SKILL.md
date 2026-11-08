@@ -137,13 +137,17 @@ coordinator may deny one with `--reason` or pass it up.
 shoal work            # Spaces, children below their parent; --chats for chats
 shoal inbox           # Questions, approvals, waiting or failed spaces, ready marks
 shoal work status fix-login
+shoal work log fix-login   # Its log; --all for every event, --follow
 shoal alerts
 ```
 
 `work status` names a workspace's base, parent and children, its watched PRs in
 `prs` with state, merge conflicts, CI results, review state and lookup errors,
 and in `cleanup_reason` why cleanup keeps it. `work` and `work status` show the
-`agent_state` agents' hooks report (`working`, `waiting`, `idle`).
+`agent_state` agents' hooks report (`working`, `waiting`, `idle`). `work log`
+lists a space's creation, agent starts and exits, links, PR changes, ready
+marks, completion, questions, approvals, alerts and child spaces, oldest
+first; a removed space is named by its last name.
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
 scoped callers cannot read them.

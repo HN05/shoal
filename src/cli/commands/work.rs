@@ -6,6 +6,7 @@ use crate::client::space_names::SpaceSelector;
 
 use super::{restore, workspaces};
 
+mod log;
 mod rename;
 
 pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
@@ -33,6 +34,12 @@ pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
             )
             .await
         }
+        WorkCommand::Log {
+            space,
+            all,
+            limit,
+            follow,
+        } => log::run(ctx, space, all, limit, follow).await,
         WorkCommand::Checkpoint { workspace, name } => {
             restore::checkpoint(ctx, workspace, name).await
         }

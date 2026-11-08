@@ -4897,6 +4897,45 @@ idle_minutes = 10
 Reload the daemon after changing this globally; the same table in a
 repository config applies to that repository's workspaces on the next sweep.
 
+### Space log
+
+```sh
+shoal work log                 # This space, or a picker outside one
+shoal work log fix-login       # A named space, including a removed one
+shoal work log --all           # Every event Shoal recorded for the space
+shoal work log --limit 20      # The newest 20 entries (default 50)
+shoal work log --follow        # Keep printing new entries
+shoal work log --json          # One JSON line per entry
+```
+
+`shoal work log [space]` shows the important events in a workspace's or
+chat's life, oldest first, each with its local time, a label and its
+details, under a heading for each date:
+
+- the space's creation, with its base and parent, its renames, its removal
+  with the cause and a workspace's restore;
+- its agent's starts, stops and exits, with the exit code;
+- its ready marks and their withdrawal, and `done` and its withdrawal;
+- the issues, PRs and CI runs it links and unlinks, the changes Shoal made to
+  them, and their closing, merging and reopening on the forge;
+- the questions it asked and their answers, the approvals it requested and
+  their decisions, and the alerts it sent;
+- the spaces created and removed below it.
+
+`--all` adds every other event of the space, dimmed: setup and cleanup
+results, branch, base and parent changes, its agent's turn states, other
+forge activity such as comments and checks, demos, simulator leases and
+attached files. With `--json` each line is the entry as
+[`shoal internal events`](#workspace-events) prints it.
+
+A removed space's log stays for `cleanup.restore.retention_days` after its
+removal and is named by the space's last name, as `shoal files` names it; a
+restored workspace's log goes on from the removed one's. A space keeps its
+newest 500 agent turn states and forge activity other than an item's
+closing, merging and reopening, so a busy space cannot push out another's
+log. A workspace process reads the logs of its own space and the spaces
+below it, removed ones included.
+
 ### Workspace events
 
 ```sh
