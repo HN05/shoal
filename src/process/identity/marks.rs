@@ -1,9 +1,6 @@
 //! What a process's own environment says about its owner: the markers of
 //! Shoal's identity it carries, read once the environment has settled.
-use super::{
-    Identity, Image, Lineage, REFUSED_WHILE_LOADING, alive, elevated_lineage, environment,
-    hides_environment, image, lineage,
-};
+use super::{Identity, Image, Lineage, alive, lineage, platform};
 use crate::protocol::timing;
 use anyhow::Result;
 use std::time::Duration;
@@ -103,7 +100,7 @@ pub fn started_with(identity: &Identity, variable: &str) -> bool {
 
 /// Read `pid`'s environment for Shoal's markers, unless it has exited.
 pub(super) fn observe(pid: u32, deadline: std::time::Instant) -> Result<Option<Observed>> {
-    observe_with(pid, deadline, hides_environment)
+    observe_with(pid, deadline, platform::hides_environment)
 }
 
 /// `observe`, telling hidden environments with `hides`.
@@ -140,7 +137,7 @@ pub(super) fn observe_with(
 
 /// Observe `pid`, a setuid program this user started, unless it has exited.
 pub(super) fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
-    Ok(elevated_lineage(pid)?.map(|lineage| Observed {
+    Ok(platform::elevated_lineage(pid)?.map(|lineage| Observed {
         lineage,
         evidence: Evidence::Elevated,
     }))
@@ -156,7 +153,7 @@ pub(super) enum Visibility {
 /// after an exiting process releases its memory; neither is evidence about
 /// ownership. Wait for loading images, then confirm a settled empty read.
 pub(super) fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visibility> {
-    visibility_with(identity, deadline, environment)
+    visibility_with(identity, deadline, platform::environment)
 }
 
 /// `visibility`, reading environments with `environment`.
@@ -176,9 +173,9 @@ pub(super) fn visibility_with(
             }
             // Without CAP_SYS_PTRACE, Linux refuses an exiting process's
             // environment. A refusal also hides env_end, so never wait on it.
-            Err(_) => match image(identity.pid)? {
+            Err(_) => match platform::image(identity.pid)? {
                 Image::Ended => return Ok(Visibility::Gone),
-                _ if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
+                _ if platform::REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(1));
                     continue;
                 }
@@ -186,7 +183,7 @@ pub(super) fn visibility_with(
             },
             Ok(_) => {}
         }
-        match image(identity.pid)? {
+        match platform::image(identity.pid)? {
             Image::Ended => return Ok(Visibility::Gone),
             Image::Loading if std::time::Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(1));
@@ -201,7 +198,10 @@ pub(super) fn visibility_with(
                 }
                 match read {
                     Ok(environment) => return Ok(Visibility::Environment(environment)),
-                    Err(_) if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
+                    Err(_)
+                        if platform::REFUSED_WHILE_LOADING
+                            && std::time::Instant::now() < deadline =>
+                    {
                         std::thread::sleep(Duration::from_millis(1));
                     }
                     Err(_) => return Ok(Visibility::Unreadable),

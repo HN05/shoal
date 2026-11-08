@@ -90,7 +90,7 @@ async fn surveys_as_a_subreaper() {
     let worktree = space.programs.clone().unwrap();
     let detached = Detached::start(&worktree, &root.path().join("pids")).await;
     assert_eq!(
-        super::super::parent(detached.shell.pid),
+        super::super::platform::parent(detached.shell.pid),
         Some(std::process::id())
     );
 

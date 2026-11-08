@@ -3,7 +3,7 @@
 //! `systemd --user` or a container's init, and to init only when it has none.
 //! `/proc` shows no such flag, so the process orphans one of its own and reads
 //! which process adopted it; agents and the daemon run under the same one.
-use super::{Identity, proc_lineage, signal};
+use super::{super::signal, Identity, proc_lineage};
 use crate::protocol::timing;
 use anyhow::{Context, Result};
 use std::sync::{Mutex, PoisonError};

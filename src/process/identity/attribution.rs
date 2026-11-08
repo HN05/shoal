@@ -4,7 +4,7 @@
 use super::{
     Identity, Lineage, MAX_ANCESTRY, alive, listed,
     marks::{Evidence, Marker, Marks, Observed, observe, observe_elevated},
-    owners, subreaper,
+    owners, platform,
 };
 use crate::{client::space_ids::SpaceId, protocol::timing};
 use anyhow::{Context, Result};
@@ -103,7 +103,7 @@ pub(super) async fn inventory<T: Send + 'static>(
     read: impl FnOnce(&Inventory<'static>) -> Result<T> + Send + 'static,
 ) -> Result<T> {
     let turn = owners::TURN.lock().await;
-    let subreaper = subreaper().await?;
+    let subreaper = platform::subreaper().await?;
     tokio::task::spawn_blocking(move || {
         let _turn = turn;
         let listing = list_processes().context("process inventory failed")?;

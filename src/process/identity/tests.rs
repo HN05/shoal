@@ -2,17 +2,10 @@ use super::attribution::{Attribution, Inventory, list_processes};
 use super::marks::{
     Evidence, Marker, Marks, Observed, Visibility, observe_with, visibility, visibility_with,
 };
+use super::platform::parent;
 use super::*;
+use crate::client::processes::UniqueId;
 use std::collections::HashMap;
-
-#[test]
-fn process_identity_unavailable_includes_inaccessible_processes() {
-    assert!(process_identity_unavailable(Some(libc::ESRCH)));
-    assert!(process_identity_unavailable(Some(libc::ENOENT)));
-    assert!(process_identity_unavailable(Some(libc::EPERM)));
-    assert!(!process_identity_unavailable(Some(libc::EACCES)));
-    assert!(!process_identity_unavailable(None));
-}
 
 #[test]
 fn lineage_follows_unique_ids_through_exited_parents_only_to_the_root() {
@@ -560,31 +553,6 @@ fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Resul
 }
 
 #[cfg(target_os = "macos")]
-#[test]
-fn a_start_time_matches_the_birth_of_the_identity() -> Result<()> {
-    let own = capture(std::process::id())?.context("own identity")?;
-    assert_eq!(start_time(own.pid)?, Some(own.birth));
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-#[test]
-fn launchd_starts_a_process_only_by_a_read_and_matching_version() {
-    let process = |parent_unique, original_parent_version| UniqueIdentifiers {
-        uuid: [0; 16],
-        unique: 2,
-        parent_unique,
-        id_version: 0,
-        original_parent_version,
-        reserved: [0; 2],
-    };
-    assert!(started_by_launchd(&process(1, 7), Some(7)));
-    assert!(!started_by_launchd(&process(1, 7), None));
-    assert!(!started_by_launchd(&process(1, 8), Some(7)));
-    assert!(!started_by_launchd(&process(5, 7), Some(7)));
-}
-
-#[cfg(target_os = "macos")]
 fn executable(pid: u32) -> Option<PathBuf> {
     let mut path = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
     let len =
@@ -609,7 +577,7 @@ async fn an_adopted_job_with_a_hidden_environment_is_unreadable() -> Result<()> 
     let hidden = matches!(
         visibility(&job, deadline)?,
         Visibility::Environment(environment) if environment.is_empty()
-    ) && hides_environment(pid);
+    ) && platform::hides_environment(pid);
     // Its own memory, which no other test's inventory can tell about the job.
     let owners = Box::leak(Box::default());
     let scan = scan_remembering(
@@ -740,16 +708,6 @@ async fn stat_read_after_process_exit_is_not_an_inventory_failure() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn a_hidden_or_exited_process_record_is_unavailable_not_an_error() {
-    for errno in [libc::ENOENT, libc::ESRCH, libc::EACCES, libc::EPERM] {
-        assert!(process_record_unavailable(Some(errno)), "{errno}");
-    }
-    assert!(!process_record_unavailable(Some(libc::EIO)));
-    assert!(!process_record_unavailable(None));
-}
-
-#[cfg(target_os = "linux")]
-#[test]
 fn a_process_named_with_invalid_utf8_is_listed_and_identified() -> Result<()> {
     let dir = tempfile::tempdir()?;
     // The kernel names a process after the file it executed.
@@ -766,43 +724,6 @@ fn a_process_named_with_invalid_utf8_is_listed_and_identified() -> Result<()> {
     assert!(listed?.iter().any(|(pid, _, _)| *pid == child.id()));
     assert!(identity?.is_some());
     Ok(())
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn empty_environment_waits_only_for_a_loading_image() {
-    let stat = |flags: u64, env_end: u64| {
-        let mut fields = vec![0; 50];
-        fields[6] = flags;
-        fields[48] = env_end;
-        let fields: Vec<_> = fields.iter().map(u64::to_string).collect();
-        format!("7 (odd) name) S {}", fields[1..].join(" "))
-    };
-    assert!(matches!(stat_image(&stat(0, 0)).unwrap(), Image::Loading));
-    assert!(matches!(
-        stat_image(&stat(0, 4096)).unwrap(),
-        Image::Settled
-    ));
-    assert!(matches!(stat_image(&stat(0x4, 0)).unwrap(), Image::Ended));
-    assert!(matches!(
-        stat_image(&stat(0x20_0000, 0)).unwrap(),
-        Image::Ended
-    ));
-}
-
-#[cfg(target_os = "macos")]
-#[test]
-fn an_exiting_or_exited_process_has_ended_its_image() {
-    let bsd = |status: u32, flags: u32| {
-        let mut bsd: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
-        bsd.pbi_status = status;
-        bsd.pbi_flags = flags;
-        bsd
-    };
-    // SRUN = 2; PROC_FLAG_LP64 = 0x10; PROC_FLAG_INEXIT = 0x4; SZOMB = 5.
-    assert!(matches!(bsd_image(&bsd(2, 0x10)), Image::Settled));
-    assert!(matches!(bsd_image(&bsd(2, 0x14)), Image::Ended));
-    assert!(matches!(bsd_image(&bsd(5, 0)), Image::Ended));
 }
 
 #[tokio::test]

@@ -5,9 +5,10 @@
 use super::{
     Identity, Lineage, MAX_ANCESTRY,
     attribution::{Inventory, inventory},
-    descends_from_detached, executable,
+    descends_from_detached,
     marks::{Marker, Marks},
-    owners, working_directory,
+    owners,
+    platform::{executable, working_directory},
 };
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;

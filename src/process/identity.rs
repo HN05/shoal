@@ -1,10 +1,10 @@
-//! Same-user process ownership for cooperative recovery. Never expose process
-//! arguments/environment; only the explicit execution marker, ancestor PIDs,
-//! scoped ancestors' state directories and the working directories of a
-//! space's untracked processes leave this module.
+//! Same-user process ownership for cooperative recovery: identifying,
+//! signalling and following processes through the records of the platform
+//! back end it selects. Never expose process arguments/environment; only the
+//! explicit execution marker, ancestor PIDs, scoped ancestors' state
+//! directories and the working directories of a space's untracked processes
+//! leave this module.
 pub(crate) use crate::client::processes::Identity;
-#[cfg(any(target_os = "macos", test))]
-use crate::client::processes::UniqueId;
 use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
 use std::{
@@ -16,8 +16,13 @@ pub use attribution::{OwnedProcess, Unattributed};
 pub use attribution::{
     Scan, scan, scan_chat, scan_oneshot_runs, scan_workspaces, stays_unattributed,
 };
+#[cfg(target_os = "linux")]
+pub(super) use linux::{process_record_unavailable, read_process_stat, stat_fields};
+#[cfg(target_os = "macos")]
+pub(super) use macos::{parent, pid_info};
 use marks::left_execution;
 pub use marks::{owned_by_workspace, started_with};
+pub(crate) use platform::executable;
 
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
@@ -40,37 +45,18 @@ pub(crate) trait IdentityExt {
 impl IdentityExt for Identity {
     fn lineage_root(&self) -> Option<u64> {
         let unique = self.unique.as_ref()?;
-        (Some(&unique.boot) == boot_session()).then_some(unique.id)
+        (Some(&unique.boot) == platform::boot_session()).then_some(unique.id)
     }
 
     fn of_earlier_boot(&self) -> bool {
-        recorded_boot(self)
-            .zip(current_boot())
+        platform::recorded_boot(self)
+            .zip(platform::current_boot())
             .is_some_and(|(then, now)| then != now)
     }
 
     #[cfg(test)]
     fn recorded_in(self, boot: &str) -> Self {
-        #[cfg(target_os = "linux")]
-        let identity = {
-            let start = self.birth.split_once(':').map_or("", |(_, start)| start);
-            Self {
-                birth: format!("{boot}:{start}"),
-                ..self
-            }
-        };
-        #[cfg(target_os = "macos")]
-        let identity = {
-            let id = self.unique.as_ref().map_or(1, |unique| unique.id);
-            Self {
-                unique: Some(UniqueId {
-                    boot: boot.into(),
-                    id,
-                }),
-                ..self
-            }
-        };
-        identity
+        platform::recorded_in(self, boot)
     }
 }
 
@@ -93,7 +79,7 @@ impl Lineage {
     /// Its parent exited and launchd, init or a subreaper adopted it. Linux
     /// cannot tell their own children from adopted ones, so all of them count.
     fn detached(&self) -> bool {
-        self.adopted || (cfg!(target_os = "linux") && self.parent_pid == 1)
+        self.adopted || (platform::INIT_CHILDREN_DETACHED && self.parent_pid == 1)
     }
 
     /// Count it adopted when its parent is `subreaper`, which takes orphans
@@ -120,14 +106,14 @@ pub fn capture(pid: u32) -> Result<Option<Identity>> {
 
 fn lineage(pid: u32) -> Result<Option<Lineage>> {
     ensure!(pid > 1 && pid <= i32::MAX as u32, "invalid process ID");
-    platform_lineage(pid)
+    platform::lineage(pid)
 }
 
 /// This process's ancestors, nearest first, until init or a reparented
 /// (daemonized) process ends the chain.
 pub fn ancestors() -> impl Iterator<Item = u32> {
     std::iter::successors(Some(std::os::unix::process::parent_id()), |pid| {
-        parent(*pid)
+        platform::parent(*pid)
     })
     .take_while(|pid| *pid > 1)
     .take(MAX_ANCESTRY)
@@ -141,7 +127,7 @@ pub fn scoped_ancestor_state_dirs() -> Vec<PathBuf> {
     let token = format!("{}=", crate::env::SCOPE_TOKEN).into_bytes();
     let state = format!("{}=", crate::env::STATE_DIR).into_bytes();
     ancestors()
-        .filter_map(|pid| environment(pid).ok())
+        .filter_map(|pid| platform::environment(pid).ok())
         .filter(|environment| environment.iter().any(|entry| entry.starts_with(&token)))
         .filter_map(|environment| {
             environment
@@ -162,7 +148,7 @@ pub fn parent_of(identity: &Identity) -> Option<u32> {
     if !alive(identity).unwrap_or(false) {
         return None;
     }
-    parent(identity.pid)
+    platform::parent(identity.pid)
 }
 
 /// The process group of the live process `identity` names, `None` once it
@@ -184,7 +170,7 @@ pub fn unreaped(identity: &Identity) -> Result<bool> {
         identity.pid > 1 && identity.pid <= i32::MAX as u32,
         "invalid process ID"
     );
-    platform_unreaped(identity)
+    platform::unreaped(identity)
 }
 
 pub fn signal(identity: &Identity, signal: i32) -> Result<()> {
@@ -240,14 +226,14 @@ struct Listed {
 /// Inventories run often, and spawning `ps` for each cost more than all the
 /// reads it saves.
 fn listed() -> Result<Vec<Listed>> {
-    let mut listed = platform_listed()?;
+    let mut listed = platform::listed()?;
     listed.retain(|process| process.pid > 1 && process.pid != std::process::id());
     Ok(listed)
 }
 /// Whether the live process `identity` works inside `directory`. One whose
 /// working directory cannot be read, or that has exited, does not.
 pub fn works_in(identity: &Identity, directory: &std::path::Path) -> Result<bool> {
-    let Some(working) = working_directory(identity.pid) else {
+    let Some(working) = platform::working_directory(identity.pid) else {
         return Ok(false);
     };
     // The PID may have gone to another process since the read.
@@ -264,609 +250,6 @@ enum Image {
     Ended,
 }
 
-/// macOS refuses the arguments of a process whose exec has not published them
-/// yet, often right after reading them as empty; Linux reads them as empty
-/// instead.
-const REFUSED_WHILE_LOADING: bool = cfg!(target_os = "macos");
-
-/// macOS refuses an exiting process's arguments, and its records soon after;
-/// in between they flag the exit.
-#[cfg(target_os = "macos")]
-fn image(pid: u32) -> Result<Image> {
-    Ok(bsd_info(pid, false)?.map_or(Image::Ended, |info| bsd_image(&info.bsd)))
-}
-
-#[cfg(target_os = "macos")]
-fn bsd_image(bsd: &libc::proc_bsdinfo) -> Image {
-    // PROC_FLAG_INEXIT in sys/proc_info.h.
-    const EXITING: u32 = 0x4;
-    // BSD SZOMB = 5.
-    if bsd.pbi_status == 5 || bsd.pbi_flags & EXITING != 0 {
-        Image::Ended
-    } else {
-        Image::Settled
-    }
-}
-
-/// macOS 27 hides the environments of its own platform binaries, such as
-/// shells, from other processes; one that cannot be checked counts as hidden.
-#[cfg(target_os = "macos")]
-fn hides_environment(pid: u32) -> bool {
-    const CS_PLATFORM_BINARY: u32 = 0x0400_0000;
-    super::code_signing::status_flags(pid as i32)
-        .is_none_or(|flags| flags & CS_PLATFORM_BINARY != 0)
-}
-
-#[cfg(target_os = "linux")]
-fn hides_environment(_pid: u32) -> bool {
-    false
-}
-
-/// The process other than init that adopts this user's orphans.
-#[cfg(target_os = "macos")]
-async fn subreaper() -> Result<Option<u32>> {
-    // Launchd adopts every orphan, and unique IDs tell which it adopted.
-    Ok(None)
-}
-
-/// The process other than init that adopts this user's orphans.
-#[cfg(target_os = "linux")]
-async fn subreaper() -> Result<Option<u32>> {
-    subreaper::current().await
-}
-
-#[cfg(target_os = "linux")]
-fn boot_session() -> Option<&'static String> {
-    None
-}
-
-/// The boot `identity` was recorded in, which starts its birth.
-#[cfg(target_os = "linux")]
-fn recorded_boot(identity: &Identity) -> Option<&str> {
-    identity.birth.split_once(':').map(|(boot, _)| boot)
-}
-
-#[cfg(target_os = "linux")]
-fn current_boot() -> Option<&'static str> {
-    static BOOT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    BOOT.get_or_init(|| {
-        let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
-        Some(boot.trim().to_owned())
-    })
-    .as_deref()
-}
-
-/// The boot `identity` was recorded in, which its unique ID names.
-#[cfg(target_os = "macos")]
-fn recorded_boot(identity: &Identity) -> Option<&str> {
-    identity.unique.as_ref().map(|unique| unique.boot.as_str())
-}
-
-#[cfg(target_os = "macos")]
-fn current_boot() -> Option<&'static str> {
-    boot_session().map(String::as_str)
-}
-
-#[cfg(target_os = "macos")]
-fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
-    let Some(info) = bsd_info(pid, false)? else {
-        return Ok(None);
-    };
-    let bsd = &info.bsd;
-    // BSD SZOMB = 5. Zombies cannot execute or hold resources.
-    if bsd.pbi_uid != unsafe { libc::geteuid() } || bsd.pbi_status == 5 {
-        return Ok(None);
-    }
-    Ok(Some(Lineage {
-        identity: Identity {
-            pid,
-            birth: format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec),
-            unique: boot_session().map(|boot| UniqueId {
-                boot: boot.clone(),
-                id: info.unique.unique,
-            }),
-        },
-        unique: Some(info.unique.unique),
-        parent: Some(info.unique.parent_unique),
-        parent_pid: bsd.pbi_ppid,
-        adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique, launchd_version()),
-    }))
-}
-
-/// The lineage of `pid`, a setuid program this user started, from the
-/// records macOS shows for any process, since it refuses the full identity
-/// of another user's process.
-#[cfg(target_os = "macos")]
-fn elevated_lineage(pid: u32) -> Result<Option<Lineage>> {
-    let read = || pid_info::<UniqueIdentifiers>(pid, PROC_PIDUNIQIDENTIFIERINFO, 0);
-    let Some(unique) = read()? else {
-        return Ok(None);
-    };
-    let (Some(short), Some(birth)) = (
-        pid_info::<libc::proc_bsdshortinfo>(pid, libc::PROC_PIDT_SHORTBSDINFO, 0)?,
-        start_time(pid)?,
-    ) else {
-        return Ok(None);
-    };
-    // The process may have exited between the reads and left its PID to
-    // another; unique IDs are never reused.
-    let same = read()?.is_some_and(|again| again.unique == unique.unique);
-    // BSD SZOMB = 5. Zombies cannot execute or hold resources.
-    if !same || short.pbsi_status == 5 {
-        return Ok(None);
-    }
-    Ok(Some(Lineage {
-        identity: Identity {
-            pid,
-            birth,
-            unique: boot_session().map(|boot| UniqueId {
-                boot: boot.clone(),
-                id: unique.unique,
-            }),
-        },
-        unique: Some(unique.unique),
-        parent: Some(unique.parent_unique),
-        parent_pid: short.pbsi_ppid,
-        adopted: short.pbsi_ppid == 1 && !started_by_launchd(&unique, launchd_version()),
-    }))
-}
-
-/// When `pid` started, in the form its identity records. `p_starttime` opens
-/// `kinfo_proc`, which libc does not bind and macOS shows for any process.
-#[cfg(target_os = "macos")]
-fn start_time(pid: u32) -> Result<Option<String>> {
-    // `sizeof(struct kinfo_proc)` on 64-bit macOS.
-    const KINFO_PROC_SIZE: usize = 648;
-    let mut record = [0_u8; KINFO_PROC_SIZE];
-    let mut len = record.len();
-    let mut mib = [
-        libc::CTL_KERN,
-        libc::KERN_PROC,
-        libc::KERN_PROC_PID,
-        pid as i32,
-    ];
-    let result = unsafe {
-        libc::sysctl(
-            mib.as_mut_ptr(),
-            mib.len() as u32,
-            record.as_mut_ptr().cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    };
-    if result != 0 {
-        return Err(std::io::Error::last_os_error()).context("inspect process start");
-    }
-    // An exited process has no record.
-    if len == 0 {
-        return Ok(None);
-    }
-    ensure!(len == KINFO_PROC_SIZE, "incomplete process record");
-    let seconds = i64::from_ne_bytes(record[..8].try_into()?);
-    let micros = i32::from_ne_bytes(record[8..12].try_into()?);
-    Ok(Some(format!("{seconds}:{micros}")))
-}
-
-/// This boot's session UUID, which names the boot unique process IDs belong to.
-#[cfg(target_os = "macos")]
-fn boot_session() -> Option<&'static String> {
-    static BOOT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    BOOT.get_or_init(|| {
-        let mut bytes = [0_u8; 64];
-        let mut len = bytes.len();
-        let result = unsafe {
-            libc::sysctlbyname(
-                c"kern.bootsessionuuid".as_ptr(),
-                bytes.as_mut_ptr().cast(),
-                &mut len,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if result != 0 {
-            return None;
-        }
-        let session = std::ffi::CStr::from_bytes_until_nul(bytes.get(..len)?).ok()?;
-        Some(session.to_string_lossy().into_owned())
-    })
-    .as_ref()
-}
-
-/// Exec resets an adopted process's parent unique ID to launchd's, but not
-/// the version of the PID it was forked from, so only launchd's version read
-/// and matching shows that launchd started it.
-#[cfg(target_os = "macos")]
-fn started_by_launchd(process: &UniqueIdentifiers, launchd: Option<u32>) -> bool {
-    // Launchd is the first process the kernel starts.
-    const LAUNCHD_UNIQUE: u64 = 1;
-    process.parent_unique == LAUNCHD_UNIQUE && launchd == Some(process.original_parent_version)
-}
-
-/// Launchd's PID version, which it keeps for the whole boot.
-#[cfg(target_os = "macos")]
-fn launchd_version() -> Option<u32> {
-    static LAUNCHD_VERSION: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    *LAUNCHD_VERSION.get_or_init(|| {
-        let launchd = pid_info::<UniqueIdentifiers>(1, PROC_PIDUNIQIDENTIFIERINFO, 0);
-        Some(launchd.ok()??.id_version as u32)
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn platform_unreaped(identity: &Identity) -> Result<bool> {
-    // SZOMB in sys/proc.h.
-    const ZOMBIE: u32 = 5;
-    let Some(info) = bsd_info(identity.pid, true)? else {
-        return Ok(false);
-    };
-    let bsd = &info.bsd;
-    Ok(bsd.pbi_status == ZOMBIE
-        && bsd.pbi_uid == unsafe { libc::geteuid() }
-        && format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec) == identity.birth)
-}
-
-/// `pid`'s working directory, which macOS shows for a platform binary too.
-#[cfg(target_os = "macos")]
-fn working_directory(pid: u32) -> Option<PathBuf> {
-    let info = pid_info::<libc::proc_vnodepathinfo>(pid, libc::PROC_PIDVNODEPATHINFO, 0).ok()??;
-    let path: Vec<u8> = info
-        .pvi_cdir
-        .vip_path
-        .as_flattened()
-        .iter()
-        .map(|byte| *byte as u8)
-        .take_while(|byte| *byte != 0)
-        .collect();
-    (!path.is_empty()).then(|| PathBuf::from(OsStr::from_bytes(&path)))
-}
-
-/// The file `pid` runs, which macOS shows for a platform binary too.
-#[cfg(target_os = "macos")]
-pub(crate) fn executable(pid: u32) -> Option<PathBuf> {
-    use std::os::unix::ffi::OsStringExt as _;
-    let mut path = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-    let len =
-        unsafe { libc::proc_pidpath(pid as i32, path.as_mut_ptr().cast(), path.len() as u32) };
-    let len = usize::try_from(len).ok().filter(|len| *len > 0)?;
-    path.truncate(len);
-    Some(PathBuf::from(std::ffi::OsString::from_vec(path)))
-}
-
-#[cfg(target_os = "macos")]
-pub(super) fn parent(pid: u32) -> Option<u32> {
-    bsd_info(pid, false)
-        .ok()
-        .flatten()
-        .map(|info| info.bsd.pbi_ppid)
-}
-
-/// `proc_bsdinfowithuniqid` and `proc_uniqidentifierinfo` from XNU's private
-/// `proc_info` flavors, which libc does not bind: one read gives the birth and
-/// unique IDs together.
-#[cfg(target_os = "macos")]
-#[repr(C)]
-struct BsdInfo {
-    bsd: libc::proc_bsdinfo,
-    unique: UniqueIdentifiers,
-}
-
-#[cfg(target_os = "macos")]
-#[repr(C)]
-#[allow(dead_code, reason = "unread fields fix the kernel's layout")]
-struct UniqueIdentifiers {
-    uuid: [u8; 16],
-    unique: u64,
-    parent_unique: u64,
-    id_version: i32,
-    original_parent_version: u32,
-    reserved: [u64; 2],
-}
-
-#[cfg(target_os = "macos")]
-const PROC_PIDUNIQIDENTIFIERINFO: i32 = 17;
-#[cfg(target_os = "macos")]
-const PROC_PIDT_BSDINFOWITHUNIQID: i32 = 18;
-
-#[cfg(target_os = "macos")]
-fn bsd_info(pid: u32, include_zombies: bool) -> Result<Option<BsdInfo>> {
-    // XNU only searches its zombie list when this argument is nonzero.
-    pid_info(pid, PROC_PIDT_BSDINFOWITHUNIQID, u64::from(include_zombies))
-}
-
-/// `pid`'s `proc_pidinfo` record of `flavor`, a plain C struct, or `None`
-/// when it has exited or is another user's.
-#[cfg(target_os = "macos")]
-pub(super) fn pid_info<T>(pid: u32, flavor: i32, argument: u64) -> Result<Option<T>> {
-    let mut info = std::mem::MaybeUninit::<T>::zeroed();
-    let size = std::mem::size_of::<T>();
-    let result = unsafe {
-        libc::proc_pidinfo(
-            pid as i32,
-            flavor,
-            argument,
-            info.as_mut_ptr().cast(),
-            size as i32,
-        )
-    };
-    if result == 0 {
-        let error = std::io::Error::last_os_error();
-        if process_identity_unavailable(error.raw_os_error()) {
-            return Ok(None);
-        }
-        return Err(error).context("inspect process identity");
-    }
-    ensure!(result as usize == size, "incomplete process identity");
-    Ok(Some(unsafe { info.assume_init() }))
-}
-
-#[cfg(target_os = "macos")]
-fn platform_listed() -> Result<Vec<Listed>> {
-    // PROC_ALL_PIDS in sys/proc_info.h.
-    const PROC_ALL_PIDS: u32 = 1;
-    let mut listed = Vec::new();
-    for pid in listed_pids(PROC_ALL_PIDS, 0)? {
-        let Some(info) = pid_info::<libc::proc_bsdshortinfo>(pid, libc::PROC_PIDT_SHORTBSDINFO, 0)?
-        else {
-            continue;
-        };
-        // BSD SZOMB = 5. Zombies cannot execute or hold resources.
-        if info.pbsi_status != 5 {
-            listed.push(Listed {
-                pid,
-                uid: info.pbsi_uid,
-                real_uid: info.pbsi_ruid,
-                group: info.pbsi_pgid,
-                parent: info.pbsi_ppid,
-            });
-        }
-    }
-    Ok(listed)
-}
-
-#[cfg(any(target_os = "macos", test))]
-fn process_identity_unavailable(errno: Option<i32>) -> bool {
-    // EPERM means proc_pidinfo could not inspect another user's process. It
-    // cannot be an execution Shoal started, so treat it as a different PID.
-    matches!(errno, Some(libc::ESRCH | libc::ENOENT | libc::EPERM))
-}
-
-#[cfg(target_os = "macos")]
-fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
-    let capacity = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
-    ensure!(
-        (1..=16 * 1024 * 1024).contains(&capacity),
-        "invalid process argument limit"
-    );
-    let mut bytes = vec![0_u8; capacity as usize];
-    let mut len = bytes.len();
-    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as i32];
-    let result = unsafe {
-        libc::sysctl(
-            mib.as_mut_ptr(),
-            3,
-            bytes.as_mut_ptr().cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    };
-    ensure!(result == 0, "cannot inspect process environment");
-    bytes.truncate(len);
-    ensure!(bytes.len() >= 4, "incomplete process arguments");
-    let argc = i32::from_ne_bytes(bytes[..4].try_into()?);
-    ensure!(argc > 0, "process arguments unavailable");
-    let mut offset = 4;
-    while offset < bytes.len() && bytes[offset] != 0 {
-        offset += 1;
-    }
-    while offset < bytes.len() && bytes[offset] == 0 {
-        offset += 1;
-    }
-    for _ in 0..argc {
-        while offset < bytes.len() && bytes[offset] != 0 {
-            offset += 1;
-        }
-        offset += 1;
-    }
-    ensure!(offset <= bytes.len(), "incomplete process arguments");
-    while offset < bytes.len() && bytes[offset] == 0 {
-        offset += 1;
-    }
-    Ok(bytes[offset..]
-        .split(|b| *b == 0)
-        .take_while(|entry| !entry.is_empty())
-        .map(<[u8]>::to_vec)
-        .collect())
-}
-
-#[cfg(target_os = "linux")]
-fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
-    proc_lineage(pid, |owner| owner == unsafe { libc::geteuid() })
-}
-
-/// The lineage of `pid`, a setuid program this user started, whose records
-/// another user owns.
-#[cfg(target_os = "linux")]
-fn elevated_lineage(pid: u32) -> Result<Option<Lineage>> {
-    proc_lineage(pid, |owner| owner != unsafe { libc::geteuid() })
-}
-
-/// The lineage of `pid` when `owned` accepts the owner of its records.
-#[cfg(target_os = "linux")]
-fn proc_lineage(pid: u32, owned: impl Fn(u32) -> bool) -> Result<Option<Lineage>> {
-    use std::os::unix::fs::MetadataExt;
-    let path = format!("/proc/{pid}");
-    let metadata = match std::fs::metadata(&path) {
-        Ok(meta) => meta,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.into()),
-    };
-    if !owned(metadata.uid()) {
-        return Ok(None);
-    }
-    let Some(stat) = read_process_stat(&format!("{path}/stat"))? else {
-        return Ok(None);
-    };
-    let fields = stat_fields(&stat)?;
-    ensure!(fields.len() > 19, "incomplete process stat");
-    if fields[0] == "Z" || fields[0] == "X" {
-        return Ok(None);
-    }
-    let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
-    // Linux keeps no record of an exited parent, so lineage ends with it.
-    Ok(Some(Lineage {
-        identity: Identity {
-            pid,
-            birth: format!("{}:{}", boot.trim(), fields[19]),
-            unique: None,
-        },
-        unique: None,
-        parent: None,
-        parent_pid: fields[1].parse()?,
-        // Linux shows every environment, so nothing depends on how a process
-        // came to init. An inventory marks the children of a subreaper.
-        adopted: false,
-    }))
-}
-
-#[cfg(target_os = "linux")]
-fn platform_unreaped(identity: &Identity) -> Result<bool> {
-    let Some(stat) = read_process_stat(&format!("/proc/{}/stat", identity.pid))? else {
-        return Ok(false);
-    };
-    let fields = stat_fields(&stat)?;
-    ensure!(fields.len() > 19, "incomplete process stat");
-    let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
-    Ok(fields[0] == "Z" && format!("{}:{}", boot.trim(), fields[19]) == identity.birth)
-}
-
-#[cfg(target_os = "linux")]
-fn working_directory(pid: u32) -> Option<PathBuf> {
-    std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn executable(pid: u32) -> Option<PathBuf> {
-    std::fs::read_link(format!("/proc/{pid}/exe")).ok()
-}
-
-#[cfg(target_os = "linux")]
-pub(super) fn parent(pid: u32) -> Option<u32> {
-    let stat = read_process_stat(&format!("/proc/{pid}/stat")).ok()??;
-    stat_fields(&stat).ok()?.get(1)?.parse().ok()
-}
-
-#[cfg(target_os = "linux")]
-fn image(pid: u32) -> Result<Image> {
-    match read_process_stat(&format!("/proc/{pid}/stat"))? {
-        Some(stat) => stat_image(&stat),
-        None => Ok(Image::Ended),
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn stat_image(stat: &str) -> Result<Image> {
-    const PF_EXITING: u64 = 0x4;
-    const PF_KTHREAD: u64 = 0x0020_0000;
-    let fields = stat_fields(stat)?;
-    // Field 9 is flags and field 51 env_end, which stays 0 until exec
-    // publishes the new environment.
-    ensure!(fields.len() > 48, "incomplete process stat");
-    if fields[6].parse::<u64>()? & (PF_EXITING | PF_KTHREAD) != 0 {
-        return Ok(Image::Ended);
-    }
-    Ok(if fields[48] == "0" {
-        Image::Loading
-    } else {
-        Image::Settled
-    })
-}
-
-/// Fields after the parenthesized command name, starting with the state.
-#[cfg(target_os = "linux")]
-pub(super) fn stat_fields(stat: &str) -> Result<Vec<&str>> {
-    Ok(stat
-        .rsplit_once(')')
-        .context("invalid process stat")?
-        .1
-        .split_whitespace()
-        .collect())
-}
-
-/// A `/proc` record of a process, whose name may be any bytes; `None` once
-/// the process has exited or when `/proc` hides it.
-#[cfg(target_os = "linux")]
-pub(super) fn read_process_stat(path: &str) -> Result<Option<String>> {
-    match std::fs::read(path) {
-        Ok(stat) => Ok(Some(String::from_utf8_lossy(&stat).into_owned())),
-        Err(error) if process_record_unavailable(error.raw_os_error()) => Ok(None),
-        Err(error) => Err(error.into()),
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub(super) fn process_record_unavailable(errno: Option<i32>) -> bool {
-    // Linux returns ESRCH if the process exits between open and read. A
-    // `hidepid` mount shows another user's PID but refuses its records, as
-    // `ps` finds; this user's own are never refused.
-    matches!(
-        errno,
-        Some(libc::ENOENT | libc::ESRCH | libc::EACCES | libc::EPERM)
-    )
-}
-
-#[cfg(target_os = "linux")]
-fn platform_listed() -> Result<Vec<Listed>> {
-    let mut listed = Vec::new();
-    for entry in std::fs::read_dir("/proc")? {
-        let Some(pid) = entry?
-            .file_name()
-            .to_str()
-            .and_then(|name| name.parse().ok())
-        else {
-            continue;
-        };
-        let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {
-            continue;
-        };
-        let fields = stat_fields(&stat)?;
-        ensure!(fields.len() > 2, "incomplete process stat");
-        // Zombies cannot execute or hold resources.
-        if fields[0] == "Z" || fields[0] == "X" {
-            continue;
-        }
-        let Some(status) = read_process_stat(&format!("/proc/{pid}/status"))? else {
-            continue;
-        };
-        let users = status
-            .lines()
-            .find_map(|line| line.strip_prefix("Uid:"))
-            .context("process status names no user")?;
-        let mut users = users.split_whitespace().map(str::parse::<u32>);
-        let (Some(real_uid), Some(uid)) = (users.next(), users.next()) else {
-            anyhow::bail!("incomplete process users");
-        };
-        listed.push(Listed {
-            pid,
-            uid: uid?,
-            real_uid: real_uid?,
-            group: fields[2].parse()?,
-            parent: fields[1].parse()?,
-        });
-    }
-    Ok(listed)
-}
-
-#[cfg(target_os = "linux")]
-fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
-    Ok(std::fs::read(format!("/proc/{pid}/environ"))?
-        .split(|b| *b == 0)
-        .filter(|e| !e.is_empty())
-        .map(<[u8]>::to_vec)
-        .collect())
-}
-
 /// How [`Identity`]s compare by age.
 pub(crate) trait IdentityAge {
     /// A process born before the wrapper cannot be one of its descendants.
@@ -875,33 +258,13 @@ pub(crate) trait IdentityAge {
 
 impl IdentityAge for Identity {
     fn not_older_than(&self, wrapper: &Identity) -> bool {
-        let Some((own_prefix, own_end)) = self.birth.rsplit_once(':') else {
+        let Some(own) = self.birth.rsplit_once(':') else {
             return true;
         };
-        let Some((other_prefix, other_end)) = wrapper.birth.rsplit_once(':') else {
+        let Some(other) = wrapper.birth.rsplit_once(':') else {
             return true;
         };
-        #[cfg(target_os = "macos")]
-        {
-            match (
-                own_prefix.parse::<u64>(),
-                own_end.parse::<u64>(),
-                other_prefix.parse::<u64>(),
-                other_end.parse::<u64>(),
-            ) {
-                (Ok(a), Ok(b), Ok(c), Ok(d)) => (a, b) >= (c, d),
-                _ => true,
-            }
-        }
-        #[cfg(target_os = "linux")]
-        {
-            own_prefix == other_prefix
-                && own_end
-                    .parse::<u64>()
-                    .ok()
-                    .zip(other_end.parse::<u64>().ok())
-                    .is_none_or(|(a, b)| a >= b)
-        }
+        platform::born_not_before(own, other)
     }
 }
 
@@ -928,7 +291,7 @@ pub async fn group_alive(group: u32) -> Result<bool> {
         if unsafe { libc::killpg(group as i32, 0) } != 0 {
             return Ok(false);
         }
-        for pid in group_members(group)? {
+        for pid in platform::group_members(group)? {
             if capture(pid)?.is_some() {
                 return Ok(true);
             }
@@ -937,69 +300,6 @@ pub async fn group_alive(group: u32) -> Result<bool> {
     })
     .await
     .context("process group worker failed")?
-}
-
-/// The PIDs in process group `group`, including zombies.
-#[cfg(target_os = "macos")]
-fn group_members(group: u32) -> Result<Vec<u32>> {
-    // PROC_PGRP_ONLY in sys/proc_info.h.
-    const PROC_PGRP_ONLY: u32 = 2;
-    listed_pids(PROC_PGRP_ONLY, group)
-}
-
-/// The PIDs other than init's that `proc_listpids` lists for `kind` and
-/// `argument`, including zombies.
-#[cfg(target_os = "macos")]
-fn listed_pids(kind: u32, argument: u32) -> Result<Vec<u32>> {
-    const PID_SIZE: usize = std::mem::size_of::<libc::pid_t>();
-    // A null buffer asks for room for every process on the machine.
-    let list = |buffer: *mut libc::pid_t, len: usize| {
-        let bytes =
-            unsafe { libc::proc_listpids(kind, argument, buffer.cast(), (len * PID_SIZE) as i32) };
-        if bytes < 0 {
-            return Err(std::io::Error::last_os_error()).context("list processes");
-        }
-        Ok(bytes as usize / PID_SIZE)
-    };
-    let mut pids = vec![0; list(std::ptr::null_mut(), 0)?.max(1)];
-    // A full buffer may have cut off processes started since it was sized.
-    loop {
-        let count = list(pids.as_mut_ptr(), pids.len())?;
-        if count < pids.len() {
-            pids.truncate(count);
-            break;
-        }
-        pids.resize(pids.len() * 2, 0);
-    }
-    Ok(pids
-        .into_iter()
-        .filter(|pid| *pid > 1)
-        .map(|pid| pid as u32)
-        .collect())
-}
-
-/// The PIDs in process group `group`, including zombies. Linux lists
-/// process groups only per process; `getpgid` reads each one without
-/// parsing another process's `/proc` record, which may not parse.
-#[cfg(target_os = "linux")]
-fn group_members(group: u32) -> Result<Vec<u32>> {
-    let mut members = Vec::new();
-    for entry in std::fs::read_dir("/proc")? {
-        let Some(pid) = entry?
-            .file_name()
-            .to_str()
-            .and_then(|name| name.parse::<i32>().ok())
-        else {
-            continue;
-        };
-        // Reading a process group sends no signal. A process that exited
-        // since the listing has none.
-        let member = unsafe { libc::getpgid(pid) };
-        if pid > 1 && u32::try_from(member) == Ok(group) {
-            members.push(pid as u32);
-        }
-    }
-    Ok(members)
 }
 
 /// The live processes those of `identities` started, directly or through
@@ -1204,7 +504,16 @@ mod attribution;
 mod marks;
 mod owners;
 pub mod spaces;
-#[cfg(target_os = "linux")]
-mod subreaper;
 #[cfg(test)]
 mod tests;
+
+// Each back end implements the same operations on its kernel's process
+// records.
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as platform;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use macos as platform;
