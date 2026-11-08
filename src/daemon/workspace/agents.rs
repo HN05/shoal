@@ -894,6 +894,16 @@ impl Manager {
         workspaces
     }
 
+    /// Workspaces with a recorded agent execution, connected or not, such as
+    /// one whose wrapper waits to reattach after a daemon restart.
+    pub(crate) async fn recorded_agent_workspaces(&self) -> anyhow::Result<HashSet<String>> {
+        let agents = self
+            .store
+            .run(crate::daemon::store::agent_executions)
+            .await?;
+        Ok(agents.into_keys().collect())
+    }
+
     /// Whether something an agent could stop runs in the workspace: a tracked
     /// command, a demo or a background process an agent started. The agents
     /// themselves do not count, working or idle.

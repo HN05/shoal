@@ -91,7 +91,7 @@ async fn send_to_all(
             return;
         }
         show_reached("Message queued for:", &reached.now);
-        show_reached("Queued for when their agent starts:", &reached.on_start);
+        show_reached("Queued for when their agent next runs:", &reached.on_start);
     })?;
     Ok(0)
 }

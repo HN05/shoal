@@ -398,6 +398,21 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     let stopped = create("stopped").await.unwrap();
     let queued = create("queued").await.unwrap();
     let without = create("without").await.unwrap();
+    // Its agent's wrapper waits to reattach, as after a daemon restart.
+    let reattaching = create("reattaching").await.unwrap();
+    let execution = manager
+        .begin_execution(&reattaching.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE executions SET agent='claude' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     // The user stopped its agent, which `shoal resume` restores.
     crate::execution::recovery::LastSession {
         mode: "worker".into(),
@@ -466,7 +481,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
                 chats: vec!["planning".into()],
             },
             on_start: ReachedSpaces {
-                workspaces: vec!["queued".into(), "stopped".into()],
+                workspaces: vec!["queued".into(), "reattaching".into(), "stopped".into()],
                 chats: vec!["paused".into()],
             },
         }

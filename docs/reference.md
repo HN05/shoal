@@ -5195,11 +5195,12 @@ printed it.
 the repository it names, or without a value the current checkout's or
 workspace's, else a picked one: each chat but the one sending, running or
 stopped, and each workspace, except one being removed, whose agent runs,
-working or idle, or is stopped, waits for its restore or is queued to start or
-restore. An agent that runs receives it now, and any other once it next
-starts; the message starts none of them, except an idle agent Shoal stopped
+working or idle, or is stopped, waits for its restore, is queued to start or
+restore, or has a wrapper waiting to reattach, as after a daemon restart. An
+agent that runs connected receives it now, and any other once it next runs;
+the message starts none of them, except an idle agent Shoal stopped
 whose restore waits for an update, as a message to its space alone starts it. It lists the spaces that receive it now, and those that receive it
-once their agent starts, in `now` and `on_start` with `--json`, each with
+once their agent next runs, in `now` and `on_start` with `--json`, each with
 `workspaces` and `chats`; a workspace process reaches only the workspaces
 below its own. Workspaces without any agent get nothing, since a message
 waits there until an agent reads it. Sending the same message again after a

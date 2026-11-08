@@ -228,7 +228,8 @@ impl Manager {
     }
 
     /// [`Self::send_space_message`] to every workspace and chat with an
-    /// agent, running, stopped, queued or waiting for its restore, but the
+    /// agent, running, reattaching, stopped, queued or waiting for its
+    /// restore, but the
     /// sending chat `sender_chat`, of `repository` when it names one, or only
     /// to the workspaces below `below`, the sender's own workspace; the
     /// spaces it reached, by whether their agent runs. A stopped agent reads
@@ -303,7 +304,7 @@ impl Manager {
     }
 
     /// The workspaces with an agent, by name, each with whether its agent
-    /// runs, except those being removed, of `repository` when it names one;
+    /// runs connected, except those being removed, of `repository` when it names one;
     /// only the workspaces below `below` when it names one.
     async fn workspace_recipients(
         &self,
@@ -311,6 +312,7 @@ impl Manager {
         below: Option<&str>,
     ) -> Result<Vec<(Workspace, bool)>> {
         let running = self.running_agent_workspaces().await;
+        let recorded = self.recorded_agent_workspaces().await?;
         let queued = self.queued_agent_workspaces().await?;
         let mut recipients = Vec::new();
         for workspace in self.list_workspaces_within(below).await? {
@@ -321,7 +323,11 @@ impl Manager {
                 continue;
             }
             let runs = running.contains(&workspace.id);
-            if runs || queued.contains(&workspace.id) || self.has_saved_agent(&workspace.id) {
+            if runs
+                || recorded.contains(&workspace.id)
+                || queued.contains(&workspace.id)
+                || self.has_saved_agent(&workspace.id)
+            {
                 recipients.push((workspace, runs));
             }
         }
@@ -546,7 +552,7 @@ impl Manager {
 }
 
 /// The spaces of `reached` that a space joins whose agent `runs`, or else
-/// receives the message once it starts.
+/// receives the message once it next runs.
 fn reached_by(reached: &mut Reached, runs: bool) -> &mut ReachedSpaces {
     if runs {
         &mut reached.now

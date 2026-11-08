@@ -168,13 +168,13 @@ pub enum MessagesCommand {
         space: Option<SpaceSelector>,
         /// Send to every agent of the workspaces and chats, such as to tell
         /// them the network works again: running ones now, and stopped,
-        /// queued or restoring ones when they start.
+        /// queued or restoring ones when they next run.
         #[arg(short = 'A', long, conflicts_with = "repository")]
         all: bool,
         /// Send to every agent of this repository's workspaces and chats,
         /// such as to have them rebase onto a fix on its default branch:
         /// running ones now, and stopped, queued or restoring ones when they
-        /// start; without a value, the current repository, else a picker.
+        /// next run; without a value, the current repository, else a picker.
         /// Put the message before a --repo without a value.
         #[arg(short = 'r', long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
         repository: Option<Option<String>>,

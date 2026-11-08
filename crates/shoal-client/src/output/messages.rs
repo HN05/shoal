@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use crate::output::outputs;
 
 /// The spaces a message to every agent reached, by whether their agent
-/// receives it now or once it starts.
+/// receives it now or once it next runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reached {
     /// The spaces whose agent runs.
     pub now: ReachedSpaces,
-    /// The spaces whose agent is stopped, queued or waits for its restore.
+    /// The spaces whose agent is stopped, queued, waits for its restore or
+    /// has a wrapper waiting to reattach.
     pub on_start: ReachedSpaces,
 }
 
