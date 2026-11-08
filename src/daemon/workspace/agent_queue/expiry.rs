@@ -14,7 +14,8 @@ pub(super) enum FailedStart {
 }
 
 /// Delete unheld, daemon-started entries older than `cutoff`. Opened launches
-/// expire silently. Return reportable failures only after deletion commits.
+/// expire silently. Return reportable failures, which the caller reports
+/// only once its transaction commits.
 pub(super) fn expire_starts(
     tx: &rusqlite::Transaction<'_>,
     held: &HashSet<String>,
