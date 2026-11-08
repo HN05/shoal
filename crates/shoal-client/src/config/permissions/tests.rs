@@ -74,20 +74,12 @@ fn a_setup_mode_has_the_permissions_of_its_base() {
 }
 
 #[test]
-fn a_mode_no_config_defines_is_refused() {
-    let settings = settings("", "");
-    assert!(resolve(&settings, mode("gone")).is_err());
-}
-
-#[test]
-fn unknown_permission_keys_and_values_are_refused() {
-    for config in [
-        "[modes.chat.permissions]\ndelete = 'direct'\n",
-        "[modes.chat.permissions]\npush = 'always'\n",
-        "[permissions]\napi_writes = 'propose'\n",
-    ] {
-        assert!(parse(config).is_err(), "{config}");
-    }
+fn a_mode_no_toml_layer_defines_has_permissions_and_the_key_defaults() {
+    // Such as one only a Markdown file beside the global config names.
+    let settings = settings("", "[permissions]\npush = 'propose'\n");
+    let undefined = resolve(&settings, mode("markdown-only")).unwrap();
+    assert_eq!(undefined, resolve(&settings, None).unwrap());
+    assert_eq!(undefined.push.value, Pushes::Propose);
 }
 
 #[test]

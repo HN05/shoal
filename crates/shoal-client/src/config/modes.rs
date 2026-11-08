@@ -218,9 +218,10 @@ pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<&'static str> {
     }
 }
 
-/// The permissions mode `mode` sets in config, and those Shoal's mode of
-/// that name has by default, which `[permissions]` overrides; a setup mode
-/// takes both from its [`setup_base`].
+/// The permissions mode `mode` sets in config, none for a mode no TOML layer
+/// defines, and those Shoal's mode of that name has by default, which
+/// `[permissions]` overrides; a setup mode takes both from its
+/// [`setup_base`].
 pub fn permission_layers(
     modes: &BTreeMap<String, Mode>,
     mode: SpaceMode,
@@ -229,8 +230,10 @@ pub fn permission_layers(
         SETUP => setup_base(mode.kind, mode.repository)?,
         name => name,
     };
-    let configured = get(modes, name)?.permissions;
-    Ok((configured, built_in_permissions(name)))
+    // A mode only a Markdown file names, which the daemon's settings leave
+    // out, configures no permissions.
+    let configured = modes.get(name).map(|mode| mode.permissions);
+    Ok((configured.unwrap_or_default(), built_in_permissions(name)))
 }
 
 /// The permissions Shoal's mode `name` has where config sets none: a
