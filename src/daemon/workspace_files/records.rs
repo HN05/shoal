@@ -146,8 +146,7 @@ pub(crate) fn record(
     Ok(())
 }
 
-/// [`record`] in a transaction of its own, returning the copies' records in
-/// their order.
+/// [`record`], returning the copies' records in their order.
 pub(super) fn record_all(
     tx: &Transaction<'_>,
     space_id: &str,
