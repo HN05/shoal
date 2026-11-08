@@ -20,7 +20,7 @@ use super::{
     workspace::Manager,
 };
 use crate::{
-    client::subscriptions::records::Topic,
+    client::{subscriptions::records::Topic, work::LogTopic},
     protocol::{Body, ErrorCode, Response},
 };
 use snapshot::{Records, Topics};
@@ -43,10 +43,11 @@ impl Subscriber {
         stream: UnixStream,
         id: u64,
         topics: Vec<Topic>,
+        log: Option<LogTopic>,
         startup: OperationGuard,
     ) -> Result<()> {
         let manager = &self.manager;
-        let topics = Topics::new(&topics, self.caller.as_ref());
+        let topics = Topics::new(&topics, log, self.caller.as_ref());
         // Watch before reading, so a change in between still wakes it.
         let mut stored = manager.store.watch_changes();
         let mut agents = manager.signals.watch_agents();

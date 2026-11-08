@@ -18,21 +18,29 @@ pub(super) fn handle(
     caller: Option<&Caller>,
     scope: Option<&str>,
 ) -> Result<Answer> {
-    let SubscriptionMethod::Subscribe { topics } = method;
+    let SubscriptionMethod::Subscribe { topics, log } = method;
     let subscriber = subscriptions::Subscriber {
         manager: manager.clone(),
         caller: caller.cloned(),
         scope: scope.map(str::to_owned),
     };
     Ok(Answer::connection(move |stream, request_id, guard| {
-        subscriber.run(stream, request_id, topics, guard)
+        subscriber.run(stream, request_id, topics, log, guard)
     }))
 }
 
 /// A scoped caller subscribes to what its scope reaches, which the
-/// subscription narrows to it.
+/// subscription narrows to it, and to the log of a space it may read.
 impl Scoped for SubscriptionMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
+        let SubscriptionMethod::Subscribe { log, .. } = self;
+        if let Some(log) = log {
+            manager.narrow_to_log(caller, &mut log.space).await?;
+        }
         Ok(None)
     }
 }

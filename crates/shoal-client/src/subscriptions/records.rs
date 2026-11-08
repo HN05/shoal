@@ -51,6 +51,7 @@ states!(
         Approval => "approval",
         Message => "message",
         Notification => "notification",
+        LogEntry => "log_entry",
     }
 );
 
@@ -74,6 +75,8 @@ pub enum Record {
     Approval(Box<ApprovalRequest>),
     Message(Message),
     Notification(Notification),
+    /// An entry of the space's log the subscription follows.
+    LogEntry(Box<crate::work::LogEntry>),
 }
 
 impl Record {
@@ -87,6 +90,8 @@ impl Record {
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
             Self::Message(record) => (RecordKind::Message, record.id.clone()),
             Self::Notification(record) => (RecordKind::Notification, record.id.to_string()),
+            // Padded, so keys sort as the log does.
+            Self::LogEntry(record) => (RecordKind::LogEntry, format!("{:020}", record.id())),
         };
         RecordKey { kind, id }
     }

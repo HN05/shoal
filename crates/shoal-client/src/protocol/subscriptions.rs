@@ -12,8 +12,12 @@ pub enum SubscriptionMethod {
     /// [`super::Body::RecordChanged`] and each one removed as
     /// [`super::Body::RecordRemoved`], until the client hangs up. A scoped
     /// caller covers its workspace and those split from it, without
-    /// notifications.
-    Subscribe { topics: Vec<Topic> },
+    /// notifications. With `log`, the entries of one space's log too.
+    Subscribe {
+        topics: Vec<Topic>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        log: Option<crate::work::LogTopic>,
+    },
 }
 
 impl SubscriptionMethod {

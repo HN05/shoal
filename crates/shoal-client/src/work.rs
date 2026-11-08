@@ -26,6 +26,15 @@ states!(
     }
 );
 
+/// The entries of a space's log a subscription follows: the newest
+/// `limit` that `filter` shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogTopic {
+    pub space: SpaceSelector,
+    pub filter: LogFilter,
+    pub limit: u32,
+}
+
 /// One event of a space's log, as `shoal internal events` prints it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

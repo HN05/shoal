@@ -10,6 +10,7 @@ use tokio::{io::BufReader, net::UnixStream};
 use crate::{
     connection::{self, Daemon},
     protocol::{Body, Responses, SubscriptionMethod},
+    work::LogTopic,
 };
 use records::{Record, RecordKey, Topic};
 
@@ -33,6 +34,7 @@ pub enum Update {
 pub struct Subscription<D> {
     daemon: D,
     topics: Vec<Topic>,
+    log: Option<LogTopic>,
     stream: Option<Responses<BufReader<UnixStream>>>,
     /// The first snapshot, until [`Self::next`] returns it.
     first: Option<Vec<Record>>,
@@ -42,10 +44,21 @@ impl<D: Daemon> Subscription<D> {
     /// Subscribe to `topics` on `daemon`, failing at once when the daemon
     /// refuses.
     pub async fn open(daemon: D, topics: Vec<Topic>) -> Result<Self> {
-        let (stream, records) = subscribe(&daemon, &topics).await?;
+        Self::open_with(daemon, topics, None).await
+    }
+
+    /// Subscribe to the entries of one space's log as `log` asks, each a
+    /// [`Record::LogEntry`].
+    pub async fn follow_log(daemon: D, log: LogTopic) -> Result<Self> {
+        Self::open_with(daemon, Vec::new(), Some(log)).await
+    }
+
+    async fn open_with(daemon: D, topics: Vec<Topic>, log: Option<LogTopic>) -> Result<Self> {
+        let (stream, records) = subscribe(&daemon, &topics, log.as_ref()).await?;
         Ok(Self {
             daemon,
             topics,
+            log,
             stream: Some(stream),
             first: Some(records),
         })
@@ -63,7 +76,8 @@ impl<D: Daemon> Subscription<D> {
         }
         loop {
             let Some(stream) = &mut self.stream else {
-                let (stream, records) = resubscribe(&self.daemon, &self.topics).await?;
+                let (stream, records) =
+                    resubscribe(&self.daemon, &self.topics, self.log.as_ref()).await?;
                 self.stream = Some(stream);
                 return Ok(Update::Snapshot {
                     records,
@@ -89,9 +103,11 @@ impl<D: Daemon> Subscription<D> {
 async fn subscribe(
     daemon: &impl Daemon,
     topics: &[Topic],
+    log: Option<&LogTopic>,
 ) -> Result<(Responses<BufReader<UnixStream>>, Vec<Record>)> {
     let method = SubscriptionMethod::Subscribe {
         topics: topics.to_vec(),
+        log: log.cloned(),
     };
     let (stream, body) = connection::open_buffered(daemon, method).await?;
     Ok((Responses::new(stream), Vec::try_from(body)?))
@@ -102,6 +118,7 @@ async fn subscribe(
 async fn resubscribe(
     daemon: &impl Daemon,
     topics: &[Topic],
+    log: Option<&LogTopic>,
 ) -> Result<(Responses<BufReader<UnixStream>>, Vec<Record>)> {
-    connection::after_restart(|| subscribe(daemon, topics)).await
+    connection::after_restart(|| subscribe(daemon, topics, log)).await
 }

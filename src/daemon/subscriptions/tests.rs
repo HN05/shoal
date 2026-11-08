@@ -487,6 +487,53 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn a_log_subscription_follows_one_space_within_its_scope() {
+        use crate::client::work::{LogEntry, LogFilter, LogTopic};
+        let daemon = TestDaemon::start().await;
+        let own = daemon.workspace("own").await;
+        let other = daemon.workspace("other").await;
+        let topic = |space: &str| LogTopic {
+            space: SpaceSelector::parse(space),
+            filter: LogFilter::Entries,
+            limit: 50,
+        };
+        let refused = Subscription::follow_log(daemon.scoped(&own).await, topic("other")).await;
+        assert!(refused.is_err());
+        let mut subscription = Subscription::follow_log(daemon.scoped(&own).await, topic("own"))
+            .await
+            .unwrap();
+        let records = snapshot(&mut subscription).await;
+        assert!(records.iter().all(|record| matches!(
+            record,
+            Record::LogEntry(entry) if matches!(&**entry, LogEntry::Event(event)
+                if event.details.space_id() == own.id)
+        )));
+        assert!(!records.is_empty());
+        daemon
+            .manager
+            .set_workspace_title(&SpaceSelector::id(&own.id), Some("Login fix".into()))
+            .await
+            .unwrap();
+        // Another space's entries stay out.
+        daemon
+            .manager
+            .set_workspace_title(&SpaceSelector::id(&other.id), Some("Other".into()))
+            .await
+            .unwrap();
+        let Update::Changed(record) = until(&mut subscription, changed(RecordKind::LogEntry)).await
+        else {
+            unreachable!();
+        };
+        let Record::LogEntry(entry) = *record else {
+            unreachable!();
+        };
+        let LogEntry::Event(event) = *entry else {
+            panic!("expected the rename");
+        };
+        assert_eq!(event.details.title, Some(Some("Login fix".into())));
+    }
+
+    #[tokio::test]
     async fn a_scoped_subscription_without_workspace_records_names_its_tree() {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
@@ -600,6 +647,7 @@ mod streams {
         let mut reader = tokio::io::BufReader::new(reader);
         let subscribe = SubscriptionMethod::Subscribe {
             topics: vec![Topic::Notifications],
+            log: None,
         };
         let request = Request {
             scope: None,
@@ -632,6 +680,7 @@ mod streams {
         let mut reader = tokio::io::BufReader::new(reader);
         let subscribe = SubscriptionMethod::Subscribe {
             topics: vec![Topic::Workspaces],
+            log: None,
         };
         let request = Request {
             scope: None,

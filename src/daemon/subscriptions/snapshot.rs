@@ -10,6 +10,7 @@ use crate::{
         Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
         Topic, WorkspaceRecord,
     },
+    client::work::LogTopic,
     daemon::{
         agent_messages::AgentMessage,
         approvals::DecisionStatus,
@@ -26,23 +27,25 @@ use crate::{
 pub(super) type Records = BTreeMap<RecordKey, (Record, serde_json::Value)>;
 
 /// The topics a subscription covers: those it asked for, without
-/// notifications for a scoped caller.
+/// notifications for a scoped caller, and the log of a space it may read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(super) struct Topics(HashSet<Topic>);
+pub(super) struct Topics {
+    topics: HashSet<Topic>,
+    log: Option<LogTopic>,
+}
 
 impl Topics {
-    pub(super) fn new(topics: &[Topic], caller: Option<&Caller>) -> Self {
-        Self(
-            topics
-                .iter()
-                .copied()
-                .filter(|topic| caller.is_none() || *topic != Topic::Notifications)
-                .collect(),
-        )
+    pub(super) fn new(topics: &[Topic], log: Option<LogTopic>, caller: Option<&Caller>) -> Self {
+        let topics = topics
+            .iter()
+            .copied()
+            .filter(|topic| caller.is_none() || *topic != Topic::Notifications)
+            .collect();
+        Self { topics, log }
     }
 
     fn has(&self, topic: Topic) -> bool {
-        self.0.contains(&topic)
+        self.topics.contains(&topic)
     }
 }
 
@@ -88,6 +91,14 @@ pub(super) async fn take(
     }
     if topics.has(Topic::Notifications) {
         found.extend(notifications(manager).await?);
+    }
+    if let Some(log) = &topics.log {
+        let entries = manager.space_log(&log.space, log.filter, log.limit).await?;
+        found.extend(
+            entries
+                .into_iter()
+                .map(|entry| Record::LogEntry(Box::new(entry))),
+        );
     }
     let mut records = Records::new();
     for record in found {
