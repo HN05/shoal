@@ -69,6 +69,7 @@ const REQUESTS: &[&str] = &[
     r#"{"hold_release":{"workspace":"fix","name":"review"}}"#,
     r#"{"hold_list":{"workspace":"fix"}}"#,
     r#"{"watch_workspace_events":{"since":4,"follow":true}}"#,
+    r#"{"space_log":{"space":"fix","filter":"entries","limit":50}}"#,
     // Removal and restore.
     r#""stop_targets""#,
     r#"{"stop_workspace":{"workspace":"fix","acknowledge_unproven":false,"launches":"cancel"}}"#,

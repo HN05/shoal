@@ -23,6 +23,28 @@ enum Record {
     Workspace(Box<EventDetails>),
 }
 
+/// The stored event `record` with its journal ID and time.
+fn decode(id: i64, created_at: i64, record: &str) -> Result<EventItem> {
+    Ok(match serde_json::from_str(record)? {
+        Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent {
+            id,
+            created_at,
+            details: *details,
+        })),
+        Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent {
+            id,
+            created_at,
+            kind,
+            chat: *chat,
+        })),
+        Record::File(details) => EventItem::File(Box::new(FileEvent {
+            id,
+            created_at,
+            details: *details,
+        })),
+    })
+}
+
 /// The fields that open every event of a space, from its `journal_spaces`
 /// row: a workspace's or a chat's identity.
 const SPACE_FIELDS: &str = "'workspace_id',workspace_id,'chat_id',chat_id,
@@ -282,11 +304,7 @@ impl Manager {
             let mut stmt = db.prepare("SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2")?;
             for row in stmt.query_map(params![cursor,limit], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))? {
                 let (id,created_at,record) = row?;
-                items.push(match serde_json::from_str(&record)? {
-                    Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent { id,created_at,details: *details })),
-                    Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent { id,created_at,kind,chat: *chat })),
-                    Record::File(details) => EventItem::File(Box::new(FileEvent { id,created_at,details: *details })),
-                });
+                items.push(decode(id, created_at, &record)?);
             }
             Ok(items)
         }).await
@@ -330,6 +348,7 @@ impl Manager {
 }
 
 mod retention;
+mod space_log;
 pub(crate) use retention::adopt;
 
 #[cfg(test)]

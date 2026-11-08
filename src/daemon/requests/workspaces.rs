@@ -24,6 +24,14 @@ pub(super) async fn handle(
                 watch_workspace_events(stream, request_id, manager, since, follow, guard)
             }));
         }
+        WorkspaceMethod::SpaceLog {
+            space,
+            filter,
+            limit,
+        } => {
+            let log = manager.space_log(&space, filter, limit).await;
+            return Ok(Answer::pages(log, Body::LogEntries));
+        }
         WorkspaceMethod::OpenBranch {
             path,
             repository,
@@ -322,6 +330,11 @@ impl Scoped for WorkspaceMethod {
             // space unless it names one below it.
             WorkspaceMethod::CheckCreation { parent, .. } => {
                 manager.parent_below(caller, parent).await?;
+                None
+            }
+            // A coordinator follows the spaces below it, removed ones too.
+            WorkspaceMethod::SpaceLog { space, .. } => {
+                manager.narrow_to_log(caller, space).await?;
                 None
             }
             WorkspaceMethod::CheckDependencies { .. }

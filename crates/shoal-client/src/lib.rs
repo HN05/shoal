@@ -53,6 +53,7 @@ pub mod transcripts;
 pub mod transfer;
 pub mod validate;
 pub mod views;
+pub mod work;
 pub mod workspaces;
 
 pub use shoal_forge as forge;

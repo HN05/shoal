@@ -37,6 +37,7 @@ impl Operation {
                         | ExecutionMethod::ListAgents
                 )
                 | Self::File(FileMethod::ListFiles { .. })
+                | Self::Workspace(WorkspaceMethod::SpaceLog { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
                 | Self::Item(
                     ItemMethod::ListItems { .. }

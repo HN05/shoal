@@ -222,6 +222,13 @@ pub enum WorkspaceMethod {
         since: Option<i64>,
         follow: bool,
     },
+    /// The newest `limit` events of a space's log that `filter` shows,
+    /// oldest first, in pages.
+    SpaceLog {
+        space: SpaceSelector,
+        filter: crate::work::LogFilter,
+        limit: u32,
+    },
 }
 
 /// What a new workspace leaves out, for workspaces on a branch and at a
