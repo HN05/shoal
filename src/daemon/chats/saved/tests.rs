@@ -3,7 +3,7 @@ use crate::process::identity::IdentityExt;
 use crate::{
     daemon::{
         events::EventItem,
-        test_support::{ProcessGroup, manager, repository},
+        test_support::{ProcessGroup, manager, repository, unmarked},
         workspace::{Ending, Manager},
     },
     model::{Chat, Repository},
@@ -802,17 +802,6 @@ wait
     assert!(!chat.tmp_dir.unwrap().exists());
     drop(escaped);
     drop(group);
-}
-
-/// `program` without the identity of a workspace or chat the runner may run
-/// in, which would make what it starts theirs rather than the test chat's.
-pub(in crate::daemon::chats) fn unmarked(program: &str) -> std::process::Command {
-    let mut command = std::process::Command::new(program);
-    command
-        .env_remove(crate::env::WORKSPACE_ID)
-        .env_remove(crate::env::EXECUTION_ID)
-        .env_remove(crate::env::CHAT);
-    command
 }
 
 #[tokio::test]

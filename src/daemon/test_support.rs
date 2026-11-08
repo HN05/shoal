@@ -7,6 +7,17 @@ use crate::{daemon::workspace::Manager, paths::Paths};
 
 pub(crate) mod overload;
 
+/// `program` without the identity of a workspace or chat the runner may run
+/// in, which would make what it starts theirs rather than the test chat's.
+pub(crate) fn unmarked(program: &str) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    command
+        .env_remove(crate::env::WORKSPACE_ID)
+        .env_remove(crate::env::EXECUTION_ID)
+        .env_remove(crate::env::CHAT);
+    command
+}
+
 /// Keep the temporary root alive until all manager operations have finished.
 /// Its global config removes eligible workspaces on their first sweep, as
 /// reopened managers also read; grace period tests set their own.

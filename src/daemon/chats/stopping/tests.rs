@@ -8,8 +8,8 @@ use std::{
 
 use crate::{
     daemon::{
-        chats::saved::tests::{running_chat, unmarked},
-        test_support::manager,
+        chats::saved::tests::running_chat,
+        test_support::{manager, unmarked},
     },
     process::identity::Identity,
 };

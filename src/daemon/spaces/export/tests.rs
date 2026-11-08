@@ -3,7 +3,7 @@ use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        test_support::{manager, repository},
+        test_support::{manager, repository, unmarked},
         workspace::Manager,
     },
     process::identity,
@@ -12,34 +12,6 @@ use crate::{
 };
 
 mod transfer;
-
-/// What a process an export left running looks like, for a failure message.
-fn described(pid: u32) -> String {
-    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
-    let chat = fs::read(format!("/proc/{pid}/environ"))
-        .map(|environ| {
-            environ
-                .split(|byte| *byte == 0)
-                .filter(|entry| entry.starts_with(crate::env::CHAT.as_bytes()))
-                .map(|entry| String::from_utf8_lossy(entry).into_owned())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let parent = stat
-        .rsplit_once(") ")
-        .and_then(|(_, rest)| rest.split_whitespace().nth(1))
-        .unwrap_or("?")
-        .to_owned();
-    let parent_cmdline = fs::read(format!("/proc/{parent}/cmdline"))
-        .map(|cmdline| String::from_utf8_lossy(&cmdline).replace('\0', " "))
-        .unwrap_or_default();
-    let own_parent = std::os::unix::process::parent_id();
-    format!(
-        "stat={stat:?} chat={chat:?} parent={parent} parent_cmdline={parent_cmdline:?} \
-         test_pid={} test_parent={own_parent}",
-        std::process::id()
-    )
-}
 
 /// A manager with a chat `name` about a registered repository, whose
 /// process this test reaps once a signal ends it, so the chat ends with it.
@@ -69,7 +41,7 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
         .await
         .unwrap();
     // It leads its process group, as a chat's process does in a terminal.
-    let mut process = std::process::Command::new("sh")
+    let mut process = unmarked("sh")
         .args(["-c", script])
         .env(crate::env::CHAT, &chat.id)
         .process_group(0)
@@ -162,22 +134,14 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
-    let before = identity::scan_chat(&chat.id).await;
-    let restore = manager.chats().await.unwrap().remove(0).restore;
 
     export(&manager, "launched", &root.path().join("launched.shoal"))
         .await
         .unwrap();
-    let after = identity::scan_chat(&chat.id).await;
     let survived = identity::alive(&agent).unwrap();
-    let description = described(agent.pid);
     // A survivor would hold the test runner's output open.
     identity::signal(&agent, libc::SIGKILL).unwrap();
-    assert!(
-        !survived,
-        "{description} agent={agent:?} launcher={pid} restore={restore:?} before={before:?} \
-         after={after:?}"
-    );
+    assert!(!survived);
     assert_eq!(identity::capture(pid).unwrap(), None);
 }
 
@@ -215,12 +179,11 @@ async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
     let survivor = identity::capture(late).unwrap();
-    let description = described(late);
     // A survivor would hold the test runner's output open.
     if let Some(survivor) = &survivor {
         identity::signal(survivor, libc::SIGKILL).unwrap();
     }
-    assert_eq!(survivor, None, "{description}");
+    assert_eq!(survivor, None);
     assert_eq!(identity::capture(pid).unwrap(), None);
 }
 

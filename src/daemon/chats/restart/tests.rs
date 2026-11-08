@@ -2,9 +2,9 @@ use crate::{
     daemon::{
         chats::{
             restores::tests::{HELD, RESUMED, UNRESUMABLE},
-            saved::tests::{named_chat, unmarked},
+            saved::tests::named_chat,
         },
-        test_support::{ProcessGroup, manager, repository},
+        test_support::{ProcessGroup, manager, repository, unmarked},
     },
     state::ChatRestore,
 };
