@@ -93,13 +93,15 @@ impl Manager {
         elsewhere: bool,
         caller: &Caller,
     ) -> Result<Account> {
+        // One snapshot, so a reload cannot pair a permission with other tokens.
+        let config = self.config();
         if method != HttpMethod::Get {
             ensure!(
                 !elsewhere,
                 "scoped processes can only send GET requests to another repository"
             );
             let permissions = self
-                .caller_permissions(caller, space.repository_id())
+                .caller_permissions_from(&config, caller, space.repository_id())
                 .await?;
             ensure!(
                 permissions.api_writes.value == ApiWrites::Direct,
@@ -108,7 +110,7 @@ impl Manager {
                 permissions.api_writes.cited("api_writes")
             );
         }
-        Ok(self.agent_account())
+        Ok(self.agent_account_from(&config))
     }
 }
 
