@@ -33,7 +33,7 @@ class IsolationTests(unittest.TestCase):
                          "SHOAL_SCOPE_TOKEN": "caller", "CODEX_HOME": str(caller),
                          "ZMX_SESSION": "agent", "HAPPY_SESSION": "session",
                          "TMUX": "/tmp/tmux-501/default,1,0"}
-            with patch.dict(os.environ, inherited), patch("sandbox.SOCKETS_ROOT", Path(root)):
+            with patch.dict(os.environ, inherited), patch("sandbox.OUTSIDE_ROOT", Path(root)):
                 env = profile_shoal.environment(sandbox)
             self.assertFalse(set(inherited) & set(env))
             self.assertEqual(env["SHOAL_PROFILE"], "1")

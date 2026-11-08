@@ -25,7 +25,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from sandbox import build, isolated, prepare_directories, remove, sockets_directory
+from sandbox import build, isolated, prepare_directories, remove, outside_directory
 
 LINE = re.compile(r"^profile (\w+) ([\d.]+)ms (.*)$")
 IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
@@ -193,7 +193,7 @@ def main():
         profile(options, sandbox)
     finally:
         if options.keep or options.sample:
-            print(f"\nkept {sandbox} and {sockets_directory(sandbox)}")
+            print(f"\nkept {sandbox} and {outside_directory(sandbox)}")
             if options.sample:
                 print(f"samply load {sandbox / 'daemon.json.gz'}\n"
                       f"samply load {sandbox / 'cli.json.gz'}")

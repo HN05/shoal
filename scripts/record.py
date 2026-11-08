@@ -5,23 +5,24 @@
   python3 scripts/record.py target/rec/picker.tape --setup target/rec/setup.sh
 
 The tape lives in its own directory under target/, and the sandbox goes in that
-directory's `sandbox`: a home and Git config of its own, with `shoal` the
-development build and a daemon running for it. Its state, zmx, tmux and Zellij
-directories, which hold sockets, go in a short directory under /tmp named after
-it, so their socket paths fit however long the tape's path is. VHS
-runs from the tape's directory with the sandbox's environment, so the tape needs
-no setup of its own and its Output paths are relative to that directory.
+directory's `sandbox`, with `shoal` the development build and a daemon running
+for it, whose log is there, and a home and Git config of its own. The home and
+its state, zmx, tmux and Zellij directories, which hold sockets, go in a short
+directory under /tmp named after it, so their socket paths fit however long the
+tape's path is and the workspaces in the home lie outside any checkout. VHS runs
+from the tape's directory with the sandbox's environment, so the tape needs no
+setup of its own and its Output paths are relative to that directory.
 
 `--setup` runs a shell script first, from the sandbox's home with the same
 environment and SANDBOX naming the sandbox, to create repositories and
-workspaces. It must finish before the recording starts; start what the tape
-needs from the tape, not in the background.
+workspaces there. It must finish before the recording starts; start what the
+tape needs from the tape, not in the background.
 
 However the recording ends, the helper then stops the daemon and every process
 the recording started, including detached ones still working in the tape's
-directory, and reports any it could not stop. Each run starts over, first
-stopping what an interrupted run left there. Nothing reaches your own daemon,
-state or zmx sessions.
+directory or the sandbox's home, and reports any it could not stop. Each run
+starts over, first stopping what an interrupted run left there and removing its
+sandbox. Nothing reaches your own daemon, state or zmx sessions.
 """
 import argparse
 import shutil
@@ -31,7 +32,7 @@ import sys
 from pathlib import Path
 
 import processes
-from sandbox import ROOT, Sandbox, build
+from sandbox import ROOT, Sandbox, build, home
 
 
 def arguments():
@@ -50,6 +51,12 @@ def tape_directory(tape):
     if directory == target or not directory.is_relative_to(target):
         sys.exit(f"put {tape} in its own directory under {target}")
     return directory
+
+
+def run_directories(directory):
+    """Where the run's processes work: the tape's directory and the home of
+    the sandbox in it."""
+    return [directory, home(directory / "sandbox")]
 
 
 def stop_leftovers(leftovers, description):
@@ -112,7 +119,7 @@ def clean_up(sandbox, directory, since):
     """Stop the daemon and what the run started, returning what survives."""
     ignore_termination()
     sandbox.stop_daemon()
-    return stop_leftovers(processes.started_by_run(directory, since),
+    return stop_leftovers(processes.started_by_run(run_directories(directory), since),
                           "processes the recording left running")
 
 
@@ -124,7 +131,8 @@ def main():
     require_vhs()
     unwind_on_termination()
     processes.become_subreaper()
-    stop_leftovers(processes.detached_in(directory), "processes an earlier run left")
+    stop_leftovers(processes.detached_in(run_directories(directory)),
+                   "processes an earlier run left")
     sandbox = prepare_sandbox(directory)
     since = processes.run_start()
     try:

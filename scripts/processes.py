@@ -168,8 +168,9 @@ def descendants(processes, ancestor):
     return [process for process in processes.values() if descends(process)]
 
 
-def inside(process, directory):
-    return process.cwd is not None and process.cwd.is_relative_to(directory)
+def inside(process, directories):
+    return process.cwd is not None and any(process.cwd.is_relative_to(directory)
+                                           for directory in directories)
 
 
 def ancestors(processes):
@@ -189,15 +190,15 @@ def with_descendants(processes, roots):
     return list(found.values())
 
 
-def started_by_run(directory, since):
-    """What a run that started at `since` from `directory` left running: this
+def started_by_run(directories, since):
+    """What a run that started at `since` in `directories` left running: this
     process's descendants, and the processes started since then that work in
-    `directory`, which a detached one does even after its parent exited, with
-    their own descendants wherever they work."""
-    directory = directory.resolve()
+    one of `directories`, which a detached one does even after its parent
+    exited, with their own descendants wherever they work."""
+    directories = [directory.resolve() for directory in directories]
     processes = snapshot()
     detached = [process for process in processes.values()
-                if process.started >= since and inside(process, directory)]
+                if process.started >= since and inside(process, directories)]
     return with_descendants(processes, descendants(processes, os.getpid()) + detached)
 
 
@@ -226,20 +227,20 @@ def orphan_adopter():
     return _adopter
 
 
-def detached_in(directory):
-    """Orphaned processes that work in `directory`, adopted by init, launchd
-    or the subreaper that adopts this process's orphans, with their
+def detached_in(directories):
+    """Orphaned processes that work in one of `directories`, adopted by init,
+    launchd or the subreaper that adopts this process's orphans, with their
     descendants: what an interrupted run left there, which no live process
     outside it keeps. This process's own ancestors, such as a terminal
     multiplexer's server started there, stay."""
-    directory = directory.resolve()
+    directories = [directory.resolve() for directory in directories]
     adopters = {1, orphan_adopter()}
     processes = snapshot()
     own = ancestors(processes)
     return with_descendants(processes, [process for process in processes.values()
                                         if process.ppid in adopters
                                         and process.pid not in own
-                                        and inside(process, directory)])
+                                        and inside(process, directories)])
 
 
 def alive(process):

@@ -17,8 +17,10 @@ class StopTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp()).resolve()
         self.run_dir = self.root / "run"
+        self.home = self.root / "home"
         self.elsewhere = self.root / "elsewhere"
         self.run_dir.mkdir()
+        self.home.mkdir()
         self.elsewhere.mkdir()
         self.started = []
 
@@ -64,7 +66,7 @@ class StopTests(unittest.TestCase):
         loop = self.detached(self.run_dir, "loop", "sh -c '(cd / && exec sleep 300); :'")
         child = self.child_of(loop)
 
-        found = {process.pid for process in processes.started_by_run(self.run_dir, since)}
+        found = {process.pid for process in processes.started_by_run([self.run_dir], since)}
 
         self.assertIn(left.pid, found)
         self.assertIn(loop.pid, found)
@@ -77,15 +79,17 @@ class StopTests(unittest.TestCase):
         self.assertTrue(processes.alive(earlier))
         self.assertTrue(processes.alive(unrelated))
 
-    def test_an_interrupted_run_leaves_detached_processes_in_its_directory(self):
+    def test_an_interrupted_run_leaves_detached_processes_in_its_directories(self):
         left = self.detached(self.run_dir, "left")
+        in_home = self.detached(self.home, "in_home")
         unrelated = self.detached(self.elsewhere, "unrelated")
         loop = self.detached(self.run_dir, "loop", "sh -c '(cd / && exec sleep 300); :'")
         child = self.child_of(loop)
 
-        found = {process.pid for process in processes.detached_in(self.run_dir)}
+        found = {process.pid for process in processes.detached_in([self.run_dir, self.home])}
 
         self.assertIn(left.pid, found)
+        self.assertIn(in_home.pid, found)
         self.assertIn(loop.pid, found)
         # Working elsewhere, but started by what the run left.
         self.assertIn(child.pid, found)
@@ -99,7 +103,7 @@ class StopTests(unittest.TestCase):
             "import json, os, sys\n"
             "from pathlib import Path\n"
             "import processes\n"
-            "found = [process.pid for process in processes.detached_in(Path(sys.argv[1]))]\n"
+            "found = [process.pid for process in processes.detached_in([Path(sys.argv[1])])]\n"
             "print(json.dumps({'shell': os.getppid(), 'found': found}))\n")
         out = self.root / "looked"
         go = self.root / "go"
@@ -133,7 +137,7 @@ left = int(subprocess.run(["sh", "-c", "sleep 300 </dev/null >/dev/null 2>&1 & e
                           check=True).stdout)
 try:
     looked = subprocess.run([sys.executable, "-c", "import json, pathlib, sys, processes; "
-                             "found = processes.detached_in(pathlib.Path(sys.argv[1])); "
+                             "found = processes.detached_in([pathlib.Path(sys.argv[1])]); "
                              "print(json.dumps([process.pid for process in found]))",
                              sys.argv[1]], stdout=subprocess.PIPE, text=True,
                             check=True).stdout

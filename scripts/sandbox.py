@@ -1,7 +1,8 @@
 """A build of Shoal in a sandbox directory: its own home, state
 directory, zmx, tmux and Zellij directories and Git config, without the
 caller's Shoal, Git, host or agent settings, so nothing reaches the user's own
-daemon or sessions."""
+daemon or sessions. The home and the directories that hold sockets lie in a
+short directory under /tmp named after the sandbox, outside any checkout."""
 import hashlib
 import json
 import os
@@ -20,8 +21,8 @@ IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
 LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_", "REX_",
            "TMUX", "ZELLIJ")
 DAEMON_START_SECONDS = 60
-# Not TMPDIR, which can itself be deep.
-SOCKETS_ROOT = Path("/tmp")
+# Not TMPDIR, which can itself be deep or inside a checkout.
+OUTSIDE_ROOT = Path("/tmp")
 
 
 def build(profile="dev"):
@@ -37,25 +38,30 @@ def build(profile="dev"):
     sys.exit("cargo built no shoal executable")
 
 
-def sockets_directory(sandbox):
-    """The short directory for the sandbox's state, zmx, tmux and Zellij
-    directories, which hold sockets, named after the sandbox so a later run
-    finds it. Socket paths hold about 100 bytes and zmx fits session names into
-    what its directory leaves, so a sandbox under a long path cannot hold them
-    itself."""
+def outside_directory(sandbox):
+    """The short directory for what the sandbox cannot hold itself, named after
+    it so a later run finds it: its state, zmx, tmux and Zellij directories,
+    which hold sockets, and its home. Socket paths hold about 100 bytes and zmx
+    fits session names into what its directory leaves, so a sandbox under a
+    long path cannot hold them, and Shoal refuses workspaces inside a Git
+    checkout, so a sandbox under target/ cannot hold the home they go in."""
     digest = hashlib.sha256(str(sandbox).encode()).hexdigest()[:16]
-    return SOCKETS_ROOT / f"shoal-sandbox-{digest}"
+    return OUTSIDE_ROOT / f"shoal-sandbox-{digest}"
+
+
+def home(sandbox):
+    return outside_directory(sandbox) / "home"
 
 
 def isolated(sandbox, identity):
     """The caller's environment without its Git, Shoal, host or agent settings,
     with the sandbox's home, state, zmx, tmux and Zellij directories and Git
     commits made as `identity`."""
-    env = isolated_git.environment(sandbox / "home", **identity)
+    env = isolated_git.environment(home(sandbox), **identity)
     env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
-    sockets = sockets_directory(sandbox)
-    env.update(SHOAL_STATE_DIR=str(sockets / "state"), ZMX_DIR=str(sockets / "zmx"),
-               TMUX_TMPDIR=str(sockets / "tmux"), ZELLIJ_SOCKET_DIR=str(sockets / "zellij"))
+    outside = outside_directory(sandbox)
+    env.update(SHOAL_STATE_DIR=str(outside / "state"), ZMX_DIR=str(outside / "zmx"),
+               TMUX_TMPDIR=str(outside / "tmux"), ZELLIJ_SOCKET_DIR=str(outside / "zellij"))
     return env
 
 
@@ -69,28 +75,29 @@ def environment(sandbox, bin_dir):
 def prepare_directories(sandbox):
     """Create the home and tmux directories `isolated` names, which their
     programs expect to exist."""
-    (sandbox / "home").mkdir(parents=True)
-    sockets = sockets_directory(sandbox)
-    sockets.mkdir(mode=0o700)
-    (sockets / "tmux").mkdir()
+    outside = outside_directory(sandbox)
+    outside.mkdir(mode=0o700)
+    home(sandbox).mkdir()
+    (outside / "tmux").mkdir()
 
 
 def prepare_zmx_lock(sandbox):
     """Create the ownership lock beside the sandbox's zmx directory. Debug builds
     only open an existing lock there, leaving the user's own to the installed Shoal."""
-    (sockets_directory(sandbox) / "zmx.shoal-ownership.lock").touch()
+    (outside_directory(sandbox) / "zmx.shoal-ownership.lock").touch()
 
 
 def remove(sandbox):
-    """Remove the sandbox and its sockets directory."""
+    """Remove the sandbox and its outside directory."""
     shutil.rmtree(sandbox, ignore_errors=True)
-    shutil.rmtree(sockets_directory(sandbox), ignore_errors=True)
+    shutil.rmtree(outside_directory(sandbox), ignore_errors=True)
 
 
 class Sandbox:
     def __init__(self, path):
         self.path = path
         self.bin_dir = path / "bin"
+        self.home = home(path)
         self.env = environment(path, self.bin_dir)
         self.daemon = None
 
@@ -113,12 +120,11 @@ class Sandbox:
         self.clear()
         self.bin_dir.mkdir(parents=True)
         prepare_directories(self.path)
-        home = self.path / "home"
         # An empty home would start zsh's first-run wizard instead of a prompt.
-        (home / ".zshrc").write_text(f"PROMPT='{prompt} %1~ %# '\n")
-        (home / ".bashrc").write_text(f"PS1='{prompt} \\W \\$ '\n")
+        (self.home / ".zshrc").write_text(f"PROMPT='{prompt} %1~ %# '\n")
+        (self.home / ".bashrc").write_text(f"PS1='{prompt} \\W \\$ '\n")
         # Nor Zellij's first-run tips over the recording.
-        zellij = home / ".config" / "zellij"
+        zellij = self.home / ".config" / "zellij"
         zellij.mkdir(parents=True)
         (zellij / "config.kdl").write_text("show_startup_tips false\nshow_release_notes false\n")
         (self.bin_dir / "shoal").symlink_to(shoal)

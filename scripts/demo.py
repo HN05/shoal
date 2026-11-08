@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Try a development build of Shoal against sample data.
 
-Builds Shoal, starts its daemon with a fresh home under target/demo and state
-directory in a short directory under /tmp, fills it with a repository,
+Builds Shoal, starts its daemon with a fresh sandbox under target/demo, whose
+home and state directory lie in a short directory under /tmp, fills it with a repository,
 workspaces, a question, an approval request, a ready mark and a notification,
 then opens a shell where `shoal` is that build. Nothing reaches your own daemon, state or zmx sessions. Leaving the
 shell stops the daemon; the next run starts over.
