@@ -675,15 +675,12 @@ async fn done_closes_a_question_it_cannot_read() {
     let (id, number) = (workspace.id.clone(), asked.number);
     let closed = manager
         .store
-        .run(move |db| {
-            db.execute(
+        .write(move |tx| {
+            tx.execute(
                 "UPDATE questions SET choices='not json' WHERE space_number=?1 AND number=?2",
                 params![number.space, number.item],
             )?;
-            let tx = db.transaction()?;
-            let closed = close_open(&tx, &id)?;
-            tx.commit()?;
-            Ok(closed)
+            close_open(tx, &id)
         })
         .await
         .unwrap();
