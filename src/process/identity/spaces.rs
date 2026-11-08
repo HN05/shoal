@@ -3,8 +3,9 @@
 //! tied to it with every process they started. A process a tracked one
 //! started, or one that started a tracked one, belongs to that one instead.
 use super::{
-    Identity, Inventory, Lineage, MAX_ANCESTRY, Marker, Marks, descends_from_detached, executable,
-    inventory, owners, working_directory,
+    Identity, Inventory, Lineage, MAX_ANCESTRY, descends_from_detached, executable, inventory,
+    marks::{Marker, Marks},
+    owners, working_directory,
 };
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
@@ -253,7 +254,10 @@ impl<'a> Survey<'a> {
 /// Setuid programs this user started run as another user: Shoal neither
 /// reports nor stops them.
 fn runs_as_this_user(inventory: &Inventory, pid: u32) -> bool {
-    !matches!(inventory.observed[&pid].evidence, super::Evidence::Elevated)
+    !matches!(
+        inventory.observed[&pid].evidence,
+        super::marks::Evidence::Elevated
+    )
 }
 
 #[cfg(test)]

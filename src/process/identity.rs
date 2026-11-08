@@ -17,6 +17,9 @@ use std::{
     time::Duration,
 };
 
+use marks::{Evidence, Marker, Marks, Observed, left_execution, observe, observe_elevated};
+pub use marks::{owned_by_workspace, started_with};
+
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
 
@@ -380,88 +383,6 @@ fn listed() -> Result<Vec<Listed>> {
     listed.retain(|process| process.pid > 1 && process.pid != std::process::id());
     Ok(listed)
 }
-
-/// One live process and what its own environment says about its owner.
-struct Observed {
-    lineage: Lineage,
-    evidence: Evidence,
-}
-
-/// The markers of Shoal's identity an environment carries.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Marks {
-    execution: Option<String>,
-    workspace: Option<String>,
-    chat: Option<String>,
-    /// The run directory of a one-shot agent run.
-    oneshot: Option<String>,
-    /// It runs one of the hooks the daemon starts.
-    hook: bool,
-}
-
-/// The marker a scan attributes processes by.
-#[derive(Clone, Copy)]
-enum Marker {
-    Execution,
-    Workspace,
-    Chat,
-    OneShot,
-}
-
-impl Marks {
-    fn read(environment: &[Vec<u8>]) -> Self {
-        let value = |variable: &str| {
-            let prefix = format!("{variable}=");
-            environment
-                .iter()
-                .find_map(|entry| entry.strip_prefix(prefix.as_bytes()))
-                .and_then(|value| std::str::from_utf8(value).ok())
-                .map(str::to_owned)
-        };
-        Self {
-            execution: value(crate::env::EXECUTION_ID),
-            workspace: value(crate::env::WORKSPACE_ID),
-            chat: value(crate::env::CHAT),
-            oneshot: value(crate::env::ONESHOT_RUN),
-            hook: value(crate::env::HOOK).is_some(),
-        }
-    }
-
-    fn get(&self, marker: Marker) -> Option<&str> {
-        match marker {
-            Marker::Execution => self.execution.as_deref(),
-            Marker::Workspace => self.workspace.as_deref(),
-            // A workspace's process a chat started belongs to the workspace.
-            Marker::Chat => self.chat.as_deref().filter(|_| !self.of_workspace()),
-            Marker::OneShot => self.oneshot.as_deref(),
-        }
-    }
-
-    /// Whether a workspace or one of its executions owns the process.
-    fn of_workspace(&self) -> bool {
-        self.workspace.is_some() || self.execution.is_some()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.execution.is_none()
-            && self.workspace.is_none()
-            && self.chat.is_none()
-            && self.oneshot.is_none()
-    }
-}
-
-enum Evidence {
-    Marked(Marks),
-    Unmarked,
-    Unreadable,
-    /// Settled empty, which a platform binary's hidden environment also reads as.
-    Hidden,
-    /// A setuid program this user started, whose environment came from the
-    /// parent that started it. It runs as another user, so it is never
-    /// reported or stopped itself.
-    Elevated,
-}
-
 /// Whether the unattributed process `identity` still keeps the ownership of
 /// `execution` from being proven at `deadline`. A short-lived process launchd
 /// adopted while its environment was hidden, such as a detached helper still
@@ -501,63 +422,6 @@ pub fn works_in(identity: &Identity, directory: &std::path::Path) -> Result<bool
     };
     // The PID may have gone to another process since the read.
     Ok(working.starts_with(directory) && alive(identity)?)
-}
-
-/// Whether `identity` was started with `variable` set. An environment that
-/// cannot be read counts as without it.
-pub fn started_with(identity: &Identity, variable: &str) -> bool {
-    let prefix = format!("{variable}=");
-    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-    matches!(
-        visibility(identity, deadline),
-        Ok(Visibility::Environment(environment))
-            if environment.iter().any(|entry| entry.starts_with(prefix.as_bytes()))
-    )
-}
-
-/// Read `pid`'s environment for Shoal's markers, unless it has exited.
-fn observe(pid: u32, deadline: std::time::Instant) -> Result<Option<Observed>> {
-    observe_with(pid, deadline, hides_environment)
-}
-
-/// `observe`, telling hidden environments with `hides`.
-fn observe_with(
-    pid: u32,
-    deadline: std::time::Instant,
-    hides: impl FnOnce(u32) -> bool,
-) -> Result<Option<Observed>> {
-    let Some(lineage) = lineage(pid)? else {
-        return Ok(None);
-    };
-    let evidence = match visibility(&lineage.identity, deadline)? {
-        Visibility::Environment(environment) if environment.is_empty() && hides(pid) => {
-            // A process that exited fails the check as if it hid its
-            // environment.
-            if !alive(&lineage.identity)? {
-                return Ok(None);
-            }
-            Evidence::Hidden
-        }
-        Visibility::Environment(environment) => {
-            let marks = Marks::read(&environment);
-            if marks.is_empty() {
-                Evidence::Unmarked
-            } else {
-                Evidence::Marked(marks)
-            }
-        }
-        Visibility::Unreadable => Evidence::Unreadable,
-        Visibility::Gone => return Ok(None),
-    };
-    Ok(Some(Observed { lineage, evidence }))
-}
-
-/// Observe `pid`, a setuid program this user started, unless it has exited.
-fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
-    Ok(elevated_lineage(pid)?.map(|lineage| Observed {
-        lineage,
-        evidence: Evidence::Elevated,
-    }))
 }
 
 #[derive(Clone)]
@@ -770,12 +634,6 @@ impl<'a> Inventory<'a> {
     }
 }
 
-enum Visibility {
-    Environment(Vec<Vec<u8>>),
-    Unreadable,
-    Gone,
-}
-
 enum Image {
     Settled,
     /// Replacing its image: the new environment is not published yet. Only
@@ -790,65 +648,6 @@ enum Image {
 /// yet, often right after reading them as empty; Linux reads them as empty
 /// instead.
 const REFUSED_WHILE_LOADING: bool = cfg!(target_os = "macos");
-
-/// Linux reads an empty environment while a process replaces its image and
-/// after an exiting process releases its memory; neither is evidence about
-/// ownership. Wait for loading images, then confirm a settled empty read.
-fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visibility> {
-    visibility_with(identity, deadline, environment)
-}
-
-/// `visibility`, reading environments with `environment`.
-fn visibility_with(
-    identity: &Identity,
-    deadline: std::time::Instant,
-    mut environment: impl FnMut(u32) -> Result<Vec<Vec<u8>>>,
-) -> Result<Visibility> {
-    loop {
-        let read = environment(identity.pid);
-        if !alive(identity)? {
-            return Ok(Visibility::Gone);
-        }
-        match read {
-            Ok(environment) if !environment.is_empty() => {
-                return Ok(Visibility::Environment(environment));
-            }
-            // Without CAP_SYS_PTRACE, Linux refuses an exiting process's
-            // environment. A refusal also hides env_end, so never wait on it.
-            Err(_) => match image(identity.pid)? {
-                Image::Ended => return Ok(Visibility::Gone),
-                _ if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(1));
-                    continue;
-                }
-                _ => return Ok(Visibility::Unreadable),
-            },
-            Ok(_) => {}
-        }
-        match image(identity.pid)? {
-            Image::Ended => return Ok(Visibility::Gone),
-            Image::Loading if std::time::Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(1));
-            }
-            Image::Loading => return Ok(Visibility::Unreadable),
-            // The image may have settled after the empty read.
-            Image::Settled => {
-                let read = environment(identity.pid);
-                // The PID may have gone to another process since the read.
-                if !alive(identity)? {
-                    return Ok(Visibility::Gone);
-                }
-                match read {
-                    Ok(environment) => return Ok(Visibility::Environment(environment)),
-                    Err(_) if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
-                    Err(_) => return Ok(Visibility::Unreadable),
-                }
-            }
-        }
-    }
-}
 
 /// macOS refuses an exiting process's arguments, and its records soon after;
 /// in between they flag the exit.
@@ -1612,20 +1411,6 @@ pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Resul
     .context("process lineage worker failed")?
 }
 
-/// Whether the process `identity` names belongs to a workspace: it is one of
-/// the execution `wrappers`, or its own environment, read rather than
-/// hidden, carries a workspace's or an execution's marker.
-pub fn owned_by_workspace(identity: &Identity, wrappers: &[Identity]) -> Result<bool> {
-    if wrappers.contains(identity) {
-        return Ok(true);
-    }
-    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-    Ok(observe(identity.pid, deadline)?.is_some_and(|observed| {
-        observed.lineage.identity == *identity
-            && matches!(&observed.evidence, Evidence::Marked(marks) if marks.of_workspace())
-    }))
-}
-
 /// A live, identity-verified leader establishes ownership of its group and
 /// current descendants (including children that started another session).
 /// After it exits, its lineage still establishes ownership of the processes
@@ -1737,24 +1522,6 @@ fn descended_from(
     })
 }
 
-/// Whether the process's own environment, read rather than hidden, lacks
-/// the execution's marker: a process started without it, such as a demo,
-/// no longer belongs to the execution, nor do its descendants.
-fn left_execution(
-    identity: &Identity,
-    execution: &str,
-    deadline: std::time::Instant,
-) -> Result<bool> {
-    Ok(observe(identity.pid, deadline)?.is_some_and(|observed| {
-        observed.lineage.identity == *identity
-            && match &observed.evidence {
-                Evidence::Unmarked => true,
-                Evidence::Marked(marks) => marks.get(Marker::Execution) != Some(execution),
-                _ => false,
-            }
-    }))
-}
-
 /// A parent's unique ID is lower than its children's, since the kernel
 /// assigns them in order, so one pass in that order finds every descendant.
 /// A descendant that `left` names is left out with its own descendants.
@@ -1813,6 +1580,7 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
     Ok(())
 }
 
+mod marks;
 mod owners;
 pub mod spaces;
 #[cfg(target_os = "linux")]

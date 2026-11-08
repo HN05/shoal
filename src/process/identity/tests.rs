@@ -1,3 +1,4 @@
+use super::marks::{Visibility, observe_with, visibility, visibility_with};
 use super::*;
 
 #[test]

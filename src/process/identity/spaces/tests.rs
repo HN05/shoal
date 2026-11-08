@@ -1,4 +1,7 @@
-use super::super::{Evidence, Observed, owners::Owners};
+use super::super::{
+    marks::{Evidence, Observed},
+    owners::Owners,
+};
 use super::*;
 use crate::test_support::{
     Adopted, Detached, copy_test_binary, isolated_command, run_until_stopped_in, runs_until_stopped,

@@ -3,7 +3,7 @@
 //! process keeps its own unique ID for life, and one launchd adopted keeps its
 //! exited parent's until it replaces its image; neither is ever reused within
 //! a boot, which the daemon's memory never outlives.
-use super::Marks;
+use super::marks::Marks;
 use std::{
     collections::{HashMap, HashSet},
     sync::{LazyLock, Mutex, PoisonError},
