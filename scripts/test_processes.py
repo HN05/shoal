@@ -102,13 +102,17 @@ class StopTests(unittest.TestCase):
             "found = [process.pid for process in processes.detached_in(Path(sys.argv[1]))]\n"
             "print(json.dumps({'shell': os.getppid(), 'found': found}))\n")
         out = self.root / "looked"
+        go = self.root / "go"
         scripts = Path(processes.__file__).resolve().parent
-        subprocess.run(["sh", "-c", f"sh -c '{sys.executable} {look} {self.run_dir} > {out}.tmp; "
+        # The shell looks once its parent has exited and it has been adopted.
+        subprocess.run(["sh", "-c", f"sh -c 'until [ -e {go} ]; do sleep 0.05; done; "
+                        f"{sys.executable} {look} {self.run_dir} > {out}.tmp; "
                         f"mv {out}.tmp {out}' &"],
                        cwd=self.run_dir, env={"PATH": os.environ["PATH"],
                                               "PYTHONPATH": str(scripts)},
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, check=True)
+        go.touch()
         deadline = time.monotonic() + START_SECONDS
         while not out.exists():
             self.assertLess(time.monotonic(), deadline, "the lookup never finished")
