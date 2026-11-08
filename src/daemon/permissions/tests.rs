@@ -162,3 +162,35 @@ async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() 
     assert_eq!(below.value, Opening::Propose);
     assert_eq!(below.from, PermissionSource::Parent);
 }
+
+#[tokio::test]
+async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let config = "[modes.review.permissions]\npush = 'propose'\n\
+                  [modes.chat.permissions]\npush = 'deny'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let child = workspace(&manager, &repo, "child", &top.id, None).await;
+    let launch = |mode: &'static str| {
+        let (manager, child) = (manager.clone(), child.clone());
+        async move { manager.launch_permissions(child, mode).await.unwrap().push }
+    };
+    let review = launch("review").await;
+    assert_eq!(review.value, Pushes::Deny);
+    assert_eq!(review.from, PermissionSource::Parent);
+    // Nothing is recorded: the workspace has no mode of its own yet.
+    let recorded = manager
+        .space_permissions(&child.id, Some(&repo.id))
+        .await
+        .unwrap();
+    assert_eq!(recorded.push.value, Pushes::Deny);
+    let config = "[modes.review.permissions]\npush = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    assert_eq!(launch("review").await.value, Pushes::Propose);
+    assert_eq!(launch("worker").await.value, Pushes::Direct);
+}

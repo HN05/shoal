@@ -138,6 +138,12 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
         branch: String,
     },
+    /// The effective permissions of an agent starting in `mode` in the
+    /// workspace, which its launch's push rules follow.
+    LaunchPermissions {
+        workspace: SpaceSelector,
+        mode: String,
+    },
     WorkspaceEnv {
         workspace: SpaceSelector,
     },

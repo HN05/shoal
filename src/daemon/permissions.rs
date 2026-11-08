@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::{
     config::permissions::{self, Permissions, SpaceMode},
     daemon::{scope::Caller, workspace::Manager},
-    model::{PresentSpace, SpaceKind},
+    model::{PresentSpace, SpaceKind, Workspace},
 };
 
 impl Manager {
@@ -33,6 +33,23 @@ impl Manager {
     ) -> Result<Permissions> {
         let space = self.space_by_id(id).await?;
         (self.permissions_below_parent(&space, recorded_mode(&space), repository)).await
+    }
+
+    /// The effective permissions an agent starting in `mode` in `workspace`
+    /// has, which its launch follows before the mode is recorded.
+    pub(crate) async fn launch_permissions(
+        &self,
+        workspace: Workspace,
+        mode: &str,
+    ) -> Result<Permissions> {
+        let repository = workspace.repository_id.clone();
+        let mode = SpaceMode {
+            name: mode,
+            kind: SpaceKind::Workspace,
+            repository: true,
+        };
+        let space = PresentSpace::Workspace(workspace);
+        (self.permissions_below_parent(&space, Some(mode), Some(&repository))).await
     }
 
     /// The permissions of `space` in `mode`, none wider than the effective

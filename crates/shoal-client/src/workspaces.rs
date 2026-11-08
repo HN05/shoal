@@ -281,6 +281,19 @@ pub async fn close_owned_place(
     .await
 }
 
+/// The effective permissions of an agent starting in `mode` in `workspace`.
+pub async fn launch_permissions(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    mode: String,
+) -> Result<crate::config::permissions::Permissions> {
+    request(
+        daemon,
+        WorkspaceMethod::LaunchPermissions { workspace, mode },
+    )
+    .await
+}
+
 /// The environment `workspace`'s configuration gives its commands.
 pub async fn environment(
     daemon: &impl Daemon,

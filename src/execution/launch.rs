@@ -554,14 +554,9 @@ async fn prepare_agent_launch(
         None => None,
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
-    let push_gate = match has_agent
-        && crate::config::permissions::resolve(&settings, None)?
-            .push
-            .value
-            != Pushes::Direct
-    {
-        true => prepare_push_gate(paths, workspace).await?,
-        false => Default::default(),
+    let push_gate = match agent {
+        Some(agent) => prepare_push_gate(paths, workspace, &agent.mode).await?,
+        None => Default::default(),
     };
     let mut git = crate::agent_git::Launch::prepare(
         settings.agent.git_profile.as_deref(),
@@ -587,9 +582,20 @@ async fn prepare_agent_launch(
     }))
 }
 
-/// The helper that holds back the agent's pushes to the remotes of
-/// `workspace`'s repository for the user's approval, or refuses them.
-async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push_gate::Launch> {
+/// The helper that holds back the pushes of an agent starting in `mode` to
+/// the remotes of `workspace`'s repository for approval, or refuses them,
+/// as its `push` permission at launch says; none where it pushes directly.
+async fn prepare_push_gate(
+    paths: &Paths,
+    workspace: &str,
+    mode: &str,
+) -> Result<crate::push_gate::Launch> {
+    let selector = SpaceSelector::parse(workspace);
+    let permissions =
+        crate::client::workspaces::launch_permissions(paths, selector, mode.to_owned()).await?;
+    if permissions.push.value == Pushes::Direct {
+        return Ok(Default::default());
+    }
     let method = crate::protocol::WorkspaceMethod::VerifyWorkspace {
         workspace: SpaceSelector::parse(workspace),
         on_branch: false,
@@ -597,7 +603,7 @@ async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push
     let workspace: crate::model::Workspace = connection::request(paths, method).await?;
     crate::push_gate::Launch::prepare(paths, &workspace.path)
         .await
-        .context("[permissions] push")
+        .context("the push permission")
 }
 
 fn execution_command(

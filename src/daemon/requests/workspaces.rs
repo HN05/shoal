@@ -190,6 +190,10 @@ pub(super) async fn handle(
         WorkspaceMethod::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
+        WorkspaceMethod::LaunchPermissions { workspace, mode } => {
+            let workspace = manager.workspace(&workspace).await?;
+            Body::Permissions(manager.launch_permissions(workspace, &mode).await?)
+        }
         WorkspaceMethod::WorkspaceEnv { workspace } => {
             Body::WorkspaceEnv(manager.workspace_environment(&workspace).await?)
         }
@@ -336,6 +340,7 @@ impl Scoped for WorkspaceMethod {
             }
             | WorkspaceMethod::InspectWorkspace { workspace }
             | WorkspaceMethod::VerifyWorkspace { workspace, .. }
+            | WorkspaceMethod::LaunchPermissions { workspace, .. }
             | WorkspaceMethod::FastForwardWorkspace { workspace, .. }
             | WorkspaceMethod::DiffBase { workspace }
             | WorkspaceMethod::Conflicts { workspace, .. }

@@ -636,6 +636,7 @@ response_bodies! {
     CiRunJobs(Vec<crate::forge::ci::run_view::RunJob>),
     CiRuns(Vec<crate::forge::ci::run_action::Run>),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
+    Permissions(crate::config::permissions::Permissions),
     Cleanup(crate::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
     AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
