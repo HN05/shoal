@@ -2,7 +2,10 @@
 use super::{LABEL, Platform, UNIT, control::SERVICE_STOP_TIMEOUT};
 use crate::client::output::daemon::Definition;
 use crate::{
-    fsutil::{self, Permissions, ReplaceOptions},
+    fsutil::{
+        self,
+        atomic::{Permissions, ReplaceOptions},
+    },
     paths::Paths,
 };
 use anyhow::{Context, Result, ensure};
@@ -28,7 +31,7 @@ pub fn file(paths: &Paths, platform: Platform) -> PathBuf {
 pub fn executable(explicit: Option<PathBuf>) -> Result<PathBuf> {
     let path = match explicit {
         Some(path) => path,
-        None => fsutil::invoked_executable()?,
+        None => fsutil::executables::invoked_executable()?,
     };
     let path = if path.is_absolute() {
         path
@@ -36,7 +39,7 @@ pub fn executable(explicit: Option<PathBuf>) -> Result<PathBuf> {
         std::env::current_dir()?.join(path)
     };
     ensure!(
-        crate::fsutil::is_executable(&path).unwrap_or(false),
+        crate::fsutil::executables::is_executable(&path).unwrap_or(false),
         "not an executable file: {}",
         path.display()
     );
@@ -152,7 +155,7 @@ pub(super) fn write_definition(definition: &Definition) -> Result<bool> {
                 .parent()
                 .context("missing service directory")?,
         )?;
-        fsutil::replace_atomically(
+        fsutil::atomic::replace_atomically(
             &definition.path,
             definition.content.as_bytes(),
             ReplaceOptions {

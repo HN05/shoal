@@ -30,13 +30,13 @@ pub(super) fn merge(args: &mut Vec<OsString>, routing: &super::super::Routing) -
 
 /// Write `settings` to a file in `private` that only the user can read.
 fn write_private(private: &Path, settings: &Value) -> Result<std::path::PathBuf> {
-    use crate::fsutil::{Permissions, ReplaceOptions};
+    use crate::fsutil::atomic::{Permissions, ReplaceOptions};
     let path = private.join("claude-settings.json");
     let options = ReplaceOptions {
         permissions: Permissions::Temporary,
         sync: false,
     };
-    crate::fsutil::replace_atomically(&path, settings.to_string().as_bytes(), options)
+    crate::fsutil::atomic::replace_atomically(&path, settings.to_string().as_bytes(), options)
         .with_context(|| format!("write {}", path.display()))?;
     Ok(path)
 }

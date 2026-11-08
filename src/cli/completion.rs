@@ -246,7 +246,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
             } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
                 arg.add(ArgValueCompleter::new(|current: &OsStr| {
                     let mut names = vec!["all".to_owned()];
-                    if let Ok(home) = crate::fsutil::home_dir()
+                    if let Ok(home) = crate::fsutil::home::home_dir()
                         && let Ok(agents) = crate::ai::load(&home)
                         && let Ok(directories) = crate::ai::skill_dirs(&agents, &home)
                     {

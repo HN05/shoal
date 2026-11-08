@@ -6,7 +6,7 @@ use crate::client::output::{
     self,
     skill::{Installed, Skill, SkillFile},
 };
-use crate::fsutil::{self, Permissions, ReplaceOptions};
+use crate::fsutil::atomic::{self, Permissions, ReplaceOptions};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs, io,
@@ -63,7 +63,7 @@ pub(super) fn run(
         "development builds cannot install user-level skills; set {}=1 in a temporary HOME to test installation",
         crate::env::DEV_USER_FILES
     );
-    let home = crate::fsutil::home_dir()?;
+    let home = crate::fsutil::home::home_dir()?;
     ensure!(home.is_absolute(), "HOME must be an absolute path");
     let directories = crate::ai::skill_dirs(&crate::ai::load(&home)?, &home)?;
     let destinations: Vec<_> = if agent == "all" {
@@ -170,7 +170,7 @@ pub(super) fn refresh_installed(state: &Path, json_output: bool) {
 
 /// Every configured skill directory, once; `refresh` skips those without Shoal skills.
 fn installed_directories() -> Result<BTreeSet<PathBuf>> {
-    let home = crate::fsutil::home_dir()?;
+    let home = crate::fsutil::home::home_dir()?;
     ensure!(home.is_absolute(), "HOME must be an absolute path");
     let directories = crate::ai::skill_dirs(&crate::ai::load(&home)?, &home)?;
     Ok(directories.into_values().flatten().collect())
@@ -498,7 +498,7 @@ fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
 /// holding its app bundle, since a file added inside a signed bundle breaks
 /// the bundle's signature.
 fn package_directory(executable: &Path) -> Option<&Path> {
-    match crate::fsutil::app_bundle(executable) {
+    match crate::fsutil::executables::app_bundle(executable) {
         Some(bundle) => bundle.parent(),
         None => executable.parent(),
     }
@@ -509,7 +509,7 @@ fn install(path: &Path, contents: &str) -> Result<()> {
     fs::create_dir_all(directory)
         .with_context(|| format!("create skill directory {}", directory.display()))?;
     // Replace only SKILL.md atomically, never following its previous symlink.
-    fsutil::replace_atomically(
+    atomic::replace_atomically(
         path,
         contents.as_bytes(),
         ReplaceOptions {

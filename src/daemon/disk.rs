@@ -69,7 +69,11 @@ pub(super) async fn run(manager: Arc<Manager>) {
         tokio::time::sleep(Duration::from_secs(poll)).await;
         let _operation = manager.gates.operation().await;
         if let Err(error) = monitor
-            .check(&manager, Instant::now(), crate::fsutil::available_bytes)
+            .check(
+                &manager,
+                Instant::now(),
+                crate::fsutil::disk_space::available_bytes,
+            )
             .await
         {
             manager.config_state.publish_disk_reading(None);

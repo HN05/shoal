@@ -62,7 +62,7 @@ pub(super) async fn run(ctx: &Context) -> Result<i32> {
 
 /// The file this command runs from; Homebrew updates its own installations.
 fn installed_binary() -> Result<PathBuf> {
-    let path = fs::canonicalize(crate::fsutil::invoked_executable()?)
+    let path = fs::canonicalize(crate::fsutil::executables::invoked_executable()?)
         .context("resolve the shoal executable")?;
     ensure!(
         !homebrew_installed(&path),
@@ -80,7 +80,7 @@ enum Installation {
 
 impl Installation {
     fn of(binary: &Path) -> Self {
-        match crate::fsutil::app_bundle(binary) {
+        match crate::fsutil::executables::app_bundle(binary) {
             Some(bundle) => Self::Bundle(bundle.to_owned()),
             None => Self::Binary(binary.to_owned()),
         }

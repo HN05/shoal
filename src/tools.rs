@@ -54,7 +54,8 @@ impl Tool {
     /// Whether the program is executable on this process's `PATH`.
     pub fn installed(self) -> bool {
         let path = std::env::var_os("PATH").unwrap_or_default();
-        crate::fsutil::find_executable(std::ffi::OsStr::new(self.program()), &path).is_some()
+        crate::fsutil::executables::find_executable(std::ffi::OsStr::new(self.program()), &path)
+            .is_some()
     }
 
     pub fn dependencies() -> impl Iterator<Item = (Self, Dependency)> {
@@ -80,10 +81,10 @@ pub(crate) fn ensure_program(name: &str, program: &str) -> Result<()> {
 pub(crate) fn program_available(program: &str, search_path: &OsStr) -> bool {
     let path = Path::new(program);
     if path.is_absolute() {
-        fsutil::is_executable(path).unwrap_or(false)
+        fsutil::executables::is_executable(path).unwrap_or(false)
     } else if program.contains('/') || program.contains('{') {
         true
     } else {
-        fsutil::find_executable(OsStr::new(program), search_path).is_some()
+        fsutil::executables::find_executable(OsStr::new(program), search_path).is_some()
     }
 }

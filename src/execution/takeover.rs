@@ -19,7 +19,7 @@ use tokio::io::BufReader;
 use super::{Mode, link::Link};
 use crate::{
     env,
-    fsutil::{FileIdentity, set_inherited},
+    fsutil::{FileIdentity, descriptors::set_inherited},
     model::ExecutionPlan,
     paths::Paths,
     protocol::{Control, ExecutionEvent, timing},

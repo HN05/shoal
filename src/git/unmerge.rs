@@ -350,9 +350,14 @@ async fn add_replay_worktree(repo: &Path, tip: &str) -> Result<PathBuf> {
     remove_replay_worktree(repo).await?;
     let directory = replay_directory(repo).await?;
     let marked = directory.clone();
-    off_runtime::run(move || Ok(fsutil::create_marked_dir(&marked, REPLAY_OWNER)?))
-        .await
-        .with_context(|| format!("create {}", directory.display()))?;
+    off_runtime::run(move || {
+        Ok(fsutil::marked_dirs::create_marked_dir(
+            &marked,
+            REPLAY_OWNER,
+        )?)
+    })
+    .await
+    .with_context(|| format!("create {}", directory.display()))?;
     ensure_replay_directory(&directory).await?;
     let worktree = directory.join("replay");
     let path = worktree.to_string_lossy();
@@ -387,9 +392,14 @@ async fn remove_replay_worktree(repo: &Path) -> Result<()> {
 /// Refuse a replay directory Shoal did not create.
 async fn ensure_replay_directory(directory: &Path) -> Result<()> {
     let checked = directory.to_owned();
-    let marked = off_runtime::run(move || Ok(fsutil::check_marked_dir(&checked, REPLAY_OWNER)?))
-        .await
-        .with_context(|| format!("read {}", directory.display()))?;
+    let marked = off_runtime::run(move || {
+        Ok(fsutil::marked_dirs::check_marked_dir(
+            &checked,
+            REPLAY_OWNER,
+        )?)
+    })
+    .await
+    .with_context(|| format!("read {}", directory.display()))?;
     ensure!(
         marked,
         "{} exists and Shoal did not create it, so the unmerge does not replay there; remove it to unmerge",

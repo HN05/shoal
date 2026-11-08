@@ -40,7 +40,7 @@ pub async fn fill(source: &Path, copy: &Path, head: &str) -> Result<()> {
         current == head,
         "the workspace's HEAD moved while it was copied; copy it again"
     );
-    crate::fsutil::clone_worktree(source, copy).await
+    crate::fsutil::copy::clone_worktree(source, copy).await
 }
 
 /// The paths in the worktree whose Git metadata lives elsewhere, which a

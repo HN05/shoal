@@ -178,7 +178,7 @@ fn narrowing_args(agent: &crate::execution::TrackedAgent) -> Vec<OsString> {
 /// text to the person at that terminal whatever `SHOAL_OUTPUT` it has.
 pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
     Ok(vec![
-        crate::fsutil::invoked_executable()?.into_os_string(),
+        crate::fsutil::executables::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         paths.state.clone().into_os_string(),
         "--text".into(),
@@ -194,7 +194,7 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
 /// [`internal_command`] for the state directory `state`.
 pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
     let mut args = vec![
-        crate::fsutil::invoked_executable()?.into_os_string(),
+        crate::fsutil::executables::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         state.as_os_str().to_owned(),
         if json { "--json" } else { "--text" }.into(),

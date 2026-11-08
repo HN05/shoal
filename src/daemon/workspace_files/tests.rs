@@ -1220,7 +1220,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
         .workspaces_dir
         .unwrap()
         .join(".attachments")
-        .join(crate::fsutil::OWNER_MARKER);
+        .join(crate::fsutil::marked_dirs::OWNER_MARKER);
     std::fs::set_permissions(&marker, std::fs::Permissions::from_mode(0o000)).unwrap();
     let failed = reopened.record_earlier_files().await;
     std::fs::set_permissions(&marker, std::fs::Permissions::from_mode(0o600)).unwrap();

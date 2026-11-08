@@ -455,7 +455,7 @@ fn var(name: &str) -> Option<String> {
 fn program(bin_dir: Option<PathBuf>) -> Result<PathBuf> {
     let in_bin_dir = bin_dir.map(|directory| directory.join("rex"));
     let on_path = || {
-        crate::fsutil::find_executable(
+        crate::fsutil::executables::find_executable(
             OsStr::new("rex"),
             &std::env::var_os("PATH").unwrap_or_default(),
         )

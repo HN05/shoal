@@ -12,7 +12,7 @@ use crate::{
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    fsutil::{Permissions, ReplaceOptions},
+    fsutil::atomic::{Permissions, ReplaceOptions},
     model::Chat,
     paths::Paths,
 };
@@ -62,7 +62,7 @@ impl History {
     }
 
     fn save(&self, paths: &Paths) -> Result<()> {
-        crate::fsutil::replace_atomically(
+        crate::fsutil::atomic::replace_atomically(
             &paths.recent_workspaces(),
             &serde_json::to_vec(self)?,
             ReplaceOptions {

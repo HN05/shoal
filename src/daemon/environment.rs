@@ -38,7 +38,7 @@ fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
     Tool::dependencies()
         .map(|(tool, dependency)| {
             let program = tool.program();
-            let executable = path.and_then(|path| crate::fsutil::find_executable(OsStr::new(program), path));
+            let executable = path.and_then(|path| crate::fsutil::executables::find_executable(OsStr::new(program), path));
             let (status, message) = match executable {
                 Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
                 None => (

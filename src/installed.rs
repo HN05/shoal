@@ -23,7 +23,7 @@ impl Executable {
                 identity: invoked.identity,
             };
         }
-        match crate::fsutil::invoked_executable() {
+        match crate::fsutil::executables::invoked_executable() {
             Ok(path) => Self::at(path),
             Err(_) => Self {
                 path: None,

@@ -198,7 +198,11 @@ fn memory_room(settings: &Overload) -> Option<u64> {
 
 /// The least free space across `paths`, as [`sample`] probes it.
 pub(crate) fn disk_free(paths: &[&Path], settings: &Overload) -> Option<u64> {
-    sample_disk(paths, settings.disk.enabled, fsutil::available_bytes)
+    sample_disk(
+        paths,
+        settings.disk.enabled,
+        fsutil::disk_space::available_bytes,
+    )
 }
 
 fn sample_memory(settings: &Overload) -> MemoryState {

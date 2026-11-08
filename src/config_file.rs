@@ -8,7 +8,10 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-use crate::fsutil::{self, Permissions, ReplaceOptions};
+use crate::fsutil::{
+    self,
+    atomic::{Permissions, ReplaceOptions},
+};
 
 use crate::config::{
     Config, PACKAGED,
@@ -56,7 +59,7 @@ pub fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> 
     let parent = path.parent().context("config path has no parent")?;
     fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     // Prepare the complete replacement before touching the user's current file.
-    let temporary = fsutil::prepare_atomic_write(
+    let temporary = fsutil::atomic::prepare_atomic_write(
         &path,
         text.as_bytes(),
         ReplaceOptions {

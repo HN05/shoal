@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     env,
-    fsutil::{FileIdentity, set_inherited},
+    fsutil::{FileIdentity, descriptors::set_inherited},
 };
 
 /// The path a process was started through, and the file there at the time.

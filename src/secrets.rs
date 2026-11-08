@@ -139,7 +139,7 @@ pub async fn run_tool(
     let secrets = read_manifest(launchers)?;
     let served = served_to(&secrets, tool);
     let search = path_after(&std::env::var_os("PATH").unwrap_or_default(), launchers)?;
-    let program = crate::fsutil::find_executable(OsStr::new(tool), &search)
+    let program = crate::fsutil::executables::find_executable(OsStr::new(tool), &search)
         .with_context(|| format!("{tool} is not on PATH"))?;
     authorize(paths, tool, &served).await?;
     let values = fetch_served(served, &search).await?;

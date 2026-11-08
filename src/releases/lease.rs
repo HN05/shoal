@@ -27,7 +27,7 @@ impl Releases {
     /// file it links to, is; none for a program outside a bundle.
     pub(crate) fn lease(&self, executable: &Path) -> io::Result<Option<Lease>> {
         let executable = &fs::canonicalize(executable)?;
-        let Some(bundle) = crate::fsutil::app_bundle(executable) else {
+        let Some(bundle) = crate::fsutil::executables::app_bundle(executable) else {
             return Ok(None);
         };
         let copy = self.root.join(copy_name(bundle, executable)?);
@@ -61,7 +61,7 @@ impl Releases {
         let temporary = tempfile::Builder::new()
             .prefix(TEMPORARY)
             .tempdir_in(&self.root)?;
-        crate::fsutil::clone_or_copy(
+        crate::fsutil::copy::clone_or_copy(
             bundle,
             &temporary
                 .path()
@@ -83,7 +83,7 @@ impl Releases {
 /// app bundle.
 pub(super) fn in_bundle(executable: &Path) -> bool {
     fs::canonicalize(executable)
-        .is_ok_and(|executable| crate::fsutil::app_bundle(&executable).is_some())
+        .is_ok_and(|executable| crate::fsutil::executables::app_bundle(&executable).is_some())
 }
 
 /// The copy's name: the bundle's version and the start of its main program's

@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    fsutil::{create_marked_dir, is_marked_dir, marked_owner},
+    fsutil::marked_dirs::{create_marked_dir, is_marked_dir, marked_owner},
     model::Repository,
 };
 

@@ -20,7 +20,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
     config::named_commands,
-    fsutil::{Permissions, ReplaceOptions},
+    fsutil::atomic::{Permissions, ReplaceOptions},
     model::Workspace,
     paths::Paths,
     process::identity::{self, Identity},
@@ -595,7 +595,7 @@ fn write_record(
             record.stage = saved.stage;
         }
     }
-    crate::fsutil::replace_atomically(
+    crate::fsutil::atomic::replace_atomically(
         &path,
         &serde_json::to_vec(&record)?,
         ReplaceOptions {
@@ -616,7 +616,7 @@ fn request_restore(
     id: &str,
     env: &BTreeMap<String, String>,
 ) -> Result<()> {
-    crate::fsutil::replace_atomically(
+    crate::fsutil::atomic::replace_atomically(
         &request_path(paths, workspace_id, id),
         &serde_json::to_vec(env)?,
         ReplaceOptions {
@@ -845,7 +845,7 @@ pub(crate) fn save_session(
         return Ok(false);
     }
     std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
-    crate::fsutil::replace_atomically(
+    crate::fsutil::atomic::replace_atomically(
         &session_path(paths, workspace_id, id),
         session.as_bytes(),
         ReplaceOptions {
@@ -937,7 +937,7 @@ impl LastSessionExt for LastSession {
 
     fn write(&self, paths: &Paths, workspace_id: &SpaceId) -> Result<()> {
         std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
-        crate::fsutil::replace_atomically(
+        crate::fsutil::atomic::replace_atomically(
             &Self::path(paths, workspace_id, &self.execution),
             &serde_json::to_vec(self)?,
             ReplaceOptions {
@@ -1022,7 +1022,7 @@ pub(super) fn save_command(
     let directory = paths.workspace_state(workspace_id);
     std::fs::create_dir_all(&directory)?;
     let path = directory.join(format!("{id}{COMMAND_SUFFIX}"));
-    crate::fsutil::replace_atomically(
+    crate::fsutil::atomic::replace_atomically(
         &path,
         &serde_json::to_vec(&record)?,
         ReplaceOptions {

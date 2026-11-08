@@ -317,7 +317,7 @@ impl Manager {
             .context("repository has no directory")?;
         let destination = self.begin_move(&repo.id, root, &source).await?;
         let moved = async {
-            fsutil::move_directory(&source, &destination).await?;
+            fsutil::copy::move_directory(&source, &destination).await?;
             self.switch_move(&repo.id, &source, &destination).await
         }
         .await;

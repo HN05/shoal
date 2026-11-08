@@ -173,7 +173,7 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
 
     // What a move to another filesystem leaves before the original goes.
     manager.record_move(&repo.id, &source, &destination).await?;
-    fsutil::copy_directory(&source, &destination).await?;
+    fsutil::copy::copy_directory(&source, &destination).await?;
     manager.switch_move(&repo.id, &source, &destination).await?;
     // An unavailable copy keeps the original.
     let away = root.join("unmounted");

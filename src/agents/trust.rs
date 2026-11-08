@@ -12,7 +12,7 @@ use crate::{
     ai::IntegrationKind,
     client::transcripts::Environments,
     env,
-    fsutil::{self, Permissions, ReplaceOptions},
+    fsutil::atomic::{self, Permissions, ReplaceOptions},
     model::Repository,
 };
 
@@ -234,7 +234,7 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
     project.insert("hasTrustDialogAccepted".into(), Value::Bool(true));
     let directory = config.parent().context("Claude config has no parent")?;
     std::fs::create_dir_all(directory)?;
-    fsutil::replace_atomically(
+    atomic::replace_atomically(
         config,
         &serde_json::to_vec_pretty(&root)?,
         ReplaceOptions {
@@ -280,7 +280,7 @@ fn remove_claude_trust(config: &std::path::Path, paths: &[std::path::PathBuf]) -
         }
     }
     if changed {
-        fsutil::replace_atomically(
+        atomic::replace_atomically(
             &config,
             &serde_json::to_vec_pretty(&root)?,
             ReplaceOptions {
@@ -325,7 +325,7 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
         return Ok(false);
     }
     project.insert("trust_level", value("trusted"));
-    fsutil::replace_atomically(
+    atomic::replace_atomically(
         &config,
         root.to_string().as_bytes(),
         ReplaceOptions {
@@ -372,7 +372,7 @@ fn remove_codex_trust(config: &std::path::Path, paths: &[std::path::PathBuf]) ->
         }
     }
     if changed {
-        fsutil::replace_atomically(
+        atomic::replace_atomically(
             &config,
             root.to_string().as_bytes(),
             ReplaceOptions {

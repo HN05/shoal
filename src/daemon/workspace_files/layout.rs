@@ -14,7 +14,7 @@ use super::NewFile;
 use crate::{
     daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
-    fsutil::{check_marked_dir, create_marked_dir, is_marked_dir},
+    fsutil::marked_dirs::{check_marked_dir, create_marked_dir, is_marked_dir},
     model::Repository,
 };
 

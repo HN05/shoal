@@ -4,7 +4,10 @@
 //! own platform binaries, such as shells), so a descendant that cleared its
 //! scope token still finds a recorded ancestor.
 use super::identity::{self, Identity};
-use crate::fsutil::{self, Permissions, ReplaceOptions};
+use crate::fsutil::{
+    self,
+    atomic::{Permissions, ReplaceOptions},
+};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
@@ -75,7 +78,7 @@ fn any_recorded(state: &Path, mut pids: impl Iterator<Item = u32>) -> bool {
 /// A reused PID replaces its ended predecessor's record.
 fn write(directory: &Path, process: &Identity) -> Result<()> {
     let path = record(directory, process.pid);
-    fsutil::replace_atomically(
+    fsutil::atomic::replace_atomically(
         &path,
         process.birth.as_bytes(),
         ReplaceOptions {

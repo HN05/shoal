@@ -56,8 +56,8 @@ mod macos {
     /// Replace this process with a copy of its release, responsible for
     /// itself. Returns only on failure.
     fn replace(releases: Option<&Releases>) -> io::Error {
-        let replacement = crate::fsutil::running_executable().and_then(|executable| {
-            let invoked = Invoked::at(crate::fsutil::invoked_executable()?);
+        let replacement = crate::fsutil::executables::running_executable().and_then(|executable| {
+            let invoked = Invoked::at(crate::fsutil::executables::invoked_executable()?);
             Replacement::of(releases, executable, &invoked)
         });
         // The replacement holds the copy's lock open until the exec.

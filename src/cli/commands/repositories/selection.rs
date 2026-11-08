@@ -30,7 +30,7 @@ pub(in crate::cli::commands) const REPOSITORY: &str = "pass <repository>";
 
 /// Expand `~` and resolve relative paths against the caller's directory.
 pub(in crate::cli::commands) fn absolute(ctx: &Context, path: PathBuf) -> Result<PathBuf> {
-    let path = crate::fsutil::expand_home(&path, &ctx.paths.home);
+    let path = crate::fsutil::home::expand_home(&path, &ctx.paths.home);
     Ok(if path.is_absolute() {
         path
     } else {

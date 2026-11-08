@@ -270,7 +270,9 @@ fn server_of(origin: Option<&Origin>) -> Server {
 async fn session(near: Option<&Origin>, label: &str) -> Result<Origin> {
     let server = server_of(near);
     server.ensure_supported().await?;
-    let group = server.session(label, &crate::fsutil::home_dir()?).await?;
+    let group = server
+        .session(label, &crate::fsutil::home::home_dir()?)
+        .await?;
     Ok(Origin {
         host: HostName::Tmux,
         group: Some(group.session),

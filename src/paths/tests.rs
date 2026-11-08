@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn a_development_build_refuses_only_the_users_own_state_directory() {
-    let Some(home) = crate::fsutil::account_home() else {
+    let Some(home) = crate::fsutil::home::account_home() else {
         return;
     };
     let user = home.join(DEFAULT_STATE);

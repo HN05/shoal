@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn a_test_refuses_the_users_own_config_directory_and_the_files_beside_it() {
-    let Some(home) = crate::fsutil::account_home() else {
+    let Some(home) = crate::fsutil::home::account_home() else {
         return;
     };
     let user = home.join(".config/shoal");

@@ -54,7 +54,8 @@ impl<T: Clone> KeyBindings<'_, T> {
 pub fn can_pick(ctx: &Context) -> bool {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     ctx.interactive()
-        && crate::fsutil::find_executable(Tool::Fzf.program().as_ref(), &search_path).is_some()
+        && crate::fsutil::executables::find_executable(Tool::Fzf.program().as_ref(), &search_path)
+            .is_some()
 }
 
 pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {

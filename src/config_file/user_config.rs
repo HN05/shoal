@@ -37,7 +37,7 @@ fn refuse_within(path: &Path, directories: &[PathBuf]) -> Result<()> {
 /// imitates it, and `$XDG_CONFIG_HOME/shoal` unless it lies in a temporary
 /// `HOME`, as a test's does.
 fn user_config_dirs() -> Vec<PathBuf> {
-    let Some(account) = crate::fsutil::account_home() else {
+    let Some(account) = crate::fsutil::home::account_home() else {
         return Vec::new();
     };
     let temporary_home = std::env::var_os("HOME")

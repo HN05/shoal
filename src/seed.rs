@@ -15,7 +15,10 @@ use std::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::fsutil::{OWNER_MARKER, clone_tree, create_marked_dir, is_marked_dir};
+use crate::fsutil::{
+    copy::clone_tree,
+    marked_dirs::{OWNER_MARKER, create_marked_dir, is_marked_dir},
+};
 
 pub mod build;
 

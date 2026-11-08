@@ -60,7 +60,7 @@ fn refuse_user_state(state: &Path) -> Result<()> {
     if crate::build::changes_user_files() {
         return Ok(());
     }
-    let Some(home) = crate::fsutil::account_home() else {
+    let Some(home) = crate::fsutil::home::account_home() else {
         return Ok(());
     };
     let user = home.join(DEFAULT_STATE);

@@ -9,7 +9,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::fsutil::{self, Permissions, ReplaceOptions};
+use crate::fsutil::{
+    self,
+    atomic::{Permissions, ReplaceOptions},
+};
 
 /// A dotfile beside the skills, which AI tools do not load as a skill.
 const FILE: &str = ".shoal-skills.json";
@@ -81,7 +84,7 @@ impl Record {
 
     pub(super) fn save(&self, directory: &Path) -> Result<()> {
         let path = directory.join(FILE);
-        fsutil::replace_atomically(
+        fsutil::atomic::replace_atomically(
             &path,
             &serde_json::to_vec_pretty(self)?,
             ReplaceOptions {

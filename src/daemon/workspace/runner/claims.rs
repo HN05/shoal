@@ -465,7 +465,7 @@ async fn copy_installation(installation: &Installation) -> Result<()> {
             installation.source.join(entry),
             installation.destination.join(entry),
         );
-        if crate::fsutil::clone_tree(&source, &destination)
+        if crate::fsutil::copy::clone_tree(&source, &destination)
             .await
             .is_err()
         {

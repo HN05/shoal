@@ -167,7 +167,8 @@ impl Manager {
         // Mark and persist the Git admin directory before the potentially long
         // file copy. A restart can therefore verify and remove the worktree.
         self.record_copy_identity(workspace).await?;
-        crate::fsutil::copy_worktree(source, &workspace.path).context("copy worktree files")?;
+        crate::fsutil::copy::copy_worktree(source, &workspace.path)
+            .context("copy worktree files")?;
         self.finish_copy_adoption(repo, workspace).await
     }
 

@@ -23,7 +23,7 @@ impl Update {
     }
 
     pub(super) fn pending(&self) -> bool {
-        crate::fsutil::is_executable(&self.path).unwrap_or(false)
+        crate::fsutil::executables::is_executable(&self.path).unwrap_or(false)
             && self.original.replaced_at(&self.path)
     }
 }

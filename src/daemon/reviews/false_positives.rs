@@ -9,7 +9,7 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
 use super::super::workspace::Manager;
 use crate::{
-    fsutil::{self, Permissions, ReplaceOptions},
+    fsutil::atomic::{self, Permissions, ReplaceOptions},
     reviews::{FindingId, Outcome, Review},
 };
 
@@ -301,7 +301,7 @@ fn store(path: &Path, text: &str, exists: bool) -> Result<()> {
         permissions,
         sync: true,
     };
-    fsutil::replace_atomically(path, text.as_bytes(), options)
+    atomic::replace_atomically(path, text.as_bytes(), options)
         .with_context(|| format!("write {}", path.display()))
 }
 

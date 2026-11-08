@@ -148,7 +148,7 @@ fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
         .agent
         .dirs
         .iter()
-        .map(|directory| fsutil::expand_home(Path::new(directory), home))
+        .map(|directory| fsutil::home::expand_home(Path::new(directory), home))
         .map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
         .collect()
 }

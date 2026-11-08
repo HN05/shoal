@@ -17,7 +17,7 @@ use rusqlite::Connection;
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    fsutil::{create_marked_dir, is_marked_dir},
+    fsutil::marked_dirs::{create_marked_dir, is_marked_dir},
     model::{RemovedWorkspace, Repository, Workspace},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };

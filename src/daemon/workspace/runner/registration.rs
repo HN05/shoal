@@ -133,7 +133,7 @@ impl Manager {
     pub(super) fn runner_program(&self, forge: &ForgeRepo) -> Result<PathBuf> {
         let program = forge.runner_program()?;
         let path = self.runners.search_path();
-        crate::fsutil::find_executable(program.as_ref(), &path)
+        crate::fsutil::executables::find_executable(program.as_ref(), &path)
             .with_context(|| format!("{program} is not on the daemon's PATH; install it"))
     }
 

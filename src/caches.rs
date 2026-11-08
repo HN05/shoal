@@ -14,7 +14,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::{
     config::repo::Cache,
-    fsutil::{create_marked_dir, is_marked_dir},
+    fsutil::marked_dirs::{create_marked_dir, is_marked_dir},
     model::Repository,
 };
 

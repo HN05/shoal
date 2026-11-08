@@ -24,7 +24,7 @@ pub const SESSION_START: &str = "startup|resume|clear";
 /// This Shoal executable quoted for hook shell text. The hooks inherit the
 /// execution's scope and state directory.
 pub fn shoal() -> std::io::Result<String> {
-    let shoal = crate::fsutil::invoked_executable()?;
+    let shoal = crate::fsutil::executables::invoked_executable()?;
     Ok(crate::shell::quote(&[&shoal.to_string_lossy()]))
 }
 
