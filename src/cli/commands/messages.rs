@@ -19,7 +19,7 @@ use crate::{
         agent_messages::{self, AgentMessage},
         files::NewFile,
         links::Updates,
-        output::messages::ReachedSpaces,
+        output::messages::{ReachedSpaces, Refused},
     },
     forge::items::attach::Attachment,
     repository::Selector,
@@ -92,8 +92,9 @@ async fn send_to_all(
         }
         show_reached("Message queued for:", &reached.now);
         show_reached("Queued for when their agent next runs:", &reached.on_start);
+        show_refused(&reached.refused);
     })?;
-    Ok(0)
+    Ok(if reached.refused.is_empty() { 0 } else { 1 })
 }
 
 /// The spaces under `heading`, unless there are none.
@@ -107,6 +108,21 @@ fn show_reached(heading: &str, spaces: &ReachedSpaces) {
     }
     for chat in &spaces.chats {
         outln!("  {chat} (chat)");
+    }
+}
+
+/// The spaces that refused the message, each with why, unless there are
+/// none.
+fn show_refused(refused: &Refused) {
+    if refused.is_empty() {
+        return;
+    }
+    outln!("Not queued for:");
+    for workspace in &refused.workspaces {
+        outln!("  {}: {}", workspace.name, workspace.error);
+    }
+    for chat in &refused.chats {
+        outln!("  {} (chat): {}", chat.name, chat.error);
     }
 }
 

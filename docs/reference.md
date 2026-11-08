@@ -5203,9 +5203,11 @@ whose restore waits for an update, as a message to its space alone starts it. It
 once their agent next runs, in `now` and `on_start` with `--json`, each with
 `workspaces` and `chats`; a workspace process reaches only the workspaces
 below its own. Workspaces without any agent get nothing, since a message
-waits there until an agent reads it. Sending the same message again after a
-failure does not repeat it to agents that have not read it yet, because
-identical unread messages collapse.
+waits there until an agent reads it. A space that refuses the message, such as
+one whose unread messages are full or that is being removed, is listed with
+why under `refused` while the others still receive it, and the command then
+exits 1. Sending the same message again does not repeat it to agents that
+have not read it yet, because identical unread messages collapse.
 
 `shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`

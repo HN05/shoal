@@ -5,13 +5,13 @@
 //! workspace is removed (see [`crate::daemon::workspace_files`]).
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 pub(crate) use crate::client::agent_messages::AgentMessage;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::output::messages::{Reached, ReachedSpaces},
+    client::output::messages::{Reached, ReachedSpaces, Refused, RefusedSpace},
     daemon::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
@@ -229,14 +229,16 @@ impl Manager {
 
     /// [`Self::send_space_message`] to every workspace and chat with an
     /// agent, running, reattaching, stopped, queued or waiting for its
-    /// restore, but the
-    /// sending chat `sender_chat`, of `repository` when it names one, or only
-    /// to the workspaces below `below`, the sender's own workspace; the
-    /// spaces it reached, by whether their agent runs. A stopped agent reads
-    /// the message once it starts, which the message does not do, except for
-    /// a restore waiting for an update. Identical unread messages collapse,
-    /// so sending again after a failure does not repeat it to recipients
-    /// that have not read it yet.
+    /// restore, but the sending chat `sender_chat`, of `repository` when it
+    /// names one, or only to the workspaces below `below`, the sender's own
+    /// workspace; the spaces it reached, by whether their agent runs. An
+    /// agent that does not run reads the message once it next runs, which
+    /// the message does not cause, except for a restore waiting for an
+    /// update. A space that refuses the message, such as one whose unread
+    /// messages are full or that removal took meanwhile, is listed with why,
+    /// and the others still receive it. Identical unread messages collapse,
+    /// so sending again does not repeat it to recipients that have not read
+    /// it yet.
     pub async fn send_all_message(
         &self,
         repository: Option<&Selector>,
@@ -249,30 +251,26 @@ impl Manager {
         let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
         let mut reached = Reached::default();
         for (workspace, runs) in workspaces {
-            self.send_agent_message(
-                &SpaceSelector::id(&workspace.id),
-                message.clone(),
-                attachments.clone(),
-                attacher,
-            )
-            .await
-            .with_context(|| format!("message {}", workspace.name))?;
-            reached_by(&mut reached, runs)
-                .workspaces
-                .push(workspace.name.into());
+            let sent = self
+                .send_agent_message(
+                    &SpaceSelector::id(&workspace.id),
+                    message.clone(),
+                    attachments.clone(),
+                    attacher,
+                )
+                .await;
+            outcome(&mut reached, runs, sent).workspace(workspace.name.into());
         }
         for chat in chats {
-            self.send_chat_message(
-                &SpaceSelector::id(&chat.id),
-                message.clone(),
-                attachments.clone(),
-                attacher,
-            )
-            .await
-            .with_context(|| format!("message {}", chat.name))?;
-            reached_by(&mut reached, chat.restore.is_none())
-                .chats
-                .push(chat.name.into());
+            let sent = self
+                .send_chat_message(
+                    &SpaceSelector::id(&chat.id),
+                    message.clone(),
+                    attachments.clone(),
+                    attacher,
+                )
+                .await;
+            outcome(&mut reached, chat.restore.is_none(), sent).chat(chat.name.into());
         }
         Ok(reached)
     }
@@ -551,14 +549,43 @@ impl Manager {
     }
 }
 
-/// The spaces of `reached` that a space joins whose agent `runs`, or else
-/// receives the message once it next runs.
-fn reached_by(reached: &mut Reached, runs: bool) -> &mut ReachedSpaces {
-    if runs {
-        &mut reached.now
-    } else {
-        &mut reached.on_start
+/// Where a space goes in `reached` once a message to it was `sent`: among
+/// those that refused it, or else those whose agent `runs` or those whose
+/// agent receives it once it next runs.
+fn outcome(reached: &mut Reached, runs: bool, sent: Result<()>) -> Outcome<'_> {
+    match sent {
+        Ok(()) if runs => Outcome::Reached(&mut reached.now),
+        Ok(()) => Outcome::Reached(&mut reached.on_start),
+        Err(error) => Outcome::Refused(&mut reached.refused, format!("{error:#}")),
     }
+}
+
+/// The list of a [`Reached`] that a space joins.
+enum Outcome<'a> {
+    Reached(&'a mut ReachedSpaces),
+    Refused(&'a mut Refused, String),
+}
+
+impl Outcome<'_> {
+    fn workspace(self, name: String) {
+        match self {
+            Self::Reached(spaces) => spaces.workspaces.push(name),
+            Self::Refused(refused, error) => refused.workspaces.push(refusal(name, error)),
+        }
+    }
+
+    fn chat(self, name: String) {
+        match self {
+            Self::Reached(spaces) => spaces.chats.push(name),
+            Self::Refused(refused, error) => refused.chats.push(refusal(name, error)),
+        }
+    }
+}
+
+/// The space `name` refusing a message for `error`, which the daemon logs.
+fn refusal(name: String, error: String) -> RefusedSpace {
+    crate::daemon::log!("message to every agent refused by {name}: {error}");
+    RefusedSpace { name, error }
 }
 
 #[cfg(test)]

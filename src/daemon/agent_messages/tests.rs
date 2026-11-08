@@ -2,7 +2,7 @@ use super::Delivery;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
-    client::output::messages::{Reached, ReachedSpaces},
+    client::output::messages::{Reached, ReachedSpaces, Refused},
     daemon::{
         scope::{self, Caller},
         test_support::{manager, repository},
@@ -437,10 +437,21 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
         "{",
     )
     .unwrap();
-    manager
-        .queue_agent(&SpaceSelector::id(&queued.id), "claude".into(), None)
-        .await
-        .unwrap();
+    // Its queued agent has not read the messages that fill its queue, and
+    // it comes first, so the spaces after it show the broadcast goes on.
+    let full = create("full").await.unwrap();
+    for workspace in [&queued, &full] {
+        manager
+            .queue_agent(&SpaceSelector::id(&workspace.id), "claude".into(), None)
+            .await
+            .unwrap();
+    }
+    for n in 0..super::MAX_UNREAD {
+        manager
+            .queue_agent_message(&full.id, format!("Message {n}"))
+            .await
+            .unwrap();
+    }
     for name in ["planning", "paused"] {
         manager
             .start_chat(
@@ -473,8 +484,16 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
         )
         .await
         .unwrap();
+    let [refused] = reached.refused.workspaces.as_slice() else {
+        panic!("{:?}", reached.refused);
+    };
+    assert_eq!(refused.name, "full");
+    assert!(refused.error.contains("unread"), "{}", refused.error);
     assert_eq!(
-        reached,
+        Reached {
+            refused: Refused::default(),
+            ..reached
+        },
         Reached {
             now: ReachedSpaces {
                 workspaces: vec!["running".into()],
@@ -484,6 +503,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
                 workspaces: vec!["queued".into(), "reattaching".into(), "stopped".into()],
                 chats: vec!["paused".into()],
             },
+            refused: Refused::default(),
         }
     );
     for (workspace, unread) in [(&stopped, 1), (&queued, 1), (&without, 0)] {
@@ -493,10 +513,10 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
             .unwrap();
         assert_eq!(messages.len(), unread, "{}", workspace.name);
     }
-    // Only the launch queued before waits in the queue.
+    // Only the launches queued before wait in the queue.
     assert_eq!(
         manager.queued_agent_workspaces().await.unwrap(),
-        [queued.id.clone()].into()
+        [queued.id.clone(), full.id.clone()].into()
     );
 }
 
