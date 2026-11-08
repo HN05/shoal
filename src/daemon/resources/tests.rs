@@ -2,6 +2,8 @@ use super::*;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 
+mod accounting;
+
 #[test]
 fn owner_lease_reads_search_existing_index() -> Result<()> {
     store::query_tests::check_owner_query(&leases_query(true), "resource_leases", "workspace_id")

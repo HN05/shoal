@@ -800,8 +800,4 @@ fn pool_status(
 }
 
 #[cfg(test)]
-#[path = "resources/accounting_tests.rs"]
-mod accounting_tests;
-
-#[cfg(test)]
 mod tests;
