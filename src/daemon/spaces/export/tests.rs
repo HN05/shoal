@@ -13,8 +13,8 @@ use crate::{
 
 mod transfer;
 
-// TEMPORARY: what a surviving process looks like on the Linux runner.
-fn report(pid: u32) -> String {
+/// What a process an export left running looks like, for a failure message.
+fn described(pid: u32) -> String {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
     let chat = fs::read(format!("/proc/{pid}/environ"))
         .map(|environ| {
@@ -162,11 +162,22 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
+    let before = identity::scan_chat(&chat.id).await;
+    let restore = manager.chats().await.unwrap().remove(0).restore;
 
     export(&manager, "launched", &root.path().join("launched.shoal"))
         .await
         .unwrap();
-    assert!(!identity::alive(&agent).unwrap(), "{}", report(agent.pid));
+    let after = identity::scan_chat(&chat.id).await;
+    let survived = identity::alive(&agent).unwrap();
+    let description = described(agent.pid);
+    // A survivor would hold the test runner's output open.
+    identity::signal(&agent, libc::SIGKILL).unwrap();
+    assert!(
+        !survived,
+        "{description} agent={agent:?} launcher={pid} restore={restore:?} before={before:?} \
+         after={after:?}"
+    );
     assert_eq!(identity::capture(pid).unwrap(), None);
 }
 
@@ -203,7 +214,13 @@ async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
-    assert_eq!(identity::capture(late).unwrap(), None, "{}", report(late));
+    let survivor = identity::capture(late).unwrap();
+    let description = described(late);
+    // A survivor would hold the test runner's output open.
+    if let Some(survivor) = &survivor {
+        identity::signal(survivor, libc::SIGKILL).unwrap();
+    }
+    assert_eq!(survivor, None, "{description}");
     assert_eq!(identity::capture(pid).unwrap(), None);
 }
 
