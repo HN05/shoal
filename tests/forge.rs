@@ -5023,6 +5023,83 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     agent.wait().unwrap();
 }
 
+/// A chat whose permission opens issues directly opens one a workspace
+/// below it proposes, with its edits, as the user would.
+#[test]
+fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
+    let config = "[permissions]\nissue_open = 'propose'\n\
+                  [modes.chat.permissions]\nissue_open = 'direct'\n";
+    let fixture = Fixture::new(Forge::GitHub, config);
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "lead", "agent": "claude", "pid": agent.id()}}));
+    let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+    let repo = fixture.repo.to_str().unwrap();
+    fixture.ok(&["start", repo, "helper", "--parent", "lead"]);
+    let working = fixture.request(json!({"set_agent_state": {"workspace": "helper",
+        "state": "working"}}));
+    assert_eq!(working["type"], "agent_status", "{working}");
+    let shoal = support::shoal_binary();
+    let open = [
+        "run",
+        "--workspace",
+        "helper",
+        "--",
+        shoal,
+        "--json",
+        "issue",
+        "open",
+        "--title",
+        "Flaky",
+        "--body",
+        "Seen twice",
+    ];
+    let output = fixture.run(&open);
+    assert!(output.status.success(), "{output:?}");
+    let proposed: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let id = proposed["proposed"]["number"].as_str().unwrap().to_owned();
+    assert!(writes(&fixture).is_empty());
+
+    let created = json!({"number": 40, "title": "Flaky test", "state": "open", "labels": []});
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": created},
+    }));
+    let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
+    let token = scope["data"]["token"].as_str().unwrap().to_owned();
+    let output = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SCOPE_TOKEN", &token)
+        .args([
+            "--json",
+            "approvals",
+            "--approve",
+            &id,
+            "--title",
+            "Flaky test",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let approved: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues",
+            {"title": "Flaky test", "body": "Seen twice", "labels": []}])]
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 #[test]
 fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspace() {
     let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");

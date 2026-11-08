@@ -135,15 +135,17 @@ impl<T: Ord + Copy> Permission<T> {
 impl<T: std::fmt::Display> Permission<T> {
     /// The permission `key` as a refusal cites it, with where it comes from.
     pub fn cited(&self, key: &str) -> String {
-        let from = match self.from {
-            PermissionSource::Mode => "its agent's mode",
-            PermissionSource::Parent => "the space above it",
-        };
-        format!(
-            "the space's {key} permission is \"{}\", from {from}",
-            self.value
-        )
+        cite(key, &self.value, self.from)
     }
+}
+
+/// The permission `key` with `value` from `from`, as a refusal cites it.
+fn cite(key: &str, value: &dyn std::fmt::Display, from: PermissionSource) -> String {
+    let from = match from {
+        PermissionSource::Mode => "its agent's mode",
+        PermissionSource::Parent => "the space above it",
+    };
+    format!("the space's {key} permission is \"{value}\", from {from}")
 }
 
 /// A space's effective permissions.
@@ -193,6 +195,14 @@ impl Permissions {
             entry("push", self.push, Pushes::as_str),
             entry("api_writes", self.api_writes, ApiWrites::as_str),
         ]
+    }
+
+    /// The first of `keys` these permissions hold below `direct`, cited;
+    /// none when every one is `direct`.
+    pub fn withheld(&self, keys: &[&str]) -> Option<String> {
+        (self.entries().into_iter())
+            .find(|(key, value, _)| keys.contains(key) && *value != "direct")
+            .map(|(key, value, from)| cite(key, &value, from))
     }
 
     fn of_mode(layered: PermissionsConfig) -> Self {

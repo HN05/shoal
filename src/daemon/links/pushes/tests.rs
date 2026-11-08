@@ -310,3 +310,113 @@ async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
     );
     assert!(manager.approval_requests(None).await.unwrap().is_empty());
 }
+
+/// The workspace `name` below `parent`, its agent working in `mode`.
+async fn below(
+    manager: &Manager,
+    repository: &str,
+    name: &str,
+    parent: &str,
+    mode: &str,
+) -> Workspace {
+    let new = crate::daemon::workspace::NewWorkspace {
+        parent: Some(parent.to_owned()),
+        ..Default::default()
+    };
+    let workspace = manager
+        .create_workspace_with(repository, name.into(), None, new)
+        .await
+        .unwrap();
+    let (id, mode) = (workspace.id.clone(), mode.to_owned());
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET mode=?2 WHERE id=?1",
+                rusqlite::params![id, mode],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let working = crate::state::AgentState::Working;
+    (manager.set_agent_state(&selector, working, None, None))
+        .await
+        .unwrap();
+    workspace
+}
+
+#[tokio::test]
+async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let config = "[modes.worker.permissions]\npush = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    // The sleep stands in for the chat's agent.
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: "top".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let top = (manager.start_new_chat(Some(repo.id.clone().into()), None, new))
+        .await
+        .unwrap();
+    let worker = below(&manager, &repo.id, "worker", &top.id, "worker").await;
+    let child = below(&manager, &repo.id, "child", &worker.id, "worker").await;
+    let caller = Caller {
+        space_id: child.id.clone(),
+        execution: None,
+    };
+    let selected = SpaceSelector::id(&child.id);
+    let outcome = manager.request_push(&selected, branch(&child).await, Some(&caller));
+    let request = proposed(outcome.await.unwrap());
+    let decider = |number| {
+        let manager = manager.clone();
+        async move {
+            let request = manager.approval_request(number).await.unwrap().unwrap();
+            (request.decider, request.status)
+        }
+    };
+    assert_eq!(
+        decider(request.number).await,
+        (Some(worker.id.clone()), DecisionStatus::Pending)
+    );
+
+    // The worker proposes its own pushes, so it may only deny or pass up.
+    let approved =
+        manager.decide_routed_approval(&worker.id, request.number, true, None, Default::default());
+    assert!(approved.await.is_err());
+    assert_eq!(
+        decider(request.number).await,
+        (Some(worker.id.clone()), DecisionStatus::Pending)
+    );
+    let selected = SpaceSelector::id(&worker.id);
+    (manager.escalate_approval(&selected, request.number, None))
+        .await
+        .unwrap();
+    assert_eq!(
+        decider(request.number).await,
+        (Some(top.id.clone()), DecisionStatus::Pending)
+    );
+
+    // The chat pushes directly, so it approves as the user would.
+    let running = manager
+        .decide_routed_approval(&top.id, request.number, true, None, Default::default())
+        .await
+        .unwrap();
+    assert_eq!(running.status, DecisionStatus::Pending);
+    assert!(running.operation.is_some());
+}

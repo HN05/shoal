@@ -218,11 +218,12 @@ impl Manager {
         })
     }
 
-    /// Open, deny or merge as a duplicate the proposal the user or a chat
-    /// chose, then forget it and tell the proposing space's agent.
-    /// Approving a push starts it in `env` instead, and its end decides the
-    /// request. With `routed_to`, the workspace deciding it, the proposal
-    /// must still be routed there once its gate is held.
+    /// Open, deny or merge as a duplicate the proposal the user or a
+    /// coordinator chose, then forget it and tell the proposing space's
+    /// agent. Approving a push starts it in `env`, or without it in the
+    /// daemon's environment, instead, and its end decides the request. With
+    /// `routed_to`, the space deciding it, the proposal must still be routed
+    /// there once its gate is held.
     pub(crate) async fn decide_proposal(
         &self,
         request: ApprovalRequest,
@@ -245,7 +246,7 @@ impl Manager {
         if let Some(workspace) = routed_to {
             ensure!(
                 request.decider.as_deref() == Some(workspace),
-                "approval request {} is not routed to this workspace",
+                "approval request {} is not routed to this space",
                 request.number
             );
         }

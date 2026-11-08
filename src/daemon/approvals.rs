@@ -47,6 +47,28 @@ impl TargetExt for Target {
     }
 }
 
+/// The permissions that govern `request`, each of which a coordinator needs
+/// as `direct` to approve it instead of a grant; none for a request a grant
+/// governs. They are those whose value made the space ask instead of act: an
+/// issue in another repository is governed by `issue_other_repositories`
+/// alone, and what pushes by `push` too.
+fn governing(request: &ApprovalRequest) -> &'static [&'static str] {
+    use proposals::ProposalExt;
+    match request.target {
+        Target::IssueOpen
+            if (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some()) =>
+        {
+            &["issue_other_repositories"]
+        }
+        Target::IssueOpen => &["issue_open"],
+        Target::PrOpen if request.pending_push().is_some() => &["pr_open", "push"],
+        Target::PrOpen => &["pr_open"],
+        Target::Push => &["push"],
+        Target::Merge | Target::Unmerge => &["merge", "push"],
+        _ => &[],
+    }
+}
+
 /// A stored request's key, record, active flag, numbers, and whether its
 /// space is gone, which only a proposed issue outlives.
 macro_rules! select {
@@ -390,10 +412,13 @@ fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> R
     }))
 }
 
-/// Whether the coordinating agent of `workspace` may decide `request`: one
-/// that needs no grant, or one it holds a grant for.
+/// Whether the coordinating agent of `workspace` may approve `request` as
+/// far as grants go: one that needs no grant, one its permissions decide
+/// instead, or one it holds a grant for.
 fn may_decide(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Result<bool> {
-    Ok(!request.target.needs_grant() || holds_grant(db, workspace, request)?)
+    Ok(!request.target.needs_grant()
+        || !governing(request).is_empty()
+        || holds_grant(db, workspace, request)?)
 }
 
 /// Give the pending request stored under `key` to the first of `candidates`,
@@ -811,9 +836,10 @@ impl Manager {
 
     /// Record the decision of the coordinating agent of `coordinator` on a
     /// request routed to it, rechecking with the decision that the request is
-    /// still its to decide. It approves only what it holds a grant for, and
-    /// otherwise denies the request or passes it up; `details` gives only a
-    /// denied proposal's reason.
+    /// still its to decide. It approves what a permission governs where its
+    /// own permission is `direct`, with a proposal's edits, and anything else
+    /// only while it holds a grant for it; otherwise it denies the request,
+    /// with a reason or as a duplicate, or passes it up.
     pub async fn decide_routed_approval(
         &self,
         coordinator: &str,
@@ -827,9 +853,12 @@ impl Manager {
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;
+        if approve {
+            self.ensure_permitted(coordinator, &request).await?;
+        }
         if request.target.is_proposal() {
             return self
-                .deny_routed_proposal(coordinator, request, approve, details)
+                .decide_proposal(request, approve, details, None, Some(coordinator))
                 .await;
         }
         ensure!(
@@ -845,33 +874,44 @@ impl Manager {
         Ok(decision.request)
     }
 
-    /// Deny the proposal `request` for `coordinator`, to which it is routed.
-    /// Approving it, or marking it a duplicate, writes to the forge, which
-    /// is for the user or a chat to do, so a workspace passes it up instead.
-    async fn deny_routed_proposal(
-        &self,
-        coordinator: &str,
-        request: ApprovalRequest,
-        approve: bool,
-        details: proposals::ProposalDecision,
-    ) -> Result<ApprovalRequest> {
-        let id = request.number;
-        ensure!(
-            !approve && details.duplicate_of.is_none(),
-            "approval {id}: a workspace may only deny a proposal, with --reason; pass it up with shoal approvals --escalate {id}"
-        );
-        self.decide_proposal(request, false, details, None, Some(coordinator))
-            .await
+    /// Refuse `coordinator`'s approval of `request` unless its effective
+    /// permission is `direct` for each permission that governs the request,
+    /// resolved in the repository of the request's action.
+    async fn ensure_permitted(&self, coordinator: &str, request: &ApprovalRequest) -> Result<()> {
+        let keys = governing(request);
+        if keys.is_empty() {
+            return Ok(());
+        }
+        let repository = match &request.repository_id {
+            Some(repository) => Some(repository.clone()),
+            None => (self.space_by_id(&request.space_id).await?)
+                .repository_id()
+                .map(str::to_owned),
+        };
+        let permissions = self
+            .space_permissions(coordinator, repository.as_deref())
+            .await?;
+        if let Some(withheld) = permissions.withheld(keys) {
+            let id = request.number;
+            bail!(
+                "approval {id}: {withheld}; deny it or pass it up with shoal approvals --escalate {id}"
+            );
+        }
+        Ok(())
     }
 
     /// Decide `request` for `coordinator` in one transaction with the checks
-    /// that it decides it and, to approve, holds a grant for it.
+    /// that it decides it and, to approve one a grant governs, holds a grant
+    /// for it.
     async fn record_routed_decision(
         &self,
         coordinator: &str,
         request: &ApprovalRequest,
         approve: bool,
     ) -> Result<Decision> {
+        if request.target == Target::Merge && approve && request.status == DecisionStatus::Pending {
+            self.ensure_merge_current(request).await?;
+        }
         let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.number);
         let _hold = self.hold_decision_guard(&request, approve).await?;

@@ -275,8 +275,8 @@ pub struct ApprovalRequest {
     /// Whether the request went up the workspace tree to find its decider.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub routed: bool,
-    /// The workspace whose coordinating agent decides the request, since it
-    /// holds a grant for the same thing; the user decides without one.
+    /// The space whose coordinating agent decides the request, the nearest
+    /// above the requester with an agent; the user decides without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decider: Option<String>,
     /// The issue or PR an approved proposal opened, or the issue a denied

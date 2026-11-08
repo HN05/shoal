@@ -275,7 +275,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
 }
 
 #[tokio::test]
-async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
+async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_up() {
     use crate::{
         removal::{InspectionPolicy, UnsavedWork},
         state::AgentState,
@@ -284,6 +284,10 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
     let path = repository(root.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let config = "[permissions]\nissue_open = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
     let parent = manager
@@ -336,26 +340,42 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         .unwrap();
     assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
 
-    // Opening it, or commenting it on another issue, writes to the forge.
-    for (approve, details) in [
-        (true, ProposalDecision::default()),
-        (
-            false,
-            ProposalDecision {
-                duplicate_of: Some(Duplicate::Issue("12".into())),
-                ..ProposalDecision::default()
-            },
-        ),
-    ] {
+    // The parent proposes its own issues, so it may not open this one, with
+    // or without edits.
+    for title in [None, Some("Flaky test".to_owned())] {
+        let details = ProposalDecision {
+            title,
+            ..ProposalDecision::default()
+        };
         let decided = manager
-            .decide_routed_approval(&parent.id, proposed.number, approve, None, details)
+            .decide_routed_approval(&parent.id, proposed.number, true, None, details)
             .await;
         assert!(decided.is_err());
     }
+    // It may deny it as a duplicate of another proposal, which takes its
+    // finding, and deny that one with a reason.
+    let original = store_issue_proposal(&manager, &child.clone().into()).await;
+    manager.notify_approval(&child.name, &original).await;
+    let duplicate = ProposalDecision {
+        duplicate_of: Some(Duplicate::Approval(original.number)),
+        ..ProposalDecision::default()
+    };
+    let denied = manager
+        .decide_routed_approval(&parent.id, proposed.number, false, None, duplicate)
+        .await
+        .unwrap();
+    assert_eq!(denied.status, DecisionStatus::Denied);
+    assert!(manager.pending_proposal(proposed).await.is_err());
+    let original = manager
+        .approval_request(original.number)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(original.findings().len(), 1);
     let denied = manager
         .decide_routed_approval(
             &parent.id,
-            proposed.number,
+            original.number,
             false,
             None,
             ProposalDecision {
@@ -366,7 +386,6 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
-    assert!(manager.pending_proposal(proposed).await.is_err());
 
     // An issue proposal outlives its workspace and the one above that
     // decides it, which gives it back to the user as it goes.

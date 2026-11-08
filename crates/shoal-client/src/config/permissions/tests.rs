@@ -96,3 +96,14 @@ fn a_space_below_another_takes_the_narrower_permission_from_its_parent() {
     // A parent that allows more widens nothing.
     assert_eq!(worker.below(&chat), worker);
 }
+
+#[test]
+fn only_direct_permissions_are_held_for_a_decision() {
+    let settings = settings("", "");
+    let chat = resolve(&settings, mode("chat")).unwrap();
+    let worker = resolve(&settings, mode("worker")).unwrap();
+    assert!(chat.withheld(&["merge", "push"]).is_none());
+    assert!(worker.withheld(&["push"]).is_none());
+    assert!(worker.withheld(&["merge", "push"]).is_some());
+    assert!(worker.withheld(&["api_writes"]).is_some());
+}
