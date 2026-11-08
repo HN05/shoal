@@ -4925,7 +4925,8 @@ events add `agent_state` with the reported `state`, null when its execution ende
 of a change Shoal made to an issue or PR. `item_activity` events add an
 `item_activity` object with the item's `kind` and `url`, and an `update` object
 with the observed update's `kind` and `message`. `created` and `base_changed`
-events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
+events add `base_workspace` with the base's `id`, `name` and `branch`, or null,
+and `created` events add `base_ref`, the ref the workspace started from.
 `created` and `parent_changed` events add `parent`, the space above the
 workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
 a [chat](#chats) that opened it returned it to you. Earlier versions recorded

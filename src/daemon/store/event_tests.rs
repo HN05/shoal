@@ -207,7 +207,8 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
          DROP TRIGGER space_agent_state_changed; DROP TRIGGER space_agent_state_cleared;
          DROP TRIGGER workspace_renamed; DROP TRIGGER question_asked;
          DROP TRIGGER question_answered; DROP TRIGGER workspace_child_created;
-         DROP TRIGGER chat_child_created; DROP TRIGGER workspace_left_tree;
+         DROP TRIGGER chat_child_created; DROP TRIGGER workspace_base_recorded;
+         DROP TRIGGER workspace_left_tree;
          DROP TRIGGER chat_left_tree;
          CREATE TRIGGER workspace_left_tree AFTER DELETE ON workspaces BEGIN
              DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
@@ -549,5 +550,25 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
             ("parent".into(), EventKind::ChildRemoved, some("fix")),
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
+    let mut db = Connection::open_in_memory()?;
+    migrate(&mut db)?;
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('w','repo','fix','/fix','fix','preparing');
+         UPDATE workspaces SET base_commit='abc',base_ref='refs/heads/main' WHERE id='w';
+         UPDATE workspaces SET base_ref='refs/heads/other' WHERE id='w';",
+    )?;
+    let created: Vec<_> = journal(&db)?
+        .into_iter()
+        .filter(|event| event.kind == crate::daemon::events::EventKind::Created)
+        .map(|event| event.base_ref)
+        .collect();
+    assert_eq!(created, [Some("refs/heads/main".to_owned())]);
     Ok(())
 }

@@ -190,3 +190,31 @@ CREATE TRIGGER chat_left_tree AFTER DELETE ON chats BEGIN
         WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=OLD.id);
     DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
 END;
+
+-- A workspace's creation names the ref it started from too.
+DROP TRIGGER workspace_created;
+CREATE TRIGGER workspace_created AFTER INSERT ON workspaces BEGIN
+    INSERT INTO workspace_events(record) VALUES (json_object(
+        'kind','created','workspace_id',NEW.id,'chat_id',NULL,'repository_id',NEW.repository_id,
+        'name',NEW.name,'path',NEW.path,'branch',NEW.branch,'cause',NULL,'error',NULL,
+        'base_ref',NEW.base_ref,
+        'base_workspace',json((SELECT json_object('id',id,'name',name,'branch',branch)
+            FROM workspaces WHERE id=NEW.base_workspace_id)),
+        'parent',json((SELECT json_object('id',id,'name',name,'kind','workspace','branch',branch)
+                FROM workspaces WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=NEW.id)
+            UNION ALL SELECT json_object('id',id,'name',name,'kind','chat')
+                FROM chats WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=NEW.id)))
+    ));
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','ready','workspace_id',NEW.id,'chat_id',NULL,'repository_id',NEW.repository_id,
+        'name',NEW.name,'path',NEW.path,'branch',NEW.branch,'cause',NULL,'error',NULL
+    ) WHERE NEW.state='ready';
+END;
+-- Creation records the base before Git resolves it into the worktree's,
+-- so its event takes the ref once recorded.
+CREATE TRIGGER workspace_base_recorded AFTER UPDATE OF base_ref ON workspaces
+WHEN OLD.base_ref IS NULL AND NEW.base_ref IS NOT NULL BEGIN
+    UPDATE workspace_events SET record=json_set(record,'$.base_ref',NEW.base_ref)
+        WHERE id=(SELECT MAX(id) FROM workspace_events
+            WHERE space_id=NEW.id AND json_extract(record,'$.kind')='created');
+END;

@@ -144,6 +144,10 @@ pub struct EventDetails {
     pub branch: Option<String>,
     pub cause: Option<EventCause>,
     pub error: Option<String>,
+    /// The ref a workspace started from, such as `refs/heads/main`, on its
+    /// creation; null for one at a commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_ref: Option<String>,
     /// The mark a review event describes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<ReviewEvent>,
