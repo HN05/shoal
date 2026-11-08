@@ -62,22 +62,24 @@ impl Manager {
 
 /// The spaces with events that are gone without a removal record or a
 /// removed chat's unexpired files, each with when it was removed, or
-/// recorded last when its removal is not in the journal.
+/// recorded last when its removal is not in the journal. A space whose
+/// repository is no longer registered takes the global retention.
 fn gone(db: &Connection) -> Result<Vec<Gone>> {
     Ok(db
         .prepare(
-            "SELECT space_id,
+            "SELECT space_id, (SELECT id FROM repositories WHERE id=repository), removed_at
+            FROM (SELECT space_id,
                 MAX(COALESCE(json_extract(record,'$.repository_id'),
-                    json_extract(record,'$.chat.repository_id'))),
+                    json_extract(record,'$.chat.repository_id'))) AS repository,
                 COALESCE(MAX(CASE WHEN json_extract(record,'$.kind') IN ('removed','chat_ended')
-                    THEN created_at END), MAX(created_at))
+                    THEN created_at END), MAX(created_at)) AS removed_at
             FROM workspace_events
             WHERE space_id NOT IN (SELECT id FROM workspaces)
                 AND space_id NOT IN (SELECT id FROM chats)
                 AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
                 AND space_id NOT IN (SELECT chat_id FROM ended_chats
                     WHERE expires_at > unixepoch())
-            GROUP BY space_id",
+            GROUP BY space_id)",
         )?
         .query_map([], |row| {
             Ok(Gone {
