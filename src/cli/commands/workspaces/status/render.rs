@@ -26,6 +26,7 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
         render_leases(worktree, palette);
     }
     render_assignment(status, palette);
+    render_permissions(status, palette);
     if let Some(worktree) = status.space.worktree() {
         render_cleanup(worktree, palette);
     }
@@ -410,6 +411,21 @@ fn render_cleanup(status: &WorktreeStatus, palette: Palette) {
     }
     if let Some(error) = &status.cleanup_error {
         outln!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
+    }
+}
+
+/// What the space's agents may do, and where each permission comes from.
+fn render_permissions(status: &SpaceStatus, palette: Palette) {
+    let Some(permissions) = &status.permissions else {
+        outln!("Permissions:   unavailable");
+        if let Some(error) = &status.permissions_error {
+            outln!("  {}", palette.paint(Style::Warning, error));
+        }
+        return;
+    };
+    outln!("Permissions:");
+    for (key, value, from) in permissions.entries() {
+        outln!("  {key:<26}{value:<9}{from}");
     }
 }
 

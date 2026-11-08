@@ -2353,7 +2353,9 @@ modes and the tree, so a config change reaches running agents and the spaces
 below them; only the hold on an agent's plain `git push` follows the `push`
 permission it launched with, which a restart renews. A check uses the
 permissions of the space that acts, so a parent acting on a space below it
-acts under its own.
+acts under its own. `shoal work status` lists a space's permissions, each with
+`mode` or `parent` for where it comes from; `--json` gives them as
+`permissions`, each key with its `value` and `from`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,

@@ -7,6 +7,7 @@ use anyhow::Result;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::links::{issue, pr::Registration},
+    config::permissions::Permissions,
     daemon::{
         approvals, forge_hosts::ForgeHosts, links::pr, questions, workspace::Manager,
         workspace_files,
@@ -29,6 +30,10 @@ impl Manager {
     /// names: a workspace's adds what needs its worktree.
     pub async fn space_status(&self, selector: &SpaceSelector) -> Result<SpaceStatus> {
         let space = self.space(selector).await?;
+        let (permissions, permissions_error) = match self.status_permissions(&space).await {
+            Ok(permissions) => (Some(permissions), None),
+            Err(error) => (None, Some(format!("{error:#}"))),
+        };
         let (space, records, origin) = self.space_detail(space).await?;
         let (prs, issue_status) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
@@ -40,7 +45,19 @@ impl Manager {
             attention,
             prs,
             issue_status,
+            permissions,
+            permissions_error,
         })
+    }
+
+    /// The effective permissions of `space` in its own repository, or for a
+    /// chat without one in the global config.
+    async fn status_permissions(&self, space: &PresentSpace) -> Result<Permissions> {
+        let repository = match space {
+            PresentSpace::Workspace(workspace) => Some(workspace.repository_id.as_str()),
+            PresentSpace::Chat(chat) => chat.repository_id.as_deref(),
+        };
+        self.space_permissions(space.id(), repository).await
     }
 
     /// What the status of `space` shows for its kind, what it records about

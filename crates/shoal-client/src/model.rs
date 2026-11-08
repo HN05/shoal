@@ -756,6 +756,12 @@ pub struct SpaceStatus {
     /// The linked issue's current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_status: Option<IssueStatus>,
+    /// What its agents may do, each with where it comes from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<crate::config::permissions::Permissions>,
+    /// Why its permissions could not be resolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions_error: Option<String>,
 }
 
 /// What awaits the user about a space.

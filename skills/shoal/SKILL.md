@@ -211,22 +211,23 @@ from the forge with the same login.
 
 A space's permissions (`issue_open`, `pr_open`, `issue_other_repositories`,
 `merge`, `push`, `api_writes`) come from its agent's mode and config, and are
-never wider than those of the space above it. A command acting on a space below uses the caller's
-own.
+never wider than those of the space above it; `shoal work status` lists them,
+each with where it comes from. A command acting on a space below uses the
+caller's own.
 
-Where a space's permissions require approval for issues and PRs, `issue open` and `pr open` exit 0 with `proposed`, an approval
-request, instead of the item; `pr open` still pushes unless pushes need
-approval too. Only the user approves a proposal, and may edit its title and
-description first; the decision arrives as a message naming the opened item,
-or giving a reason or the duplicate issue for a denial. A proposed issue stays
-after the space is removed. A pending PR proposal keeps the workspace; a new
-commit outdates it until `pr open` runs again. A chat proposes issues, never
-PRs.
+Where a space's permissions require approval for issues and PRs, `issue open`
+and `pr open` exit 0 with `proposed`, an approval request, instead of the item;
+`pr open` still pushes unless pushes need approval too. Only the user approves
+a proposal, and may edit its title and description first; the decision arrives
+as a message naming the opened item, or giving a reason or the duplicate issue
+for a denial. A proposed issue stays after the space is removed. A pending PR
+proposal keeps the workspace; a new commit outdates it until `pr open` runs
+again. A chat proposes issues, never PRs.
 
-With the space's `push` permission requiring approval, `pr open` pushes nothing: it
-proposes the PR together with the push, or only the push for an open PR. Plain
-`git push` reports the push as rejected and `waits for approval <S.N>`;
-`--force-with-lease` works as usual. On approval Shoal pushes the
+With the space's `push` permission requiring approval, `pr open` pushes
+nothing: it proposes the PR together with the push, or only the push for an
+open PR. Plain `git push` reports the push as rejected and `waits for approval
+<S.N>`; `--force-with-lease` works as usual. On approval Shoal pushes the
 approved commit and opens the PR that waited for it. A new commit outdates the
 request until the next push or `pr open`. A pending push keeps the workspace.
 With `push = "deny"`, `pr open` and `git push` fail with the reason.
