@@ -92,8 +92,8 @@ impl Selection {
 
     /// The agents named `agent` to restart, ready ones first, and those that
     /// cannot restart, `in_place` when asked, or already run again. Agents
-    /// protection stopped wait for their restore and are left out, unless
-    /// their space was named and runs no other.
+    /// protection stopped wait for their restore and are left out, and
+    /// reported as skipped when their space was named and runs no other.
     pub(super) fn plan(self, agent: Option<&str>, in_place: bool) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
