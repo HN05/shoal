@@ -20,23 +20,27 @@ impl Manager {
     /// Forget the events of each space gone for longer than its retention.
     pub(crate) async fn expire_events(&self) -> Result<()> {
         let gone = self.store.run(|db| gone(db)).await?;
+        let expired = self.expired(gone).await;
+        self.store.run(move |db| forget(db, &expired)).await
+    }
+
+    /// The IDs of the `gone` spaces whose retention after their removal
+    /// has passed, reading each repository's retention once.
+    async fn expired(&self, gone: Vec<Gone>) -> Vec<String> {
         let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
         let mut retention = HashMap::new();
         let mut expired = Vec::new();
         for space in gone {
-            let kept = match retention.get(&space.repository_id) {
-                Some(seconds) => *seconds,
-                None => {
-                    let seconds = self.retention(space.repository_id.as_deref()).await;
-                    retention.insert(space.repository_id.clone(), seconds);
-                    seconds
-                }
-            };
+            if !retention.contains_key(&space.repository_id) {
+                let seconds = self.retention(space.repository_id.as_deref()).await;
+                retention.insert(space.repository_id.clone(), seconds);
+            }
+            let kept = retention[&space.repository_id];
             if space.removed_at.saturating_add(kept) <= now {
                 expired.push(space.id);
             }
         }
-        self.store.run(move |db| forget(db, &expired)).await
+        expired
     }
 
     /// The seconds a removed space of `repository` keeps what it leaves:
@@ -89,6 +93,11 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
 fn forget(db: &mut Connection, ids: &[String]) -> Result<()> {
     let tx = db.transaction()?;
     for id in ids {
+        tx.execute(
+            "UPDATE journal_pruned SET id=MAX(id, (SELECT COALESCE(MAX(id),0)
+                FROM workspace_events WHERE space_id=?1))",
+            [id],
+        )?;
         tx.execute(
             "DELETE FROM workspace_events WHERE space_id=?1
                 AND ?1 NOT IN (SELECT id FROM workspaces)
