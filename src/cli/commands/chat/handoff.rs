@@ -83,11 +83,13 @@ impl Handoff {
             match place {
                 Place::Waiting => ensure!(
                     tokio::time::Instant::now() < deadline,
-                    "the background place did not run Shoal within {} minutes",
+                    "the background place did not run Shoal within {} minutes; run the command again",
                     PICKUP.as_secs() / 60
                 ),
                 Place::Running => {}
-                Place::Ended => bail!("the background place ended before the chat started"),
+                Place::Ended => bail!(
+                    "the background place ended before the chat started; run the command again"
+                ),
             }
             tokio::time::sleep(POLL).await;
         }
