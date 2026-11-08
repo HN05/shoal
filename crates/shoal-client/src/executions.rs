@@ -129,7 +129,7 @@ pub struct Record {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 
 /// How an agent of a copied workspace starts: from a fork of the session
@@ -218,7 +218,7 @@ pub struct LastSession {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 
 /// The key of a last session saved without its execution.

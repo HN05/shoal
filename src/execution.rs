@@ -41,7 +41,7 @@ pub struct TrackedAgent {
     pub model: crate::agent::ModelChoice,
     pub mode: String,
     /// The `--permission` narrowing of its mode's permissions.
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 
 #[cfg(test)]
@@ -49,7 +49,7 @@ impl TrackedAgent {
     /// Agent `name` running with the tool's own model and effort.
     pub fn named(name: impl Into<String>) -> Self {
         Self {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             name: name.into(),
             model: Default::default(),
             mode: crate::config::modes::DEFAULT.to_owned(),

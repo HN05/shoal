@@ -27,7 +27,7 @@ pub enum ExecutionMethod {
             default,
             skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
         )]
-        permissions: crate::config::permissions::PermissionsConfig,
+        narrowing: crate::config::permissions::PermissionsConfig,
         #[serde(default)]
         recover: bool,
         /// The wrapper keeps its command running when the daemon goes away

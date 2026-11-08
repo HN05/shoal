@@ -155,7 +155,7 @@ pub enum InternalCommand {
         mode: String,
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
-        permissions: crate::config::permissions::PermissionsConfig,
+        narrowing: crate::config::permissions::PermissionsConfig,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
@@ -203,7 +203,7 @@ pub enum InternalCommand {
         mode: String,
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
-        permissions: crate::config::permissions::PermissionsConfig,
+        narrowing: crate::config::permissions::PermissionsConfig,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
         /// The host that opened the place.
@@ -242,7 +242,7 @@ pub enum InternalCommand {
         mode: String,
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
-        permissions: crate::config::permissions::PermissionsConfig,
+        narrowing: crate::config::permissions::PermissionsConfig,
         /// The descriptor of the wrapper's daemon connection.
         #[arg(long)]
         connection: i32,

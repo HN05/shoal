@@ -774,7 +774,7 @@ async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_tempor
         .to_owned();
     let process = test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
@@ -827,7 +827,7 @@ async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository()
         .to_owned();
     let process = test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),

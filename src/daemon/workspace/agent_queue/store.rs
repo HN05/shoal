@@ -82,7 +82,7 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,permissions)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
         params![
             launch.id,
@@ -98,7 +98,7 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
             (launch.state == QueueState::Starting).then_some(now),
             launch.opens,
             request.mode,
-            crate::daemon::store::narrowing_column(&request.permissions)?,
+            crate::daemon::store::narrowing_column(&request.narrowing)?,
         ],
     )?;
     dependencies::record(tx, &launch.id, &launch.repository, &request.after)?;
@@ -144,7 +144,7 @@ pub(super) fn record_waiting_restore(
     )?)
 }
 
-pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,permissions,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job";
+pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job";
 
 pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {
@@ -154,7 +154,7 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         name: row.get("name")?,
         agent: row.get("agent")?,
         mode: row.get("mode")?,
-        permissions: crate::daemon::store::json_column(row, "permissions")?.unwrap_or_default(),
+        narrowing: crate::daemon::store::json_column(row, "narrowing")?.unwrap_or_default(),
         issue_title: row.get("issue_title")?,
         state: row.get("state")?,
         position: None,

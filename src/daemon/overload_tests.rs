@@ -186,7 +186,7 @@ async fn built_in_restore_child() {
     ] {
         let restored = crate::execution::recovery::Restored {
             mode: "worker",
-            permissions: Default::default(),
+            narrowing: Default::default(),
             agent,
             model: &model,
             session: Some("s1"),
@@ -278,7 +278,7 @@ async fn built_in_restore_child() {
     };
     let with_model = |agent| crate::execution::recovery::Restored {
         mode: "worker",
-        permissions: Default::default(),
+        narrowing: Default::default(),
         agent,
         model: &model,
         session: None,
@@ -1261,7 +1261,7 @@ fn restored<'a>(
     };
     crate::execution::recovery::Restored {
         mode: "worker",
-        permissions: Default::default(),
+        narrowing: Default::default(),
         agent,
         model: &OWN,
         session,

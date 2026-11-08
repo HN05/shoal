@@ -55,7 +55,7 @@ pub(super) async fn plan_addition(
         args,
         prompt: None,
         mode: None,
-        permissions: Default::default(),
+        narrowing: Default::default(),
         fork: None,
         queue_entry: None,
         chat: env::in_chat(),
@@ -107,7 +107,7 @@ pub(super) fn start_as(
     narrowing: crate::config::permissions::PermissionsConfig,
 ) {
     plan.mode = mode;
-    plan.permissions = narrowing;
+    plan.narrowing = narrowing;
     plan.prompt.clone_from(&options.prompt);
     plan.parent.clone_from(&options.parent);
     plan.fork.clone_from(&options.fork);

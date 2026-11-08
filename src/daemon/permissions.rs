@@ -73,32 +73,6 @@ impl Manager {
         (self.permissions_below_parent(&config, &space, agent, Some(&repository))).await
     }
 
-    /// `narrowing` as an agent starting in `mode` below the space `parent`
-    /// records it: refused where it is wider than the mode's permissions in
-    /// the registered repository `repository`, or without one in the global
-    /// config, and lowered to the parent's effective permissions.
-    pub(crate) async fn checked_narrowing(
-        &self,
-        repository: Option<&str>,
-        parent: Option<&str>,
-        mode: SpaceMode<'_>,
-        narrowing: PermissionsConfig,
-    ) -> Result<PermissionsConfig> {
-        if narrowing.is_empty() {
-            return Ok(narrowing);
-        }
-        let config = self.config();
-        let settings = match repository {
-            Some(repository) => self.repository_settings_from(&config, repository).await?,
-            None => config.resolve(&Default::default())?,
-        };
-        narrowing.ensure_within(&permissions::resolve(&settings, Some(mode))?)?;
-        Ok(match parent {
-            Some(parent) => narrowing.lowered(&self.space_permissions(parent, repository).await?),
-            None => narrowing,
-        })
-    }
-
     /// The permissions of `space`'s `agent`, its mode and narrowing, none
     /// wider than the effective ones of the space above it.
     async fn permissions_below_parent(
@@ -194,7 +168,7 @@ fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
                 kind: SpaceKind::Workspace,
                 repository: true,
             };
-            (mode, workspace.permissions)
+            (mode, workspace.narrowing)
         }),
         PresentSpace::Chat(chat) => Some((
             SpaceMode {
@@ -202,7 +176,7 @@ fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
                 kind: SpaceKind::Chat,
                 repository: chat.repository_id.is_some(),
             },
-            chat.permissions,
+            chat.narrowing,
         )),
     }
 }

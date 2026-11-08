@@ -206,7 +206,7 @@ pub struct QueuedLaunch {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The model and effort requested over the configured ones.
     #[serde(default, skip_serializing_if = "ModelChoice::is_empty")]
     pub model: ModelChoice,

@@ -149,18 +149,6 @@ pub enum WorkspaceMethod {
         )]
         narrowing: crate::config::permissions::PermissionsConfig,
     },
-    /// The `--permission` narrowing an agent starting in `mode` below the
-    /// space `parent` records: refused where it is wider than the mode's
-    /// permissions in the registered repository `repository`, or without
-    /// one in the global config, and lowered to the parent's effective
-    /// permissions. `chat` says whether the agent runs in a chat.
-    CheckNarrowing {
-        repository: Option<String>,
-        parent: Option<SpaceSelector>,
-        mode: String,
-        chat: bool,
-        narrowing: crate::config::permissions::PermissionsConfig,
-    },
     WorkspaceEnv {
         workspace: SpaceSelector,
     },

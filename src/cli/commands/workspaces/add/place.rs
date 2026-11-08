@@ -26,7 +26,7 @@ pub(super) struct HereLaunch {
     pub agent: ResolvedAddAgent,
     pub opening: agents::Opening,
     /// The `--permission` narrowing of the mode's permissions.
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
     pub fork: Option<String>,
 }
@@ -37,13 +37,13 @@ impl HereLaunch {
         let Self {
             agent,
             opening,
-            permissions,
+            narrowing,
             args,
             fork,
         } = self;
         let launch = super::agent::Launch {
             opening,
-            permissions,
+            narrowing,
             args,
             fork,
         };

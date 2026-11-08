@@ -114,6 +114,25 @@ impl PermissionsConfig {
         Ok(narrowing)
     }
 
+    /// One narrowing of `narrowings`, each a `--permission` assignment, a
+    /// later one of a key replacing an earlier one.
+    pub fn combined(narrowings: &[Self]) -> Self {
+        let mut combined = Self::default();
+        for narrowing in narrowings {
+            combined.merge(*narrowing, Merge::SameLevel);
+        }
+        combined
+    }
+
+    /// Refuse a key this narrowing sets wider than the permissions of
+    /// `mode` in `settings`, which a narrowing never widens.
+    pub fn ensure_within_mode(&self, settings: &Settings, mode: SpaceMode) -> Result<()> {
+        match self.is_empty() {
+            true => Ok(()),
+            false => self.ensure_within(&resolve(settings, Some(mode))?),
+        }
+    }
+
     /// Whether the narrowing sets no key.
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
@@ -166,25 +185,6 @@ impl PermissionsConfig {
         within(PermissionKey::Merge, self.merge, mode.merge)?;
         within(PermissionKey::Push, self.push, mode.push)?;
         within(PermissionKey::ApiWrites, self.api_writes, mode.api_writes)
-    }
-
-    /// This narrowing with each key it sets lowered to `limit`, the
-    /// effective permissions of the space above.
-    pub fn lowered(self, limit: &Permissions) -> Self {
-        fn lower<T: Ord + Copy>(value: Option<T>, limit: Permission<T>) -> Option<T> {
-            value.map(|value| value.min(limit.value))
-        }
-        Self {
-            issue_open: lower(self.issue_open, limit.issue_open),
-            pr_open: lower(self.pr_open, limit.pr_open),
-            issue_other_repositories: lower(
-                self.issue_other_repositories,
-                limit.issue_other_repositories,
-            ),
-            merge: lower(self.merge, limit.merge),
-            push: lower(self.push, limit.push),
-            api_writes: lower(self.api_writes, limit.api_writes),
-        }
     }
 }
 

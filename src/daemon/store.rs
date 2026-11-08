@@ -420,7 +420,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,mode,permissions,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
+pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,mode,narrowing,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -447,7 +447,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         name: row.get("name")?,
         title: row.get("title")?,
         mode: row.get("mode")?,
-        permissions: json_column(row, "permissions")?.unwrap_or_default(),
+        narrowing: json_column(row, "narrowing")?.unwrap_or_default(),
         path: PathBuf::from(row.get::<_, String>("path")?),
         branch: row.get("branch")?,
         at: starting_commit(row)?,
@@ -555,7 +555,7 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
 }
 
 const EXECUTION_COLUMNS: &str =
-    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,permissions";
+    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,narrowing";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -572,7 +572,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
             effort: row.get("effort")?,
         },
         mode: row.get("mode")?,
-        permissions: json_column(row, "permissions")?.unwrap_or_default(),
+        narrowing: json_column(row, "narrowing")?.unwrap_or_default(),
         stopped: None,
     })
 }

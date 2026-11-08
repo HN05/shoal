@@ -13,7 +13,7 @@ fn spaces() -> Spaces {
     }))
     .unwrap();
     let chat = |id: &str, name: &str, restore| Chat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         mode: "chat".into(),
         number: 1,
         id: id.into(),

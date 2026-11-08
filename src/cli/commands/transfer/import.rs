@@ -233,7 +233,7 @@ impl Package {
             .iter()
             .find_map(|last| last.session.clone());
         Ok(chat::Options {
-            permissions: packaged.permissions.assignments(),
+            narrowing: packaged.narrowing,
             agent: Some(packaged.agent.parse()?),
             place,
             name: Some(crate::client::chats::free_name(&ctx.paths, packaged.name.clone()).await?),

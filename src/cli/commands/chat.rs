@@ -274,9 +274,8 @@ pub(super) struct Options {
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
     pub parent: Option<String>,
-    /// The `--permission KEY=VALUE` assignments that narrow the mode's
-    /// permissions.
-    pub permissions: Vec<String>,
+    /// The `--permission` narrowing of the mode's permissions.
+    pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 
 /// Where a chat runs.
@@ -500,29 +499,6 @@ pub(super) async fn begin(
     }
 }
 
-/// The narrowing `assignments` give a chat's agent starting in `mode`
-/// below `parent`, as the daemon records it: refused where wider than the
-/// mode's permissions and lowered to the parent's.
-async fn checked_narrowing(
-    ctx: &Context,
-    repo: &ChatRepository,
-    parent: Option<&str>,
-    mode: &str,
-    assignments: &[String],
-) -> Result<crate::config::permissions::PermissionsConfig> {
-    let narrowing = crate::config::permissions::PermissionsConfig::assigned(assignments)?;
-    if narrowing.is_empty() {
-        return Ok(narrowing);
-    }
-    let repository = repo.registered().map(|repository| repository.id.clone());
-    let parent = parent.map(SpaceSelector::parse);
-    let mode = mode.to_owned();
-    crate::client::workspaces::check_narrowing(
-        &ctx.paths, repository, parent, mode, true, narrowing,
-    )
-    .await
-}
-
 /// How a chat started.
 pub(super) enum Started {
     /// It ran here, or beside this terminal, or an app that runs it detached
@@ -553,7 +529,7 @@ pub(super) async fn launch(
         // Received with the caller's options.
         handoff: _,
         parent,
-        permissions,
+        narrowing,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
@@ -577,12 +553,19 @@ pub(super) async fn launch(
     // An agent that cannot continue or fork the session starts a new one,
     // which has not seen the chat's rules.
     let brief = brief(&settings, &agent, &repo, &topic, !resumed.is_empty())?;
-    let narrowing = checked_narrowing(ctx, &repo, parent.as_deref(), &topic.mode, &permissions);
-    let narrowing = narrowing.await?;
+    // A restore or an imported session keeps the narrowing it was given.
+    if restore.is_none() && session.is_none() {
+        let mode = crate::config::permissions::SpaceMode {
+            name: &topic.mode,
+            kind: crate::model::SpaceKind::Chat,
+            repository: repo.registered().is_some(),
+        };
+        narrowing.ensure_within_mode(&settings, mode)?;
+    }
     let launch = agents::ChatLaunch {
         name,
         mode: topic.mode.clone(),
-        permissions: narrowing,
+        narrowing,
         parent: parent.clone(),
         instructions: brief.system,
         opening: brief.first_message,
@@ -616,7 +599,7 @@ pub(super) async fn launch(
         fork,
         restore: restore.as_deref(),
         parent: parent.as_deref(),
-        permissions: &narrowing,
+        narrowing: &narrowing,
     };
     let home = topic.home(&repo);
     if place == ChatPlace::Background {
@@ -658,7 +641,7 @@ pub(super) async fn launch(
         name: &name,
         agent: agent.name(),
         mode: &topic.mode,
-        permissions: narrowing,
+        narrowing,
         parent: parent.as_ref(),
     };
     let chat = crate::client::chats::record(
@@ -887,7 +870,7 @@ struct Beside<'a> {
     fork: bool,
     restore: Option<&'a str>,
     parent: Option<&'a str>,
-    permissions: &'a crate::config::permissions::PermissionsConfig,
+    narrowing: &'a crate::config::permissions::PermissionsConfig,
 }
 
 impl Beside<'_> {
@@ -919,7 +902,7 @@ impl Beside<'_> {
         if let Some(restore) = self.restore {
             chat.extend(["--restore".into(), restore.into()]);
         }
-        for assignment in self.permissions.assignments() {
+        for assignment in self.narrowing.assignments() {
             chat.extend(["--permission".into(), assignment.into()]);
         }
         if let Some(parent) = self.parent {

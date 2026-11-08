@@ -76,7 +76,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
     // An agent that exited, and one whose session a running agent goes on.
     for (execution, session) in [("ended", "s3"), ("again", "s1")] {
         LastSession {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             mode: "worker".into(),
             model: Default::default(),
             execution: execution.into(),

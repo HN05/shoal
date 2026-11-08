@@ -82,7 +82,7 @@ pub struct PackagedChat {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 
 /// A file of an agent's session, copied unread.

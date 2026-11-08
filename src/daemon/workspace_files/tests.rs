@@ -1336,9 +1336,9 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_progress_removed;
     ALTER TABLE workspaces DROP COLUMN made_for;
     ALTER TABLE workspaces DROP COLUMN setup_skipped;
     ALTER TABLE workspaces DROP COLUMN disposable;
-    ALTER TABLE workspaces DROP COLUMN permissions;
-    ALTER TABLE executions DROP COLUMN permissions;
-    ALTER TABLE chats DROP COLUMN permissions;
+    ALTER TABLE workspaces DROP COLUMN narrowing;
+    ALTER TABLE executions DROP COLUMN narrowing;
+    ALTER TABLE chats DROP COLUMN narrowing;
     ALTER TABLE workspaces DROP COLUMN mode;
     ALTER TABLE executions DROP COLUMN mode;
     ALTER TABLE chats DROP COLUMN mode;
@@ -1490,7 +1490,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
@@ -1554,7 +1554,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),

@@ -13,7 +13,7 @@ use tokio::{io::BufReader, net::UnixListener};
 async fn kept_completion_waits_for_running_and_unresolved_executions() {
     for state in [ExecutionState::Running, ExecutionState::Unknown] {
         let execution = Execution {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             mode: None,
             model: Default::default(),
             id: "agent".into(),

@@ -23,7 +23,7 @@ pub(super) async fn start(ctx: &Context, args: ConfigSetupArgs) -> Result<i32> {
     chat::check_model(&settings, &agent, &model)?;
     let config = installed_config(ctx)?;
     let options = chat::Options {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         agent: Some(agent),
         place: chat::ChatPlace::here(args.here),
         name: args.name,

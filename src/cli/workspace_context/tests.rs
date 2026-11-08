@@ -3,7 +3,7 @@ use crate::state::WorkspaceState;
 
 fn workspace(name: &str, path: &Path) -> Workspace {
     Workspace {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         mode: None,
         number: 1,
         holds: Vec::new(),

@@ -90,7 +90,7 @@ pub struct Workspace {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub path: PathBuf,
     /// Its branch; `None` for a workspace at a commit, which `at` describes.
     pub branch: Option<String>,
@@ -625,7 +625,7 @@ impl Workspace {
         state: WorkspaceState,
     ) -> Self {
         Self {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             id: uuid::Uuid::new_v4().to_string(),
             number: 0,
             repository_id,
@@ -722,7 +722,7 @@ pub struct Execution {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     /// Why Shoal stopped its agent, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped: Option<crate::protocol::Protection>,
@@ -1495,7 +1495,7 @@ pub struct Chat {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The workspace whose worktree it runs in; none for a chat in the
     /// registered checkout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1839,7 +1839,7 @@ pub struct QueueEntry {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub issue_title: Option<String>,
     pub state: QueueState,
     /// The 1-based place among waiting entries; `None` once starting.
@@ -1945,7 +1945,7 @@ pub struct QueueRequest {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub issue_title: Option<String>,
     pub plan: String,
     /// Terminal multiplexer variables the start needs to reach the same window,

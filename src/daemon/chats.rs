@@ -61,7 +61,7 @@ impl Manager {
         hands_over: bool,
     ) -> Result<Chat> {
         let new = NewChat {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             name,
             agent,
             mode: crate::model::chat_mode(),
@@ -87,7 +87,7 @@ impl Manager {
     ) -> Result<Chat> {
         let workspace = self.chat_workspace(workspace).await?;
         let new = NewChat {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             name,
             agent,
             mode: crate::model::chat_mode(),
@@ -180,7 +180,7 @@ impl Manager {
             name,
             agent,
             mode,
-            permissions,
+            narrowing,
             pid,
             origin,
             hands_over,
@@ -206,7 +206,7 @@ impl Manager {
             name,
             agent,
             mode,
-            permissions,
+            narrowing,
             workspace,
             pid: process.pid,
             started_at,
@@ -614,7 +614,7 @@ pub struct NewChat {
     pub agent: String,
     pub mode: String,
     /// The `--permission` narrowing of its mode's permissions.
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub pid: u32,
     pub origin: Option<crate::sessions::Origin>,
     pub hands_over: bool,
@@ -657,7 +657,7 @@ fn insert(
     store::ensure_name_available(tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
-            unique_id,scope_token,workspace_id,mode,root_dir,permissions)
+            unique_id,scope_token,workspace_id,mode,root_dir,narrowing)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
         params![
             chat.id,
@@ -677,7 +677,7 @@ fn insert(
             workspace,
             chat.mode,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
-            store::narrowing_column(&chat.permissions)?
+            store::narrowing_column(&chat.narrowing)?
         ],
     )?;
     chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {
@@ -825,7 +825,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore,chats.completion,
                     workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode,
-                    chats.root_dir,chats.permissions
+                    chats.root_dir,chats.narrowing
              FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
@@ -851,7 +851,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             name: row.get(2)?,
             agent: row.get(3)?,
             mode: row.get(15)?,
-            permissions: store::json_column(row, "permissions")?.unwrap_or_default(),
+            narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
             workspace: match row.get::<_, Option<String>>(11)? {
                 Some(id) => Some(WorkspaceRef {
                     id,

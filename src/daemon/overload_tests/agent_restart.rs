@@ -99,7 +99,7 @@ async fn starting_restore(manager: &Manager, execution: &str) -> QueueEntry {
 /// A launch in the fixture's repository, which waits for a slot.
 fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
     QueueRequest {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         repository: workspace.repository_id.as_str().into(),
         name: "waiting".into(),
         agent: "claude".into(),

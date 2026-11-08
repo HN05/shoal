@@ -42,7 +42,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         name: launch.name,
         agent: launch.agent,
         mode: plan.mode.clone(),
-        permissions: plan.permissions,
+        narrowing: plan.narrowing,
         issue_title: launch.issue_title,
         plan: serde_json::to_string(plan)?,
         env: terminal::start_environment(),

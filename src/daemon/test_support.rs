@@ -56,7 +56,7 @@ pub async fn chat(
         name: name.into(),
         agent: "claude".into(),
         mode: mode.into(),
-        permissions: Default::default(),
+        narrowing: Default::default(),
         pid: process.id(),
         origin: None,
         hands_over: false,

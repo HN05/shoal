@@ -158,7 +158,7 @@ fn connected(paths: &Paths, plan: &ExecutionPlan) -> (Link, BufReader<UnixStream
     link.allow_reattach(
         paths,
         Reattach {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             mode: None,
             model: Default::default(),
             execution: plan.id.clone(),

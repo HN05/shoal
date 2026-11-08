@@ -639,7 +639,6 @@ response_bodies! {
     CiRuns(Vec<crate::forge::ci::run_action::Run>),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Permissions(crate::config::permissions::Permissions),
-    Narrowing(crate::config::permissions::PermissionsConfig),
     Cleanup(crate::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
     AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
@@ -897,7 +896,7 @@ pub struct Reattach {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     #[serde(default)]
     pub recover: bool,
     /// How long the command has run, keeping the overload stop order.

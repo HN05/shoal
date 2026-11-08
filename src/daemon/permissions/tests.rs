@@ -148,7 +148,7 @@ async fn narrow(manager: &Manager, table: &str, id: &str, assignments: &[&str]) 
     let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
     let json = serde_json::to_string(&narrowing).unwrap();
     let (sql, id) = (
-        format!("UPDATE {table} SET permissions=?2 WHERE id=?1"),
+        format!("UPDATE {table} SET narrowing=?2 WHERE id=?1"),
         id.to_owned(),
     );
     manager
@@ -184,38 +184,4 @@ async fn a_narrowing_narrows_its_space_and_the_spaces_below() {
     let split = of(split.id.clone()).await;
     assert_eq!(split.push.value, Pushes::Propose);
     assert_eq!(split.push.from, PermissionSource::Parent);
-}
-
-#[tokio::test]
-async fn a_narrowing_is_refused_above_its_mode_and_lowered_to_its_parent() {
-    use crate::config::permissions::{PermissionsConfig, SpaceMode};
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
-    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
-    narrow(&manager, "chats", &top.id, &["push=propose"]).await;
-    let worker = SpaceMode {
-        name: "worker",
-        kind: crate::model::SpaceKind::Workspace,
-        repository: true,
-    };
-    let check = |assignments: &[&str]| {
-        let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
-        let narrowing = PermissionsConfig::assigned(&assignments).unwrap();
-        let manager = manager.clone();
-        let (repository, parent) = (repo.id.clone(), top.id.clone());
-        async move {
-            let checked =
-                manager.checked_narrowing(Some(&repository), Some(&parent), worker, narrowing);
-            checked.await
-        }
-    };
-    // A worker merges only after approval, so it cannot be given more.
-    assert!(check(&["merge=direct"]).await.is_err());
-    // The parent proposes its pushes, so a worker's are lowered to that.
-    let lowered = check(&["push=direct", "api_writes=deny"]).await.unwrap();
-    assert_eq!(lowered.push, Some(Pushes::Propose));
-    assert_eq!(
-        lowered.api_writes,
-        Some(crate::config::permissions::ApiWrites::Deny)
-    );
 }

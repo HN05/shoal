@@ -876,7 +876,7 @@ impl Manager {
                 model: request.model.clone(),
                 mode: (request.mode.clone())
                     .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
-                permissions: request.permissions,
+                narrowing: request.narrowing,
             };
             self.track_agent(
                 &request.execution,

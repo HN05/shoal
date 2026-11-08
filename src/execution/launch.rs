@@ -467,7 +467,7 @@ async fn open_execution(
         agent: agent.map(|agent| agent.name.clone()),
         model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
         mode: agent.map(|agent| agent.mode.clone()),
-        permissions: agent.map(|agent| agent.permissions).unwrap_or_default(),
+        narrowing: agent.map(|agent| agent.narrowing).unwrap_or_default(),
         recover,
         reattach: mode.reattaches(),
         demo: match mode {
@@ -520,7 +520,7 @@ fn allow_reattach(
             agent: agent.map(|agent| agent.name.clone()),
             model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
             mode: agent.map(|agent| agent.mode.clone()),
-            permissions: agent.map(|agent| agent.permissions).unwrap_or_default(),
+            narrowing: agent.map(|agent| agent.narrowing).unwrap_or_default(),
             recover,
             running_ms: 0,
             awaiting_restore: None,
@@ -594,7 +594,7 @@ async fn prepare_push_gate(
     agent: &crate::execution::TrackedAgent,
 ) -> Result<crate::push_gate::Launch> {
     let selector = SpaceSelector::parse(workspace);
-    let (mode, narrowing) = (agent.mode.clone(), agent.permissions);
+    let (mode, narrowing) = (agent.mode.clone(), agent.narrowing);
     let permissions =
         crate::client::workspaces::launch_permissions(paths, selector, mode, narrowing).await?;
     if permissions.push.value == Pushes::Direct {

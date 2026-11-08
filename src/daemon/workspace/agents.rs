@@ -165,7 +165,7 @@ pub(crate) struct Agent {
     mode: String,
     /// The `--permission` narrowing it started with, which its recovery
     /// records keep.
-    permissions: crate::config::permissions::PermissionsConfig,
+    narrowing: crate::config::permissions::PermissionsConfig,
     workspace: String,
     workspace_id: String,
     started: Instant,
@@ -200,7 +200,7 @@ impl Agent {
             name: self.name.clone(),
             model: self.model.clone(),
             mode: self.mode.clone(),
-            permissions: self.permissions,
+            narrowing: self.narrowing,
         }
     }
 
@@ -455,7 +455,7 @@ impl Manager {
             name: tracked.name.clone(),
             model: tracked.model.clone(),
             mode: tracked.mode.clone(),
-            permissions: tracked.permissions,
+            narrowing: tracked.narrowing,
             workspace: workspace.into(),
             workspace_id: workspace_id.into(),
             started: Instant::now()
@@ -485,9 +485,9 @@ impl Manager {
         let recorded = self
             .store
             .run(move |db| {
-                let narrowing = crate::daemon::store::narrowing_column(&agent.permissions)?;
+                let narrowing = crate::daemon::store::narrowing_column(&agent.narrowing)?;
                 db.execute(
-                    "UPDATE executions SET agent=?2,model=?3,effort=?4,mode=?5,permissions=?6
+                    "UPDATE executions SET agent=?2,model=?3,effort=?4,mode=?5,narrowing=?6
                      WHERE id=?1",
                     rusqlite::params![
                         execution,
@@ -499,7 +499,7 @@ impl Manager {
                     ],
                 )?;
                 db.execute(
-                    "UPDATE workspaces SET mode=?2,permissions=?3
+                    "UPDATE workspaces SET mode=?2,narrowing=?3
                      WHERE id=(SELECT workspace_id FROM executions WHERE id=?1)",
                     rusqlite::params![execution, agent.mode, narrowing],
                 )?;

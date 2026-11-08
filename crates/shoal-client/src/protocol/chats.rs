@@ -26,7 +26,7 @@ pub enum ChatMethod {
             default,
             skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
         )]
-        permissions: crate::config::permissions::PermissionsConfig,
+        narrowing: crate::config::permissions::PermissionsConfig,
         pid: u32,
         /// Where the chat runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]

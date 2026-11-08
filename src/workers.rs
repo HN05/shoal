@@ -160,11 +160,11 @@ fn model_args(model: &ModelChoice) -> Vec<OsString> {
 /// The worker option that carries `agent`'s `--permission` narrowing, as
 /// JSON; none without one.
 fn narrowing_args(agent: &crate::execution::TrackedAgent) -> Vec<OsString> {
-    match agent.permissions.is_empty() {
+    match agent.narrowing.is_empty() {
         true => Vec::new(),
         false => vec![
-            "--permissions".into(),
-            serde_json::to_string(&agent.permissions)
+            "--narrowing".into(),
+            serde_json::to_string(&agent.narrowing)
                 .expect("a narrowing serializes")
                 .into(),
         ],

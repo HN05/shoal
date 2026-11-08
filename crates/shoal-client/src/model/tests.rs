@@ -98,7 +98,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
     }))
     .unwrap();
     let chat = |id: &str, number, name: &str, restore| Chat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         mode: "chat".into(),
         number,
         id: id.into(),

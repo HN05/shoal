@@ -34,7 +34,6 @@ const REQUESTS: &[&str] = &[
     r#"{"create_workspace":{"path":"/work/fix","repository":"app","name":"fix","base":null,"git_profile":"work","parent":"c1"}}"#,
     r#"{"reopen_workspace":{"workspace":"fix"}}"#,
     r#"{"launch_permissions":{"workspace":"fix","mode":"review","narrowing":{"push":"propose"}}}"#,
-    r#"{"check_narrowing":{"repository":"r1","parent":"lead","mode":"worker","chat":false,"narrowing":{"merge":"propose"}}}"#,
     r#"{"create_commit_workspace":{"repository":"app","parent":"fix","start":{"revision":"v1.4.0"},"options":{"skip_setup":true,"disposable":true}}}"#,
     r#"{"open_pull_head":{"repository":"app","url":"https://forge.example/team/app/pulls/8","head":{"number":8,"reference":"refs/pull/8/head","commit":"abc"},"parent":null}}"#,
     r#"{"split_workspace":{"workspace":"fix","name":"part","base":null}}"#,

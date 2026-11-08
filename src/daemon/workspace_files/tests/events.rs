@@ -311,7 +311,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
-        permissions: Default::default(),
+        narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),

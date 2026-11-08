@@ -471,10 +471,10 @@ WHERE id IN (SELECT workspace_id FROM executions WHERE agent IS NOT NULL);";
 
 /// The `--permission` narrowing each agent started with, beside its mode: a
 /// JSON object of the keys it narrows, or none.
-pub(super) const PERMISSION_NARROWINGS: &str = "ALTER TABLE workspaces ADD COLUMN permissions TEXT;
-ALTER TABLE executions ADD COLUMN permissions TEXT;
-ALTER TABLE agent_queue ADD COLUMN permissions TEXT;
-ALTER TABLE chats ADD COLUMN permissions TEXT;";
+pub(super) const PERMISSION_NARROWINGS: &str = "ALTER TABLE workspaces ADD COLUMN narrowing TEXT;
+ALTER TABLE executions ADD COLUMN narrowing TEXT;
+ALTER TABLE agent_queue ADD COLUMN narrowing TEXT;
+ALTER TABLE chats ADD COLUMN narrowing TEXT;";
 
 /// The workspace whose worktree a chat runs in instead of its repository's
 /// checkout. Removing the workspace removes its chats first, so nothing

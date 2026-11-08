@@ -19688,7 +19688,7 @@ fn start_narrows_the_agents_permissions_and_records_them() {
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     let status = fixture.ok(&["work", "status", "narrowed"]);
     assert_eq!(
-        status["workspace"]["permissions"]["push"], "propose",
+        status["workspace"]["narrowing"]["push"], "propose",
         "{status}"
     );
     let push = &status["permissions"]["push"];

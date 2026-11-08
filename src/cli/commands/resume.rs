@@ -541,7 +541,7 @@ async fn restore(
         agent: &session.agent,
         model: &session.model,
         mode: &session.mode,
-        permissions: session.permissions,
+        narrowing: session.narrowing,
         session: session.session.as_deref(),
     };
     let recovery = Recovery::resolve(
@@ -627,7 +627,7 @@ async fn start_told(
         replaces: records,
         fork,
         model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
-        permissions: session.permissions,
+        narrowing: session.narrowing,
     };
     let opening = crate::cli::agents::Opening::Told {
         mode: session.mode.clone(),

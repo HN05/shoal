@@ -72,7 +72,7 @@ pub(in crate::cli) struct Launch {
     /// The mode it starts in.
     pub mode: String,
     /// The `--permission` narrowing of the mode's permissions.
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
@@ -126,7 +126,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// The mode its agent starts in.
     pub mode: String,
     /// The `--permission` narrowing of the mode's permissions.
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below.
     pub parent: Option<String>,
     pub settings: Effective,
@@ -228,7 +228,7 @@ pub(in crate::cli) struct LaunchOptions {
     /// The model and effort the launch asks for.
     pub model: ModelRequest,
     /// The `--permission` narrowing of the mode's permissions.
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 
 /// The model and effort a launch asks for.
@@ -302,7 +302,7 @@ pub(super) async fn launch_agent(
         fork,
         model,
         mode: opening.mode().to_owned(),
-        permissions: options.permissions,
+        narrowing: options.narrowing,
         replaces: options.replaces,
     };
     let replaces = launch.replaces.clone();

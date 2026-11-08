@@ -230,7 +230,7 @@ impl ManifestExt for Manifest {
                     agent: chat.agent,
                     links: chat.links,
                     mode: chat.mode,
-                    permissions: chat.permissions,
+                    narrowing: chat.narrowing,
                 };
                 (Space::Chat(packaged), sessions)
             }
@@ -367,7 +367,7 @@ pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
 /// package.
 fn chat_session(chat: &Chat) -> LastSession {
     LastSession {
-        permissions: chat.permissions,
+        narrowing: chat.narrowing,
         execution: chat.id.clone(),
         agent: chat.agent.clone(),
         session: chat.session.clone(),

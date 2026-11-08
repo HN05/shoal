@@ -161,7 +161,7 @@ pub(super) async fn resolve_add_agent(
 /// session it starts from a fork of.
 pub(super) struct Launch {
     pub opening: agents::Opening,
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
     pub fork: Option<String>,
 }
@@ -180,7 +180,7 @@ pub(super) async fn launch(
     let options = agents::LaunchOptions {
         fork: launch.fork,
         model: agents::ModelRequest::Override(resolved.model),
-        permissions: launch.permissions,
+        narrowing: launch.narrowing,
         ..Default::default()
     };
     agents::launch_agent(ctx, agent, workspace, launch.opening, launch.args, options).await

@@ -84,7 +84,7 @@ pub(crate) fn queued_agent_request(
         name: workspace.name.clone(),
         agent,
         mode: plan.mode.clone(),
-        permissions: plan.permissions,
+        narrowing: plan.narrowing,
         issue_title,
         plan: serde_json::to_string(&plan)?,
         env,
@@ -120,7 +120,7 @@ pub(crate) struct AddPlan {
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The session the agent starts from a fork of.
     #[serde(default)]
     pub fork: Option<String>,
@@ -147,7 +147,7 @@ impl AddPlan {
             agent,
             prompt,
             mode,
-            permissions,
+            narrowing,
             model,
             args,
             fork,
@@ -170,7 +170,7 @@ impl AddPlan {
             args: args.into_iter().map(OsString::from).collect(),
             prompt,
             mode,
-            permissions,
+            narrowing,
             fork,
             queue_entry: None,
             chat: None,

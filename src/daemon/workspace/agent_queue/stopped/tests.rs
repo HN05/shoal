@@ -507,7 +507,7 @@ async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
         let workspace = create(&manager, &repo, name).await;
         let execution = format!("{name}-agent");
         recovery::LastSession {
-            permissions: Default::default(),
+            narrowing: Default::default(),
             mode: "worker".into(),
             model: Default::default(),
             execution: execution.clone(),

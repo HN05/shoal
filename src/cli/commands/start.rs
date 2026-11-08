@@ -453,7 +453,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         after: args.after,
         model: args.model.into(),
         mode: Some(mode),
-        permissions: PermissionsConfig::assigned(&args.permissions)?,
+        narrowing: PermissionsConfig::combined(&args.narrowing),
         prompt: None,
         parent,
         fork,
@@ -579,7 +579,7 @@ fn chat_options(args: &mut StartArgs) -> chat::Options {
         restore: args.restore.take(),
         handoff: args.handoff.take(),
         parent: args.parent.take().map(|parent| parent.to_string()),
-        permissions: std::mem::take(&mut args.permissions),
+        narrowing: PermissionsConfig::combined(&args.narrowing),
     }
 }
 

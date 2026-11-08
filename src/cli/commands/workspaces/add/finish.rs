@@ -99,7 +99,7 @@ pub(super) async fn add_planned(
         args,
         prompt,
         mode,
-        permissions,
+        narrowing,
         fork,
         queue_entry,
         chat,
@@ -112,12 +112,12 @@ pub(super) async fn add_planned(
     let told = (&prompt, args.as_slice(), &fork);
     let (launch, placed) = match start {
         AgentStart::Queued { now } => (
-            queued_launch(&agent, issue.as_ref(), (&mode, permissions), told, now)?,
+            queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?,
             None,
         ),
         AgentStart::Placed { now } => (
             None,
-            queued_launch(&agent, issue.as_ref(), (&mode, permissions), told, now)?,
+            queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?,
         ),
         AgentStart::Here => (None, None),
     };
@@ -179,7 +179,7 @@ pub(super) async fn add_planned(
     let here = HereLaunch {
         agent,
         opening,
-        permissions,
+        narrowing,
         args,
         fork,
     };
@@ -197,7 +197,7 @@ pub(super) async fn add_planned(
 fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
-    (mode, permissions): (
+    (mode, narrowing): (
         &Option<String>,
         crate::config::permissions::PermissionsConfig,
     ),
@@ -211,7 +211,7 @@ fn queued_launch(
         agent: chosen.clone().into(),
         prompt: prompt.clone(),
         mode: mode.clone(),
-        permissions,
+        narrowing,
         model: agent.model.clone(),
         args: super::plan::launch_args(args.to_vec())?,
         fork: fork.clone(),

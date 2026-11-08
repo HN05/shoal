@@ -129,7 +129,7 @@ fn a_narrowing_takes_known_keys_and_values_and_round_trips() {
 }
 
 #[test]
-fn a_narrowing_never_widens_the_mode_or_the_parent() {
+fn a_narrowing_never_widens_the_mode() {
     let settings = settings("", "");
     let worker = resolve(&settings, mode("worker")).unwrap();
     let wider = PermissionsConfig::assigned(&["merge=direct".to_owned()]).unwrap();
@@ -140,7 +140,4 @@ fn a_narrowing_never_widens_the_mode_or_the_parent() {
     assert_eq!(narrowed.push.value, Pushes::Propose);
     assert_eq!(narrowed.push.from, PermissionSource::Narrowing);
     assert_eq!(narrowed.merge, worker.merge);
-    // A value above the parent's is lowered to it.
-    let parent = worker.narrowed(&PermissionsConfig::assigned(&["push=deny".to_owned()]).unwrap());
-    assert_eq!(narrower.lowered(&parent).push, Some(Pushes::Deny));
 }
