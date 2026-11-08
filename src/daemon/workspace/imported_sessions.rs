@@ -77,6 +77,8 @@ impl Manager {
 
     /// Give the session files kept for `removed` to the workspace `to` that
     /// restores it, for the caller to put in place, returning them there.
+    /// The checkpoint gate keeps the sweep from reading the files' owners
+    /// before the move and deleting them after it.
     pub(super) async fn hand_over_imported_sessions(
         &self,
         removed: &RemovedWorkspace,
@@ -87,8 +89,13 @@ impl Manager {
         }
         let repo = self.repository(&removed.repository_id).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
-        layout.hand_over(&removed.workspace_id, to)?;
-        Ok(layout.kept(to, &removed.session_files))
+        let kept = layout.kept(to, &removed.session_files);
+        let (from, to) = (removed.workspace_id.clone(), to.to_owned());
+        let _sweep = self.gates.lock_checkpoints().await;
+        tokio::task::spawn_blocking(move || layout.hand_over(&from, &to))
+            .await
+            .context("hand over the kept session files")??;
+        Ok(kept)
     }
 
     /// Delete the session files `repo` keeps for workspaces that neither
