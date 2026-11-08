@@ -394,9 +394,9 @@ It is never a required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens or leaves draft and whenever `review/default`, `review/claude` or
 `review/codex` is added; `review/none` suppresses it. Pushing commits does not
-request one, so a review covers only the head it ran on. A draft PR gets no
-review; a request label added while it is a draft is answered when it leaves
-draft.
+request one; Committing below says which heads a review covers. A draft PR
+gets no review; a request label added while it is a draft is answered when it
+leaves draft.
 `.review/review.md` is its project brief;
 keep it current when a rule here or in `docs/design.md` changes.
 Opening a ready PR already requests its review; never add reviewer request labels
