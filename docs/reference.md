@@ -5019,7 +5019,8 @@ and `file`, the record as
 already attached adds nothing.
 
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
-falls outside retained history, then replay continues with retained events.
+falls outside retained history or retention deleted events after it, then
+replay continues with the retained events from `oldest_id`.
 Resync with `shoal work --json` after a gap or on first connection: the journal
 starts when the daemon upgrades and does not reconstruct older changes.
 

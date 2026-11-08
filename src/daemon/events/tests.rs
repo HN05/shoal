@@ -410,3 +410,26 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         ]
     );
 }
+
+#[tokio::test]
+async fn a_cursor_below_what_retention_pruned_reports_the_gap() {
+    let (_temp, manager) = manager().await;
+    seed(&manager, 1).await;
+    // Ids 2 to 601; the space keeps the newest 500, so 2 to 101 go.
+    seed_turns(&manager, 600).await;
+    seed(&manager, 1).await;
+    let behind = manager.workspace_events(Some(50), 1000).await.unwrap();
+    assert!(matches!(
+        behind[0],
+        EventItem::Gap {
+            since: 50,
+            oldest_id: 102,
+            latest_id: 602
+        }
+    ));
+    assert!(matches!(&behind[1], EventItem::Event(event) if event.id == 102));
+    let past = manager.workspace_events(Some(101), 1000).await.unwrap();
+    assert!(matches!(&past[0], EventItem::Event(event) if event.id == 102));
+    let all = manager.workspace_events(None, 1000).await.unwrap();
+    assert!(matches!(&all[0], EventItem::Event(event) if event.id == 1));
+}

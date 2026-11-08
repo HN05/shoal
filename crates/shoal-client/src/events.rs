@@ -54,7 +54,7 @@ states!(EventKind {
     SimulatorAcquired => "simulator_acquired",
     /// A booted simulator lease was released or its device deleted.
     SimulatorReleased => "simulator_released",
-    /// The workspace took a new title, which `title` carries.
+    /// The workspace took a new name and branch, or a new `title`.
     Renamed => "renamed",
     /// `shoal work restore` reopened the removed workspace, whose events
     /// the reopened one took.

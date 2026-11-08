@@ -17,9 +17,17 @@ CREATE INDEX workspace_events_space ON workspace_events(space_id, bulk, id);
 -- Each space keeps its newest 500 bulk events, so a busy space cannot push
 -- out another's history; the rest stay while the space does, and the
 -- retention sweep forgets a removed space's events with its removal record.
+-- The highest ID either deleted, so a replay from an older cursor reports
+-- the gap.
+CREATE TABLE journal_pruned (id INTEGER NOT NULL);
+INSERT INTO journal_pruned(id) VALUES (0);
 DROP TRIGGER workspace_events_retention;
 CREATE TRIGGER workspace_events_retention AFTER INSERT ON workspace_events
 WHEN NEW.bulk BEGIN
+    UPDATE journal_pruned SET id=MAX(id, COALESCE((
+        SELECT id FROM workspace_events WHERE space_id=NEW.space_id AND bulk
+            ORDER BY id DESC LIMIT 1 OFFSET 500
+    ), 0));
     DELETE FROM workspace_events WHERE space_id=NEW.space_id AND bulk AND id <= (
         SELECT id FROM workspace_events WHERE space_id=NEW.space_id AND bulk
             ORDER BY id DESC LIMIT 1 OFFSET 500

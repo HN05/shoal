@@ -219,7 +219,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
          END;
          DROP VIEW journal_spaces;
          DROP INDEX workspace_events_space; DROP TRIGGER workspace_events_retention;
-         ALTER TABLE workspace_events DROP COLUMN bulk;
+         ALTER TABLE workspace_events DROP COLUMN bulk; DROP TABLE journal_pruned;
          ALTER TABLE workspace_events DROP COLUMN space_id;
          CREATE TRIGGER workspace_events_retention AFTER INSERT ON workspace_events BEGIN
              DELETE FROM workspace_events WHERE id <= (

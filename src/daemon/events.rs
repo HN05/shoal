@@ -290,17 +290,26 @@ impl Manager {
             "event cursor must be nonnegative"
         );
         self.store.run(move |db| {
-            let (oldest, latest): (Option<i64>, Option<i64>) = db.query_row(
-                "SELECT MIN(id),MAX(id) FROM workspace_events", [], |r| Ok((r.get(0)?,r.get(1)?))
+            let (oldest, latest, pruned): (Option<i64>, Option<i64>, i64) = db.query_row(
+                "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
+                [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))
             )?;
-            let latest = latest.unwrap_or(0);
+            // Deleting the newest event does not move a follower's cursor ahead.
+            let latest = latest.unwrap_or(0).max(pruned);
             let oldest = oldest.unwrap_or(1);
-            let cursor = since.unwrap_or(oldest - 1);
             let mut items = Vec::new();
-            let cursor = if cursor < oldest - 1 || cursor > latest {
-                items.push(EventItem::Gap { since: cursor, oldest_id: oldest, latest_id: latest });
-                oldest - 1
-            } else { cursor };
+            let cursor = match since {
+                None => oldest - 1,
+                // Per-space retention deletes events anywhere below the
+                // highest it pruned, so a cursor below that missed some.
+                Some(cursor) => {
+                    let resume = (oldest - 1).max(pruned);
+                    if cursor < resume || cursor > latest {
+                        items.push(EventItem::Gap { since: cursor, oldest_id: resume + 1, latest_id: latest });
+                        resume
+                    } else { cursor }
+                }
+            };
             let mut stmt = db.prepare("SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2")?;
             for row in stmt.query_map(params![cursor,limit], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))? {
                 let (id,created_at,record) = row?;
