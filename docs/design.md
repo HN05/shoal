@@ -783,8 +783,10 @@ Stopping a workspace stops the workspaces below it unless `--skip-children`
 says otherwise, since their agents work for it. Approval
 requests go up the same tree: to the nearest space above with an agent, of
 either kind, since each knows best what its children need. A parent space,
-workspace or chat, approves only what it holds an approved grant for, or a
-hold on its child, and otherwise denies or passes the request up; the user
+workspace or chat, approves what a permission governs where its own
+permission for it is `direct`, anything else only where it holds an approved
+grant for it, and a hold on its child, and otherwise denies or passes the
+request up; the user
 decides at the top, and a chat whose agent stops or a
 deciding space that is removed hands the user what it had not decided, since
 neither can decide any more.
@@ -2193,8 +2195,8 @@ hooks deliver, including the user's request to rename it; a removed chat gives t
 messages stand for.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the spaces below it come to it when it is the nearest space above
-them with an agent, and it approves only what it holds a grant for, as a
-parent workspace does, and otherwise denies or passes them up; those it
+them with an agent, and it approves them by its own permissions or grants, as
+a parent workspace does, and otherwise denies or passes them up; those it
 has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
@@ -2470,10 +2472,13 @@ their defaults resolved, the workspace, branch, commit and agent, and copies of 
 attachments in the state directory until no pending proposal uses them; the command
 reports it and exits 0, because the agent goes on with its work and hears the
 decision as a message. A proposal is routed like any request, to the nearest
-space above with an agent and up to the user, but publishing to a forge other people see is the review
-the setting asks for, so only the user approves one. A parent space may deny it
-with a reason or pass it up; marking it a duplicate comments on the forge too, so that is not a workspace's
-either. Approval carries data: the decider may replace the title and body, and the daemon then opens the item as the agent account through the same path
+space above with an agent and up to the user. Publishing to a forge other people see is the review
+the setting asks for, so a space above approves one only where its own
+permission for it is `direct`: it may then publish the item itself, so
+reviewing a child's is within what it may do, and a child never has more than
+it does. A parent without that permission may deny it, with a reason or as a
+duplicate, or pass it up; a duplicate only adds a finding to an existing issue
+or proposal, which opens nothing. Approval carries data: the decider may replace the title and body, and the daemon then opens the item as the agent account through the same path
 `issue open` and `pr open` use, recording and linking it. Denial may carry a reason,
 and an issue proposal may be denied as a duplicate of an existing issue, which gets
 its text as a comment, or of another pending proposal, which posts it once opened.
@@ -2551,7 +2556,9 @@ persists a request with a caller-supplied reason and the effective allocation se
 only an unscoped caller decides it, or the nearest space above the requesting
 workspace with an agent: a workspace approves only what it holds an approved
 grant for with the same target and settings and otherwise denies or passes the
-request up, as a chat does; the user decides at the top. The decision is sent to the requesting
+request up, as a chat does; the user decides at the top. A resource grant is
+the only measure of what a parent may hand on, since resources are not
+permissions. The decision is sent to the requesting
 workspace's agents as a message so they need not poll. Pending requests consume no capacity. Approval
 lasts until release by default, or for the workspace when configured, limited to the
 same resource and access settings. Changed settings require a new request; approval

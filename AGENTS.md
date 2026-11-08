@@ -220,11 +220,13 @@ for delivering a PR, under Committing near the end, decide when work is done.
   only unscoped callers approve or deny, except that a request from a space
   with an agent goes to the nearest space above it with an agent, of either
   kind. That space decides it or passes it up, the next such space above and
-  the user at the top; a parent
-  space without an approved grant for the same target and settings may only
-  deny or pass it up, a chat as a workspace. Proposals route the same way, but
-  only the user approves one; a parent space may deny it with a reason or pass
-  it up. A chat whose agent
+  the user at the top. For a request a permission governs (issue and PR
+  proposals, pushes, merges and unmerges), a parent space whose own effective
+  permission for it is `direct` decides it as the user would, editing a
+  proposal or marking it a duplicate; one without may deny it, with a reason
+  or as a duplicate, or pass it up. For any other request, a parent space
+  without an approved grant for the same target and settings may only deny or
+  pass it up, a chat as a workspace. A chat whose agent
   stops, or a deciding space that is removed, passes its undecided requests to
   the user. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace

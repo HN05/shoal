@@ -125,11 +125,14 @@ stopped and restores the chats its restart left stopped in a background
 place, while the user resumes the ones the user stopped.
 
 A child's approval request comes to its coordinator first.
-`shoal approvals --approve <S.N>` works only for a request to hold a workspace
-below, or for a thing the coordinator holds an approved grant for; otherwise
-it is refused. `--deny <S.N>` denies it, and `--escalate <S.N>` passes it to the
-space above or the user. Only the user approves a proposed issue or PR; a
-coordinator may deny one with `--reason` or pass it up.
+`shoal approvals --approve <S.N>` works for a request to hold a workspace
+below; for an issue or PR proposal, a push, a merge or an unmerge where the
+coordinator's own permission for it is `direct`, taking `--title` and `--body`
+for a proposal as the user's approval does; and for anything else only where
+the coordinator holds an approved grant for it. Otherwise it is refused.
+`--deny <S.N>` denies it, with `--reason`, or for an issue proposal
+`--duplicate-of` or `--duplicate-of-approval`, and `--escalate <S.N>` passes it
+to the space above or the user.
 
 ## Follow progress
 
@@ -221,8 +224,9 @@ caller's own.
 
 Where a space's permissions require approval for issues and PRs, `issue open`
 and `pr open` exit 0 with `proposed`, an approval request, instead of the item;
-`pr open` still pushes unless pushes need approval too. Only the user approves
-a proposal, and may edit its title and description first; the decision arrives
+`pr open` still pushes unless pushes need approval too. The user approves a
+proposal, or a space above whose own permission opens it directly, and may
+edit its title and description first; the decision arrives
 as a message naming the opened item, or giving a reason or the duplicate issue
 for a denial. A proposed issue stays after the space is removed. A pending PR
 proposal keeps the workspace; a new commit outdates it until `pr open` runs

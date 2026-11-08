@@ -4198,8 +4198,10 @@ agent's copies may be gone when you decide, and deleted once no pending proposal
 uses them, by the next decision or proposal or by the cleanup sweep. Both commands exit 0 with JSON `proposed`, the request, and the agent
 continues its work. A proposal is routed like other
 [approval requests](#resource-approvals): the nearest space above with an agent,
-a workspace or a chat, decides it before you do. Only you approve one; a
-parent space may deny it with `--reason` or pass it up.
+a workspace or a chat, decides it before you do. A parent space whose own
+[permission](#mode-permissions) for it is `direct` approves it as you would,
+with `--title` and `--body`, or denies it; one without may deny it, with
+`--reason`, `--duplicate-of` or `--duplicate-of-approval`, or pass it up.
 
 ```sh
 shoal approvals                     # proposals show their labels and description
@@ -5714,12 +5716,16 @@ agent is told and decides it instead of the user, by number with
 `shoal approvals --approve <S.N>` or `shoal approvals --deny <S.N>`, or
 passes it up with `shoal approvals --escalate <S.N>`, to the next such
 space above and at the top to the user. A parent space, workspace or chat,
-approves only what it holds an approved grant for, with the same target and
-settings, or a request to hold the workspace, which needs none; otherwise
-`--approve` is refused and it denies or passes the request up. It never
-approves a proposal or denies one as a duplicate, which write to the forge.
-A merge request names its own branch and commit, which no other workspace holds
-a grant for, so its parent workspace passes it up. When a chat's agent stops,
+approves a request a permission governs, an issue or PR proposal, a push, a
+merge or an unmerge, where its own effective [permission](#mode-permissions)
+for it is `direct`: `issue_open` for an issue, or `issue_other_repositories`
+for one in another repository, `pr_open` for a PR, `push` for a push and for
+a PR that pushes first, and `merge` and `push` for a merge or unmerge. It
+approves anything else only where it holds an approved grant for it, with the
+same target and settings, or a request to hold the workspace, which needs
+none. Otherwise `--approve` is refused, citing the permission or the missing
+grant, and it denies or passes the request up. A push a parent approves runs
+in the daemon's environment. When a chat's agent stops,
 or a space deciding a request is removed, such as below an issue
 proposal that outlives its workspace, the requests it had not decided go to
 the user. Without a deciding

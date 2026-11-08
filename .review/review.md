@@ -221,7 +221,8 @@ instead of the PR delivery guidance below.
   and `push` permissions are both `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval never skips a check and merges only the approved commit or undoes only the approved merge.
   Under an `issue_open`/`pr_open` permission of `"propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening, routed like other approval
-  requests, though only the user approves it; approval opens it as the agent
+  requests, though a space above approves it only where its own permission for
+  it is `direct`, and otherwise may only deny it or pass it up; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives the space that made it.
   A chat's agent proposes issues, without a branch or commit, but never PRs.
@@ -263,7 +264,8 @@ instead of the PR delivery guidance below.
   decision, or one by the nearest space above with an agent, of either kind, that
   the request was routed to: a workspace approves only with an approved grant
   for the same target and settings and otherwise denies or passes it up, as a
-  chat does. That decision, which queues an agent message for the requester; failing to queue it
+  chat does. Requests a permission governs (proposals, pushes, merges and
+  unmerges) take the decider's own permission instead of a grant. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse
