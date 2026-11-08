@@ -39,3 +39,25 @@ fn message_hooks_run_shoal_and_collect_by_event() {
         ["PostToolUse", "Stop", "UserPromptSubmit"]
     );
 }
+
+#[test]
+fn plan_hooks_match_the_plan_tools_and_never_fail() {
+    let directory = tempfile::tempdir().unwrap();
+    let log = directory.path().join("calls");
+    let shoal = directory.path().join("shoal");
+    install_test_script(
+        &shoal,
+        &format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
+    );
+    let quoted = crate::shell::quote(&[shoal.to_str().unwrap()]);
+    let (event, group) = plan(&quoted, crate::ai::IntegrationKind::Codex, "update_plan");
+    assert_eq!(
+        (event, &group["matcher"]),
+        ("PostToolUse", &json!("update_plan"))
+    );
+    let command = group["hooks"][0]["command"].as_str().unwrap();
+    let output = Command::new("sh").args(["-c", command]).output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let calls = fs::read_to_string(&log).unwrap();
+    assert_eq!(calls.trim_end(), "internal plan --integration codex");
+}

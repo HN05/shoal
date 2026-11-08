@@ -2124,6 +2124,22 @@ gets a lifetime, since idle stop takes an unknown one for an expired cache and
 would stop the agent as soon as its turn ends; 30 minutes is the least OpenAI
 keeps a GPT-5.6 or later cache, and a guess for other tools.
 
+Progress is where a space's agent is in its work, beside its turn: a status
+line in the agent's own words and the steps of its plan. Agents already keep
+their steps in their plan tools, so Shoal reads them through `PostToolUse`
+hooks instead of asking agents to report them: each integration only turns its
+hook event into a change, whole-plan tools replacing the steps and task tools
+changing one task by its ID, and the daemon keeps the list. Agents without a
+plan hook set the steps from a task list. Progress outlives the agent until the
+space goes, so a finished space shows where its work ended, and like agent state it
+never notifies; coordinators read it on demand. Each change is a space's
+journal event, kept as its turn states are since plan tools change it as
+often.
+
+The wrapper does not report progress to the terminal through OSC 7501: its
+writes, from a second process, interleave with the agent's own TUI output and
+corrupt it, and Claude Code and Codex already report their turns there.
+
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout instead of in a workspace: coordinating
 work is one thing a chat may do. Every chat is scoped, as a workspace's

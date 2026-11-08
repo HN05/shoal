@@ -94,6 +94,10 @@ impl Integration for Claude {
             _ => TurnFailure::Other,
         })
     }
+
+    fn plan_change(&self, event: &Value) -> Option<crate::client::progress::ProgressChange> {
+        plan::change(event)
+    }
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
@@ -113,6 +117,7 @@ fn settings(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     };
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
+        .chain([hooks::plan(&shoal, IntegrationKind::Claude, plan::TOOLS)])
         .chain(subagents)
         .chain(wake_hooks(&shoal));
     let mut settings = json!({
@@ -271,6 +276,7 @@ const CUSTOM_HEADERS: &str = "ANTHROPIC_CUSTOM_HEADERS";
 /// lifetime is set elsewhere.
 const PROMPT_CACHE_1H: &str = "ENABLE_PROMPT_CACHING_1H";
 
+mod plan;
 mod prompt_cache;
 mod settings;
 

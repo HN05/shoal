@@ -5,6 +5,7 @@ use std::io::Read;
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
+    ai::IntegrationKind,
     cli::{
         context::Context,
         output::{Palette, Style},
@@ -55,6 +56,54 @@ fn changes(status: Option<String>, steps: bool) -> Result<Vec<ProgressChange>> {
         ));
     }
     Ok(changes)
+}
+
+/// Report the plan change the hook event on stdin of an agent with
+/// `integration` names, for the space `space` names, else the agent's own.
+/// An event that changes no plan reports nothing.
+pub(super) async fn report_plan(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    integration: IntegrationKind,
+) -> Result<i32> {
+    let event = super::agent_state::hook_event();
+    let change = event.and_then(|event| crate::cli::agents::plan_change(integration, &event));
+    let Some(change) = change.and_then(single_lines) else {
+        return Ok(0);
+    };
+    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    progress::set(&ctx.paths, SpaceSelector::parse(&space), change).await?;
+    Ok(0)
+}
+
+/// `change` with each step name a valid line, leaving out the steps that
+/// have none, so a plan tool's long or multi-line step is shown, not
+/// refused; none for a created step without a name.
+fn single_lines(change: ProgressChange) -> Option<ProgressChange> {
+    let step = |step: PlanStep| {
+        Some(PlanStep {
+            name: progress::step_name(&step.name)?,
+            ..step
+        })
+    };
+    Some(match change {
+        ProgressChange::Steps(steps) => {
+            ProgressChange::Steps(steps.into_iter().filter_map(step).collect())
+        }
+        ProgressChange::StepCreated(created) => ProgressChange::StepCreated(step(created)?),
+        ProgressChange::StepChanged {
+            key,
+            name,
+            state,
+            removed,
+        } => ProgressChange::StepChanged {
+            key,
+            name: name.and_then(|name| progress::step_name(&name)),
+            state,
+            removed,
+        },
+        status @ ProgressChange::Status(_) => status,
+    })
 }
 
 /// Apply each of `changes` in order, returning the progress after the last.

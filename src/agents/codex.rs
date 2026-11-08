@@ -57,6 +57,10 @@ impl Integration for Codex {
         Wake::Prompt
     }
 
+    fn plan_change(&self, event: &Value) -> Option<crate::client::progress::ProgressChange> {
+        plan::change(event)
+    }
+
     /// Ctrl-C, which quits Codex only when pressed again.
     fn interrupt_key(&self) -> Option<&'static str> {
         Some("\x03")
@@ -84,6 +88,7 @@ fn config_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let subagents = space.workspace().map(|_| hooks::subagent(&shoal));
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
+        .chain([hooks::plan(&shoal, IntegrationKind::Codex, plan::TOOLS)])
         .chain(subagents);
     Ok(hooks::by_event(groups)
         .into_iter()
@@ -115,6 +120,7 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
 }
 
 mod layers;
+mod plan;
 mod provider;
 
 use provider::PROVIDER;

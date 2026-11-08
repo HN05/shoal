@@ -5,8 +5,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, events, menu, messages, operations, push_gate, queued_agents,
-            subagents, workspaces, worktree_hooks,
+            agent_state, approvals, events, menu, messages, operations, progress, push_gate,
+            queued_agents, subagents, workspaces, worktree_hooks,
         },
         context::Context,
         terminal,
@@ -39,6 +39,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 ends_turn,
             )
             .await
+        }
+        InternalCommand::Plan { integration, space } => {
+            let space = space.as_deref().map(SpaceSelector::parse);
+            progress::report_plan(&ctx, space, integration).await
         }
         InternalCommand::TurnFailed { integration, space } => {
             agent_state::turn_failed(

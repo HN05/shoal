@@ -1,7 +1,7 @@
 //! Hook groups agents run Shoal through, in the event-and-group shape Claude
 //! Code and Codex share: `shoal messages --hook` delivers undelivered agent
-//! messages as context, and `shoal internal agent-state` reports the turn
-//! state. Integrations choose the events and how the agent receives them.
+//! messages as context, `shoal internal agent-state` reports the turn
+//! state, and `shoal internal plan` the plan the agent's plan tools keep. Integrations choose the events and how the agent receives them.
 use serde_json::{Map, Value, json};
 
 use crate::state::AgentState;
@@ -105,6 +105,28 @@ pub fn turn_failed(shoal: &str, integration: crate::ai::IntegrationKind) -> Valu
         ),
         "timeout": 10,
     }] })
+}
+
+/// The group that reports the plan an agent with `integration` keeps in
+/// the plan tools `matcher` names, after each call of one. It never fails,
+/// as [`state`] does not.
+pub fn plan(
+    shoal: &str,
+    integration: crate::ai::IntegrationKind,
+    matcher: &str,
+) -> (&'static str, Value) {
+    let group = json!({
+        "matcher": matcher,
+        "hooks": [{
+            "type": "command",
+            "command": format!(
+                "{shoal} internal plan --integration {} >/dev/null 2>&1 || true",
+                crate::shell::quote(&[integration.as_str()])
+            ),
+            "timeout": 10,
+        }],
+    });
+    ("PostToolUse", group)
 }
 
 /// Hook groups collected under their events, in order.

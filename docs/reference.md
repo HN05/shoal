@@ -4837,8 +4837,14 @@ daemon restarts and agent exits, so a completed space still shows where its
 work ended: a `shoal done --summary` sets the status line with the
 completion, and `shoal done --undo` leaves it as it is.
 
-`--steps` replaces the steps with a markdown task list, one `- [ ] name` or
-`- [x] name` per line.
+Claude Code's and Codex's plan tools set the steps through `PostToolUse` hooks
+Shoal registers with the [message hooks](#agent-messages), which run
+`shoal internal plan --integration <name>` with the hook event on stdin:
+`TodoWrite` and `update_plan` replace the steps, and `TaskCreate` and
+`TaskUpdate` add and change one task by its ID, where creating an ID the plan
+already has starts a new plan. A subagent's calls change nothing, and Happy
+sessions register no hooks. Other agents set the steps with `--steps`, which
+reads a markdown task list, one `- [ ] name` or `- [x] name` per line.
 
 `work status` shows a `Progress` section with the status line and the numbered
 steps, marking the current one, and `work` shows how many steps are done with

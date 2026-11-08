@@ -61,6 +61,17 @@ pub enum InternalCommand {
         #[arg(long)]
         space: Option<String>,
     },
+    /// Report the plan that the hook event of an agent with this integration
+    /// names after a plan tool call; Shoal's agent hooks call it.
+    Plan {
+        /// The integration whose hook event stdin carries.
+        #[arg(long)]
+        integration: crate::ai::IntegrationKind,
+        /// Workspace or chat to report for; defaults to the chat this runs
+        /// in, else the caller's own or the current workspace.
+        #[arg(long)]
+        space: Option<String>,
+    },
     /// Wait for the next agent messages or item activity of the workspace or
     /// chat, print them and exit 2; Shoal's Claude Code `Stop` and `StopFailure`
     /// hooks run it in the background so the update starts the idle agent's

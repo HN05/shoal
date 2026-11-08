@@ -148,7 +148,7 @@ const EVENT_WAIT: Duration = Duration::from_secs(2);
 
 /// The event Claude Code and Codex pass their hooks on stdin; a terminal, a
 /// silent input or another input reports none.
-fn hook_event() -> Option<serde_json::Value> {
+pub(super) fn hook_event() -> Option<serde_json::Value> {
     let stdin = std::io::stdin();
     if stdin.is_terminal() || !readable_within(stdin.as_fd(), EVENT_WAIT) {
         return None;

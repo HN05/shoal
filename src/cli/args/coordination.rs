@@ -49,6 +49,9 @@ pub enum CoordinationCommand {
     },
     /// Show or set where a space's agent is in its work: a status line and
     /// the steps of its plan.
+    ///
+    /// Claude Code's and Codex's plan tools set the steps through Shoal's
+    /// hooks; other agents set them with --steps.
     Progress {
         /// The status line, such as "Reproduced; the cause is the query
         /// limit"; "" clears it. Omit it and --steps to show the progress.

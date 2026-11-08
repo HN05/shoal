@@ -118,3 +118,18 @@ pub fn validate_line(kind: &str, value: &str) -> Result<()> {
     );
     Ok(())
 }
+
+/// `value` made a valid step name: control characters become spaces and a
+/// long one is cut. None when nothing is left.
+pub fn step_name(value: &str) -> Option<String> {
+    let line: String = value
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let line = line.trim();
+    (!line.is_empty())
+        .then(|| crate::validate::shorten(line.to_owned(), crate::validate::MAX_MESSAGE_LEN))
+}
+
+#[cfg(test)]
+mod tests;

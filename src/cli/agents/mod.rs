@@ -668,6 +668,15 @@ pub(in crate::cli) fn turn_failure(
     integration(kind).turn_failure(event)
 }
 
+/// The plan change that `event`, from the plan hook of an agent with
+/// integration `kind`, reports.
+pub(in crate::cli) fn plan_change(
+    kind: IntegrationKind,
+    event: &serde_json::Value,
+) -> Option<crate::client::progress::ProgressChange> {
+    integration(kind).plan_change(event)
+}
+
 /// Trust the path of `workspace`, reopened from `removed`, for each agent
 /// whose session `shoal resume` continues there as a tracked agent, since
 /// resuming does not trust it as a launch does. Failures only warn.
