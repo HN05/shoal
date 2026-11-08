@@ -14,7 +14,10 @@ with (root / "handoff-calls.jsonl").open("a") as calls:
 if args[0] == "list":
     if record.exists():
         fields = json.loads(record.read_text())
-        if (root / "handoff-pause-cleanup").exists() and (root / "handoff-failed").exists():
+        # Only the failed handoff's own cleanup pauses: the daemon's session
+        # sweep lists sessions too, without the ownership lock the test checks.
+        if ("HANDOFF_FAIL" in os.environ and (root / "handoff-pause-cleanup").exists()
+                and (root / "handoff-failed").exists()):
             (root / "handoff-pause-cleanup").unlink()
             (root / "handoff-cleanup-paused").touch()
             deadline = time.monotonic() + 120
