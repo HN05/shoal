@@ -3,7 +3,9 @@
 //! tied to it with every process they started. A process a tracked one
 //! started, or one that started a tracked one, belongs to that one instead.
 use super::{
-    Identity, Inventory, Lineage, MAX_ANCESTRY, descends_from_detached, executable, inventory,
+    Identity, Lineage, MAX_ANCESTRY,
+    attribution::{Inventory, inventory},
+    descends_from_detached, executable,
     marks::{Marker, Marks},
     owners, working_directory,
 };

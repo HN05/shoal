@@ -1,5 +1,9 @@
-use super::marks::{Visibility, observe_with, visibility, visibility_with};
+use super::attribution::{Attribution, Inventory, list_processes};
+use super::marks::{
+    Evidence, Marker, Marks, Observed, Visibility, observe_with, visibility, visibility_with,
+};
 use super::*;
+use std::collections::HashMap;
 
 #[test]
 fn process_identity_unavailable_includes_inaccessible_processes() {
@@ -503,6 +507,7 @@ fn marked_parent_of_a_shell_job() {
 #[cfg(target_os = "macos")]
 #[test]
 fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Result<()> {
+    use super::marks::observe_elevated;
     use Evidence::{Hidden, Unmarked};
     // `top` runs setuid root like `login`; it samples until killed.
     let mut setuid = std::process::Command::new("/usr/bin/top")
@@ -593,6 +598,7 @@ fn executable(pid: u32) -> Option<PathBuf> {
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn an_adopted_job_with_a_hidden_environment_is_unreadable() -> Result<()> {
+    use super::attribution::scan_remembering;
     let output = tokio::process::Command::new("sh")
         .args(["-c", "sleep 30 </dev/null >/dev/null 2>&1 & echo $!"])
         .output()
