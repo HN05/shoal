@@ -50,14 +50,7 @@ pub async fn bare_flag_problem(path: &Path) -> Result<Option<String>> {
     if !git::is_bare_with_work_tree(path).await? {
         return Ok(None);
     }
-    let fix = crate::shell::quote(&[
-        "git",
-        "-C",
-        &path.to_string_lossy(),
-        "config",
-        "core.bare",
-        "false",
-    ]);
+    let fix = git::clear_bare_flag_command(path);
     Ok(Some(format!(
         "{} has a working tree, but its Git config sets core.bare=true; run {fix}",
         path.display()

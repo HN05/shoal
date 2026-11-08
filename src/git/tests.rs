@@ -265,3 +265,11 @@ fn an_approved_push_replays_its_url_and_keeps_a_missing_ref_missing() {
         std::ffi::OsString::from("origin")
     );
 }
+
+#[test]
+fn the_core_bare_fix_quotes_the_checkout_path() {
+    assert_eq!(
+        clear_bare_flag_command(Path::new("/repos/my app")),
+        "git -C '/repos/my app' config core.bare false"
+    );
+}

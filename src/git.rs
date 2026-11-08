@@ -298,6 +298,19 @@ pub fn push_command(remote: &str, branch: &str) -> Vec<OsString> {
     .collect()
 }
 
+/// Shell text of the command that unsets `core.bare` in the checkout at
+/// `path`, for a hint the user runs.
+pub fn clear_bare_flag_command(path: &Path) -> String {
+    crate::shell::quote(&[
+        Tool::Git.program(),
+        "-C",
+        &path.to_string_lossy(),
+        "config",
+        "core.bare",
+        "false",
+    ])
+}
+
 /// Build the tracked command that runs a push the user approved: the
 /// approved object to the approved ref, replacing only the commit the remote
 /// had when it was requested.
