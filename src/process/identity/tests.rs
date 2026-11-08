@@ -957,7 +957,8 @@ async fn a_group_stays_alive_while_a_member_outlives_its_leader() -> Result<()> 
     // SAFETY: the member is the test's own background sleep.
     unsafe { libc::kill(member, libc::SIGKILL) };
     assert!(alive?, "the member keeps the group alive");
-    // A hang guard well past the member's exit; launchd or init reaps it.
+    // A hang guard well past the member's exit; whichever process adopts
+    // orphans reaps it.
     tokio::time::timeout(Duration::from_secs(60), group_exited(group)).await??;
     assert!(!group_alive(group).await?);
     Ok(())

@@ -170,7 +170,7 @@ async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
         .await
         .unwrap();
     // Written as it started, before the export finished; stopped, it is gone
-    // once launchd or init reaps it.
+    // once whichever process adopts orphans reaps it.
     let late = written_pid(&child).await;
     for _ in 0..400 {
         if identity::capture(late).unwrap().is_none() {
