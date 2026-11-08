@@ -19714,6 +19714,14 @@ fn start_narrows_the_agents_permissions_and_records_them() {
     let output = fixture.run(&unknown);
     assert!(!output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["work"]), before);
+    // A chat's mode bounds its narrowing too.
+    let chats = fixture.ok(&["work", "--chats"]);
+    let chat = [
+        "start", "--chat", repo, "--mode", "plan", "--agent", "helper", "--here",
+    ];
+    let output = fixture.run(&[&chat[..], &["--permission", "api_writes=direct"]].concat());
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["work", "--chats"]), chats);
 }
 
 /// A repository's own mode decides the kind of space, its rules and the

@@ -71,6 +71,7 @@ pub(super) async fn start(
             &settings.modes,
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
+        options.check_narrowing(&settings, &mode, true)?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::repository(&repo, &mode)
@@ -105,6 +106,7 @@ pub(super) async fn start_outside_repositories(
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
         let settings = crate::client::workspaces::settings(&ctx.paths, repository.config()).await?;
         crate::config::modes::resolve(&settings.modes, &topic.mode, SpaceKind::Chat, false)?;
+        options.check_narrowing(&settings, &topic.mode, false)?;
         begin(ctx, repository, settings, topic, options).await
     }
     .await;
@@ -141,6 +143,7 @@ pub(super) async fn start_in_workspace(
             &settings.modes,
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
+        options.check_narrowing(&settings, &mode, true)?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::workspace(workspace, &mode)
@@ -344,6 +347,26 @@ impl Options {
         self.agent = checked_agent(settings, self.agent.take(), &self.model)?;
         Ok(())
     }
+
+    /// Refuse a requested narrowing wider than the permissions of the chat
+    /// mode `mode` under `settings`, in a repository when `registered`, as
+    /// soon as the mode is chosen; a recorded one stays as it is.
+    pub fn check_narrowing(
+        &self,
+        settings: &Effective,
+        mode: &str,
+        registered: bool,
+    ) -> Result<()> {
+        let Narrowing::Requested(narrowing) = self.narrowing else {
+            return Ok(());
+        };
+        let mode = crate::config::permissions::SpaceMode {
+            name: mode,
+            kind: SpaceKind::Chat,
+            repository: registered,
+        };
+        narrowing.ensure_within_mode(settings, mode)
+    }
 }
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
@@ -533,26 +556,6 @@ impl Narrowing {
     }
 }
 
-/// Refuse a requested `narrowing` where it is wider than the permissions
-/// of the chat mode `mode` in `settings`, before anything is asked; a
-/// recorded one stays as it is.
-fn ensure_narrowing_fits(
-    settings: &Effective,
-    narrowing: Narrowing,
-    mode: &str,
-    repo: &ChatRepository,
-) -> Result<()> {
-    let Narrowing::Requested(narrowing) = narrowing else {
-        return Ok(());
-    };
-    let mode = crate::config::permissions::SpaceMode {
-        name: mode,
-        kind: crate::model::SpaceKind::Chat,
-        repository: repo.registered().is_some(),
-    };
-    narrowing.ensure_within_mode(settings, mode)
-}
-
 /// How a chat started.
 pub(super) enum Started {
     /// It ran here, or beside this terminal, or an app that runs it detached
@@ -585,7 +588,6 @@ pub(super) async fn launch(
         parent,
         narrowing,
     } = options;
-    ensure_narrowing_fits(&settings, narrowing, &topic.mode, &repo)?;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
     let topic = match &restore {
