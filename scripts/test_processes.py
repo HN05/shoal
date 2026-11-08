@@ -1,5 +1,7 @@
+import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -88,6 +90,34 @@ class StopTests(unittest.TestCase):
         # Working elsewhere, but started by what the run left.
         self.assertIn(child.pid, found)
         self.assertNotIn(unrelated.pid, found)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "only Linux has subreapers")
+    def test_an_interrupted_run_under_a_subreaper_leaves_what_it_adopted(self):
+        # A subreaper adopts the orphan, and a process below it looks.
+        script = """
+import json, os, signal, subprocess, sys
+import processes
+processes.become_subreaper()
+left = int(subprocess.run(["sh", "-c", "sleep 300 </dev/null >/dev/null 2>&1 & echo $!"],
+                          cwd=sys.argv[1], stdout=subprocess.PIPE, text=True,
+                          check=True).stdout)
+try:
+    looked = subprocess.run([sys.executable, "-c", "import json, pathlib, sys, processes; "
+                             "found = processes.detached_in(pathlib.Path(sys.argv[1])); "
+                             "print(json.dumps([process.pid for process in found]))",
+                             sys.argv[1]], stdout=subprocess.PIPE, text=True,
+                            check=True).stdout
+finally:
+    os.kill(left, signal.SIGKILL)
+print(json.dumps({"left": left, "found": json.loads(looked)}))
+"""
+        scripts = Path(processes.__file__).resolve().parent
+        output = subprocess.run([sys.executable, "-c", script, str(self.run_dir)],
+                                env={"PATH": os.environ["PATH"], "PYTHONPATH": str(scripts)},
+                                stdout=subprocess.PIPE, text=True, check=True).stdout
+        looked = json.loads(output)
+
+        self.assertIn(looked["left"], looked["found"])
 
     def test_a_reused_pid_is_not_the_process_it_named(self):
         left = self.detached(self.run_dir, "left")
