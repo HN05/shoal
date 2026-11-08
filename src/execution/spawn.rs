@@ -269,6 +269,7 @@ pub(super) fn spawn(
         ),
         _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
     };
+    restore_terminal_stops(&mut process);
     process
         .stdin(stdin)
         .stdout(stdout)
@@ -277,6 +278,29 @@ pub(super) fn spawn(
         .kill_on_drop(true)
         .spawn()
         .context("launch workspace command")
+}
+
+/// Let the command stop when it uses the terminal from the background, as a
+/// shell's job does, even where this wrapper started with those stops
+/// ignored, as in a pane tmux's `respawn-pane` started. The command runs in
+/// a process group of its own, which gets the terminal only once the daemon
+/// has registered it: a read before then waits for the handover instead of
+/// failing with EIO.
+fn restore_terminal_stops(process: &mut Command) {
+    // SAFETY: sigaction is async-signal-safe, and the closure runs in the
+    // forked child before exec without allocating.
+    unsafe {
+        process.pre_exec(|| {
+            let mut default: libc::sigaction = std::mem::zeroed();
+            default.sa_sigaction = libc::SIG_DFL;
+            for signal in [libc::SIGTTIN, libc::SIGTTOU] {
+                if libc::sigaction(signal, &default, std::ptr::null_mut()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        });
+    }
 }
 
 /// Export the workspace's identity and `[env]`, dropping stale port variables

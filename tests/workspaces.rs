@@ -4964,6 +4964,44 @@ finally:
 }
 
 #[test]
+fn execution_lets_its_command_stop_for_the_terminal_where_shoal_ignores_that() {
+    use std::os::unix::process::CommandExt;
+
+    let fixture = Fixture::new();
+    fixture.add("stops");
+    let mut command = fixture.command();
+    // SAFETY: sigaction runs in the forked child before exec, without
+    // allocating.
+    unsafe {
+        command.pre_exec(|| {
+            let mut ignore: libc::sigaction = std::mem::zeroed();
+            ignore.sa_sigaction = libc::SIG_IGN;
+            for signal in [libc::SIGTTIN, libc::SIGTTOU] {
+                libc::sigaction(signal, &ignore, std::ptr::null_mut());
+            }
+            Ok(())
+        });
+    }
+    // The trailing `:` keeps the shell from running `ps` in its place, so
+    // `ps` reports the shell's own signals.
+    let output = command
+        .args(["run", "--workspace", "stops", "--"])
+        .args(["sh", "-c", "ps -o sigignore= -p $$; :"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let ignored = u64::from_str_radix(String::from_utf8_lossy(&output.stdout).trim(), 16)
+        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
+    for signal in [libc::SIGTTIN, libc::SIGTTOU] {
+        assert_eq!(
+            ignored & 1 << (signal - 1),
+            0,
+            "signal {signal}: {ignored:x}"
+        );
+    }
+}
+
+#[test]
 fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("execute");
