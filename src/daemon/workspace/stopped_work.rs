@@ -34,10 +34,13 @@ impl Manager {
 
     /// Whether a stop saved an agent of workspace `id`: one a wrapper waits
     /// to restore, stopped work or a last session, which `shoal resume`
-    /// restores.
-    pub(crate) fn has_saved_agent(&self, id: &str) -> Result<bool> {
-        let saved = Saved::load(&self.paths, id)?;
-        Ok(!saved.agents.is_empty() || !saved.sessions.is_empty())
+    /// restores. A state directory that cannot be read counts as none, so
+    /// it costs only its own workspace.
+    pub(crate) fn has_saved_agent(&self, id: &str) -> bool {
+        recovery::saves_agent(&self.paths, id).unwrap_or_else(|error| {
+            crate::daemon::log!("saved agents of workspace {id} unreadable: {error:#}");
+            false
+        })
     }
 
     /// Keep the workspace's stopped agents whose execution ended as last

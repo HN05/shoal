@@ -660,6 +660,30 @@ fn request_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
         .join(format!("{id}{REQUEST_SUFFIX}"))
 }
 
+/// Whether a stop saved an agent of the workspace, as a recovery record or a
+/// last session. It reads only the file names, so a record that does not
+/// parse still counts.
+pub(crate) fn saves_agent(paths: &Paths, workspace_id: &str) -> Result<bool> {
+    let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
+        let name = entry?.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name.ends_with(AGENT_SUFFIX)
+            || name.ends_with(LAST_SESSION_SUFFIX)
+            || name == UNNAMED_LAST_SESSION
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// The workspace's stopped agents, for its removal record. Their wrappers have
 /// exited, so none waits to restore them, and the restored workspace waits
 /// for `shoal resume` to restore them.

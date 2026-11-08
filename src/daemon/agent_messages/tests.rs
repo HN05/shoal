@@ -413,6 +413,15 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     }
     .write(&manager.paths, &stopped.id)
     .unwrap();
+    // A record that does not parse leaves the broadcast to the others.
+    std::fs::write(
+        manager
+            .paths
+            .workspace_state(&stopped.id)
+            .join("lost.command.json"),
+        "{",
+    )
+    .unwrap();
     manager
         .queue_agent(&SpaceSelector::id(&queued.id), "claude".into(), None)
         .await

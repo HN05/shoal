@@ -321,7 +321,7 @@ impl Manager {
                 continue;
             }
             let runs = running.contains(&workspace.id);
-            if runs || queued.contains(&workspace.id) || self.has_saved_agent(&workspace.id)? {
+            if runs || queued.contains(&workspace.id) || self.has_saved_agent(&workspace.id) {
                 recipients.push((workspace, runs));
             }
         }
