@@ -655,8 +655,8 @@ impl MessagesConfig {
     }
 }
 
-/// Whether new PRs open as drafts and `shoal ready` moves them, and the labels
-/// a new PR needs.
+/// Whether new PRs open as drafts and `shoal ready` moves them, the labels
+/// a new PR needs, and whether PRs show their agent's progress.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Pr)]
@@ -673,6 +673,10 @@ pub struct PrConfig {
     /// inherited entries off.
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
+    /// Whether Shoal writes the agent's progress into a section at the end
+    /// of the body of each open PR it opened or was assigned.
+    #[option(default = true)]
+    pub progress: Option<bool>,
 }
 
 /// The labels a new issue needs and the labels that say whether an issue's

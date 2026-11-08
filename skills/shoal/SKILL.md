@@ -169,9 +169,11 @@ shoal progress --steps < plan.md    # `- [ ] name` / `- [x] name` per line
 ```
 
 `progress` sets the space's status line, one line in the agent's words that
-`work` and `work status` show. Claude Code's and Codex's plan tools set the steps
-through Shoal's hooks; `--steps` sets them for other agents. Changes never
-notify; a coordinator reads its children's progress on demand.
+`work`, `work status` and the PRs the space opened or was assigned show. Claude
+Code's and Codex's plan tools set the steps through Shoal's hooks; `--steps`
+sets them for other agents. Each open PR's body ends with a section showing
+both, until `shoal ready` removes it. Changes never notify; a coordinator
+reads its children's progress on demand.
 
 ## Issues and pull requests
 

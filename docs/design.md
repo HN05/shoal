@@ -2136,6 +2136,14 @@ never notifies; coordinators read it on demand. Each change is a space's
 journal event, kept as its turn states are since plan tools change it as
 often.
 
+An open PR the space opened or was assigned shows its progress in a section
+at the end of its body, which belongs to Shoal: the daemon writes it through
+the same forge-edit path as the space's other changes, recorded as its own so
+the watch does not report it back, at most once a minute per space with the
+latest progress written in the end. A PR marked ready loses the section and
+stops being updated, since reviewers read the description, not a live plan.
+`[pr] progress` turns it off.
+
 The wrapper does not report progress to the terminal through OSC 7501: its
 writes, from a second process, interleave with the agent's own TUI output and
 corrupt it, and Claude Code and Codex already report their turns there.

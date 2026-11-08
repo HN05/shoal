@@ -179,6 +179,12 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         workspace::turn_retry::run,
     );
     spawn_supervised(&mut background, &manager, "chats", chats::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "progress sections",
+        progress::run,
+    );
     spawn_supervised(&mut background, &manager, "reviews", reviews::run);
     spawn_supervised(
         &mut background,

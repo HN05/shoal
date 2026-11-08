@@ -51,13 +51,19 @@ impl Manager {
         };
         let (id, recorded) = (chat.id.clone(), completion.clone());
         let now = crate::time::UnixTime::now();
-        let closed = (self.store)
+        let (closed, progressed) = (self.store)
             .write(move |tx| {
                 let progressed =
                     progress::record_status(tx, &id, recorded.summary.as_deref(), now)?;
-                record_completion(tx, &id, &recorded, progressed)
+                Ok((
+                    record_completion(tx, &id, &recorded, progressed)?,
+                    progressed,
+                ))
             })
             .await?;
+        if progressed {
+            self.publications.request(&chat.id);
+        }
         if !closed.is_empty() {
             self.signals.question_changed();
         }

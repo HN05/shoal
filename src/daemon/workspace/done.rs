@@ -111,6 +111,9 @@ impl Manager {
             persisted.changed || hook.is_some(),
             "assignment is already marked done at this HEAD"
         );
+        if persisted.progressed {
+            self.publications.request(&workspace.id);
+        }
         let closed = persisted.closed;
         self.forget_last_sessions(&workspace.id);
         // A done assignment needs no agent; only naming the workspace in
@@ -157,6 +160,7 @@ impl Manager {
                 Ok(Persisted {
                     changed: replaced || released > 0 || !closed.is_empty() || progressed,
                     closed,
+                    progressed,
                 })
             })
             .await?;
@@ -328,6 +332,8 @@ struct Persisted {
     changed: bool,
     /// The numbers of the questions it closed.
     closed: Vec<ItemNumber>,
+    /// Whether it changed the status line.
+    progressed: bool,
 }
 
 /// Record `completion`, returning whether it differs from the recorded one

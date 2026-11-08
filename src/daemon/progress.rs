@@ -13,6 +13,11 @@ use crate::client::{
 };
 use crate::time::UnixTime;
 
+mod publish;
+pub(crate) mod section;
+
+pub(crate) use publish::{Publications, run};
+
 /// What a space keeps of its agent's reports.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Plan {
@@ -112,6 +117,16 @@ fn stored(db: &Connection, id: &str) -> Result<Option<(Plan, UnixTime)>> {
         .transpose()
 }
 
+/// Record that the PRs of the space `id` show `plan`, unless it changed
+/// after they were written.
+fn mark_published(db: &Connection, id: &str, plan: &Plan) -> Result<()> {
+    db.execute(
+        "UPDATE space_progress SET published_at=updated_at WHERE space_id=?1 AND record=?2",
+        params![id, serde_json::to_string(plan)?],
+    )?;
+    Ok(())
+}
+
 /// Apply `change` to the progress of the space `id` at `now` in the
 /// caller's transaction, journaling it; `None` when it changes nothing.
 fn save(
@@ -195,12 +210,19 @@ impl Manager {
         validate(&change)?;
         let id = self.space(selector).await?.id().to_owned();
         let now = UnixTime::now();
-        self.store
+        let query = id.clone();
+        let (changed, progress) = (self.store)
             .write(move |db| {
-                save(db, &id, change, now)?;
-                current(db, &id)
+                Ok((
+                    save(db, &query, change, now)?.is_some(),
+                    current(db, &query)?,
+                ))
             })
-            .await
+            .await?;
+        if changed {
+            self.publications.request(&id);
+        }
+        Ok(progress)
     }
 
     /// The progress of the space `selector` names.

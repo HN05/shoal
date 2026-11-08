@@ -171,6 +171,41 @@ impl Manager {
         Ok(())
     }
 
+    /// Show `section` as the progress section of the space's PR at `url`, or
+    /// remove its section for `None`, as the agent account, unless the PR is
+    /// no longer open or already shows it. The caller holds the gates
+    /// [`Manager::lock_change_gates`] takes for the space.
+    pub(crate) async fn write_progress_section(
+        &self,
+        space: &LinkSpace,
+        url: &str,
+        section: Option<&str>,
+    ) -> Result<()> {
+        let forge = self.space_forge(space).await?;
+        let account = self.agent_account();
+        let (number, url) = forge.pull(url)?;
+        let current = forge.read(&account, ItemKind::Pr, number).await?;
+        if current.item.state != ItemState::Open {
+            return Ok(());
+        }
+        let body = crate::daemon::progress::section::with_section(&current.body, section);
+        if body == current.body {
+            return Ok(());
+        }
+        let action = Action::edit(Edit {
+            body: Some(body),
+            ..Edit::default()
+        });
+        let target = Target {
+            kind: ItemKind::Pr,
+            number,
+            url,
+        };
+        self.apply_own(space.id(), &forge, &account, target, &action)
+            .await?;
+        Ok(())
+    }
+
     /// Add to each mark what its item leaves out of the repository's
     /// conventions, read as the workspace's agent account. Its description
     /// was checked when Shoal opened it, so only its labels are.

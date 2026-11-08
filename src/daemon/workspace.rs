@@ -140,6 +140,8 @@ pub struct Manager {
     pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
     pub(crate) syncs: super::checkout_sync::Syncs,
+    /// The spaces whose PRs' progress sections wait for an update.
+    pub(crate) publications: super::progress::Publications,
     pub(crate) config_state: config_state::ConfigState,
     pub(crate) paths: Paths,
     /// Arrival order of queued resource and simulator requests.
@@ -202,6 +204,7 @@ impl Manager {
             chat_waits: Default::default(),
             cleanup_health: Default::default(),
             syncs: Default::default(),
+            publications: Default::default(),
             store: Store::open(paths.database()).await?,
             session_hosts: crate::sessions::hosts(),
             place_ownership: Default::default(),
