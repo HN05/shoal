@@ -199,34 +199,7 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
-    // The journal knows no spaces, and only workspaces record into it.
-    db.execute_batch(
-        "DROP TRIGGER chat_completed; DROP TRIGGER chat_undone;
-         DROP TRIGGER space_review_ready; DROP TRIGGER space_review_ready_again;
-         DROP TRIGGER space_review_cleared; DROP TRIGGER space_agent_state_set;
-         DROP TRIGGER space_agent_state_changed; DROP TRIGGER space_agent_state_cleared;
-         DROP TRIGGER workspace_renamed; DROP TRIGGER question_asked;
-         DROP TRIGGER question_answered; DROP TRIGGER workspace_child_created;
-         DROP TRIGGER chat_child_created; DROP TRIGGER workspace_base_recorded;
-         DROP TRIGGER workspace_name_changed;
-         DROP TRIGGER workspace_left_tree;
-         DROP TRIGGER chat_left_tree;
-         CREATE TRIGGER workspace_left_tree AFTER DELETE ON workspaces BEGIN
-             DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
-         END;
-         CREATE TRIGGER chat_left_tree AFTER DELETE ON chats BEGIN
-             DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
-         END;
-         DROP VIEW journal_spaces;
-         DROP INDEX workspace_events_space; DROP TRIGGER workspace_events_retention;
-         ALTER TABLE workspace_events DROP COLUMN bulk; DROP TABLE journal_pruned;
-         ALTER TABLE workspace_events DROP COLUMN space_id;
-         CREATE TRIGGER workspace_events_retention AFTER INSERT ON workspace_events BEGIN
-             DELETE FROM workspace_events WHERE id <= (
-                 SELECT id FROM workspace_events ORDER BY id DESC LIMIT 1 OFFSET 1000
-             );
-         END;",
-    )?;
+    db.execute_batch(include_str!("space_events_undo.sql"))?;
     // Workspaces record no copies again.
     db.execute_batch(
         "ALTER TABLE workspaces DROP COLUMN copied_from;

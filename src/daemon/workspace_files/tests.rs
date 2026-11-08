@@ -1042,6 +1042,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
             db.execute_batch(BEFORE_ATTACHED_FILES)?;
             Ok(())
         })
@@ -1162,6 +1163,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
             db.execute_batch(BEFORE_ATTACHED_FILES)?;
             Ok(())
         })
@@ -1206,6 +1208,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
             db.execute_batch(BEFORE_ATTACHED_FILES)?;
             Ok(())
         })
