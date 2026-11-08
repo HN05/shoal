@@ -38,11 +38,19 @@ class Process:
     cwd: Optional[Path]
 
 
+# The PID of the process that adopted this process's orphans before it became
+# a subreaper, once probed.
+_adopter = None
+
+
 def become_subreaper():
     """On Linux, keep orphaned descendants as this process's children, so
     they stay its descendants after their parent exits. macOS has no such
-    option; detached processes there are found by their directory."""
+    option; detached processes there are found by their directory. Finds the
+    subreaper above first, which has adopted an earlier run's leftovers, as
+    orphans probed afterwards come to this process instead."""
     if sys.platform.startswith("linux"):
+        orphan_adopter()
         libc = ctypes.CDLL(None, use_errno=True)
         if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
             raise OSError(ctypes.get_errno(), "prctl(PR_SET_CHILD_SUBREAPER)")
@@ -111,7 +119,8 @@ def macos_birth(pid):
 def start_time(recorded):
     """When a process with the birth `recorded` started, by the clock."""
     if sys.platform.startswith("linux"):
-        boot_time = next(int(line.split()[1]) for line in Path("/proc/stat").open()
+        boot_time = next(int(line.split()[1])
+                         for line in Path("/proc/stat").read_text().splitlines()
                          if line.startswith("btime "))
         return boot_time + recorded[1] / os.sysconf("SC_CLK_TCK")
     seconds, micros = recorded
@@ -178,14 +187,43 @@ def started_by_run(directory, since):
     return with_descendants(processes, descendants(processes, os.getpid()) + detached)
 
 
+def orphan_adopter():
+    """The PID of the process that adopts this process's orphans: on Linux its
+    nearest ancestor that set PR_SET_CHILD_SUBREAPER, such as `systemd --user`,
+    or else init; launchd on macOS. /proc shows no such flag, so this orphans
+    a process and reads its new parent, once, before `become_subreaper`."""
+    global _adopter
+    if not sys.platform.startswith("linux"):
+        return 1
+    if _adopter is None:
+        # The kernel hands the shell's children to their adopter before the
+        # shell's exit reaches this process.
+        orphan = int(subprocess.run(["sh", "-c", "sleep 60 >/dev/null 2>&1 & echo $!"],
+                                    cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    text=True, check=True).stdout)
+        try:
+            stat = Path(f"/proc/{orphan}/stat").read_text()
+            # The parent is the fourth field of stat(5).
+            _adopter = int(stat[stat.rindex(")") + 2:].split()[1])
+        finally:
+            try:
+                os.kill(orphan, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    return _adopter
+
+
 def detached_in(directory):
-    """Processes init or launchd adopted that work in `directory`, with their
+    """Orphaned processes that work in `directory`, adopted by init, launchd
+    or the subreaper that adopts this process's orphans, with their
     descendants: what an interrupted run left there, which no live process
     outside it keeps."""
     directory = directory.resolve()
+    adopters = {1, orphan_adopter()}
     processes = snapshot()
     return with_descendants(processes, [process for process in processes.values()
-                                        if process.ppid == 1 and inside(process, directory)])
+                                        if process.ppid in adopters
+                                        and inside(process, directory)])
 
 
 def alive(process):
