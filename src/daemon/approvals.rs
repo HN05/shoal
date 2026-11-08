@@ -71,6 +71,28 @@ fn governing(request: &ApprovalRequest) -> &'static [PermissionKey] {
     }
 }
 
+/// The permissions a coordinator needs as `direct` to decide `request` so:
+/// to approve it, those that govern it; to deny an issue proposal for
+/// another repository as a duplicate of an issue there, which comments on
+/// that issue, `issue_other_repositories`.
+fn needed(
+    request: &ApprovalRequest,
+    approve: bool,
+    details: &proposals::ProposalDecision,
+) -> &'static [PermissionKey] {
+    use proposals::ProposalExt;
+    if approve {
+        return governing(request);
+    }
+    let elsewhere = (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some());
+    match &details.duplicate_of {
+        Some(proposals::Duplicate::Issue(_)) if elsewhere => {
+            &[PermissionKey::IssueOtherRepositories]
+        }
+        _ => &[],
+    }
+}
+
 /// A stored request's key, record, active flag, numbers, and whether its
 /// space is gone, which only a proposed issue outlives.
 macro_rules! select {
@@ -855,9 +877,8 @@ impl Manager {
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;
-        if approve {
-            self.ensure_permitted(coordinator, &request).await?;
-        }
+        self.ensure_permitted(coordinator, &request, needed(&request, approve, &details))
+            .await?;
         if request.target.is_proposal() {
             return self
                 .decide_proposal(request, approve, details, None, Some(coordinator))
@@ -876,11 +897,15 @@ impl Manager {
         Ok(decision.request)
     }
 
-    /// Refuse `coordinator`'s approval of `request` unless its effective
-    /// permission is `direct` for each permission that governs the request,
-    /// resolved in the repository of the request's action.
-    async fn ensure_permitted(&self, coordinator: &str, request: &ApprovalRequest) -> Result<()> {
-        let keys = governing(request);
+    /// Refuse `coordinator`'s decision on `request` unless its effective
+    /// permission is `direct` for each of `keys`, resolved in the repository
+    /// of the request's action.
+    async fn ensure_permitted(
+        &self,
+        coordinator: &str,
+        request: &ApprovalRequest,
+        keys: &[PermissionKey],
+    ) -> Result<()> {
         if keys.is_empty() {
             return Ok(());
         }

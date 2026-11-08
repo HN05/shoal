@@ -4202,6 +4202,8 @@ a workspace or a chat, decides it before you do. A parent space whose own
 [permission](#mode-permissions) for it is `direct` approves it as you would,
 with `--title` and `--body`, or denies it; one without may deny it, with
 `--reason`, `--duplicate-of` or `--duplicate-of-approval`, or pass it up.
+Marking a proposal for another repository a duplicate of an issue there
+comments on that issue, so it takes `issue_other_repositories = "direct"`.
 
 ```sh
 shoal approvals                     # proposals show their labels and description

@@ -387,6 +387,52 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
 
+    // Marking one for another repository a duplicate of an issue there
+    // comments on it, which the parent's issue_other_repositories withholds.
+    let specification = Specification::Issue(IssueSpecification {
+        issue: NewIssue {
+            title: "Flaky upstream".into(),
+            ..NewIssue::default()
+        },
+        repository: Some("https://github.com/other/project".into()),
+        link: false,
+        branch: Some("child".into()),
+        commit: Some("head".into()),
+        agent: None,
+        duplicates: Vec::new(),
+        follow_up: None,
+    });
+    let request = proposal(
+        &child.id,
+        Target::IssueOpen,
+        proposals::ISSUE,
+        specification,
+    );
+    let (elsewhere, _) = manager
+        .store_proposal(request, proposals::propose_issue)
+        .await
+        .unwrap();
+    manager.notify_approval(&child.name, &elsewhere).await;
+    let duplicate = ProposalDecision {
+        duplicate_of: Some(Duplicate::Issue("12".into())),
+        ..ProposalDecision::default()
+    };
+    let decided = manager
+        .decide_routed_approval(&parent.id, elsewhere.number, false, None, duplicate)
+        .await;
+    assert!(decided.is_err());
+    let kept = manager.approval_request(elsewhere.number).await.unwrap();
+    assert_eq!(kept.unwrap().status, DecisionStatus::Pending);
+    let reason = ProposalDecision {
+        reason: Some("Not ours".into()),
+        ..ProposalDecision::default()
+    };
+    let denied = manager
+        .decide_routed_approval(&parent.id, elsewhere.number, false, None, reason)
+        .await
+        .unwrap();
+    assert_eq!(denied.status, DecisionStatus::Denied);
+
     // An issue proposal outlives its workspace and the one above that
     // decides it, which gives it back to the user as it goes.
     let specification = Specification::Issue(IssueSpecification {
