@@ -1,6 +1,4 @@
-//! The working directories of this user's processes, read from the kernel:
-//! one scan reads every process, and `lsof`, which a sweep spawned for the
-//! same answer, took longer than all those reads.
+//! The working directories of this user's processes, read from the kernel.
 use anyhow::Result;
 use std::path::PathBuf;
 
