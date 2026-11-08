@@ -172,6 +172,15 @@ def inside(process, directory):
     return process.cwd is not None and process.cwd.is_relative_to(directory)
 
 
+def ancestors(processes):
+    """The PIDs of this process's parent, its parent's parent and so on."""
+    found, pid = set(), os.getppid()
+    while pid not in found and pid in processes:
+        found.add(pid)
+        pid = processes[pid].ppid
+    return found
+
+
 def with_descendants(processes, roots):
     """`roots` and every process descending from one of them."""
     found = {process.pid: process for process in roots}
@@ -221,12 +230,15 @@ def detached_in(directory):
     """Orphaned processes that work in `directory`, adopted by init, launchd
     or the subreaper that adopts this process's orphans, with their
     descendants: what an interrupted run left there, which no live process
-    outside it keeps."""
+    outside it keeps. This process's own ancestors, such as a terminal
+    multiplexer's server started there, stay."""
     directory = directory.resolve()
     adopters = {1, orphan_adopter()}
     processes = snapshot()
+    own = ancestors(processes)
     return with_descendants(processes, [process for process in processes.values()
                                         if process.ppid in adopters
+                                        and process.pid not in own
                                         and inside(process, directory)])
 
 

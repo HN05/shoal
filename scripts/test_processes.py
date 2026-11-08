@@ -91,6 +91,32 @@ class StopTests(unittest.TestCase):
         self.assertIn(child.pid, found)
         self.assertNotIn(unrelated.pid, found)
 
+    def test_the_callers_own_detached_ancestors_are_no_leftovers(self):
+        # A detached shell in the run directory, like a multiplexer's server,
+        # runs the lookup.
+        look = self.root / "look.py"
+        look.write_text(
+            "import json, os, sys\n"
+            "from pathlib import Path\n"
+            "import processes\n"
+            "found = [process.pid for process in processes.detached_in(Path(sys.argv[1]))]\n"
+            "print(json.dumps({'shell': os.getppid(), 'found': found}))\n")
+        out = self.root / "looked"
+        scripts = Path(processes.__file__).resolve().parent
+        subprocess.run(["sh", "-c", f"sh -c '{sys.executable} {look} {self.run_dir} > {out}.tmp; "
+                        f"mv {out}.tmp {out}' &"],
+                       cwd=self.run_dir, env={"PATH": os.environ["PATH"],
+                                              "PYTHONPATH": str(scripts)},
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=True)
+        deadline = time.monotonic() + START_SECONDS
+        while not out.exists():
+            self.assertLess(time.monotonic(), deadline, "the lookup never finished")
+            time.sleep(0.05)
+        looked = json.loads(out.read_text())
+
+        self.assertNotIn(looked["shell"], looked["found"])
+
     @unittest.skipUnless(sys.platform.startswith("linux"), "only Linux has subreapers")
     def test_an_interrupted_run_under_a_subreaper_leaves_what_it_adopted(self):
         # A subreaper adopts the orphan, and a process below it looks.
