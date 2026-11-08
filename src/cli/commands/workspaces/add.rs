@@ -101,6 +101,17 @@ async fn ensure_narrowing_fits(
     narrowing.ensure_within_mode(settings.get().await?, mode)
 }
 
+/// [`ensure_narrowing_fits`] for the chosen `mode`, the default mode
+/// without one, once a picked mode is known.
+async fn ensure_narrowing_fits_chosen(
+    settings: &AddSettings<'_>,
+    narrowing: &crate::config::permissions::PermissionsConfig,
+    mode: Option<&str>,
+) -> Result<()> {
+    let chosen = mode.map(|mode| ModeChoice::Named(mode.to_owned()));
+    ensure_narrowing_fits(settings, narrowing, chosen.as_ref()).await
+}
+
 pub(in crate::cli::commands) async fn add(
     ctx: &Context,
     repository: Option<String>,
@@ -135,9 +146,8 @@ pub(in crate::cli::commands) async fn add(
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
+    ensure_narrowing_fits_chosen(&settings, &options.narrowing, mode.as_deref()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    let picked = mode.clone().map(ModeChoice::Named);
-    ensure_narrowing_fits(&settings, &options.narrowing, picked.as_ref()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     start_as(&mut plan, &options, mode, options.narrowing);
     ensure!(
