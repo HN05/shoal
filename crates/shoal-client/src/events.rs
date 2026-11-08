@@ -452,7 +452,7 @@ pub enum EventItem {
     Event(Box<WorkspaceEvent>),
     Chat(Box<ChatEvent>),
     File(Box<FileEvent>),
-    /// The requested cursor lies outside the retained journal.
+    /// The journal no longer holds every event after the requested cursor.
     Gap {
         #[serde(rename = "since")]
         after: EventCursor,
