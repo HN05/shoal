@@ -13,6 +13,7 @@ use tokio::{
 
 use super::{
     approvals::Undecided,
+    events::{AgentEvent, EventKind},
     execution_recovery,
     scope::Caller,
     workspace::{
@@ -425,11 +426,13 @@ async fn relay(
                 manager
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
-                if agent.is_some() {
+                if let Some(tracked) = agent {
                     if !restored {
                         manager.forget_last_sessions(&workspace.id);
                     }
                     manager.agent_started(execution_id).await;
+                    let started = agent_event(tracked, execution_id, None);
+                    (manager.record_agent(&workspace.id, EventKind::AgentStarted, started)).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
             }
@@ -477,6 +480,10 @@ async fn relay(
             }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
+                if let Some(tracked) = agent {
+                    let stopped = agent_event(tracked, execution_id, None);
+                    (manager.record_agent(&workspace.id, EventKind::AgentStopped, stopped)).await;
+                }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
                 sent_stop = true;
@@ -741,6 +748,13 @@ async fn finish(
         false
     };
     if let Some(agent) = agent.as_ref().filter(|_| !requeued && !renewed) {
+        let code = result.as_ref().ok().copied();
+        let (kind, code) = match stopped {
+            true => (EventKind::AgentStopped, None),
+            false => (EventKind::AgentExited, code),
+        };
+        let ended = agent_event(agent, &execution_id, code);
+        manager.record_agent(&workspace.id, kind, ended).await;
         manager
             .notify_agent_exit(
                 &workspace,
@@ -777,6 +791,15 @@ async fn finish(
     }
     acknowledged?;
     result.map(|_| ())
+}
+
+/// What a space's log records of the agent that execution `id` runs.
+fn agent_event(agent: &TrackedAgent, id: &str, exit_code: Option<i32>) -> AgentEvent {
+    AgentEvent {
+        name: agent.name.clone(),
+        execution_id: Some(id.to_owned()),
+        exit_code,
+    }
 }
 
 /// Keep frame reads alive across control changes so stop/recovery cannot discard

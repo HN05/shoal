@@ -349,3 +349,64 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
     assert_eq!(future.len(), 501);
     assert!(manager.workspace_events(Some(-1), 100).await.is_err());
 }
+
+#[tokio::test]
+async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
+    let (_temp, manager) = manager().await;
+    let agent = |execution: &str, exit_code| AgentEvent {
+        name: "claude".into(),
+        execution_id: Some(execution.into()),
+        exit_code,
+    };
+    let recorded = [
+        (EventKind::AgentStarted, agent("e1", None)),
+        (EventKind::AgentStopped, agent("e1", None)),
+        // The wrapper of the stopped agent then ends.
+        (EventKind::AgentStopped, agent("e1", None)),
+        (EventKind::AgentExited, agent("e1", Some(0))),
+        (EventKind::AgentStarted, agent("e1", None)),
+        (EventKind::AgentExited, agent("e1", Some(3))),
+        (EventKind::AgentStarted, agent("e2", None)),
+    ];
+    let events = manager
+        .store
+        .run(move |db| {
+            db.execute_batch(
+                "INSERT INTO repositories(id,path,source,last_used) VALUES ('r','/r','/r',1);
+                 INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+                     VALUES ('w','r','worker','/work','worker','ready');",
+            )?;
+            for (kind, agent) in &recorded {
+                record_agent(db, "w", *kind, agent)?;
+            }
+            Ok(())
+        })
+        .await;
+    events.unwrap();
+    let agents: Vec<_> = manager
+        .workspace_events(None, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|item| match item {
+            EventItem::Event(event) => event.details.agent.map(|agent| {
+                (
+                    event.details.kind,
+                    agent.execution_id.unwrap(),
+                    agent.exit_code,
+                )
+            }),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        agents,
+        [
+            (EventKind::AgentStarted, "e1".to_owned(), None),
+            (EventKind::AgentStopped, "e1".to_owned(), None),
+            (EventKind::AgentStarted, "e1".to_owned(), None),
+            (EventKind::AgentExited, "e1".to_owned(), Some(3)),
+            (EventKind::AgentStarted, "e2".to_owned(), None),
+        ]
+    );
+}

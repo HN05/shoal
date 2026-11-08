@@ -4917,7 +4917,7 @@ the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
 other null), `repository_id` (null for a chat without a repository), `name`,
 `path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired` and `simulator_released`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `alert_sent`, `child_created` and `child_removed`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -4931,6 +4931,19 @@ workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
 a [chat](#chats) that opened it returned it to you. Earlier versions recorded
 `parent_workspace` on these events and `chat`, the chat's ID, on
 `chat_changed` events.
+`renamed` events add a workspace's new `title`, or null; a chat's rename is
+its own `chat_renamed` line. `restored` events record a workspace
+`shoal work restore` reopened, which takes the removed workspace's events
+under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
+stopped it) and `agent_exited` (it exited on its own) events add `agent`
+with its `name`, `execution_id` and `exit_code`, null for a start or stop
+and when the wrapper reported none. `question_asked` and `question_answered`
+events add `question` with its `number`, `question` and `answer`.
+`approval_requested` and `approval_decided` events add `approval` with its
+`number`, `target`, `subject` and `status`. `alert_sent` events add `alert`
+with its `message`. `child_created` and `child_removed` events, in the log of
+the space above, add `child` with its `id`, `name`, `kind` and a workspace's
+`branch`.
 `demo_started` events, when a [demo](#demos)'s command first runs, and
 `demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,
 `preset` and, for a simulator demo, the device's `udid`.

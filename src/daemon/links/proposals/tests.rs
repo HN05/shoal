@@ -137,7 +137,7 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
 
     // The original is decided and its workspace's next proposal takes its
     // number while the duplicate decision waits for the gates.
-    manager.forget_proposal(original.key.clone()).await.unwrap();
+    manager.forget_proposal(original).await.unwrap();
     let workspace = manager.workspace_by_id(&original.space_id).await.unwrap();
     let reused = store_issue_proposal(&manager, &workspace.clone().into()).await;
     assert_eq!(reused.number, original.number);
@@ -184,7 +184,7 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     // No new space takes the number while it waits.
     let next = create("next").await.unwrap();
     assert_ne!(next.number, proposer.number);
-    manager.forget_proposal(kept.key.clone()).await.unwrap();
+    manager.forget_proposal(kept).await.unwrap();
     let freed = create("freed").await.unwrap();
     assert_eq!(freed.number, proposer.number);
 }

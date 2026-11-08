@@ -112,3 +112,81 @@ WHEN OLD.completion IS NOT NULL AND NEW.completion IS NULL BEGIN
         'cause',NULL,'error',NULL
     ) FROM journal_spaces WHERE id=NEW.id;
 END;
+
+-- A workspace's title; a chat's new name is its own `chat_renamed`.
+CREATE TRIGGER workspace_renamed AFTER UPDATE OF title ON workspaces
+WHEN NEW.title IS NOT OLD.title BEGIN
+    INSERT INTO workspace_events(record) VALUES (json_object(
+        'kind','renamed','workspace_id',NEW.id,'chat_id',NULL,
+        'repository_id',NEW.repository_id,'name',NEW.name,'path',NEW.path,
+        'branch',NEW.branch,'cause',NULL,'error',NULL,'title',NEW.title
+    ));
+END;
+
+-- A space's questions, as asked and once answered.
+CREATE TRIGGER question_asked AFTER INSERT ON questions BEGIN
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','question_asked','workspace_id',workspace_id,'chat_id',chat_id,
+        'repository_id',repository_id,'name',name,'path',path,'branch',branch,
+        'cause',NULL,'error',NULL,
+        'question',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'question',NEW.question,'answer',NULL)
+    ) FROM journal_spaces WHERE id=COALESCE(NEW.workspace_id,NEW.chat_id);
+END;
+CREATE TRIGGER question_answered AFTER UPDATE OF answer ON questions
+WHEN OLD.answer IS NULL AND NEW.answer IS NOT NULL BEGIN
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','question_answered','workspace_id',workspace_id,'chat_id',chat_id,
+        'repository_id',repository_id,'name',name,'path',path,'branch',branch,
+        'cause',NULL,'error',NULL,
+        'question',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'question',NEW.question,
+            'answer',NEW.answer)
+    ) FROM journal_spaces WHERE id=COALESCE(NEW.workspace_id,NEW.chat_id);
+END;
+
+-- A parent's log records the spaces created and removed below it. Writers
+-- record a new workspace's parent before the workspace, and a new chat's
+-- after it; a workspace a chat takes over existed already.
+CREATE TRIGGER workspace_child_created AFTER INSERT ON workspaces BEGIN
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','child_created','workspace_id',workspace_id,'chat_id',chat_id,
+        'repository_id',repository_id,'name',name,'path',path,'branch',branch,
+        'cause',NULL,'error',NULL,
+        'child',json_object('id',NEW.id,'name',NEW.name,'kind','workspace','branch',NEW.branch)
+    ) FROM journal_spaces
+        WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=NEW.id);
+END;
+CREATE TRIGGER chat_child_created AFTER INSERT ON space_parents
+WHEN NEW.space_id IN (SELECT id FROM chats) BEGIN
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','child_created','workspace_id',parent.workspace_id,'chat_id',parent.chat_id,
+        'repository_id',parent.repository_id,'name',parent.name,'path',parent.path,
+        'branch',parent.branch,'cause',NULL,'error',NULL,
+        'child',json_object('id',child.id,'name',child.name,'kind','chat')
+    ) FROM journal_spaces AS parent, chats AS child
+        WHERE parent.id=NEW.parent_id AND child.id=NEW.space_id;
+END;
+-- Before the removed space leaves the tree.
+DROP TRIGGER workspace_left_tree;
+CREATE TRIGGER workspace_left_tree AFTER DELETE ON workspaces BEGIN
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','child_removed','workspace_id',workspace_id,'chat_id',chat_id,
+        'repository_id',repository_id,'name',name,'path',path,'branch',branch,
+        'cause',NULL,'error',NULL,
+        'child',json_object('id',OLD.id,'name',OLD.name,'kind','workspace','branch',OLD.branch)
+    ) FROM journal_spaces
+        WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=OLD.id);
+    DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
+END;
+DROP TRIGGER chat_left_tree;
+CREATE TRIGGER chat_left_tree AFTER DELETE ON chats BEGIN
+    INSERT INTO workspace_events(record) SELECT json_object(
+        'kind','child_removed','workspace_id',workspace_id,'chat_id',chat_id,
+        'repository_id',repository_id,'name',name,'path',path,'branch',branch,
+        'cause',NULL,'error',NULL,
+        'child',json_object('id',OLD.id,'name',OLD.name,'kind','chat')
+    ) FROM journal_spaces
+        WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=OLD.id);
+    DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
+END;

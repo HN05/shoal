@@ -236,6 +236,11 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
             request.number.item
         ],
     )?;
+    crate::daemon::events::record_approval(
+        tx,
+        crate::daemon::events::EventKind::ApprovalRequested,
+        &request,
+    )?;
     Ok(request)
 }
 

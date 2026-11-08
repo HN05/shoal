@@ -282,6 +282,7 @@ impl Manager {
         workspace_files::check_sent(&attachments)?;
         let space = self.space(selector).await?;
         let about = About::workspace(space.name(), space.id());
+        let id = space.id().to_owned();
         let (kind, text) = (NotificationKind::AgentMessage, message.clone());
         let notification = (self.send_with_files(
             &space.into(),
@@ -292,6 +293,7 @@ impl Manager {
             |files| async move { self.record_sent(about, kind, message, &files).await },
         ))
         .await?;
+        self.record_alert(&id, text).await;
         Ok(Sent { notification })
     }
 

@@ -164,6 +164,21 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
                 .is_err()
         );
     }
+    // Each decision reaches the space's log once, though repeated.
+    let decided: Vec<_> = (manager.workspace_events(None, 100).await?.into_iter())
+        .filter_map(|item| match item {
+            crate::daemon::events::EventItem::Event(event) => event.details.approval,
+            _ => None,
+        })
+        .map(|approval| (approval.number, approval.status))
+        .collect();
+    assert_eq!(
+        decided,
+        [
+            (item(1, 1), DecisionStatus::Approved),
+            (item(1, 2), DecisionStatus::Denied)
+        ]
+    );
     // A decision chosen from a shown request does not reach another
     // request holding its number.
     let shown = manager.approval_requests(Some(&"worker".into())).await?;

@@ -347,6 +347,13 @@ impl Manager {
                 let tx = db.transaction()?;
                 reassign(&tx, &from, &to)?;
                 crate::daemon::events::adopt(&tx, &from, &to)?;
+                crate::daemon::events::record(
+                    &tx,
+                    &to,
+                    crate::daemon::events::EventKind::Restored,
+                    crate::daemon::events::EventCause::Manual,
+                    None,
+                )?;
                 tx.execute(
                     "DELETE FROM removed_workspaces WHERE workspace_id=?1",
                     [&from],

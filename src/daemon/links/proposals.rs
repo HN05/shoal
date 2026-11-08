@@ -278,7 +278,7 @@ impl Manager {
         space: Option<&LinkSpace>,
         message: String,
     ) -> Result<()> {
-        self.forget_proposal(request.key.clone()).await?;
+        self.forget_proposal(request).await?;
         self.prune_proposal_files().await;
         if let Some(space) = space {
             self.tell_space(space.id(), message).await;

@@ -6,6 +6,7 @@ use std::fmt;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
+        events::{self, EventKind},
         item_numbers::{self, ItemKind, ItemNumber},
         log,
         notifications::{self, About, NotificationKind},
@@ -248,6 +249,7 @@ pub fn check(
     request.number = item_numbers::next(tx, &request.space_id)?;
     tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number) VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.number.space,request.number.item])?;
+    events::record_approval(tx, EventKind::ApprovalRequested, &request)?;
     Ok(Some(request))
 }
 
@@ -567,6 +569,7 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
         request.status = status;
         request.decided_at = Some(crate::time::unix_seconds());
         write_record(tx, &request)?;
+        events::record_approval(tx, EventKind::ApprovalDecided, &request)?;
     }
     Ok(Decision { request, new })
 }
@@ -674,12 +677,15 @@ impl Manager {
             .await
     }
 
-    /// [`proposals::remove`] in its own transaction, once it is decided.
-    pub(crate) async fn forget_proposal(&self, key: String) -> Result<()> {
+    /// [`proposals::remove`] in its own transaction, once `request` is
+    /// decided, recording the decision in its space's log.
+    pub(crate) async fn forget_proposal(&self, request: &ApprovalRequest) -> Result<()> {
+        let request = request.clone();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                proposals::remove(&tx, &key)?;
+                events::record_approval(&tx, EventKind::ApprovalDecided, &request)?;
+                proposals::remove(&tx, &request.key)?;
                 tx.commit()?;
                 Ok(())
             })

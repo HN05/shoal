@@ -1,13 +1,13 @@
 //! Durable lifecycle records, independent of notification delivery and read state.
 
 use anyhow::{Result, ensure};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 
-use super::workspace::Manager;
+use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
-    ChatEvent, ChatEventKind, EventCause, EventDetails, EventItem, EventKind, FileEvent,
-    FileEventDetails, WorkspaceEvent,
+    AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventDetails,
+    EventItem, EventKind, FileEvent, FileEventDetails, WorkspaceEvent,
 };
 
 /// A journal row as stored: chat events carry the chat in place of a
@@ -128,7 +128,112 @@ pub(crate) fn record_item_activity(
     Ok(())
 }
 
+/// Record `kind` for the space `id`, with `payload` as its field `field`.
+fn record_with(
+    db: &Connection,
+    id: &str,
+    kind: EventKind,
+    field: &str,
+    payload: &impl serde::Serialize,
+) -> Result<()> {
+    db.execute(
+        &format!(
+            "INSERT INTO workspace_events(record)
+             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,?3,json(?4))
+             FROM journal_spaces WHERE id=?1"
+        ),
+        params![id, kind, field, serde_json::to_string(payload)?],
+    )?;
+    Ok(())
+}
+
+/// Record that the agent of the space `id` started, stopped or exited. An
+/// execution's agent ends once: a stop that saved it for a restore, then its
+/// wrapper's end, records one stop.
+fn record_agent(db: &Connection, id: &str, kind: EventKind, agent: &AgentEvent) -> Result<()> {
+    ensure!(matches!(
+        kind,
+        EventKind::AgentStarted | EventKind::AgentStopped | EventKind::AgentExited
+    ));
+    if kind != EventKind::AgentStarted && agent_ended(db, id, agent.execution_id.as_deref())? {
+        return Ok(());
+    }
+    record_with(db, id, kind, "agent", agent)
+}
+
+/// Whether the space's newest agent event is the end of `execution`'s agent.
+fn agent_ended(db: &Connection, id: &str, execution: Option<&str>) -> Result<bool> {
+    let newest: Option<(EventKind, Option<String>)> = db
+        .query_row(
+            "SELECT json_extract(record,'$.kind'),json_extract(record,'$.agent.execution_id')
+             FROM workspace_events WHERE space_id=?1
+                 AND json_extract(record,'$.kind') IN (?2,?3,?4)
+             ORDER BY id DESC LIMIT 1",
+            params![
+                id,
+                EventKind::AgentStarted,
+                EventKind::AgentStopped,
+                EventKind::AgentExited
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    Ok(newest.is_some_and(|(kind, ended)| {
+        kind != EventKind::AgentStarted && ended.as_deref() == execution
+    }))
+}
+
+/// Record that the request's space asked for it, or that it was decided,
+/// in the transaction that stores it.
+pub(crate) fn record_approval(
+    db: &Connection,
+    kind: EventKind,
+    request: &crate::client::approvals::ApprovalRequest,
+) -> Result<()> {
+    ensure!(matches!(
+        kind,
+        EventKind::ApprovalRequested | EventKind::ApprovalDecided
+    ));
+    let approval = ApprovalEvent {
+        number: request.number,
+        target: request.target.to_string(),
+        subject: request.subject(),
+        status: request.status,
+    };
+    record_with(db, &request.space_id, kind, "approval", &approval)
+}
+
 impl Manager {
+    /// Record an agent's start, stop or exit in the space `id`'s log; a
+    /// failure is logged, never returned, as it must not fail the agent's
+    /// lifecycle.
+    pub(crate) async fn record_agent(&self, id: &str, kind: EventKind, agent: AgentEvent) {
+        let space = id.to_owned();
+        let recorded = self
+            .store
+            .run(move |db| record_agent(db, &space, kind, &agent))
+            .await;
+        if let Err(error) = recorded {
+            log!("agent event of {id} not recorded: {error:#}");
+        }
+    }
+
+    /// Record the alert the space `id` sent, which reached its coordinator
+    /// or the user.
+    pub(crate) async fn record_alert(&self, id: &str, message: String) {
+        let space = id.to_owned();
+        let recorded = self
+            .store
+            .run(move |db| {
+                let alert = AlertEvent { message };
+                record_with(db, &space, EventKind::AlertSent, "alert", &alert)
+            })
+            .await;
+        if let Err(error) = recorded {
+            log!("alert of {id} not recorded: {error:#}");
+        }
+    }
+
     /// Observe external checkouts without changing the branch Shoal owns.
     pub(crate) async fn observe_workspace_branch(
         &self,

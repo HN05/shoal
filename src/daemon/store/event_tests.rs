@@ -205,6 +205,16 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
          DROP TRIGGER space_review_ready; DROP TRIGGER space_review_ready_again;
          DROP TRIGGER space_review_cleared; DROP TRIGGER space_agent_state_set;
          DROP TRIGGER space_agent_state_changed; DROP TRIGGER space_agent_state_cleared;
+         DROP TRIGGER workspace_renamed; DROP TRIGGER question_asked;
+         DROP TRIGGER question_answered; DROP TRIGGER workspace_child_created;
+         DROP TRIGGER chat_child_created; DROP TRIGGER workspace_left_tree;
+         DROP TRIGGER chat_left_tree;
+         CREATE TRIGGER workspace_left_tree AFTER DELETE ON workspaces BEGIN
+             DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
+         END;
+         CREATE TRIGGER chat_left_tree AFTER DELETE ON chats BEGIN
+             DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
+         END;
          DROP VIEW journal_spaces;
          DROP INDEX workspace_events_space; DROP TRIGGER workspace_events_retention;
          ALTER TABLE workspace_events DROP COLUMN bulk;
@@ -467,5 +477,77 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
         assert_eq!(event.workspace_id, None);
         assert_eq!(event.name, "planner");
     }
+    Ok(())
+}
+
+/// The journal's records, oldest first.
+fn journal(db: &Connection) -> Result<Vec<crate::daemon::events::EventDetails>> {
+    db.prepare(
+        "SELECT record FROM workspace_events
+            WHERE json_extract(record,'$.kind') NOT LIKE 'chat_%' ORDER BY id",
+    )?
+    .query_map([], |row| row.get::<_, String>(0))?
+    .map(|record| Ok(serde_json::from_str(&record?)?))
+    .collect()
+}
+
+#[test]
+fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
+    use crate::daemon::events::EventKind;
+    let mut db = Connection::open_in_memory()?;
+    migrate(&mut db)?;
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('parent','repo','plan','/plan','plan','ready');
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('child','parent');
+         INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('child','repo','fix','/fix','fix','ready');
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','helper','claude',1,'birth',1);
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','parent');
+         UPDATE workspaces SET title='Fix login' WHERE id='child';
+         INSERT INTO questions(space_number,number,workspace_id,created_at,question,
+                 recommendation,choices)
+             VALUES (2,1,'child',1,'Which database?','SQLite','[]');
+         UPDATE questions SET answer='SQLite',answered_at=2 WHERE number=1;
+         DELETE FROM chats WHERE id='chat';
+         DELETE FROM workspaces WHERE id='child';",
+    )?;
+    let events: Vec<_> = journal(&db)?
+        .into_iter()
+        .filter(|event| !matches!(event.kind, EventKind::Created | EventKind::Ready))
+        .map(|event| {
+            let space = event.space_id().to_owned();
+            let detail = match event.kind {
+                EventKind::ChildCreated | EventKind::ChildRemoved => {
+                    event.child.map(|child| child.name.to_string())
+                }
+                EventKind::Renamed => event.title.flatten(),
+                EventKind::QuestionAsked | EventKind::QuestionAnswered => event
+                    .question
+                    .map(|question| format!("{} {:?}", question.number, question.answer)),
+                _ => None,
+            };
+            (space, event.kind, detail)
+        })
+        .collect();
+    let some = |text: &str| Some(text.to_owned());
+    assert_eq!(
+        events,
+        [
+            ("parent".into(), EventKind::ChildCreated, some("fix")),
+            ("parent".into(), EventKind::ChildCreated, some("helper")),
+            ("child".into(), EventKind::Renamed, some("Fix login")),
+            ("child".into(), EventKind::QuestionAsked, some("2.1 None")),
+            (
+                "child".into(),
+                EventKind::QuestionAnswered,
+                some("2.1 Some(\"SQLite\")")
+            ),
+            ("parent".into(), EventKind::ChildRemoved, some("helper")),
+            ("parent".into(), EventKind::ChildRemoved, some("fix")),
+        ]
+    );
     Ok(())
 }

@@ -54,6 +54,31 @@ states!(EventKind {
     SimulatorAcquired => "simulator_acquired",
     /// A booted simulator lease was released or its device deleted.
     SimulatorReleased => "simulator_released",
+    /// The workspace took a new title, which `title` carries.
+    Renamed => "renamed",
+    /// `shoal work restore` reopened the removed workspace, whose events
+    /// the reopened one took.
+    Restored => "restored",
+    /// The space's agent started, or started again after a stop.
+    AgentStarted => "agent_started",
+    /// Shoal or a stop request stopped the space's agent.
+    AgentStopped => "agent_stopped",
+    /// The space's agent exited on its own.
+    AgentExited => "agent_exited",
+    /// The space's agent asked a question.
+    QuestionAsked => "question_asked",
+    /// A question the space asked was answered.
+    QuestionAnswered => "question_answered",
+    /// The space asked for an approval.
+    ApprovalRequested => "approval_requested",
+    /// An approval the space asked for was approved or denied.
+    ApprovalDecided => "approval_decided",
+    /// The space's agent sent an alert.
+    AlertSent => "alert_sent",
+    /// A space was created below the space, which `child` names.
+    ChildCreated => "child_created",
+    /// A space below the space was removed.
+    ChildRemoved => "child_removed",
 });
 
 states!(
@@ -169,6 +194,28 @@ pub struct EventDetails {
     /// The simulator lease acquired or released.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator: Option<SimulatorEvent>,
+    /// The workspace's new title; null once it has none.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "present_or_null"
+    )]
+    pub title: Option<Option<String>>,
+    /// The agent that started, stopped or exited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentEvent>,
+    /// The question asked or answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question: Option<Box<QuestionEvent>>,
+    /// The approval requested or decided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval: Option<Box<ApprovalEvent>>,
+    /// The alert sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alert: Option<AlertEvent>,
+    /// The space created or removed below this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child: Option<crate::model::SpaceRef>,
 }
 
 impl EventDetails {
@@ -225,6 +272,42 @@ pub struct SimulatorEvent {
     pub udid: Option<String>,
     pub device: String,
     pub runtime: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentEvent {
+    /// The agent's name, such as `claude`.
+    pub name: String,
+    /// The execution that runs it; null for a chat's agent.
+    pub execution_id: Option<String>,
+    /// The code an agent exited with; null when its wrapper disconnected
+    /// without reporting one, and for a start or stop.
+    pub exit_code: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuestionEvent {
+    #[serde(flatten)]
+    pub number: crate::item_numbers::ItemNumber,
+    pub question: String,
+    /// Null when it was asked.
+    pub answer: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovalEvent {
+    #[serde(flatten)]
+    pub number: crate::item_numbers::ItemNumber,
+    /// What the request is for, such as `port/web` or `pr_open`.
+    pub target: String,
+    /// What approving it allows, as `shoal approvals` describes it.
+    pub subject: String,
+    pub status: crate::approvals::DecisionStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertEvent {
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
