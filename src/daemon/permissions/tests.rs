@@ -181,16 +181,17 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
     let review = launch("review").await;
     assert_eq!(review.value, Pushes::Deny);
     assert_eq!(review.from, PermissionSource::Parent);
-    // Nothing is recorded: the workspace has no mode of its own yet.
-    let recorded = manager
-        .space_permissions(&child.id, Some(&repo.id))
-        .await
-        .unwrap();
-    assert_eq!(recorded.push.value, Pushes::Deny);
     let config = "[modes.review.permissions]\npush = 'propose'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
     assert_eq!(launch("review").await.value, Pushes::Propose);
     assert_eq!(launch("worker").await.value, Pushes::Direct);
+    // Nothing is recorded: the workspace has no mode of its own yet, so
+    // its push is the key's default rather than the review mode's.
+    let recorded = manager
+        .space_permissions(&child.id, Some(&repo.id))
+        .await
+        .unwrap();
+    assert_eq!(recorded.push.value, Pushes::Direct);
 }
