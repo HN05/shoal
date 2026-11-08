@@ -121,6 +121,29 @@ async fn a_restore_that_runs_a_key_command_stops_it_at_the_limit() {
 
 #[tokio::test]
 async fn a_claude_agent_through_its_proxy_gets_the_hour_long_prompt_cache_unless_it_sets_one() {
+    // The launch reads this process's environment too, so the check runs in
+    // one without the runner's variables.
+    let root = tempfile::tempdir().unwrap();
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        crate::test_support::isolated_test(
+            root.path(),
+            "execution::spawn::tests::prompt_cache_child",
+        )
+        .output(),
+    )
+    .await
+    .expect("prompt cache check stalled")
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[tokio::test]
+#[ignore = "isolated environment launched by the prompt cache test"]
+async fn prompt_cache_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
     let home = tempfile::tempdir().unwrap();
     let mut launch = launch(home.path());
     let unset = BTreeMap::new();
