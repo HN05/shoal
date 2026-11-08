@@ -11,7 +11,6 @@ use crate::{
         work::{LogEntry, LogFilter},
     },
     daemon::{scope::Caller, workspace::Manager},
-    refusal::{Reason, Refusal},
 };
 
 /// How far a removed space's log looks up for a space that still exists,
@@ -76,15 +75,16 @@ impl Manager {
     /// The ID of the space `selector` names: one that exists, else a
     /// removed one whose events the journal keeps.
     async fn log_space(&self, selector: &SpaceSelector) -> Result<String> {
-        if let Ok(space) = self.space(selector).await {
-            return Ok(space.id().to_owned());
-        }
+        let error = match self.space(selector).await {
+            Ok(space) => return Ok(space.id().to_owned()),
+            Err(error) => error,
+        };
         let name = selector.id_or_name().map(str::to_owned);
         let removed = match name {
             Some(name) => self.store.run(move |db| removed(db, &name)).await?,
             None => None,
         };
-        removed.ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
+        removed.ok_or(error)
     }
 }
 
