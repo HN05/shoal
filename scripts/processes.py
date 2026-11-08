@@ -92,16 +92,21 @@ def birth(pid):
 
 def linux_birth(pid):
     try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
+        fields = linux_stat_fields(pid)
         boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     except OSError:
         return None
-    # Fields after the parenthesized command name, which may hold spaces:
-    # state is the third field of stat(5) and the start time the 22nd.
-    fields = stat[stat.rindex(")") + 2:].split()
+    # State is the third field of stat(5) and the start time the 22nd.
     if fields[0] in ("Z", "X"):
         return None
     return (boot, int(fields[19]))
+
+
+def linux_stat_fields(pid):
+    """The fields of `/proc/<pid>/stat` after the parenthesized command name,
+    which may hold spaces, starting with the third."""
+    stat = Path(f"/proc/{pid}/stat").read_text()
+    return stat[stat.rindex(")") + 2:].split()
 
 
 def macos_birth(pid):
@@ -202,9 +207,8 @@ def orphan_adopter():
                                     cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                     text=True, check=True).stdout)
         try:
-            stat = Path(f"/proc/{orphan}/stat").read_text()
             # The parent is the fourth field of stat(5).
-            _adopter = int(stat[stat.rindex(")") + 2:].split()[1])
+            _adopter = int(linux_stat_fields(orphan)[1])
         finally:
             try:
                 os.kill(orphan, signal.SIGKILL)
