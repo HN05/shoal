@@ -467,7 +467,8 @@ async fn a_job_stays_owned_after_its_shell_and_agent_exit() -> Result<()> {
     agent.wait().await?;
     signal(&shell, libc::SIGKILL)?;
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    while lineage(job.pid)?.is_some_and(|lineage| lineage.parent_pid != 1) {
+    // Init or the subreaper above takes it once the shell's exit is seen.
+    while lineage(job.pid)?.is_some_and(|lineage| lineage.parent_pid == shell.pid) {
         ensure!(
             std::time::Instant::now() < deadline,
             "the job was never adopted"
