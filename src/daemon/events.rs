@@ -46,41 +46,70 @@ fn decode(id: i64, created_at: i64, record: &str) -> Result<EventItem> {
 }
 
 /// The events after `cursor`, after a gap where the journal lost some of
-/// them: the cursor is outside it, or retention deleted events after the
-/// cursor. Per-space retention deletes events anywhere, so for the client's
-/// own cursor (`known_pruned` none) any deletion above it is a gap, and for
-/// a later batch only one since the batch before.
+/// them.
 fn replay(
     db: &Connection,
     cursor: Option<i64>,
     known_pruned: Option<i64>,
     limit: u32,
 ) -> Result<(Vec<EventItem>, i64)> {
-    let (oldest, latest, pruned): (Option<i64>, Option<i64>, i64) = db.query_row(
-        "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
-        [],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-    )?;
-    // Deleting the newest event does not move a follower's cursor ahead.
-    let latest = latest.unwrap_or(0).max(pruned);
-    let oldest = oldest.unwrap_or(1);
-    let mut items = Vec::new();
-    let cursor = match cursor {
-        None => oldest - 1,
-        Some(cursor) => {
-            let outside = cursor < oldest - 1 || cursor > latest;
-            let deleted = pruned > cursor.max(known_pruned.unwrap_or(-1));
-            let resume = if outside { oldest - 1 } else { cursor };
-            if outside || deleted {
-                items.push(EventItem::Gap {
-                    since: cursor,
-                    oldest_id: resume + 1,
-                    latest_id: latest,
-                });
-            }
-            resume
-        }
-    };
+    let bounds = Bounds::read(db)?;
+    let (resume, gap) = bounds.resume_after(cursor, known_pruned);
+    let mut items: Vec<_> = gap.into_iter().collect();
+    items.extend(events_after(db, resume, limit)?);
+    Ok((items, bounds.pruned))
+}
+
+/// What the journal holds: its oldest and newest IDs, and the highest ID
+/// retention deleted.
+struct Bounds {
+    oldest: i64,
+    latest: i64,
+    pruned: i64,
+}
+
+impl Bounds {
+    fn read(db: &Connection) -> Result<Self> {
+        let (oldest, latest, pruned): (Option<i64>, Option<i64>, i64) = db.query_row(
+            "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        Ok(Self {
+            oldest: oldest.unwrap_or(1),
+            // Deleting the newest event does not move a follower's cursor ahead.
+            latest: latest.unwrap_or(0).max(pruned),
+            pruned,
+        })
+    }
+
+    /// Where a replay from `cursor` goes on, and the gap to report first:
+    /// for a cursor outside the journal, or one retention deleted events
+    /// after. Per-space retention deletes events anywhere, so for the
+    /// client's own cursor (`known_pruned` none) any deletion above it is a
+    /// gap, and for a later batch only one since the batch before.
+    fn resume_after(
+        &self,
+        cursor: Option<i64>,
+        known_pruned: Option<i64>,
+    ) -> (i64, Option<EventItem>) {
+        let Some(cursor) = cursor else {
+            return (self.oldest - 1, None);
+        };
+        let outside = cursor < self.oldest - 1 || cursor > self.latest;
+        let deleted = self.pruned > cursor.max(known_pruned.unwrap_or(-1));
+        let resume = if outside { self.oldest - 1 } else { cursor };
+        let gap = (outside || deleted).then_some(EventItem::Gap {
+            since: cursor,
+            oldest_id: resume + 1,
+            latest_id: self.latest,
+        });
+        (resume, gap)
+    }
+}
+
+/// The first `limit` events after `cursor`.
+fn events_after(db: &Connection, cursor: i64, limit: u32) -> Result<Vec<EventItem>> {
     let mut statement = db.prepare(
         "SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2",
     )?;
@@ -91,11 +120,11 @@ fn replay(
             r.get::<_, String>(2)?,
         ))
     })?;
-    for row in rows {
+    rows.map(|row| {
         let (id, created_at, record) = row?;
-        items.push(decode(id, created_at, &record)?);
-    }
-    Ok((items, pruned))
+        decode(id, created_at, &record)
+    })
+    .collect()
 }
 
 /// The fields that open every event of a space, from its `journal_spaces`
