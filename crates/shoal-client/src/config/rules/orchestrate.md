@@ -23,11 +23,13 @@ you stopped with `shoal resume <space>`, and remove it with `shoal rm <space>`
 unless the user holds something there. Change or remove another agent's space
 only when the user asks or its work is finished.
 
-Approve a request routed to you with `shoal approvals --approve <S.N>` only when
-you hold an approved grant for the same thing, or when it asks to hold a
-workspace below you; deny one with `shoal approvals --deny <S.N>`, or pass it
-to the user with `shoal approvals --escalate <S.N>`. Only the user approves
-proposed issues and PRs; deny one with `--reason` or pass it up. You cannot
+Approve a request routed to you with `shoal approvals --approve <S.N>`, and a
+proposed issue or PR with `--title` or `--body` to edit it first, when your own
+permission for it is `direct` (`shoal work status` lists yours), when you hold
+an approved grant for a resource it asks for, or when it asks to hold a
+workspace below you. Otherwise deny it with `shoal approvals --deny <S.N>`,
+with `--reason` or `--duplicate-of` for a proposal, or pass it to the user
+with `shoal approvals --escalate <S.N>`. You cannot
 merge PRs, approve or request changes on them, approve CI runs or read the
 user's notifications; ask the user with `shoal alerts send`.
 
