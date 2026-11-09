@@ -163,7 +163,7 @@ fn recorded_urls(
     }
     // A PR linked or unlinked since the poll changes what the branch
     // reports; a chat works on none.
-    let branch = if watches_branch(selection) && branch_report(&items) == poll.report {
+    let branch = if watches_branch(selection) && branch_report(db, id)? == poll.report {
         workspace_branch(db, id)?
     } else {
         None

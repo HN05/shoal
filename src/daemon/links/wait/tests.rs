@@ -5,7 +5,7 @@ use rusqlite::params;
 use serde_json::{Value, json};
 
 use super::{
-    branch_report::{BranchReport, branch_conflicts},
+    branch_report::{BranchReport, branch_conflicts, branch_report},
     framing::{Batch, Cut, frame_cut},
     items::{followed_items, polled_items},
     poll::{wait_for_updates, watch_deadline},
@@ -3051,4 +3051,35 @@ async fn unlinking_a_related_pr_forgets_its_delivered_merge() {
         .await
         .unwrap();
     assert_eq!(again[0].kind, UpdateKind::Merged, "{again:?}");
+}
+
+#[tokio::test]
+async fn only_an_assigned_pr_leaves_branch_conflicts_to_the_forge() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "conflicts".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let report = || {
+        let id = id.clone();
+        manager.store.run(move |db| branch_report(db, &id))
+    };
+    let pr = crate::model::LinkedItem {
+        kind: LinkKind::Pr,
+        url: "other".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, pr)])
+        .await
+        .unwrap();
+    assert_eq!(report().await.unwrap(), BranchReport::Conflicts);
+    register_watch(&manager, &id, "own").await;
+    assert_eq!(report().await.unwrap(), BranchReport::ChangedOnBothSides);
 }

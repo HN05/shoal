@@ -72,12 +72,13 @@ impl Manager {
     /// what changed.
     pub(super) async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
         let id = space.id().to_owned();
-        let items = self.store.run(move |db| polled_items(db, &id)).await?;
+        let (items, report) = (self.store)
+            .run(move |db| Ok((polled_items(db, &id)?, branch_report(db, &id)?)))
+            .await?;
         if items.is_empty() {
             return Ok(());
         }
         let observed_at = UnixTime::now();
-        let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
         let activity = self.item_activity(items, &Selection::default()).await;
         let mut observations = Vec::new();

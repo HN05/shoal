@@ -2,9 +2,11 @@
 //! how it reads as an observation.
 use anyhow::Result;
 
+use super::items::linked_items;
 use crate::{
+    client::space_ids::SpaceId,
     forge::{
-        items::link::{LinkKind, Selection},
+        items::link::{ItemKind, Selection},
         updates::{MergeCheck, Snapshot},
     },
     model::ConflictCheck,
@@ -22,13 +24,14 @@ pub(super) enum BranchReport {
     ChangedOnBothSides,
 }
 
-/// What the branch of a space following `items` reports.
-pub(super) fn branch_report(items: &[(String, LinkKind)]) -> BranchReport {
-    if items.iter().any(|(_, kind)| *kind == LinkKind::Pr) {
-        BranchReport::ChangedOnBothSides
-    } else {
+/// What the branch of the space `id` reports: the forge reports the
+/// conflicts of an assigned PR, never of one another space owns.
+pub(super) fn branch_report(db: &rusqlite::Connection, id: &SpaceId) -> Result<BranchReport> {
+    Ok(if linked_items(db, id, Some(ItemKind::Pr))?.is_empty() {
         BranchReport::Conflicts
-    }
+    } else {
+        BranchReport::ChangedOnBothSides
+    })
 }
 
 /// A workspace branch's local merge check as `report` keeps it, observed

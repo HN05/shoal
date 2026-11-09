@@ -44,7 +44,8 @@ impl Manager {
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
         let space = self.link_space(&SpaceSelector::id(id)).await?;
         let items = self.watched_items(&space, selection).await?;
-        let report = branch_report(&items);
+        let space_id = id.to_owned();
+        let report = (self.store.run(move |db| branch_report(db, &space_id))).await?;
         let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
         let branch = branch.flatten();
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
