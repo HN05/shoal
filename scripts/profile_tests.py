@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Measure the CPU time of the test suite, per binary or per test.
 
-Builds the test binaries as `cargo test` does with CI's settings, then runs
+Builds the test binaries as `cargo test` does with Cargo's default settings,
+as CI's rust job does, so they reuse a workspace's existing build. It then runs
 them and reads each process's user and system CPU from wait4, which counts the
 descendants it waited for, such as the daemons and CLI processes a test
 spawns, but not processes left running after it.
@@ -26,9 +27,6 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# CI's build settings (.forgejo/workflows/ci.yml).
-CI_ENV = {"CARGO_INCREMENTAL": "0", "CARGO_PROFILE_DEV_DEBUG": "0",
-          "CARGO_PROFILE_TEST_DEBUG": "0"}
 TOP_ROWS = 40
 
 
@@ -55,7 +53,7 @@ def binaries():
     """(name, executable, package directory) of each test binary."""
     output = subprocess.run(
         ["cargo", "test", "--locked", "--no-run", "--message-format=json"],
-        cwd=ROOT, env={**os.environ, **CI_ENV}, check=True,
+        cwd=ROOT, check=True,
         stdout=subprocess.PIPE, text=True).stdout
     return built_binaries(output.splitlines())
 
