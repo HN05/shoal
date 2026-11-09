@@ -1,10 +1,11 @@
-//! `shoal demo start`: choosing the demo, placing its worker in a terminal
-//! host and waiting until it records that it runs.
+//! `shoal demo start`: choosing the demo, replacing a running one of its
+//! name, placing its worker in a terminal host and waiting until it records
+//! that it runs.
 use std::{collections::BTreeMap, ffi::OsString, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::{presets, screen::last_lines, stop::replace};
+use super::{lookup::running, presets, screen::last_lines, stop::stop_named};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -24,9 +25,9 @@ use crate::{
 const DEFAULT_NAME: &str = "demo";
 /// How often a start checks that a replaced demo ended and its worker
 /// recorded the new one.
-pub(super) const START_POLL: Duration = Duration::from_millis(100);
+const START_POLL: Duration = Duration::from_millis(100);
 /// A hang guard for a demo that never ends or a worker that never records it.
-pub(super) const START_LIMIT: Duration = Duration::from_secs(120);
+const START_LIMIT: Duration = Duration::from_secs(120);
 
 /// What `shoal demo start` replaces in the configured demo.
 pub(super) struct Overrides {
@@ -110,6 +111,25 @@ pub(super) async fn start(
         &running,
     )?;
     Ok(0)
+}
+
+/// Stop a running demo `name` and wait for it to end, so the new one neither
+/// shares its place nor is mistaken for it.
+pub(super) async fn replace(ctx: &Context, workspace: &Workspace, name: &str) -> Result<()> {
+    stop_named(ctx, workspace, Some(name.to_owned())).await?;
+    let deadline = tokio::time::Instant::now() + START_LIMIT;
+    while running(ctx, Some(workspace))
+        .await?
+        .iter()
+        .any(|demo| demo.launch.name == name)
+    {
+        ensure!(
+            tokio::time::Instant::now() < deadline,
+            "demo {name} is still stopping; start it again once `shoal demo ls` no longer lists it"
+        );
+        tokio::time::sleep(START_POLL).await;
+    }
+    Ok(())
 }
 
 /// The demo `name` and the command after `--` select: a command names an

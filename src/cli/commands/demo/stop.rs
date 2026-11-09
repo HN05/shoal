@@ -1,10 +1,6 @@
-//! `shoal demo stop`, and stopping a demo that a start replaces.
-use anyhow::{Result, ensure};
+//! `shoal demo stop`.
+use anyhow::Result;
 
-use super::{
-    lookup::running,
-    start::{START_LIMIT, START_POLL},
-};
 use crate::client::output::demo::Stopping;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -42,25 +38,10 @@ pub(super) async fn stop(
     Ok(0)
 }
 
-/// Stop a running demo `name` and wait for it to end, so the new one neither
-/// shares its place nor is mistaken for it.
-pub(super) async fn replace(ctx: &Context, workspace: &Workspace, name: &str) -> Result<()> {
-    stop_named(ctx, workspace, Some(name.to_owned())).await?;
-    let deadline = tokio::time::Instant::now() + START_LIMIT;
-    while running(ctx, Some(workspace))
-        .await?
-        .iter()
-        .any(|demo| demo.launch.name == name)
-    {
-        ensure!(
-            tokio::time::Instant::now() < deadline,
-            "demo {name} is still stopping; start it again once `shoal demo ls` no longer lists it"
-        );
-        tokio::time::sleep(START_POLL).await;
-    }
-    Ok(())
-}
-
-async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) -> Result<()> {
+pub(super) async fn stop_named(
+    ctx: &Context,
+    workspace: &Workspace,
+    name: Option<String>,
+) -> Result<()> {
     demos::stop(&ctx.paths, SpaceSelector::id(&workspace.id), name).await
 }
