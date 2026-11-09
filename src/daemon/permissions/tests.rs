@@ -193,7 +193,7 @@ async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
 }
 
 #[tokio::test]
-async fn a_scoped_process_registers_and_restores_only_what_it_holds_or_was_recorded() {
+async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let (temp, manager) = manager().await;
     let repo = register(&temp, &manager, "repo").await;
     let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None)).await;
@@ -228,6 +228,15 @@ async fn a_scoped_process_registers_and_restores_only_what_it_holds_or_was_recor
             .await
             .is_err()
     );
+    // A new agent or a restart takes nothing as recorded.
+    let queued = manager.ensure_new_agent_held(giver, &child, &recorded);
+    assert!(queued.await.is_err());
+    let change = crate::config::permissions::PermissionChange {
+        set: recorded,
+        dropped: Vec::new(),
+    };
+    let restarted = manager.ensure_chat_restart_held(giver, Some(&talk), &change);
+    assert!(restarted.await.is_err());
     // The user gives any.
     let registered = manager.ensure_registration_held(None, &child, &wider);
     registered.await.unwrap();
@@ -235,4 +244,8 @@ async fn a_scoped_process_registers_and_restores_only_what_it_holds_or_was_recor
         .ensure_restore_held(None, &talk, &wider)
         .await
         .unwrap();
+    let queued = manager.ensure_new_agent_held(None, &child, &wider);
+    queued.await.unwrap();
+    let restarted = manager.ensure_chat_restart_held(None, Some(&talk), &change);
+    restarted.await.unwrap();
 }

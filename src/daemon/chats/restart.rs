@@ -35,8 +35,7 @@ impl Manager {
     ) -> Result<Option<Origin>> {
         let chat = self.running_chat_by_id(id).await?;
         if let Some(change) = &change {
-            let repository = chat.as_ref().and_then(|chat| chat.repository_id.as_deref());
-            (self.ensure_caller_holds(stopped_by.as_ref(), &change.set, repository)).await?;
+            (self.ensure_chat_restart_held(stopped_by.as_ref(), chat.as_ref(), change)).await?;
         }
         let resumes = match &chat {
             Some(chat) => self.chat_resumes(chat).await?,

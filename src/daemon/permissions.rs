@@ -10,7 +10,7 @@ use crate::{
     client::{space_ids::SpaceId, space_names::SpaceSelector},
     config::{
         Config,
-        permissions::{self, Permissions, PermissionsConfig, SpaceMode},
+        permissions::{self, PermissionChange, Permissions, PermissionsConfig, SpaceMode},
     },
     daemon::{scope::Caller, workspace::Manager},
     model::{Chat, PresentSpace, SpaceKind, Workspace},
@@ -70,6 +70,34 @@ impl Manager {
             }
             _ => Ok(()),
         }
+    }
+
+    /// Refuse `given` to a new agent of `workspace` where the scoped process
+    /// of the space `giver` does not hold it.
+    pub(crate) async fn ensure_new_agent_held(
+        &self,
+        giver: Option<&SpaceId>,
+        workspace: &SpaceSelector,
+        given: &PermissionsConfig,
+    ) -> Result<()> {
+        if giver.is_none() || given.is_empty() {
+            return Ok(());
+        }
+        let repository = self.workspace(workspace).await?.repository_id;
+        (self.ensure_caller_holds(giver, given, Some(&repository))).await
+    }
+
+    /// Refuse `change` to the permissions of the running `chat`'s agent
+    /// where the scoped process of the space `giver` does not hold what it
+    /// gives.
+    pub(crate) async fn ensure_chat_restart_held(
+        &self,
+        giver: Option<&SpaceId>,
+        chat: Option<&Chat>,
+        change: &PermissionChange,
+    ) -> Result<()> {
+        let repository = chat.and_then(|chat| chat.repository_id.as_deref());
+        (self.ensure_caller_holds(giver, &change.set, repository)).await
     }
 
     /// Refuse an agent of `workspace` the scoped process of the space

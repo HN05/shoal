@@ -324,9 +324,7 @@ impl Manager {
         let given = request.narrowing;
         let target = request.workspace.as_mut().context(REFUSAL)?;
         let target = self.workspace_below(caller, target, REFUSAL).await?;
-        // A scoped process gives the agent only what it holds itself.
-        let repository = self.workspace(target).await?.repository_id;
-        (self.ensure_caller_holds(Some(&caller.space_id), &given, Some(&repository))).await?;
+        (self.ensure_new_agent_held(Some(&caller.space_id), target, &given)).await?;
         Ok(target)
     }
 
