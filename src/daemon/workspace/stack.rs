@@ -55,7 +55,7 @@ impl Manager {
     }
 }
 
-/// Record the workspace `base` names as the base of workspace `id`, or clear
+/// Record the workspace `base` as the base of workspace `id`, or clear
 /// it without one, and journal the change. Fails when nothing would change.
 fn change_base(
     tx: &rusqlite::Transaction<'_>,
@@ -63,11 +63,8 @@ fn change_base(
     id: &SpaceId,
     base: Option<&SpaceId>,
 ) -> Result<()> {
-    let base = match base {
-        Some(base) => Some(base_workspace(tx, repository_id, base.as_str())?),
-        None => None,
-    };
-    if let Some(base) = &base {
+    if let Some(base) = base {
+        ensure_base(tx, repository_id, base, base.as_str())?;
         ensure!(
             !store::exists(
                 tx,
@@ -113,35 +110,45 @@ fn base_workspace(
     repository_id: &RepositoryId,
     selector: &str,
 ) -> Result<SpaceId> {
-    let named = match crate::daemon::spaces::selected(db, &SpaceSelector::parse(selector))? {
-        Some((crate::model::SpaceKind::Workspace, id)) => {
-            let repository = db.query_row(
-                "SELECT repository_id FROM workspaces WHERE id=?1",
-                [&id],
-                |row| row.get::<_, RepositoryId>(0),
-            )?;
-            Some((id, repository))
-        }
-        _ => None,
-    };
-    if let Some((id, repository)) = named {
-        ensure!(
-            repository == *repository_id,
-            "base workspace {selector} belongs to another repository"
-        );
-        // A stack builds on its base's branch.
-        ensure!(
-            store::exists(
-                db,
-                "SELECT 1 FROM workspaces WHERE id=?1 AND branch IS NOT NULL",
-                [&id]
-            )?,
-            "base workspace {selector} is at a commit and has no branch to build on"
-        );
+    if let Some((crate::model::SpaceKind::Workspace, id)) =
+        crate::daemon::spaces::selected(db, &SpaceSelector::parse(selector))?
+    {
+        ensure_base(db, repository_id, &id, selector)?;
         return Ok(id);
     }
     Ok(owner(db, repository_id, selector)?
         .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}")))?)
+}
+
+/// Fails unless the workspace `id`, which `shown` names, exists in the
+/// repository with a branch a stack can build on.
+fn ensure_base(
+    db: &Connection,
+    repository_id: &RepositoryId,
+    id: &SpaceId,
+    shown: &str,
+) -> Result<()> {
+    let repository = db
+        .query_row(
+            "SELECT repository_id FROM workspaces WHERE id=?1",
+            [id],
+            |row| row.get::<_, RepositoryId>(0),
+        )
+        .optional()?
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {shown}")))?;
+    ensure!(
+        repository == *repository_id,
+        "base workspace {shown} belongs to another repository"
+    );
+    ensure!(
+        store::exists(
+            db,
+            "SELECT 1 FROM workspaces WHERE id=?1 AND branch IS NOT NULL",
+            [id]
+        )?,
+        "base workspace {shown} is at a commit and has no branch to build on"
+    );
+    Ok(())
 }
 
 /// Fill in the workspace's base and the workspaces stacked on it.
