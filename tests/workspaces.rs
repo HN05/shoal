@@ -4982,23 +4982,23 @@ fn execution_lets_its_command_stop_for_the_terminal_where_shoal_ignores_that() {
             Ok(())
         });
     }
-    // The trailing `:` keeps the shell from running `ps` in its place, so
-    // `ps` reports the shell's own signals.
+    // Python starts its handlers from the signals the process inherits, and
+    // unlike `ps -o sigignore`, this reads them on macOS too.
     let output = command
-        .args(["run", "--workspace", "stops", "--"])
-        .args(["sh", "-c", "ps -o sigignore= -p $$; :"])
+        .args(["run", "--workspace", "stops", "--", "python3", "-c"])
+        .arg(
+            "import signal\n\
+             print(*(signal.getsignal(s) == signal.SIG_IGN\n\
+             for s in (signal.SIGTTIN, signal.SIGTTOU)))",
+        )
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let ignored = u64::from_str_radix(String::from_utf8_lossy(&output.stdout).trim(), 16)
-        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
-    for signal in [libc::SIGTTIN, libc::SIGTTOU] {
-        assert_eq!(
-            ignored & 1 << (signal - 1),
-            0,
-            "signal {signal}: {ignored:x}"
-        );
-    }
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "False False",
+        "whether SIGTTIN and SIGTTOU are ignored: {output:?}"
+    );
 }
 
 #[test]
