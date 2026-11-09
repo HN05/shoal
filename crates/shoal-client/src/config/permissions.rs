@@ -170,14 +170,6 @@ impl PermissionsConfig {
         within(PermissionKey::ApiWrites, self.api_writes, held.api_writes)
     }
 
-    /// The keys these permissions set to another value than `recorded`
-    /// sets, which a restore brings in rather than keeps.
-    pub fn beyond(&self, recorded: &Self) -> Self {
-        (PermissionKey::ALL.iter())
-            .filter(|&&key| self.get(key) == recorded.get(key))
-            .fold(*self, |beyond, &key| beyond.without(key))
-    }
-
     /// These permissions with only the values they set for `keys`.
     fn only(self, keys: &[PermissionKey]) -> Self {
         (PermissionKey::ALL.iter())
@@ -228,6 +220,20 @@ impl PermissionChange {
                 set: PermissionsConfig::assigned(&[assignment.to_owned()])?,
                 dropped: Vec::new(),
             }),
+        }
+    }
+
+    /// The change that turns the permissions `recorded` gives into those
+    /// `given` gives, which a registration or restore brings in rather than
+    /// keeps: each key `given` sets to another value, and each `recorded`
+    /// sets that `given` drops.
+    pub fn between(recorded: &PermissionsConfig, given: &PermissionsConfig) -> Self {
+        let keys = PermissionKey::ALL.iter().copied();
+        let changed = keys.filter(|&key| given.get(key) != recorded.get(key));
+        let (set, dropped): (Vec<_>, Vec<_>) = changed.partition(|&key| given.get(key).is_some());
+        Self {
+            set: given.only(&set),
+            dropped,
         }
     }
 

@@ -160,6 +160,20 @@ fn a_dropped_key_gives_the_value_it_falls_back_to() {
     assert!(drop_merge.ensure_held(&chat, &chat).is_ok());
     let set_merge = PermissionChange::assigned("merge=direct").unwrap();
     assert!(set_merge.ensure_held(&worker, &worker).is_err());
+    // A registration or restore without a recorded key drops it.
+    let recorded =
+        PermissionsConfig::assigned(&["merge=propose".to_owned(), "push=deny".to_owned()]).unwrap();
+    let given = PermissionsConfig::assigned(&["push=deny".to_owned()]).unwrap();
+    assert_eq!(PermissionChange::between(&recorded, &given), drop_merge);
+    let between = PermissionChange::between(&given, &recorded);
+    assert_eq!(
+        (between.set.merge, between.dropped),
+        (Some(Opening::Propose), Vec::new())
+    );
+    assert_eq!(
+        PermissionChange::between(&recorded, &recorded),
+        PermissionChange::default()
+    );
 }
 
 #[test]

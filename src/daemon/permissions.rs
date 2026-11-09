@@ -126,8 +126,8 @@ impl Manager {
     }
 
     /// Refuse an agent of `workspace` the scoped process of the space
-    /// `giver` registers with `given` where it sets a key to another value
-    /// than the workspace recorded that the process does not hold.
+    /// `giver` registers with `given` where it changes what the workspace
+    /// recorded as [`Self::ensure_change_held`] refuses a change.
     pub(crate) async fn ensure_registration_held(
         &self,
         giver: Option<&SpaceId>,
@@ -138,21 +138,25 @@ impl Manager {
             return Ok(());
         }
         let recorded = self.workspace(workspace).await?;
-        let repository = Some(recorded.repository_id.as_str());
-        (self.ensure_caller_holds(giver, &given.beyond(&recorded.narrowing), repository)).await
+        let change = PermissionChange::between(&recorded.narrowing, given);
+        let repository = recorded.repository_id.clone();
+        let space = PresentSpace::Workspace(recorded);
+        (self.ensure_change_held(giver, &space, &change, Some(&repository))).await
     }
 
     /// Refuse a restore of `chat` the scoped process of the space `giver`
-    /// asks for with `given` where it sets a key to another value than the
-    /// chat recorded that the process does not hold.
+    /// asks for with `given` where it changes what the chat recorded as
+    /// [`Self::ensure_change_held`] refuses a change.
     pub(crate) async fn ensure_restore_held(
         &self,
         giver: Option<&SpaceId>,
         chat: &Chat,
         given: &PermissionsConfig,
     ) -> Result<()> {
+        let change = PermissionChange::between(&chat.narrowing, given);
+        let space = PresentSpace::Chat(chat.clone());
         let repository = chat.repository_id.as_deref();
-        (self.ensure_caller_holds(giver, &given.beyond(&chat.narrowing), repository)).await
+        (self.ensure_change_held(giver, &space, &change, repository)).await
     }
 
     /// The effective permissions an agent starting in `mode` in `workspace`

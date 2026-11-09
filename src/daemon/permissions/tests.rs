@@ -283,4 +283,26 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
         .await
         .unwrap();
     check(None, dropped("push=mode")).await.unwrap();
+
+    // A registration or restore that leaves a recorded key out drops it.
+    let (talk, _talk) = chat(&manager, "talk", "chat", Some(&repo), Some(&parent.id)).await;
+    give(&manager, "chats", &talk.id, &["push=propose"]).await;
+    let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
+    let none = crate::config::permissions::PermissionsConfig::default();
+    let (giver, child) = (Some(&top.id), SpaceSelector::id(space.id()));
+    let registered = manager.ensure_registration_held(giver, &child, &none);
+    assert!(registered.await.is_err());
+    assert!(
+        manager
+            .ensure_restore_held(giver, &talk, &none)
+            .await
+            .is_err()
+    );
+    let recorded = talk.narrowing;
+    let registered = manager.ensure_registration_held(giver, &child, &recorded);
+    registered.await.unwrap();
+    manager
+        .ensure_restore_held(giver, &talk, &recorded)
+        .await
+        .unwrap();
 }
