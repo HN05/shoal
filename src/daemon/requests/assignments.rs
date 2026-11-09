@@ -24,10 +24,9 @@ pub(super) async fn handle(
             workspace,
             execution,
         } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
-        AssignmentMethod::ReplaceStoppedNarrowing { agents, narrowing } => {
-            manager
-                .replace_stopped_narrowing(&agents, narrowing)
-                .await?;
+        AssignmentMethod::ChangeStoppedPermissions { agents, change } => {
+            let giver = caller.map(|caller| &caller.space_id);
+            (manager.change_stopped_permissions(&agents, &change, giver)).await?;
             Body::Ok
         }
         AssignmentMethod::MarkReady { space, selection } => {
@@ -72,7 +71,7 @@ impl Scoped for AssignmentMethod {
                     .await?,
             ),
             // Every agent is checked before the handler replaces any.
-            AssignmentMethod::ReplaceStoppedNarrowing { agents, .. } => {
+            AssignmentMethod::ChangeStoppedPermissions { agents, .. } => {
                 for agent in agents {
                     (manager.stopped_below(caller, &mut agent.workspace, &agent.execution)).await?;
                 }

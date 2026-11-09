@@ -23,7 +23,7 @@ pub enum ExecutionMethod {
         /// The mode the agent started in.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,
-        /// The `--permission` narrowing of the mode's permissions.
+        /// The permissions `--permission` gives the agent, whatever the mode's.
         #[serde(
             default,
             skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
@@ -58,8 +58,8 @@ pub enum ExecutionMethod {
     /// wrapper, or in its own terminal when `in_place`, answering once the
     /// restarted agent runs with the place of the wrapper that runs it. With `join`, only wait for that restart the run
     /// selected, which may have ended already, as it was asked. `run` names
-    /// the `shoal restart` run that asks. `narrowing` replaces the one the
-    /// agent recorded, which only a new wrapper starts it under.
+    /// the `shoal restart` run that asks. `change` changes the permissions the
+    /// agent was given, which only a new wrapper starts it under.
     RestartAgent {
         execution: ExecutionId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -69,7 +69,7 @@ pub enum ExecutionMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         in_place: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        narrowing: Option<crate::config::permissions::PermissionsConfig>,
+        change: Option<crate::config::permissions::PermissionChange>,
     },
 }
 

@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 
 use super::{Agent, Manager, Restarts};
 use crate::{
-    config::permissions::PermissionsConfig,
+    config::permissions::PermissionChange,
     daemon::workspace::agent_queue::Start,
     model::{RunningAgent, Workspace},
     sessions::Origin,
@@ -21,7 +21,7 @@ use crate::{
 /// execution the agent ran as.
 pub(crate) enum Renewal {
     /// The new wrapper has not registered the agent yet.
-    Starting(Handover),
+    Starting(Box<Handover>),
     /// The agent runs as this execution now.
     Started(ExecutionId),
 }
@@ -46,12 +46,12 @@ impl Agent {
     /// the outcomes of those that ended.
     pub(super) fn hand_over(&mut self) -> Option<Renewal> {
         self.restarts.current.as_mut()?.resume();
-        Some(Renewal::Starting(Handover {
+        Some(Renewal::Starting(Box::new(Handover {
             name: self.name.clone(),
             workspace_id: self.workspace_id.clone(),
             restarts: std::mem::take(&mut self.restarts),
             entry: None,
-        }))
+        })))
     }
 }
 
@@ -63,15 +63,14 @@ pub(super) fn starting(renewals: &Renewals, id: &ExecutionId) -> bool {
 
 impl Handover {
     /// Answer one more request, of `run`, for the restart in progress,
-    /// refusing one under another `narrowing` than it starts the agent
-    /// under.
-    pub(super) fn answer_replacing(
+    /// refusing one making another `change` than it makes.
+    pub(super) fn answer_changing(
         &mut self,
         run: Option<String>,
-        narrowing: Option<PermissionsConfig>,
+        change: Option<&PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         if let Some(restart) = &self.restarts.current {
-            restart.ensure_replaces(&self.name, narrowing)?;
+            restart.ensure_changes(&self.name, change)?;
         }
         Ok(self.answer(run))
     }
@@ -252,7 +251,7 @@ impl Manager {
             })
             .await;
         if let Some(handover) = ended {
-            answer_all(handover, &reason);
+            answer_all(*handover, &reason);
         }
     }
 
@@ -288,7 +287,7 @@ impl Manager {
                     .collect();
                 ids.iter()
                     .filter_map(|execution| match renewals.remove(execution) {
-                        Some(Renewal::Starting(handover)) => Some(handover),
+                        Some(Renewal::Starting(handover)) => Some(*handover),
                         _ => None,
                     })
                     .collect()
@@ -329,9 +328,9 @@ impl Manager {
                 renewals
                     .iter()
                     .filter_map(|(execution, renewal)| match renewal {
-                        Renewal::Starting(Handover {
-                            entry: Some(entry), ..
-                        }) => Some((execution.clone(), entry.clone())),
+                        Renewal::Starting(handover) => {
+                            Some((execution.clone(), handover.entry.clone()?))
+                        }
                         _ => None,
                     })
                     .collect()

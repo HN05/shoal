@@ -859,7 +859,7 @@ impl Manager {
             !connections.is_connected(&request.execution),
             "execution is already connected"
         );
-        let (workspace_id, agent_execution) = self.authorize_reattachment(request).await?;
+        let (workspace_id, agent_execution, narrowing) = self.authorize_reattachment(request).await?;
         let workspace = self.workspace_by_id(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.
@@ -889,7 +889,9 @@ impl Manager {
                 model: request.model.clone(),
                 mode: (request.mode.clone())
                     .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
-                narrowing: request.narrowing,
+                // What its launch recorded, which a reattaching wrapper
+                // cannot change.
+                narrowing,
             };
             self.track_agent(
                 &request.execution,
@@ -917,7 +919,11 @@ impl Manager {
     async fn authorize_reattachment(
         &self,
         request: &Reattach,
-    ) -> Result<(SpaceId, Option<ExecutionId>)> {
+    ) -> Result<(
+        SpaceId,
+        Option<ExecutionId>,
+        crate::config::permissions::PermissionsConfig,
+    )> {
         let request = request.clone();
         self.store
             .write(move |tx| {
@@ -941,7 +947,7 @@ impl Manager {
                     "UPDATE executions SET state=?2 WHERE id=?1",
                     params![request.execution, ExecutionState::Running],
                 )?;
-                Ok((execution.workspace_id, agent_execution))
+                Ok((execution.workspace_id, agent_execution, execution.narrowing))
             })
             .await
     }

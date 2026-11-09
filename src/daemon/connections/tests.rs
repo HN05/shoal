@@ -179,7 +179,7 @@ fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
         join: None,
         run: None,
         in_place: false,
-        narrowing: None,
+        change: None,
     };
     let _restart = capacity.admit(&restart.into()).unwrap();
     // The restored wrapper's own requests still find a slot.

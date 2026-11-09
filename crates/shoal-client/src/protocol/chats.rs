@@ -22,7 +22,7 @@ pub enum ChatMethod {
         /// The mode its agent starts in; `chat` when omitted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,
-        /// The `--permission` narrowing of the mode's permissions.
+        /// The permissions `--permission` gives the agent, whatever the mode's.
         #[serde(
             default,
             skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
@@ -124,7 +124,7 @@ pub enum ChatMethod {
     /// runs in once it runs again.
     /// With `join`, only wait for that restart the run selected, which may
     /// have ended already. `run` names the `shoal restart` run that asks.
-    /// `narrowing` replaces the one the chat recorded.
+    /// `change` changes the permissions the chat's agent was given.
     RestartChat {
         chat: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -132,7 +132,7 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         run: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        narrowing: Option<crate::config::permissions::PermissionsConfig>,
+        change: Option<crate::config::permissions::PermissionChange>,
     },
     /// `root_dir`, where a chat without a repository runs, prepared as
     /// registering a repository prepares it.

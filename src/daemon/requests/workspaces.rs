@@ -2,7 +2,7 @@
 use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use tokio::net::UnixStream;
 
 use super::super::{
@@ -211,6 +211,15 @@ pub(super) async fn handle(
                     .await?,
             )
         }
+        WorkspaceMethod::HeldPermissions { repository } => {
+            let caller = caller.context("the user holds every permission")?;
+            let repository = match repository {
+                Some(repository) => Some(manager.repository(repository).await?.id),
+                None => None,
+            };
+            let held = manager.space_permissions(&caller.space_id, repository.as_deref());
+            Body::Permissions(held.await?)
+        }
         WorkspaceMethod::WorkspaceEnv { workspace } => {
             Body::WorkspaceEnv(manager.workspace_environment(&workspace).await?)
         }
@@ -352,6 +361,8 @@ impl Scoped for WorkspaceMethod {
                 target: ConfigTarget::Global,
             } => None,
             WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
+            // The handler answers with the caller's own space's.
+            WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }
             | WorkspaceMethod::WorkspacePlaces { workspace }

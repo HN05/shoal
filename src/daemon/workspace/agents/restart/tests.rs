@@ -695,9 +695,9 @@ async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_re
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let narrowing = |assignment: &str| {
-        Some(crate::config::permissions::PermissionsConfig::assigned(&[assignment.into()]).unwrap())
+        Some(crate::config::permissions::PermissionChange::assigned(assignment).unwrap())
     };
-    // The wrapper that restarts its agent in place keeps the narrowing it
+    // The wrapper that restarts its agent in place keeps the permissions it
     // launched it with.
     assert!(
         manager
@@ -717,8 +717,8 @@ async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_re
         )
         .await
         .unwrap();
-    // Another run joins it under the same narrowing, or without one, but
-    // not under another.
+    // Another run joins it with the same --permission, or without one, but
+    // not with another.
     let other = manager
         .request_restart(
             &id,

@@ -1,6 +1,7 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
+use crate::config::permissions::PermissionChange;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -1230,14 +1231,11 @@ impl Saved {
     }
 }
 
-/// Give each agent and last session the `saved` lists keep `narrowing` in
-/// place of the one it recorded, which its restore runs under, holding the
-/// claim a restore takes on each of them, so one a restore holds is refused
-/// before any changes.
-pub fn replace_narrowings(
-    saved: &[Saved],
-    narrowing: crate::config::permissions::PermissionsConfig,
-) -> Result<()> {
+/// Make `change` to the permissions given to each agent and last session
+/// the `saved` lists keep, which its restore runs under, holding the claim a
+/// restore takes on each of them, so one a restore holds is refused before
+/// any changes.
+pub fn change_permissions(saved: &[Saved], change: &PermissionChange) -> Result<()> {
     let agents = || saved.iter().flat_map(|saved| &saved.agents);
     let sessions = || saved.iter().flat_map(|saved| &saved.sessions);
     let _claims = (agents().chain(sessions()))
@@ -1245,6 +1243,7 @@ pub fn replace_narrowings(
         .collect::<Result<Vec<_>>>()?;
     for (_, path) in agents() {
         if let Some(record) = Record::load(path)? {
+            let narrowing = change.applied_to(record.narrowing);
             rewrite(
                 path,
                 &Record {
@@ -1256,23 +1255,24 @@ pub fn replace_narrowings(
     }
     for (_, path) in sessions() {
         if let Some(last) = LastSession::load(path)? {
+            let narrowing = change.applied_to(last.narrowing);
             rewrite(path, &LastSession { narrowing, ..last })?;
         }
     }
     Ok(())
 }
 
-/// Give the saved agent or last session of execution `id` of the workspace
-/// `workspace_id` `narrowing` in place of the one it recorded.
-pub(crate) fn replace_narrowing(
+/// Make `change` to the permissions given to the saved agent or last
+/// session of execution `id` of the workspace `workspace_id`.
+pub(crate) fn change_permission(
     paths: &Paths,
     workspace_id: &SpaceId,
     id: &str,
-    narrowing: crate::config::permissions::PermissionsConfig,
+    change: &PermissionChange,
 ) -> Result<()> {
     let mut saved = Saved::load(paths, workspace_id)?;
     saved.retain_execution(id, false);
-    replace_narrowings(&[saved], narrowing)
+    change_permissions(&[saved], change)
 }
 
 /// Save `saved` again at `path`, where a stopped agent's file is.

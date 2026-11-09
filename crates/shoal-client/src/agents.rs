@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::space_names::SpaceSelector;
 use crate::{
-    config::permissions::PermissionsConfig,
+    config::permissions::PermissionChange,
     connection::{Daemon, request},
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
     protocol::{AgentMethod, ChatMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
@@ -101,7 +101,7 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 
 /// Restart the agent of `execution` in a new wrapper, or `in_place`, as
 /// part of the restart `run`, or join the restart `join` already pending,
-/// under `narrowing` when given instead of the one it recorded. Returns the
+/// making `change` to the permissions it was given. Returns the
 /// place of the wrapper that runs the agent again, when that runs in a
 /// terminal host.
 pub async fn restart(
@@ -110,7 +110,7 @@ pub async fn restart(
     join: Option<PendingRestart>,
     run: Option<String>,
     in_place: bool,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<PermissionChange>,
 ) -> Result<Option<Origin>> {
     request(
         daemon,
@@ -119,7 +119,7 @@ pub async fn restart(
             join,
             run,
             in_place,
-            narrowing,
+            change,
         },
     )
     .await
@@ -133,20 +133,20 @@ pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 
 /// Restart the agent of the running chat `chat` in a background place, as
 /// part of the restart `run`, or join the restart `join` already pending,
-/// under `narrowing` when given instead of the one it recorded. Returns the
+/// making `change` to the permissions its agent was given. Returns the
 /// place the chat runs in again, when it runs in a terminal host.
 pub async fn restart_chat(
     daemon: &impl Daemon,
     chat: SpaceSelector,
     join: Option<PendingRestart>,
     run: Option<String>,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<PermissionChange>,
 ) -> Result<Option<Origin>> {
     let method = ChatMethod::RestartChat {
         chat,
         join,
         run,
-        narrowing,
+        change,
     };
     request(daemon, method).await
 }

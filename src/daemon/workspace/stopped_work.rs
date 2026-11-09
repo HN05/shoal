@@ -103,25 +103,37 @@ impl Manager {
         })
     }
 
-    /// Give each of the stopped `agents` `narrowing` in place of the one it
-    /// recorded, which its restore runs under, once none of them is refused.
-    pub async fn replace_stopped_narrowing(
+    /// Make `change` to the permissions each of the stopped `agents` was
+    /// given, which its restore runs under, once none of them is refused,
+    /// for the scoped process of the space `giver`, which gives only what it
+    /// holds, or for the user.
+    pub async fn change_stopped_permissions(
         &self,
         agents: &[SavedAgent],
-        narrowing: crate::config::permissions::PermissionsConfig,
+        change: &crate::config::permissions::PermissionChange,
+        giver: Option<&SpaceId>,
     ) -> Result<()> {
-        let mut replaced = Vec::new();
+        let mut changed = Vec::new();
         for agent in agents {
-            replaced.push(self.replaceable(agent).await?);
+            changed.push(self.changeable(agent, change, giver).await?);
         }
-        recovery::replace_narrowings(&replaced, narrowing)
+        recovery::change_permissions(&changed, change)
     }
 
-    /// What the stopped `agent` saved, refusing one that saved nothing and
-    /// one its waiting wrapper restores, which keeps the narrowing that
-    /// wrapper launched it with.
-    async fn replaceable(&self, agent: &SavedAgent) -> Result<Saved> {
+    /// What the stopped `agent` saved, refusing one that saved nothing, one
+    /// its waiting wrapper restores, which keeps the permissions that
+    /// wrapper launched it with, and `change` where `giver` does not hold
+    /// what it gives.
+    async fn changeable(
+        &self,
+        agent: &SavedAgent,
+        change: &crate::config::permissions::PermissionChange,
+        giver: Option<&SpaceId>,
+    ) -> Result<Saved> {
         let (workspace, execution) = (self.workspace(&agent.workspace).await?, &agent.execution);
+        let repository = Some(workspace.repository_id.as_str());
+        self.ensure_caller_holds(giver, &change.set, repository)
+            .await?;
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
         saved.retain_execution(execution, false);
         ensure!(
@@ -134,7 +146,7 @@ impl Manager {
                 .agents
                 .iter()
                 .any(|(_, path)| recovery::waits_in_wrapper(path)),
-            "the agent of {} restores in the wrapper that waits for it, which keeps its narrowing; resume it without --permission",
+            "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
             workspace.name
         );
         Ok(saved)

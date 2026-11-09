@@ -105,14 +105,13 @@ pub async fn discard_stopped_work(
     request(daemon, method).await
 }
 
-/// Give each of the stopped `agents` `narrowing` in place of the one it
-/// recorded, which its restore runs under; the daemon replaces none when it
-/// refuses one.
-pub async fn replace_stopped_narrowing(
+/// Make `change` to the permissions each of the stopped `agents` was given,
+/// which its restore runs under; the daemon changes none when it refuses one.
+pub async fn change_stopped_permissions(
     daemon: &impl Daemon,
     agents: Vec<crate::protocol::SavedAgent>,
-    narrowing: crate::config::permissions::PermissionsConfig,
+    change: crate::config::permissions::PermissionChange,
 ) -> Result<()> {
-    let method = AssignmentMethod::ReplaceStoppedNarrowing { agents, narrowing };
+    let method = AssignmentMethod::ChangeStoppedPermissions { agents, change };
     request(daemon, method).await
 }

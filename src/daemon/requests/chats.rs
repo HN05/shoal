@@ -34,6 +34,8 @@ pub(super) async fn handle(
             if caller.is_none() {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
             }
+            let held = (repository.as_ref(), workspace.as_ref());
+            ensure_caller_holds(manager, caller, &narrowing, held).await?;
             let new = NewChat {
                 name,
                 agent,
@@ -57,8 +59,16 @@ pub(super) async fn handle(
             origin,
             hands_over,
         } => {
-            let id = manager.chat(&chat).await?.id;
-            let restored = manager.restore_chat(&id, pid, narrowing, origin, hands_over);
+            let recorded = manager.chat(&chat).await?;
+            // A restore keeps what the chat recorded; a scoped process gives
+            // the rest only where it holds it.
+            let given = narrowing.beyond(&recorded.narrowing);
+            let giver = caller.map(|caller| &caller.space_id);
+            let repository = recorded.repository_id.as_deref();
+            manager
+                .ensure_caller_holds(giver, &given, repository)
+                .await?;
+            let restored = manager.restore_chat(&recorded.id, pid, narrowing, origin, hands_over);
             Body::Chat(restored.await?)
         }
         ChatMethod::CheckChatRestore { .. } => Body::Ok,
@@ -116,18 +126,38 @@ pub(super) async fn handle(
             chat,
             join,
             run,
-            narrowing,
+            change,
         } => {
             let id = restarted_chat(manager, chat).await?;
             Body::RestartedPlace(match join {
                 Some(joined) => manager.join_chat_restart(&id, joined.run, run).await?,
                 None => {
                     let stopped_by = caller.map(|caller| caller.space_id.clone());
-                    (manager.restart_chat(&id, run, stopped_by, narrowing)).await?
+                    (manager.restart_chat(&id, run, stopped_by, change)).await?
                 }
             })
         }
     }))
+}
+
+/// Refuse the permissions `given` to a new chat in the repository or the
+/// workspace of `place` where the scoped `caller` does not hold them.
+async fn ensure_caller_holds(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    given: &crate::config::permissions::PermissionsConfig,
+    place: (Option<&crate::repository::Selector>, Option<&SpaceSelector>),
+) -> Result<()> {
+    let Some(caller) = caller.filter(|_| !given.is_empty()) else {
+        return Ok(());
+    };
+    let repository = match place {
+        (_, Some(workspace)) => Some(manager.chat_workspace(workspace).await?.repository_id),
+        (Some(repository), None) => Some(manager.repository(repository.clone()).await?.id),
+        (None, None) => None,
+    };
+    let giver = Some(&caller.space_id);
+    (manager.ensure_caller_holds(giver, given, repository.as_deref())).await
 }
 
 /// The ID of the chat a restart names, or of one that ended meanwhile,

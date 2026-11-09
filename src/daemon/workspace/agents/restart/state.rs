@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
 use super::RestartWaits;
-use crate::{config::permissions::PermissionsConfig, model::PendingRestart, sessions::Origin};
+use crate::{config::permissions::PermissionChange, model::PendingRestart, sessions::Origin};
 
 /// How a restart ended: the place of the wrapper that runs the agent again,
 /// when it runs in a terminal host, or why it does not run again.
@@ -26,9 +26,8 @@ pub(crate) struct Restart {
     /// The wrapper starts the agent again itself rather than finishing for
     /// a new wrapper to start it.
     in_place: bool,
-    /// The narrowing the restarted agent runs under instead of the one it
-    /// recorded.
-    narrowing: Option<PermissionsConfig>,
+    /// What the restart changes in the permissions the agent was given.
+    change: Option<PermissionChange>,
     /// The stopped agent was resumed, in its wrapper or a new one, so that
     /// wrapper's next start is the restarted agent rather than the first one.
     pub(super) resumed: bool,
@@ -47,35 +46,35 @@ impl Restart {
             run,
             joined: Vec::new(),
             in_place,
-            narrowing: None,
+            change: None,
             resumed: false,
             waits: None,
         }
     }
 
-    /// This restart, with the restarted agent running under `narrowing`
-    /// when given instead of the one it recorded.
-    pub(crate) fn replacing(self, narrowing: Option<PermissionsConfig>) -> Self {
-        Self { narrowing, ..self }
+    /// This restart, making `change` when given to the permissions the
+    /// agent was given.
+    pub(crate) fn changing(self, change: Option<PermissionChange>) -> Self {
+        Self { change, ..self }
     }
 
-    /// The narrowing the restarted agent runs under instead of the one it
-    /// recorded, if any.
-    pub(crate) fn narrowing(&self) -> Option<PermissionsConfig> {
-        self.narrowing
+    /// What the restart changes in the permissions the agent was given, if
+    /// anything.
+    pub(crate) fn change(&self) -> Option<&PermissionChange> {
+        self.change.as_ref()
     }
 
-    /// Refuse a request for a restart under `narrowing` that this one, in
-    /// progress for the agent `name`, does not replace the recorded one
-    /// with; a request without one takes this restart as it is.
-    pub(crate) fn ensure_replaces(
+    /// Refuse a request for a restart making `change` that this one, in
+    /// progress for the agent `name`, does not make; a request without one
+    /// takes this restart as it is.
+    pub(crate) fn ensure_changes(
         &self,
         name: &str,
-        narrowing: Option<PermissionsConfig>,
+        change: Option<&PermissionChange>,
     ) -> Result<()> {
         ensure!(
-            narrowing.is_none() || narrowing == self.narrowing,
-            "{name} restarts already under another narrowing; restart it again once it runs"
+            change.is_none() || change == self.change.as_ref(),
+            "{name} restarts already with another --permission; restart it again once it runs"
         );
         Ok(())
     }

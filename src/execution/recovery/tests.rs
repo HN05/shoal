@@ -634,23 +634,32 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
 }
 
 #[test]
-fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
+fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let workspace = SpaceId::from("workspace");
     let agent = crate::execution::TrackedAgent {
-        narrowing: crate::config::permissions::PermissionsConfig::assigned(
-            &["push=propose".into()],
-        )
+        narrowing: crate::config::permissions::PermissionsConfig::assigned(&[
+            "push=propose".into(),
+            "merge=propose".into(),
+        ])
         .unwrap(),
         ..crate::execution::TrackedAgent::named("claude")
     };
     save_record(&paths, &workspace, "stopped", &agent, Some("asked"), None).unwrap();
     LastSession::save(&paths, &workspace, &agent, "last").unwrap();
-    let replacement =
-        crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
-            .unwrap();
-    replace_narrowings(&[Saved::load(&paths, &workspace).unwrap()], replacement).unwrap();
+    let change = crate::config::permissions::PermissionChange {
+        set: crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
+            .unwrap(),
+        dropped: vec![crate::config::permissions::PermissionKey::Merge],
+    };
+    // The key it does not name keeps its value.
+    let replacement = crate::config::permissions::PermissionsConfig::assigned(&[
+        "push=propose".into(),
+        "api_writes=deny".into(),
+    ])
+    .unwrap();
+    change_permissions(&[Saved::load(&paths, &workspace).unwrap()], &change).unwrap();
     let record = Record::load(&record_path(&paths, &workspace, "stopped"))
         .unwrap()
         .unwrap();
@@ -673,7 +682,7 @@ fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
     let record = record_path(&paths, &workspace, "stopped");
     let _restoring = claim(&record).unwrap();
     let saved = [&other, &workspace].map(|id| Saved::load(&paths, id).unwrap());
-    assert!(replace_narrowings(&saved, Default::default()).is_err());
+    assert!(change_permissions(&saved, &change).is_err());
     let last = LastSession::all(&paths, &workspace).unwrap();
     assert_eq!(last[0].narrowing, replacement);
     let other_last = LastSession::all(&paths, &other).unwrap();

@@ -297,6 +297,15 @@ pub async fn launch_permissions(
     request(daemon, method).await
 }
 
+/// The effective permissions of this scoped process's own space for an
+/// action in the registered repository `repository`.
+pub async fn held_permissions(
+    daemon: &impl Daemon,
+    repository: Option<crate::repository::Selector>,
+) -> Result<crate::config::permissions::Permissions> {
+    request(daemon, WorkspaceMethod::HeldPermissions { repository }).await
+}
+
 /// The environment `workspace`'s configuration gives its commands.
 pub async fn environment(
     daemon: &impl Daemon,

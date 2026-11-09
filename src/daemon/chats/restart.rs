@@ -11,7 +11,7 @@ use rusqlite::params;
 
 use super::restores::resume;
 use crate::{
-    config::permissions::PermissionsConfig,
+    config::permissions::PermissionChange,
     daemon::{
         log, store,
         workspace::{Manager, restarted},
@@ -22,22 +22,28 @@ use crate::{
 
 impl Manager {
     /// Restart the agent of the running chat `id` for the `shoal restart`
-    /// `run`, which the process of the space `stopped_by` asks for, under
-    /// `narrowing` when given instead of the one it recorded, or join the
-    /// restart in progress, returning the place it runs in again.
+    /// `run`, which the process of the space `stopped_by` asks for, making
+    /// `change` when given to the permissions its agent was given, which
+    /// that process must hold, or join the restart in progress, returning
+    /// the place it runs in again.
     pub(crate) async fn restart_chat(
         self: &Arc<Self>,
         id: &SpaceId,
         run: Option<String>,
         stopped_by: Option<SpaceId>,
-        narrowing: Option<PermissionsConfig>,
+        change: Option<PermissionChange>,
     ) -> Result<Option<Origin>> {
         let chat = self.running_chat_by_id(id).await?;
+        if let Some(change) = &change {
+            let repository = chat.as_ref().and_then(|chat| chat.repository_id.as_deref());
+            (self.ensure_caller_holds(stopped_by.as_ref(), &change.set, repository)).await?;
+        }
         let resumes = match &chat {
             Some(chat) => self.chat_resumes(chat).await?,
             None => false,
         };
-        let requested = (self.chat_agents).request(id, chat.as_ref(), resumes, run, narrowing)?;
+        let requested =
+            (self.chat_agents).request(id, chat.as_ref(), resumes, run, change.clone())?;
         if let Some(chat) = requested.starts {
             self.chat_agents.set_stopper(&chat.id, stopped_by.clone());
             // A daemon update waits for the restart: the next daemon would
@@ -46,7 +52,7 @@ impl Manager {
             let operation = self.gates.owned_operation().await;
             let manager = self.clone();
             tokio::spawn(async move {
-                manager.run_chat_restart(chat, stopped_by, narrowing).await;
+                manager.run_chat_restart(chat, stopped_by, change).await;
                 drop(operation);
             });
         }
@@ -108,36 +114,36 @@ impl Manager {
         Ok(launch.arguments.resume_args(Some(session)).is_some())
     }
 
-    /// Restart `chat` for the process of the space `stopped_by`, under
-    /// `narrowing` when given, and answer the requests for it with how that
+    /// Restart `chat` for the process of the space `stopped_by`, making
+    /// `change` when given, and answer the requests for it with how that
     /// ended.
     async fn run_chat_restart(
         &self,
         chat: Chat,
         stopped_by: Option<SpaceId>,
-        narrowing: Option<PermissionsConfig>,
+        change: Option<PermissionChange>,
     ) {
-        let outcome = (self.save_and_restore(&chat, stopped_by.as_ref(), narrowing)).await;
+        let outcome = (self.save_and_restore(&chat, stopped_by.as_ref(), change)).await;
         let outcome = outcome.map_err(|error| format!("{error:#}"));
         self.chat_agents.finish(&chat.id, &outcome);
     }
 
     /// Save `chat` and stop its agent for the process of the space
-    /// `stopped_by`, give it `narrowing` when given in place of the one it
-    /// recorded, as a workspace agent's restart gives its record, then
+    /// `stopped_by`, make `change` when given to the permissions its agent
+    /// was given, as a workspace agent's restart changes its record, then
     /// restore it, returning the place it runs in again. A chat whose
     /// restore fails stays stopped for `shoal resume`, the stopper's to
-    /// resume, under the narrowing it has then.
+    /// resume, with the permissions it has then.
     async fn save_and_restore(
         &self,
         chat: &Chat,
         stopped_by: Option<&SpaceId>,
-        narrowing: Option<PermissionsConfig>,
+        change: Option<PermissionChange>,
     ) -> Result<Option<Origin>> {
         self.save_chat(&chat.id, stopped_by).await?;
-        if let Some(narrowing) = narrowing {
-            self.replace_saved_chat_narrowing(&chat.id, narrowing)
-                .await?;
+        if let Some(change) = change {
+            let given = change.applied_to(chat.narrowing);
+            self.give_saved_chat(&chat.id, given).await?;
         }
         let restored = resume(&self.paths, chat)
             .await
@@ -149,14 +155,14 @@ impl Manager {
         Ok(restored.and_then(|chat| chat.origin))
     }
 
-    /// Give the saved chat `id` `narrowing` in place of the one it
-    /// recorded, which its restore runs under.
-    async fn replace_saved_chat_narrowing(
+    /// Give the saved chat `id`'s agent the permissions `given`, which its
+    /// restore runs under.
+    async fn give_saved_chat(
         &self,
         id: &str,
-        narrowing: PermissionsConfig,
+        given: crate::config::permissions::PermissionsConfig,
     ) -> Result<()> {
-        let (id, narrowing) = (id.to_owned(), store::narrowing_column(&narrowing)?);
+        let (id, narrowing) = (id.to_owned(), store::narrowing_column(&given)?);
         self.store
             .run(move |db| {
                 let updated = db.execute(

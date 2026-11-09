@@ -149,6 +149,13 @@ pub enum WorkspaceMethod {
         )]
         narrowing: crate::config::permissions::PermissionsConfig,
     },
+    /// The effective permissions of the calling scoped process's own space
+    /// for an action in the registered repository `repository`, the most
+    /// its `--permission` gives; the user holds every permission.
+    HeldPermissions {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<crate::repository::Selector>,
+    },
     WorkspaceEnv {
         workspace: SpaceSelector,
     },

@@ -321,8 +321,13 @@ impl Manager {
         const REFUSAL: &str =
             "workspace processes can start agents only in the workspaces split from theirs";
         ensure!(!request.now, NOT_NOW);
+        let given = request.narrowing;
         let target = request.workspace.as_mut().context(REFUSAL)?;
-        self.workspace_below(caller, target, REFUSAL).await
+        let target = self.workspace_below(caller, target, REFUSAL).await?;
+        // A scoped process gives the agent only what it holds itself.
+        let repository = self.workspace(target).await?.repository_id;
+        (self.ensure_caller_holds(Some(&caller.space_id), &given, Some(&repository))).await?;
+        Ok(target)
     }
 
     /// Question `number` for the caller to answer, which must be one of a

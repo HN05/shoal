@@ -46,17 +46,34 @@ async fn a_restart_saves_a_chat_and_restores_it_as_shoal_resume_does() {
 #[tokio::test]
 async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     let (root, manager) = manager().await;
-    let (_repo, chat, mut process) = named_chat(root.path(), &manager, "unrestored").await;
+    let (repo, chat, mut process) = named_chat(root.path(), &manager, "unrestored").await;
     manager
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
+    // A space whose process holds the permission it gives.
+    let coordinating = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let pid = coordinating.id();
+    let coordinator = (manager.start_chat(
+        repo.id.into(),
+        "coordinator".into(),
+        "claude".into(),
+        pid,
+        None,
+        false,
+    ))
+    .await
+    .unwrap();
 
-    let coordinator = Some(SpaceId::from("coordinator"));
-    let narrowing =
-        crate::config::permissions::PermissionsConfig::assigned(&["push=propose".into()]).unwrap();
-    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.clone(), Some(narrowing));
+    let coordinator = Some(coordinator.id);
+    let change = crate::config::permissions::PermissionChange::assigned("push=propose").unwrap();
+    let restart = manager.restart_chat(
+        &chat.id,
+        run("a"),
+        coordinator.clone(),
+        Some(change.clone()),
+    );
     let error = restart.await.unwrap_err();
 
     assert!(
@@ -66,9 +83,9 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     assert!(!process.wait().unwrap().success());
     let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
-    // It waits under the narrowing the restart gave it, as a workspace
+    // It waits with the permissions the restart gave it, as a workspace
     // agent's record does.
-    assert_eq!(saved.narrowing, narrowing);
+    assert_eq!(saved.narrowing, change.set);
     // The space whose process asked for the restart stopped it.
     let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
     assert_eq!(stopper, coordinator);
@@ -78,6 +95,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
             .iter()
             .all(|agent| agent.execution.as_str() != chat.id.as_str())
     );
+    coordinating.kill();
 }
 
 /// A chat a coordinator stopped is the user's to resume once its restored

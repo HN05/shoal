@@ -35,11 +35,11 @@ pub enum AssignmentMethod {
         workspace: SpaceSelector,
         execution: Option<ExecutionId>,
     },
-    /// Give each of the stopped `agents` `narrowing` in place of the one it
-    /// recorded, which its restore runs under, once none of them is refused.
-    ReplaceStoppedNarrowing {
+    /// Make `change` to the permissions each of the stopped `agents` was
+    /// given, which its restore runs under, once none of them is refused.
+    ChangeStoppedPermissions {
         agents: Vec<SavedAgent>,
-        narrowing: crate::config::permissions::PermissionsConfig,
+        change: crate::config::permissions::PermissionChange,
     },
 }
 
