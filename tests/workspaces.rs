@@ -19749,6 +19749,136 @@ fn start_narrows_the_agents_permissions_and_records_them() {
     assert_eq!(fixture.ok(&["work", "--chats"]), chats);
 }
 
+/// Save a stopped agent of `waiter` that started with `push=propose` for
+/// the workspace `workspace` of `fixture`, returning its record.
+fn stop_narrowed_agent(fixture: &Fixture, workspace: &Value) -> PathBuf {
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    let record = state.join("stopped-agent.recovery.json");
+    fs::write(
+        &record,
+        r#"{"agent":"waiter","narrowing":{"push":"propose"}}"#,
+    )
+    .unwrap();
+    record
+}
+
+/// `shoal resume --permission` replaces the narrowing a stopped agent
+/// recorded, which its restore registers; without it the restore keeps the
+/// recorded one, and a value wider than the agent's mode is refused before
+/// anything is restored or replaced.
+#[test]
+fn resume_replaces_the_narrowing_a_stopped_agent_recorded() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'exit 0']\n",
+    ));
+    let workspace = fixture.add("stopped");
+    let narrowing = || fixture.ok(&["work", "status", "stopped"])["workspace"]["narrowing"].clone();
+    let resume = |args: &[&str]| {
+        let resume = [
+            "resume",
+            "stopped",
+            "--execution",
+            "stopped-agent",
+            "--focus",
+        ];
+        fixture.run(&[&resume[..], args].concat())
+    };
+    stop_narrowed_agent(&fixture, &workspace);
+    let output = resume(&[]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(narrowing(), serde_json::json!({"push": "propose"}));
+
+    let record = stop_narrowed_agent(&fixture, &workspace);
+    let output = resume(&["--permission", "merge=direct"]);
+    assert!(!output.status.success(), "{output:?}");
+    let kept: Value = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
+    assert_eq!(kept["narrowing"], serde_json::json!({"push": "propose"}));
+    let output = resume(&["--permission", "api_writes=deny"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(narrowing(), serde_json::json!({"api_writes": "deny"}));
+}
+
+/// The narrowing a restore the daemon starts from the queue runs under,
+/// which `shoal resume` with `args` queued for an agent that started with
+/// `push=propose`.
+fn queued_restore_narrowing(args: &[&str]) -> Value {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let workspace = fixture.add("stopped");
+    stop_narrowed_agent(&fixture, &workspace);
+    let queued = fixture.ok(&[&["resume", "stopped"][..], args].concat());
+    assert_eq!(queued["queued"].as_array().unwrap().len(), 1, "{queued}");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    wait_until("the restore", || path.join("restored").exists());
+    let status = fixture.ok(&["work", "status", "stopped"]);
+    fixture.ok(&["stop", "stopped"]);
+    status["workspace"]["narrowing"].clone()
+}
+
+/// A restore queued without `--permission` runs under the recorded
+/// narrowing.
+#[test]
+fn a_queued_restore_keeps_the_recorded_narrowing() {
+    assert_eq!(
+        queued_restore_narrowing(&[]),
+        serde_json::json!({"push": "propose"})
+    );
+}
+
+/// A restore the daemon starts from the queue runs under the narrowing its
+/// `shoal resume --permission` gave.
+#[test]
+fn a_queued_restore_runs_under_the_narrowing_its_resume_gave() {
+    assert_eq!(
+        queued_restore_narrowing(&["--permission", "api_writes=deny"]),
+        serde_json::json!({"api_writes": "deny"})
+    );
+}
+
+/// `shoal resume --permission` restores a stopped chat under the narrowing
+/// it gives, which the chat records in place of its own; without it the
+/// chat keeps the recorded one, and a value wider than its mode's is
+/// refused before it restores.
+#[test]
+fn resume_replaces_the_narrowing_a_stopped_chat_recorded() {
+    let mut fixture = chat_session_fixture();
+    save_running_chat(&fixture, |fixture| {
+        let output = fixture.run(&["daemon", "stop"]);
+        assert!(output.status.success(), "{output:?}");
+    });
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    fixture.restart();
+    let narrowing = |fixture: &Fixture| fixture.ok(&["work", "--chats"])[0]["narrowing"].clone();
+    let resume = |fixture: &Fixture, args: &[&str]| {
+        let mut command = fixture.command();
+        command.args(["resume", "talk", "--focus"]).args(args);
+        let (output, transcript) = fixture.interactive_command(&mut command, "");
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+    };
+
+    let output = fixture.run(&[
+        "resume",
+        "talk",
+        "--focus",
+        "--permission",
+        "api_writes=direct",
+    ]);
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["work", "--chats"])[0]["restore"], "resume");
+    // The restored agent exits at once, which stops the chat again.
+    resume(&fixture, &["--permission", "push=propose"]);
+    assert_eq!(narrowing(&fixture), serde_json::json!({"push": "propose"}));
+    resume(&fixture, &[]);
+    assert_eq!(narrowing(&fixture), serde_json::json!({"push": "propose"}));
+}
+
 /// A repository's own mode decides the kind of space, its rules and the
 /// instructions after the subject; `--worktree` starts a chat mode in a
 /// workspace; the workspace records the mode of its latest agent.

@@ -98,6 +98,15 @@ pub(in crate::cli) fn item_reference(input: &str) -> Result<String, std::convert
     })
 }
 
+/// The narrowing one `--permission KEY=VALUE` gives, refusing an unknown
+/// key or value before anything is asked.
+pub(in crate::cli) fn permission_assignment(
+    text: &str,
+) -> Result<crate::config::permissions::PermissionsConfig, String> {
+    crate::config::permissions::PermissionsConfig::assigned(&[text.to_owned()])
+        .map_err(|error| format!("{error:#}"))
+}
+
 /// clap parser for [`Agent`] that also advertises its values for completion.
 #[derive(Clone)]
 pub struct AgentParser;

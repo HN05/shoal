@@ -7,7 +7,7 @@ use clap::Subcommand;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, SpaceTargets},
+    cli::args::{AgentParser, SpaceTargets, permission_assignment},
     model::QueuePlace,
     sessions::HostName,
 };
@@ -40,6 +40,16 @@ pub enum SessionsCommand {
         /// agent limits.
         #[arg(short = 'f', long, conflicts_with_all = ["discard", "all"])]
         focus: bool,
+        /// Replace the narrowing the restored agents and chats recorded, as
+        /// KEY=VALUE such as push=propose; repeatable. A value wider than
+        /// an agent's mode is refused before anything is restored.
+        #[arg(
+            long = "permission",
+            value_name = "KEY=VALUE",
+            value_parser = permission_assignment,
+            conflicts_with_all = ["discard", "all", "queue_entry"]
+        )]
+        narrowing: Vec<crate::config::permissions::PermissionsConfig>,
         /// The queue entry whose slot the restored agent takes, for the
         /// daemon's start of a queued restore.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]

@@ -7,7 +7,7 @@ use clap::{Args, Subcommand};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ModelArgs, item_reference},
+    cli::args::{AgentParser, ModelArgs, item_reference, permission_assignment},
 };
 
 #[derive(Debug, Subcommand)]
@@ -70,7 +70,7 @@ pub struct StartArgs {
     /// Narrow a permission of the mode, as KEY=VALUE such as push=propose;
     /// repeatable. A value wider than the mode's is refused, and one wider
     /// than the parent space's gets no more than the parent's.
-    #[arg(long = "permission", value_name = "KEY=VALUE", value_parser = assignment)]
+    #[arg(long = "permission", value_name = "KEY=VALUE", value_parser = permission_assignment)]
     pub narrowing: Vec<crate::config::permissions::PermissionsConfig>,
     /// The narrowing a restored or imported chat recorded, as JSON, which a
     /// start in a background place keeps unchecked.
@@ -259,13 +259,6 @@ pub struct ContributeArgs {
     /// Arguments forwarded to the agent.
     #[arg(last = true)]
     pub args: Vec<OsString>,
-}
-
-/// The narrowing one `--permission KEY=VALUE` gives, refusing an unknown
-/// key or value before anything is asked.
-fn assignment(text: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
-    crate::config::permissions::PermissionsConfig::assigned(&[text.to_owned()])
-        .map_err(|error| format!("{error:#}"))
 }
 
 /// A recorded narrowing passed on as JSON.

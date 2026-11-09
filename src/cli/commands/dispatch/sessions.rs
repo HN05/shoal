@@ -5,6 +5,7 @@ use crate::cli::{
     commands::{demo, queue, restart, resume, sessions},
     context::Context,
 };
+use crate::config::permissions::PermissionsConfig;
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand) -> Result<i32> {
     match command {
@@ -22,6 +23,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             discard,
             now,
             focus,
+            narrowing,
             queue_entry,
             opened_in,
             close_in,
@@ -33,7 +35,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                 resume::close_place_when_done(&ctx, host, &targets).await;
             }
             match queue_entry {
-                None => resume::select(&ctx, targets, execution, discard, now, focus).await,
+                None => {
+                    let options = resume::Options {
+                        execution,
+                        discard,
+                        now,
+                        focus,
+                        narrowing: replacement(&narrowing),
+                    };
+                    resume::select(&ctx, targets, options).await
+                }
                 Some(entry) => resume::start_entry(&ctx, targets, execution, entry).await,
             }
         }
@@ -57,4 +68,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             print,
         } => queue::run(&ctx, command, repository, print).await,
     }
+}
+
+/// The narrowing the `--permission` assignments of a resume or restart
+/// give, which replaces the recorded one; none without any, which keeps it.
+fn replacement(narrowings: &[PermissionsConfig]) -> Option<PermissionsConfig> {
+    (!narrowings.is_empty()).then(|| PermissionsConfig::combined(narrowings))
 }
