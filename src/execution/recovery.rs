@@ -1263,7 +1263,7 @@ impl Saved {
 /// `workspace_id` `narrowing` in place of the one it recorded.
 pub(crate) fn replace_narrowing(
     paths: &Paths,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
     id: &str,
     narrowing: crate::config::permissions::PermissionsConfig,
 ) -> Result<()> {

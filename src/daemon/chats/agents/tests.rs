@@ -98,7 +98,8 @@ fn only_a_running_chat_whose_agent_resumes_starts_a_restart() {
                 &SpaceId::from("c1"),
                 Some(&chat(Some("s1"), None)),
                 false,
-                run("a"), None,
+                run("a"),
+                None,
             )
             .is_err()
     );

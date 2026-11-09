@@ -51,10 +51,10 @@ pub(super) async fn check(
 /// saved, only `execution`'s when given.
 async fn saved_agents(
     ctx: &Context,
-    selector: &str,
+    selector: &SpaceSelector,
     execution: Option<&str>,
 ) -> Result<(Workspace, Saved)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
         .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;

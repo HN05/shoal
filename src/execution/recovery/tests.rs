@@ -637,6 +637,7 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
 fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
+    let workspace = SpaceId::from("workspace");
     let agent = crate::execution::TrackedAgent {
         narrowing: crate::config::permissions::PermissionsConfig::assigned(
             &["push=propose".into()],
@@ -644,23 +645,23 @@ fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
         .unwrap(),
         ..crate::execution::TrackedAgent::named("claude")
     };
-    save_record(&paths, "workspace", "stopped", &agent, Some("asked"), None).unwrap();
-    LastSession::save(&paths, "workspace", &agent, "last").unwrap();
+    save_record(&paths, &workspace, "stopped", &agent, Some("asked"), None).unwrap();
+    LastSession::save(&paths, &workspace, &agent, "last").unwrap();
     let replacement =
         crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
             .unwrap();
-    Saved::load(&paths, "workspace")
+    Saved::load(&paths, &workspace)
         .unwrap()
         .replace_narrowing(replacement)
         .unwrap();
-    let record = Record::load(&record_path(&paths, "workspace", "stopped"))
+    let record = Record::load(&record_path(&paths, &workspace, "stopped"))
         .unwrap()
         .unwrap();
     assert_eq!(
         (record.narrowing, record.stop_reason.as_deref()),
         (replacement, Some("asked"))
     );
-    let last = LastSession::all(&paths, "workspace").unwrap();
+    let last = LastSession::all(&paths, &workspace).unwrap();
     assert_eq!(
         last.iter()
             .map(|last| (last.execution.as_str(), last.narrowing))
@@ -669,10 +670,10 @@ fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
     );
 
     // A record a restore claimed is refused, and none changes.
-    let record = record_path(&paths, "workspace", "stopped");
+    let record = record_path(&paths, &workspace, "stopped");
     let _restoring = claim(&record).unwrap();
-    let saved = Saved::load(&paths, "workspace").unwrap();
+    let saved = Saved::load(&paths, &workspace).unwrap();
     assert!(saved.replace_narrowing(Default::default()).is_err());
-    let last = LastSession::all(&paths, "workspace").unwrap();
+    let last = LastSession::all(&paths, &workspace).unwrap();
     assert_eq!(last[0].narrowing, replacement);
 }

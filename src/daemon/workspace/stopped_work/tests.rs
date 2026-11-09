@@ -17,7 +17,7 @@ async fn a_narrowing_replaces_no_agent_when_one_is_refused() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (mut agents, mut stopped_id) = (Vec::new(), String::new());
+    let (mut agents, mut stopped_id) = (Vec::new(), None);
     for name in ["stopped", "running"] {
         let workspace = manager
             .create_workspace(&repo.id, name.into(), None, None, None)
@@ -30,11 +30,11 @@ async fn a_narrowing_replaces_no_agent_when_one_is_refused() {
         if name == "stopped" {
             let agent = TrackedAgent::named("claude");
             LastSession::save(&manager.paths, &workspace.id, &agent, "stopped-agent").unwrap();
-            stopped_id = workspace.id;
+            stopped_id = Some(workspace.id);
         }
     }
     let stopped = |manager: &crate::daemon::workspace::Manager| {
-        LastSession::all(&manager.paths, &stopped_id).unwrap()[0].narrowing
+        LastSession::all(&manager.paths, stopped_id.as_ref().unwrap()).unwrap()[0].narrowing
     };
     let narrowing = PermissionsConfig::assigned(&["push=propose".into()]).unwrap();
 
