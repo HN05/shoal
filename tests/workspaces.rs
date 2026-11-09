@@ -23930,126 +23930,136 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
 #[test]
 fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
     for github in [true, false] {
-        // Both forges read and PATCH the PR through their API with the token.
-        let mut fixture = Fixture::with_config(Some(
-            "machine.forges.\"github.com\".token = \"secret123\"\n\
+        restack_on_merge(github, "lower");
+    }
+}
+
+#[test]
+fn a_base_pr_from_another_branch_retargets_the_prs_stacked_on_it() {
+    restack_on_merge(false, "lower-stacked");
+}
+
+/// Merge the PR of the `lower` workspace, whose head is `lower_head`, and
+/// check that `upper`, whose PR targets that branch, is restacked and its
+/// PR retargeted.
+fn restack_on_merge(github: bool, lower_head: &str) {
+    // Both forges read and PATCH the PR through their API with the token.
+    let mut fixture = Fixture::with_config(Some(
+        "machine.forges.\"github.com\".token = \"secret123\"\n\
              machine.forges.\"forge.example\".token = \"secret123\"\n\
              [cleanup.auto]\nenabled=false\n",
-        ));
-        let lower = fixture.add("lower");
-        let repo = fixture.repo.to_str().unwrap().to_owned();
-        fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
-        let origin = if github {
-            "git@github.com:team/project.git"
-        } else {
-            "https://forge.example/team/project.git"
-        };
-        git(&fixture.repo, &["remote", "add", "origin", origin]);
-        git(
-            &fixture.repo,
-            &[
-                "symbolic-ref",
-                "refs/remotes/origin/HEAD",
-                "refs/remotes/origin/main",
-            ],
-        );
-        let root = fixture.root.path().to_owned();
-        let bin = root.join("bin");
-        fs::create_dir_all(&bin).unwrap();
-        install_api_curl(&bin);
-        let fake_api = fs::read_to_string(bin.join("curl")).unwrap();
-        install_test_script(
-            bin.join("curl"),
-            fake_api.replacen(
-                "cat >/dev/null\n",
-                r#"case "$*" in *PATCH*)
+    ));
+    let lower = fixture.add("lower");
+    let repo = fixture.repo.to_str().unwrap().to_owned();
+    fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
+    let origin = if github {
+        "git@github.com:team/project.git"
+    } else {
+        "https://forge.example/team/project.git"
+    };
+    git(&fixture.repo, &["remote", "add", "origin", origin]);
+    git(
+        &fixture.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    let root = fixture.root.path().to_owned();
+    let bin = root.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    install_api_curl(&bin);
+    let fake_api = fs::read_to_string(bin.join("curl")).unwrap();
+    install_test_script(
+        bin.join("curl"),
+        fake_api.replacen(
+            "cat >/dev/null\n",
+            r#"case "$*" in *PATCH*)
   printf '%s\n' "$@" > "$HOME/curl-args"; cat > "$HOME/curl-stdin"
   echo "2 main" >> "$HOME/edits"; printf '{}\n0 200'; exit;;
 esac
 cat >/dev/null
 "#,
-                1,
-            ),
-        );
-        let head = git(
-            Path::new(lower["path"].as_str().unwrap()),
-            &["rev-parse", "HEAD"],
-        );
-        let head = head.trim();
-        let commits = if github {
-            "repos/team/project/pulls/1/commits?per_page=100&page=1"
-        } else {
-            "repos/team/project/pulls/1/commits?limit=50&page=1"
-        };
-        script_api(&root, commits, &serde_json::json!([{"sha": head}]));
-        let write_pr = |number: u64, state: &str, head_branch: &str, base: &str| {
-            let mut rest = forgejo_pull(number, &state.to_lowercase(), head_branch, head);
-            rest["base"]["ref"] = base.into();
-            rest["head"]["repo"]["full_name"] = "team/project".into();
-            script_api(&root, &format!("repos/team/project/pulls/{number}"), &rest);
-        };
-        write_pr(1, "Open", "lower", "main");
-        write_pr(2, "Open", "upper", "lower");
-        fixture.ok(&["link", "pr", "1", "assigned", "--space", "lower"]);
-        fixture.ok(&["link", "pr", "2", "assigned", "--space", "upper"]);
-        fixture.restart();
-        assert_eq!(
-            fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
-            "lower"
-        );
+            1,
+        ),
+    );
+    let head = git(
+        Path::new(lower["path"].as_str().unwrap()),
+        &["rev-parse", "HEAD"],
+    );
+    let head = head.trim();
+    let commits = if github {
+        "repos/team/project/pulls/1/commits?per_page=100&page=1"
+    } else {
+        "repos/team/project/pulls/1/commits?limit=50&page=1"
+    };
+    script_api(&root, commits, &serde_json::json!([{"sha": head}]));
+    let write_pr = |number: u64, state: &str, head_branch: &str, base: &str| {
+        let mut rest = forgejo_pull(number, &state.to_lowercase(), head_branch, head);
+        rest["base"]["ref"] = base.into();
+        rest["head"]["repo"]["full_name"] = "team/project".into();
+        script_api(&root, &format!("repos/team/project/pulls/{number}"), &rest);
+    };
+    write_pr(1, "Open", lower_head, "main");
+    write_pr(2, "Open", "upper", lower_head);
+    fixture.ok(&["link", "pr", "1", "assigned", "--space", "lower"]);
+    fixture.ok(&["link", "pr", "2", "assigned", "--space", "upper"]);
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
+        "lower"
+    );
 
-        write_pr(1, "Merged", "lower", "main");
-        fixture.restart();
-        wait_until("restacked upper", || {
-            fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()
+    write_pr(1, "Merged", lower_head, "main");
+    fixture.restart();
+    wait_until("restacked upper", || {
+        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()
+    });
+    let edits = fs::read_to_string(root.join("edits")).unwrap();
+    assert_eq!(edits, "2 main\n");
+    let (api, authorization) = if github {
+        ("https://api.github.com", "Bearer secret123")
+    } else {
+        ("https://forge.example/api/v1", "token secret123")
+    };
+    let args = fs::read_to_string(root.join("curl-args")).unwrap();
+    assert!(args.contains("PATCH\n"), "{args}");
+    assert!(args.contains("{\"base\":\"main\"}\n"), "{args}");
+    assert!(
+        args.contains(&format!("{api}/repos/team/project/pulls/2\n")),
+        "{args}"
+    );
+    assert!(!args.contains("secret123"), "{args}");
+    let config = fs::read_to_string(root.join("curl-stdin")).unwrap();
+    assert_eq!(
+        config,
+        format!("header = \"Authorization: {authorization}\"\n")
+    );
+    // A PR activity lookup that failed around the restart may report
+    // before the update the restack queued.
+    let updates = fixture.ok(&["watch", "pr", "--space", "upper", "--timeout", "1"]);
+    let update = updates["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|update| update["kind"] == "base_merged")
+        .unwrap_or_else(|| panic!("{updates}"));
+    let message = update["message"].as_str().unwrap();
+    assert!(message.contains(head), "{message}");
+    let events = fixture
+        .command()
+        .args(["--json", "internal", "events"])
+        .output()
+        .unwrap();
+    let restacked = String::from_utf8(events.stdout)
+        .unwrap()
+        .lines()
+        .any(|line| {
+            let event: Value = serde_json::from_str(line).unwrap();
+            event["kind"] == "base_changed" && event["name"] == "upper" && event["cause"] == "pr"
         });
-        let edits = fs::read_to_string(root.join("edits")).unwrap();
-        assert_eq!(edits, "2 main\n");
-        let (api, authorization) = if github {
-            ("https://api.github.com", "Bearer secret123")
-        } else {
-            ("https://forge.example/api/v1", "token secret123")
-        };
-        let args = fs::read_to_string(root.join("curl-args")).unwrap();
-        assert!(args.contains("PATCH\n"), "{args}");
-        assert!(args.contains("{\"base\":\"main\"}\n"), "{args}");
-        assert!(
-            args.contains(&format!("{api}/repos/team/project/pulls/2\n")),
-            "{args}"
-        );
-        assert!(!args.contains("secret123"), "{args}");
-        let config = fs::read_to_string(root.join("curl-stdin")).unwrap();
-        assert_eq!(
-            config,
-            format!("header = \"Authorization: {authorization}\"\n")
-        );
-        // A PR activity lookup that failed around the restart may report
-        // before the update the restack queued.
-        let updates = fixture.ok(&["watch", "pr", "--space", "upper", "--timeout", "1"]);
-        let update = updates["updates"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|update| update["kind"] == "base_merged")
-            .unwrap_or_else(|| panic!("{updates}"));
-        let message = update["message"].as_str().unwrap();
-        assert!(message.contains(head), "{message}");
-        let events = fixture
-            .command()
-            .args(["--json", "internal", "events"])
-            .output()
-            .unwrap();
-        let restacked = String::from_utf8(events.stdout)
-            .unwrap()
-            .lines()
-            .any(|line| {
-                let event: Value = serde_json::from_str(line).unwrap();
-                event["kind"] == "base_changed"
-                    && event["name"] == "upper"
-                    && event["cause"] == "pr"
-            });
-        assert!(restacked);
-    }
+    assert!(restacked);
 }
 
 #[test]

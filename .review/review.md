@@ -278,7 +278,7 @@ instead of the PR delivery guidance below.
   and removal moves stacked workspaces down to the removed workspace's base.
 - Once every watched PR of a base merges and covers its HEAD, the PR sweep restacks its stacked
   workspaces before cleanup can remove it, retargets only their PRs still
-  targeting its branch, and queues a watch update; it never rebases or pushes.
+  targeting the head branch of one of its merged PRs, and queues a watch update; it never rebases or pushes.
   Forge writes are retargeting, the daemon's typed issue and PR actions and
   `shoal forge api` requests, sent through the REST transport; scoped callers cannot
   merge. `shoal forge api` paths stay under the forge's API root. Every forge

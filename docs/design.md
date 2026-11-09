@@ -652,7 +652,8 @@ the creation base names another workspace's branch locally or on a remote, so
 stacks span workspaces on any forge. The base is local metadata, not a link:
 removing it moves its stacked workspaces down to its own base and journals the
 change. When every watched PR of the base merges and covers its HEAD, the PR sweep does the same
-before cleanup can remove it, retargets stacked PRs still targeting its branch,
+before cleanup can remove it, retargets stacked PRs still targeting the head
+branch of one of its merged PRs,
 and queues a watch update; agents rebase their own branches, since Shoal never
 moves workspace branches. Retargeting goes through the same REST transport as
 issue and PR actions. Adoption

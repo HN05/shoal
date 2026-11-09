@@ -2481,7 +2481,8 @@ none. `work status` shows both directions; `work --json` and `work status --json
 Once every watched PR of a base workspace has merged, with its HEAD among the
 merged commits, the daemon moves the
 workspaces stacked on it to its own base workspace and retargets their linked
-PRs that still target its branch to the branch it merged into. Their next
+PRs that still target the head branch of one of its merged PRs, which need not
+be its own branch, to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent
 rebases and force-pushes its branch. The PR is retargeted through the forge's
 API with your [token](#forges) for that host, passed to curl on stdin. A
