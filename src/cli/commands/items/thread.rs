@@ -9,11 +9,14 @@ use crate::{
         context::Context,
         ui,
     },
-    forge::items::action::{Action, ThreadChange},
+    forge::{
+        items::action::{Action, ThreadChange},
+        numbers::CommentId,
+    },
 };
 
 /// A reply in the thread of `comment`, which needs a body.
-pub(super) fn reply(comment: u64, body: BodyArgs) -> Result<Action> {
+pub(super) fn reply(comment: CommentId, body: BodyArgs) -> Result<Action> {
     let reply = read_body(body)?.context("a reply needs --body or --body-file")?;
     Ok(thread(comment, Some(reply), None))
 }
@@ -23,7 +26,7 @@ pub(super) fn reply(comment: u64, body: BodyArgs) -> Result<Action> {
 pub(super) async fn resolve(
     ctx: &Context,
     item: &ItemSelector,
-    comment: u64,
+    comment: CommentId,
     body: BodyArgs,
     confirmed: bool,
 ) -> Result<Action> {
@@ -34,7 +37,7 @@ pub(super) async fn resolve(
     Ok(thread(comment, reply, Some(true)))
 }
 
-pub(super) fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>) -> Action {
+pub(super) fn thread(comment: CommentId, reply: Option<String>, resolve: Option<bool>) -> Action {
     Action::Thread(ThreadChange {
         comment,
         reply,
@@ -44,7 +47,11 @@ pub(super) fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>)
 
 /// Ask before resolving a thread without a reply, which leaves the reviewer
 /// no reason.
-async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64) -> Result<()> {
+async fn confirm_unanswered(
+    ctx: &Context,
+    selector: &ItemSelector,
+    comment: CommentId,
+) -> Result<()> {
     let context = item_context(ctx, selector).await?;
     let read = client::review_thread(&ctx.paths, context, selector.item.clone(), comment);
     let thread = ctx.progress("Reading thread", read).await?;

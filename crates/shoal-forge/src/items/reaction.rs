@@ -12,6 +12,7 @@ use crate::{
     account::Account,
     backends::Backend,
     items::{action::Acted, comment, link::ItemKind},
+    numbers::CommentId,
     review::view::Details,
     transport::api::Request,
     updates::Edited,
@@ -37,7 +38,7 @@ pub struct Reaction {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactionChange {
     /// The ID of a comment or inline comment, as `shoal view` shows it.
-    pub comment: Option<u64>,
+    pub comment: Option<CommentId>,
     /// GitHub's name for the reaction, or the forge's own.
     pub content: String,
     pub remove: bool,
@@ -59,9 +60,9 @@ pub(crate) enum Subject {
     /// The issue or PR itself.
     Item,
     /// A discussion comment.
-    Comment(u64),
+    Comment(CommentId),
     /// An inline comment on a PR's diff.
-    ReviewComment(u64),
+    ReviewComment(CommentId),
 }
 
 /// A reaction as the forge lists it.

@@ -9,6 +9,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
+    numbers::CommentId,
     review::thread::{Target, Thread},
     transport::api::Request,
 };
@@ -66,7 +67,7 @@ async fn inline_comments_of(
 }
 
 /// The Forgejo thread with `comment`.
-pub(crate) fn thread(reviews: &[(Value, Value)], comment: u64) -> Option<Thread> {
+pub(crate) fn thread(reviews: &[(Value, Value)], comment: CommentId) -> Option<Thread> {
     let comments = inline_comments(reviews);
     let found = comments.iter().find(|(_, value)| value["id"] == comment)?;
     let key = thread_key(found.0, found.1);
@@ -77,7 +78,7 @@ pub(crate) fn thread(reviews: &[(Value, Value)], comment: u64) -> Option<Thread>
         .collect();
     let first = thread.iter().min_by_key(|value| value["id"].as_u64())?;
     Some(Thread {
-        first: first["id"].as_u64()?,
+        first: CommentId::new(first["id"].as_u64()?),
         replies: thread.len() - 1,
         resolved: Some(thread.iter().any(|value| !value["resolver"].is_null())),
         target: Target::Forgejo {

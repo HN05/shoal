@@ -10,7 +10,7 @@ fn github_threads_carry_resolution_comments_and_cursors() {
         GitHubThread {
             node: "T_1".into(),
             resolved: true,
-            comments: vec![5, 9],
+            comments: vec![CommentId::new(5), CommentId::new(9)],
         }
     );
     assert_eq!(
@@ -28,12 +28,12 @@ fn threads_are_found_from_any_of_their_comments() {
     let threads = [GitHubThread {
         node: "T_1".into(),
         resolved: false,
-        comments: vec![5, 9],
+        comments: vec![CommentId::new(5), CommentId::new(9)],
     }];
-    let found = thread(&threads, 9).unwrap();
+    let found = thread(&threads, CommentId::new(9)).unwrap();
     assert_eq!(
-        (found.first, found.replies, found.resolved),
+        (found.first.get(), found.replies, found.resolved),
         (5, 1, Some(false))
     );
-    assert!(thread(&threads, 6).is_none());
+    assert!(thread(&threads, CommentId::new(6)).is_none());
 }

@@ -41,7 +41,7 @@ use crate::{
         reaction::{Listed, Subject},
         revert::NewRevert,
     },
-    numbers::{JobId, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, JobId, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -427,7 +427,7 @@ impl Backend for GitHub {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<Option<Thread>> {
         Ok(threads::thread(
             &threads::threads(repo, account, number).await?,

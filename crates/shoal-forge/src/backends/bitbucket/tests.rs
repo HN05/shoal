@@ -176,7 +176,7 @@ fn inline_threads_become_reviews_with_their_resolution() {
     assert_eq!(
         comments
             .iter()
-            .map(|c| (c.id, c.body.as_str()))
+            .map(|c| (c.id.get(), c.body.as_str()))
             .collect::<Vec<_>>(),
         [(1, "Looks fine"), (4, "Agreed")]
     );
@@ -186,7 +186,13 @@ fn inline_threads_become_reviews_with_their_resolution() {
     assert_eq!(
         thread
             .iter()
-            .map(|c| (c.id, c.thread, c.body.as_str(), c.line, c.resolved))
+            .map(|c| (
+                c.id.get(),
+                c.thread.get(),
+                c.body.as_str(),
+                c.line,
+                c.resolved
+            ))
             .collect::<Vec<_>>(),
         [
             (2, 2, "Bug", Some(3), Some(true)),
@@ -205,13 +211,16 @@ fn replies_find_the_thread_they_belong_to() {
         {"id": 6}
     ]);
     let listed = listed.as_array().unwrap();
-    let thread = find_thread(listed, 4).unwrap();
+    let thread = find_thread(listed, CommentId::new(4)).unwrap();
     assert_eq!(
-        (thread.first, thread.replies, thread.resolved),
+        (thread.first.get(), thread.replies, thread.resolved),
         (2, 2, Some(true))
     );
-    assert_eq!(find_thread(listed, 6).unwrap().resolved, Some(false));
-    assert!(find_thread(listed, 5).is_none());
+    assert_eq!(
+        find_thread(listed, CommentId::new(6)).unwrap().resolved,
+        Some(false)
+    );
+    assert!(find_thread(listed, CommentId::new(5)).is_none());
 }
 
 #[test]
@@ -316,7 +325,7 @@ fn comment_edits_replace_the_raw_content_of_inline_and_issue_comments() {
             .unwrap()
     };
     assert_eq!(
-        edit(ItemKind::Pr, 7, Subject::ReviewComment(40)),
+        edit(ItemKind::Pr, 7, Subject::ReviewComment(CommentId::new(40))),
         Request::new(
             HttpMethod::Put,
             "repositories/workspace/repo/pullrequests/7/comments/40".into(),
@@ -324,7 +333,7 @@ fn comment_edits_replace_the_raw_content_of_inline_and_issue_comments() {
         )
     );
     assert_eq!(
-        edit(ItemKind::Issue, 3, Subject::Comment(41)).endpoint,
+        edit(ItemKind::Issue, 3, Subject::Comment(CommentId::new(41))).endpoint,
         "repositories/workspace/repo/issues/3/comments/41"
     );
 }

@@ -17,6 +17,7 @@ use crate::{
             issue::IssueDetails,
             link::{ItemKind, LinkKind, Selection},
         },
+        numbers::CommentId,
         review::{reviewers::Reviewer, thread::Thread},
     },
     model::{Dependency, Repository, Selected, SelectedItem},
@@ -184,7 +185,7 @@ impl Manager {
         &self,
         context: &ItemContext,
         item: Option<String>,
-        comment: u64,
+        comment: CommentId,
         scoped: bool,
     ) -> Result<Thread> {
         let place = self.read_place(context).await?;

@@ -37,7 +37,7 @@ use crate::{
         reaction::{Listed, Subject, allowed::AllowedReactions},
         revert::NewRevert,
     },
-    numbers::{JobId, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, JobId, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -443,7 +443,7 @@ pub(crate) trait Backend {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<Option<Thread>>;
 
     /// The request that replies in `thread` on PR `number`.

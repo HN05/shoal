@@ -5,14 +5,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ForgeRepo, account::Account, backends::Backend, items::action::ThreadChange,
-    transport::api::Request,
+    numbers::CommentId, transport::api::Request,
 };
 
 /// A review thread, found from any of its comments.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
     /// The comment that starts the thread.
-    pub first: u64,
+    pub first: CommentId,
     /// The comments after the first.
     pub replies: usize,
     /// Unknown where the forge does not report it.
@@ -44,7 +44,12 @@ pub(crate) enum Target {
 
 impl ForgeRepo {
     /// The thread of `comment` on PR `number`.
-    pub async fn thread(&self, account: &Account, number: u64, comment: u64) -> Result<Thread> {
+    pub async fn thread(
+        &self,
+        account: &Account,
+        number: u64,
+        comment: CommentId,
+    ) -> Result<Thread> {
         let thread = self.kind.thread(self, account, number, comment).await?;
         thread.with_context(|| format!("comment {comment} is not in a review thread of #{number}"))
     }

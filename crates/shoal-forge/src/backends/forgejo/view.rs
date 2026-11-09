@@ -8,6 +8,7 @@ use crate::{
     account::Account,
     backends::github_rest,
     items::link::ItemKind,
+    numbers::CommentId,
     review::view::{
         AutoMerge, Details, Review, ReviewComment, login, review_comment, review_state, text_field,
     },
@@ -120,7 +121,7 @@ fn parse_review_comments(review: u64, comments: &Value) -> Result<Vec<ReviewComm
                 comment,
                 &comment["position"],
                 &comment["original_position"],
-                thread,
+                CommentId::new(thread),
                 Some(resolved),
             )
         })

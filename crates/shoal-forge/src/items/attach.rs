@@ -9,7 +9,9 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capability};
+use crate::{
+    ForgeRepo, account::Account, backends::Backend, capability::Capability, numbers::CommentId,
+};
 
 /// The largest image Shoal uploads, which is GitHub's limit.
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
@@ -214,7 +216,7 @@ pub(crate) enum Holder {
     Repository,
     /// The issue or PR whose description shows it.
     Item(u64),
-    Comment(u64),
+    Comment(CommentId),
 }
 
 /// A body to post before its files can be uploaded, and the files.

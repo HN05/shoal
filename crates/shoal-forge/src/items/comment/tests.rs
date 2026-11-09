@@ -32,13 +32,16 @@ fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies()
         milestone: None,
         body: String::new(),
         pr: None,
-        comments: Some(vec![comment(10, "bob")]),
+        comments: Some(vec![comment(CommentId::new(10), "bob")]),
         reviews: Some(vec![Review {
             author: "bot".into(),
             state: String::new(),
             submitted_at: String::new(),
             body: String::new(),
-            comments: vec![review_comment(20, "bot"), review_comment(21, "me")],
+            comments: vec![
+                review_comment(CommentId::new(20), "bot"),
+                review_comment(CommentId::new(21), "me"),
+            ],
         }]),
         reactions: Vec::new(),
     };
@@ -48,9 +51,17 @@ fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies()
     assert_eq!(
         listed,
         [
-            (Subject::Comment(10), "bob", "comment 10"),
-            (Subject::ReviewComment(20), "bot", "comment 20"),
-            (Subject::ReviewComment(21), "me", "comment 21"),
+            (Subject::Comment(CommentId::new(10)), "bob", "comment 10"),
+            (
+                Subject::ReviewComment(CommentId::new(20)),
+                "bot",
+                "comment 20"
+            ),
+            (
+                Subject::ReviewComment(CommentId::new(21)),
+                "me",
+                "comment 21"
+            ),
         ]
     );
 }
@@ -58,7 +69,7 @@ fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies()
 #[test]
 fn an_edit_needs_a_body() {
     let edit = |body: &str| CommentEdit {
-        comment: 3,
+        comment: CommentId::new(3),
         body: body.into(),
     };
     assert!(edit("Fixed").validate().is_ok());

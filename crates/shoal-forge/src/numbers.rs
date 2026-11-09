@@ -1,7 +1,7 @@
-//! The numbers a forge gives its runs, jobs and runners, each its own type
-//! so one is never passed as another. Each serializes and stores as the
-//! number it holds; backends convert where they read a response or build a
-//! request.
+//! The numbers a forge gives its runs, jobs, runners and comments, each its
+//! own type so one is never passed as another. Each serializes and stores as
+//! the number it holds; backends convert where they read a response or build
+//! a request.
 use std::{fmt, num::ParseIntError, str::FromStr};
 
 /// Defines `$name` as a forge number held as a `u64`.
@@ -94,6 +94,10 @@ forge_number!(
 forge_number!(
     /// The ID of a CI runner the forge registered.
     RunnerId
+);
+forge_number!(
+    /// The ID of a comment on an issue or PR, or in a review thread.
+    CommentId
 );
 
 #[cfg(test)]

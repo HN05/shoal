@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
+    numbers::CommentId,
     review::thread::{Target, Thread},
     transport::api::{HttpMethod, Request},
 };
@@ -17,7 +18,7 @@ pub(crate) struct GitHubThread {
     pub node: String,
     pub resolved: bool,
     /// The REST IDs of its comments, first comment first.
-    pub comments: Vec<u64>,
+    pub comments: Vec<CommentId>,
 }
 
 const GITHUB_THREADS: &str = "query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first: 100) { pageInfo { hasNextPage endCursor } nodes { databaseId } } } } } } }";
@@ -103,10 +104,11 @@ fn thread_node(node: &Value) -> Result<GitHubThread> {
     })
 }
 
-fn comment_ids(comments: &[Value]) -> Vec<u64> {
+fn comment_ids(comments: &[Value]) -> Vec<CommentId> {
     comments
         .iter()
         .filter_map(|comment| comment["databaseId"].as_u64())
+        .map(CommentId::new)
         .collect()
 }
 
@@ -123,7 +125,7 @@ fn next_cursor(connection: &Value) -> Result<Option<String>> {
 }
 
 /// The GitHub thread with `comment`.
-pub(crate) fn thread(threads: &[GitHubThread], comment: u64) -> Option<Thread> {
+pub(crate) fn thread(threads: &[GitHubThread], comment: CommentId) -> Option<Thread> {
     let thread = threads
         .iter()
         .find(|thread| thread.comments.contains(&comment))?;

@@ -18,6 +18,7 @@ use crate::{
         link::ItemKind,
         reaction::{ReactionChange, Subject},
     },
+    numbers::CommentId,
     review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
     updates::{Edited, ItemDetails},
@@ -189,7 +190,7 @@ pub(crate) fn changed_set(current: &[String], added: &[String], removed: &[Strin
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadChange {
     /// Any comment of the thread.
-    pub comment: u64,
+    pub comment: CommentId,
     pub reply: Option<String>,
     pub resolve: Option<bool>,
 }
@@ -786,9 +787,10 @@ fn ensure_open(item: &Item) -> Result<()> {
 }
 
 /// The ID of the comment a post's response describes.
-fn comment_id(response: &serde_json::Value) -> Result<u64> {
+fn comment_id(response: &serde_json::Value) -> Result<CommentId> {
     response["id"]
         .as_u64()
+        .map(CommentId::new)
         .context("the forge did not report the comment's ID")
 }
 

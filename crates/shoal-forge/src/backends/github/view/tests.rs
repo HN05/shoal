@@ -41,18 +41,21 @@ fn github_inline_comments_join_the_review_that_posted_them() {
     let threads = [GitHubThread {
         node: "T_1".into(),
         resolved: true,
-        comments: vec![10, 11],
+        comments: vec![CommentId::new(10), CommentId::new(11)],
     }];
     let reviews = parse_reviews(&reviews, &comments, &threads).unwrap();
     assert_eq!(reviews.len(), 2);
     assert_eq!(reviews[0].state, "changes_requested");
     let bug = &reviews[0].comments[0];
-    assert_eq!((bug.id, bug.thread, bug.line), (10, 10, Some(3)));
+    assert_eq!(
+        (bug.id.get(), bug.thread.get(), bug.line),
+        (10, 10, Some(3))
+    );
     assert_eq!(bug.resolved, Some(true));
     let fixed = &reviews[1].comments[0];
     assert_eq!((fixed.body.as_str(), fixed.line), ("Fixed", Some(2)));
     assert_eq!(
-        (fixed.id, fixed.thread, fixed.resolved),
+        (fixed.id.get(), fixed.thread.get(), fixed.resolved),
         (11, 10, Some(true))
     );
     // A thread GraphQL did not list has unknown resolution.

@@ -71,7 +71,7 @@ fn posts_are_keyed_where_each_forge_records_their_activity() {
     };
     let reply = |reply: Option<&str>| {
         Action::Thread(ThreadChange {
-            comment: 5,
+            comment: CommentId::new(5),
             reply: reply.map(str::to_owned),
             resolve: Some(true),
         })
@@ -541,7 +541,7 @@ fn actions_refuse_what_the_item_cannot_take() {
     );
     let thread = |reply: Option<&str>, resolve| {
         Action::Thread(ThreadChange {
-            comment: 5,
+            comment: CommentId::new(5),
             reply: reply.map(str::to_owned),
             resolve,
         })

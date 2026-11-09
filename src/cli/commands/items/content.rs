@@ -9,10 +9,13 @@ use crate::{
         BodyArgs,
         changes::{AttachArgs, EditArgs, PrEditArgs},
     },
-    forge::items::{
-        action::{Action, Edit, MilestoneChange},
-        attach::{self, Attachment},
-        comment::CommentEdit,
+    forge::{
+        items::{
+            action::{Action, Edit, MilestoneChange},
+            attach::{self, Attachment},
+            comment::CommentEdit,
+        },
+        numbers::CommentId,
     },
 };
 
@@ -50,7 +53,7 @@ pub(super) fn edit_fields(edit: EditArgs) -> Result<Edit> {
 pub(super) fn comment(
     body: BodyArgs,
     files: AttachArgs,
-    edit: Option<u64>,
+    edit: Option<CommentId>,
     posted: &'static str,
 ) -> Result<(Action, &'static str)> {
     let (body, attachments) = read_content(body, files)?;

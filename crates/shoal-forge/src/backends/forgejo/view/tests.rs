@@ -78,8 +78,14 @@ fn forgejo_reviews_carry_inline_comments_and_resolution() {
     assert_eq!(reviews.len(), 2);
     assert_eq!(reviews[0].state, "commented");
     let comments = &reviews[0].comments;
-    let thread =
-        |comment: &ReviewComment| (comment.id, comment.thread, comment.line, comment.resolved);
+    let thread = |comment: &ReviewComment| {
+        (
+            comment.id.get(),
+            comment.thread.get(),
+            comment.line,
+            comment.resolved,
+        )
+    };
     assert_eq!(thread(&comments[0]), (20, 20, Some(182), Some(true)));
     assert_eq!(thread(&comments[1]), (21, 20, Some(182), Some(true)));
     assert_eq!(thread(&comments[2]), (22, 22, Some(9), Some(false)));
@@ -91,7 +97,10 @@ fn forgejo_reviews_carry_inline_comments_and_resolution() {
     let comments = github_rest::comments(&[
         json!({"id": 5, "user": {"login": "a"}, "body": "b", "created_at": "c"}),
     ]);
-    assert_eq!((comments[0].id, comments[0].author.as_str()), (5, "a"));
+    assert_eq!(
+        (comments[0].id.get(), comments[0].author.as_str()),
+        (5, "a")
+    );
 }
 
 #[test]
@@ -119,5 +128,5 @@ fn a_review_whose_comments_fail_keeps_its_body_and_the_others() {
         (reviews[0].body.as_str(), reviews[0].comments.len()),
         ("Findings", 0)
     );
-    assert_eq!(reviews[1].comments[0].id, 30);
+    assert_eq!(reviews[1].comments[0].id, CommentId::new(30));
 }

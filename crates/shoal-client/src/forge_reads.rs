@@ -19,6 +19,7 @@ use crate::{
             reaction::allowed::AllowedReactions,
             revert::MergedPull,
         },
+        numbers::CommentId,
         raw::RawRequest,
         review::{reviewers::Reviewer, thread::Thread},
     },
@@ -195,7 +196,7 @@ pub async fn review_thread(
     daemon: &impl Daemon,
     context: ItemContext,
     item: Option<String>,
-    comment: u64,
+    comment: CommentId,
 ) -> Result<Thread> {
     let method = ItemMethod::ReviewThread {
         context,

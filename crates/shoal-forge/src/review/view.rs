@@ -11,6 +11,7 @@ use crate::{
     capability::Capability,
     ci::approval::WaitingRun,
     items::{action::MergeMethod, link::ItemKind, reaction::Reaction},
+    numbers::CommentId,
     review::status::{CheckResult, PrStatus, ReviewState},
 };
 
@@ -93,7 +94,7 @@ pub struct AutoMerge {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Comment {
     /// The forge's ID for the comment.
-    pub id: u64,
+    pub id: CommentId,
     pub author: String,
     pub created_at: String,
     pub body: String,
@@ -115,9 +116,9 @@ pub struct Review {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewComment {
     /// The ID `shoal pr reply` and `pr resolve` take.
-    pub id: u64,
+    pub id: CommentId,
     /// The ID of the comment that starts the thread; its own for a first comment.
-    pub thread: u64,
+    pub thread: CommentId,
     pub author: String,
     pub created_at: String,
     pub path: String,
@@ -265,12 +266,12 @@ pub(crate) fn review_comment(
     comment: &Value,
     line: &Value,
     original: &Value,
-    thread: u64,
+    thread: CommentId,
     resolved: Option<bool>,
 ) -> ReviewComment {
     let positive = |value: &Value| value.as_u64().filter(|line| *line > 0);
     ReviewComment {
-        id: comment["id"].as_u64().unwrap_or_default(),
+        id: CommentId::new(comment["id"].as_u64().unwrap_or_default()),
         thread,
         author: login(&comment["user"]),
         created_at: text_field(&comment["created_at"]),

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
 use crate::forge::download::Download;
+use crate::forge::numbers::CommentId;
 use crate::space_names::SpaceSelector;
 
 /// Requests about the issues and PRs of a workspace's repository and the ones it links.
@@ -167,7 +168,7 @@ pub enum ItemMethod {
         #[serde(flatten)]
         context: ItemContext,
         item: Option<String>,
-        comment: u64,
+        comment: CommentId,
     },
     /// The kind of the item numbered `number`: in a space, that of the
     /// linked item with that number, otherwise the kind the forge reports.

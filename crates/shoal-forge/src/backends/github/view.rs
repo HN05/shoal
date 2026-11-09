@@ -8,6 +8,7 @@ use crate::{
     account::Account,
     backends::github_rest,
     items::{action::MergeMethod, link::ItemKind},
+    numbers::CommentId,
     review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},
     transport::api::Request,
 };
@@ -98,12 +99,14 @@ fn parse_reviews(
                 .filter(|comment| comment["pull_request_review_id"].as_u64() == Some(id))
                 .map(|comment| {
                     let id = comment["id"].as_u64().unwrap_or_default();
-                    let thread = threads.iter().find(|thread| thread.comments.contains(&id));
+                    let thread = threads
+                        .iter()
+                        .find(|thread| thread.comments.contains(&CommentId::new(id)));
                     review_comment(
                         comment,
                         &comment["line"],
                         &comment["original_line"],
-                        comment["in_reply_to_id"].as_u64().unwrap_or(id),
+                        CommentId::new(comment["in_reply_to_id"].as_u64().unwrap_or(id)),
                         thread.map(|thread| thread.resolved),
                     )
                 })

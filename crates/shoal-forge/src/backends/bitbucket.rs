@@ -30,7 +30,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::RunNumber,
+    numbers::{CommentId, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -510,7 +510,7 @@ impl Backend for Bitbucket {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<Option<Thread>> {
         let pr = repo.item_endpoint(ItemKind::Pr, number);
         let comments = repo.pages(account, &format!("{pr}/comments")).await?;
@@ -1003,7 +1003,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         let start = comments.iter().find(|candidate| candidate["id"] == thread);
         if !start.is_some_and(|start| start["inline"].is_object()) {
             general.push(Comment {
-                id,
+                id: CommentId::new(id),
                 author: nickname(&comment["user"]),
                 created_at: text(&comment["created_on"]).unwrap_or_default(),
                 body: text(&comment["content"]["raw"]).unwrap_or_default(),
@@ -1013,7 +1013,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         }
         // Bitbucket records resolution on the thread's first comment.
         let resolved = start.is_some_and(|start| start["resolution"].is_object());
-        let review_comment = review_comment(comment, thread, resolved);
+        let review_comment = review_comment(comment, CommentId::new(thread), resolved);
         match reviews.iter_mut().find(|(root, _)| *root == thread) {
             Some((_, review)) => review.comments.push(review_comment),
             None => reviews.push((
@@ -1035,11 +1035,11 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// The thread with `comment`, named by its first comment.
-fn find_thread(comments: &[Value], comment: u64) -> Option<Thread> {
+fn find_thread(comments: &[Value], comment: CommentId) -> Option<Thread> {
     let comments = listed(comments);
     let root = roots(&comments);
     comments.iter().find(|value| value["id"] == comment)?;
-    let first = root(comment);
+    let first = root(comment.get());
     let start = comments.iter().find(|value| value["id"] == first)?;
     let replies = comments
         .iter()
@@ -1047,7 +1047,7 @@ fn find_thread(comments: &[Value], comment: u64) -> Option<Thread> {
         .filter(|id| *id != first && root(*id) == first)
         .count();
     Some(Thread {
-        first,
+        first: CommentId::new(first),
         replies,
         resolved: Some(start["resolution"].is_object()),
         target: Target::Bitbucket,
@@ -1076,10 +1076,10 @@ fn roots(comments: &[&Value]) -> impl Fn(u64) -> u64 {
 }
 
 /// An inline comment on the new side, or the old side of a removed line.
-fn review_comment(comment: &Value, thread: u64, resolved: bool) -> ReviewComment {
+fn review_comment(comment: &Value, thread: CommentId, resolved: bool) -> ReviewComment {
     let inline = &comment["inline"];
     ReviewComment {
-        id: comment["id"].as_u64().unwrap_or_default(),
+        id: CommentId::new(comment["id"].as_u64().unwrap_or_default()),
         thread,
         author: nickname(&comment["user"]),
         created_at: text(&comment["created_on"]).unwrap_or_default(),

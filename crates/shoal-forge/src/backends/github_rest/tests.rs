@@ -49,22 +49,34 @@ fn forgejo_keeps_inline_comments_and_their_reactions_with_issue_comments() {
         "repos/team/repo/issues/4/reactions"
     );
     assert_eq!(
-        endpoint(&github, Subject::Comment(9), Dialect::GitHub),
+        endpoint(
+            &github,
+            Subject::Comment(CommentId::new(9)),
+            Dialect::GitHub
+        ),
         "repos/team/repo/issues/comments/9/reactions"
     );
     assert_eq!(
-        endpoint(&github, Subject::ReviewComment(9), Dialect::GitHub),
+        endpoint(
+            &github,
+            Subject::ReviewComment(CommentId::new(9)),
+            Dialect::GitHub
+        ),
         "repos/team/repo/pulls/comments/9/reactions"
     );
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     assert!(
-        endpoint(&forgejo, Subject::ReviewComment(9), Dialect::Forgejo)
-            .ends_with("issues/comments/9/reactions")
+        endpoint(
+            &forgejo,
+            Subject::ReviewComment(CommentId::new(9)),
+            Dialect::Forgejo
+        )
+        .ends_with("issues/comments/9/reactions")
     );
     // Comment edits go to the same comments.
     let edit = |subject, dialect| edit_comment(&github, subject, "Why?", dialect).unwrap();
     assert_eq!(
-        edit(Subject::ReviewComment(9), Dialect::GitHub),
+        edit(Subject::ReviewComment(CommentId::new(9)), Dialect::GitHub),
         Request::new(
             HttpMethod::Patch,
             "repos/team/repo/pulls/comments/9".into(),
@@ -72,7 +84,7 @@ fn forgejo_keeps_inline_comments_and_their_reactions_with_issue_comments() {
         )
     );
     assert_eq!(
-        edit(Subject::ReviewComment(9), Dialect::Forgejo).endpoint,
+        edit(Subject::ReviewComment(CommentId::new(9)), Dialect::Forgejo).endpoint,
         "repos/team/repo/issues/comments/9"
     );
     assert!(edit_comment(&github, Subject::Item, "Why?", Dialect::GitHub).is_err());

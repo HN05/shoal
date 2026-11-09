@@ -68,13 +68,16 @@ fn reactions_go_to_the_item_its_comments_and_its_inline_comments() {
         milestone: None,
         body: String::new(),
         pr: None,
-        comments: Some(vec![comment(10), comment(11)]),
+        comments: Some(vec![
+            comment(CommentId::new(10)),
+            comment(CommentId::new(11)),
+        ]),
         reviews: Some(vec![Review {
             author: String::new(),
             state: String::new(),
             submitted_at: String::new(),
             body: String::new(),
-            comments: vec![review_comment(20)],
+            comments: vec![review_comment(CommentId::new(20))],
         }]),
         reactions: Vec::new(),
     };
@@ -82,9 +85,9 @@ fn reactions_go_to_the_item_its_comments_and_its_inline_comments() {
         subjects(&details),
         [
             Subject::Item,
-            Subject::Comment(10),
-            Subject::Comment(11),
-            Subject::ReviewComment(20)
+            Subject::Comment(CommentId::new(10)),
+            Subject::Comment(CommentId::new(11)),
+            Subject::ReviewComment(CommentId::new(20))
         ]
     );
     let one = |content: &str| vec![reaction(content, 1, false)];

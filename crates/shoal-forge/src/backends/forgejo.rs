@@ -45,7 +45,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::{JobId, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, JobId, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -448,7 +448,7 @@ impl Backend for Forgejo {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<Option<Thread>> {
         let reviews = threads::all_review_comments(repo, account, number).await?;
         Ok(threads::thread(&reviews, comment))

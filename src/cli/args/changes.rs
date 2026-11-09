@@ -4,6 +4,7 @@ use std::{ffi::OsString, path::PathBuf};
 use clap::{Args, Subcommand};
 
 use crate::client::space_names::SpaceSelector;
+use crate::forge::numbers::CommentId;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, item_reference},
@@ -235,7 +236,7 @@ pub enum PrCommand {
         files: AttachArgs,
         /// Replace the body of this comment or inline comment instead, by its ID as `shoal view` shows it.
         #[arg(long, value_name = "ID", conflicts_with = "attach")]
-        edit: Option<u64>,
+        edit: Option<CommentId>,
     },
     /// Review a PR: a body, comments on lines of its diff and a verdict.
     ///
@@ -257,7 +258,7 @@ pub enum PrCommand {
     /// Reply in the thread of a review comment.
     Reply {
         /// ID of any comment in the thread, as `shoal view` shows it.
-        comment: u64,
+        comment: CommentId,
         #[command(flatten)]
         item: ItemSelector,
         #[command(flatten)]
@@ -266,7 +267,7 @@ pub enum PrCommand {
     /// Resolve the thread of a review comment, after replying with the body given.
     Resolve {
         /// ID of any comment in the thread, as `shoal view` shows it.
-        comment: u64,
+        comment: CommentId,
         #[command(flatten)]
         item: ItemSelector,
         #[command(flatten)]
@@ -277,7 +278,7 @@ pub enum PrCommand {
     /// Unresolve the thread of a review comment.
     Unresolve {
         /// ID of any comment in the thread, as `shoal view` shows it.
-        comment: u64,
+        comment: CommentId,
         #[command(flatten)]
         item: ItemSelector,
     },
@@ -380,7 +381,7 @@ pub enum IssueCommand {
         files: AttachArgs,
         /// Replace the body of this comment instead, by its ID as `shoal view` shows it.
         #[arg(long, value_name = "ID", conflicts_with = "attach")]
-        edit: Option<u64>,
+        edit: Option<CommentId>,
     },
     /// Add a reaction to an issue or one of its comments, or remove it.
     React {
@@ -410,7 +411,7 @@ pub struct ReactArgs {
     pub reaction: String,
     /// React to this comment or inline comment instead, by its ID as `shoal view` shows it.
     #[arg(long, value_name = "ID")]
-    pub comment: Option<u64>,
+    pub comment: Option<CommentId>,
     /// Remove the reaction.
     #[arg(long)]
     pub remove: bool,

@@ -17,9 +17,9 @@ fn threads_are_found_from_any_of_their_comments() {
         ),
     ];
     // Comment 8 ends on the line comment 5's range ends on.
-    let found = thread(&reviews, 8).unwrap();
+    let found = thread(&reviews, CommentId::new(8)).unwrap();
     assert_eq!(
-        (found.first, found.replies, found.resolved),
+        (found.first.get(), found.replies, found.resolved),
         (5, 1, Some(true))
     );
     assert_eq!(
@@ -31,11 +31,11 @@ fn threads_are_found_from_any_of_their_comments() {
             extra_lines: 1,
         }
     );
-    assert_eq!(thread(&reviews, 6).unwrap().replies, 0);
+    assert_eq!(thread(&reviews, CommentId::new(6)).unwrap().replies, 0);
     // Another review's comment on the same line is its own thread.
-    let other = thread(&reviews, 9).unwrap();
-    assert_eq!((other.first, other.replies), (9, 0));
-    assert!(thread(&reviews, 7).is_none());
+    let other = thread(&reviews, CommentId::new(9)).unwrap();
+    assert_eq!((other.first.get(), other.replies), (9, 0));
+    assert!(thread(&reviews, CommentId::new(7)).is_none());
 }
 
 #[test]

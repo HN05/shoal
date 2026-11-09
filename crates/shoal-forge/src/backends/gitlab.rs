@@ -27,7 +27,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::{JobId, RunId, RunNumber},
+    numbers::{CommentId, JobId, RunId, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -562,7 +562,7 @@ impl Backend for GitLab {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<Option<Thread>> {
         let pr = repo.item_endpoint(ItemKind::Pr, number);
         let discussions = repo.pages(account, &format!("{pr}/discussions")).await?;
@@ -1240,12 +1240,17 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
                 body: String::new(),
                 comments: notes
                     .iter()
-                    .map(|note| review_comment(note, first["id"].as_u64().unwrap_or_default()))
+                    .map(|note| {
+                        review_comment(
+                            note,
+                            CommentId::new(first["id"].as_u64().unwrap_or_default()),
+                        )
+                    })
                     .collect(),
             });
         } else {
             comments.extend(notes.iter().map(|note| Comment {
-                id: note["id"].as_u64().unwrap_or_default(),
+                id: CommentId::new(note["id"].as_u64().unwrap_or_default()),
                 author: username(&note["author"]),
                 created_at: text(&note["created_at"]).unwrap_or_default(),
                 body: text(&note["body"]).unwrap_or_default(),
@@ -1257,13 +1262,13 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// The discussion with note `comment`, which replies and resolution name.
-fn find_thread(discussions: &[Value], comment: u64) -> Option<Thread> {
+fn find_thread(discussions: &[Value], comment: CommentId) -> Option<Thread> {
     discussions.iter().find_map(|discussion| {
         let notes = notes(discussion);
         notes.iter().find(|note| note["id"] == comment)?;
         let first = notes.first()?;
         Some(Thread {
-            first: first["id"].as_u64()?,
+            first: CommentId::new(first["id"].as_u64()?),
             replies: notes.len() - 1,
             resolved: first["resolved"].as_bool(),
             target: Target::GitLab {
@@ -1284,10 +1289,10 @@ fn notes(discussion: &Value) -> Vec<&Value> {
 }
 
 /// A diff note on the new side, or the old side of a removed line.
-fn review_comment(note: &Value, thread: u64) -> ReviewComment {
+fn review_comment(note: &Value, thread: CommentId) -> ReviewComment {
     let position = &note["position"];
     ReviewComment {
-        id: note["id"].as_u64().unwrap_or_default(),
+        id: CommentId::new(note["id"].as_u64().unwrap_or_default()),
         thread,
         author: username(&note["author"]),
         created_at: text(&note["created_at"]).unwrap_or_default(),

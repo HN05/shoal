@@ -8,6 +8,7 @@ use crate::{
     account::Account,
     backends::Backend,
     items::{action::Acted, link::ItemKind, reaction::Subject},
+    numbers::CommentId,
     review::view::Details,
     updates::Edited,
 };
@@ -16,7 +17,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommentEdit {
     /// The ID of a comment or inline comment, as `shoal view` shows it.
-    pub comment: u64,
+    pub comment: CommentId,
     pub body: String,
 }
 
@@ -50,7 +51,7 @@ impl ForgeRepo {
         account: &Account,
         kind: ItemKind,
         number: u64,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<Found> {
         let mut details = self
             .kind
@@ -118,7 +119,7 @@ impl ForgeRepo {
         kind: ItemKind,
         number: u64,
         found: &Found,
-        comment: u64,
+        comment: CommentId,
     ) -> Result<()> {
         ensure!(
             self.kind.wrote(self, account, kind, number, found).await?,

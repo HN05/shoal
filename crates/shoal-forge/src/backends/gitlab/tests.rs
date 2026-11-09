@@ -183,7 +183,7 @@ fn diff_threads_become_reviews_and_other_notes_comments() {
     assert_eq!(comments.len(), 1);
     assert_eq!(
         (
-            comments[0].id,
+            comments[0].id.get(),
             comments[0].author.as_str(),
             comments[0].body.as_str()
         ),
@@ -212,7 +212,10 @@ fn diff_threads_become_reviews_and_other_notes_comments() {
         ("ghost", "b.rs", Some(9))
     );
     assert_eq!(
-        threads.iter().map(|c| (c.id, c.thread)).collect::<Vec<_>>(),
+        threads
+            .iter()
+            .map(|c| (c.id.get(), c.thread.get()))
+            .collect::<Vec<_>>(),
         [(30, 30), (31, 30)]
     );
 }
@@ -224,9 +227,9 @@ fn notes_find_their_discussion() {
         {"id": "d2", "notes": [{"id": 4, "resolved": true}]}
     ]);
     let listed = listed.as_array().unwrap();
-    let thread = find_thread(listed, 3).unwrap();
+    let thread = find_thread(listed, CommentId::new(3)).unwrap();
     assert_eq!(
-        (thread.first, thread.replies, thread.resolved),
+        (thread.first.get(), thread.replies, thread.resolved),
         (2, 1, Some(false))
     );
     assert_eq!(
@@ -235,9 +238,12 @@ fn notes_find_their_discussion() {
             discussion: "d1".into()
         }
     );
-    assert_eq!(find_thread(listed, 4).unwrap().resolved, Some(true));
+    assert_eq!(
+        find_thread(listed, CommentId::new(4)).unwrap().resolved,
+        Some(true)
+    );
     // System notes are events, not comments.
-    assert!(find_thread(listed, 1).is_none());
+    assert!(find_thread(listed, CommentId::new(1)).is_none());
 }
 
 #[test]
@@ -292,7 +298,13 @@ fn comment_edits_replace_the_body_of_an_items_note() {
     let repo = gitlab();
     let pull = repo.item_endpoint(ItemKind::Pr, 7);
     let inline = GitLab
-        .edit_comment(&repo, ItemKind::Pr, 7, Subject::ReviewComment(40), "Why?")
+        .edit_comment(
+            &repo,
+            ItemKind::Pr,
+            7,
+            Subject::ReviewComment(CommentId::new(40)),
+            "Why?",
+        )
         .unwrap();
     assert_eq!(
         inline,
@@ -303,7 +315,13 @@ fn comment_edits_replace_the_body_of_an_items_note() {
         )
     );
     let issue = GitLab
-        .edit_comment(&repo, ItemKind::Issue, 3, Subject::Comment(41), "Fixed")
+        .edit_comment(
+            &repo,
+            ItemKind::Issue,
+            3,
+            Subject::Comment(CommentId::new(41)),
+            "Fixed",
+        )
         .unwrap();
     assert_eq!(
         issue.endpoint,

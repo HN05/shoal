@@ -18,6 +18,7 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject},
     },
+    numbers::CommentId,
     review::{
         reviewers::team_name,
         view::{Comment, Details, PrDetails, labels, login, required, text_field},
@@ -101,7 +102,7 @@ pub(crate) fn comments(comments: &[Value]) -> Vec<Comment> {
     comments
         .iter()
         .map(|comment| Comment {
-            id: comment["id"].as_u64().unwrap_or_default(),
+            id: CommentId::new(comment["id"].as_u64().unwrap_or_default()),
             author: login(&comment["user"]),
             created_at: text_field(&comment["created_at"]),
             body: text_field(&comment["body"]),

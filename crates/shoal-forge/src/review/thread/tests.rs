@@ -27,7 +27,7 @@ fn planned(
 
 fn thread(target: Target, resolved: Option<bool>) -> Thread {
     Thread {
-        first: 5,
+        first: CommentId::new(5),
         replies: 0,
         resolved,
         target,
