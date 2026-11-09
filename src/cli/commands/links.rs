@@ -132,7 +132,7 @@ fn link_outcome(kind: LinkKind, relation: Relation) -> String {
             format!("CI run linked as {relation}; shoal watch reports when it finishes.")
         }
         (Relation::Assigned, LinkKind::Pr) => {
-            "PR linked as assigned; run shoal watch pr for updates and shoal done once the assignment is finished.".into()
+            "PR linked as assigned; run shoal watch pr for updates and shoal done once no work is left.".into()
         }
         (Relation::Assigned, LinkKind::Issue) => {
             "Issue linked as assigned; closure can complete the assignment.".into()
