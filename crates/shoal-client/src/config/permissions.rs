@@ -152,7 +152,7 @@ impl PermissionsConfig {
         ) -> Result<()> {
             match value {
                 Some(value) if value > held.value => bail!(
-                    "--permission {key}={value} is wider than {}; a space gives only what it holds",
+                    "--permission {key}={value} gives more than the giver holds: {}; a space gives only what it holds",
                     held.cited(key.as_str())
                 ),
                 _ => Ok(()),
