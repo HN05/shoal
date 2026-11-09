@@ -212,12 +212,32 @@ pub(crate) async fn copy_directory(source: &Path, destination: &Path) -> anyhow:
     if entries.is_empty() {
         return Ok(());
     }
-    let mut command = tokio::process::Command::new("cp");
-    command.args(["-pPR", "--"]).args(entries).arg(destination);
-    crate::subprocess::output(command)
+    copy_keeping_attributes(&entries, destination)
         .await
-        .map(drop)
         .with_context(|| format!("copy {} to {}", source.display(), destination.display()))
+}
+
+/// Clone `source`, a file or directory tree, to `destination` as
+/// [`clone_tree`] does, or copy it where it cannot be cloned, keeping
+/// symlinks, modes and times.
+pub async fn clone_or_copy_tree(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    if clone_tree(source, destination).await.is_ok() {
+        return Ok(());
+    }
+    copy_keeping_attributes(&[source], destination)
+        .await
+        .with_context(|| format!("copy {}", source.display()))
+}
+
+/// `cp -pPR` of `sources` to `destination`: into it when it is a directory,
+/// otherwise as it for a single source.
+async fn copy_keeping_attributes(
+    sources: &[impl AsRef<OsStr>],
+    destination: &Path,
+) -> anyhow::Result<()> {
+    let mut command = tokio::process::Command::new("cp");
+    command.args(["-pPR", "--"]).args(sources).arg(destination);
+    crate::subprocess::output(command).await.map(drop)
 }
 
 #[cfg(test)]

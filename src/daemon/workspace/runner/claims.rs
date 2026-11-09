@@ -465,16 +465,7 @@ async fn copy_installation(installation: &Installation) -> Result<()> {
             installation.source.join(entry),
             installation.destination.join(entry),
         );
-        if crate::fsutil::copy::clone_tree(&source, &destination)
-            .await
-            .is_err()
-        {
-            let mut copy = tokio::process::Command::new("cp");
-            copy.arg("-pPR").arg("--").arg(&source).arg(&destination);
-            crate::subprocess::output(copy)
-                .await
-                .with_context(|| format!("copy {}", source.display()))?;
-        }
+        crate::fsutil::copy::clone_or_copy_tree(&source, &destination).await?;
     }
     Ok(())
 }
