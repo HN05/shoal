@@ -23930,19 +23930,25 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
 #[test]
 fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
     for github in [true, false] {
-        restack_on_merge(github, "lower");
+        restack_on_merge(github, &[(1, "lower", "main")], "lower");
     }
 }
 
 #[test]
 fn a_base_pr_from_another_branch_retargets_the_prs_stacked_on_it() {
-    restack_on_merge(false, "lower-stacked");
+    restack_on_merge(false, &[(1, "lower-stacked", "main")], "lower-stacked");
 }
 
-/// Merge the PR of the `lower` workspace, whose head is `lower_head`, and
-/// check that `upper`, whose PR targets that branch, is restacked and its
-/// PR retargeted.
-fn restack_on_merge(github: bool, lower_head: &str) {
+#[test]
+fn chained_base_prs_retarget_the_prs_stacked_on_them_past_every_merged_branch() {
+    let chain = [(1, "lower", "main"), (3, "lower-2", "lower")];
+    restack_on_merge(false, &chain, "lower-2");
+}
+
+/// Merge the PRs of the `lower` workspace, each a number with its head and
+/// base branch, and check that `upper`, whose PR targets `upper_base`, is
+/// restacked and its PR retargeted to `main`.
+fn restack_on_merge(github: bool, lower_prs: &[(u64, &str, &str)], upper_base: &str) {
     // Both forges read and PATCH the PR through their API with the token.
     let mut fixture = Fixture::with_config(Some(
         "machine.forges.\"github.com\".token = \"secret123\"\n\
@@ -23989,21 +23995,26 @@ cat >/dev/null
         &["rev-parse", "HEAD"],
     );
     let head = head.trim();
-    let commits = if github {
-        "repos/team/project/pulls/1/commits?per_page=100&page=1"
-    } else {
-        "repos/team/project/pulls/1/commits?limit=50&page=1"
-    };
-    script_api(&root, commits, &serde_json::json!([{"sha": head}]));
+    for (number, _, _) in lower_prs {
+        let commits = if github {
+            format!("repos/team/project/pulls/{number}/commits?per_page=100&page=1")
+        } else {
+            format!("repos/team/project/pulls/{number}/commits?limit=50&page=1")
+        };
+        script_api(&root, &commits, &serde_json::json!([{"sha": head}]));
+    }
     let write_pr = |number: u64, state: &str, head_branch: &str, base: &str| {
         let mut rest = forgejo_pull(number, &state.to_lowercase(), head_branch, head);
         rest["base"]["ref"] = base.into();
         rest["head"]["repo"]["full_name"] = "team/project".into();
         script_api(&root, &format!("repos/team/project/pulls/{number}"), &rest);
     };
-    write_pr(1, "Open", lower_head, "main");
-    write_pr(2, "Open", "upper", lower_head);
-    fixture.ok(&["link", "pr", "1", "assigned", "--space", "lower"]);
+    for &(number, head_branch, base) in lower_prs {
+        write_pr(number, "Open", head_branch, base);
+        let number = number.to_string();
+        fixture.ok(&["link", "pr", &number, "assigned", "--space", "lower"]);
+    }
+    write_pr(2, "Open", "upper", upper_base);
     fixture.ok(&["link", "pr", "2", "assigned", "--space", "upper"]);
     fixture.restart();
     assert_eq!(
@@ -24011,7 +24022,9 @@ cat >/dev/null
         "lower"
     );
 
-    write_pr(1, "Merged", lower_head, "main");
+    for &(number, head_branch, base) in lower_prs {
+        write_pr(number, "Merged", head_branch, base);
+    }
     fixture.restart();
     wait_until("restacked upper", || {
         fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()

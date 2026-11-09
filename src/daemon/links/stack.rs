@@ -23,7 +23,7 @@ use crate::{
 impl Manager {
     /// Once every watched PR of `base` has merged, retarget the PRs of the
     /// workspaces stacked on it that target the head branch of one of them
-    /// to the branch the last merged into, stack them on
+    /// to the branch they merged into, stack them on
     /// its own base, and queue a `base_merged` update for their next watch.
     /// A failed merge lookup returns its error as `Ok(Some(_))`: the base's
     /// cleanup waits for the next sweep without reporting a failure.
@@ -61,7 +61,7 @@ impl Manager {
             )));
         }
         let pulls = self.base_pulls(base, urls).await?;
-        let Some(target) = pulls.last().map(|pull| pull.base.clone()) else {
+        let Some(target) = merged_into(&pulls) else {
             return Ok(None);
         };
         // A watched PR's head need not be the base workspace's branch.
@@ -198,6 +198,15 @@ impl Manager {
         );
         Ok(())
     }
+}
+
+/// The branch the base's merged PRs `pulls` merged into: the base of the
+/// last one that targets no other's head branch, since PRs stacked among
+/// them merged into each other.
+fn merged_into(pulls: &[PullRequest]) -> Option<String> {
+    let outside = |pull: &&PullRequest| !pulls.iter().any(|other| other.head == pull.base);
+    let last = pulls.iter().rev().find(outside).or(pulls.last());
+    last.map(|pull| pull.base.clone())
 }
 
 /// A linked PR of the stacked `workspace`, and the head branches of the
