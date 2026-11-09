@@ -34,18 +34,18 @@ pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()>
 
 /// Attach to the session of the started `entry`'s agent once it has one.
 pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
-    let (workspace, session) = agent_session(ctx, entry).await?;
+    let (workspace, session) = agent_terminal_session(ctx, entry).await?;
     sessions::attach(ctx, Some(SpaceSelector::id(&workspace)), Some(session)).await
 }
 
 /// The ID of the workspace `entry` starts its agent in and the name of the
-/// session the agent runs in, once it runs there; other sessions of the
+/// terminal session the agent runs in, once it runs there; other sessions of the
 /// workspace, such as a shell left after a failed setup, do not count. A
 /// launch learns its workspace while it starts. The daemon records the
 /// agent where it runs before it takes the entry out of the queue, so an
 /// entry gone before the sessions were read without an agent session among
 /// them did not start in one.
-async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, String)> {
+async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().cloned();
     loop {
@@ -60,7 +60,7 @@ async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, St
         }
         match &workspace {
             Some(id) => {
-                if let Some(session) = sessions::agent_session(ctx, id).await? {
+                if let Some(session) = sessions::agent_terminal_session(ctx, id).await? {
                     return Ok((id.clone(), session));
                 }
                 ensure!(

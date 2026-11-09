@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{model::SpaceStatus, output::outputs, transcripts::Transcript};
 
-/// The daemon's space status with the agent sessions the CLI finds.
+/// The daemon's space status with the terminal sessions the CLI finds.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusView {
     #[serde(flatten)]
     pub status: SpaceStatus,
-    pub sessions: Vec<AgentSession>,
+    pub sessions: Vec<TerminalSession>,
     /// Why sessions could not be listed; status still reports the rest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions_error: Option<String>,
@@ -20,9 +20,10 @@ pub struct StatusView {
     pub transcripts_error: Option<String>,
 }
 
-/// A running agent session that `shoal attach` can reach.
+/// A terminal host's session that `shoal attach` can reach, with the agent
+/// running there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentSession {
+pub struct TerminalSession {
     pub name: String,
     /// The agent the daemon recorded running there, when one runs there.
     pub agent: Option<crate::agent::Agent>,
@@ -31,7 +32,7 @@ pub struct AgentSession {
     pub clients: u32,
 }
 
-impl AgentSession {
+impl TerminalSession {
     /// The name, agent, and whether a terminal is attached.
     pub fn label(&self) -> String {
         let mut label = self.name.clone();

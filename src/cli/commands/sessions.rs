@@ -57,9 +57,9 @@ pub(super) async fn attach(
     Ok(0)
 }
 
-/// The name of the session `shoal attach` takes in which the daemon
-/// recorded the agent of the workspace with the ID `id` running.
-pub(super) async fn agent_session(ctx: &Context, id: &SpaceId) -> Result<Option<String>> {
+/// The name of the terminal session `shoal attach` takes in which the
+/// daemon recorded the agent of the workspace with the ID `id` running.
+pub(super) async fn agent_terminal_session(ctx: &Context, id: &SpaceId) -> Result<Option<String>> {
     let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
     let sessions = target.attachable(ctx, None).await?.unwrap_or_default();
     Ok(sessions

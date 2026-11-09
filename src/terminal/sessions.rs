@@ -41,7 +41,8 @@ impl<'a> Owner<'a> {
     }
 }
 
-/// A running agent session that `shoal attach` can reach.
+/// A terminal host's session that `shoal attach` can reach, with the agent
+/// running there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Session {
     pub name: String,
@@ -78,8 +79,8 @@ impl Session {
     }
 
     /// The session as commands print it.
-    pub fn output(self) -> crate::client::output::status::AgentSession {
-        crate::client::output::status::AgentSession {
+    pub fn output(self) -> crate::client::output::status::TerminalSession {
+        crate::client::output::status::TerminalSession {
             name: self.name,
             agent: self.agent,
             clients: self.clients,
