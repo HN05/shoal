@@ -90,7 +90,8 @@ fn agent_cli_and_config_spellings_remain_compatible() {
         let text = format!("agent.default = {invalid:?}");
         assert!(crate::config::Config::from_toml(&text).is_err());
         assert!(toml::from_str::<crate::config::repo::RepoConfig>(&text).is_err());
-        assert!(serde_json::from_value::<Agent>(invalid.into()).is_err());
+        let recorded = serde_json::from_value::<Agent>(invalid.into()).unwrap();
+        assert_eq!(recorded.name(), invalid);
     }
 }
 

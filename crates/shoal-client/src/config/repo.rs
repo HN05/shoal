@@ -159,6 +159,7 @@ pub struct AppConfig {
 #[options(resolved = AgentSettings)]
 pub struct AgentConfig {
     /// Agent an issue workspace starts when `--agent` is omitted.
+    #[serde(deserialize_with = "crate::agent::configured")]
     pub default: Option<Agent>,
     /// The model the `default` agent runs with, over its AI tool's.
     pub model: Option<String>,
@@ -623,9 +624,11 @@ pub struct ReviewConfig {
     #[option(default = true)]
     pub post: Option<bool>,
     /// The agent that reviews; unset, `agent.default`.
+    #[serde(deserialize_with = "crate::agent::configured")]
     pub agent: Option<Agent>,
     /// The agent that reviews once more when the first reviewer fails for a
     /// reason other than running too long.
+    #[serde(deserialize_with = "crate::agent::configured")]
     pub fallback_agent: Option<Agent>,
     /// Whether a workspace process opening a new PR needs a finished review
     /// of HEAD with every finding resolved.

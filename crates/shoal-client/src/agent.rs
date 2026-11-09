@@ -2,14 +2,31 @@
 //! that launch them.
 
 /// What `add --agent` and `agent.default` start: an AI tool, a configured
-/// command, or a name an integration serves.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
-#[serde(try_from = "String", into = "String")]
+/// command, or a name an integration serves. Parsing validates the name;
+/// a record loads the name it holds unchanged, so one saved before names
+/// were validated still loads.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
+#[serde(transparent)]
 pub struct Agent(String);
 
 impl Agent {
+    /// The agent `name` names without validating it: a name a record holds,
+    /// which may predate validation, or one Shoal gives itself.
+    pub fn unchecked(name: String) -> Self {
+        Self(name)
+    }
+
     pub fn name(&self) -> &str {
         &self.0
+    }
+
+    /// The agent as `--agent` and recovery records name it: a name an app's
+    /// execution records with a space, such as `happy claude`, takes `-`
+    /// instead.
+    pub fn normalized(&self) -> Self {
+        Self(self.0.replace(' ', "-"))
     }
 }
 
@@ -29,19 +46,73 @@ impl std::str::FromStr for Agent {
 }
 
 /// Config spelling: the same values `--agent` accepts.
-impl TryFrom<String> for Agent {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, String> {
-        value
-            .parse()
-            .map_err(|error| format!("invalid agent {value:?}: {error}"))
-    }
+pub fn configured<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Agent>, D::Error> {
+    <Option<String> as serde::Deserialize>::deserialize(deserializer)?
+        .map(|name| {
+            name.parse().map_err(|error| {
+                serde::de::Error::custom(format!("invalid agent {name:?}: {error}"))
+            })
+        })
+        .transpose()
 }
 
 impl From<Agent> for String {
     fn from(agent: Agent) -> Self {
         agent.0
+    }
+}
+
+impl From<Agent> for std::ffi::OsString {
+    fn from(agent: Agent) -> Self {
+        agent.0.into()
+    }
+}
+
+impl AsRef<str> for Agent {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for Agent {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.0.as_ref()
+    }
+}
+
+impl PartialEq<str> for Agent {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Agent {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+/// Agents tests write as literals.
+#[cfg(any(test, feature = "test-support"))]
+impl From<&str> for Agent {
+    fn from(name: &str) -> Self {
+        Self(name.to_owned())
+    }
+}
+
+#[cfg(feature = "rusqlite")]
+impl rusqlite::types::ToSql for Agent {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "rusqlite")]
+impl rusqlite::types::FromSql for Agent {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).map(Self)
     }
 }
 
