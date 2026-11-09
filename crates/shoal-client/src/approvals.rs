@@ -646,8 +646,8 @@ pub async fn push_held(daemon: &impl Daemon, workspace: SpaceSelector) -> Result
     Ok(held)
 }
 
-/// Push `push` from `workspace` at once, or record it for the user's
-/// approval.
+/// Whether `workspace` may make the push `push` itself, or the approval
+/// request recorded for it instead.
 pub async fn request_push(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
