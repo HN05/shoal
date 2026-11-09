@@ -43,6 +43,13 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         args.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     ensure_copy_fits(&args)?;
+    ensure!(
+        PermissionChange::combined(&args.permissions)
+            .dropped
+            .is_empty(),
+        "--permission KEY={} drops a value given before, and a new agent has none; leave the key out",
+        crate::config::permissions::MODE_VALUE
+    );
     match start_of(ctx, &mut args).await? {
         Start::Workspace(mode) => in_workspace(ctx, args, mode).await,
         Start::Chat(mode) => in_chat(ctx, args, mode).await,
@@ -657,9 +664,10 @@ fn positional_target(
     Ok((Some(positional), issue))
 }
 
-/// The permissions a start's `--permission` assignments give its agent.
+/// The permissions a start's `--permission` assignments give its agent,
+/// which [`run`] refused a `KEY=mode` among.
 fn given(changes: &[PermissionChange]) -> PermissionsConfig {
-    PermissionChange::combined(changes).applied_to(PermissionsConfig::default())
+    PermissionChange::combined(changes).set
 }
 
 #[cfg(test)]

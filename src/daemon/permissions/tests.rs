@@ -212,7 +212,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
 
     // What the space recorded comes back, with what the giver holds.
     let recorded = assigned(&["merge=direct", "push=propose"]);
-    let registered = manager.ensure_workspace_agent_held(giver, &child, &recorded);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &recorded);
     registered.await.unwrap();
     manager
         .ensure_restore_held(giver, &talk, &recorded)
@@ -220,7 +220,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         .unwrap();
     // A value the giver does not hold, recorded nowhere, is refused.
     let wider = assigned(&["merge=direct", "api_writes=direct"]);
-    let registered = manager.ensure_workspace_agent_held(giver, &child, &wider);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &wider);
     assert!(registered.await.is_err());
     assert!(
         manager
@@ -236,7 +236,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let restarted = manager.ensure_chat_restart_held(giver, Some(&talk), &change);
     assert!(restarted.await.is_err());
     // The user gives any.
-    let registered = manager.ensure_workspace_agent_held(None, &child, &wider);
+    let registered = manager.ensure_workspace_agent_held(None, &child, "worker", &wider);
     registered.await.unwrap();
     manager
         .ensure_restore_held(None, &talk, &wider)
@@ -287,7 +287,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let none = crate::config::permissions::PermissionsConfig::default();
     let (giver, child) = (Some(&top.id), SpaceSelector::id(space.id()));
-    let registered = manager.ensure_workspace_agent_held(giver, &child, &none);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &none);
     assert!(registered.await.is_err());
     assert!(
         manager
@@ -296,10 +296,23 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
             .is_err()
     );
     let recorded = talk.narrowing;
-    let registered = manager.ensure_workspace_agent_held(giver, &child, &recorded);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &recorded);
     registered.await.unwrap();
     manager
         .ensure_restore_held(giver, &talk, &recorded)
         .await
         .unwrap();
+
+    // A dropped key falls back in the mode of the agent that drops it.
+    let config = "[modes.review.permissions]\npush = 'deny'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let quiet = workspace(&manager, &repo, "quiet", &parent.id, Some("review")).await;
+    give(&manager, "workspaces", &quiet.id, &["push=deny"]).await;
+    let quiet = SpaceSelector::id(&quiet.id);
+    let registered = manager.ensure_workspace_agent_held(giver, &quiet, "review", &none);
+    registered.await.unwrap();
+    let registered = manager.ensure_workspace_agent_held(giver, &quiet, "worker", &none);
+    assert!(registered.await.is_err());
 }

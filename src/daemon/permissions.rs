@@ -110,14 +110,16 @@ impl Manager {
         (self.ensure_change_held(giver, &space, change, repository.as_deref())).await
     }
 
-    /// Refuse an agent of `workspace` the scoped process of the space
-    /// `giver` queues or registers with `given`, which replaces what the
-    /// workspace recorded, where it changes that as
-    /// [`Self::ensure_change_held`] refuses a change.
+    /// Refuse an agent in `mode` of `workspace` the scoped process of the
+    /// space `giver` queues or registers with `given`, which replaces what
+    /// the workspace recorded, where it changes that as
+    /// [`Self::ensure_change_held`] refuses a change, with the fallback of
+    /// each key it drops in that agent's mode.
     pub(crate) async fn ensure_workspace_agent_held(
         &self,
         giver: Option<&SpaceId>,
         workspace: &SpaceSelector,
+        mode: &str,
         given: &PermissionsConfig,
     ) -> Result<()> {
         if giver.is_none() {
@@ -126,7 +128,10 @@ impl Manager {
         let recorded = self.workspace(workspace).await?;
         let change = PermissionChange::between(&recorded.narrowing, given);
         let repository = recorded.repository_id.clone();
-        let space = PresentSpace::Workspace(recorded);
+        let space = PresentSpace::Workspace(Workspace {
+            mode: Some(mode.to_owned()),
+            ..recorded
+        });
         (self.ensure_change_held(giver, &space, &change, Some(&repository))).await
     }
 
