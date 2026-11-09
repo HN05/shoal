@@ -43,7 +43,7 @@ pub(super) async fn open_pr(
     };
     let message = if opened.linked {
         format!(
-            "{outcome} and linked: {}\nRun shoal watch pr for updates and shoal done once the assignment is finished.",
+            "{outcome} and linked: {}\nRun shoal watch pr for updates and shoal done once no work is left.",
             opened.item.url
         )
     } else {
