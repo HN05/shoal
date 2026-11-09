@@ -19794,10 +19794,29 @@ fn resume_replaces_the_narrowing_a_stopped_agent_recorded() {
     assert_eq!(narrowing(), serde_json::json!({"push": "propose"}));
 
     let record = stop_narrowed_agent(&fixture, &workspace);
+    let kept = || -> Value { serde_json::from_slice(&fs::read(&record).unwrap()).unwrap() };
     let output = resume(&["--permission", "merge=direct"]);
     assert!(!output.status.success(), "{output:?}");
-    let kept: Value = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
-    assert_eq!(kept["narrowing"], serde_json::json!({"push": "propose"}));
+    assert_eq!(kept()["narrowing"], serde_json::json!({"push": "propose"}));
+    // A resume refused after the narrowing fits, here because no host can
+    // start the restore in the background, replaces nothing either.
+    let bin = fixture.root.path().join("no-host-bin");
+    fs::create_dir(&bin).unwrap();
+    let output = fixture
+        .command()
+        .args([
+            "resume",
+            "stopped",
+            "--now",
+            "--permission",
+            "api_writes=deny",
+        ])
+        .env("PATH", fixture.restricted_path(&bin))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(kept()["narrowing"], serde_json::json!({"push": "propose"}));
     let output = resume(&["--permission", "api_writes=deny"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(narrowing(), serde_json::json!({"api_writes": "deny"}));

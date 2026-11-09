@@ -74,8 +74,8 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     {
         return Ok(code);
     }
-    if let Some(narrowing) = narrowing {
-        narrowing::replace(ctx, &selected, execution.as_deref(), narrowing).await?;
+    if let Some(narrowing) = &narrowing {
+        narrowing::check(ctx, &selected, execution.as_deref(), narrowing).await?;
     }
     if scoped && !discard {
         return queue_below(ctx, selected, execution, narrowing).await;
@@ -83,10 +83,10 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
         ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
-            run(ctx, workspace.clone(), execution, discard, focus).await
+            run(ctx, workspace.clone(), execution, discard, focus, narrowing).await
         }
         ([], Some([workspace])) => {
-            queue_workspace(ctx, workspace.clone(), execution, queuing).await
+            queue_workspace(ctx, workspace.clone(), execution, queuing, narrowing).await
         }
         ([chat], Some([])) if focus && execution.is_none() => {
             chats::restore_here(ctx, chat, narrowing).await
@@ -207,6 +207,7 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
+    narrowing::apply(ctx, &stopped, narrowing).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, narrowing).await;
     match queuing {
         Queuing::Here { now: true } => {
@@ -241,6 +242,7 @@ async fn queue_below(
     for chat in &selected.chats {
         crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
     }
+    narrowing::apply(ctx, &stopped, narrowing).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, narrowing).await;
     queue::queue_all(ctx, stopped, chats, failed, false).await
 }
@@ -294,15 +296,17 @@ async fn stopped_agents(
 }
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
-/// when given, to start as `queuing` says. Without stopped agents, a last
-/// session continues at once, as resuming the workspace by itself does not
-/// wait for a slot it never held: where it stopped or in the background, or
-/// for a noninteractive process through the queue, started now.
+/// when given, to start as `queuing` says, under `narrowing` when given.
+/// Without stopped agents, a last session continues at once, as resuming
+/// the workspace by itself does not wait for a slot it never held: where it
+/// stopped or in the background, or for a noninteractive process through
+/// the queue, started now.
 async fn queue_workspace(
     ctx: &Context,
     workspace: SpaceSelector,
     execution: Option<ExecutionId>,
     queuing: Queuing,
+    narrowing: Option<PermissionsConfig>,
 ) -> Result<i32> {
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
@@ -318,7 +322,7 @@ async fn queue_workspace(
     let last_session = saved.agents.is_empty() && !saved.sessions.is_empty();
     let now = match queuing {
         Queuing::Here { .. } if last_session => {
-            return continue_last_session(ctx, &workspace, saved, false).await;
+            return continue_last_session(ctx, &workspace, saved, false, narrowing).await;
         }
         Queuing::Here { .. } => false,
         Queuing::Daemon { now } => now || last_session,
@@ -327,6 +331,7 @@ async fn queue_workspace(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
+    narrowing::apply(ctx, &stopped, narrowing).await?;
     queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
 }
 
@@ -377,7 +382,7 @@ pub async fn start_entry(
         .iter()
         .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
     ensure!(admitted, "the queued restore was cancelled");
-    let restored = run(ctx, workspace.clone(), Some(execution), false, true).await;
+    let restored = run(ctx, workspace.clone(), Some(execution), false, true, None).await;
     if let Err(error) = &restored {
         super::queued_agents::fail(ctx, &entry, error).await;
     }
@@ -440,14 +445,16 @@ fn background_workspace(targets: &SpaceTargets) -> Option<SpaceId> {
 
 /// Resume `workspace`'s stopped agent, the `execution` one when given, or
 /// forget its stopped work for `discard`. The agent restores in this
-/// terminal when `here`, otherwise where it stopped or in the background;
-/// one whose wrapper waits to restore it starts there at once.
+/// terminal when `here`, otherwise where it stopped or in the background,
+/// under `narrowing` when given; one whose wrapper waits to restore it
+/// starts there at once.
 pub async fn run(
     ctx: &Context,
     workspace: SpaceSelector,
     execution: Option<ExecutionId>,
     discard: bool,
     here: bool,
+    narrowing: Option<PermissionsConfig>,
 ) -> Result<i32> {
     if discard {
         return discard_work(ctx, workspace, execution).await;
@@ -463,7 +470,8 @@ pub async fn run(
         "no stopped agents or commands for this workspace"
     );
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
-        return continue_last_session(ctx, &inspection.workspace, saved, here).await;
+        let workspace = &inspection.workspace;
+        return continue_last_session(ctx, workspace, saved, here, narrowing).await;
     }
     let recovery_id = execution
         .as_ref()
@@ -489,6 +497,7 @@ pub async fn run(
         !active(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
+    narrowing::apply_one(ctx, workspace, &selected_id, narrowing).await?;
     if !here {
         let session = (workspace.clone(), selected_id, selected);
         return start_sessions(ctx, vec![session], true, Resumed::default()).await;
@@ -530,14 +539,16 @@ async fn discard_work(
 /// Continue one of the workspace's last sessions that `saved` keeps, the
 /// only one or one picked on a terminal, telling it about the stopped
 /// commands: in this terminal when `here`, otherwise where it stopped or in
-/// the background.
+/// the background, under `narrowing` when given.
 async fn continue_last_session(
     ctx: &Context,
     workspace: &Workspace,
     saved: Saved,
     here: bool,
+    narrowing: Option<PermissionsConfig>,
 ) -> Result<i32> {
     let (id, path) = select_agent(ctx, &saved.sessions, session_label)?;
+    narrowing::apply_one(ctx, workspace, &id, narrowing).await?;
     if !here {
         let session = (workspace.clone(), id, path);
         return start_sessions(ctx, vec![session], true, Resumed::default()).await;
@@ -900,7 +911,8 @@ async fn start_sessions(
             Ok(Started::Here) => {
                 // Boxed, since `run` calls back into this function.
                 let id = Some(id.clone());
-                return Box::pin(run(ctx, SpaceSelector::id(&workspace.id), id, false, true)).await;
+                let workspace = SpaceSelector::id(&workspace.id);
+                return Box::pin(run(ctx, workspace, id, false, true, None)).await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Ok(Started::InWrapper) => {
