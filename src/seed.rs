@@ -335,21 +335,14 @@ impl Snapshot {
         if !fits {
             return Ok(None);
         }
-        let taken = layout.spare_taken();
-        remove_dir(&taken)?;
-        match fs::rename(layout.spare(), &taken) {
-            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
-            result => result.with_context(|| format!("rename {}", layout.spare().display()))?,
-        }
+        let Some(taken) = claim_spare(layout)? else {
+            return Ok(None);
+        };
         let mut moved = Vec::new();
         for path in &self.paths {
             // The clone that follows meets the same problem and reports it.
             if move_output(&taken, worktree, path).is_err() {
-                for path in &moved {
-                    // The rename back cannot cross filesystems, as it came.
-                    fs::rename(worktree.join(path), taken.join(path))
-                        .with_context(|| format!("return {path} to the spare"))?;
-                }
+                return_outputs(worktree, &taken, &moved)?;
                 return put_back(layout, &taken).map(|()| None);
             }
             moved.push(path.clone());
@@ -419,6 +412,28 @@ impl Staged {
         fs::rename(&staging, &current)?;
         Ok(())
     }
+}
+
+/// Move the spare out of the way of refills and return where it went, or
+/// `None` when no spare is ready.
+fn claim_spare(layout: &Layout) -> Result<Option<PathBuf>> {
+    let taken = layout.spare_taken();
+    remove_dir(&taken)?;
+    match fs::rename(layout.spare(), &taken) {
+        Ok(()) => Ok(Some(taken)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("rename {}", layout.spare().display())),
+    }
+}
+
+/// Move the outputs `moved` from `worktree` back into the spare `taken`.
+fn return_outputs(worktree: &Path, taken: &Path, moved: &[String]) -> Result<()> {
+    for path in moved {
+        // The rename back cannot cross filesystems, as it came.
+        fs::rename(worktree.join(path), taken.join(path))
+            .with_context(|| format!("return {path} to the spare"))?;
+    }
+    Ok(())
 }
 
 /// Move the output `path` from the spare `taken` into `worktree`.

@@ -982,9 +982,10 @@ moves it into the new worktree, a background task clones the next, and creation
 clones only when no spare is ready. A new snapshot is cloned and the old one
 deleted outside the gate, which it takes only to swap them. Creation restores the
 seed's modification times on tracked files its commit left unchanged, since
-mtime-based tools otherwise treat every freshly checked-out file as new. Platforms without clones skip the seed
-rather than copy. Seeds are best effort: failures notify and never fail creation,
-and builds wait under host pressure so they never add load an agent would feel.
+mtime-based tools otherwise treat every freshly checked-out file as new.
+Platforms without clones skip the seed rather than copy. Seeds are best effort:
+failures notify and never fail creation, and builds and spare clones wait under
+host pressure so they never add load an agent would feel.
 A repository's `presets` name the build tools it uses, and each sets up what
 that tool needs to stop repeating work across workspaces, so common stacks need
 no script. Tools whose build outputs survive a move into another path get a

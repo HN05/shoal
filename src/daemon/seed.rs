@@ -266,8 +266,8 @@ impl Manager {
         }
     }
 
-    /// Clone a spare of the repository's snapshot when it has none and its
-    /// settings still describe the snapshot.
+    /// Clone a spare of the repository's snapshot when it has none, its
+    /// settings still describe the snapshot and the host has headroom for it.
     async fn refill_spare(&self, id: &RepositoryId) -> Result<()> {
         let slot = self.seeds.slot(id);
         let _snapshot = slot.snapshot.lock().await;
@@ -281,7 +281,8 @@ impl Manager {
         let Some(snapshot) = Snapshot::open(&layout)? else {
             return Ok(());
         };
-        if layout.has_spare() {
+        // A start meanwhile clones, as it would without spares.
+        if layout.has_spare() || !self.seed_headroom(&layout) {
             return Ok(());
         }
         let Some(plan) = self.seed_plan(&repo, &layout).await? else {
@@ -402,8 +403,8 @@ impl Manager {
     }
 
     /// Whether memory and disk space are clear of their overload warning
-    /// thresholds, so a seed build adds no load to a strained host. A failed
-    /// reading defers the build.
+    /// thresholds, so a seed build or spare adds no load to a strained host.
+    /// A failed reading defers it.
     fn seed_headroom(&self, layout: &Layout) -> bool {
         let overload = &self.config().machine.overload;
         let sample = capacity::sample(&[self.paths.state.as_path(), layout.root()], overload, None);
