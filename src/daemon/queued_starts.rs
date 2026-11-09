@@ -50,29 +50,19 @@ pub(super) async fn run(manager: Arc<Manager>) {
 /// with the multiplexer variables of the terminal that queued it.
 #[cfg(not(test))]
 pub(crate) fn spawn_start(paths: &Paths, start: &Start) -> Result<()> {
-    use crate::workers::{Worker, internal_command};
+    use crate::workers::{Worker, detached_command, internal_command};
     use anyhow::Context as _;
     use std::process::Stdio;
 
     let argv = internal_command(paths, false, Worker::QueueStart { entry: &start.id })?;
-    let mut command = tokio::process::Command::new(&argv[0]);
-    command
-        .args(&argv[1..])
+    let mut child = detached_command(&argv)
         .envs(&start.env)
         .current_dir(&paths.home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    // SAFETY: setsid detaches the forked child without allocating, before exec.
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    let mut child = command.spawn().context("start the queued agent")?;
+        .stderr(Stdio::null())
+        .spawn()
+        .context("start the queued agent")?;
     tokio::spawn(async move {
         let _ = child.wait().await;
     });

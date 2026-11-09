@@ -110,24 +110,15 @@ pub(super) async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<R
     let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend(["resume".into(), chat.id.clone().into()]);
     let env = crate::terminal::detached_start_environment(chat.origin.as_ref());
-    let mut command = tokio::process::Command::new(&argv[0]);
-    command
-        .args(&argv[1..])
+    let output = crate::workers::detached_command(&argv)
         .envs(&env)
         .current_dir(&paths.home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::piped());
-    // SAFETY: setsid detaches the forked child without allocating, before exec.
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    let output = command.output().await.context("run shoal resume")?;
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .context("run shoal resume")?;
     Ok(match output.status.success() {
         true => Ok(()),
         false => Err(String::from_utf8_lossy(&output.stderr).trim().to_owned()),

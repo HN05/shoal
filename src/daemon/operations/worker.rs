@@ -53,12 +53,11 @@ pub(super) fn spawn(
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt as _;
 
-    use crate::workers::{Worker as Internal, internal_command};
+    use crate::workers::{Worker as Internal, detached_command, internal_command};
 
     let argv = internal_command(paths, false, Internal::Operation)?;
-    let mut command = tokio::process::Command::new(&argv[0]);
+    let mut command = detached_command(&argv);
     command
-        .args(&argv[1..])
         .current_dir(&paths.home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -73,15 +72,6 @@ pub(super) fn spawn(
         Some(token) => command.env(crate::env::SCOPE_TOKEN, token.expose()),
         None => command.env_remove(crate::env::SCOPE_TOKEN),
     };
-    // SAFETY: setsid detaches the forked child without allocating, before exec.
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
     let mut child = command.spawn().context("start the operation's worker")?;
     let (Some(mut stdin), Some(stdout), Some(stderr)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())

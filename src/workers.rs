@@ -185,6 +185,24 @@ pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
     ])
 }
 
+/// The command that starts the worker `argv` in a session of its own, apart
+/// from the process starting it and its terminal; the caller sets its
+/// standard streams, environment and directory.
+pub fn detached_command(argv: &[OsString]) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(&argv[0]);
+    command.args(&argv[1..]);
+    // SAFETY: setsid detaches the forked child without allocating, before exec.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    command
+}
+
 /// Build an argv for this executable, preserving the caller's resolved globals.
 /// The output format is explicit, so an inherited `SHOAL_OUTPUT` cannot change it.
 pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {

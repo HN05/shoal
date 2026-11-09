@@ -73,23 +73,12 @@ pub(super) async fn start_watcher(
 
 /// Start `argv` in its own session, apart from this process and its terminal.
 fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result<()> {
-    let mut child = tokio::process::Command::new(&argv[0]);
-    child
-        .args(&argv[1..])
+    workers::detached_command(argv)
         .current_dir(&ctx.paths.home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    // SAFETY: setsid detaches the forked child without allocating, before exec.
-    unsafe {
-        child.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    child.spawn()?;
+        .stderr(Stdio::null())
+        .spawn()?;
     Ok(())
 }
 

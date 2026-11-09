@@ -12,7 +12,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
-    process::{Child, Command},
+    process::Child,
     time::timeout,
 };
 
@@ -21,7 +21,7 @@ use crate::{
     model::Workspace,
     paths::Paths,
     protocol::timing,
-    workers::{Worker, internal_command},
+    workers::{Worker, detached_command, internal_command},
 };
 
 /// Start `command` in `workspace` as a tracked execution that outlives this
@@ -148,9 +148,8 @@ fn spawn_detached_wrapper(
     clear: &[&str],
     env: &[(&str, String)],
 ) -> Result<Child> {
-    let mut wrapper = Command::new(&command[0]);
+    let mut wrapper = detached_command(command);
     wrapper
-        .args(&command[1..])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(file))
@@ -163,16 +162,6 @@ fn spawn_detached_wrapper(
     wrapper.envs(env.iter().map(|(name, value)| (*name, value)));
     if let Some(entry) = crate::env::queue_entry() {
         wrapper.env(env::QUEUE_ENTRY, entry);
-    }
-    // SAFETY: setsid only detaches the child from this terminal session and
-    // runs before exec in the forked child, without allocating.
-    unsafe {
-        wrapper.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
     }
     wrapper.spawn().context("launch detached execution wrapper")
 }
