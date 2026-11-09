@@ -2,7 +2,7 @@
 use super::{Chat, SpaceLinks, Workspace};
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
-use crate::space_names::SpaceSelector;
+use crate::space_names::{SpaceName, SpaceSelector};
 use serde::{Deserialize, Serialize};
 
 /// Another space a record refers to, with its current name, and its branch
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceRef {
     pub id: SpaceId,
-    pub name: String,
+    pub name: SpaceName,
     pub kind: SpaceKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
@@ -59,7 +59,7 @@ impl PresentSpace {
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &SpaceName {
         match self {
             Self::Workspace(workspace) => &workspace.name,
             Self::Chat(chat) => &chat.name,
@@ -163,7 +163,7 @@ impl Spaces {
                 .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == *id))
                 .map(|chat| SpaceRef {
                     id: chat.id.clone(),
-                    name: chat.name.to_string(),
+                    name: chat.name.clone(),
                     kind: SpaceKind::Chat,
                     branch: None,
                 })

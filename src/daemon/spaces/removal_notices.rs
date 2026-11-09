@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::{
-    client::space_ids::SpaceId,
+    client::{space_ids::SpaceId, space_names::SpaceName},
     daemon::{
         events::EventCause,
         log,
@@ -18,7 +18,7 @@ use crate::{
 pub(crate) struct Announced<'a> {
     kind: SpaceKind,
     id: &'a SpaceId,
-    name: &'a str,
+    name: &'a SpaceName,
 }
 
 impl<'a> From<&'a Workspace> for Announced<'a> {

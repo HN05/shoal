@@ -3,7 +3,7 @@ use crate::space_ids::SpaceId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::space_names::SpaceSelector;
+use crate::space_names::{SpaceName, SpaceSelector};
 use crate::{
     connection::{Daemon, await_reply, request},
     files::NewFile,
@@ -31,7 +31,7 @@ pub struct Question {
     /// The workspace or chat whose agent asked it.
     pub space_id: SpaceId,
     /// The space's current name.
-    pub space: String,
+    pub space: SpaceName,
     pub created_at: crate::time::UnixTime,
     #[serde(flatten)]
     pub ask: Ask,

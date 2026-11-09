@@ -101,7 +101,7 @@ pub(super) fn describe_space(space: &SpaceRef) -> String {
         (SpaceKind::Workspace, Some(branch)) if *branch != space.name => {
             format!("{} ({branch})", space.name)
         }
-        (SpaceKind::Workspace, _) => space.name.clone(),
+        (SpaceKind::Workspace, _) => space.name.to_string(),
     }
 }
 

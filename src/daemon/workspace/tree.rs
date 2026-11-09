@@ -11,7 +11,7 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::notifications::NotificationKind,
     model::{SpaceRef, Workspace, WorkspaceRef},
@@ -160,14 +160,14 @@ impl Manager {
     /// there; the user then receives the event instead.
     pub(crate) async fn tell_coordinator(
         &self,
-        name: &str,
+        name: &SpaceName,
         workspace_id: Option<&SpaceId>,
         kind: Option<NotificationKind>,
         message: String,
         attachments: Vec<PathBuf>,
         source: Source,
     ) -> bool {
-        let lookup = name.to_owned();
+        let lookup = name.clone();
         let agents = self.tracked_agents().await;
         let found = self
             .store

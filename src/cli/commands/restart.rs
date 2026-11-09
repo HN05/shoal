@@ -286,7 +286,7 @@ fn tell_waiting(ctx: &Context, restarts: &[Restart]) -> bool {
     let names: Vec<_> = restarts
         .iter()
         .filter(|restart| !restart.ready())
-        .map(|restart| restart.space.name())
+        .map(|restart| restart.space.name().as_str())
         .collect();
     if !names.is_empty() && !ctx.json {
         eprintln!("Waiting for the turns of {} to end", names.join(", "));

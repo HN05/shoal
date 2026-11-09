@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     config::Effective,
     daemon::{
@@ -205,7 +205,7 @@ impl Manager {
     }
 
     /// Tell the user that `hooks.post_ready` of the space `name` failed.
-    async fn post_ready_failed(&self, name: &str, error: &anyhow::Error) {
+    async fn post_ready_failed(&self, name: &SpaceName, error: &anyhow::Error) {
         self.notify(
             Some(name),
             NotificationKind::HookFailed,

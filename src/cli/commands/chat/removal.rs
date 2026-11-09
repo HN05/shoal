@@ -13,7 +13,7 @@ use crate::{
 pub(in crate::cli::commands) fn losses(chat: &Chat, spaces: &Spaces) -> Vec<String> {
     let mut lines = Vec::new();
     let below: Vec<String> = (spaces.taken_with(&chat.id).into_iter())
-        .map(|space| space.name)
+        .map(|space| space.name.into())
         .collect();
     if !below.is_empty() {
         lines.push(format!(

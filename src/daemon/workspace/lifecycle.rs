@@ -1654,7 +1654,7 @@ impl Manager {
                 let cleanup = crate::daemon::spaces::removal_notices::Cleanup::Parent(parent);
                 self.announce_removal(&child, cleanup, &Ok(())).await?;
             }
-            removed.push(child.name);
+            removed.push(child.name.into());
         }
         Ok(removed)
     }

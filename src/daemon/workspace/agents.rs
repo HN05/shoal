@@ -2,6 +2,7 @@
 //! not turn an unknown execution into an automatic signal target.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use std::{
@@ -168,7 +169,7 @@ pub(crate) struct Agent {
     /// The `--permission` narrowing it started with, which its recovery
     /// records keep.
     narrowing: crate::config::permissions::PermissionsConfig,
-    workspace: String,
+    workspace: SpaceName,
     workspace_id: SpaceId,
     started: Instant,
     recover: bool,
@@ -1196,7 +1197,7 @@ fn least_work<'a>(
 pub(crate) struct StoppedAgent {
     id: ExecutionId,
     pub name: String,
-    pub workspace: String,
+    pub workspace: SpaceName,
     workspace_id: SpaceId,
     recover: bool,
     handoff_saved: bool,

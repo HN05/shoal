@@ -1,6 +1,7 @@
 //! What failed in a cleanup pass, each failure in the space it concerns
 //! where it concerns one.
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use anyhow::Result;
 use std::{collections::BTreeMap, fmt};
 
@@ -13,16 +14,16 @@ pub(crate) struct SpaceFailures(Vec<SpaceFailure>);
 #[derive(Debug)]
 struct SpaceFailure {
     id: SpaceId,
-    name: String,
+    name: SpaceName,
     error: String,
 }
 
 impl SpaceFailures {
     /// Record that the step failed in the space `id`, named `name`.
-    pub(crate) fn push(&mut self, id: &SpaceId, name: &str, error: &anyhow::Error) {
+    pub(crate) fn push(&mut self, id: &SpaceId, name: &SpaceName, error: &anyhow::Error) {
         self.0.push(SpaceFailure {
             id: id.to_owned(),
-            name: name.to_owned(),
+            name: name.clone(),
             error: format!("{error:#}"),
         });
     }
@@ -59,7 +60,7 @@ pub struct SweepFailures {
 /// A space's failed steps in one pass.
 #[derive(Debug)]
 struct Failed {
-    name: String,
+    name: SpaceName,
     errors: Vec<String>,
 }
 
@@ -97,9 +98,8 @@ impl SweepFailures {
     }
 
     /// The ID, name and failures of each space with failures.
-    pub(super) fn spaces(&self) -> impl Iterator<Item = (&SpaceId, &str, String)> {
-        (self.spaces.iter())
-            .map(|(id, failed)| (id, failed.name.as_str(), failed.errors.join("; ")))
+    pub(super) fn spaces(&self) -> impl Iterator<Item = (&SpaceId, &SpaceName, String)> {
+        (self.spaces.iter()).map(|(id, failed)| (id, &failed.name, failed.errors.join("; ")))
     }
 
     /// The failures of the space `id`.

@@ -73,7 +73,7 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
     seed(&manager, 205).await;
     manager
         .notify(
-            Some("worker"),
+            Some(&"worker".into()),
             NotificationKind::SpaceRemoved,
             "idle cleanup",
         )

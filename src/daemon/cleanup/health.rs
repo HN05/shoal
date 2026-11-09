@@ -2,6 +2,7 @@
 //! workspaces, or have stalled, and telling the user once when they start
 //! failing.
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use std::{collections::HashMap, sync::PoisonError, time::Duration};
 use tokio::time::Instant;
 
@@ -84,7 +85,7 @@ impl Failure {
 #[derive(Debug, PartialEq, Eq)]
 struct Unreported {
     /// The ID and name of the workspace it concerns, if any.
-    workspace: Option<(SpaceId, String)>,
+    workspace: Option<(SpaceId, SpaceName)>,
     error: String,
 }
 

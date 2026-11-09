@@ -331,7 +331,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
             .await
             .unwrap()
             .unwrap();
-        manager.notify_approval(&workspace.name, &request).await;
+        manager.notify_approval(&request).await;
         request
     };
     let unseen = request().await;
@@ -452,7 +452,7 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
         .await
         .unwrap();
     // The allocation announces the request it recorded only now.
-    manager.notify_approval(&workspace.name, &request).await;
+    manager.notify_approval(&request).await;
     let unread = manager.notifications(true, 50).await.unwrap();
     assert!(
         unread
@@ -895,7 +895,7 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
             .await
             .unwrap()
             .unwrap();
-        manager.notify_approval(&child.name, &requested).await;
+        manager.notify_approval(&requested).await;
         let approved = manager.decide_routed_approval(
             &worker.id,
             requested.number,

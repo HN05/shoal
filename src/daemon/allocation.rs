@@ -1,5 +1,6 @@
 //! Shared outcomes of daemon-owned resource allocation.
 use crate::{
+    client::space_names::SpaceName,
     daemon::{approvals::ApprovalRequest, notifications::NotificationKind, workspace::Manager},
     protocol::Body,
 };
@@ -24,7 +25,7 @@ impl Manager {
     /// Record allocation notifications after the claim transaction has finished.
     pub async fn notify_allocation<T>(
         &self,
-        workspace: &str,
+        workspace: &SpaceName,
         outcome: &Allocation<T>,
         busy_prefix: &str,
     ) {
@@ -38,7 +39,7 @@ impl Manager {
                 )
                 .await;
             }
-            Allocation::Approval(request) => self.notify_approval(workspace, request).await,
+            Allocation::Approval(request) => self.notify_approval(request).await,
         }
     }
 }

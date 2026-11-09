@@ -532,7 +532,7 @@ pub(super) async fn check_exports(
 ) -> Result<Vec<PlannedExport>> {
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
-    let exported: Vec<&str> = spaces.iter().map(PresentSpace::name).collect();
+    let exported: Vec<&str> = spaces.iter().map(|space| space.name().as_str()).collect();
     for space in spaces {
         let export = async {
             let export = plan_export(ctx, space, directory, operation).await?;

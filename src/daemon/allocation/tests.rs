@@ -17,7 +17,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
         .await
         .unwrap();
     manager
-        .notify_allocation("worker", &Allocation::Granted(()), "")
+        .notify_allocation(&worker.name, &Allocation::Granted(()), "")
         .await;
     let port = |name: &str| {
         ApprovalRequest::new(
@@ -43,7 +43,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
             .unwrap();
         assert_ne!(decided.status, DecisionStatus::Pending);
         manager
-            .notify_allocation::<()>("worker", &Allocation::Approval(Box::new(request)), "")
+            .notify_allocation::<()>(&worker.name, &Allocation::Approval(Box::new(request)), "")
             .await;
     }
     assert_eq!(manager.unread_notifications().await.unwrap(), 0);
@@ -56,12 +56,12 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     for _ in 0..2 {
         for prefix in ["", "simulator: "] {
             manager
-                .notify_allocation::<()>("worker", &Allocation::Busy("busy".into()), prefix)
+                .notify_allocation::<()>(&worker.name, &Allocation::Busy("busy".into()), prefix)
                 .await;
         }
         manager
             .notify_allocation::<()>(
-                "worker",
+                &worker.name,
                 &Allocation::Approval(Box::new(request.clone())),
                 "",
             )

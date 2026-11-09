@@ -4,13 +4,14 @@ use std::collections::HashSet;
 use anyhow::Result;
 use rusqlite::params;
 
+use crate::client::space_names::SpaceName;
 use crate::state::{QueueKind, QueueState};
 
 /// A start that expired without completing its handoff.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum FailedStart {
-    UnopenedLaunch(String),
-    UnstartedRestore(String),
+    UnopenedLaunch(SpaceName),
+    UnstartedRestore(SpaceName),
 }
 
 /// Delete unheld, daemon-started entries older than `cutoff`. Opened launches
@@ -29,7 +30,7 @@ pub(super) fn expire_starts(
         .query_map(params![QueueState::Starting, cutoff], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })?
-        .collect::<rusqlite::Result<Vec<(String, String, QueueKind, bool)>>>()?;
+        .collect::<rusqlite::Result<Vec<(String, SpaceName, QueueKind, bool)>>>()?;
     let mut failures = Vec::new();
     for (id, name, kind, unopened) in stale {
         if held.contains(&id) {

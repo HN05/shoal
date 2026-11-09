@@ -253,7 +253,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         .store_proposal(request, proposals::propose_issue)
         .await
         .unwrap();
-    manager.notify_approval(&workspace.name, &proposed).await;
+    manager.notify_approval(&proposed).await;
     assert_eq!(manager.notifications(true, 50).await.unwrap().len(), 1);
     // An approval that failed to open it kept the user's edited title.
     let mut edited = proposed.clone();
@@ -332,7 +332,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .store_proposal(request, proposals::propose_issue)
         .await
         .unwrap();
-    manager.notify_approval(&child.name, &proposed).await;
+    manager.notify_approval(&proposed).await;
     let routed = manager
         .approval_request(proposed.number)
         .await
@@ -355,7 +355,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
     // It may deny it as a duplicate of another proposal, which takes its
     // finding, and deny that one with a reason.
     let original = store_issue_proposal(&manager, &child.clone().into()).await;
-    manager.notify_approval(&child.name, &original).await;
+    manager.notify_approval(&original).await;
     let duplicate = ProposalDecision {
         duplicate_of: Some(Duplicate::Approval(original.number)),
         ..ProposalDecision::default()
@@ -428,7 +428,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .store_proposal(request, proposals::propose_issue)
         .await
         .unwrap();
-    manager.notify_approval(&child.name, &elsewhere).await;
+    manager.notify_approval(&elsewhere).await;
     let duplicate = ProposalDecision {
         duplicate_of: Some(Duplicate::Issue("12".into())),
         ..ProposalDecision::default()
@@ -474,7 +474,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .store_proposal(request, proposals::propose_issue)
         .await
         .unwrap();
-    manager.notify_approval(&child.name, &pending).await;
+    manager.notify_approval(&pending).await;
     for id in [&child.id, &parent.id] {
         manager
             .remove_workspace(

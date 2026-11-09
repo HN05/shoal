@@ -7,7 +7,7 @@ use std::{fmt, str::FromStr};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::space_names::SpaceSelector;
+use crate::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::{Agent, ModelChoice},
     connection::{Daemon, await_reply, pages, request},
@@ -333,7 +333,7 @@ pub struct Review {
     pub id: ReviewId,
     pub workspace_id: SpaceId,
     /// The workspace's name.
-    pub workspace: String,
+    pub workspace: SpaceName,
     pub target: ReviewTarget,
     /// The agent asked to review.
     pub agent: String,

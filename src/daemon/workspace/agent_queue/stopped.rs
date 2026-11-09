@@ -357,7 +357,7 @@ impl Manager {
         let restore = Restore::new(target, execution, &record.agent, &env, false)?.starting(id);
         let start = Start {
             id: restore.id.clone(),
-            name: restore.target.name.clone(),
+            name: workspace.name.clone(),
             env,
         };
         self.store.write(move |tx| insert(tx, &restore)).await?;

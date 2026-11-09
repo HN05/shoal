@@ -57,7 +57,7 @@ async fn a_retained_chat_records_no_retention() {
     let chat = Announced {
         kind: SpaceKind::Chat,
         id: &SpaceId::from("chat-id"),
-        name: "notes",
+        name: &"notes".into(),
     };
 
     let removal: Result<bool> = Err(anyhow::anyhow!("agent running"));
@@ -74,11 +74,11 @@ async fn a_retained_chat_records_no_retention() {
 
 #[test]
 fn only_a_workspace_with_a_checkpoint_is_restorable() {
-    let id = SpaceId::from("id");
+    let (id, name) = (SpaceId::from("id"), SpaceName::from("topic"));
     let space = |kind| Announced {
         kind,
         id: &id,
-        name: "topic",
+        name: &name,
     };
     let restorable =
         |kind, cleanup| (space(kind).removal_notice(cleanup)).contains("shoal work restore topic");

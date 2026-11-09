@@ -194,7 +194,7 @@ impl Manager {
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
-                update.workspace = Some(child.name.clone());
+                update.workspace = Some(child.name.to_string());
                 (child.id.clone(), update)
             }));
         }

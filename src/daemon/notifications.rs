@@ -8,7 +8,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
 pub(crate) use crate::client::notifications::{Cleared, Notification, NotificationKind, Sent};
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::log;
 use crate::daemon::workspace::{Manager, Source};
 use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files};
@@ -69,34 +69,26 @@ pub(crate) struct Recorded {
 /// the key of a request it asks the user to decide.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct About {
-    pub name: Option<String>,
+    pub name: Option<SpaceName>,
     pub id: Option<SpaceId>,
     pub subject: Option<String>,
 }
 
 impl About {
     /// The workspace named `name`, whose identity recording looks up.
-    fn named(name: Option<&str>) -> Self {
+    fn named(name: Option<&SpaceName>) -> Self {
         Self {
-            name: name.map(str::to_owned),
+            name: name.cloned(),
             ..Self::default()
         }
     }
 
     /// The space `id`, which has `name`.
-    pub(crate) fn space(name: &str, id: &SpaceId) -> Self {
+    pub(crate) fn space(name: &SpaceName, id: &SpaceId) -> Self {
         Self {
-            name: Some(name.to_owned()),
+            name: Some(name.clone()),
             id: Some(id.to_owned()),
             subject: None,
-        }
-    }
-
-    /// The same, asking the user to decide the request `subject`.
-    pub(crate) fn asking(self, subject: &str) -> Self {
-        Self {
-            subject: Some(subject.to_owned()),
-            ..self
         }
     }
 
@@ -240,7 +232,7 @@ impl Manager {
     /// a notification must not fail the operation it describes.
     pub async fn notify(
         &self,
-        workspace: Option<&str>,
+        workspace: Option<&SpaceName>,
         kind: NotificationKind,
         message: impl Into<String>,
     ) {

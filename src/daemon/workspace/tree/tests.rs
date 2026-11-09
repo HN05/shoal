@@ -21,7 +21,7 @@ use crate::{
 fn space(workspace: &Workspace) -> SpaceRef {
     SpaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.to_string(),
+        name: workspace.name.clone(),
         kind: SpaceKind::Workspace,
         branch: workspace.branch.clone(),
     }
@@ -1357,7 +1357,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&child.name, &requested).await;
+    manager.notify_approval(&requested).await;
     let routed = manager
         .approval_request(requested.number)
         .await
@@ -1470,11 +1470,11 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
             .await
             .is_err()
     );
-    manager.notify_approval(&child.name, &escalated).await;
+    manager.notify_approval(&escalated).await;
     // A snapshot from before the routing, as a concurrent acquisition holds,
     // does not route it again either.
     assert!(!requested.routed);
-    manager.notify_approval(&child.name, &requested).await;
+    manager.notify_approval(&requested).await;
     let again = manager
         .approval_request(requested.number)
         .await
@@ -1545,7 +1545,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&child.name, &requested).await;
+    manager.notify_approval(&requested).await;
     // The root cannot be told, so passing it up gives it to the user, as
     // the reply says.
     let mut n = 0;
@@ -1697,7 +1697,7 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&worker.name, &requested).await;
+    manager.notify_approval(&requested).await;
     let routed = manager
         .approval_request(requested.number)
         .await
@@ -1767,7 +1767,7 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&worker.name, &requested).await;
+    manager.notify_approval(&requested).await;
     let routed = manager
         .approval_request(requested.number)
         .await
@@ -1865,7 +1865,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&child.name, &requested).await;
+    manager.notify_approval(&requested).await;
     let routed = manager
         .approval_request(requested.number)
         .await
@@ -1905,7 +1905,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     process.kill();
     tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        manager.notify_approval(&child.name, &routed),
+        manager.notify_approval(&routed),
     )
     .await
     .expect("the retry waited on the gate it holds");
@@ -2007,7 +2007,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&child.name, &requested).await;
+    manager.notify_approval(&requested).await;
     // The grant ends before the parent decides, so it may no longer approve.
     let parent_id = parent.id.clone();
     manager
@@ -2056,7 +2056,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&child.name, &longer).await;
+    manager.notify_approval(&longer).await;
     assert!(
         manager
             .decide_routed_approval(&parent.id, longer.number, true, None, Default::default())
@@ -2089,7 +2089,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&child.name, &other).await;
+    manager.notify_approval(&other).await;
     assert_eq!(user_requests().await, 1);
     // It is the user's now, so their inbox lists it.
     let given_back = manager
@@ -2174,7 +2174,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .await
             .unwrap()
             .unwrap();
-        manager.notify_approval(&child.name, &requested).await;
+        manager.notify_approval(&requested).await;
         let shown = manager
             .approval_request(requested.number)
             .await
@@ -2211,7 +2211,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .unwrap();
         assert_eq!(replacement.number, shown.number);
         assert_ne!(replacement.key, shown.key);
-        manager.notify_approval(&child.name, &replacement).await;
+        manager.notify_approval(&replacement).await;
         if displayed {
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await

@@ -555,7 +555,7 @@ pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueSta
         .await
         .unwrap()
         .into_iter()
-        .map(|entry| (entry.name, entry.kind, entry.state))
+        .map(|entry| (entry.name.into(), entry.kind, entry.state))
         .collect()
 }
 
@@ -1078,7 +1078,7 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
     assert!(
         notifications.iter().any(|notification| {
             notification.kind == NotificationKind::QueueFailed
-                && notification.message.contains(&entry.name)
+                && notification.message.contains(entry.name.as_str())
         }),
         "{notifications:?}"
     );

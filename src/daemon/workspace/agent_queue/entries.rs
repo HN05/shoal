@@ -13,7 +13,10 @@ use super::{
     dispatch::Start,
     store::{ENTRY_COLUMNS, Launch, entry, insert_launch},
 };
-use crate::client::{space_names::SpaceSelector, time::UnixTime};
+use crate::client::{
+    space_names::{SpaceName, SpaceSelector},
+    time::UnixTime,
+};
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
@@ -55,7 +58,7 @@ impl Manager {
         };
         let start = Start {
             id: id.clone(),
-            name: request.name.to_string(),
+            name: request.name.clone(),
             env: request.env.clone(),
         };
         let launch = Launch {
@@ -319,7 +322,7 @@ impl Manager {
         let entry = self
             .store
             .run(move |db| {
-                let entry: Option<(String, bool)> = db
+                let entry: Option<(SpaceName, bool)> = db
                     .query_row(
                         "SELECT name, state=?2 FROM agent_queue WHERE id=?1",
                         params![entry_id, QueueState::Starting],

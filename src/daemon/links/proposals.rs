@@ -108,7 +108,7 @@ impl Manager {
         );
         // A chat without a repository proposes it for the one it acts in.
         request.repository_id = Some(space.repository_id().to_owned());
-        self.record_proposal(space.name(), request, proposals::propose_issue, files)
+        self.record_proposal(request, proposals::propose_issue, files)
             .await
     }
 
@@ -134,7 +134,7 @@ impl Manager {
             push,
         });
         let request = proposal(&workspace.id, Target::PrOpen, proposals::PR, specification);
-        self.record_proposal(&workspace.name, request, proposals::propose_pull, files)
+        self.record_proposal(request, proposals::propose_pull, files)
             .await
     }
 
@@ -198,12 +198,11 @@ impl Manager {
         tokio::task::spawn_blocking(move || remove_unattached(&root, &kept)).await?
     }
 
-    /// Store the proposal of the space named `space` with `record` and tell
-    /// whoever decides it about a new one. `files`, held since its files
-    /// were copied, is released once it is stored.
+    /// Store the proposal `request` with `record` and tell whoever decides
+    /// it about a new one. `files`, held since its files were copied, is
+    /// released once it is stored.
     pub(super) async fn record_proposal(
         &self,
-        space: &str,
         request: ApprovalRequest,
         record: fn(&rusqlite::Transaction<'_>, ApprovalRequest) -> Result<Recorded>,
         files: tokio::sync::MutexGuard<'_, ()>,
@@ -212,7 +211,7 @@ impl Manager {
         drop(files);
         self.prune_proposal_files().await;
         if new {
-            self.notify_approval(space, &request).await;
+            self.notify_approval(&request).await;
         }
         Ok(Proposed {
             proposed: Box::new(request),

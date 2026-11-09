@@ -6,6 +6,7 @@
 pub(super) mod pending;
 
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use anyhow::{Context as _, Result};
 
 use super::Manager;
@@ -207,7 +208,7 @@ impl Manager {
         }
     }
 
-    async fn session_cleanup_failed(&self, workspace: Option<&str>, error: &anyhow::Error) {
+    async fn session_cleanup_failed(&self, workspace: Option<&SpaceName>, error: &anyhow::Error) {
         self.notify(
             workspace,
             NotificationKind::CleanupFailed,

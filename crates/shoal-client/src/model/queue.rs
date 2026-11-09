@@ -15,7 +15,7 @@ pub struct QueueEntry {
     pub repository_id: RepositoryId,
     /// The workspace name: derived from the planned branch for a launch, the
     /// stopped agent's for a restore.
-    pub name: String,
+    pub name: SpaceName,
     pub agent: String,
     /// The mode a launch's agent starts in; none for a restore, which keeps
     /// its agent's.

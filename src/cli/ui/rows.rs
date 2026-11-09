@@ -472,7 +472,7 @@ pub fn queue_rows(
         .zip(names)
         .map(|(entry, repository)| {
             [
-                (entry.name.clone(), Some(Style::Heading)),
+                (entry.name.to_string(), Some(Style::Heading)),
                 (
                     if several {
                         repository.into()

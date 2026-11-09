@@ -123,7 +123,7 @@ fn tree_rows_list_children_below_their_parent() {
     ];
     let reference = |w: &Workspace| crate::model::SpaceRef {
         id: w.id.clone(),
-        name: w.name.to_string(),
+        name: w.name.clone(),
         kind: crate::model::SpaceKind::Workspace,
         branch: w.branch.clone(),
     };

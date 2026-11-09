@@ -91,7 +91,7 @@ pub(super) async fn decider(
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&workspace.name, &requested).await;
+    manager.notify_approval(&requested).await;
     let routed = manager.approval_request(requested.number).await.unwrap();
     routed.unwrap().decider
 }

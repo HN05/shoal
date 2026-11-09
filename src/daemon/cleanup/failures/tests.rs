@@ -10,11 +10,15 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
         let mut workspaces = SpaceFailures::default();
         workspaces.push(
             &SpaceId::from("id-a"),
-            "a",
+            &"a".into(),
             &anyhow::anyhow!("{step} failed in a"),
         );
         if step == "idle agents" {
-            workspaces.push(&SpaceId::from("id-b"), "b", &anyhow::anyhow!("bad config"));
+            workspaces.push(
+                &SpaceId::from("id-b"),
+                &"b".into(),
+                &anyhow::anyhow!("bad config"),
+            );
         }
         failed.step(step, workspaces.into_result());
     }

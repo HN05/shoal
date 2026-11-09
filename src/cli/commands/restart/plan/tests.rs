@@ -45,7 +45,7 @@ fn reporting(workspace: &Workspace, state: Option<AgentState>) -> RunningAgent {
 fn restarted(plan: &Plan) -> Vec<&str> {
     plan.restarts
         .iter()
-        .map(|restart| restart.space.name())
+        .map(|restart| restart.space.name().as_str())
         .collect()
 }
 

@@ -3,6 +3,7 @@
 //! and starts what the daemon starts itself.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
+use crate::client::space_names::SpaceName;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     time::Duration,
@@ -29,7 +30,7 @@ pub(super) const START_GRACE: Duration = Duration::from_secs(120);
 /// An admitted entry the daemon starts itself.
 pub(crate) struct Start {
     pub id: String,
-    pub name: String,
+    pub name: SpaceName,
     pub env: BTreeMap<String, String>,
 }
 
@@ -299,7 +300,7 @@ impl Manager {
                         "UPDATE agent_queue SET state=?2,seen_at=?3,base_branch=?4 WHERE id=?1",
                         params![id, QueueState::Starting, now, bases.remove(&id)],
                     )?;
-                    let (name, env): (String, Option<String>) = tx.query_row(
+                    let (name, env): (SpaceName, Option<String>) = tx.query_row(
                         "SELECT name,env FROM agent_queue WHERE id=?1",
                         [&id],
                         |row| Ok((row.get(0)?, row.get(1)?)),

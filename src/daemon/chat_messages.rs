@@ -9,7 +9,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 use std::path::{Path, PathBuf};
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::{
     agent_messages::{self, AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
     links::wait::{RESPONSE_LIMIT, Updates},
@@ -86,13 +86,13 @@ impl Manager {
     pub(crate) async fn queue_chat_message(
         &self,
         chat: &SpaceId,
-        workspace: Option<&str>,
+        workspace: Option<&SpaceName>,
         workspace_id: Option<&SpaceId>,
         kind: Option<NotificationKind>,
         message: String,
         attachments: Vec<PathBuf>,
     ) -> Result<()> {
-        let (chat, workspace) = (chat.to_owned(), workspace.map(str::to_owned));
+        let (chat, workspace) = (chat.to_owned(), workspace.cloned());
         let workspace_id = workspace_id.cloned();
         let queued = self
             .store

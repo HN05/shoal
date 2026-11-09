@@ -1,6 +1,7 @@
 //! Spaces: workspaces and chats, which share one namespace of IDs and names,
 //! so a request naming a space acts on whichever of them it names.
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use anyhow::{Context as _, Result};
 
 use super::{workspace::Manager, workspace_files::Attacher};
@@ -14,7 +15,7 @@ use crate::{
 /// The space a message for another space's agent is about.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct About<'a> {
-    pub name: &'a str,
+    pub name: &'a SpaceName,
     pub id: Option<&'a SpaceId>,
     /// The notification the event would be for the user.
     pub kind: Option<NotificationKind>,

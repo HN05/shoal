@@ -57,7 +57,7 @@ pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, V
 /// Remove the stopped `chat` unless spaces are below it.
 async fn discard(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<Chat> {
     let below: Vec<String> = (spaces.below(&chat.id).into_iter())
-        .map(|space| space.name)
+        .map(|space| space.name.into())
         .collect();
     ensure!(
         below.is_empty(),

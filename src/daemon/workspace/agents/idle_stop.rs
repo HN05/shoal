@@ -3,6 +3,7 @@
 //! since restoring one rewrites its cache.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use crate::daemon::workspace::agents::ProtectionExt;
 use std::collections::HashMap;
 
@@ -15,7 +16,7 @@ use crate::state::AgentState;
 struct Candidate {
     execution: ExecutionId,
     workspace_id: SpaceId,
-    workspace: String,
+    workspace: SpaceName,
     /// The agent's [`super::Agent::turns_started`] when it was chosen.
     turns_started: u64,
 }

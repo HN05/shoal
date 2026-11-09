@@ -1,5 +1,5 @@
 use crate::{
-    client::files::Attacher,
+    client::{files::Attacher, space_names::SpaceName},
     daemon::notifications::NotificationKind,
     model::{SpaceDetail, SpaceStatus},
 };
@@ -38,7 +38,11 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
         (None, "daemon"),
     ] {
         manager
-            .notify(workspace, NotificationKind::CleanupFailed, message)
+            .notify(
+                workspace.map(SpaceName::from).as_ref(),
+                NotificationKind::CleanupFailed,
+                message,
+            )
             .await;
     }
     manager

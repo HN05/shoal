@@ -41,7 +41,7 @@ impl Progress {
                 .iter()
                 .map(|restart| {
                     let execution = restart.agent.execution.clone();
-                    (execution, restart.space.name().to_owned())
+                    (execution, restart.space.name().to_string())
                 })
                 .collect(),
         }
@@ -83,7 +83,7 @@ impl Progress {
                     place.as_ref(),
                 ),
                 RestartedAgent {
-                    space: name.to_owned(),
+                    space: name.to_string(),
                     agent: restart.agent.agent.clone(),
                     place,
                 },

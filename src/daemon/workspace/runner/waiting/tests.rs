@@ -212,7 +212,7 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
         .await
         .unwrap()
         .into_iter()
-        .map(|entry| entry.name)
+        .map(|entry| entry.name.into())
         .collect();
     assert_eq!(order, ["first", "ci-linked-1", "restore", "ci-unlinked-1"]);
 }

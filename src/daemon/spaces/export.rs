@@ -204,7 +204,7 @@ impl Manager {
         let (chats, taken): (Vec<_>, Vec<_>) = (self.spaces_taken_with(&workspace.id).await?)
             .into_iter()
             .partition(|space| space.kind == SpaceKind::Chat);
-        let chats: Vec<String> = chats.into_iter().map(|chat| chat.name).collect();
+        let chats: Vec<String> = chats.into_iter().map(|chat| chat.name.into()).collect();
         ensure!(
             chats.is_empty(),
             "chats run in workspace {} or below it ({}), which shoal move does not move; remove them first",

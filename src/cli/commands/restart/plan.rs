@@ -47,7 +47,7 @@ impl Restart {
     /// The agent, skipped for `reason`.
     pub(super) fn skipped(self, reason: impl Into<String>) -> Skipped {
         Skipped {
-            space: self.space.name().to_owned(),
+            space: self.space.name().to_string(),
             agent: self.agent.agent,
             reason: reason.into(),
         }
@@ -113,7 +113,7 @@ impl Selection {
                 .partition(|running| running.stopped.is_some());
             if agents.is_empty() && self.named {
                 plan.skipped.push(Skipped {
-                    space: space.name().to_owned(),
+                    space: space.name().to_string(),
                     agent: agent.map(str::to_owned),
                     reason: absent_reason(space.name(), agent, &stopped),
                 });
@@ -121,7 +121,7 @@ impl Selection {
             for running in agents {
                 match run_skip_reason(&space, &running, in_place) {
                     Some(reason) => plan.skipped.push(Skipped {
-                        space: space.name().to_owned(),
+                        space: space.name().to_string(),
                         agent: running.agent,
                         reason,
                     }),

@@ -8,21 +8,33 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     let watcher = manager.signals.watch_notifications();
     for _ in 0..3 {
         manager
-            .notify(Some("a"), NotificationKind::ResourceBusy, "pool busy")
+            .notify(
+                Some(&"a".into()),
+                NotificationKind::ResourceBusy,
+                "pool busy",
+            )
             .await;
     }
     manager
-        .notify(Some("b"), NotificationKind::ResourceBusy, "pool busy")
+        .notify(
+            Some(&"b".into()),
+            NotificationKind::ResourceBusy,
+            "pool busy",
+        )
         .await;
     for _ in 0..2 {
         manager
-            .notify(Some("a"), NotificationKind::AgentExited, "claude exited")
+            .notify(
+                Some(&"a".into()),
+                NotificationKind::AgentExited,
+                "claude exited",
+            )
             .await;
     }
     for _ in 0..2 {
         manager
             .notify(
-                Some("a"),
+                Some(&"a".into()),
                 NotificationKind::HookFailed,
                 "workspace removed; hook failed",
             )
@@ -69,7 +81,11 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     assert_eq!(manager.notifications(false, 1).await.unwrap()[0].id, last);
     // Once read, the same conflict is news again.
     manager
-        .notify(Some("a"), NotificationKind::ResourceBusy, "pool busy")
+        .notify(
+            Some(&"a".into()),
+            NotificationKind::ResourceBusy,
+            "pool busy",
+        )
         .await;
     let after = manager.notifications_after(last, 50).await.unwrap();
     assert_eq!(after.len(), 1);
@@ -218,7 +234,11 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     // A repeat collapses into the same notification.
     assert_eq!(send("PR #12 is ready to merge").await, sent);
     manager
-        .notify(Some("sender"), NotificationKind::ResourceBusy, "pool busy")
+        .notify(
+            Some(&"sender".into()),
+            NotificationKind::ResourceBusy,
+            "pool busy",
+        )
         .await;
     let busy = manager.notifications(true, 50).await.unwrap()[1].id;
     for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {

@@ -10,7 +10,7 @@ fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepF
     let result = match workspace {
         Some(id) => {
             let mut failures = SpaceFailures::default();
-            failures.push(&SpaceId::from(id), id, &error);
+            failures.push(&SpaceId::from(id), &id.into(), &error);
             failures.into_result()
         }
         None => Err(error),
@@ -22,7 +22,7 @@ fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepF
 
 fn unreported(workspace: Option<&str>, error: &str) -> Unreported {
     Unreported {
-        workspace: workspace.map(|id| (SpaceId::from(id), id.to_owned())),
+        workspace: workspace.map(|id| (SpaceId::from(id), id.into())),
         error: error.to_owned(),
     }
 }

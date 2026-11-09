@@ -20,7 +20,7 @@ async fn waiting(manager: &Manager) -> Vec<String> {
         .unwrap()
         .into_iter()
         .filter(|entry| entry.state == QueueState::Queued)
-        .map(|entry| entry.name)
+        .map(|entry| entry.name.into())
         .collect()
 }
 

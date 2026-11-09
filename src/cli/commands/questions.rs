@@ -203,7 +203,7 @@ fn picker_rows(questions: &[Question]) -> Entries {
         .map(|question| {
             [
                 (question.number.to_string(), Some(Style::Muted)),
-                (question.space.clone(), None),
+                (question.space.to_string(), None),
                 (question.one_line(), None),
                 (
                     question

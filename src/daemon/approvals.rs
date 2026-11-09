@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use std::fmt;
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
@@ -344,6 +344,10 @@ pub(crate) trait ApprovalRequestExt {
 
     /// The agent message naming a decision and what the requesting agent does next.
     fn decision_message(&self) -> String;
+
+    /// The name of the space that made it, which storing the request
+    /// records; none before.
+    fn space_name(&self) -> Option<SpaceName>;
 }
 
 impl ApprovalRequestExt for ApprovalRequest {
@@ -420,6 +424,10 @@ impl ApprovalRequestExt for ApprovalRequest {
             self.subject(),
             self.status
         )
+    }
+
+    fn space_name(&self) -> Option<SpaceName> {
+        SpaceName::parse(&self.space).ok()
     }
 }
 
@@ -777,7 +785,7 @@ impl Manager {
             return;
         }
         self.notify(
-            Some(&request.space),
+            request.space_name().as_ref(),
             NotificationKind::ApprovalWithdrawn,
             message,
         )
@@ -1048,7 +1056,7 @@ impl Manager {
     /// above its workspace, a parent workspace with an agent or the chat that
     /// opened it, or else the user. A request is routed once; repeating it
     /// tells its decider again.
-    pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
+    pub async fn notify_approval(&self, request: &ApprovalRequest) {
         let _gate = self.gates.lock_announcements().await;
         // It may have been withdrawn or decided since it was requested.
         let request = match self.approval_by_key(&request.key).await {
@@ -1065,10 +1073,10 @@ impl Manager {
             false => self.route_approval(request, None).await,
         };
         match routed {
-            Ok(routed) => self.announce_approval(workspace, &routed).await,
+            Ok(routed) => self.announce_approval(&routed).await,
             Err(error) => {
                 log!("approval {} not routed: {error:#}", request.number);
-                self.ask_user(workspace, request).await;
+                self.ask_user(request).await;
             }
         }
     }
@@ -1095,7 +1103,7 @@ impl Manager {
         );
         let _gate = self.gates.lock_announcements().await;
         let routed = self.route_approval(&request, Some(space.id())).await?;
-        self.announce_approval(&request.space, &routed).await;
+        self.announce_approval(&routed).await;
         // A decider that could not be told gave the request to the user. Its
         // key, unlike its number, never names another request.
         Ok(self.approval_by_key(&routed.key).await?.unwrap_or(routed))
@@ -1127,9 +1135,10 @@ impl Manager {
 
     /// Message the request's decider, or notify the user when no space
     /// decides it or its decider cannot be told.
-    async fn announce_approval(&self, workspace: &str, request: &ApprovalRequest) {
+    async fn announce_approval(&self, request: &ApprovalRequest) {
         let about = format!(
-            "{workspace}: approval {}: {}: {}",
+            "{}: approval {}: {}: {}",
+            request.space,
             request.number,
             request.subject(),
             request.reason
@@ -1152,7 +1161,7 @@ impl Manager {
             if request.decider.is_some() {
                 self.release_to_user(request).await;
             }
-            self.ask_user(workspace, request).await;
+            self.ask_user(request).await;
         }
     }
 
@@ -1174,7 +1183,7 @@ impl Manager {
             if let Some(stored) = stored.filter(|stored| {
                 stored.status == DecisionStatus::Pending && stored.decider.is_none()
             }) {
-                self.ask_user(&stored.space, &stored).await;
+                self.ask_user(&stored).await;
             }
         }
     }
@@ -1205,8 +1214,12 @@ impl Manager {
         }
     }
 
-    async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
-        let about = About::space(workspace, &request.space_id).asking(&request.key);
+    async fn ask_user(&self, request: &ApprovalRequest) {
+        let about = About {
+            name: request.space_name(),
+            id: Some(request.space_id.clone()),
+            subject: Some(request.key.clone()),
+        };
         self.notify_about(
             about,
             NotificationKind::ApprovalRequested,

@@ -110,7 +110,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     process.kill();
     let worker = SpaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.to_string(),
+        name: workspace.name.clone(),
         kind: SpaceKind::Workspace,
         branch: workspace.branch.clone(),
     };
