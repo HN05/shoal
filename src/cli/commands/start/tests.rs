@@ -187,3 +187,25 @@ async fn the_setup_mode_starts_only_with_its_own_commands() {
         assert!(error.contains("shoal config setup"), "{error}");
     }
 }
+
+#[test]
+fn a_workspace_start_takes_the_checked_repository_by_id() {
+    let checked = || Some(crate::repository::Selector::Id("repo-id".into()));
+    let id = |named: Option<crate::repository::Selector>| match named {
+        Some(crate::repository::Selector::Id(id)) => Some(id),
+        _ => None,
+    };
+    // It replaces the positional repository that named it.
+    let (positional, named) = named_repository(Some("repo".into()), None, checked()).unwrap();
+    assert_eq!((positional, id(named)), (None, Some("repo-id".into())));
+    // A positional issue stays, beside the repository `--repo` named.
+    let (positional, named) =
+        named_repository(Some("37".into()), Some("repo".into()), checked()).unwrap();
+    assert_eq!(
+        (positional, id(named)),
+        (Some("37".into()), Some("repo-id".into()))
+    );
+    // Unchecked, `--repo` stays the user's text.
+    let (_, named) = named_repository(Some("37".into()), Some("repo".into()), None).unwrap();
+    assert!(matches!(named, Some(crate::repository::Selector::Value(value)) if value == "repo"));
+}

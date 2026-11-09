@@ -309,6 +309,7 @@ async fn checked_repository(
         true => args.repository = named,
         false => args.repository_override = named,
     }
+    args.checked_repository = Some(selector.clone());
     Ok(selector)
 }
 
@@ -421,16 +422,17 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
     };
     // A copy goes in the copied workspace's repository unless one is named,
     // which the daemon refuses when it is another.
-    let named = args
-        .repository_override
-        .map(ui::repository_selector)
-        .transpose()?;
-    let repository = match (&copy, &args.repository) {
+    let (positional, named) = named_repository(
+        args.repository,
+        args.repository_override,
+        args.checked_repository,
+    )?;
+    let repository = match (&copy, &positional) {
         (Some(copy), None) => named.or_else(|| Some(copy.repository.clone().into())),
         _ => named,
     };
     let input = AddInput {
-        positional: args.repository,
+        positional,
         repository,
         issue,
     };
@@ -515,6 +517,25 @@ async fn forked(
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, agent.name())?;
     Ok((parent, agent, session))
+}
+
+/// The positional argument and the repository a workspace's start takes:
+/// the `checked` one, in place of the argument that named it, else the one
+/// `--repo` names.
+fn named_repository(
+    positional: Option<String>,
+    repository: Option<String>,
+    checked: Option<crate::repository::Selector>,
+) -> Result<(Option<String>, Option<crate::repository::Selector>)> {
+    let Some(checked) = checked else {
+        return Ok((
+            positional,
+            repository.map(ui::repository_selector).transpose()?,
+        ));
+    };
+    let names_repository = (positional.as_deref())
+        .is_some_and(|positional| positional_kind(positional) == Positional::Repository);
+    Ok((positional.filter(|_| !names_repository), Some(checked)))
 }
 
 /// Start the agent in a chat in a repository's checkout, or with `--in` in

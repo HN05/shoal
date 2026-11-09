@@ -109,6 +109,11 @@ pub struct StartArgs {
     /// Repository for an issue number or a pasted link.
     #[arg(short = 'r', long = "repo")]
     pub repository_override: Option<String>,
+    /// The repository the start resolved and checked before choosing what it
+    /// starts, which a workspace's start then takes in place of the
+    /// arguments that named it.
+    #[arg(skip)]
+    pub checked_repository: Option<crate::repository::Selector>,
     /// Git branch name; a portable workspace name is derived from it.
     pub branch: Option<String>,
     /// Use an existing local branch or remote/branch without creating a new branch.
