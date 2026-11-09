@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result};
 
-use super::Chosen;
+use super::start::Chosen;
 use crate::client::leases::{self, Acquisition, PortAcquisition};
 use crate::client::output::acquisition::NotAcquired;
 use crate::client::space_names::SpaceSelector;

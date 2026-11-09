@@ -1,5 +1,4 @@
 use super::*;
-use crate::time::UnixTime;
 
 fn demo(cmd: &[&str]) -> Demo {
     Demo {
@@ -66,54 +65,6 @@ fn start_options_replace_the_configured_parts() {
         Some(&["sh".to_owned(), "-c".into(), "echo $PORT".into()][..])
     );
     assert_eq!(chosen.demo.ports.as_deref(), Some(&["api".to_owned()][..]));
-}
-
-#[test]
-fn a_screen_keeps_its_last_lines_without_trailing_blanks() {
-    assert_eq!(
-        last_lines("one\ntwo\nthree\n\n\n", 2).as_deref(),
-        Some("two\nthree")
-    );
-    assert_eq!(last_lines("one\n", 5).as_deref(), Some("one"));
-    assert_eq!(last_lines("\n\n", 5), None);
-}
-
-#[test]
-fn listings_show_running_demos_then_the_configured_ones_not_running() {
-    let launch = Launch {
-        id: "launch".into(),
-        name: "web".into(),
-        preset: Some(Preset::Web),
-        open: None,
-        scheme: None,
-        environment: BTreeMap::new(),
-        origin: crate::sessions::Origin::created(
-            crate::sessions::HostName::Zmx,
-            "first-web".into(),
-        ),
-    };
-    let listing = Listing {
-        workspace: Some("first".into()),
-        configured: BTreeMap::from([
-            ("tui".to_owned(), demo(&["cargo", "run"])),
-            ("web".to_owned(), demo(&["npm", "run", "dev"])),
-        ]),
-        running: vec![Running {
-            workspace_id: "id".into(),
-            workspace: "first".into(),
-            execution_id: "execution".into(),
-            started_at: UnixTime::from_seconds(0),
-            has_run: true,
-            url: None,
-            launch,
-        }],
-    };
-    let rows = listing_rows(&listing, Palette::stdout(true));
-    let names: Vec<_> = rows
-        .iter()
-        .filter_map(|row| row.split_whitespace().next())
-        .collect();
-    assert_eq!(names, ["web", "tui"]);
 }
 
 #[test]
