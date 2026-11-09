@@ -212,7 +212,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
 
     // What the space recorded comes back, with what the giver holds.
     let recorded = assigned(&["merge=direct", "push=propose"]);
-    let registered = manager.ensure_registration_held(giver, &child, &recorded);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &recorded);
     registered.await.unwrap();
     manager
         .ensure_restore_held(giver, &talk, &recorded)
@@ -220,7 +220,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         .unwrap();
     // A value the giver does not hold, recorded nowhere, is refused.
     let wider = assigned(&["merge=direct", "api_writes=direct"]);
-    let registered = manager.ensure_registration_held(giver, &child, &wider);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &wider);
     assert!(registered.await.is_err());
     assert!(
         manager
@@ -228,9 +228,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
             .await
             .is_err()
     );
-    // A new agent or a restart takes nothing as recorded.
-    let queued = manager.ensure_new_agent_held(giver, &child, &recorded);
-    assert!(queued.await.is_err());
+    // A restart takes nothing as recorded.
     let change = crate::config::permissions::PermissionChange {
         set: recorded,
         dropped: Vec::new(),
@@ -238,14 +236,12 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let restarted = manager.ensure_chat_restart_held(giver, Some(&talk), &change);
     assert!(restarted.await.is_err());
     // The user gives any.
-    let registered = manager.ensure_registration_held(None, &child, &wider);
+    let registered = manager.ensure_workspace_agent_held(None, &child, &wider);
     registered.await.unwrap();
     manager
         .ensure_restore_held(None, &talk, &wider)
         .await
         .unwrap();
-    let queued = manager.ensure_new_agent_held(None, &child, &wider);
-    queued.await.unwrap();
     let restarted = manager.ensure_chat_restart_held(None, Some(&talk), &change);
     restarted.await.unwrap();
 }
@@ -284,13 +280,14 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
         .unwrap();
     check(None, dropped("push=mode")).await.unwrap();
 
-    // A registration or restore that leaves a recorded key out drops it.
+    // A queued or registered agent or a restore that leaves a recorded key
+    // out drops it.
     let (talk, _talk) = chat(&manager, "talk", "chat", Some(&repo), Some(&parent.id)).await;
     give(&manager, "chats", &talk.id, &["push=propose"]).await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let none = crate::config::permissions::PermissionsConfig::default();
     let (giver, child) = (Some(&top.id), SpaceSelector::id(space.id()));
-    let registered = manager.ensure_registration_held(giver, &child, &none);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &none);
     assert!(registered.await.is_err());
     assert!(
         manager
@@ -299,7 +296,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
             .is_err()
     );
     let recorded = talk.narrowing;
-    let registered = manager.ensure_registration_held(giver, &child, &recorded);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &recorded);
     registered.await.unwrap();
     manager
         .ensure_restore_held(giver, &talk, &recorded)

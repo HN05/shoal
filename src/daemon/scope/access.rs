@@ -324,7 +324,7 @@ impl Manager {
         let given = request.narrowing;
         let target = request.workspace.as_mut().context(REFUSAL)?;
         let target = self.workspace_below(caller, target, REFUSAL).await?;
-        (self.ensure_new_agent_held(Some(&caller.space_id), target, &given)).await?;
+        (self.ensure_workspace_agent_held(Some(&caller.space_id), target, &given)).await?;
         Ok(target)
     }
 

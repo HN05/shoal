@@ -72,21 +72,6 @@ impl Manager {
         }
     }
 
-    /// Refuse `given` to a new agent of `workspace` where the scoped process
-    /// of the space `giver` does not hold it.
-    pub(crate) async fn ensure_new_agent_held(
-        &self,
-        giver: Option<&SpaceId>,
-        workspace: &SpaceSelector,
-        given: &PermissionsConfig,
-    ) -> Result<()> {
-        if giver.is_none() || given.is_empty() {
-            return Ok(());
-        }
-        let repository = self.workspace(workspace).await?.repository_id;
-        (self.ensure_caller_holds(giver, given, Some(&repository))).await
-    }
-
     /// Refuse `change` to the permissions of `space`'s agent where the
     /// scoped process of the space `giver` does not hold a value it sets,
     /// or the value a key it drops falls back to: the space's without what
@@ -126,9 +111,10 @@ impl Manager {
     }
 
     /// Refuse an agent of `workspace` the scoped process of the space
-    /// `giver` registers with `given` where it changes what the workspace
-    /// recorded as [`Self::ensure_change_held`] refuses a change.
-    pub(crate) async fn ensure_registration_held(
+    /// `giver` queues or registers with `given`, which replaces what the
+    /// workspace recorded, where it changes that as
+    /// [`Self::ensure_change_held`] refuses a change.
+    pub(crate) async fn ensure_workspace_agent_held(
         &self,
         giver: Option<&SpaceId>,
         workspace: &SpaceSelector,

@@ -118,7 +118,7 @@ pub(super) async fn execute(
     let giver = caller.as_ref().map(|caller| &caller.space_id);
     if let Some(agent) = &agent
         && let Err(error) =
-            (manager.ensure_registration_held(giver, &workspace, &agent.narrowing)).await
+            (manager.ensure_workspace_agent_held(giver, &workspace, &agent.narrowing)).await
     {
         let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
         return protocol::write(&mut stream, &Response::new(request_id, body)).await;
