@@ -63,7 +63,7 @@ async fn a_prs_discussion_reviews_and_checks_are_read_together() {
     });
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
-    let snapshot = forgejo.activity(&account, 7, Some("topic")).await.unwrap();
+    let snapshot = forgejo.activity(&account, 7).await.unwrap();
     assert!(snapshot.errors.is_empty(), "{:?}", snapshot.errors);
     assert_eq!(server.received().len(), 4);
 }

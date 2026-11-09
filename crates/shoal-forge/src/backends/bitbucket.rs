@@ -567,9 +567,8 @@ impl Backend for Bitbucket {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Snapshot> {
-        rest::pr_activity(self, repo, account, number, branch).await
+        rest::pr_activity(self, repo, account, number).await
     }
 
     async fn pr_status(

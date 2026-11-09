@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::rest::branch_pull,
+    backends::rest::read_pull,
     ci::check_state::CheckState,
     items::{
         item::{Current, ItemState},
@@ -40,9 +40,8 @@ pub(crate) async fn pr_activity(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
-    branch: Option<&str>,
 ) -> Result<Snapshot> {
-    let pull = branch_pull(repo, account, number, branch).await?;
+    let pull = read_pull(repo, account, number).await?;
     let mut snapshot = Snapshot::item(&pull);
     let (discussion, reviews, inline, checks) = tokio::join!(
         discussion(repo, account, number),

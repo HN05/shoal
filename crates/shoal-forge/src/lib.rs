@@ -226,17 +226,13 @@ impl ForgeRepo {
     }
 
     /// Fail closed on changed output. Only commits actually listed in the
-    /// merged PR can authorize cleanup, including squash/rebase merges. A
-    /// given `branch` must be the PR's head.
+    /// merged PR can authorize cleanup, including squash/rebase merges.
     pub async fn merged_commits(
         &self,
         account: &account::Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Option<Vec<String>>> {
-        self.kind
-            .merged_commits(self, account, number, branch)
-            .await
+        self.kind.merged_commits(self, account, number).await
     }
 }
 

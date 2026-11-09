@@ -267,15 +267,14 @@ pub(crate) trait Backend {
 
     /// Fail closed on changed output: only commits the merged PR lists can
     /// authorize cleanup, including squash and rebase merges. None while the
-    /// PR, which must have a given `branch` as its head, is unmerged.
+    /// PR is unmerged.
     async fn merged_commits(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Option<Vec<String>>> {
-        rest::merged_commits(repo, account, number, branch)
+        rest::merged_commits(repo, account, number)
             .await
             .context(MERGED_HINT.trim_start_matches("; ").to_owned())
     }
@@ -472,14 +471,12 @@ pub(crate) trait Backend {
         number: u64,
     ) -> Result<Snapshot>;
 
-    /// A PR's state, discussion, reviews, mergeability and checks. The PR
-    /// must have `branch` as its head when one is given.
+    /// A PR's state, discussion, reviews, mergeability and checks.
     async fn pr_activity(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Snapshot>;
 
     /// A PR's state, mergeability, checks and review state.
@@ -1114,9 +1111,8 @@ impl Backend for ForgeKind {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Option<Vec<String>>> {
-        dispatch!(self, backend => backend.merged_commits(repo, account, number, branch).await)
+        dispatch!(self, backend => backend.merged_commits(repo, account, number).await)
     }
 
     async fn behind(
@@ -1316,9 +1312,8 @@ impl Backend for ForgeKind {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Snapshot> {
-        dispatch!(self, backend => backend.pr_activity(repo, account, number, branch).await)
+        dispatch!(self, backend => backend.pr_activity(repo, account, number).await)
     }
 
     async fn pr_status(

@@ -2,7 +2,7 @@
 //! keeps its own activity reads.
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
 
@@ -96,15 +96,14 @@ pub(crate) async fn issue_activity(
 }
 
 /// A PR's state, discussion, reviews and, while it is open, mergeability
-/// and checks. The PR must have `branch` as its head when one is given.
+/// and checks.
 pub(crate) async fn pr_activity(
     reads: &impl RestReads,
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
-    branch: Option<&str>,
 ) -> Result<Snapshot> {
-    let pull = branch_pull(repo, account, number, branch).await?;
+    let pull = read_pull(repo, account, number).await?;
     let (discussion, reviews, checks) = tokio::join!(
         reads.discussion(repo, account, ItemKind::Pr, number),
         reads.review_activity(repo, account, number),
@@ -173,15 +172,13 @@ async fn open_checks(
     Some(reads.checks(repo, account, pull).await)
 }
 
-/// The commits of the PR once it has merged, or `None` before. The PR must
-/// have `branch` as its head.
+/// The commits of the PR once it has merged, or `None` before.
 pub(crate) async fn merged_commits(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
-    branch: Option<&str>,
 ) -> Result<Option<Vec<String>>> {
-    let pull = branch_pull(repo, account, number, branch).await?;
+    let pull = read_pull(repo, account, number).await?;
     if pull.item.state != ItemState::Merged {
         return Ok(None);
     }
@@ -193,25 +190,11 @@ pub(crate) async fn merged_commits(
     commit_shas(&commits, repo.kind.commit_field()).map(Some)
 }
 
-/// The PR, which must have `branch` as its head when one is given. Only a
-/// failed request suggests logging in.
-pub(crate) async fn branch_pull(
-    repo: &ForgeRepo,
-    account: &Account,
-    number: u64,
-    branch: Option<&str>,
-) -> Result<Current> {
-    let pull = repo
-        .read(account, ItemKind::Pr, number)
+/// The PR, suggesting logging in when the request fails.
+pub(crate) async fn read_pull(repo: &ForgeRepo, account: &Account, number: u64) -> Result<Current> {
+    repo.read(account, ItemKind::Pr, number)
         .await
-        .hint_login(&repo.kind)?;
-    if let Some(branch) = branch {
-        ensure!(
-            pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
-            "PR does not match the workspace branch"
-        );
-    }
-    Ok(pull)
+        .hint_login(&repo.kind)
 }
 
 /// Up to `search.limit` items of `kind` that a list endpoint under the

@@ -4584,8 +4584,9 @@ than the current one. Numbers resolve against its origin and URLs must match it.
 idempotent; an assigned issue must be unlinked before assigning a different one.
 Linking an issue records its title for workspace lists; when the forge cannot be
 read, the link is recorded without one and a warning names the error.
-Assigned PRs accumulate without duplicates and must name the recorded workspace
-branch. Assigned items suppress idle cleanup.
+Assigned PRs accumulate without duplicates, and any PR of the repository can be
+assigned whatever its head branch, such as one pushed from the worktree on
+another branch. Assigned items suppress idle cleanup.
 A chat links items the same way in its repository's registered checkout. Its
 assigned items neither complete nor remove it: only its own `done` records
 completion, an assigned issue or a watched PR keeps it from idle cleanup as they

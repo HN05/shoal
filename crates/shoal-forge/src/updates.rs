@@ -554,19 +554,17 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
 }
 
 impl ForgeRepo {
-    /// The activity of the `kind` item at `url`, a PR only while its head
-    /// is `branch` when one is given.
+    /// The activity of the `kind` item at `url`.
     pub async fn item_activity(
         &self,
         account: &Account,
         kind: LinkKind,
         url: &str,
-        branch: Option<&str>,
     ) -> Result<Snapshot> {
         let (number, _) = self.item(kind, url)?;
         match kind {
             LinkKind::Issue => self.issue_activity(account, number).await,
-            LinkKind::Pr => self.activity(account, number, branch).await,
+            LinkKind::Pr => self.activity(account, number).await,
             LinkKind::Ci => self.run_activity(account, url).await,
         }
     }
@@ -578,14 +576,9 @@ impl ForgeRepo {
             .complete()
     }
 
-    pub async fn activity(
-        &self,
-        account: &Account,
-        number: u64,
-        branch: Option<&str>,
-    ) -> Result<Snapshot> {
+    pub async fn activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
         self.kind
-            .pr_activity(self, account, number, branch)
+            .pr_activity(self, account, number)
             .await?
             .complete()
     }

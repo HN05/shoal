@@ -653,7 +653,7 @@ impl Manager {
         drop(guard);
         let observed_at = UnixTime::now();
         let items = self.items_to_look_up(&space, items).await?;
-        let items = self.item_activity(&space, items, selection).await;
+        let items = self.item_activity(items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
             observations.extend(self.branch_observation(id, branch, report).await);
@@ -740,18 +740,14 @@ impl Manager {
     /// a worktree Git cannot read holds none of it back.
     async fn item_activity(
         &self,
-        space: &LinkSpace,
         items: Vec<(String, LinkKind)>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
         let account = &self.user_account();
         let linked = selection.input.is_none();
-        let branch = linked.then(|| space.branch()).flatten();
         stream::iter(items)
             .map(|(url, kind)| async move {
-                let snapshot = self
-                    .read_item_activity(account, &url, kind, branch, linked)
-                    .await?;
+                let snapshot = (self.read_item_activity(account, &url, kind, linked)).await?;
                 Ok((url, snapshot))
             })
             .buffered(ITEMS_READ_AT_ONCE)
@@ -759,8 +755,7 @@ impl Manager {
             .await
     }
 
-    /// The activity of the item at `url`, a PR only while its head is
-    /// `branch` when one is given. The forge failing to read a `linked`
+    /// The activity of the item at `url`. The forge failing to read a `linked`
     /// item leaves an unread snapshot, so a watch reports the failure as it
     /// reports one of the item's sources; an item named on the command line
     /// still fails, so a mistyped number does not wait silently.
@@ -769,11 +764,10 @@ impl Manager {
         account: &Account,
         url: &str,
         kind: LinkKind,
-        branch: Option<&str>,
         linked: bool,
     ) -> Result<Snapshot> {
         let forge = self.item_url_forge(kind, url).await?;
-        match forge.item_activity(account, kind, url, branch).await {
+        match forge.item_activity(account, kind, url).await {
             Err(error) if linked && rate_limited(&error).is_none() => {
                 Ok(Snapshot::unread_item(kind, &error))
             }
@@ -848,9 +842,7 @@ impl Manager {
         let observed_at = UnixTime::now();
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
-        let activity = self
-            .item_activity(space, items, &Selection::default())
-            .await;
+        let activity = self.item_activity(items, &Selection::default()).await;
         let mut observations = Vec::new();
         observations.extend(self.background_branch_observation(space, report).await);
         // A failed item lookup must not hold back the branch's changes.

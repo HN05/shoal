@@ -512,9 +512,8 @@ impl Backend for GitHub {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: Option<&str>,
     ) -> Result<Snapshot> {
-        activity::pr_activity(repo, account, number, branch).await
+        activity::pr_activity(repo, account, number).await
     }
 
     async fn pr_status(

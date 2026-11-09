@@ -80,13 +80,7 @@ impl Manager {
 
     async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<String>>> {
         let (forge, number, _) = self.pr_forge(&base.path, url).await?;
-        forge
-            .merged_commits(
-                &self.user_account(),
-                number,
-                Some(base.require_branch("restacking")?),
-            )
-            .await
+        forge.merged_commits(&self.user_account(), number).await
     }
 
     async fn restack(

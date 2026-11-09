@@ -2420,6 +2420,27 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
 }
 
 #[test]
+fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    git(&fixture.topic(), &["switch", "-c", "stacked"]);
+    let mut pr = pull(8, "open", "Stacked", &[]);
+    pr["head"] = json!({"ref": "stacked", "sha": "head"});
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pr},
+        "GET repos/team/project/issues/8/comments?limit=50&page=1":
+            {"body": [{"id": 1, "body": "First"}]},
+        "GET repos/team/project/pulls/8/reviews?limit=50&page=1": {"body": []},
+        "GET repos/team/project/commits/head/status?limit=50":
+            {"body": {"total_count": 0, "statuses": []}},
+    }));
+    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
+    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    assert_eq!(links["prs"], json!([format!("{}/pulls/8", fixture.web)]));
+    let watched = fixture.ok(&["watch", "pr", "--space", "topic"]);
+    assert_eq!(watched["updates"][0]["kind"], "comment", "{watched}");
+}
+
+#[test]
 fn pr_and_issue_commands_act_on_linked_or_named_items() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

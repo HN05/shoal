@@ -166,13 +166,10 @@ impl Manager {
         input: &str,
         check: WatchCheck,
     ) -> Result<RegistrationKind> {
-        current_head(workspace).await?;
         let (forge, number, url) = self.pr_forge(&workspace.path, input).await?;
-        // Detect missing tools/login, wrong branches and invalid PRs now.
+        // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
-            forge
-                .merged_commits(&self.user_account(), number, workspace.branch.as_deref())
-                .await?;
+            forge.merged_commits(&self.user_account(), number).await?;
         }
         self.adding_pr_watch(&workspace.id, url).await
     }
@@ -446,10 +443,7 @@ impl Manager {
         let mut contains_head = false;
         for url in urls {
             let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
-            let Some(commits) = forge
-                .merged_commits(&self.user_account(), number, workspace.branch.as_deref())
-                .await?
-            else {
+            let Some(commits) = forge.merged_commits(&self.user_account(), number).await? else {
                 return Ok(false);
             };
             contains_head |= commits.iter().any(|commit| commit == head);
