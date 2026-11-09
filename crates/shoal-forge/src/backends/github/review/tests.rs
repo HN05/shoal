@@ -41,7 +41,7 @@ async fn reviews_post_their_verdict_line_comments_and_head_in_one_request() -> R
         head: Some("c0ffee"),
         bases: None,
     };
-    let submission = review(&repo, 7, &placed);
+    let submission = review(&repo, PullNumber::new(7), &placed);
     assert!(submission.drafts.is_empty());
     let [request] = submission.requests.as_slice() else {
         panic!("one request");
@@ -65,10 +65,19 @@ async fn reviews_post_their_verdict_line_comments_and_head_in_one_request() -> R
         head: None,
         bases: None,
     };
-    let body = review(&repo, 7, &approval).requests[0].body.clone();
+    let body = review(&repo, PullNumber::new(7), &approval).requests[0]
+        .body
+        .clone();
     assert_eq!(body, Some(json!({"event": "APPROVE", "comments": []})));
     let response = json!({"id": 80, "node_id": "PRR_80"});
-    let keys = keys(&repo, &Account::default(), 7, &approval, &response).await?;
+    let keys = keys(
+        &repo,
+        &Account::default(),
+        PullNumber::new(7),
+        &approval,
+        &response,
+    )
+    .await?;
     assert_eq!(keys, ["reviews:PRR_80"]);
     Ok(())
 }

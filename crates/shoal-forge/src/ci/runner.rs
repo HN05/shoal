@@ -16,7 +16,7 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
-    numbers::{JobId, RunId, RunnerId},
+    numbers::{JobId, PullNumber, RunId, RunnerId},
     transport::api::{HttpMethod, Request},
 };
 
@@ -39,7 +39,7 @@ pub struct WaitingJob {
 #[serde(rename_all = "snake_case")]
 pub enum Trigger {
     /// PR `number`, at its head when the run started.
-    Pull { number: u64 },
+    Pull { number: PullNumber },
     /// A push to, or a run started on, `branch`.
     Branch(String),
     /// Anything else, such as a tag or a schedule.

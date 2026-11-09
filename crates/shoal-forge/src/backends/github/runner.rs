@@ -16,7 +16,7 @@ use crate::{
         took_run_hook,
     },
     items::item::text,
-    numbers::{JobId, RunId, RunnerId},
+    numbers::{JobId, PullNumber, RunId, RunnerId},
     transport::api::{HttpMethod, Request},
 };
 
@@ -121,7 +121,9 @@ fn names(value: &Value) -> Vec<String> {
 /// fork's, like a tag's or a schedule's, is fetched by its commit.
 pub(super) fn job_run(value: &Value) -> Result<JobRun> {
     let event = value["event"].as_str().unwrap_or_default();
-    let pull = value["pull_requests"][0]["number"].as_u64();
+    let pull = value["pull_requests"][0]["number"]
+        .as_u64()
+        .map(PullNumber::new);
     let branch = text(&value["head_branch"]);
     let (trigger, reference) = match (event, pull, branch) {
         // A `pull_request_target` run is at its base branch's commit.

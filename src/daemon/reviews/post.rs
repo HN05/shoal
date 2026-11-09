@@ -64,7 +64,7 @@ impl Manager {
     ) -> Result<String> {
         let (forge, account) = self.workspace_forge_account(workspace).await?;
         let (number, url) = forge.pull(url)?;
-        let current = forge.read(&account, ItemKind::Pr, number).await?;
+        let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         let moved = current.head_sha.as_deref() != Some(head);
         let diff = match moved {
             true => None,

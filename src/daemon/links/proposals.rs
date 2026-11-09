@@ -691,7 +691,7 @@ impl Manager {
         let (number, url) = forge.issue(input)?;
         let target = super::actions::Target {
             kind: ItemKind::Issue,
-            number,
+            number: number.get(),
             url: url.clone(),
         };
         let comment = comment(finding(request)?);
@@ -821,7 +821,7 @@ async fn ensure_pull_head(
         .as_deref()
         .context("the proposal has no opened PR")?;
     let (number, _) = forge.pull(url)?;
-    let item = forge.read(account, ItemKind::Pr, number).await?.item;
+    let item = forge.read(account, ItemKind::Pr, number.get()).await?.item;
     let branch = workspace.require_branch("opening a PR")?;
     ensure!(
         item.pr.as_ref().is_some_and(|pr| pr.head == branch),

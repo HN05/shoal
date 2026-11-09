@@ -1,4 +1,5 @@
 use crate::client::space_ids::SpaceId;
+use crate::forge::numbers::PullNumber;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
@@ -124,7 +125,12 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
     let queued = jobs(&manager).await;
     assert_eq!(handles(&queued), ["a", "b"]);
     let first = queued[0].job.as_ref().unwrap();
-    assert_eq!(first.run.trigger, Trigger::Pull { number: 12 });
+    assert_eq!(
+        first.run.trigger,
+        Trigger::Pull {
+            number: PullNumber::new(12)
+        }
+    );
     assert_eq!(first.workspace_id.as_ref(), Some(&pull.id));
     assert_eq!(queued[0].name, "ci-rust-4");
     let second = queued[1].job.as_ref().unwrap();

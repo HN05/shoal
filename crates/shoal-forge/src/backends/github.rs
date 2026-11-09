@@ -41,7 +41,7 @@ use crate::{
         reaction::{Listed, Subject},
         revert::NewRevert,
     },
-    numbers::{CommentId, JobId, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -147,7 +147,7 @@ impl Backend for GitHub {
         "sha"
     }
 
-    fn pull_head_ref(&self, number: u64) -> Option<String> {
+    fn pull_head_ref(&self, number: PullNumber) -> Option<String> {
         Some(format!("refs/pull/{number}/head"))
     }
 
@@ -221,7 +221,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Vec<String>> {
         let endpoint = format!("issues/{number}/dependencies/blocked_by");
         github_rest::open_dependencies(repo, account, &endpoint).await
@@ -249,7 +249,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Option<u64>> {
         let compare = |base: &str, head: &str| format!("compare/{base}...{head}?per_page=1");
         github_rest::behind(repo, account, number, compare, "behind_by").await
@@ -341,7 +341,7 @@ impl Backend for GitHub {
         account: &Account,
         current: &Current,
         revert: &NewRevert,
-    ) -> Result<(u64, String)> {
+    ) -> Result<(PullNumber, String)> {
         let response = repo
             .send(account, &revert_request(current, revert)?)
             .await?;
@@ -426,7 +426,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         comment: CommentId,
     ) -> Result<Option<Thread>> {
         Ok(threads::thread(
@@ -435,7 +435,13 @@ impl Backend for GitHub {
         ))
     }
 
-    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+    fn reply(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        body: &str,
+    ) -> Result<Request> {
         let endpoint =
             repo.repo_endpoint(&format!("pulls/{number}/comments/{}/replies", thread.first));
         Ok(Request::new(
@@ -448,7 +454,7 @@ impl Backend for GitHub {
     fn resolution(
         &self,
         _repo: &ForgeRepo,
-        _number: u64,
+        _number: PullNumber,
         thread: &Thread,
         resolved: bool,
     ) -> Result<Request> {
@@ -481,7 +487,12 @@ impl Backend for GitHub {
         review::diff(repo, account, current).await
     }
 
-    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+    fn review(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        review: &PlacedReview,
+    ) -> Result<Submission> {
         Ok(review::review(repo, number, review))
     }
 
@@ -489,7 +500,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         review: &PlacedReview<'_>,
         responses: &[Value],
     ) -> Result<Vec<String>> {
@@ -501,7 +512,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Snapshot> {
         activity::issue_activity(repo, account, number)
             .await
@@ -512,7 +523,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Snapshot> {
         activity::pr_activity(repo, account, number).await
     }
@@ -521,7 +532,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         url: &str,
     ) -> Result<PrStatus> {
         activity::pr_status(repo, account, number, url)
@@ -1044,10 +1055,11 @@ fn revert_request(current: &Current, revert: &NewRevert) -> Result<Request> {
 const REVERT_PULL: &str = "mutation($id: ID!, $title: String!, $body: String!, $draft: Boolean!) { revertPullRequest(input: {pullRequestId: $id, title: $title, body: $body, draft: $draft}) { revertPullRequest { number headRefName } } }";
 
 /// The number and head branch of the PR a revert's response reports.
-fn reverted(response: &Value) -> Result<(u64, String)> {
+fn reverted(response: &Value) -> Result<(PullNumber, String)> {
     let pull = &response["data"]["revertPullRequest"]["revertPullRequest"];
     let number = pull["number"]
         .as_u64()
+        .map(PullNumber::new)
         .context("GitHub did not report the revert's number")?;
     let head = text(&pull["headRefName"]).context("GitHub did not report the revert's branch")?;
     Ok((number, head))

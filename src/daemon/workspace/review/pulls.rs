@@ -47,7 +47,7 @@ impl Manager {
         let account = self.agent_account();
         for url in urls {
             let (number, _) = forge.pull(&url)?;
-            let pull = (forge.read(&account, ItemKind::Pr, number).await)
+            let pull = (forge.read(&account, ItemKind::Pr, number.get()).await)
                 .with_context(|| format!("could not read {url}"))?;
             let state = pull.item.state;
             match unmarkable_reason(state, pull.head_sha.as_deref(), head) {

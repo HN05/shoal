@@ -342,7 +342,7 @@ pub(in crate::cli) async fn load(
 ) -> Result<Issue> {
     let issue = client::issue_details(&ctx.paths, context, input.to_owned()).await?;
     Ok(Issue {
-        number: issue.number,
+        number: issue.number.get(),
         title: issue.title,
         url: issue.url,
         details: issue.details,

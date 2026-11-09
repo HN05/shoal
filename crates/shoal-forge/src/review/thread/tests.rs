@@ -13,7 +13,7 @@ fn planned(
         resolve,
     };
     Ok(ForgeRepo::parse(forge)?
-        .plan_thread(7, &thread, &change)?
+        .plan_thread(PullNumber::new(7), &thread, &change)?
         .into_iter()
         .map(|request| {
             (

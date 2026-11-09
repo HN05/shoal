@@ -1,4 +1,5 @@
 use super::*;
+use crate::forge::numbers::IssueNumber;
 
 async fn repository_for<'a>(repos: &'a [Repository], url: &str) -> Result<&'a Repository> {
     repository_with_remote(repos, ForgeRepo::from_issue_url(url)?, "retry").await
@@ -11,12 +12,12 @@ fn forge_urls_match_transports_and_reject_other_repositories() {
         repo,
         ForgeRepo::parse("ssh://git@github.com:2222/team/repo").unwrap()
     );
-    assert_eq!(repo.issue("42").unwrap().0, 42);
+    assert_eq!(repo.issue("42").unwrap().0, IssueNumber::new(42));
     assert_eq!(
         repo.issue("https://github.com/team/repo/issues/42#comment")
             .unwrap()
             .0,
-        42
+        IssueNumber::new(42)
     );
     for input in [
         "0",

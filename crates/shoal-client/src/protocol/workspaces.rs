@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::ConfigTarget;
 use super::Lifetime;
 use crate::config::hooks::HookKind;
+use crate::forge::numbers::PullNumber;
 use crate::model::CheckpointNumber;
 use crate::space_names::SpaceSelector;
 
@@ -294,7 +295,7 @@ pub struct CopySource {
 /// `commit`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PullHead {
-    pub number: u64,
+    pub number: PullNumber,
     pub reference: String,
     pub commit: String,
     /// The fetched ref of the PR's base branch, which the workspace's diff

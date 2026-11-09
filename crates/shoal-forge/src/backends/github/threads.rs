@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::thread::{Target, Thread},
     transport::api::{HttpMethod, Request},
 };
@@ -28,7 +28,7 @@ const GITHUB_THREAD_COMMENTS: &str = "query($id: ID!, $after: String) { node(id:
 pub(crate) async fn threads(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Vec<GitHubThread>> {
     let (owner, name) = repo
         .path

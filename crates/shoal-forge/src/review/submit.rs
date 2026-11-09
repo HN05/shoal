@@ -17,6 +17,7 @@ use crate::{
         action::{Acted, after_post},
         link::ItemKind,
     },
+    numbers::PullNumber,
     review::diff::{Bases, Diff, Placed},
     state::states,
     transport::api::Request,
@@ -215,7 +216,7 @@ trait Exchange {
 struct Forge<'a> {
     repo: &'a ForgeRepo,
     account: &'a Account,
-    number: u64,
+    number: PullNumber,
 }
 
 impl Exchange for Forge<'_> {
@@ -254,11 +255,11 @@ impl ForgeRepo {
     pub(crate) async fn submit_review(
         &self,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         review: &NewReview,
     ) -> Result<Acted> {
-        let _submitting = Submitting::start(self.item_url(ItemKind::Pr, number)?).await;
-        let current = self.read(account, ItemKind::Pr, number).await?;
+        let _submitting = Submitting::start(self.item_url(ItemKind::Pr, number.get())?).await;
+        let current = self.read(account, ItemKind::Pr, number.get()).await?;
         if let Some(reviewed) = &review.commit
             && current.head_sha.as_ref() != Some(reviewed)
         {
@@ -292,7 +293,7 @@ impl ForgeRepo {
             return Err(after_post(error, submitted.published, &authored));
         }
         let item = self
-            .read(account, ItemKind::Pr, number)
+            .read(account, ItemKind::Pr, number.get())
             .await
             .map_err(|error| after_post(error, true, &authored))?
             .item;
@@ -309,7 +310,7 @@ impl ForgeRepo {
     async fn posted_keys(
         &self,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         review: &PlacedReview<'_>,
         submitted: &Submitted,
     ) -> Vec<String> {

@@ -1,5 +1,6 @@
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use crate::forge::numbers::PullNumber;
 use crate::time::UnixTime;
 use std::path::Path;
 
@@ -174,7 +175,7 @@ async fn a_pr_head_is_fetched_from_the_ref_its_forge_serves() {
         .unwrap();
     let pull = |commit: &str| {
         CommitStart::PullHead(crate::protocol::PullHead {
-            number: 812,
+            number: PullNumber::new(812),
             reference: "refs/pull/812/head".into(),
             commit: commit.into(),
             base: None,
@@ -184,7 +185,10 @@ async fn a_pr_head_is_fetched_from_the_ref_its_forge_serves() {
     assert!(moved.is_err());
     let workspace = create(&manager, &repo.id, None, pull(&fork)).await.unwrap();
     assert_eq!(workspace.name, "pr-812");
-    assert_eq!(workspace.at.unwrap().made_for, Some(MadeFor::Pr(812)));
+    assert_eq!(
+        workspace.at.unwrap().made_for,
+        Some(MadeFor::Pr(PullNumber::new(812)))
+    );
     assert_eq!(head(&workspace.path), (fork, String::new()));
     // No ref keeps the fetched head; the worktree's HEAD does.
     assert!(git(&repo.path, &["for-each-ref", "refs/shoal"]).is_empty());
@@ -385,7 +389,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
             (&repo.id).into(),
             url.clone(),
             crate::protocol::PullHead {
-                number: 9,
+                number: PullNumber::new(9),
                 reference: "refs/pull/9/head".into(),
                 commit,
                 base: Some("refs/remotes/origin/main".into()),
@@ -555,7 +559,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
             (&repo.id).into(),
             "https://forge.example/team/repo/pulls/5".into(),
             crate::protocol::PullHead {
-                number: 5,
+                number: PullNumber::new(5),
                 reference: "refs/pull/5/head".into(),
                 commit: head.clone(),
                 base: base.map(str::to_owned),
@@ -612,7 +616,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
             (&repo.id).into(),
             "https://forge.example/team/repo/pulls/6".into(),
             crate::protocol::PullHead {
-                number: 6,
+                number: PullNumber::new(6),
                 reference: "refs/pull/6/head".into(),
                 commit: head.clone(),
                 base: Some("refs/remotes/origin/release".into()),
@@ -688,7 +692,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
             (&repo.id).into(),
             "https://forge.example/team/repo/pulls/4".into(),
             crate::protocol::PullHead {
-                number: 4,
+                number: PullNumber::new(4),
                 reference: "refs/pull/4/head".into(),
                 commit: head.clone(),
                 base: None,
@@ -824,7 +828,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
             (&other.id).into(),
             "https://forge.example/team/other/pulls/3".into(),
             crate::protocol::PullHead {
-                number: 3,
+                number: PullNumber::new(3),
                 reference: "refs/pull/3/head".into(),
                 commit: "0000000".into(),
                 base: None,

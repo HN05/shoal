@@ -19,7 +19,7 @@ use crate::{
     backends::Backend,
     capability::Capability,
     items::{item::ItemState, link::ItemKind},
-    numbers::{JobId, RunId, RunNumber},
+    numbers::{JobId, PullNumber, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
 use crate::{ci::check_state::CheckState, state::states};
@@ -132,7 +132,7 @@ impl ForgeRepo {
     pub async fn plan_ci(
         &self,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         action: CiAction,
         names: &[String],
     ) -> Result<Plan> {
@@ -183,8 +183,8 @@ impl ForgeRepo {
         self.kind.locate_job(self, target)
     }
 
-    pub(crate) async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
-        let pull = self.read(account, ItemKind::Pr, number).await?;
+    pub(crate) async fn open_head(&self, account: &Account, number: PullNumber) -> Result<String> {
+        let pull = self.read(account, ItemKind::Pr, number.get()).await?;
         ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
         pull.head_sha.context("PR has no head commit")
     }

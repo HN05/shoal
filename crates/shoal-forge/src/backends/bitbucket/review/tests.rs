@@ -65,9 +65,11 @@ fn reviews_comment_on_each_line_then_post_the_body_and_the_verdict() -> Result<(
         head: Some("abc"),
         bases: None,
     };
-    let requests: Vec<_> = (super::review(&repo, 3, &review).requests.into_iter())
-        .map(|request| (request.endpoint, request.body))
-        .collect();
+    let requests: Vec<_> = (super::review(&repo, PullNumber::new(3), &review)
+        .requests
+        .into_iter())
+    .map(|request| (request.endpoint, request.body))
+    .collect();
     let pull = "repositories/team/repo/pullrequests/3";
     let comments = format!("{pull}/comments");
     assert_eq!(

@@ -27,7 +27,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::{CommentId, JobId, RunId, RunNumber},
+    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -141,7 +141,7 @@ impl Backend for GitLab {
         "id"
     }
 
-    fn pull_head_ref(&self, number: u64) -> Option<String> {
+    fn pull_head_ref(&self, number: PullNumber) -> Option<String> {
         Some(format!("refs/merge-requests/{number}/head"))
     }
 
@@ -385,9 +385,9 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Option<u64>> {
-        let endpoint = repo.item_endpoint(ItemKind::Pr, number);
+        let endpoint = repo.item_endpoint(ItemKind::Pr, number.get());
         let endpoint = format!("{endpoint}?include_diverged_commits_count=true");
         let merge_request = repo.send(account, &Request::get(endpoint)).await?;
         if merge_request["state"] != "opened" {
@@ -561,19 +561,25 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         comment: CommentId,
     ) -> Result<Option<Thread>> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
         let discussions = repo.pages(account, &format!("{pr}/discussions")).await?;
         Ok(find_thread(&discussions, comment))
     }
 
-    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+    fn reply(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        body: &str,
+    ) -> Result<Request> {
         let Target::GitLab { discussion } = &thread.target else {
             bail!("not a GitLab review thread");
         };
-        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
         Ok(Request::new(
             HttpMethod::Post,
             format!("{pr}/discussions/{discussion}/notes"),
@@ -584,14 +590,14 @@ impl Backend for GitLab {
     fn resolution(
         &self,
         repo: &ForgeRepo,
-        number: u64,
+        number: PullNumber,
         thread: &Thread,
         resolved: bool,
     ) -> Result<Request> {
         let Target::GitLab { discussion } = &thread.target else {
             bail!("not a GitLab review thread");
         };
-        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
         Ok(Request::new(
             HttpMethod::Put,
             format!("{pr}/discussions/{discussion}"),
@@ -604,7 +610,7 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Vec<String>> {
         let links = repo
             .pages(
@@ -626,15 +632,30 @@ impl Backend for GitLab {
     }
 
     /// Publishing a review publishes every draft the account has pending.
-    async fn check_review(&self, repo: &ForgeRepo, account: &Account, number: u64) -> Result<()> {
+    async fn check_review(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<()> {
         review::check(repo, account, number).await
     }
 
-    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+    fn review(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        review: &PlacedReview,
+    ) -> Result<Submission> {
         review::review(repo, number, review)
     }
 
-    fn discard_draft(&self, repo: &ForgeRepo, number: u64, draft: &Value) -> Result<Request> {
+    fn discard_draft(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        draft: &Value,
+    ) -> Result<Request> {
         review::discard_draft(repo, number, draft)
     }
 
@@ -642,7 +663,7 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         review: &PlacedReview<'_>,
         _responses: &[Value],
     ) -> Result<Vec<String>> {
@@ -653,7 +674,7 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Snapshot> {
         rest::issue_activity(self, repo, account, number).await
     }
@@ -662,7 +683,7 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Snapshot> {
         rest::pr_activity(self, repo, account, number).await
     }
@@ -671,7 +692,7 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         url: &str,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, url).await
@@ -1052,7 +1073,9 @@ async fn view_discussion(
     if kind == ItemKind::Issue {
         return Ok(None);
     }
-    let verdicts = GitLab.verdicts(repo, account, number).await?;
+    let verdicts = GitLab
+        .verdicts(repo, account, PullNumber::new(number))
+        .await?;
     reviews.extend(verdicts.into_iter().filter_map(|(author, verdict)| {
         let state = match verdict {
             Verdict::Approved => "approved",
@@ -1100,9 +1123,9 @@ impl RestReads for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Vec<(String, Verdict)>> {
-        let merge_request = repo.item_endpoint(ItemKind::Pr, number);
+        let merge_request = repo.item_endpoint(ItemKind::Pr, number.get());
         let reviewers = Request::get(format!("{merge_request}/reviewers"));
         let approvals = Request::get(format!("{merge_request}/approvals"));
         let (reviewers, approvals) = tokio::try_join!(

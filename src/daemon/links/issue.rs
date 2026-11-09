@@ -1,6 +1,7 @@
 //! Persist issue associations.
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use crate::forge::numbers::IssueNumber;
 use crate::refusal::{Reason, Refusal};
 use std::path::Path;
 
@@ -120,7 +121,7 @@ impl Manager {
         &self,
         checkout: &Path,
         input: &str,
-    ) -> Result<(ForgeRepo, u64, String)> {
+    ) -> Result<(ForgeRepo, IssueNumber, String)> {
         let remote = crate::repository::remote_url_from_path(checkout)
             .await?
             .context("issue lookup needs an origin remote")?;

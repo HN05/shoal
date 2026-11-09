@@ -11,7 +11,7 @@ use crate::{
     capability::Capability,
     ci::approval::WaitingRun,
     items::{action::MergeMethod, link::ItemKind, reaction::Reaction},
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::status::{CheckResult, PrStatus, ReviewState},
 };
 
@@ -169,8 +169,8 @@ impl ForgeRepo {
         errors: &mut Vec<String>,
     ) -> Result<Details> {
         let number = match kind {
-            ItemKind::Issue => self.issue(url)?.0,
-            ItemKind::Pr => self.pull(url)?.0,
+            ItemKind::Issue => self.issue(url)?.0.get(),
+            ItemKind::Pr => self.pull(url)?.0.get(),
         };
         let content = self
             .kind
@@ -179,7 +179,7 @@ impl ForgeRepo {
             match kind {
                 ItemKind::Pr => Some(tokio::join!(
                     self.pr_status(account, url),
-                    self.kind.behind(self, account, number)
+                    self.kind.behind(self, account, PullNumber::new(number))
                 )),
                 ItemKind::Issue => None,
             }

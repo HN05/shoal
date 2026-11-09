@@ -43,7 +43,7 @@ fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
     let details = |repository| {
         forge
             .checkout_details(
-                7,
+                PullNumber::new(7),
                 "https://forge.example/team/repo/pulls/7".into(),
                 pull(repository),
             )
@@ -65,7 +65,7 @@ fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
         ..pull(Some("team/repo"))
     };
     let read = forge
-        .checkout_details(7, String::new(), without_head)
+        .checkout_details(PullNumber::new(7), String::new(), without_head)
         .unwrap();
     assert_eq!((read.base.as_str(), read.head_commit), ("main", None));
 }
@@ -86,7 +86,7 @@ fn issue_input_classification_defers_validation_until_lookup() {
         "http://forge.example/team/repo/issues/1/",
     ] {
         assert_eq!(IssueInput::parse(input), IssueInput::Url);
-        assert_eq!(repo.issue(input).unwrap().0, 1);
+        assert_eq!(repo.issue(input).unwrap().0, IssueNumber::new(1));
     }
     for input in [
         "https://forge.example/team/repo/pulls/1",
@@ -97,7 +97,7 @@ fn issue_input_classification_defers_validation_until_lookup() {
         assert!(repo.issue(input).is_err());
     }
     assert_eq!(IssueInput::parse("001"), IssueInput::Number);
-    assert_eq!(repo.issue("001").unwrap().0, 1);
+    assert_eq!(repo.issue("001").unwrap().0, IssueNumber::new(1));
 }
 
 #[test]
@@ -118,9 +118,12 @@ fn backend_is_selected_from_the_normalized_remote_host() {
 fn bitbucket_items_use_pull_request_routes() {
     let repo = ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap();
     let base = "https://bitbucket.org/workspace/repo";
-    assert_eq!(repo.issue("4").unwrap(), (4, format!("{base}/issues/4")));
+    assert_eq!(
+        repo.issue("4").unwrap(),
+        (IssueNumber::new(4), format!("{base}/issues/4"))
+    );
     let url = format!("{base}/pull-requests/5");
-    assert_eq!(repo.pull("5").unwrap(), (5, url.clone()));
+    assert_eq!(repo.pull("5").unwrap(), (PullNumber::new(5), url.clone()));
     assert_eq!(
         ForgeRepo::from_pull_url(&format!("{url}/diff")).unwrap(),
         repo
@@ -155,7 +158,10 @@ fn only_gitlab_paths_nest_groups() {
 fn gitlab_items_use_their_own_routes() {
     let repo = ForgeRepo::parse("git@gitlab.com:group/sub/project.git").unwrap();
     let base = "https://gitlab.com/group/sub/project";
-    assert_eq!(repo.issue("4").unwrap(), (4, format!("{base}/-/issues/4")));
+    assert_eq!(
+        repo.issue("4").unwrap(),
+        (IssueNumber::new(4), format!("{base}/-/issues/4"))
+    );
     assert!(
         repo.pull(&format!("{base}/-/merge_requests/5/diffs"))
             .is_err()
@@ -163,7 +169,7 @@ fn gitlab_items_use_their_own_routes() {
     assert_eq!(
         repo.pull(&format!("{base}/-/merge_requests/5#note_1"))
             .unwrap(),
-        (5, format!("{base}/-/merge_requests/5"))
+        (PullNumber::new(5), format!("{base}/-/merge_requests/5"))
     );
     for (url, kind) in [
         (format!("{base}/-/issues/4"), "issue"),
@@ -260,11 +266,8 @@ fn item_locators_share_validation_and_preserve_links() {
     ] {
         let repo = ForgeRepo::parse(remote).unwrap();
         for (route, lookup) in [
-            (
-                "issues",
-                ForgeRepo::issue as fn(&ForgeRepo, &str) -> Result<(u64, String)>,
-            ),
-            (pull_route, ForgeRepo::pull),
+            ("issues", issue_number as fn(&ForgeRepo, &str) -> _),
+            (pull_route, pull_number),
         ] {
             for (digits, number) in [("56", 56), ("0056", 56), ("18446744073709551615", u64::MAX)] {
                 let url = format!("{base}/{route}/{digits}");
@@ -344,9 +347,9 @@ fn item_repository_discovery_defers_number_validation() {
         (
             "issues",
             ForgeRepo::from_issue_url as fn(&str) -> Result<ForgeRepo>,
-            ForgeRepo::issue as fn(&ForgeRepo, &str) -> Result<(u64, String)>,
+            issue_number as fn(&ForgeRepo, &str) -> _,
         ),
-        ("pull", ForgeRepo::from_pull_url, ForgeRepo::pull),
+        ("pull", ForgeRepo::from_pull_url, pull_number),
     ] {
         for tail in [
             "56/?query#fragment",
@@ -369,4 +372,14 @@ fn item_repository_discovery_defers_number_validation() {
         ForgeRepo::from_pull_url(url).unwrap(),
         ForgeRepo::parse("git@forge.example:team/Repo.git").unwrap()
     );
+}
+
+/// The number and URL `input` names as an issue, as a plain number.
+fn issue_number(repo: &ForgeRepo, input: &str) -> Result<(u64, String)> {
+    repo.issue(input).map(|(number, url)| (number.get(), url))
+}
+
+/// The number and URL `input` names as a PR, as a plain number.
+fn pull_number(repo: &ForgeRepo, input: &str) -> Result<(u64, String)> {
+    repo.pull(input).map(|(number, url)| (number.get(), url))
 }

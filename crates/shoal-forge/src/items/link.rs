@@ -175,8 +175,8 @@ impl ForgeRepo {
     /// or URL, names.
     pub fn item(&self, kind: LinkKind, input: &str) -> Result<(u64, String)> {
         match kind {
-            LinkKind::Issue => self.issue(input),
-            LinkKind::Pr => self.pull(input),
+            LinkKind::Issue => self.issue(input).map(|(number, url)| (number.get(), url)),
+            LinkKind::Pr => self.pull(input).map(|(number, url)| (number.get(), url)),
             LinkKind::Ci => self.run(input).map(|(number, url)| (number.get(), url)),
         }
     }

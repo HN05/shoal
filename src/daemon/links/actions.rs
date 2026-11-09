@@ -156,13 +156,13 @@ impl Manager {
         });
         for url in urls {
             let (number, url) = forge.pull(url)?;
-            let item = forge.read(&account, ItemKind::Pr, number).await?.item;
+            let item = forge.read(&account, ItemKind::Pr, number.get()).await?.item;
             let pending = item.state == ItemState::Open
                 && item.pr.as_ref().is_some_and(|pr| pr.draft != draft);
             if pending {
                 let target = Target {
                     kind: ItemKind::Pr,
-                    number,
+                    number: number.get(),
                     url,
                 };
                 self.apply_own(space.id(), &forge, &account, target, &action)
@@ -185,7 +185,7 @@ impl Manager {
         let forge = self.space_forge(space).await?;
         let account = self.agent_account();
         let (number, url) = forge.pull(url)?;
-        let current = forge.read(&account, ItemKind::Pr, number).await?;
+        let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         if current.item.state != ItemState::Open {
             return Ok(());
         }
@@ -199,7 +199,7 @@ impl Manager {
         });
         let target = Target {
             kind: ItemKind::Pr,
-            number,
+            number: number.get(),
             url,
         };
         self.apply_own(space.id(), &forge, &account, target, &action)
@@ -663,7 +663,7 @@ async fn new_pull(
         (None, Some(title), _) => title.clone(),
         (None, None, Some(number)) => {
             forge
-                .read(account, ItemKind::Issue, number)
+                .read(account, ItemKind::Issue, number.get())
                 .await?
                 .item
                 .title

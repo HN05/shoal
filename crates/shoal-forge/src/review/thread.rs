@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ForgeRepo, account::Account, backends::Backend, items::action::ThreadChange,
-    numbers::CommentId, transport::api::Request,
+    numbers::CommentId, numbers::PullNumber, transport::api::Request,
 };
 
 /// A review thread, found from any of its comments.
@@ -47,7 +47,7 @@ impl ForgeRepo {
     pub async fn thread(
         &self,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         comment: CommentId,
     ) -> Result<Thread> {
         let thread = self.kind.thread(self, account, number, comment).await?;
@@ -58,7 +58,7 @@ impl ForgeRepo {
     /// Refuses before any request when the resolution cannot change.
     pub(crate) fn plan_thread(
         &self,
-        number: u64,
+        number: PullNumber,
         thread: &Thread,
         change: &ThreadChange,
     ) -> Result<Vec<Request>> {

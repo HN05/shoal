@@ -4,6 +4,7 @@
 //! Worktrunk like any workspace's.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result};
 
 use super::{Manager, restore::RestoredFiles};
@@ -167,7 +168,7 @@ impl Manager {
         &self,
         repository_id: &RepositoryId,
         url: &str,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Option<Workspace>> {
         let made_for = Some(MadeFor::Pr(number));
         Ok(self.list_workspaces().await?.into_iter().find(|workspace| {

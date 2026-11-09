@@ -1,6 +1,7 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use crate::forge::numbers::PullNumber;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
@@ -224,7 +225,7 @@ impl Manager {
         &self,
         checkout: &std::path::Path,
         input: &str,
-    ) -> Result<(ForgeRepo, u64, String)> {
+    ) -> Result<(ForgeRepo, PullNumber, String)> {
         let forge = (self.guarded_forge(checkout, "PR lookup needs an origin remote")).await?;
         let (number, url) = forge.pull(input)?;
         Ok((forge, number, url))

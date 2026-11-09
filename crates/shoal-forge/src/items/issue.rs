@@ -2,12 +2,14 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend, items::item::ItemState};
+use crate::{
+    ForgeRepo, account::Account, backends::Backend, items::item::ItemState, numbers::IssueNumber,
+};
 
 /// An issue's title, description and labels, with the URL of its number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueDetails {
-    pub number: u64,
+    pub number: IssueNumber,
     pub url: String,
     pub title: String,
     pub details: String,
@@ -38,7 +40,7 @@ impl ForgeRepo {
     pub async fn open_issue_dependencies(
         &self,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Vec<String>> {
         self.kind
             .open_issue_dependencies(self, account, number)
@@ -46,7 +48,11 @@ impl ForgeRepo {
     }
 
     /// An issue's state; a PR's number is refused.
-    pub(crate) async fn issue_state(&self, account: &Account, number: u64) -> Result<ItemState> {
+    pub(crate) async fn issue_state(
+        &self,
+        account: &Account,
+        number: IssueNumber,
+    ) -> Result<ItemState> {
         self.kind.issue_state(self, account, number).await
     }
 }

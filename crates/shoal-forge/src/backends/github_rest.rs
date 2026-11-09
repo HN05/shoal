@@ -18,7 +18,7 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject},
     },
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::{
         reviewers::team_name,
         view::{Comment, Details, PrDetails, labels, login, required, text_field},
@@ -144,7 +144,7 @@ pub(crate) fn current(
     let pr = match kind {
         ItemKind::Issue => None,
         ItemKind::Pr => Some(PrSummary {
-            head: head_branch(number, value, dialect)?,
+            head: head_branch(PullNumber::new(number), value, dialect)?,
             base: text(&value["base"]["ref"]).context("PR has no base branch")?,
             draft: if dialect == Dialect::Forgejo {
                 draft_prefix(&title).is_some()
@@ -196,11 +196,11 @@ pub(crate) fn current(
 pub(crate) async fn behind(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
     compare: impl FnOnce(&str, &str) -> String,
     field: &str,
 ) -> Result<Option<u64>> {
-    let pull = repo.read(account, ItemKind::Pr, number).await?;
+    let pull = repo.read(account, ItemKind::Pr, number.get()).await?;
     let (ItemState::Open, Some(pr), Some(head)) = (pull.item.state, &pull.item.pr, &pull.head_sha)
     else {
         return Ok(None);
@@ -228,7 +228,7 @@ async fn comparison_count(
 
 /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
 /// head and keeps the branch name only as the head's label.
-fn head_branch(number: u64, value: &Value, dialect: Dialect) -> Result<String> {
+fn head_branch(number: PullNumber, value: &Value, dialect: Dialect) -> Result<String> {
     let head = text(&value["head"]["ref"]).context("PR has no head branch")?;
     if dialect == Dialect::Forgejo && head == format!("refs/pull/{number}/head") {
         return text(&value["head"]["label"]).context("PR has no head branch");

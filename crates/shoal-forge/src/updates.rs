@@ -15,6 +15,7 @@ use crate::{
     backends::{Backend, rest::RestCheck},
     ci::check_state::CheckState,
     items::{item::Current, link::LinkKind},
+    numbers::{IssueNumber, PullNumber},
     review::status::CheckResult,
     transport::limits::{RateLimited, rate_limited},
 };
@@ -565,22 +566,27 @@ impl ForgeRepo {
         kind: LinkKind,
         url: &str,
     ) -> Result<Snapshot> {
-        let (number, _) = self.item(kind, url)?;
         match kind {
-            LinkKind::Issue => self.issue_activity(account, number).await,
-            LinkKind::Pr => self.activity(account, number).await,
+            LinkKind::Issue => {
+                let (number, _) = self.issue(url)?;
+                self.issue_activity(account, number).await
+            }
+            LinkKind::Pr => {
+                let (number, _) = self.pull(url)?;
+                self.activity(account, number).await
+            }
             LinkKind::Ci => self.run_activity(account, url).await,
         }
     }
 
-    pub async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
+    pub async fn issue_activity(&self, account: &Account, number: IssueNumber) -> Result<Snapshot> {
         self.kind
             .issue_activity(self, account, number)
             .await?
             .complete()
     }
 
-    pub async fn activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
+    pub async fn activity(&self, account: &Account, number: PullNumber) -> Result<Snapshot> {
         self.kind
             .pr_activity(self, account, number)
             .await?

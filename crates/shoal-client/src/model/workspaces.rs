@@ -168,7 +168,7 @@ pub enum MadeFor {
     /// A branch or tag, by the name it was given.
     Ref(String),
     /// A PR's head, by its number.
-    Pr(u64),
+    Pr(crate::forge::numbers::PullNumber),
 }
 
 impl std::fmt::Display for MadeFor {

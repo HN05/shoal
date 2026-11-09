@@ -18,7 +18,7 @@ use crate::{
         link::ItemKind,
         reaction::{ReactionChange, Subject},
     },
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
     updates::{Edited, ItemDetails},
@@ -466,7 +466,11 @@ impl ForgeRepo {
         // Refused before anything is read or posted.
         self.require_all(action.needs(kind))?;
         match action {
-            Action::Review(review) => return self.submit_review(account, number, review).await,
+            Action::Review(review) => {
+                return self
+                    .submit_review(account, PullNumber::new(number), review)
+                    .await;
+            }
             // Boxed so finding a comment among the item's discussion does not
             // grow the future of every action.
             Action::React(change) => {
@@ -633,7 +637,7 @@ impl ForgeRepo {
     ) -> Result<Vec<Request>> {
         match action {
             Action::Thread(change) => {
-                let number = current.item.number;
+                let number = PullNumber::new(current.item.number);
                 let thread = self.thread(account, number, change.comment).await?;
                 self.plan_thread(number, &thread, change)
             }

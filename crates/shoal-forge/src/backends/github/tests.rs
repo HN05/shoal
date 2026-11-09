@@ -90,6 +90,9 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
     );
     let response = json!({"data": {"revertPullRequest": {"revertPullRequest":
         {"number": 9, "headRefName": "revert-7-topic"}}}});
-    assert_eq!(reverted(&response).unwrap(), (9, "revert-7-topic".into()));
+    assert_eq!(
+        reverted(&response).unwrap(),
+        (PullNumber::new(9), "revert-7-topic".into())
+    );
     assert!(reverted(&json!({"data": {"revertPullRequest": null}})).is_err());
 }

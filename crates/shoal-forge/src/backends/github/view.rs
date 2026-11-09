@@ -8,7 +8,7 @@ use crate::{
     account::Account,
     backends::github_rest,
     items::{action::MergeMethod, link::ItemKind},
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},
     transport::api::Request,
 };
@@ -55,7 +55,7 @@ pub(crate) async fn reviews(
     let (reviews, comments, threads) = tokio::try_join!(
         pages("reviews"),
         pages("comments"),
-        threads(repo, account, number)
+        threads(repo, account, PullNumber::new(number))
     )?;
     parse_reviews(&reviews, &comments, &threads).map(Some)
 }

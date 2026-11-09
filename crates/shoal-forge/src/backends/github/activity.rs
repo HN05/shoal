@@ -14,6 +14,7 @@ use crate::{
         item::{Current, ItemState},
         link::ItemKind,
     },
+    numbers::{IssueNumber, PullNumber},
     review::{
         status::{PrState, PrStatus, github_reviews},
         view::login,
@@ -25,11 +26,11 @@ use crate::{
 pub(crate) async fn issue_activity(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: IssueNumber,
 ) -> Result<Snapshot> {
     let (issue, discussion) = tokio::join!(
-        repo.read(account, ItemKind::Issue, number),
-        discussion(repo, account, number),
+        repo.read(account, ItemKind::Issue, number.get()),
+        discussion(repo, account, number.get()),
     );
     let mut snapshot = Snapshot::item(&issue?);
     snapshot.record_comments(DISCUSSION, discussion);
@@ -39,12 +40,12 @@ pub(crate) async fn issue_activity(
 pub(crate) async fn pr_activity(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Snapshot> {
     let pull = read_pull(repo, account, number).await?;
     let mut snapshot = Snapshot::item(&pull);
     let (discussion, reviews, inline, checks) = tokio::join!(
-        discussion(repo, account, number),
+        discussion(repo, account, number.get()),
         reviews(repo, account, number),
         inline_comments(repo, account, number),
         open_checks(repo, account, &pull),
@@ -61,10 +62,10 @@ pub(crate) async fn pr_activity(
 pub(crate) async fn pr_status(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
     url: &str,
 ) -> Result<PrStatus> {
-    let pull = repo.read(account, ItemKind::Pr, number).await?;
+    let pull = repo.read(account, ItemKind::Pr, number.get()).await?;
     let (checks, reviews) = tokio::join!(
         open_checks(repo, account, &pull),
         reviews(repo, account, number),
@@ -101,7 +102,7 @@ async fn discussion(
     entries(&repo.pages(account, &endpoint).await?, "node_id")
 }
 
-async fn reviews(repo: &ForgeRepo, account: &Account, number: u64) -> Result<Vec<Value>> {
+async fn reviews(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Result<Vec<Value>> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
     repo.pages(account, &endpoint).await
 }
@@ -110,7 +111,7 @@ async fn reviews(repo: &ForgeRepo, account: &Account, number: u64) -> Result<Vec
 async fn inline_comments(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Vec<(String, Entry)>> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/comments"));
     entries(&repo.pages(account, &endpoint).await?, "id")

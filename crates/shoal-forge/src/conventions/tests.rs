@@ -127,6 +127,12 @@ fn a_template_without_headings_still_takes_precedence() {
 #[test]
 fn linked_issue_closes_only_without_a_description() {
     assert_eq!(pull_description(None, None), "");
-    assert_eq!(pull_description(None, Some(7)), "Closes #7");
-    assert_eq!(pull_description(Some("".into()), Some(7)), "");
+    assert_eq!(
+        pull_description(None, Some(IssueNumber::new(7))),
+        "Closes #7"
+    );
+    assert_eq!(
+        pull_description(Some("".into()), Some(IssueNumber::new(7))),
+        ""
+    );
 }

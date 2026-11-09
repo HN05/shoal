@@ -1,7 +1,7 @@
-//! The numbers a forge gives its runs, jobs, runners and comments, each its
-//! own type so one is never passed as another. Each serializes and stores as
-//! the number it holds; backends convert where they read a response or build
-//! a request.
+//! The numbers a forge gives its issues, PRs, runs, jobs, runners and
+//! comments, each its own type so one is never passed as another. Each
+//! serializes and stores as the number it holds; backends convert where they
+//! read a response or build a request.
 use std::{fmt, num::ParseIntError, str::FromStr};
 
 /// Defines `$name` as a forge number held as a `u64`.
@@ -78,6 +78,15 @@ macro_rules! forge_number {
     };
 }
 
+forge_number!(
+    /// An issue's number in its repository. On a forge that numbers issues
+    /// and PRs in one sequence, a PR's number is also an issue number.
+    IssueNumber
+);
+forge_number!(
+    /// A PR's number in its repository.
+    PullNumber
+);
 forge_number!(
     /// The ID a forge's API reads and acts on a CI run by.
     RunId

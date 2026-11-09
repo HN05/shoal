@@ -9,6 +9,7 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
+    numbers::PullNumber,
     transport::api::{HttpMethod, Request},
 };
 
@@ -93,7 +94,11 @@ impl ForgeRepo {
 
     /// The runs on the head of the open PR numbered `number` that wait for
     /// approval, of which there must be one.
-    pub async fn pr_waiting_runs(&self, account: &Account, number: u64) -> Result<Vec<WaitingRun>> {
+    pub async fn pr_waiting_runs(
+        &self,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<Vec<WaitingRun>> {
         self.require(Capability::ApproveRuns)?;
         let head = self.open_head(account, number).await?;
         let runs = self.waiting_runs(account, &head).await?;

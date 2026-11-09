@@ -23,7 +23,7 @@ fn reviews_place_each_comment_on_its_side_and_are_keyed_by_review() -> Result<()
         head: Some("c0ffee"),
         bases: None,
     };
-    let submission = review(&repo, 7, &placed);
+    let submission = review(&repo, PullNumber::new(7), &placed);
     assert_eq!(
         submission.requests[0].endpoint,
         "repos/team/repo/pulls/7/reviews"

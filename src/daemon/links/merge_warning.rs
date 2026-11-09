@@ -3,6 +3,7 @@
 //! sides. It reads that record and checks nothing again, so merging stays as
 //! fast without one.
 use crate::client::space_ids::SpaceId;
+use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result};
 
 use crate::client::space_names::SpaceSelector;
@@ -29,7 +30,7 @@ impl Manager {
             return Ok(None);
         }
         let account = self.user_account();
-        let current = forge.read(&account, ItemKind::Pr, number).await?;
+        let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         let head = current.head_sha.context("the forge names no PR head")?;
         let base = current.item.pr.context("the forge names no PR base")?.base;
         let merged = Merged { head, target: base };
@@ -66,7 +67,7 @@ impl Manager {
         &self,
         context: &ItemContext,
         input: Option<String>,
-    ) -> Result<(ForgeRepo, u64, String)> {
+    ) -> Result<(ForgeRepo, PullNumber, String)> {
         let (forge, input) = match context {
             ItemContext::Checkout(selector) => {
                 let checkout = self.repository(selector).await?;

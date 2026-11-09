@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::thread::{Target, Thread},
     transport::api::Request,
 };
@@ -23,7 +23,7 @@ const REVIEW_READS: usize = 4;
 pub(crate) async fn review_comments(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Vec<(Value, Result<Value>)>> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
     let reviews = repo.pages(account, &endpoint).await?;
@@ -42,7 +42,7 @@ pub(crate) async fn review_comments(
 pub(crate) async fn all_review_comments(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Vec<(Value, Value)>> {
     review_comments(repo, account, number)
         .await?
@@ -55,7 +55,7 @@ pub(crate) async fn all_review_comments(
 async fn inline_comments_of(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
     review: &Value,
 ) -> Result<Value> {
     let id = review["id"].as_u64().context("Forgejo review has no ID")?;

@@ -7,6 +7,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     items::item::{Current, text},
+    numbers::PullNumber,
     review::{
         diff::{Diff, FileDiff},
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
@@ -36,7 +37,7 @@ fn changed_file(file: &Value) -> Result<FileDiff> {
 
 /// The request that posts `review` of PR `number` with its line comments,
 /// of the head commit Shoal read.
-pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Submission {
+pub(super) fn review(repo: &ForgeRepo, number: PullNumber, review: &PlacedReview) -> Submission {
     let event = match review.verdict {
         ReviewVerdict::Comment => "COMMENT",
         ReviewVerdict::Approve => "APPROVE",
@@ -74,7 +75,7 @@ pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Su
 pub(super) async fn keys(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
     review: &PlacedReview<'_>,
     response: &Value,
 ) -> Result<Vec<String>> {

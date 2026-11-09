@@ -14,11 +14,12 @@ use crate::{
     backends::Backend,
     conventions::labels::Label,
     items::{item::Item, link::ItemKind},
+    numbers::IssueNumber,
 };
 
 /// A new PR's description: a supplied `body` verbatim, otherwise a line
 /// that closes the linked `issue` when the PR merges.
-pub fn pull_description(body: Option<String>, issue: Option<u64>) -> String {
+pub fn pull_description(body: Option<String>, issue: Option<IssueNumber>) -> String {
     let Some(number) = issue else {
         return body.unwrap_or_default();
     };

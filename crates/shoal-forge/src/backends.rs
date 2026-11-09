@@ -37,7 +37,7 @@ use crate::{
         reaction::{Listed, Subject, allowed::AllowedReactions},
         revert::NewRevert,
     },
-    numbers::{CommentId, JobId, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -191,7 +191,7 @@ pub(crate) trait Backend {
 
     /// The ref a remote of the repository keeps PR `number`'s head
     /// commit under, where the forge keeps one after its branch goes.
-    fn pull_head_ref(&self, number: u64) -> Option<String>;
+    fn pull_head_ref(&self, number: PullNumber) -> Option<String>;
 
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
@@ -265,7 +265,7 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<ItemState> {
         rest::issue_state(repo, account, number).await
     }
@@ -275,7 +275,7 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Current> {
         rest::issue_details(repo, account, number).await
     }
@@ -286,7 +286,7 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _number: u64,
+        _number: IssueNumber,
     ) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
@@ -296,9 +296,9 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Current> {
-        repo.read(account, ItemKind::Pr, number)
+        repo.read(account, ItemKind::Pr, number.get())
             .await
             .hint_login(self)
     }
@@ -310,7 +310,7 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Option<Vec<String>>> {
         rest::merged_commits(repo, account, number)
             .await
@@ -323,7 +323,7 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _number: u64,
+        _number: PullNumber,
     ) -> Result<Option<u64>> {
         Ok(None)
     }
@@ -387,7 +387,7 @@ pub(crate) trait Backend {
         _account: &Account,
         _current: &Current,
         _revert: &NewRevert,
-    ) -> Result<(u64, String)> {
+    ) -> Result<(PullNumber, String)> {
         Err(crate::capability::unsupported(self, Capability::RevertPrs))
     }
 
@@ -442,18 +442,24 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         comment: CommentId,
     ) -> Result<Option<Thread>>;
 
     /// The request that replies in `thread` on PR `number`.
-    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request>;
+    fn reply(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        body: &str,
+    ) -> Result<Request>;
 
     /// The request that resolves or unresolves `thread` on PR `number`.
     fn resolution(
         &self,
         repo: &ForgeRepo,
-        number: u64,
+        number: PullNumber,
         thread: &Thread,
         resolved: bool,
     ) -> Result<Request>;
@@ -469,17 +475,27 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _number: u64,
+        _number: PullNumber,
     ) -> Result<()> {
         Ok(())
     }
 
     /// The requests that submit `review` of PR `number`.
-    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission>;
+    fn review(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        review: &PlacedReview,
+    ) -> Result<Submission>;
 
     /// The request that deletes the review draft a draft request's
     /// response describes, where the forge keeps drafts.
-    fn discard_draft(&self, _repo: &ForgeRepo, _number: u64, _draft: &Value) -> Result<Request> {
+    fn discard_draft(
+        &self,
+        _repo: &ForgeRepo,
+        _number: PullNumber,
+        _draft: &Value,
+    ) -> Result<Request> {
         anyhow::bail!("{} keeps no review drafts", self.name())
     }
 
@@ -490,7 +506,7 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _number: u64,
+        _number: PullNumber,
         _review: &PlacedReview<'_>,
         responses: &[Value],
     ) -> Result<Vec<String>> {
@@ -506,7 +522,7 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Snapshot>;
 
     /// A PR's state, discussion, reviews, mergeability and checks.
@@ -514,7 +530,7 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Snapshot>;
 
     /// A PR's state, mergeability, checks and review state.
@@ -522,7 +538,7 @@ pub(crate) trait Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         url: &str,
     ) -> Result<PrStatus>;
 

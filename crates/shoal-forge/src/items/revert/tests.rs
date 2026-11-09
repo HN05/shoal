@@ -24,18 +24,18 @@ fn pr_heads_stay_fetchable_where_the_forge_keeps_a_ref() {
     let kind = |remote: &str| ForgeRepo::parse(remote).unwrap().kind;
     assert_eq!(
         kind("https://forge.example/team/repo")
-            .pull_head_ref(7)
+            .pull_head_ref(PullNumber::new(7))
             .as_deref(),
         Some("refs/pull/7/head")
     );
     assert_eq!(
         kind("git@gitlab.com:group/repo.git")
-            .pull_head_ref(7)
+            .pull_head_ref(PullNumber::new(7))
             .as_deref(),
         Some("refs/merge-requests/7/head")
     );
     assert_eq!(
-        kind("git@bitbucket.org:team/repo.git").pull_head_ref(7),
+        kind("git@bitbucket.org:team/repo.git").pull_head_ref(PullNumber::new(7)),
         None
     );
 }

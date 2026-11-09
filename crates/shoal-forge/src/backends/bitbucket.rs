@@ -30,7 +30,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::{CommentId, RunNumber},
+    numbers::{CommentId, IssueNumber, PullNumber, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -160,7 +160,7 @@ impl Backend for Bitbucket {
     }
 
     // Bitbucket keeps no ref for a pull request's head.
-    fn pull_head_ref(&self, _number: u64) -> Option<String> {
+    fn pull_head_ref(&self, _number: PullNumber) -> Option<String> {
         None
     }
 
@@ -509,16 +509,22 @@ impl Backend for Bitbucket {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         comment: CommentId,
     ) -> Result<Option<Thread>> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
         let comments = repo.pages(account, &format!("{pr}/comments")).await?;
         Ok(find_thread(&comments, comment))
     }
 
-    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number);
+    fn reply(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        body: &str,
+    ) -> Result<Request> {
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
         Ok(Request::new(
             HttpMethod::Post,
             format!("{pr}/comments"),
@@ -529,11 +535,11 @@ impl Backend for Bitbucket {
     fn resolution(
         &self,
         repo: &ForgeRepo,
-        number: u64,
+        number: PullNumber,
         thread: &Thread,
         resolved: bool,
     ) -> Result<Request> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
         let method = if resolved {
             HttpMethod::Post
         } else {
@@ -555,7 +561,12 @@ impl Backend for Bitbucket {
         review::diff(repo, account, current).await
     }
 
-    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+    fn review(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        review: &PlacedReview,
+    ) -> Result<Submission> {
         Ok(review::review(repo, number, review))
     }
 
@@ -563,7 +574,7 @@ impl Backend for Bitbucket {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Snapshot> {
         rest::issue_activity(self, repo, account, number).await
     }
@@ -572,7 +583,7 @@ impl Backend for Bitbucket {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Snapshot> {
         rest::pr_activity(self, repo, account, number).await
     }
@@ -581,7 +592,7 @@ impl Backend for Bitbucket {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         url: &str,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, url).await
@@ -864,7 +875,9 @@ async fn view_discussion(
     if kind == ItemKind::Issue {
         return Ok(None);
     }
-    let verdicts = Bitbucket.verdicts(repo, account, number).await?;
+    let verdicts = Bitbucket
+        .verdicts(repo, account, PullNumber::new(number))
+        .await?;
     reviews.extend(verdicts.into_iter().map(|(author, verdict)| {
         Review {
             author,
@@ -914,12 +927,12 @@ impl RestReads for Bitbucket {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Vec<(String, Verdict)>> {
         let pull = repo
             .send(
                 account,
-                &Request::get(repo.item_endpoint(ItemKind::Pr, number)),
+                &Request::get(repo.item_endpoint(ItemKind::Pr, number.get())),
             )
             .await?;
         verdicts(&pull)

@@ -8,6 +8,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     items::{item::Current, link::ItemKind},
+    numbers::PullNumber,
     review::{
         diff::Diff,
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
@@ -36,8 +37,8 @@ fn diff_endpoint(repo: &ForgeRepo, current: &Current) -> Result<String> {
 /// The requests that post `review` of pull request `number` in order: an
 /// inline comment on each line, the body as a comment, then approving or
 /// requesting changes.
-pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Submission {
-    let pull = repo.item_endpoint(ItemKind::Pr, number);
+pub(super) fn review(repo: &ForgeRepo, number: PullNumber, review: &PlacedReview) -> Submission {
+    let pull = repo.item_endpoint(ItemKind::Pr, number.get());
     let comment = |body: serde_json::Value| {
         Request::new(HttpMethod::Post, format!("{pull}/comments"), Some(body))
     };

@@ -3,7 +3,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend, items::link::ItemKind};
+use crate::{
+    ForgeRepo, account::Account, backends::Backend, items::link::ItemKind, numbers::PullNumber,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reviewer {
@@ -43,10 +45,10 @@ pub(crate) fn team_name(name: &str) -> Option<(&str, &str)> {
 impl ForgeRepo {
     /// The users and teams PR `number` can ask for a review, in the forge's
     /// order, leaving out its author.
-    pub async fn reviewers(&self, account: &Account, number: u64) -> Result<Vec<Reviewer>> {
+    pub async fn reviewers(&self, account: &Account, number: PullNumber) -> Result<Vec<Reviewer>> {
         // Boxed so each forge's user and team reads stay off the caller's stack.
         let (pr, candidates) = tokio::try_join!(
-            self.read(account, ItemKind::Pr, number),
+            self.read(account, ItemKind::Pr, number.get()),
             Box::pin(self.kind.reviewers(self, account)),
         )?;
         Ok(candidates

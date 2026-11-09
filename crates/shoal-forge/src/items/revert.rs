@@ -15,6 +15,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary},
         link::ItemKind,
     },
+    numbers::PullNumber,
 };
 
 /// The PR that undoes a merged one.
@@ -132,8 +133,8 @@ impl ForgeRepo {
             .with_context(|| format!("could not revert PR #{number}"))?;
         let posted = Item {
             kind: ItemKind::Pr,
-            number,
-            url: self.item_url(ItemKind::Pr, number)?,
+            number: number.get(),
+            url: self.item_url(ItemKind::Pr, number.get())?,
             title: posted.title,
             state: ItemState::Open,
             labels: Vec::new(),
@@ -154,7 +155,7 @@ impl ForgeRepo {
     }
 
     /// The merged PR `number` with its merge commit and its own commits.
-    pub async fn merged_pull(&self, account: &Account, number: u64) -> Result<MergedPull> {
+    pub async fn merged_pull(&self, account: &Account, number: PullNumber) -> Result<MergedPull> {
         let current = self.merged(account, number).await?;
         let merge_commit = current.merge_commit.with_context(|| {
             format!("the forge did not report the commit PR #{number} merged as")
@@ -162,7 +163,7 @@ impl ForgeRepo {
         let head = current
             .head_sha
             .with_context(|| format!("the forge did not report PR #{number}'s head commit"))?;
-        let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number));
+        let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number.get()));
         let commits = self.pages(account, &endpoint).await?;
         Ok(MergedPull {
             item: current.item,
@@ -174,8 +175,8 @@ impl ForgeRepo {
     }
 
     /// The PR `number`, refused unless it has merged.
-    pub async fn merged(&self, account: &Account, number: u64) -> Result<Current> {
-        let current = self.read(account, ItemKind::Pr, number).await?;
+    pub async fn merged(&self, account: &Account, number: PullNumber) -> Result<Current> {
+        let current = self.read(account, ItemKind::Pr, number.get()).await?;
         ensure!(
             current.item.state == ItemState::Merged,
             "PR #{number} has not merged, so there is nothing to revert"

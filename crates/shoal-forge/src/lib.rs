@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use backends::{Backend, ForgeKind};
 use hosts::{HostType, HostTypes};
 use items::link::LinkKind;
+use numbers::{IssueNumber, PullNumber};
 use repo::remote_url::{RemoteUrl, Transport};
 
 /// Classify before resolving a repository; validate identity and number at lookup.
@@ -186,7 +187,7 @@ impl ForgeRepo {
     pub async fn issue_details(
         &self,
         account: &account::Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<items::item::Current> {
         let issue = self.kind.issue_details(self, account, number).await?;
         ensure!(!issue.item.title.trim().is_empty(), "issue title is empty");
@@ -213,14 +214,16 @@ impl ForgeRepo {
         format!("{}://{}/{}", self.web_scheme, self.host, self.path)
     }
 
-    pub fn issue(&self, input: &str) -> Result<(u64, String)> {
-        self.kind.issue_route().resolve(self, input)
+    pub fn issue(&self, input: &str) -> Result<(IssueNumber, String)> {
+        let (number, url) = self.kind.issue_route().resolve(self, input)?;
+        Ok((IssueNumber::new(number), url))
     }
 }
 
 impl ForgeRepo {
-    pub fn pull(&self, input: &str) -> Result<(u64, String)> {
-        self.kind.pull_route().resolve(self, input)
+    pub fn pull(&self, input: &str) -> Result<(PullNumber, String)> {
+        let (number, url) = self.kind.pull_route().resolve(self, input)?;
+        Ok((PullNumber::new(number), url))
     }
 
     /// Fail closed on changed output. Only commits actually listed in the
@@ -228,7 +231,7 @@ impl ForgeRepo {
     pub async fn merged_commits(
         &self,
         account: &account::Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Option<Vec<String>>> {
         self.kind.merged_commits(self, account, number).await
     }
@@ -237,7 +240,7 @@ impl ForgeRepo {
 /// A PR's branches, for checking it out locally.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct PullRequest {
-    pub number: u64,
+    pub number: PullNumber,
     pub title: String,
     pub url: String,
     /// Its head branch, in this repository or in `fork`.
@@ -279,7 +282,7 @@ impl ForgeRepo {
     /// The PR `pull`, read as `number` at `url`, with where its head is.
     fn checkout_details(
         &self,
-        number: u64,
+        number: PullNumber,
         url: String,
         pull: items::item::Current,
     ) -> Result<PullRequest> {

@@ -73,7 +73,7 @@ fn reviews_draft_each_line_then_publish_with_the_body_and_requested_changes() ->
         body: "Why?".into(),
     }];
     let review = placed_review(ReviewVerdict::RequestChanges, "Fix", &diff, &comments)?;
-    let submission = super::review(&repo, 7, &review)?;
+    let submission = super::review(&repo, PullNumber::new(7), &review)?;
     let mr = "projects/group%2Frepo/merge_requests/7";
     assert_eq!(submission.drafts[0].endpoint, format!("{mr}/draft_notes"));
     assert_eq!(
@@ -103,7 +103,7 @@ fn reviews_draft_each_line_then_publish_with_the_body_and_requested_changes() ->
             Some(json!({"note": "Fix", "reviewer_state": "requested_changes"}))
         )]
     );
-    let discard = discard_draft(&repo, 7, &json!({"id": 12}))?;
+    let discard = discard_draft(&repo, PullNumber::new(7), &json!({"id": 12}))?;
     assert_eq!(
         (discard.method, discard.endpoint.as_str()),
         (HttpMethod::Delete, format!("{mr}/draft_notes/12").as_str())
@@ -116,7 +116,7 @@ fn approvals_publish_first_and_approve_the_head() -> Result<()> {
     let repo = ForgeRepo::parse("https://gitlab.com/group/repo.git")?;
     let diff = Diff::default();
     let review = placed_review(ReviewVerdict::Approve, "Fine", &diff, &[])?;
-    let submission = super::review(&repo, 7, &review)?;
+    let submission = super::review(&repo, PullNumber::new(7), &review)?;
     assert!(submission.drafts.is_empty());
     let requests: Vec<_> = (submission.requests.iter())
         .map(|request| (request.endpoint.as_str(), request.body.clone()))

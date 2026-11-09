@@ -59,7 +59,12 @@ fn a_run_names_the_pr_or_branch_whose_ref_serves_its_commit() {
     );
     assert_eq!(read.workflow.as_deref(), Some("ci.yml"));
     assert_eq!(read.commit, "abc123");
-    assert_eq!(read.trigger, Trigger::Pull { number: 12 });
+    assert_eq!(
+        read.trigger,
+        Trigger::Pull {
+            number: PullNumber::new(12)
+        }
+    );
     assert_eq!(read.reference.as_deref(), Some("refs/pull/12/head"));
 
     let push = job_run(&repo(), &run("push", json!({"ref": "refs/heads/main"}))).unwrap();

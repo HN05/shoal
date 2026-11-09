@@ -11,6 +11,7 @@ use crate::{
         item::{Current, text},
         link::ItemKind,
     },
+    numbers::PullNumber,
     review::{
         diff::{Bases, Diff, FileDiff, Placed},
         submit::{PlacedReview, ReviewVerdict, Submission},
@@ -78,8 +79,12 @@ fn changed_file(file: &Value) -> Result<FileDiff> {
 /// The requests that submit `review` of merge request `number`: a draft
 /// note on each line, then publishing them with the body as a summary and
 /// any requested changes, then an approval of the head.
-pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
-    let merge_request = repo.item_endpoint(ItemKind::Pr, number);
+pub(super) fn review(
+    repo: &ForgeRepo,
+    number: PullNumber,
+    review: &PlacedReview,
+) -> Result<Submission> {
+    let merge_request = repo.item_endpoint(ItemKind::Pr, number.get());
     let drafts = review
         .comments
         .iter()
@@ -138,19 +143,26 @@ fn draft_note(review: &PlacedReview, placed: &Placed) -> Result<Value> {
 
 /// The request that deletes the draft note a draft request's response
 /// describes.
-pub(super) fn discard_draft(repo: &ForgeRepo, number: u64, draft: &Value) -> Result<Request> {
+pub(super) fn discard_draft(
+    repo: &ForgeRepo,
+    number: PullNumber,
+    draft: &Value,
+) -> Result<Request> {
     let id = draft["id"].as_u64().context("the draft note has no ID")?;
     let endpoint = format!(
         "{}/draft_notes/{id}",
-        repo.item_endpoint(ItemKind::Pr, number)
+        repo.item_endpoint(ItemKind::Pr, number.get())
     );
     Ok(Request::new(HttpMethod::Delete, endpoint, None))
 }
 
 /// Refuse a review while `account` has drafts pending on merge request
 /// `number`, which publishing the review would publish with it.
-pub(super) async fn check(repo: &ForgeRepo, account: &Account, number: u64) -> Result<()> {
-    let endpoint = format!("{}/draft_notes", repo.item_endpoint(ItemKind::Pr, number));
+pub(super) async fn check(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Result<()> {
+    let endpoint = format!(
+        "{}/draft_notes",
+        repo.item_endpoint(ItemKind::Pr, number.get())
+    );
     let drafts = repo.pages(account, &endpoint).await?;
     ensure!(
         drafts.is_empty(),
@@ -167,14 +179,14 @@ pub(super) async fn check(repo: &ForgeRepo, account: &Account, number: u64) -> R
 pub(super) async fn keys(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
     review: &PlacedReview<'_>,
 ) -> Result<Vec<String>> {
     let user = repo.send(account, &Request::get("user".into())).await?;
     let author = user
         .get("id")
         .context("GitLab did not report the account")?;
-    let merge_request = repo.item_endpoint(ItemKind::Pr, number);
+    let merge_request = repo.item_endpoint(ItemKind::Pr, number.get());
     let endpoint = format!("{merge_request}/notes?sort=desc&order_by=created_at&per_page=100");
     let notes = repo.send(account, &Request::get(endpoint)).await?;
     Ok(published(&notes, author, review))

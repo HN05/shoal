@@ -7,6 +7,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     items::item::Current,
+    numbers::PullNumber,
     review::{
         diff::Diff,
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
@@ -24,7 +25,7 @@ pub(super) async fn diff(repo: &ForgeRepo, account: &Account, current: &Current)
 /// The request that posts `review` of PR `number` with its line comments,
 /// of the head commit Shoal read. A comment's position is its line on its
 /// side, and zero on the other.
-pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Submission {
+pub(super) fn review(repo: &ForgeRepo, number: PullNumber, review: &PlacedReview) -> Submission {
     let event = match review.verdict {
         ReviewVerdict::Comment => "COMMENT",
         ReviewVerdict::Approve => "APPROVED",

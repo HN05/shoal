@@ -8,16 +8,17 @@ use crate::{
         action::{Action, Edit},
         link::ItemKind,
     },
+    numbers::PullNumber,
 };
 
 impl ForgeRepo {
     /// Retargeting follows the user's merge, so it uses the user's login.
-    pub async fn retarget(&self, account: &Account, number: u64, base: &str) -> Result<()> {
+    pub async fn retarget(&self, account: &Account, number: PullNumber, base: &str) -> Result<()> {
         let edit = Action::edit(Edit {
             base: Some(base.to_owned()),
             ..Edit::default()
         });
-        self.act(account, ItemKind::Pr, number, &edit)
+        self.act(account, ItemKind::Pr, number.get(), &edit)
             .await
             .with_context(|| format!("could not retarget PR #{number} to {base}"))?;
         Ok(())

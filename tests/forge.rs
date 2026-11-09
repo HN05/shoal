@@ -658,13 +658,17 @@ fn apps_read_forge_items_through_the_daemon() {
         .block_on(forge_reads::issue_details(&app, workspace(), "3".into()))
         .unwrap();
     assert_eq!(
-        (issue.number, issue.title.as_str(), issue.details.as_str()),
+        (
+            issue.number.get(),
+            issue.title.as_str(),
+            issue.details.as_str()
+        ),
         (3, "Crash", "Steps")
     );
     let pull = runtime
         .block_on(forge_reads::pull_request(&app, checkout(), "8".into()))
         .unwrap();
-    assert_eq!((pull.number, pull.head.as_str()), (8, "topic"));
+    assert_eq!((pull.number.get(), pull.head.as_str()), (8, "topic"));
     let reads = fixture.requests();
     assert!(
         reads.iter().all(|request| request[2] == "token usertoken"),
@@ -685,7 +689,7 @@ fn apps_read_forge_items_through_the_daemon() {
     let issue = runtime
         .block_on(forge_reads::issue_details(&agent, workspace(), "3".into()))
         .unwrap();
-    assert_eq!(issue.number, 3);
+    assert_eq!(issue.number.get(), 3);
     let reads = fixture.requests();
     assert!(
         reads.iter().all(|request| request[2] == "token agenttoken"),

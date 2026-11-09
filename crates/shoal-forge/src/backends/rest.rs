@@ -17,6 +17,7 @@ use crate::{
         link::ItemKind,
         list,
     },
+    numbers::{IssueNumber, PullNumber},
     review::status::{PrState, PrStatus, Verdict},
     updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
 };
@@ -50,7 +51,7 @@ pub(crate) trait RestReads: Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Vec<(String, Entry)>> {
         let verdicts = self.verdicts(repo, account, number).await?;
         Ok(verdict_entries(verdicts.into_iter().map(
@@ -71,7 +72,7 @@ pub(crate) trait RestReads: Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Vec<(String, Verdict)>>;
 }
 
@@ -80,12 +81,12 @@ pub(crate) async fn issue_activity(
     reads: &impl RestReads,
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: IssueNumber,
 ) -> Result<Snapshot> {
     async {
         let (issue, discussion) = tokio::join!(
-            repo.read(account, ItemKind::Issue, number),
-            reads.discussion(repo, account, ItemKind::Issue, number),
+            repo.read(account, ItemKind::Issue, number.get()),
+            reads.discussion(repo, account, ItemKind::Issue, number.get()),
         );
         let mut snapshot = Snapshot::item(&issue?);
         snapshot.record_comments(DISCUSSION, discussion);
@@ -101,11 +102,11 @@ pub(crate) async fn pr_activity(
     reads: &impl RestReads,
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Snapshot> {
     let pull = read_pull(repo, account, number).await?;
     let (discussion, reviews, checks) = tokio::join!(
-        reads.discussion(repo, account, ItemKind::Pr, number),
+        reads.discussion(repo, account, ItemKind::Pr, number.get()),
         reads.review_activity(repo, account, number),
         open_checks(reads, repo, account, &pull),
     );
@@ -123,11 +124,11 @@ pub(crate) async fn pr_status(
     reads: &impl RestReads,
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
     url: &str,
 ) -> Result<PrStatus> {
     async {
-        let pull = repo.read(account, ItemKind::Pr, number).await?;
+        let pull = repo.read(account, ItemKind::Pr, number.get()).await?;
         let (checks, verdicts) = tokio::join!(
             open_checks(reads, repo, account, &pull),
             reads.verdicts(repo, account, number),
@@ -176,13 +177,13 @@ async fn open_checks(
 pub(crate) async fn merged_commits(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: PullNumber,
 ) -> Result<Option<Vec<String>>> {
     let pull = read_pull(repo, account, number).await?;
     if pull.item.state != ItemState::Merged {
         return Ok(None);
     }
-    let endpoint = format!("{}/commits", repo.item_endpoint(ItemKind::Pr, number));
+    let endpoint = format!("{}/commits", repo.item_endpoint(ItemKind::Pr, number.get()));
     let commits = repo
         .pages(account, &endpoint)
         .await
@@ -191,8 +192,12 @@ pub(crate) async fn merged_commits(
 }
 
 /// The PR, suggesting logging in when the request fails.
-pub(crate) async fn read_pull(repo: &ForgeRepo, account: &Account, number: u64) -> Result<Current> {
-    repo.read(account, ItemKind::Pr, number)
+pub(crate) async fn read_pull(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: PullNumber,
+) -> Result<Current> {
+    repo.read(account, ItemKind::Pr, number.get())
         .await
         .hint_login(&repo.kind)
 }
@@ -278,10 +283,10 @@ fn listed_number(repo: &ForgeRepo, value: &Value) -> Result<u64> {
 pub(crate) async fn issue_state(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: IssueNumber,
 ) -> Result<ItemState> {
     Ok(repo
-        .read(account, ItemKind::Issue, number)
+        .read(account, ItemKind::Issue, number.get())
         .await
         .hint_login(&repo.kind)?
         .item
@@ -292,10 +297,10 @@ pub(crate) async fn issue_state(
 pub(crate) async fn issue_details(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: IssueNumber,
 ) -> Result<Current> {
     let issue = repo
-        .read(account, ItemKind::Issue, number)
+        .read(account, ItemKind::Issue, number.get())
         .await
         .hint_login(&repo.kind)?;
     require_open(issue.item.state)?;

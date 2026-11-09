@@ -30800,7 +30800,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         start: shoal_client::protocol::operations::WorkspaceStart::PullHead {
             url: url.into(),
             head: shoal_client::protocol::PullHead {
-                number: 8,
+                number: shoal_client::forge::numbers::PullNumber::new(8),
                 reference: "refs/pull/8/head".into(),
                 commit: first.clone(),
                 base: None,

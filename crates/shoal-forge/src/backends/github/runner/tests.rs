@@ -81,7 +81,12 @@ fn a_run_names_its_pr_or_branch_and_a_forks_pr_only_its_commit() {
     assert_eq!(pull.url, "https://github.com/team/repo/actions/runs/30");
     assert_eq!(pull.workflow.as_deref(), Some("ci.yml"));
     assert_eq!(pull.commit, "abc123");
-    assert_eq!(pull.trigger, Trigger::Pull { number: 12 });
+    assert_eq!(
+        pull.trigger,
+        Trigger::Pull {
+            number: PullNumber::new(12)
+        }
+    );
     assert_eq!(pull.reference.as_deref(), Some("refs/pull/12/head"));
 
     let target = run(

@@ -8,7 +8,7 @@ use crate::{
     account::Account,
     backends::github_rest,
     items::link::ItemKind,
-    numbers::CommentId,
+    numbers::{CommentId, PullNumber},
     review::view::{
         AutoMerge, Details, Review, ReviewComment, login, review_comment, review_state, text_field,
     },
@@ -66,7 +66,11 @@ pub(crate) async fn discussion(
     if kind == ItemKind::Issue {
         return Ok(None);
     }
-    parse_reviews(&review_comments(repo, account, number).await?, errors).map(Some)
+    parse_reviews(
+        &review_comments(repo, account, PullNumber::new(number)).await?,
+        errors,
+    )
+    .map(Some)
 }
 
 /// Each review with the inline comments Forgejo lists under it, replies

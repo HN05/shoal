@@ -45,7 +45,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::{CommentId, JobId, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -178,7 +178,7 @@ impl Backend for Forgejo {
         "sha"
     }
 
-    fn pull_head_ref(&self, number: u64) -> Option<String> {
+    fn pull_head_ref(&self, number: PullNumber) -> Option<String> {
         Some(format!("refs/pull/{number}/head"))
     }
 
@@ -301,7 +301,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Option<u64>> {
         let compare = |base: &str, head: &str| {
             format!("compare/{head}...{base}?files=false&stat=false&verification=false")
@@ -447,7 +447,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         comment: CommentId,
     ) -> Result<Option<Thread>> {
         let reviews = threads::all_review_comments(repo, account, number).await?;
@@ -456,7 +456,13 @@ impl Backend for Forgejo {
 
     /// A reply is a comment of the thread's review on the first comment's
     /// lines.
-    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+    fn reply(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        body: &str,
+    ) -> Result<Request> {
         let Target::Forgejo {
             review,
             path,
@@ -482,7 +488,7 @@ impl Backend for Forgejo {
     fn resolution(
         &self,
         _repo: &ForgeRepo,
-        _number: u64,
+        _number: PullNumber,
         _thread: &Thread,
         _resolved: bool,
     ) -> Result<Request> {
@@ -493,7 +499,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Vec<String>> {
         github_rest::open_dependencies(repo, account, &format!("issues/{number}/dependencies"))
             .await
@@ -508,7 +514,12 @@ impl Backend for Forgejo {
         review::diff(repo, account, current).await
     }
 
-    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+    fn review(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        review: &PlacedReview,
+    ) -> Result<Submission> {
         Ok(review::review(repo, number, review))
     }
 
@@ -516,7 +527,7 @@ impl Backend for Forgejo {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _number: u64,
+        _number: PullNumber,
         _review: &PlacedReview<'_>,
         responses: &[Value],
     ) -> Result<Vec<String>> {
@@ -527,7 +538,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: IssueNumber,
     ) -> Result<Snapshot> {
         rest::issue_activity(self, repo, account, number).await
     }
@@ -536,7 +547,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Snapshot> {
         rest::pr_activity(self, repo, account, number).await
     }
@@ -545,7 +556,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
         url: &str,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, url).await
@@ -1047,7 +1058,7 @@ impl RestReads for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Vec<(String, Entry)>> {
         let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
         let mut reviews = repo.pages(account, &endpoint).await?;
@@ -1082,7 +1093,7 @@ impl RestReads for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        number: u64,
+        number: PullNumber,
     ) -> Result<Vec<(String, Verdict)>> {
         let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
         forgejo_reviews(&repo.pages(account, &endpoint).await?)
