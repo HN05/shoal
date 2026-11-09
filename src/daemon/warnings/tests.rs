@@ -119,7 +119,7 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
                 &id,
                 &crate::execution::TrackedAgent::named("claude"),
                 &workspace.id,
-                name,
+                &workspace.name,
                 false,
                 Duration::ZERO,
             )

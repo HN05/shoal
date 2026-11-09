@@ -445,7 +445,7 @@ impl Manager {
         id: &ExecutionId,
         tracked: &TrackedAgent,
         workspace_id: &SpaceId,
-        workspace: &str,
+        workspace: &SpaceName,
         recover: bool,
         running: Duration,
     ) {
@@ -459,7 +459,7 @@ impl Manager {
             model: tracked.model.clone(),
             mode: tracked.mode.clone(),
             narrowing: tracked.narrowing,
-            workspace: workspace.into(),
+            workspace: workspace.clone(),
             workspace_id: workspace_id.clone(),
             started: Instant::now()
                 .checked_sub(running)
