@@ -794,7 +794,9 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
              VALUES ('{"kind":"test","name":"9"}'),
                  ('{"kind":"test","chat_id":"chat","name":"15"}'),
                  ('{"kind":"test","chat":{"name":"10"}}'),
-                 ('{"kind":"test","file":{"chat":"11","name":"12"}}');"#,
+                 ('{"kind":"test","file":{"chat":"11","name":"12"}}'),
+                 ('{"kind":"test","base_workspace":{"name":"16"},"parent":{"name":"17","kind":"chat"}}'),
+                 ('{"kind":"test","parent_workspace":{"name":"18"},"child":{"name":"19","kind":"workspace"}}');"#,
     )?;
     migrate(&mut db)?;
     let column = |sql: &str| -> Result<Vec<Option<String>>> {
@@ -828,14 +830,20 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
     assert_eq!(
         column(
             "SELECT COALESCE(json_extract(record,'$.name'),json_extract(record,'$.chat.name'),
-                json_extract(record,'$.file.chat') || ' ' || json_extract(record,'$.file.name'))
+                json_extract(record,'$.file.chat') || ' ' || json_extract(record,'$.file.name'),
+                json_extract(record,'$.base_workspace.name') || ' '
+                    || json_extract(record,'$.parent.name'),
+                json_extract(record,'$.parent_workspace.name') || ' '
+                    || json_extract(record,'$.child.name'))
             FROM workspace_events WHERE json_extract(record,'$.kind')='test' ORDER BY id"
         )?,
         names(&[
             Some("workspace-9"),
             Some("chat-15"),
             Some("chat-10"),
-            Some("chat-11 12")
+            Some("chat-11 12"),
+            Some("workspace-16 chat-17"),
+            Some("workspace-18 workspace-19")
         ])
     );
     Ok(())

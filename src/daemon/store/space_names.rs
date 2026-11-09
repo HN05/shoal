@@ -111,6 +111,13 @@ pub(super) fn rename_invalid_copies(db: &Connection) -> Result<()> {
         ("$.chat.name", "1"),
         ("$.file.workspace", "0"),
         ("$.file.chat", "1"),
+        ("$.base_workspace.name", "0"),
+        ("$.parent_workspace.name", "0"),
+        (
+            "$.parent.name",
+            "json_extract(record,'$.parent.kind')='chat'",
+        ),
+        ("$.child.name", "json_extract(record,'$.child.kind')='chat'"),
     ] {
         rename_in_records(db, "workspace_events", path, chat, Empty::Derive)?;
     }
