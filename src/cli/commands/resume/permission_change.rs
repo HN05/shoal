@@ -1,8 +1,8 @@
-//! `--permission` on `shoal resume` and `shoal restart`: a change to the
-//! permissions the restored or restarted agents and chats were given. A
-//! scoped process gives only what it holds, which is checked for every
-//! selected space before anything restarts or restores, and a restore makes
-//! the change in the records it restores once nothing refuses it.
+//! `--permission` on `shoal resume`: a change to the permissions the restored
+//! agents and chats were given. A scoped process gives only what it holds,
+//! which is checked for every selected space before anything restores, and a
+//! restore makes the change in the records it restores once nothing refuses
+//! it.
 use anyhow::{Context as _, Result, ensure};
 
 use super::targets::Selected;
