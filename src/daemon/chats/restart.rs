@@ -142,7 +142,8 @@ impl Manager {
         self.save_chat(&chat.id, stopped_by).await?;
         if let Some(change) = change {
             let given = change.applied_to(chat.narrowing);
-            self.give_saved_chat(&chat.id, given).await?;
+            self.give_saved_chats(vec![(chat.id.clone(), given)])
+                .await?;
         }
         let restored = resume(&self.paths, chat)
             .await
@@ -154,21 +155,24 @@ impl Manager {
         Ok(restored.and_then(|chat| chat.origin))
     }
 
-    /// Give the saved chat `id`'s agent the permissions `given`, which its
-    /// restore runs under.
-    pub(crate) async fn give_saved_chat(
+    /// Give each saved chat its agent's permissions, which its restore runs
+    /// under, all or none: a chat restored or removed since refuses them.
+    pub(crate) async fn give_saved_chats(
         &self,
-        id: &str,
-        given: crate::config::permissions::PermissionsConfig,
+        given: Vec<(SpaceId, crate::config::permissions::PermissionsConfig)>,
     ) -> Result<()> {
-        let (id, narrowing) = (id.to_owned(), store::narrowing_column(&given)?);
+        let given = (given.into_iter())
+            .map(|(id, given)| Ok((id, store::narrowing_column(&given)?)))
+            .collect::<Result<Vec<_>>>()?;
         self.store
-            .run(move |db| {
-                let updated = db.execute(
-                    "UPDATE chats SET narrowing=?2 WHERE id=?1 AND restore IS NOT NULL",
-                    params![id, narrowing],
-                )?;
-                ensure!(updated == 1, "the chat is no longer saved");
+            .write(move |tx| {
+                for (id, narrowing) in given {
+                    let updated = tx.execute(
+                        "UPDATE chats SET narrowing=?2 WHERE id=?1 AND restore IS NOT NULL",
+                        params![id, narrowing],
+                    )?;
+                    ensure!(updated == 1, "chat {id} is no longer saved");
+                }
                 Ok(())
             })
             .await

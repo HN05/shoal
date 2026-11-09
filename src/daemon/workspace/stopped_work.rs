@@ -122,11 +122,14 @@ impl Manager {
         for chat in chats {
             saved.push(self.changeable_chat(chat, change, giver).await?);
         }
-        recovery::change_permissions(&changed, change)?;
-        for chat in saved {
-            (self.give_saved_chat(&chat.id, change.applied_to(chat.narrowing))).await?;
-        }
-        Ok(())
+        // The chats change together, refusing one restored or removed since,
+        // while the agents' claims keep their restores out.
+        let claimed = recovery::ClaimedChange::claim(&changed)?;
+        let given = saved
+            .iter()
+            .map(|chat| (chat.id.clone(), change.applied_to(chat.narrowing)));
+        self.give_saved_chats(given.collect()).await?;
+        claimed.make(change)
     }
 
     /// The saved chat `selector` names, refusing one that is not saved and

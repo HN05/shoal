@@ -1236,30 +1236,54 @@ impl Saved {
 /// restore takes on each of them, so one a restore holds is refused before
 /// any changes.
 pub fn change_permissions(saved: &[Saved], change: &PermissionChange) -> Result<()> {
-    let agents = || saved.iter().flat_map(|saved| &saved.agents);
-    let sessions = || saved.iter().flat_map(|saved| &saved.sessions);
-    let _claims = (agents().chain(sessions()))
-        .map(|(_, path)| claim(path))
-        .collect::<Result<Vec<_>>>()?;
-    for (_, path) in agents() {
-        if let Some(record) = Record::load(path)? {
-            let narrowing = change.applied_to(record.narrowing);
-            rewrite(
-                path,
-                &Record {
-                    narrowing,
-                    ..record
-                },
-            )?;
-        }
+    ClaimedChange::claim(saved)?.make(change)
+}
+
+/// The agents and last sessions a permission change rewrites, each claimed
+/// as a restore claims it until the change is made.
+pub struct ClaimedChange<'a> {
+    saved: &'a [Saved],
+    _claims: Vec<RecoveryClaim>,
+}
+
+impl<'a> ClaimedChange<'a> {
+    /// Claim each agent and last session `saved` lists, refusing one a
+    /// restore holds.
+    pub fn claim(saved: &'a [Saved]) -> Result<Self> {
+        let paths = saved
+            .iter()
+            .flat_map(|saved| saved.agents.iter().chain(&saved.sessions));
+        let claims = paths.map(|(_, path)| claim(path)).collect::<Result<_>>()?;
+        Ok(Self {
+            saved,
+            _claims: claims,
+        })
     }
-    for (_, path) in sessions() {
-        if let Some(last) = LastSession::load(path)? {
-            let narrowing = change.applied_to(last.narrowing);
-            rewrite(path, &LastSession { narrowing, ..last })?;
+
+    /// Make `change` to the permissions each was given.
+    pub fn make(self, change: &PermissionChange) -> Result<()> {
+        let agents = self.saved.iter().flat_map(|saved| &saved.agents);
+        let sessions = self.saved.iter().flat_map(|saved| &saved.sessions);
+        for (_, path) in agents {
+            if let Some(record) = Record::load(path)? {
+                let narrowing = change.applied_to(record.narrowing);
+                rewrite(
+                    path,
+                    &Record {
+                        narrowing,
+                        ..record
+                    },
+                )?;
+            }
         }
+        for (_, path) in sessions {
+            if let Some(last) = LastSession::load(path)? {
+                let narrowing = change.applied_to(last.narrowing);
+                rewrite(path, &LastSession { narrowing, ..last })?;
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Make `change` to the permissions given to the saved agent or last

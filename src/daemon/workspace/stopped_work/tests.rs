@@ -59,6 +59,12 @@ async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
     assert_eq!(stopped(&manager), PermissionsConfig::default());
     let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     assert_eq!(saved.narrowing, PermissionsConfig::default());
+    // Chats change all or none: one restored since refuses the rest.
+    let (running, _running) = chat(&manager, "busy", "chat", Some(&repo), None).await;
+    let both = vec![(talk.id.clone(), change.set), (running.id, change.set)];
+    assert!(manager.give_saved_chats(both).await.is_err());
+    let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
+    assert_eq!(saved.narrowing, PermissionsConfig::default());
     // The user gives any, to a saved chat as to a stopped agent.
     (manager.change_stopped_permissions(&agents[..1], &chats, &change, None))
         .await
