@@ -90,6 +90,7 @@ const REQUESTS: &[&str] = &[
     r#"{"mark_done":{"space":"fix","cleanup":true,"summary":"No leak"}}"#,
     r#"{"undo_done":{"space":"fix"}}"#,
     r#"{"discard_stopped_work":{"workspace":"part","execution":null}}"#,
+    r#"{"replace_stopped_narrowing":{"agents":[{"workspace":"part","execution":"e1"}],"narrowing":{"push":"propose"}}}"#,
     r#"{"mark_ready":{"space":"fix","selection":{"kind":"pr","input":null}}}"#,
     r#"{"clear_ready":{"space":"fix","selection":{"kind":null,"input":null},"draft":true}}"#,
     r#"{"set_agent_state":{"workspace":"fix","state":"idle","session":"s1","turn_end":{"prompt_cache_secs":3600,"final_message":"Which one?"}}}"#,
