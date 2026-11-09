@@ -128,7 +128,7 @@ async fn built_in_restore_child() {
         let recovery = Recovery::resolve(
             &manager.paths,
             &workspace,
-            restored(agent, Some("s1")),
+            restored(agent, Some(&"s1".into())),
             None,
             None,
         )
@@ -147,9 +147,10 @@ async fn built_in_restore_child() {
          [rules.triage]\ntext = 'Triage {branch}'\n",
     )
     .unwrap();
+    let session = "s1".into();
     let triage = crate::execution::recovery::Restored {
         mode: &"triage".into(),
-        ..restored("claude", Some("s1"))
+        ..restored("claude", Some(&session))
     };
     let recovery = Recovery::resolve(&manager.paths, &workspace, triage, None, None)
         .await
@@ -195,7 +196,7 @@ async fn built_in_restore_child() {
             narrowing: Default::default(),
             agent: &agent,
             model: &model,
-            session: Some("s1"),
+            session: Some(&"s1".into()),
         };
         let recovery = Recovery::resolve(&manager.paths, &workspace, restored, None, None)
             .await
@@ -498,7 +499,7 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
     let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
-    assert_eq!(record.session.as_deref(), Some("closed-session"));
+    assert_eq!(record.session, Some("closed-session".into()));
     serving.abort();
 }
 
@@ -555,7 +556,7 @@ async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
         record.stop_reason.as_deref(),
         Some("its session was terminated")
     );
-    assert_eq!(record.session.as_deref(), Some("ending-session"));
+    assert_eq!(record.session, Some("ending-session".into()));
     // It comes back through the agent queue once its execution has ended.
     let requested: Vec<_> = restore_requests(&manager.paths, &workspace.id)
         .unwrap()
@@ -1461,7 +1462,10 @@ static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::
 
 /// The restore of `agent` with the tool's own model and effort, from
 /// `session` when given.
-fn restored<'a>(agent: &str, session: Option<&'a str>) -> crate::execution::recovery::Restored<'a> {
+fn restored<'a>(
+    agent: &str,
+    session: Option<&'a crate::client::agent::AgentSessionId>,
+) -> crate::execution::recovery::Restored<'a> {
     let agent = Box::leak(Box::new(agent.into()));
     static OWN: crate::agent::ModelChoice = crate::agent::ModelChoice {
         model: None,

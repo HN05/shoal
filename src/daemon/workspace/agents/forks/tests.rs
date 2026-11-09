@@ -35,7 +35,7 @@ async fn agent(
         )
         .await;
     if let Some(session) = session {
-        recovery::save_session(&manager.paths, &workspace.id, &id, session).unwrap();
+        recovery::save_session(&manager.paths, &workspace.id, &id, &session.into()).unwrap();
     }
     id
 }
@@ -64,7 +64,7 @@ async fn a_fork_starts_from_the_callers_agent_or_the_only_one() {
     let quiet = agent(&manager, &workspace, "claude", None).await;
     assert!(refused(&manager, &workspace, None).await);
 
-    recovery::save_session(&manager.paths, &workspace.id, &quiet, "s1").unwrap();
+    recovery::save_session(&manager.paths, &workspace.id, &quiet, &"s1".into()).unwrap();
     let only = AgentSession {
         agent: "claude".into(),
         session: "s1".into(),

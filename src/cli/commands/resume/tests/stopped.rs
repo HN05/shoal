@@ -7,6 +7,7 @@ use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;
 
+use crate::client::agent::AgentSessionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::executions::ExecutionKind,
@@ -317,7 +318,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     );
     bounded(agent).await.unwrap().unwrap();
     let [stopped] = last().try_into().unwrap();
-    assert_eq!(stopped.session.as_deref(), Some("stopped-session"));
+    assert_eq!(stopped.session, Some("stopped-session".into()));
     assert!(
         Saved::load(&manager.paths, &workspace.id)
             .unwrap()
@@ -340,7 +341,11 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
     let [quit] = last().try_into().unwrap();
     assert_eq!(
-        (quit.agent.name(), quit.session.as_deref(), quit.moved),
+        (
+            quit.agent.name(),
+            quit.session.as_ref().map(AgentSessionId::as_str),
+            quit.moved
+        ),
         ("fixture", Some("quit-session"), false)
     );
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());

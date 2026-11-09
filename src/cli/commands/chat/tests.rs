@@ -46,7 +46,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
     // restore takes the saved chat, and so does a scoped start its handoff.
     // A chat below a named parent goes there too.
     let resumed = Beside {
-        session: Some("s1"),
+        session: Some(&"s1".into()),
         restore: Some(&SpaceId::from("c1")),
         parent: Some(&SpaceSelector::parse("7")),
         ..beside
@@ -242,7 +242,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
         agent: &agent,
         model: &ModelChoice::default(),
         args: &[],
-        session: Some("s1"),
+        session: Some(&"s1".into()),
         fork: false,
         restore: None,
         parent: None,
@@ -260,7 +260,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let issue =
         templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title).unwrap();
     assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
-    assert_eq!(start.session.as_deref(), Some("s1"));
+    assert_eq!(start.session, Some("s1".into()));
     assert!(!start.fork_session);
     // A copy's chat starts from a fork of the session there too.
     let fork = Beside {
@@ -275,7 +275,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     else {
         panic!("expected start");
     };
-    assert_eq!(start.session.as_deref(), Some("s1"));
+    assert_eq!(start.session, Some("s1".into()));
     assert!(start.fork_session);
     let unlinked = Topic::imported(&repo, &"plan".into(), &SpaceLinks::default());
     assert_eq!(
@@ -290,7 +290,7 @@ fn a_chat_whose_agent_cannot_fork_starts_a_new_session() {
         .resolve(&Default::default())
         .unwrap();
     let forked = SessionArgs {
-        session: Some("s1"),
+        session: Some(&"s1".into()),
         fork: true,
         directory: Path::new("/repos/shoal"),
     };

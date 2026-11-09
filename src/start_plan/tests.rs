@@ -66,7 +66,7 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
     assert!(plan.opens(&child));
     assert_eq!(plan.agent.model, model);
     assert_eq!(plan.args, ["Take the child part"]);
-    assert_eq!(plan.fork.as_deref(), Some("parent-session"));
+    assert_eq!(plan.fork, Some("parent-session".into()));
     assert_eq!(
         plan.issue_url(),
         Some("https://forge.example/team/project/issues/7")

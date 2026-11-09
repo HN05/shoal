@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    agent::ModelChoice,
+    agent::{AgentSessionId, ModelChoice},
     connection::{Daemon, request},
     processes::Identity,
     protocol::ExecutionMethod,
@@ -100,7 +100,7 @@ pub struct Record {
     /// The session the agent's hooks last reported, which built-in agents
     /// resume by ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<String>,
+    pub session: Option<AgentSessionId>,
     /// The workspace moved where the agent's session is not available, such
     /// as from another machine, so the agent starts a new one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -182,7 +182,7 @@ pub struct LastSession {
     pub execution: ExecutionId,
     pub agent: crate::agent::Agent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<String>,
+    pub session: Option<AgentSessionId>,
     /// The workspace moved where the session is not available.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,

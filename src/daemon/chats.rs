@@ -6,6 +6,7 @@
 //! under pressure. A chat runs while its process lives; once its agent exits
 //! or Shoal saves it, the chat is stopped until it is restored, and it lasts
 //! until it is removed.
+use crate::client::agent::AgentSessionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::{SpaceId, SpaceNumber};
@@ -329,7 +330,11 @@ impl Manager {
     }
 
     /// Record `session` as the agent session the running chat `id` continues.
-    pub(crate) async fn record_chat_session(&self, id: &SpaceId, session: String) -> Result<()> {
+    pub(crate) async fn record_chat_session(
+        &self,
+        id: &SpaceId,
+        session: AgentSessionId,
+    ) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

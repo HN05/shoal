@@ -38,7 +38,7 @@ async fn agent(
             Duration::ZERO,
         )
         .await;
-    recovery::save_session(&manager.paths, &workspace.id, &id, session)?;
+    recovery::save_session(&manager.paths, &workspace.id, &id, &session.into())?;
     Ok(id)
 }
 

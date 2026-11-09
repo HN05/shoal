@@ -1,4 +1,5 @@
 //! Running agents, their reported state and sessions.
+use crate::agent::AgentSessionId;
 use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use crate::state::AgentState;
@@ -77,5 +78,5 @@ pub struct PendingRestart {
 pub struct AgentSession {
     /// Named as `--agent` names it.
     pub agent: crate::agent::Agent,
-    pub session: String,
+    pub session: AgentSessionId,
 }

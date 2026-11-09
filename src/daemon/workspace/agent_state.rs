@@ -1,7 +1,7 @@
 //! The turn state agents report from their hooks: a status signal for
 //! integrations that never notifies, completes, or changes cleanup.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use std::time::Duration;
 
 use anyhow::{Result, ensure};
@@ -134,7 +134,7 @@ impl Manager {
         selector: &SpaceSelector,
         state: AgentState,
         execution: Option<ExecutionId>,
-        session: Option<String>,
+        session: Option<AgentSessionId>,
     ) -> Result<AgentStatus> {
         self.record_agent_state(selector, state, execution, session, TurnEnding::default())
             .await
@@ -147,7 +147,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
-        session: Option<String>,
+        session: Option<AgentSessionId>,
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
@@ -249,7 +249,7 @@ impl Manager {
         selector: &SpaceSelector,
         state: AgentState,
         execution: Option<ExecutionId>,
-        session: Option<String>,
+        session: Option<AgentSessionId>,
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
         let space = self.space(selector).await?;
@@ -288,10 +288,10 @@ impl Manager {
         &self,
         space: &PresentSpace,
         execution: Option<&ExecutionId>,
-        session: String,
+        session: AgentSessionId,
     ) -> Result<()> {
         ensure!(
-            recovery::valid_session(&session),
+            recovery::valid_session(session.as_str()),
             "invalid agent session ID"
         );
         match (space, execution) {
@@ -315,7 +315,7 @@ impl Manager {
         selector: &SpaceSelector,
         failure: TurnFailure,
         execution: Option<ExecutionId>,
-        session: Option<String>,
+        session: Option<AgentSessionId>,
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
         if let Some(execution) = &execution {

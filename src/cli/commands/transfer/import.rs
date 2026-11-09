@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
+use crate::client::agent::AgentSessionId;
 use crate::client::output::chat::BackgroundChat;
 use crate::client::output::{
     resume::Reopened,
@@ -141,10 +142,11 @@ impl Package {
             .or_else(|| manifest.remote_url.clone())
             .context("the exported repository has no origin; select the repository to import into with --repo")?;
         let sessions = sessions_here(&manifest, options.sessions);
-        let kept: BTreeSet<&str> = sessions.reported().map(|(_, session)| session).collect();
+        let kept: BTreeSet<&AgentSessionId> =
+            sessions.reported().map(|(_, session)| session).collect();
         let carried = files
             .into_iter()
-            .filter(|imported| kept.contains(imported.file.session.as_str()))
+            .filter(|imported| kept.contains(&imported.file.session))
             .collect();
         Ok(Self {
             space: manifest.space,

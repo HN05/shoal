@@ -214,7 +214,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
             .unwrap();
     }
     let chats = manager.chats().await.unwrap();
-    assert_eq!(chats[0].session.as_deref(), Some("session-2"));
+    assert_eq!(chats[0].session, Some("session-2".into()));
     manager
         .set_agent_state(
             &SpaceSelector::id(&chat.id),

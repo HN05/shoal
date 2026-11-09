@@ -124,7 +124,7 @@ pub(crate) struct AddPlan {
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The session the agent starts from a fork of.
     #[serde(default)]
-    pub fork: Option<String>,
+    pub fork: Option<crate::client::agent::AgentSessionId>,
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
     pub queue_entry: Option<crate::client::queue::QueueEntryId>,

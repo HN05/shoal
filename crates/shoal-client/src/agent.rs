@@ -1,5 +1,11 @@
-//! Agent names and the models they run with, independent of the integrations
-//! that launch them.
+//! Agent names, the models they run with and the IDs of their sessions,
+//! independent of the integrations that launch them.
+
+crate::ids::text_id!(
+    /// The ID an agent gives its session, which its hooks report and its
+    /// resume and fork arguments name; never a terminal host's session.
+    AgentSessionId
+);
 
 /// What `add --agent` and `agent.default` start: an AI tool, a configured
 /// command, or a name an integration serves. Parsing validates the name;

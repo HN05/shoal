@@ -61,7 +61,7 @@ pub(in crate::cli::commands) struct AddOptions {
     /// or, for a workspace process, its own space.
     pub parent: Option<SpaceSelector>,
     /// The session the agent starts from a fork of.
-    pub fork: Option<String>,
+    pub fork: Option<crate::client::agent::AgentSessionId>,
 }
 
 impl AddOptions {

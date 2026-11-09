@@ -163,7 +163,7 @@ pub(super) struct Launch {
     pub opening: agents::Opening,
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
-    pub fork: Option<String>,
+    pub fork: Option<crate::client::agent::AgentSessionId>,
 }
 
 /// Start `resolved`'s agent in `workspace` as `launch` says, else open a

@@ -212,7 +212,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         &manager.paths,
         &workspace.id,
         &ExecutionId::from("unrecorded"),
-        "rebooted-session",
+        &"rebooted-session".into(),
     )
     .unwrap();
     let reopened = restart(&manager).await;

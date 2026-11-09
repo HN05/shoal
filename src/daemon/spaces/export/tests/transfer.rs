@@ -2,6 +2,7 @@ use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use std::{fs, path::Path, sync::Arc};
 
+use crate::client::agent::AgentSessionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -170,7 +171,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
         &exporting.paths,
         &workspace.id,
         &ExecutionId::from("stopped-agent"),
-        "s1",
+        &"s1".into(),
     )
     .unwrap();
     recovery::save_record(
@@ -190,7 +191,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     // The exporting machine's import can resume the session it recorded.
     let sessions = read.manifest.sessions.as_ref().unwrap();
     assert_eq!(sessions.machine, crate::process::machine::id());
-    assert_eq!(sessions.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(sessions.agents[0].record.session, Some("s1".into()));
     let restored = import(&importing, &target_repo, &file).await;
 
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
@@ -448,7 +449,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
         &manager.paths,
         &workspace.id,
         &ExecutionId::from("stopped-agent"),
-        "s1",
+        &"s1".into(),
     )
     .unwrap();
     recovery::save_record(
@@ -499,7 +500,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let saved = recovery::Saved::load(&manager.paths, &copy.id).unwrap();
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
     let forked = crate::process::machine::id().map(|_| "s1");
-    assert_eq!(record.session.as_deref(), forked);
+    assert_eq!(record.session.as_ref().map(AgentSessionId::as_str), forked);
     assert_eq!(record.copied, Some(Copied::default()));
     assert_eq!(record.moved, forked.is_none());
     // The original keeps its branch, files and agent.

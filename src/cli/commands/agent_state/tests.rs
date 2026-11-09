@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::agent::AgentSessionId;
 
 #[test]
 fn hook_events_name_their_session() {
@@ -6,7 +7,7 @@ fn hook_events_name_their_session() {
         br#"{"session_id":"0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f","hook_event_name":"Stop"}"#;
     let session = |input: &[u8]| first_value(input).as_ref().and_then(session_of);
     assert_eq!(
-        session(&event[..]).as_deref(),
+        session(&event[..]).as_ref().map(AgentSessionId::as_str),
         Some("0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f")
     );
     assert_eq!(session(br#"{"session_id":"--help"}"#), None);
@@ -26,7 +27,8 @@ fn open_inputs_report_their_event_without_closing() -> std::io::Result<()> {
         first_value(&reader)
             .as_ref()
             .and_then(session_of)
-            .as_deref(),
+            .as_ref()
+            .map(AgentSessionId::as_str),
         Some("0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f")
     );
     drop(writer);

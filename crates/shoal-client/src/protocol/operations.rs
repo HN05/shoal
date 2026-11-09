@@ -215,7 +215,7 @@ pub struct QueuedLaunch {
     pub args: Vec<String>,
     /// The session the agent starts from a fork of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fork: Option<String>,
+    pub fork: Option<crate::agent::AgentSessionId>,
     /// The issue the agent works on, which prompts it instead of `prompt`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue: Option<LaunchIssue>,

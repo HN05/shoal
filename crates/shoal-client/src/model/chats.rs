@@ -2,6 +2,7 @@
 use super::{
     AgentStatus, Completion, Repository, ReviewMark, SpaceLinks, SpaceRef, Workspace, WorkspaceRef,
 };
+use crate::agent::AgentSessionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
@@ -56,7 +57,7 @@ pub struct Chat {
     pub root_dir: Option<std::path::PathBuf>,
     /// The agent session its hooks reported last, which an export continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<String>,
+    pub session: Option<AgentSessionId>,
     /// How the chat comes back once its agent stopped, by exiting or as
     /// Shoal saved its session; none while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,3 +1,4 @@
+use crate::agent::AgentSessionId;
 use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
@@ -16,7 +17,7 @@ pub enum AgentMethod {
         workspace: SpaceSelector,
         state: crate::state::AgentState,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<String>,
+        session: Option<AgentSessionId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         turn_end: Option<TurnEnd>,
     },
@@ -44,7 +45,7 @@ pub enum AgentMethod {
         workspace: SpaceSelector,
         failure: crate::state::TurnFailure,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<String>,
+        session: Option<AgentSessionId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         execution: Option<ExecutionId>,
         #[serde(default, skip_serializing_if = "TurnEnd::is_empty")]

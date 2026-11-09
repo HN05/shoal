@@ -5,7 +5,7 @@
 //! daemon records it while its agent runs.
 //! Every start makes a new chat and gives it focus.
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
+use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
@@ -262,7 +262,7 @@ pub(super) struct Options {
     pub args: Vec<OsString>,
     /// The agent session the chat continues, such as one `shoal move
     /// import` brought, instead of starting a new one.
-    pub session: Option<String>,
+    pub session: Option<AgentSessionId>,
     /// Whether the chat starts from a fork of `session`, which stays
     /// unchanged, instead of continuing it.
     pub fork: bool,
@@ -597,7 +597,7 @@ pub(super) async fn launch(
     let name = initial_name(ctx, &topic, requested).await?;
     let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
     let session_args = SessionArgs {
-        session: session.as_deref(),
+        session: session.as_ref(),
         fork,
         directory: topic.home(&repo).path(),
     };
@@ -638,7 +638,7 @@ pub(super) async fn launch(
         agent: &agent,
         model: &model,
         args: &args,
-        session: session.as_deref(),
+        session: session.as_ref(),
         fork,
         restore: restore.as_ref(),
         parent: parent.as_ref(),
@@ -729,7 +729,7 @@ pub(super) async fn launch(
 /// The session a chat's agent continues, or starts in `directory` from a
 /// fork of when `fork`.
 struct SessionArgs<'a> {
-    session: Option<&'a str>,
+    session: Option<&'a AgentSessionId>,
     fork: bool,
     directory: &'a Path,
 }
@@ -743,7 +743,7 @@ impl SessionArgs<'_> {
             return Ok(Vec::new());
         };
         ensure!(
-            crate::execution::recovery::valid_session(session),
+            crate::execution::recovery::valid_session(session.as_str()),
             "invalid agent session ID"
         );
         if !self.fork {
@@ -759,7 +759,7 @@ impl SessionArgs<'_> {
 
 /// The arguments with which `agent` continues `session`; an agent without
 /// resume arguments starts a new one, with a warning.
-fn resumed_args(settings: &Effective, agent: &Agent, session: &str) -> Vec<OsString> {
+fn resumed_args(settings: &Effective, agent: &Agent, session: &AgentSessionId) -> Vec<OsString> {
     let resumed = settings.launch(agent).arguments.resume_args(Some(session));
     if resumed.is_none() {
         eprintln!(
@@ -900,7 +900,7 @@ struct Beside<'a> {
     agent: &'a Agent,
     model: &'a ModelChoice,
     args: &'a [OsString],
-    session: Option<&'a str>,
+    session: Option<&'a AgentSessionId>,
     fork: bool,
     restore: Option<&'a SpaceId>,
     parent: Option<&'a SpaceSelector>,
@@ -928,7 +928,7 @@ impl Beside<'_> {
             }
         }
         if let Some(session) = self.session {
-            chat.extend(["--session".into(), session.into()]);
+            chat.extend(["--session".into(), session.as_str().into()]);
             if self.fork {
                 chat.push("--fork-session".into());
             }

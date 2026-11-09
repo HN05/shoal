@@ -118,7 +118,7 @@ async fn an_agents_files_name_its_kind_and_session() {
             session: None,
         }
     );
-    recovery::save_session(&manager.paths, &workspace.id, &execution, "s1").unwrap();
+    recovery::save_session(&manager.paths, &workspace.id, &execution, &"s1".into()).unwrap();
     let attacher = manager.attacher(Some(&caller), None).await;
     assert_eq!(
         serde_json::to_value(&attacher).unwrap(),

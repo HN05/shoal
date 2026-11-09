@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
@@ -90,7 +91,7 @@ pub struct PackagedChat {
 pub struct SessionFile {
     /// The agent whose session it belongs to.
     pub agent: crate::agent::Agent,
-    pub session: String,
+    pub session: AgentSessionId,
     /// Its path in the directory the agent keeps its sessions in.
     pub path: PathBuf,
     /// The length of its contents in the export.
@@ -124,7 +125,7 @@ pub struct Sessions {
 
 impl Sessions {
     /// Each agent's name with the session it reported, stopped agents first.
-    pub fn reported(&self) -> impl Iterator<Item = (&crate::agent::Agent, &str)> {
+    pub fn reported(&self) -> impl Iterator<Item = (&crate::agent::Agent, &AgentSessionId)> {
         let stopped = self
             .agents
             .iter()
@@ -135,7 +136,7 @@ impl Sessions {
             .map(|last| (&last.agent, &last.session));
         stopped
             .chain(last)
-            .filter_map(|(agent, session)| Some((agent, session.as_deref()?)))
+            .filter_map(|(agent, session)| Some((agent, session.as_ref()?)))
     }
 }
 

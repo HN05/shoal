@@ -598,7 +598,7 @@ async fn restore(
         model: &session.model,
         mode: &session.mode,
         narrowing: session.narrowing,
-        session: session.session.as_deref(),
+        session: session.session.as_ref(),
     };
     let recovery = Recovery::resolve(
         &ctx.paths,
@@ -671,7 +671,7 @@ async fn start_told(
     ctx: &Context,
     workspace: &Workspace,
     session: &LastSession,
-    fork: Option<String>,
+    fork: Option<crate::client::agent::AgentSessionId>,
     message: String,
     records: Vec<PathBuf>,
 ) -> Result<i32> {

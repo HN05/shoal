@@ -149,7 +149,10 @@ impl Manager {
 
 /// The record a copy keeps of the agent `execution` runs, with the `session`
 /// it reported; `None` for an execution without an agent.
-fn running_record(execution: &Execution, session: Option<String>) -> Option<Record> {
+fn running_record(
+    execution: &Execution,
+    session: Option<crate::client::agent::AgentSessionId>,
+) -> Option<Record> {
     Some(Record {
         narrowing: execution.narrowing,
         // Named as recovery records name it.

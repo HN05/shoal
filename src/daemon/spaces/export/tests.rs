@@ -104,7 +104,7 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     let sessions = import.manifest.sessions.as_ref().unwrap();
     assert_eq!(
         sessions.reported().collect::<Vec<_>>(),
-        [(&crate::agent::Agent::from("claude"), "s1")]
+        [(&crate::agent::Agent::from("claude"), &"s1".into())]
     );
     assert_eq!(
         sessions.last_sessions[0].execution.as_str(),
@@ -443,7 +443,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
     let sessions = import.manifest.sessions.as_ref().unwrap();
     assert_eq!(
         sessions.reported().collect::<Vec<_>>(),
-        [(&crate::agent::Agent::from("claude"), "s1")]
+        [(&crate::agent::Agent::from("claude"), &"s1".into())]
     );
     manager.stop_chat(&chat.id).await.unwrap();
 }

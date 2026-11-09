@@ -3,6 +3,7 @@ use crate::time::UnixTime;
 use std::{fs, path::PathBuf};
 
 use super::*;
+use crate::client::agent::AgentSessionId;
 use crate::execution::recovery::{LastSession, Record};
 
 /// A registered repository pushed to a bare `origin`.
@@ -161,7 +162,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         .manifest
         .sessions_on(Some("m2"), None)
         .reported()
-        .map(|(agent, session)| (agent.to_string(), session.to_owned()))
+        .map(|(agent, session)| (agent.to_string(), session.to_string()))
         .collect();
     assert_eq!(reported, [("claude".to_owned(), "s1".to_owned())]);
     // Without its files, another machine starts a new session.
@@ -312,7 +313,13 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
         panic!("one last session: {:?}", here.last_sessions);
     };
     assert_eq!(last.execution, "quit");
-    assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
+    assert_eq!(
+        (
+            last.session.as_ref().map(AgentSessionId::as_str),
+            last.moved
+        ),
+        (Some("s2"), false)
+    );
     assert_eq!(place(last.origin.as_ref()).as_deref(), Some("tab"));
 
     for new in [
@@ -329,7 +336,7 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     // the exporting machine's.
     let kept = manifest.sessions_on(Some("m2"), Some(true));
     assert!(!kept.agents[0].record.moved);
-    assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(kept.agents[0].record.session, Some("s1".into()));
     assert_eq!(kept.agents[0].record.origin, None);
     assert!(!kept.last_sessions[0].moved);
     assert_eq!(kept.last_sessions[0].origin, None);
@@ -338,13 +345,13 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     manifest.sessions.as_mut().unwrap().machine = None;
     assert!(manifest.sessions_on(None, None).agents[0].record.moved);
     let kept = manifest.sessions_on(None, Some(true));
-    assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(kept.agents[0].record.session, Some("s1".into()));
     assert_eq!(kept.agents[0].record.origin, None);
 
     // Another machine keeps a session whose files the export carries.
     manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
     let carried = manifest.sessions_on(Some("m2"), None);
-    assert_eq!(carried.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(carried.agents[0].record.session, Some("s1".into()));
     assert_eq!(carried.agents[0].record.origin, None);
     assert!(carried.last_sessions[0].moved);
     let new = manifest.sessions_on(Some("m2"), Some(false));
@@ -415,10 +422,10 @@ fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
     };
     let here = manifest.sessions_on(Some("m1"), None);
     let agent = &here.agents[0].record;
-    assert_eq!(agent.session.as_deref(), Some("s1"));
+    assert_eq!(agent.session, Some("s1".into()));
     assert_eq!((agent.origin.as_ref(), agent.copied), (None, Some(copied)));
     let last = &here.last_sessions[0];
-    assert_eq!(last.session.as_deref(), Some("s2"));
+    assert_eq!(last.session, Some("s2".into()));
     assert_eq!((last.origin.as_ref(), last.copied), (None, Some(copied)));
     // Without the session, the copy's agents start anew, still told it is
     // a copy.

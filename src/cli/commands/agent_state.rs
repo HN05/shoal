@@ -190,11 +190,11 @@ fn final_message(event: &serde_json::Value) -> Option<String> {
 }
 
 /// The agent session a hook event names.
-fn session_of(event: &serde_json::Value) -> Option<String> {
+fn session_of(event: &serde_json::Value) -> Option<crate::client::agent::AgentSessionId> {
     event["session_id"]
         .as_str()
         .filter(|session| recovery::valid_session(session))
-        .map(str::to_owned)
+        .map(|session| session.to_owned().into())
 }
 
 #[cfg(test)]

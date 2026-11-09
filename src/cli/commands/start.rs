@@ -2,7 +2,7 @@
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -505,7 +505,7 @@ async fn fork_from(
     copied: Option<SpaceSelector>,
     parent: Option<SpaceSelector>,
     agent: Option<Agent>,
-) -> Result<(Option<SpaceSelector>, Option<Agent>, Option<String>)> {
+) -> Result<(Option<SpaceSelector>, Option<Agent>, Option<AgentSessionId>)> {
     if copied.is_some() {
         let (_, agent, session) = forked(ctx, copied, agent).await?;
         return Ok((parent, Some(agent), Some(session)));
@@ -522,7 +522,7 @@ async fn forked(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
     agent: Option<Agent>,
-) -> Result<(SpaceSelector, Agent, String)> {
+) -> Result<(SpaceSelector, Agent, AgentSessionId)> {
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let AgentSession {
         agent: running,

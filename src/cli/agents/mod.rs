@@ -228,7 +228,7 @@ pub(in crate::cli) struct LaunchOptions {
     /// As [`Launch::replaces`].
     pub replaces: Vec<PathBuf>,
     /// The session the agent starts from a fork of, which stays unchanged.
-    pub fork: Option<String>,
+    pub fork: Option<crate::client::agent::AgentSessionId>,
     /// The model and effort the launch asks for.
     pub model: ModelRequest,
     /// The permissions `--permission` gives the agent, whatever the mode's.
@@ -583,7 +583,7 @@ pub(in crate::cli) fn ensure_reviewer_available(name: &Agent, settings: &Effecti
 pub(in crate::cli) fn fork_args(
     settings: &Effective,
     name: &Agent,
-    session: &str,
+    session: &crate::client::agent::AgentSessionId,
     directory: &Path,
 ) -> Result<Vec<OsString>> {
     ensure_forks(settings, name)?;

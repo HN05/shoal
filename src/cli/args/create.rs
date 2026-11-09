@@ -164,7 +164,7 @@ pub struct StartArgs {
     pub model: ModelArgs,
     /// Agent session the chat continues, which shoal move import passes.
     #[arg(long, hide = true, requires = "chat")]
-    pub session: Option<String>,
+    pub session: Option<crate::client::agent::AgentSessionId>,
     /// Start from a fork of --session instead of continuing it, which shoal
     /// move import passes for a copy.
     #[arg(long, hide = true, requires = "session")]

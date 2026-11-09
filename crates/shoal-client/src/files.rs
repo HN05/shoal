@@ -48,7 +48,7 @@ pub enum Attacher {
         /// The session the agent reported, which outlives a resume; none
         /// before its first report.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<String>,
+        session: Option<crate::agent::AgentSessionId>,
     },
     /// A request from a chat's agent, which runs outside any execution.
     Chat {

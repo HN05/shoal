@@ -1,6 +1,6 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use crate::config::permissions::PermissionChange;
 use std::{
     collections::BTreeMap,
@@ -208,7 +208,7 @@ pub(crate) struct Restored<'a> {
     pub model: &'a ModelChoice,
     pub mode: &'a crate::config::modes::ModeName,
     pub narrowing: crate::config::permissions::PermissionsConfig,
-    pub session: Option<&'a str>,
+    pub session: Option<&'a AgentSessionId>,
 }
 
 impl Recovery {
@@ -342,7 +342,7 @@ impl Recovery {
             agent: &self.agent,
             model: &self.model,
             mode: &self.mode,
-            session: record.session.as_deref(),
+            session: record.session.as_ref(),
         };
         match Self::resolve(paths, workspace, restored, None, Some(&stop)).await {
             Ok(recovery) if !recovery.command.is_empty() => (recovery.command, recovery.proxy),
@@ -845,15 +845,15 @@ pub(crate) fn save_session(
     paths: &Paths,
     workspace_id: &SpaceId,
     id: &ExecutionId,
-    session: &str,
+    session: &AgentSessionId,
 ) -> Result<bool> {
-    if reported_session(paths, workspace_id, id).as_deref() == Some(session) {
+    if reported_session(paths, workspace_id, id).as_ref() == Some(session) {
         return Ok(false);
     }
     std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
     crate::fsutil::atomic::replace_atomically(
         &session_path(paths, workspace_id, id),
-        session.as_bytes(),
+        session.as_str().as_bytes(),
         ReplaceOptions {
             permissions: Permissions::Temporary,
             sync: false,
@@ -867,10 +867,11 @@ pub(crate) fn reported_session(
     paths: &Paths,
     workspace_id: &SpaceId,
     id: &ExecutionId,
-) -> Option<String> {
+) -> Option<AgentSessionId> {
     std::fs::read_to_string(session_path(paths, workspace_id, id))
         .ok()
         .filter(|session| valid_session(session))
+        .map(AgentSessionId::from)
 }
 
 /// Forget the session of an execution that has ended.

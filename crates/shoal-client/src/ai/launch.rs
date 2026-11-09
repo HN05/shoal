@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use crate::agent::ModelChoice;
+use crate::agent::{AgentSessionId, ModelChoice};
 
 /// What an AI tool's tracked launches change in the environment they would
 /// otherwise run with: values as written, and the variables they remove.
@@ -123,12 +123,12 @@ impl Arguments {
 
     /// The arguments that resume `session`, or the workspace's latest session
     /// when none was reported; `None` when the agent cannot resume.
-    pub fn resume_args(&self, session: Option<&str>) -> Option<Vec<OsString>> {
+    pub fn resume_args(&self, session: Option<&AgentSessionId>) -> Option<Vec<OsString>> {
         match session {
             Some(session) => self
                 .resume
                 .as_ref()
-                .map(|template| substitute(template, &[("{session}", session)])),
+                .map(|template| substitute(template, &[("{session}", session.as_str())])),
             None => self
                 .resume_latest
                 .as_ref()
@@ -138,11 +138,11 @@ impl Arguments {
 
     /// The arguments that start a new session in `directory` from a fork
     /// of `session`; `None` when the agent cannot fork one.
-    pub fn fork_args(&self, session: &str, directory: &str) -> Option<Vec<OsString>> {
+    pub fn fork_args(&self, session: &AgentSessionId, directory: &str) -> Option<Vec<OsString>> {
         self.fork.as_ref().map(|template| {
             substitute(
                 template,
-                &[("{session}", session), ("{directory}", directory)],
+                &[("{session}", session.as_str()), ("{directory}", directory)],
             )
         })
     }

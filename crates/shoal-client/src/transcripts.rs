@@ -16,6 +16,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
     ai::IntegrationKind,
@@ -28,7 +29,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportedSession {
     pub agent: crate::agent::Agent,
-    pub session: String,
+    pub session: AgentSessionId,
     /// The execution the agent ran as, in a workspace.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionId>,
@@ -107,7 +108,7 @@ fn transcript(
     store: Option<&dyn Store>,
     environments: &[AgentEnvironment],
 ) -> Transcript {
-    let found = store.map(|store| find(store, environments, &session.session));
+    let found = store.map(|store| find(store, environments, session.session.as_str()));
     let (found, error) = match found.transpose() {
         Ok(found) => (found.flatten(), None),
         Err(error) => (None, Some(format!("{error:#}"))),

@@ -3,6 +3,7 @@
 use crate::execution_ids::ExecutionId;
 use anyhow::Result;
 
+use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionChange,
@@ -19,7 +20,7 @@ pub async fn set_state(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     state: AgentState,
-    session: Option<String>,
+    session: Option<AgentSessionId>,
     turn_end: Option<TurnEnd>,
 ) -> Result<AgentStatus> {
     let method = AgentMethod::SetAgentState {
@@ -45,7 +46,7 @@ pub async fn report_turn_failure(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     failure: TurnFailure,
-    session: Option<String>,
+    session: Option<AgentSessionId>,
     turn_end: TurnEnd,
 ) -> Result<AgentStatus> {
     let method = AgentMethod::ReportTurnFailure {

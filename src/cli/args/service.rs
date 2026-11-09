@@ -88,7 +88,7 @@ pub struct ConfigSetupArgs {
     pub name: Option<crate::client::space_names::SpaceName>,
     /// Agent session the chat continues, which shoal resume passes.
     #[arg(long, hide = true)]
-    pub session: Option<String>,
+    pub session: Option<crate::client::agent::AgentSessionId>,
     /// Stopped chat, by ID, that this start restores under its own name,
     /// which shoal resume passes.
     #[arg(long, hide = true, requires = "name")]

@@ -11,8 +11,8 @@ use super::{
     target::AddTarget,
 };
 use crate::client::operations::NewWorkspace;
-use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceSelector;
+use crate::client::{agent::AgentSessionId, queue::QueueEntryId};
 use crate::{
     cli::{
         agents,
@@ -203,7 +203,7 @@ fn queued_launch(
         &Option<crate::config::modes::ModeName>,
         crate::config::permissions::PermissionsConfig,
     ),
-    (prompt, args, fork): (&Option<String>, &[OsString], &Option<String>),
+    (prompt, args, fork): (&Option<String>, &[OsString], &Option<AgentSessionId>),
     now: bool,
 ) -> Result<Option<Box<QueuedLaunch>>> {
     let Some(chosen) = &agent.agent else {

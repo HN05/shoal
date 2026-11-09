@@ -28,7 +28,7 @@ pub(super) struct HereLaunch {
     /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
-    pub fork: Option<String>,
+    pub fork: Option<crate::client::agent::AgentSessionId>,
 }
 
 impl HereLaunch {

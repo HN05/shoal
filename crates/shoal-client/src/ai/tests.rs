@@ -76,7 +76,7 @@ fn configured_arguments_replace_built_in_ones_entry_by_entry() {
     .unwrap();
     let claude = arguments(&agents, "claude");
     assert_eq!(
-        claude.resume_args(Some("s1")),
+        claude.resume_args(Some(&"s1".into())),
         Some(vec![OsString::from("--resume=s1")])
     );
     assert_eq!(claude.resume_args(None), Some(vec!["--continue".into()]));
@@ -101,7 +101,7 @@ fn fork_arguments_name_the_forked_session() {
     )
     .unwrap();
     assert_eq!(
-        arguments(&agents, "claude-direct").fork_args("s1", "/work/child"),
+        arguments(&agents, "claude-direct").fork_args(&"s1".into(), "/work/child"),
         Some(vec![
             OsString::from("--resume"),
             "s1".into(),
@@ -109,7 +109,7 @@ fn fork_arguments_name_the_forked_session() {
         ])
     );
     assert_eq!(
-        arguments(&agents, "codex").fork_args("s1", "/work/child"),
+        arguments(&agents, "codex").fork_args(&"s1".into(), "/work/child"),
         Some(vec![
             OsString::from("fork"),
             "s1".into(),
@@ -118,11 +118,11 @@ fn fork_arguments_name_the_forked_session() {
         ])
     );
     assert_eq!(
-        arguments(&agents, "droid").fork_args("s1", "/work/child"),
+        arguments(&agents, "droid").fork_args(&"s1".into(), "/work/child"),
         Some(vec![OsString::from("--fork"), "s1".into()])
     );
     assert_eq!(
-        arguments(&agents, "pi").fork_args("s1", "/work/child"),
+        arguments(&agents, "pi").fork_args(&"s1".into(), "/work/child"),
         None
     );
     let error = format!(
@@ -231,7 +231,7 @@ fn launch_profiles_inherit_along_their_bases() {
     // The nearest entry wins, then the built-in provider's.
     let fast = arguments(&agents, "claude-fast");
     assert_eq!(
-        fast.resume_args(Some("s1")),
+        fast.resume_args(Some(&"s1".into())),
         Some(vec!["--resume=s1".into()])
     );
     assert_eq!(fast.resume_args(None), Some(vec!["--continue".into()]));

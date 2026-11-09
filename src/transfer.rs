@@ -3,6 +3,7 @@
 //! agents with their sessions and the sessions' files; a workspace's also
 //! holds its removal record and a Git bundle of its checkpoint, and a chat's
 //! its name.
+use crate::client::agent::AgentSessionId;
 use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -64,7 +65,7 @@ pub enum Source {
 #[derive(Debug, Clone)]
 pub struct SessionSource {
     pub agent: crate::agent::Agent,
-    pub session: String,
+    pub session: AgentSessionId,
     pub path: PathBuf,
     pub source: PathBuf,
 }
@@ -89,7 +90,7 @@ pub fn session_sources(
         let Some(store) = transcripts::store(settings.integration(agent)) else {
             continue;
         };
-        match transcripts::find(store, &environments, session) {
+        match transcripts::find(store, &environments, session.as_str()) {
             Ok(found) => sources.extend(found.into_iter().flat_map(|found| {
                 let directory = found.directory;
                 found
@@ -98,7 +99,7 @@ pub fn session_sources(
                     .into_iter()
                     .map(move |path| SessionSource {
                         agent: agent.to_owned(),
-                        session: session.to_owned(),
+                        session: session.clone(),
                         source: directory.join(&path),
                         path,
                     })
@@ -148,7 +149,7 @@ type OpenedSessionFile = (SessionFile, std::fs::File);
 /// rather than the export failing after its workspace's removal.
 fn open_sessions(sessions: Vec<SessionSource>) -> (Vec<OpenedSessionFile>, Vec<String>) {
     let mut opened: Vec<OpenedSessionFile> = Vec::new();
-    let mut failed: Vec<String> = Vec::new();
+    let mut failed: Vec<AgentSessionId> = Vec::new();
     let mut warnings = Vec::new();
     for source in sessions {
         if failed.contains(&source.session) {
@@ -203,7 +204,7 @@ pub(crate) trait ManifestExt: Sized {
     fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions;
 
     /// Whether the export carries the files of `session`.
-    fn carries(&self, session: &str) -> bool;
+    fn carries(&self, session: &AgentSessionId) -> bool;
 }
 
 impl ManifestExt for Manifest {
@@ -268,8 +269,8 @@ impl ManifestExt for Manifest {
             };
         };
         let exporting = machine.is_some() && sessions.machine.as_deref() == machine;
-        let keeps = |session: &Option<String>| {
-            session.as_deref().is_some_and(|session| {
+        let keeps = |session: &Option<AgentSessionId>| {
+            session.as_ref().is_some_and(|session| {
                 keep_sessions.unwrap_or_else(|| exporting || self.carries(session))
             })
         };
@@ -308,10 +309,10 @@ impl ManifestExt for Manifest {
         }
     }
 
-    fn carries(&self, session: &str) -> bool {
+    fn carries(&self, session: &AgentSessionId) -> bool {
         self.session_files
             .iter()
-            .any(|file| file.session == session)
+            .any(|file| &file.session == session)
     }
 }
 
@@ -355,7 +356,7 @@ impl PackagedWorkspaceExt for PackagedWorkspace {
 /// its agent's session in its mode; `None` for a chat whose agent reported
 /// none.
 pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
-    let session = chat.session.as_deref()?;
+    let session = chat.session.as_ref().map(AgentSessionId::as_str)?;
     Some(format!(
         "chat {name} ended here; shoal start --chat --mode {mode} {repository} --name {name} --agent {agent} --session {session} continues it",
         name = chat.name,
