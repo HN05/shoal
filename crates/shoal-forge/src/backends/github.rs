@@ -41,6 +41,7 @@ use crate::{
         reaction::{Listed, Subject},
         revert::NewRevert,
     },
+    numbers::{JobId, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -627,11 +628,12 @@ impl Backend for GitHub {
     }
 
     /// A run's URL holds its API ID.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
-        id(repo.repository_path(target, "/actions/runs/")?.first()?)
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
+        id(repo.repository_path(target, "/actions/runs/")?.first()?).map(RunNumber::new)
     }
 
-    fn run_path(&self, number: u64) -> String {
+    /// A run's number is its API ID.
+    fn run_path(&self, number: RunNumber) -> String {
         format!("actions/runs/{number}")
     }
 
@@ -639,7 +641,7 @@ impl Backend for GitHub {
     fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {
         let path = text(&value["path"]);
         Ok(Run {
-            id: value["id"].as_u64().context("Actions run has no ID")?,
+            id: RunId::new(value["id"].as_u64().context("Actions run has no ID")?),
             url: text(&value["html_url"]).context("Actions run has no URL")?,
             branch: text(&value["head_branch"]),
             workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
@@ -680,7 +682,7 @@ impl Backend for GitHub {
         runner::waiting_jobs(repo, account, labels).await
     }
 
-    fn job_run_path(&self, id: u64) -> Result<String> {
+    fn job_run_path(&self, id: RunId) -> Result<String> {
         Ok(format!("actions/runs/{id}"))
     }
 
@@ -699,7 +701,7 @@ impl Backend for GitHub {
         Ok(None)
     }
 
-    fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
+    fn delete_runner(&self, repo: &ForgeRepo, id: RunnerId) -> Result<Request> {
         Ok(runner::delete(repo, id))
     }
 
@@ -716,7 +718,7 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        id: u64,
+        id: RunnerId,
     ) -> Result<Option<RunnerState>> {
         runner::state(repo, account, id).await
     }
@@ -725,8 +727,8 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        run: u64,
-        runner: u64,
+        run: RunId,
+        runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         runner::runner_job(repo, account, run, runner).await
     }
@@ -753,7 +755,7 @@ impl Backend for GitHub {
         jobs.iter()
             .map(|job| {
                 Ok(RunJob {
-                    id: job["id"].as_u64().context("Actions job has no ID")?,
+                    id: JobId::new(job["id"].as_u64().context("Actions job has no ID")?),
                     name: text(&job["name"]).context("Actions job has no name")?,
                     state: actions::state(job)?,
                     url: text(&job["html_url"]),

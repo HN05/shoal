@@ -12,6 +12,7 @@ use crate::{
         JobCommand, JobLaunch, JobRun, RegisteredRunner, Trigger, WaitingJob, file_url,
         registration,
     },
+    numbers::{JobId, RunId, RunnerId},
     transport::api::{HttpMethod, Request, encode},
 };
 
@@ -60,8 +61,8 @@ fn waiting_job(value: &Value) -> Result<Option<WaitingJob>> {
         .collect();
     Ok(Some(WaitingJob {
         handle: field(value, "handle")?,
-        id: value["id"].as_u64().context("job has no ID")?,
-        run: value["run_id"].as_u64().context("job has no run")?,
+        id: JobId::new(value["id"].as_u64().context("job has no ID")?),
+        run: RunId::new(value["run_id"].as_u64().context("job has no run")?),
         name: field(value, "name")?,
         labels,
     }))
@@ -115,13 +116,14 @@ pub(super) fn registered(value: &Value) -> Result<RegisteredRunner> {
     Ok(RegisteredRunner {
         id: value["id"]
             .as_u64()
+            .map(RunnerId::new)
             .context("registered runner has no ID")?,
         uuid: field(value, "uuid")?,
         token: field(value, "token")?,
     })
 }
 
-pub(super) fn delete(repo: &ForgeRepo, id: u64) -> Request {
+pub(super) fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
     let endpoint = repo.repo_endpoint(&format!("actions/runners/{id}"));
     Request::new(HttpMethod::Delete, endpoint, None)
 }

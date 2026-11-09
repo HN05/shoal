@@ -177,7 +177,7 @@ impl ForgeRepo {
         match kind {
             LinkKind::Issue => self.issue(input),
             LinkKind::Pr => self.pull(input),
-            LinkKind::Ci => self.run(input),
+            LinkKind::Ci => self.run(input).map(|(number, url)| (number.get(), url)),
         }
     }
 

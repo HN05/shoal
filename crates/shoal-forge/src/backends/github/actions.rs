@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
+    numbers::{JobId, RunId},
 };
 
 /// GitHub's latest check runs.
@@ -46,8 +47,8 @@ pub(crate) fn locate(repo: &ForgeRepo, target: &str) -> Option<Location> {
         return None;
     };
     Some(Location::GitHub {
-        run: id(run)?,
-        job: id(job)?,
+        run: RunId::new(id(run)?),
+        job: JobId::new(id(job)?),
     })
 }
 
@@ -110,7 +111,7 @@ pub(crate) fn log_endpoint(location: Location) -> Result<String> {
     Ok(format!("actions/jobs/{job}/logs"))
 }
 
-fn github_run(job: &Job) -> Option<u64> {
+fn github_run(job: &Job) -> Option<RunId> {
     match job.location {
         Some(Location::GitHub { run, .. }) => Some(run),
         _ => None,

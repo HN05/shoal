@@ -16,6 +16,7 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
+    numbers::{JobId, RunId, RunnerId},
     transport::api::{HttpMethod, Request},
 };
 
@@ -25,9 +26,9 @@ pub struct WaitingJob {
     /// What claims this attempt of the job and no other.
     pub handle: String,
     /// The job's ID, which grows with each job the forge queues.
-    pub id: u64,
+    pub id: JobId,
     /// The API ID of the run it belongs to.
-    pub run: u64,
+    pub run: RunId,
     pub name: String,
     /// The labels it runs on.
     pub labels: Vec<String>,
@@ -66,7 +67,7 @@ pub struct JobRun {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegisteredRunner {
     /// The ID that deletes it.
-    pub id: u64,
+    pub id: RunnerId,
     pub uuid: String,
     pub token: String,
 }
@@ -117,7 +118,7 @@ pub struct JobCommand {
     /// the job's workspace once the installation is in place.
     pub workspace_links: Vec<PathBuf>,
     /// The runner registered for this job alone, which ends with its job.
-    pub runner: Option<u64>,
+    pub runner: Option<RunnerId>,
 }
 
 /// The entries of a runner's installation to copy into a directory of the
@@ -153,7 +154,7 @@ impl ForgeRepo {
     }
 
     /// The run with API ID `id`.
-    pub async fn job_run(&self, account: &Account, id: u64) -> Result<JobRun> {
+    pub async fn job_run(&self, account: &Account, id: RunId) -> Result<JobRun> {
         let read = Request::get(self.repo_endpoint(&self.kind.job_run_path(id)?));
         let value = self.send(account, &read).await?;
         self.kind.job_run(self, &value)
@@ -161,7 +162,7 @@ impl ForgeRepo {
 
     /// The web URL of the run with API ID `id`, which a forge whose runner
     /// takes another run's job serves the run's page under.
-    pub fn run_page(&self, id: u64) -> Result<String> {
+    pub fn run_page(&self, id: RunId) -> Result<String> {
         Ok(self.run(&id.to_string())?.1)
     }
 
@@ -185,7 +186,7 @@ impl ForgeRepo {
     }
 
     /// Delete the repository's runner `id`; one already gone counts as deleted.
-    pub async fn delete_runner(&self, account: &Account, id: u64) -> Result<()> {
+    pub async fn delete_runner(&self, account: &Account, id: RunnerId) -> Result<()> {
         let request = self.kind.delete_runner(self, id)?;
         // A refusal's only possible status is that the runner is gone.
         let _gone = self.read_refusable(account, &request, &[404]).await?;
@@ -203,7 +204,11 @@ impl ForgeRepo {
     }
 
     /// The state of the runner `id`, or `None` once it is gone.
-    pub async fn runner_state(&self, account: &Account, id: u64) -> Result<Option<RunnerState>> {
+    pub async fn runner_state(
+        &self,
+        account: &Account,
+        id: RunnerId,
+    ) -> Result<Option<RunnerState>> {
         self.kind.runner_state(self, account, id).await
     }
 
@@ -212,8 +217,8 @@ impl ForgeRepo {
     pub async fn runner_job(
         &self,
         account: &Account,
-        run: u64,
-        runner: u64,
+        run: RunId,
+        runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         self.kind.runner_job(self, account, run, runner).await
     }
@@ -240,7 +245,7 @@ const REFUSED: &str = "refused";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TookRun {
     /// The run the job it took belongs to.
-    pub run: u64,
+    pub run: RunId,
     /// Whether its hook holds the job back until the daemon answers, which
     /// it does for a job of another run than the claimed one.
     pub awaits: bool,
@@ -299,7 +304,7 @@ pub fn answer_took_run(work_dir: &Path, answer: Result<(), String>) -> Result<()
 /// commit the workspace has; with another run's job it waits for the daemon
 /// to move the workspace, failing the job when the daemon refuses or does
 /// not answer within ten minutes.
-pub(crate) fn took_run_hook(work_dir: &Path, run: u64, before: &str) -> Result<String> {
+pub(crate) fn took_run_hook(work_dir: &Path, run: RunId, before: &str) -> Result<String> {
     let quoted = |name: &str| shell_quote(&work_dir.join(name));
     let (took, awaits, prepared, refused) = (
         quoted(TOOK_RUN)?,

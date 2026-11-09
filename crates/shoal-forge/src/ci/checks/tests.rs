@@ -1,4 +1,5 @@
 use super::*;
+use crate::numbers::JobId;
 
 #[test]
 fn logs_come_from_the_failed_job_a_check_links_where_the_forge_serves_them() {
@@ -23,7 +24,9 @@ fn logs_come_from_the_failed_job_a_check_links_where_the_forge_serves_them() {
     assert!(error.downcast_ref::<NoJobLog>().is_some(), "{error}");
 
     let gitlab = ForgeRepo::parse("https://gitlab.com/group/repo").unwrap();
-    let location = Location::GitLab { job: 56 };
+    let location = Location::GitLab {
+        job: JobId::new(56),
+    };
     assert_eq!(
         gitlab.kind.job_log_endpoint(location).unwrap(),
         "jobs/56/trace"

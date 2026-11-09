@@ -27,6 +27,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
+    numbers::{JobId, RunId, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -760,7 +761,9 @@ impl Backend for GitLab {
         let [job] = parts.as_slice() else {
             return None;
         };
-        Some(Location::GitLab { job: id(job)? })
+        Some(Location::GitLab {
+            job: JobId::new(id(job)?),
+        })
     }
 
     fn ci_operation(
@@ -804,15 +807,16 @@ impl Backend for GitLab {
     }
 
     /// A pipeline's URL holds its API ID.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
         let parts = repo.repository_path(target, "/-/pipelines/")?;
         let [pipeline] = parts.as_slice() else {
             return None;
         };
-        id(pipeline)
+        id(pipeline).map(RunNumber::new)
     }
 
-    fn run_path(&self, number: u64) -> String {
+    /// A pipeline's number is its API ID.
+    fn run_path(&self, number: RunNumber) -> String {
         format!("pipelines/{number}")
     }
 
@@ -824,7 +828,7 @@ impl Backend for GitLab {
     /// so none names a workflow.
     fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {
         Ok(Run {
-            id: value["id"].as_u64().context("pipeline has no ID")?,
+            id: RunId::new(value["id"].as_u64().context("pipeline has no ID")?),
             url: text(&value["web_url"]).context("pipeline has no URL")?,
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
@@ -864,7 +868,7 @@ impl Backend for GitLab {
         jobs.iter()
             .map(|job| {
                 Ok(RunJob {
-                    id: job["id"].as_u64().context("GitLab job has no ID")?,
+                    id: JobId::new(job["id"].as_u64().context("GitLab job has no ID")?),
                     name: text(&job["name"]).context("GitLab job has no name")?,
                     state: status_state(&job["status"])?.into(),
                     url: text(&job["web_url"]),

@@ -12,6 +12,7 @@ use crate::{
     ci::{CiAction, JobState, id},
     hosts::HostTypes,
     items::link::LinkKind,
+    numbers::{JobId, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
 
@@ -20,7 +21,7 @@ use crate::{
 pub struct Run {
     /// The ID its API acts on.
     #[serde(skip)]
-    pub(crate) id: u64,
+    pub(crate) id: RunId,
     pub url: String,
     /// The branch it ran on, when it ran on one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,7 +41,7 @@ pub(crate) enum RunOperation {
     Post(String),
     /// POST to the endpoint under the repository's that each failed job's ID
     /// gives, one job at a time.
-    EachFailedJob(fn(u64) -> String),
+    EachFailedJob(fn(JobId) -> String),
 }
 
 /// A run an action reached.
@@ -73,9 +74,10 @@ impl ForgeRepo {
 
     /// The number of the run `input`, its web URL or the number in it, names,
     /// and the run's web URL without a job.
-    pub fn run(&self, input: &str) -> Result<(u64, String)> {
+    pub fn run(&self, input: &str) -> Result<(RunNumber, String)> {
         validate_run_reference(input)?;
         let number = id(input)
+            .map(RunNumber::new)
             .or_else(|| self.kind.locate_run(self, input))
             .with_context(|| format!("{input} is not a CI run of {}", self.repository_url()))?;
         let route = self
@@ -128,7 +130,7 @@ impl ForgeRepo {
         &self,
         account: &Account,
         run: &Run,
-        endpoint: fn(u64) -> String,
+        endpoint: fn(JobId) -> String,
     ) -> Result<()> {
         let mut rerun = Vec::new();
         loop {

@@ -35,7 +35,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     let [job] = &claimed[..] else {
         panic!("{claimed:?}");
     };
-    assert_eq!(job.runner_id, Some(77));
+    assert_eq!(job.runner_id, Some(RunnerId::new(77)));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.head);
     let (command, started) = launched(workspace.id.as_str());

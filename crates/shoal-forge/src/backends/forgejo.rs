@@ -45,6 +45,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
+    numbers::{JobId, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -725,16 +726,16 @@ impl Backend for Forgejo {
         Some(format!("{}/actions/runs/{number}", repo.repository_url()))
     }
 
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
         actions::run_number(repo, target)
     }
 
     /// Forgejo links a run by its number in the repository, not its API ID.
-    fn run_path(&self, number: u64) -> String {
+    fn run_path(&self, number: RunNumber) -> String {
         format!("actions/runs?run_number={number}")
     }
 
-    fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run> {
+    fn run(&self, repo: &ForgeRepo, number: RunNumber, value: &Value) -> Result<Run> {
         self.run_item(repo, actions::numbered_run(value, number)?)
     }
 
@@ -744,7 +745,7 @@ impl Backend for Forgejo {
             .as_u64()
             .context("Actions run has no number")?;
         Ok(Run {
-            id: value["id"].as_u64().context("Actions run has no ID")?,
+            id: RunId::new(value["id"].as_u64().context("Actions run has no ID")?),
             url: format!("{}/actions/runs/{number}", repo.repository_url()),
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
@@ -790,7 +791,7 @@ impl Backend for Forgejo {
             .map(|(index, job)| {
                 let index = offset + index;
                 Ok(RunJob {
-                    id: job["id"].as_u64().context("Actions job has no ID")?,
+                    id: JobId::new(job["id"].as_u64().context("Actions job has no ID")?),
                     name: text(&job["name"]).context("Actions job has no name")?,
                     state: actions::state(&job["status"])?,
                     url: Some(format!("{}/jobs/{index}", run.url)),
@@ -824,7 +825,7 @@ impl Backend for Forgejo {
     }
 
     /// Forgejo reads a run by its API ID here, not its number.
-    fn job_run_path(&self, id: u64) -> Result<String> {
+    fn job_run_path(&self, id: RunId) -> Result<String> {
         Ok(format!("actions/runs/{id}"))
     }
 
@@ -842,7 +843,7 @@ impl Backend for Forgejo {
         runner::registered(&value).map(Some)
     }
 
-    fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
+    fn delete_runner(&self, repo: &ForgeRepo, id: RunnerId) -> Result<Request> {
         Ok(runner::delete(repo, id))
     }
 
@@ -881,7 +882,7 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        job: u64,
+        job: JobId,
     ) -> Option<String> {
         actions::listed_failed_step(repo, account, job).await
     }

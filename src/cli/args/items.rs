@@ -3,6 +3,7 @@
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::client::space_names::SpaceSelector;
+use crate::forge::numbers::JobId;
 use crate::{cli::args::item_reference, model::Relation, reviews::ReviewId};
 
 #[derive(Debug, Subcommand)]
@@ -81,7 +82,7 @@ pub struct ViewArgs {
     pub job: Option<String>,
     /// Show only the log of the CI run's job with this ID, for jobs that share a name.
     #[arg(long, value_name = "ID")]
-    pub job_id: Option<u64>,
+    pub job_id: Option<JobId>,
     /// Open the items in the browser instead.
     #[arg(long, conflicts_with_all = ["no_comments", "check", "job", "job_id"])]
     pub web: bool,

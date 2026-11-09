@@ -1,4 +1,5 @@
 use super::*;
+use crate::numbers::RunNumber;
 
 #[test]
 fn links_of_unresolved_hosts_use_the_forge_their_routes_name() {
@@ -126,7 +127,7 @@ fn run_links_select_runs_by_url_or_after_ci() {
     assert_eq!(
         link.repository.run(url).unwrap(),
         (
-            2765,
+            RunNumber::new(2765),
             "https://forge.example/team/repo/actions/runs/2765".into()
         )
     );

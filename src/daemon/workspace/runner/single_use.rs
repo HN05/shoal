@@ -11,7 +11,7 @@ use super::ends::ClaimedJob;
 use crate::client::queue::QueueEntryId;
 use crate::{
     daemon::workspace::Manager,
-    forge::{ForgeRepo, ci::runner::took_job},
+    forge::{ForgeRepo, ci::runner::took_job, numbers::RunnerId},
 };
 
 /// How long a runner may wait for the forge to give it a job before the
@@ -21,13 +21,17 @@ const IDLE_AFTER: Duration = Duration::from_secs(60);
 impl Manager {
     /// Keep `runner`, registered for the claimed job `id` alone, with its
     /// claim.
-    pub(super) async fn record_job_runner(&self, id: &QueueEntryId, runner: u64) -> Result<()> {
+    pub(super) async fn record_job_runner(
+        &self,
+        id: &QueueEntryId,
+        runner: RunnerId,
+    ) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 db.execute(
                     "UPDATE ci_jobs SET runner_id=?2 WHERE id=?1",
-                    params![id, i64::try_from(runner)?],
+                    params![id, runner],
                 )?;
                 Ok(())
             })
@@ -66,7 +70,7 @@ impl Manager {
 
     /// Delete `runner`, registered for `job` alone, when it runs nothing and
     /// the forge lists no job waiting for the labels it was registered with.
-    async fn release_if_idle(&self, job: &ClaimedJob, runner: u64) -> Result<()> {
+    async fn release_if_idle(&self, job: &ClaimedJob, runner: RunnerId) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         // A runner already gone exits by itself.

@@ -100,9 +100,9 @@ impl Manager {
                         "SELECT forge_repository,forge_id,uuid,token FROM runners WHERE repository_id=?1",
                         [id],
                         |row| {
-                            let runner = match row.get::<_, Option<i64>>(1)? {
+                            let runner = match row.get(1)? {
                                 Some(id) => Some(RegisteredRunner {
-                                    id: id as u64,
+                                    id,
                                     uuid: row.get(2)?,
                                     token: row.get(3)?,
                                 }),
@@ -190,7 +190,7 @@ impl Manager {
                     params![
                         id,
                         registration.forge_repository,
-                        runner.map(|runner| i64::try_from(runner.id)).transpose()?,
+                        runner.map(|runner| runner.id),
                         runner.map(|runner| &runner.uuid),
                         runner.map(|runner| &runner.token)
                     ],

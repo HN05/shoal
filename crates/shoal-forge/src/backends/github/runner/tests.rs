@@ -51,15 +51,15 @@ async fn queued_jobs_of_active_runs_wait_when_the_runner_has_their_labels() {
         [
             WaitingJob {
                 handle: "9".into(),
-                id: 9,
-                run: 2,
+                id: JobId::new(9),
+                run: RunId::new(2),
                 name: "rust".into(),
                 labels: vec!["shoal-macos-arm64".into()],
             },
             WaitingJob {
                 handle: "11".into(),
-                id: 11,
-                run: 1,
+                id: JobId::new(11),
+                run: RunId::new(1),
                 name: "rust".into(),
                 labels: vec!["Shoal".into()],
             },
@@ -140,8 +140,8 @@ async fn a_job_runs_a_just_in_time_runner_from_a_copy_of_the_installation() {
     let labels = ["shoal".to_owned(), "shoal-macos-arm64".to_owned()];
     let job = WaitingJob {
         handle: "11".into(),
-        id: 11,
-        run: 1,
+        id: JobId::new(11),
+        run: RunId::new(1),
         name: "rust".into(),
         labels: vec!["shoal".into()],
     };
@@ -169,7 +169,7 @@ async fn a_job_runs_a_just_in_time_runner_from_a_copy_of_the_installation() {
     );
     let copy = work.join("runner");
     assert_eq!(command.argv, [copy.join("run.sh").into_os_string()]);
-    assert_eq!(command.runner, Some(77));
+    assert_eq!(command.runner, Some(RunnerId::new(77)));
     let installed = command.installation.unwrap();
     assert_eq!(
         installed.source,
@@ -223,13 +223,13 @@ fn the_hook_goes_on_with_the_claimed_run_and_waits_for_the_daemon_with_another()
     let work = root.path().join("it's work");
     std::fs::create_dir(&work).unwrap();
     let env = [("SHOAL_WORKSPACE_PATH".to_owned(), "/w/it's".to_owned())];
-    let script = took_run_hook(&work, 1, &job_env_lines(&env)).unwrap();
+    let script = took_run_hook(&work, RunId::new(1), &job_env_lines(&env)).unwrap();
 
     let (went_on, variables) = run_hook(&work, &script, "1");
     assert!(went_on);
     assert_eq!(variables, "SHOAL_WORKSPACE_PATH=/w/it's\n");
     let went_on = TookRun {
-        run: 1,
+        run: RunId::new(1),
         awaits: false,
     };
     assert_eq!(took_run(&work).unwrap(), Some(went_on));
@@ -265,11 +265,34 @@ async fn a_runner_is_busy_until_it_goes_and_names_the_job_it_took() {
     });
     let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let account = agent_on(&server, "user");
-    let state = github.runner_state(&account, 77).await.unwrap().unwrap();
+    let state = github
+        .runner_state(&account, RunnerId::new(77))
+        .await
+        .unwrap()
+        .unwrap();
     assert!(state.busy);
     assert_eq!(state.labels, ["self-hosted", "shoal"]);
-    assert_eq!(github.runner_state(&account, 78).await.unwrap(), None);
-    let job = github.runner_job(&account, 2, 77).await.unwrap().unwrap();
-    assert_eq!((job.id, job.run, job.name.as_str()), (10, 2, "rust"));
-    assert_eq!(github.runner_job(&account, 2, 78).await.unwrap(), None);
+    assert_eq!(
+        github
+            .runner_state(&account, RunnerId::new(78))
+            .await
+            .unwrap(),
+        None
+    );
+    let job = github
+        .runner_job(&account, RunId::new(2), RunnerId::new(77))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (job.id, job.run, job.name.as_str()),
+        (JobId::new(10), RunId::new(2), "rust")
+    );
+    assert_eq!(
+        github
+            .runner_job(&account, RunId::new(2), RunnerId::new(78))
+            .await
+            .unwrap(),
+        None
+    );
 }

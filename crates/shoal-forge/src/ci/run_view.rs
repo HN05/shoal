@@ -9,6 +9,7 @@ use crate::{
     backends::Backend,
     capability::Capability,
     ci::{JobState, checks::CheckLog, run_action::Run},
+    numbers::JobId,
     transport::api::Request,
     updates::{FailedJob, MAX_LISTED_JOBS, Snapshot, SnapshotKind, SnapshotState},
 };
@@ -22,7 +23,7 @@ pub(crate) const JOBS_PAGE: usize = 100;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunJob {
     /// The ID its API reads the log by, which tells apart jobs of one name.
-    pub id: u64,
+    pub id: JobId,
     pub name: String,
     pub state: JobState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -46,7 +47,7 @@ pub struct RunView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobRef {
-    Id(u64),
+    Id(JobId),
     Name(String),
 }
 

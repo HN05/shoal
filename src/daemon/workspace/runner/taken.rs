@@ -13,6 +13,7 @@ use crate::{
     forge::{
         ForgeRepo,
         ci::runner::{JobRun, TookRun, WaitingJob, answer_took_run, reported_run, took_run},
+        numbers::{RunId, RunnerId},
     },
     model::QueuedJob,
 };
@@ -52,7 +53,12 @@ impl Manager {
     /// Record that `runner`, registered for `job` alone, took a job of the
     /// run `took` names, move the job's workspace to that run's commit when
     /// its hook holds the job back for it, and then name the job it took.
-    async fn follow_taken_job(&self, job: &ClaimedJob, runner: u64, took: TookRun) -> Result<()> {
+    async fn follow_taken_job(
+        &self,
+        job: &ClaimedJob,
+        runner: RunnerId,
+        took: TookRun,
+    ) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         let taken_run = self.taken_run(&forge, job, took.run).await?;
@@ -96,7 +102,7 @@ impl Manager {
     /// The run with API ID `run` that the runner of `job` took a job of. One
     /// that cannot be read is still recorded by its URL, so stopping the job
     /// cancels it.
-    async fn taken_run(&self, forge: &ForgeRepo, job: &ClaimedJob, run: u64) -> Result<JobRun> {
+    async fn taken_run(&self, forge: &ForgeRepo, job: &ClaimedJob, run: RunId) -> Result<JobRun> {
         if run == job.job.job.run {
             return Ok(job.job.run.clone());
         }

@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::*;
+use crate::numbers::RunId;
 
 fn filter(branch: Option<&str>, workflow: Option<&str>) -> RunFilter {
     RunFilter {
@@ -83,7 +84,7 @@ fn listed_runs_are_read_like_one_run() -> Result<()> {
 fn jobs_are_read_with_their_state_and_page() -> Result<()> {
     let github = ForgeRepo::parse("https://github.com/team/repo")?;
     let run = Run {
-        id: 12,
+        id: RunId::new(12),
         url: "https://github.com/team/repo/actions/runs/12".into(),
         branch: None,
         workflow: None,
@@ -103,13 +104,13 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         jobs,
         [
             RunJob {
-                id: 34,
+                id: JobId::new(34),
                 name: "rust".into(),
                 state: JobState::Failed,
                 url: Some("https://github.com/team/repo/actions/runs/12/job/34".into()),
             },
             RunJob {
-                id: 35,
+                id: JobId::new(35),
                 name: "docs".into(),
                 state: JobState::Running,
                 url: None,
@@ -119,7 +120,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
     // Forgejo links a job by its index in the run.
     let forgejo = ForgeRepo::parse("https://codeberg.org/team/repo")?;
     let run = Run {
-        id: 9331,
+        id: RunId::new(9331),
         url: "https://codeberg.org/team/repo/actions/runs/2765".into(),
         ..run
     };
@@ -152,7 +153,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
 #[test]
 fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
     let run = Run {
-        id: 12,
+        id: RunId::new(12),
         url: "https://github.com/team/repo/actions/runs/12".into(),
         branch: None,
         workflow: None,
@@ -165,11 +166,21 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
         state: JobState::Failed,
         url: None,
     };
-    let jobs = [job(1, "test"), job(2, "test"), job(3, "lint")];
-    assert_eq!(find_job(&run, &jobs, &JobRef::Id(2))?.id, 2);
-    assert_eq!(find_job(&run, &jobs, &JobRef::Name("lint".into()))?.id, 3);
+    let jobs = [
+        job(JobId::new(1), "test"),
+        job(JobId::new(2), "test"),
+        job(JobId::new(3), "lint"),
+    ];
+    assert_eq!(
+        find_job(&run, &jobs, &JobRef::Id(JobId::new(2)))?.id,
+        JobId::new(2)
+    );
+    assert_eq!(
+        find_job(&run, &jobs, &JobRef::Name("lint".into()))?.id,
+        JobId::new(3)
+    );
     assert!(find_job(&run, &jobs, &JobRef::Name("test".into())).is_err());
-    assert!(find_job(&run, &jobs, &JobRef::Id(4)).is_err());
+    assert!(find_job(&run, &jobs, &JobRef::Id(JobId::new(4))).is_err());
     Ok(())
 }
 

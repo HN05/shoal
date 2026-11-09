@@ -13,6 +13,7 @@ use crate::{
         checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
     },
     items::link::ItemKind,
+    numbers::{JobId, RunId, RunNumber},
     transport::{
         api::{Request, TIMEOUT, curl_body},
         programs,
@@ -112,7 +113,7 @@ pub(crate) fn operation(
     }
 }
 
-fn run_of(job: &Job) -> Option<u64> {
+fn run_of(job: &Job) -> Option<RunNumber> {
     match job.location {
         Some(Location::Forgejo { run_number, .. }) => Some(run_number),
         _ => None,
@@ -125,9 +126,9 @@ pub(crate) async fn failed_job_id(
     repo: &ForgeRepo,
     account: &Account,
     head: &str,
-    run_number: u64,
+    run_number: RunNumber,
     job_index: usize,
-) -> Result<u64> {
+) -> Result<JobId> {
     let run_id = run_id_for(repo, account, run_number, head).await?;
     let jobs = repo
         .send(
@@ -143,7 +144,7 @@ pub(crate) async fn failed_job_id(
 pub(crate) async fn listed_failed_step(
     repo: &ForgeRepo,
     account: &Account,
-    job: u64,
+    job: JobId,
 ) -> Option<String> {
     let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job}"));
     let job = repo.send(account, &Request::get(endpoint)).await.ok()?;
@@ -196,9 +197,9 @@ fn job_url(repo: &ForgeRepo, target: &str) -> String {
 pub(crate) async fn run_id_for(
     repo: &ForgeRepo,
     account: &Account,
-    number: u64,
+    number: RunNumber,
     head: &str,
-) -> Result<u64> {
+) -> Result<RunId> {
     let runs = repo
         .send(
             account,
@@ -229,7 +230,7 @@ pub(crate) fn status_waits(status: &Value) -> bool {
 }
 
 /// The one run a list filtered by `number` holds.
-pub(crate) fn numbered_run(runs: &Value, number: u64) -> Result<&Value> {
+pub(crate) fn numbered_run(runs: &Value, number: RunNumber) -> Result<&Value> {
     let runs = runs["workflow_runs"]
         .as_array()
         .context("Actions runs are not a list")?;
@@ -245,9 +246,14 @@ pub(crate) fn numbered_run(runs: &Value, number: u64) -> Result<&Value> {
 
 /// The run number of a run's or job's web URL in the repository, which may
 /// be relative to the host.
-pub(crate) fn run_number(repo: &ForgeRepo, target: &str) -> Option<u64> {
+pub(crate) fn run_number(repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
     let parts = runs_path(repo, target)?;
-    parts.first()?.parse().ok().filter(|number| *number > 0)
+    parts
+        .first()?
+        .parse()
+        .ok()
+        .filter(|number| *number > 0)
+        .map(RunNumber::new)
 }
 
 /// The path components of `target` after the repository's runs. A host may
@@ -263,7 +269,7 @@ fn runs_path<'a>(repo: &ForgeRepo, target: &'a str) -> Option<Vec<&'a str>> {
 
 /// Web URLs use a repository run number and zero-based job index, neither
 /// API ID.
-pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(u64, usize)> {
+pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(RunNumber, usize)> {
     let parts =
         runs_path(repo, target).context("check does not link to this repository's Actions job")?;
     let [run, "jobs", job] = parts.as_slice() else {
@@ -272,7 +278,7 @@ pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(u64, usize
     let run = run.parse::<u64>().context("invalid Actions run number")?;
     let job = job.parse::<usize>().context("invalid Actions job index")?;
     ensure!(run > 0, "invalid Actions run number");
-    Ok((run, job))
+    Ok((RunNumber::new(run), job))
 }
 
 /// Read plaintext logs without following redirects or exposing the login.
@@ -306,7 +312,7 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
     Ok(curl_body(&output)?.to_owned())
 }
 
-fn run_id(runs: &Value, number: u64, head: &str) -> Result<u64> {
+fn run_id(runs: &Value, number: RunNumber, head: &str) -> Result<RunId> {
     let run = numbered_run(runs, number)?;
     ensure!(
         run["commit_sha"] == head,
@@ -315,10 +321,11 @@ fn run_id(runs: &Value, number: u64, head: &str) -> Result<u64> {
     run["id"]
         .as_u64()
         .filter(|id| *id > 0)
+        .map(RunId::new)
         .context("Actions run has no ID")
 }
 
-fn job_id(jobs: &Value, index: usize, run: u64) -> Result<u64> {
+fn job_id(jobs: &Value, index: usize, run: RunId) -> Result<JobId> {
     let job = jobs
         .as_array()
         .and_then(|jobs| jobs.get(index))
@@ -334,6 +341,7 @@ fn job_id(jobs: &Value, index: usize, run: u64) -> Result<u64> {
     job["id"]
         .as_u64()
         .filter(|id| *id > 0)
+        .map(JobId::new)
         .context("Actions job has no ID")
 }
 

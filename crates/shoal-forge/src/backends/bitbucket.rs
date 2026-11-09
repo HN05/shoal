@@ -30,6 +30,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
+    numbers::RunNumber,
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -710,11 +711,11 @@ impl Backend for Bitbucket {
         ))
     }
 
-    fn locate_run(&self, _repo: &ForgeRepo, _target: &str) -> Option<u64> {
+    fn locate_run(&self, _repo: &ForgeRepo, _target: &str) -> Option<RunNumber> {
         None
     }
 
-    fn run_path(&self, number: u64) -> String {
+    fn run_path(&self, number: RunNumber) -> String {
         format!("pipelines/{number}")
     }
 

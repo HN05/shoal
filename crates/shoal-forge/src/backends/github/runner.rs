@@ -16,6 +16,7 @@ use crate::{
         took_run_hook,
     },
     items::item::text,
+    numbers::{JobId, RunId, RunnerId},
     transport::api::{HttpMethod, Request},
 };
 
@@ -44,7 +45,7 @@ pub(super) async fn waiting_jobs(
     for status in ACTIVE_RUNS {
         let path = format!("actions/runs?status={status}");
         for run in every(repo, account, &path, "workflow_runs").await? {
-            let run = run["id"].as_u64().context("Actions run has no ID")?;
+            let run = RunId::new(run["id"].as_u64().context("Actions run has no ID")?);
             for job in run_jobs(repo, account, run).await? {
                 if let Some(job) = queued_job(&job)?
                     && matches(&job.labels, labels)
@@ -58,7 +59,7 @@ pub(super) async fn waiting_jobs(
 }
 
 /// The latest attempt's jobs of the run with API ID `run`.
-async fn run_jobs(repo: &ForgeRepo, account: &Account, run: u64) -> Result<Vec<Value>> {
+async fn run_jobs(repo: &ForgeRepo, account: &Account, run: RunId) -> Result<Vec<Value>> {
     let path = format!("actions/runs/{run}/jobs?filter=latest");
     every(repo, account, &path, "jobs").await
 }
@@ -87,11 +88,11 @@ fn queued_job(value: &Value) -> Result<Option<WaitingJob>> {
     if value["status"] != "queued" {
         return Ok(None);
     }
-    let id = value["id"].as_u64().context("Actions job has no ID")?;
+    let id = JobId::new(value["id"].as_u64().context("Actions job has no ID")?);
     Ok(Some(WaitingJob {
         handle: id.to_string(),
         id,
-        run: value["run_id"].as_u64().context("Actions job has no run")?,
+        run: RunId::new(value["run_id"].as_u64().context("Actions job has no run")?),
         name: text(&value["name"]).context("Actions job has no name")?,
         labels: names(&value["labels"]),
     }))
@@ -151,7 +152,7 @@ pub(super) async fn check_registration(repo: &ForgeRepo, account: &Account) -> R
     Ok(())
 }
 
-pub(super) fn delete(repo: &ForgeRepo, id: u64) -> Request {
+pub(super) fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
     let endpoint = repo.repo_endpoint(&format!("actions/runners/{id}"));
     Request::new(HttpMethod::Delete, endpoint, None)
 }
@@ -160,7 +161,7 @@ pub(super) fn delete(repo: &ForgeRepo, id: u64) -> Request {
 pub(super) async fn state(
     repo: &ForgeRepo,
     account: &Account,
-    id: u64,
+    id: RunnerId,
 ) -> Result<Option<RunnerState>> {
     let read = Request::get(repo.repo_endpoint(&format!("actions/runners/{id}")));
     Ok(match repo.read_refusable(account, &read, &[404]).await? {
@@ -181,17 +182,14 @@ pub(super) async fn state(
 pub(super) async fn runner_job(
     repo: &ForgeRepo,
     account: &Account,
-    run: u64,
-    runner: u64,
+    run: RunId,
+    runner: RunnerId,
 ) -> Result<Option<WaitingJob>> {
     let jobs = run_jobs(repo, account, run).await?;
-    let Some(job) = jobs
-        .iter()
-        .find(|job| job["runner_id"].as_u64() == Some(runner))
-    else {
+    let Some(job) = jobs.iter().find(|job| job["runner_id"] == runner) else {
         return Ok(None);
     };
-    let id = job["id"].as_u64().context("Actions job has no ID")?;
+    let id = JobId::new(job["id"].as_u64().context("Actions job has no ID")?);
     Ok(Some(WaitingJob {
         handle: id.to_string(),
         id,
@@ -246,7 +244,7 @@ async fn register_for_job(
     repo: &ForgeRepo,
     account: &Account,
     launch: &JobLaunch<'_>,
-) -> Result<(u64, String)> {
+) -> Result<(RunnerId, String)> {
     let request = Request::new(
         HttpMethod::Post,
         repo.repo_endpoint("actions/runners/generate-jitconfig"),
@@ -260,6 +258,7 @@ async fn register_for_job(
     let registered = repo.send(account, &request).await?;
     let runner = registered["runner"]["id"]
         .as_u64()
+        .map(RunnerId::new)
         .context("the registered runner has no ID")?;
     let config = text(&registered["encoded_jit_config"])
         .context("the registered runner has no configuration")?;

@@ -6,6 +6,7 @@ use crate::daemon::{
     test_support::git,
     workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
 };
+use crate::forge::numbers::JobId;
 
 /// Claim GitHub's job 11 of run 1 and report, as its runner's hook does,
 /// that the runner took a job of `run`, returning the claim and the job's
@@ -42,7 +43,7 @@ async fn a_job_of_the_claimed_run_goes_on_and_its_claim_names_it() {
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert_eq!(
         (claimed.job.job.id, claimed.job.job.name.as_str()),
-        (12, "docs")
+        (JobId::new(12), "docs")
     );
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
@@ -70,7 +71,10 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
     );
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.topic);
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
-    assert_eq!((claimed.job.job.id, claimed.job.job.run), (21, 2));
+    assert_eq!(
+        (claimed.job.job.id, claimed.job.job.run),
+        (JobId::new(21), RunId::new(2))
+    );
     assert!(claimed.job.run.url.ends_with("/actions/runs/2"));
 }
 
@@ -139,7 +143,7 @@ async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
     assert!(directory.join("prepared").exists());
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.ends_with("/actions/runs/5"));
-    assert_eq!(claimed.job.job.id, 11);
+    assert_eq!(claimed.job.job.id, JobId::new(11));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
@@ -162,7 +166,10 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
     let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &manager.forge_hosts())
         .await
         .unwrap();
-    recorded.run = forge.job_run(&manager.user_account(), 2).await.unwrap();
+    recorded.run = forge
+        .job_run(&manager.user_account(), RunId::new(2))
+        .await
+        .unwrap();
     manager.record_taken_job(&job.id, &recorded).await.unwrap();
 
     manager.follow_taken_jobs().await.unwrap();

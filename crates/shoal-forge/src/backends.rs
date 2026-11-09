@@ -37,6 +37,7 @@ use crate::{
         reaction::{Listed, Subject, allowed::AllowedReactions},
         revert::NewRevert,
     },
+    numbers::{JobId, RunId, RunNumber, RunnerId},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -671,11 +672,11 @@ pub(crate) trait Backend {
 
     /// The number a workflow run's web URL in the repository names, if
     /// `target` links one.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64>;
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber>;
 
     /// The path under the repository that reads the run numbered `number`
     /// in its web URL.
-    fn run_path(&self, number: u64) -> String;
+    fn run_path(&self, number: RunNumber) -> String;
 
     /// What precedes a run's number in the forge's run web URLs, or `None`
     /// where Shoal reads no runs.
@@ -684,7 +685,7 @@ pub(crate) trait Backend {
     }
 
     /// The run numbered `number` that a read of its path returned as `value`.
-    fn run(&self, repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
+    fn run(&self, repo: &ForgeRepo, _number: RunNumber, value: &Value) -> Result<Run> {
         self.run_item(repo, value)
     }
 
@@ -747,7 +748,7 @@ pub(crate) trait Backend {
     }
 
     /// The path under the repository that reads the run with API ID `id`.
-    fn job_run_path(&self, _id: u64) -> Result<String> {
+    fn job_run_path(&self, _id: RunId) -> Result<String> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
@@ -768,7 +769,7 @@ pub(crate) trait Backend {
     }
 
     /// The request that deletes the repository's runner `id`.
-    fn delete_runner(&self, _repo: &ForgeRepo, _id: u64) -> Result<Request> {
+    fn delete_runner(&self, _repo: &ForgeRepo, _id: RunnerId) -> Result<Request> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
@@ -787,7 +788,7 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _id: u64,
+        _id: RunnerId,
     ) -> Result<Option<RunnerState>> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
@@ -797,8 +798,8 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _run: u64,
-        _runner: u64,
+        _run: RunId,
+        _runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
@@ -829,7 +830,7 @@ pub(crate) trait Backend {
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
-        _job: u64,
+        _job: JobId,
     ) -> Option<String> {
         None
     }

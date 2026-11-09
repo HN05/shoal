@@ -8,6 +8,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use crate::forge::numbers::RunnerId;
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -39,7 +40,7 @@ pub(crate) struct ClaimedJob {
     pub launched_at: Option<crate::time::UnixTime>,
     pub job: QueuedJob,
     /// The runner the forge registered for this job alone, if it did.
-    pub runner_id: Option<u64>,
+    pub runner_id: Option<RunnerId>,
 }
 
 impl Manager {
@@ -59,7 +60,7 @@ impl Manager {
                             workspace_id: row.get(2)?,
                             execution_id: row.get(3)?,
                             launched_at: row.get(5)?,
-                            runner_id: row.get::<_, Option<i64>>(6)?.map(|id| id as u64),
+                            runner_id: row.get(6)?,
                             job: serde_json::from_str(&row.get::<_, String>(4)?).map_err(
                                 |error| {
                                     rusqlite::Error::FromSqlConversionFailure(

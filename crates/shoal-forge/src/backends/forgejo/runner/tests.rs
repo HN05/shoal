@@ -39,8 +39,8 @@ fn the_job_search_lists_waiting_jobs_and_skips_others() {
 fn job() -> WaitingJob {
     WaitingJob {
         handle: "h1".into(),
-        id: 7,
-        run: 3,
+        id: JobId::new(7),
+        run: RunId::new(3),
         name: "rust".into(),
         labels: vec!["shoal".into()],
     }
@@ -88,12 +88,12 @@ fn registration_and_deletion_act_on_the_repository_runner() {
     assert_eq!(
         runner,
         RegisteredRunner {
-            id: 4,
+            id: RunnerId::new(4),
             uuid: "u".into(),
             token: "t".into(),
         }
     );
-    let request = delete(&repo(), 4);
+    let request = delete(&repo(), RunnerId::new(4));
     assert_eq!(request.method, HttpMethod::Delete);
     assert_eq!(request.endpoint, "repos/team/repo/actions/runners/4");
 }
@@ -101,7 +101,7 @@ fn registration_and_deletion_act_on_the_repository_runner() {
 #[test]
 fn one_job_claims_the_handle_on_the_host_backend_with_its_files_in_the_work_directory() {
     let runner = RegisteredRunner {
-        id: 4,
+        id: RunnerId::new(4),
         uuid: "u".into(),
         token: "t".into(),
     };

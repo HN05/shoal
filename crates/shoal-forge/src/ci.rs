@@ -19,6 +19,7 @@ use crate::{
     backends::Backend,
     capability::Capability,
     items::{item::ItemState, link::ItemKind},
+    numbers::{JobId, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
 use crate::{ci::check_state::CheckState, state::states};
@@ -79,16 +80,16 @@ impl From<CheckState> for JobState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Location {
     GitHub {
-        run: u64,
-        job: u64,
+        run: RunId,
+        job: JobId,
     },
     GitLab {
-        job: u64,
+        job: JobId,
     },
     /// Forgejo links a job by its run's number in the repository and its
     /// index in the run, neither an API ID.
     Forgejo {
-        run_number: u64,
+        run_number: RunNumber,
         job_index: usize,
     },
 }
@@ -99,11 +100,11 @@ pub(crate) enum Operation {
     /// POST to this endpoint under the repository's.
     Post(String),
     ForgejoRun {
-        run_number: u64,
+        run_number: RunNumber,
         action: CiAction,
     },
     RerunForgejoJob {
-        run_number: u64,
+        run_number: RunNumber,
         job_index: usize,
     },
 }

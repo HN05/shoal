@@ -4,7 +4,7 @@ use super::*;
 
 fn run(id: u64) -> Run {
     Run {
-        id,
+        id: RunId::new(id),
         url: String::new(),
         branch: None,
         workflow: None,
@@ -17,7 +17,7 @@ fn run(id: u64) -> Run {
 fn run_urls_locate_runs_only_in_the_repository() -> Result<()> {
     let locate = |remote: &str, target: &str| -> Result<Option<u64>> {
         let repo = ForgeRepo::parse(remote)?;
-        Ok(repo.kind.locate_run(&repo, target))
+        Ok(repo.kind.locate_run(&repo, target).map(RunNumber::get))
     };
     let github = "https://github.com/team/repo";
     assert_eq!(
@@ -62,7 +62,7 @@ fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
             .run_operation(&run(9), action, failed)?;
         Ok(match operation {
             RunOperation::Post(endpoint) => endpoint,
-            RunOperation::EachFailedJob(endpoint) => format!("each of {}", endpoint(7)),
+            RunOperation::EachFailedJob(endpoint) => format!("each of {}", endpoint(JobId::new(7))),
         })
     };
     let github = "https://github.com/team/repo";
@@ -109,7 +109,7 @@ fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
 fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
     let read = |remote: &str, value| -> Result<Run> {
         let repo = ForgeRepo::parse(remote)?;
-        repo.kind.run(&repo, 12, &value)
+        repo.kind.run(&repo, RunNumber::new(12), &value)
     };
     assert_eq!(
         read(
@@ -119,7 +119,7 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
                     "status": "completed", "conclusion": "failure"})
         )?,
         Run {
-            id: 12,
+            id: RunId::new(12),
             url: "https://github.com/team/repo/actions/runs/12".into(),
             branch: Some("topic".into()),
             workflow: Some("ci.yml".into()),
@@ -142,7 +142,7 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
     assert_eq!(
         forgejo,
         Run {
-            id: 9331,
+            id: RunId::new(9331),
             url: "https://codeberg.org/team/repo/actions/runs/12".into(),
             branch: Some("topic".into()),
             workflow: Some("deps.yml".into()),

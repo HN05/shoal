@@ -10,7 +10,10 @@ fn job(name: &str, state: JobState, location: Option<Location>) -> Job {
 }
 
 fn github(run: u64, job: u64) -> Option<Location> {
-    Some(Location::GitHub { run, job })
+    Some(Location::GitHub {
+        run: RunId::new(run),
+        job: JobId::new(job),
+    })
 }
 
 fn names(jobs: Vec<Job>) -> Vec<String> {
@@ -19,7 +22,7 @@ fn names(jobs: Vec<Job>) -> Vec<String> {
 
 #[test]
 fn actions_select_named_checks_in_their_state_or_every_ci_job() {
-    let gitlab = Some(Location::GitLab { job: 1 });
+    let gitlab = Some(Location::GitLab { job: JobId::new(1) });
     let jobs = [
         job("rust", JobState::Failed, gitlab),
         job("docs", JobState::Running, gitlab),
@@ -91,13 +94,13 @@ fn forgejo_reruns_one_failed_job_alone_and_several_of_a_run_with_the_run() {
         })
     };
     let jobs = [
-        job("rust", JobState::Failed, forgejo(1, 0)),
-        job("docs", JobState::Failed, forgejo(1, 1)),
-        job("lint", JobState::Finished, forgejo(1, 2)),
-        job("fmt", JobState::Failed, forgejo(2, 0)),
-        job("test", JobState::Running, forgejo(3, 0)),
-        job("build", JobState::Failed, forgejo(3, 1)),
-        job("audit", JobState::Failed, forgejo(3, 2)),
+        job("rust", JobState::Failed, forgejo(RunNumber::new(1), 0)),
+        job("docs", JobState::Failed, forgejo(RunNumber::new(1), 1)),
+        job("lint", JobState::Finished, forgejo(RunNumber::new(1), 2)),
+        job("fmt", JobState::Failed, forgejo(RunNumber::new(2), 0)),
+        job("test", JobState::Running, forgejo(RunNumber::new(3), 0)),
+        job("build", JobState::Failed, forgejo(RunNumber::new(3), 1)),
+        job("audit", JobState::Failed, forgejo(RunNumber::new(3), 2)),
     ];
     let run = |run_number, action| Operation::ForgejoRun { run_number, action };
     let rerun_job = |run_number, job_index| Operation::RerunForgejoJob {
@@ -106,15 +109,21 @@ fn forgejo_reruns_one_failed_job_alone_and_several_of_a_run_with_the_run() {
     };
     let selected = [jobs[0].clone(), jobs[1].clone(), jobs[3].clone()];
     let (planned, checks) = operations(&Forgejo, &jobs, &selected, CiAction::Rerun).unwrap();
-    assert_eq!(planned, [run(1, CiAction::Rerun), rerun_job(2, 0)]);
+    assert_eq!(
+        planned,
+        [
+            run(RunNumber::new(1), CiAction::Rerun),
+            rerun_job(RunNumber::new(2), 0)
+        ]
+    );
     assert_eq!(checks, ["rust", "docs", "lint", "fmt"]);
     // A job reruns while others of its run still run, but a run does not.
     let (planned, checks) = operations(&Forgejo, &jobs, &jobs[5..6], CiAction::Rerun).unwrap();
-    assert_eq!(planned, [rerun_job(3, 1)]);
+    assert_eq!(planned, [rerun_job(RunNumber::new(3), 1)]);
     assert_eq!(checks, ["build"]);
     assert!(operations(&Forgejo, &jobs, &jobs[5..], CiAction::Rerun).is_err());
     let (planned, _) = operations(&Forgejo, &jobs, &jobs[4..5], CiAction::Cancel).unwrap();
-    assert_eq!(planned, [run(3, CiAction::Cancel)]);
+    assert_eq!(planned, [run(RunNumber::new(3), CiAction::Cancel)]);
 }
 
 #[test]
@@ -122,7 +131,10 @@ fn check_urls_locate_jobs_only_in_the_repository() {
     let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
     assert_eq!(
         github.locate("https://github.com/team/repo/actions/runs/12/job/34"),
-        Some(Location::GitHub { run: 12, job: 34 })
+        Some(Location::GitHub {
+            run: RunId::new(12),
+            job: JobId::new(34)
+        })
     );
     for target in [
         "https://github.com/other/repo/actions/runs/12/job/34",
@@ -136,7 +148,9 @@ fn check_urls_locate_jobs_only_in_the_repository() {
     let gitlab = ForgeRepo::parse("http://gitlab.com/group/sub/repo").unwrap();
     assert_eq!(
         gitlab.locate("https://gitlab.com/group/sub/repo/-/jobs/56"),
-        Some(Location::GitLab { job: 56 })
+        Some(Location::GitLab {
+            job: JobId::new(56)
+        })
     );
     for target in [
         "https://gitlab.com/group/repo/-/jobs/56",
@@ -149,7 +163,7 @@ fn check_urls_locate_jobs_only_in_the_repository() {
     assert_eq!(
         forgejo.locate("/team/repo/actions/runs/2765/jobs/1"),
         Some(Location::Forgejo {
-            run_number: 2765,
+            run_number: RunNumber::new(2765),
             job_index: 1
         })
     );
