@@ -29,14 +29,7 @@ pub(super) async fn replace(
         .context("--permission replaces the narrowing of the spaces a resume names")?;
     let mut stopped = Vec::new();
     for selector in selectors {
-        let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
-                .await?
-                .workspace;
-        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-        if let Some(execution) = execution {
-            saved.retain_execution(execution, false);
-        }
+        let (workspace, saved) = saved_agents(ctx, selector, execution).await?;
         for mode in recorded_modes(&saved)? {
             ensure_fits_workspace(ctx, &workspace, &mode, &narrowing).await?;
         }
@@ -45,14 +38,45 @@ pub(super) async fn replace(
     for chat in &selected.chats {
         ensure_fits_chat(ctx, chat, &narrowing).await?;
     }
-    for (workspace, saved) in stopped {
-        for execution in (saved.agents.into_iter().chain(saved.sessions)).map(|(id, _)| id) {
-            let selector = SpaceSelector::id(&workspace.id);
-            crate::client::assignments::replace_stopped_narrowing(
-                &ctx.paths, selector, execution, narrowing,
-            )
-            .await?;
-        }
+    for (workspace, saved) in &stopped {
+        replace_saved(ctx, workspace, saved, narrowing).await?;
+    }
+    Ok(())
+}
+
+/// The workspace `selector` names with the agents and last sessions it
+/// saved, only `execution`'s when given.
+async fn saved_agents(
+    ctx: &Context,
+    selector: &str,
+    execution: Option<&str>,
+) -> Result<(Workspace, Saved)> {
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
+        .await?
+        .workspace;
+    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    if let Some(execution) = execution {
+        saved.retain_execution(execution, false);
+    }
+    Ok((workspace, saved))
+}
+
+/// Have the daemon give each agent and last session `saved` keeps of
+/// `workspace` `narrowing` in place of the one it recorded.
+async fn replace_saved(
+    ctx: &Context,
+    workspace: &Workspace,
+    saved: &Saved,
+    narrowing: PermissionsConfig,
+) -> Result<()> {
+    for (execution, _) in saved.agents.iter().chain(&saved.sessions) {
+        crate::client::assignments::replace_stopped_narrowing(
+            &ctx.paths,
+            SpaceSelector::id(&workspace.id),
+            execution.clone(),
+            narrowing,
+        )
+        .await?;
     }
     Ok(())
 }
