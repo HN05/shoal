@@ -1,5 +1,5 @@
 //! One removal path for explicit removal and automatic cleanup.
-use super::{Manager, RemovalRules, executions::StopPolicy};
+use super::{Manager, executions::StopPolicy, reservation::RemovalRules};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::space_processes::WorktreeTies;
