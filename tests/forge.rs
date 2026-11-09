@@ -677,7 +677,7 @@ fn apps_read_forge_items_through_the_daemon() {
         .as_str()
         .unwrap()
         .to_owned();
-    let agent = app.clone().scope(scope);
+    let agent = app.clone().scope(scope.into());
     let labels = runtime
         .block_on(forge_reads::labels(&agent, workspace(), None))
         .unwrap();

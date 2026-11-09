@@ -1,5 +1,6 @@
 //! The environment Shoal gives the processes it starts, and what it reads of
 //! its own; [`crate::client::env`] names every variable.
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail};
 use std::{
@@ -292,12 +293,12 @@ pub fn not_chat_identity() -> Vec<OsString> {
 /// temporary directory; and the agents' output default.
 pub fn chat_environment(
     chat: &crate::model::Chat,
-    token: &str,
+    token: &ScopeToken,
     paths: &Paths,
 ) -> BTreeMap<String, OsString> {
     let mut values = BTreeMap::from([
         (CHAT.into(), chat.id.clone().into()),
-        (SCOPE_TOKEN.into(), token.into()),
+        (SCOPE_TOKEN.into(), token.expose().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ]);
     if let Some(directory) = &chat.tmp_dir {
@@ -312,11 +313,11 @@ pub fn workspace_environment(
     workspace: &Workspace,
     paths: &Paths,
     ports: &[PortReservation],
-    token: &str,
+    token: &ScopeToken,
 ) -> BTreeMap<String, OsString> {
     let mut values = workspace_identity(workspace, paths);
     values.insert(WORKSPACE_PATH.into(), workspace.path.as_os_str().to_owned());
-    values.insert(SCOPE_TOKEN.into(), token.into());
+    values.insert(SCOPE_TOKEN.into(), token.expose().into());
     values.insert(
         RESERVED_PORT_ENV.into(),
         ports

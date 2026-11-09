@@ -197,7 +197,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         )
         .await;
     let mut list = DemoMethod::ListDemos { workspace: None };
-    scope::authorize(&manager, Some("scope"), &mut list)
+    scope::authorize(&manager, Some(&"scope".into()), &mut list)
         .await
         .unwrap();
     assert!(
@@ -207,7 +207,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         workspace: SpaceSelector::parse(&first.name),
         name: None,
     };
-    scope::authorize(&manager, Some("scope"), &mut stop)
+    scope::authorize(&manager, Some(&"scope".into()), &mut stop)
         .await
         .unwrap();
     for mut method in [
@@ -220,7 +220,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         },
     ] {
         assert!(
-            scope::authorize(&manager, Some("scope"), &mut method)
+            scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
                 .is_err()
         );

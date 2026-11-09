@@ -1,5 +1,6 @@
 //! Persistent scope for processes whose lifetime belongs to an external caller.
 use super::Manager;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope::Caller, store},
@@ -8,10 +9,9 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use std::collections::BTreeMap;
-use uuid::Uuid;
 
 impl Manager {
-    pub(crate) async fn caller(&self, token: &str) -> Result<Option<Caller>> {
+    pub(crate) async fn caller(&self, token: &ScopeToken) -> Result<Option<Caller>> {
         if let Some(caller) = self.executions.scope(token).await {
             return Ok(Some(caller));
         }
@@ -56,7 +56,7 @@ impl Manager {
         let configured = settings.env;
         let repository_name = crate::repository::name(&repository).to_owned();
         let workspace_id = workspace.id.clone();
-        let token = Uuid::new_v4().to_string();
+        let token = ScopeToken::generate();
         let paths = self.paths.clone();
         self.store
             .write(move |tx| {
@@ -94,7 +94,7 @@ impl Manager {
     pub(crate) async fn revoke_workspace_environment(
         &self,
         selector: &SpaceSelector,
-        token: String,
+        token: ScopeToken,
     ) -> Result<()> {
         let workspace_id = self.workspace(selector).await?.id;
         self.store

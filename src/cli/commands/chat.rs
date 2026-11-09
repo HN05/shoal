@@ -4,6 +4,7 @@
 //! A chat is no workspace's agent, so it is not a tracked execution; the
 //! daemon records it while its agent runs.
 //! Every start makes a new chat and gives it focus.
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use std::{
     ffi::{OsStr, OsString},
@@ -651,7 +652,7 @@ pub(super) async fn launch(
         // Opening the place does not start the chat, so the start waits for
         // its report. A scoped starter's scope token, with which the place
         // records the chat, may end with the starter, so it goes along.
-        let handoff = handoff::Handoff::create(crate::env::scope_token().as_deref())?;
+        let handoff = handoff::Handoff::create(crate::env::scope_token().as_ref())?;
         let relaunch = beside(&name).relaunch(Some(handoff.path()));
         let note = terminal::start_chat_in_background(
             ctx,
@@ -1065,7 +1066,7 @@ fn run_here(
     ctx: &Context,
     path: &Path,
     chat: &Chat,
-    token: &str,
+    token: &ScopeToken,
     command: &[OsString],
     profile: &crate::ai::Environment,
 ) -> Result<i32> {

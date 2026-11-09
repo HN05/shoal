@@ -2,6 +2,7 @@
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -38,7 +39,7 @@ pub struct ScopedExecution {
 /// filters default to the caller's own; other targets must name one of them.
 pub(crate) async fn authorize(
     manager: &Manager,
-    token: Option<&str>,
+    token: Option<&ScopeToken>,
     method: &mut impl Scoped,
 ) -> Result<Option<Caller>> {
     let Some(token) = token else {

@@ -208,7 +208,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
             },
         ] {
             assert_eq!(
-                scope::authorize(&manager, Some("scope"), &mut method)
+                scope::authorize(&manager, Some(&"scope".into()), &mut method)
                     .await
                     .is_ok(),
                 allowed
@@ -222,7 +222,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         sender_chat: None,
     };
     assert!(
-        scope::authorize(&manager, Some("scope"), &mut method)
+        scope::authorize(&manager, Some(&"scope".into()), &mut method)
             .await
             .is_err()
     );
@@ -384,7 +384,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             sender_chat: None,
         };
         assert_eq!(
-            scope::authorize(&manager, Some("scope"), &mut method)
+            scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
                 .is_ok(),
             allowed

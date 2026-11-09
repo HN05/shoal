@@ -4,6 +4,8 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 
 use anyhow::{Result, ensure};
 
+use crate::scope_tokens::ScopeToken;
+
 pub const PREFIX: &str = "SHOAL_";
 
 /// Overrides the state directory; also isolates the daemon socket.
@@ -188,16 +190,16 @@ pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", TMPDIR];
 
 /// The scope token a starter handed this process with a chat to start,
 /// which stands in for [`SCOPE_TOKEN`] without entering any environment.
-static HANDED_SCOPE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static HANDED_SCOPE: std::sync::OnceLock<ScopeToken> = std::sync::OnceLock::new();
 
 /// Take `token`, which a starter handed this process, as its scope token;
 /// false when it already took one.
-pub fn take_handed_scope(token: String) -> bool {
+pub fn take_handed_scope(token: ScopeToken) -> bool {
     HANDED_SCOPE.set(token).is_ok()
 }
 
-pub fn scope_token() -> Option<String> {
-    (HANDED_SCOPE.get().cloned()).or_else(|| std::env::var(SCOPE_TOKEN).ok())
+pub fn scope_token() -> Option<ScopeToken> {
+    (HANDED_SCOPE.get().cloned()).or_else(|| std::env::var(SCOPE_TOKEN).ok().map(ScopeToken::from))
 }
 
 /// True when this process carries cooperative workspace scope.

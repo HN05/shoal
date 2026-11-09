@@ -5,6 +5,7 @@ mod reregistration;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_work::Stopper};
 use crate::client::execution_ids::ExecutionId;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
@@ -40,7 +41,6 @@ use tokio::{
     sync::{OwnedMutexGuard, watch},
     time::{Instant, sleep},
 };
-use uuid::Uuid;
 
 mod state;
 /// The workspaces with a running execution. One whose wrapper is gone is
@@ -260,7 +260,7 @@ struct ExecutionRecord {
     /// The agent execution whose process tree registers it.
     agent_execution: Option<ExecutionId>,
     wrapper: Option<Identity>,
-    scope_token: String,
+    scope_token: ScopeToken,
     demo: Option<Launch>,
     place: Option<ExecutionPlace>,
 }
@@ -289,7 +289,7 @@ impl ProcessDirectories {
 struct RegisteredExecution {
     id: ExecutionId,
     workspace: Workspace,
-    scope_token: String,
+    scope_token: ScopeToken,
     ports: Vec<PortReservation>,
     environment: std::collections::BTreeMap<String, std::ffi::OsString>,
     stop: watch::Receiver<bool>,
@@ -479,7 +479,7 @@ impl Manager {
         let settings = self.workspace_settings(&workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
         let id = ExecutionId::generate();
-        let scope_token = Uuid::new_v4().to_string();
+        let scope_token = ScopeToken::generate();
         let (parent_execution, agent_execution) = parents;
         let (ports, directories) = self
             .persist_execution(
@@ -923,14 +923,14 @@ impl Manager {
             .write(move |tx| {
                 let execution = store::find_execution(tx, &request.execution)?
                     .context("execution record is missing")?;
-                let (token, agent_execution): (Option<String>, Option<ExecutionId>) = tx
+                let (token, agent_execution): (Option<ScopeToken>, Option<ExecutionId>) = tx
                     .query_row(
                         "SELECT scope_token,agent_execution FROM executions WHERE id=?1",
                         [&request.execution],
                         |row| Ok((row.get(0)?, row.get(1)?)),
                     )?;
                 ensure!(
-                    token.as_deref() == Some(request.scope_token.as_str()),
+                    token.as_ref() == Some(&request.scope_token),
                     "execution scope token does not match"
                 );
                 ensure!(

@@ -69,6 +69,7 @@ pub mod workspace;
 pub mod workspace_files;
 mod workspace_usage;
 
+use crate::client::scope_tokens::ScopeToken;
 use std::{
     panic::AssertUnwindSafe,
     sync::Arc,
@@ -389,7 +390,7 @@ async fn serve_request(
         }
         // Service commands end a daemon of any release.
         Method::Exit(exit) => {
-            let scope = request.scope.as_deref();
+            let scope = request.scope.as_ref();
             return requests::daemon::exit(
                 stream,
                 request.id,
@@ -402,7 +403,7 @@ async fn serve_request(
         }
         Method::Operation(operation) => operation,
     };
-    let scope = request.scope.as_deref();
+    let scope = request.scope.as_ref();
     let accepted = accept(
         &mut stream,
         &server,
@@ -493,7 +494,7 @@ async fn accept(
     server: &Server,
     request_id: u64,
     protocol: u32,
-    scope: Option<&str>,
+    scope: Option<&ScopeToken>,
     operation: &mut Operation,
 ) -> Result<Option<Option<Caller>>> {
     if protocol != protocol::VERSION {

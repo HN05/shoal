@@ -9,6 +9,7 @@
 //! too. The handoff is a private directory that the place's command names,
 //! never the place's environment, which a shell left there after the chat
 //! would keep.
+use crate::client::scope_tokens::ScopeToken;
 use std::{
     fs::File,
     path::{Path, PathBuf},
@@ -46,7 +47,7 @@ pub(super) struct Handoff(tempfile::TempDir);
 impl Handoff {
     /// A handoff, of the scope token `token` when the starter has one, which
     /// only this user reads.
-    pub fn create(token: Option<&str>) -> Result<Self> {
+    pub fn create(token: Option<&ScopeToken>) -> Result<Self> {
         use std::os::unix::fs::PermissionsExt as _;
         let directory = tempfile::Builder::new()
             .prefix("shoal-chat.")
@@ -54,7 +55,7 @@ impl Handoff {
             .tempdir()
             .context("create the chat's handoff")?;
         let (file, contents) = match token {
-            Some(token) => (SCOPE, token),
+            Some(token) => (SCOPE, token.expose()),
             None => (UNSCOPED, ""),
         };
         std::fs::write(directory.path().join(file), contents)
@@ -168,12 +169,12 @@ fn hold(path: &Path) -> Result<()> {
 /// `None` from an unscoped starter. A handoff that says neither, as one
 /// whose starter stopped waiting and removed it, is refused, so the chat
 /// never starts unscoped in a scoped starter's stead.
-fn take_scope(path: &Path) -> Result<Option<String>> {
+fn take_scope(path: &Path) -> Result<Option<ScopeToken>> {
     let scope = path.join(SCOPE);
     match std::fs::read_to_string(&scope) {
         Ok(token) => {
             let _ = std::fs::remove_file(&scope);
-            Ok(Some(token))
+            Ok(Some(token.into()))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             ensure!(

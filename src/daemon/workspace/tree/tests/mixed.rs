@@ -450,11 +450,11 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     };
     // The workspace above the chat is outside its tree...
     let authorized =
-        crate::daemon::scope::authorize(&manager, Some("scope"), &mut start(&root)).await;
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut start(&root)).await;
     assert!(authorized.is_err());
     // ...and the one below it is not.
     let mut method = start(&worker);
-    crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
         .await
         .unwrap();
     let crate::protocol::ChatMethod::StartChat {
@@ -501,14 +501,14 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         parent: Some(SpaceSelector::parse(&parent.name)),
     };
     let mut method = below(&worker);
-    crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
         .await
         .unwrap();
     let crate::protocol::ChatMethod::StartChat { parent, .. } = method else {
         unreachable!("the method stays a chat start");
     };
     assert_eq!(parent, Some(SpaceSelector::id(&worker.id)));
-    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut below(&root))
+    let error = crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut below(&root))
         .await
         .unwrap_err();
     assert!(
@@ -527,7 +527,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         parent: Some(SpaceSelector::parse(&parent.name)),
     };
     let mut method = check(&worker);
-    crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
         .await
         .unwrap();
     let crate::protocol::WorkspaceMethod::CheckCreation { parent, .. } = method else {
@@ -535,7 +535,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     };
     assert_eq!(parent, Some(SpaceSelector::id(&worker.id)));
     assert!(
-        crate::daemon::scope::authorize(&manager, Some("scope"), &mut check(&root))
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut check(&root))
             .await
             .is_err()
     );

@@ -1,6 +1,6 @@
 //! The response envelope, its bodies and the errors they carry.
 use super::{
-    DaemonStatus, DownloadPiece, MAX_FRAME, ReviewPiece, ScopeToken, VERSION, ViewPiece, WokenTurn,
+    ChatScope, DaemonStatus, DownloadPiece, MAX_FRAME, ReviewPiece, VERSION, ViewPiece, WokenTurn,
     chats, frame_pages, operations,
 };
 use crate::config::repo::ConfigLayers;
@@ -188,7 +188,7 @@ response_bodies! {
     Chats(Vec<crate::model::Chat>),
     RemovedChat(crate::output::chat::RemovedChat),
     ChatName(crate::space_names::SpaceName),
-    ScopeToken(ScopeToken),
+    ScopeToken(ChatScope),
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),

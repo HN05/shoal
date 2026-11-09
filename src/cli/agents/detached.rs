@@ -451,7 +451,7 @@ fn spawn_session(
     ctx: &Context,
     app: &dyn App,
     directory: &Path,
-    (chat, token): (&Chat, &str),
+    (chat, token): (&Chat, &crate::client::scope_tokens::ScopeToken),
     log: &Path,
     prepared: &dyn Prepared,
 ) -> Result<Child> {

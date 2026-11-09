@@ -10,8 +10,9 @@ use crate::{
     connection::{Daemon, request},
     model::{Chat, ChatHome, RenamedChat},
     output::chat::RemovedChat,
-    protocol::{ChatMethod, ScopeToken},
+    protocol::{ChatMethod, ChatScope},
     repository::Selector,
+    scope_tokens::ScopeToken,
     sessions::Origin,
 };
 
@@ -101,9 +102,9 @@ pub async fn free_name(daemon: &impl Daemon, name: String) -> Result<SpaceName> 
 }
 
 /// The scope token `chat`'s agent carries.
-pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<String> {
+pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<ScopeToken> {
     let chat = SpaceSelector::id(&chat.id);
-    let scope: ScopeToken = request(daemon, ChatMethod::ChatScope { chat }).await?;
+    let scope: ChatScope = request(daemon, ChatMethod::ChatScope { chat }).await?;
     Ok(scope.token)
 }
 

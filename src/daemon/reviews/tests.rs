@@ -774,7 +774,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     };
     // The parent's agent reaches its own and its child's reviews.
     for review in [&parent_review, &child_review] {
-        authorize(manager, Some("scope"), &mut resolve(review))
+        authorize(manager, Some(&"scope".into()), &mut resolve(review))
             .await
             .unwrap();
     }
@@ -789,16 +789,20 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
         )
         .await;
     assert!(
-        authorize(manager, Some("child-scope"), &mut resolve(&parent_review))
-            .await
-            .is_err()
+        authorize(
+            manager,
+            Some(&"child-scope".into()),
+            &mut resolve(&parent_review)
+        )
+        .await
+        .is_err()
     );
     let mut show = ReviewMethod::ShowReview {
         workspace: None,
         id: Some(parent_review.id),
     };
     assert!(
-        authorize(manager, Some("child-scope"), &mut show)
+        authorize(manager, Some(&"child-scope".into()), &mut show)
             .await
             .is_err()
     );
@@ -806,7 +810,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
         workspace: None,
         id: None,
     };
-    authorize(manager, Some("child-scope"), &mut own)
+    authorize(manager, Some(&"child-scope".into()), &mut own)
         .await
         .unwrap();
     assert!(

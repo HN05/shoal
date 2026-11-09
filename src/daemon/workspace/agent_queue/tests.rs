@@ -1006,7 +1006,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
             },
         };
         let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
         assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
     } // Only the user starts one regardless of the limits.
     let mut method = crate::protocol::QueueMethod::QueueAdd {
@@ -1015,7 +1015,8 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
             ..request(&repo, "launch", true)
         },
     };
-    let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+    let authorized =
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
     assert!(authorized.is_err());
 }
 

@@ -154,7 +154,7 @@ pub enum WorkspaceMethod {
     },
     RevokeWorkspaceEnv {
         workspace: SpaceSelector,
-        token: String,
+        token: crate::scope_tokens::ScopeToken,
     },
     /// The status of a workspace or chat, running or stopped.
     SpaceStatus {

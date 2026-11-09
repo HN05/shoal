@@ -673,7 +673,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     let mode = std::fs::metadata(&tmp_dir).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o700);
     assert_eq!(
-        crate::env::chat_environment(&chat, "token", &manager.paths)[crate::env::TMPDIR],
+        crate::env::chat_environment(&chat, &"token".into(), &manager.paths)[crate::env::TMPDIR],
         tmp_dir.as_os_str()
     );
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
@@ -961,15 +961,17 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         elsewhere: false,
     });
     for mut read in [status(&workspace.name), diff, items] {
-        authorize(&manager, Some("chat"), &mut read).await.unwrap();
+        authorize(&manager, Some(&"chat".into()), &mut read)
+            .await
+            .unwrap();
     }
     let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {
         workspace: SpaceSelector::parse(&workspace.name),
         base: None,
     });
-    let refused = authorize(&manager, Some("chat"), &mut change).await;
+    let refused = authorize(&manager, Some(&"chat".into()), &mut change).await;
     assert!(refused.is_err());
-    let refused = authorize(&manager, Some("chat"), &mut status(&other.name)).await;
+    let refused = authorize(&manager, Some(&"chat".into()), &mut status(&other.name)).await;
     assert!(refused.is_err());
 }
 

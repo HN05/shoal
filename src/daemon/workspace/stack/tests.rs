@@ -163,7 +163,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
             base: Some(lower.name.to_string()),
         };
         let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
         assert_eq!(authorized.is_ok(), allowed);
     }
 

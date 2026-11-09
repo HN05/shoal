@@ -132,7 +132,9 @@ instead of the PR delivery guidance below.
   its ownership verifies.
 - Scope: tracked executions, externally launched processes with exported
   environments and every chat's agent carry a scope token; only the user's own
-  terminal is unscoped. Flag a chat process granted what a workspace process is
+  terminal is unscoped. Flag a scope token held as a bare string instead of a
+  `ScopeToken`, whose `Debug` redacts it, or its text read anywhere but where
+  it is sent, stored or compared. Flag a chat process granted what a workspace process is
   refused, other than renaming its own chat and reading the workspace whose
   worktree it runs in with requests that only read state, and a scoped caller
   creating a space anywhere but below its own, in its repository (any, for a

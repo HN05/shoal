@@ -20,6 +20,7 @@ use crate::{
     protocol::{
         self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response, timing,
     },
+    scope_tokens::ScopeToken,
 };
 
 /// A daemon to send requests to, and the scope they carry.
@@ -28,7 +29,7 @@ pub trait Daemon: Sync {
     fn paths(&self) -> &Paths;
     /// The scope token requests carry: with one, the caller is the agent of
     /// the workspace it belongs to; without one, the user.
-    fn scope(&self) -> Option<String>;
+    fn scope(&self) -> Option<ScopeToken>;
 }
 
 /// The CLI's daemon: requests carry the scope token this process inherited.
@@ -37,7 +38,7 @@ impl Daemon for Paths {
         self
     }
 
-    fn scope(&self) -> Option<String> {
+    fn scope(&self) -> Option<ScopeToken> {
         crate::env::scope_token()
     }
 }
@@ -46,7 +47,7 @@ impl Daemon for Paths {
 #[derive(Debug, Clone)]
 pub struct Connector {
     pub paths: Paths,
-    pub scope: Option<String>,
+    pub scope: Option<ScopeToken>,
 }
 
 impl Connector {
@@ -61,9 +62,9 @@ impl Connector {
     }
 
     /// Requests as the agent of the workspace `token` belongs to.
-    pub fn scope(self, token: impl Into<String>) -> Self {
+    pub fn scope(self, token: ScopeToken) -> Self {
         Self {
-            scope: Some(token.into()),
+            scope: Some(token),
             ..self
         }
     }
@@ -74,7 +75,7 @@ impl Daemon for Connector {
         &self.paths
     }
 
-    fn scope(&self) -> Option<String> {
+    fn scope(&self) -> Option<ScopeToken> {
         self.scope.clone()
     }
 }

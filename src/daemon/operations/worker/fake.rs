@@ -1,4 +1,5 @@
 //! A worker tests drive: they write its output and choose its exit.
+use crate::client::scope_tokens::ScopeToken;
 use std::{
     collections::HashMap,
     sync::{
@@ -17,14 +18,14 @@ static STARTED: LazyLock<Mutex<HashMap<String, Fake>>> = LazyLock::new(Default::
 /// A started fake worker, by its operation's ID.
 pub(crate) struct Fake {
     pub order: Order,
-    pub token: Option<String>,
+    pub token: Option<ScopeToken>,
     pub interrupted: Arc<AtomicBool>,
     stdout: DuplexStream,
     stderr: DuplexStream,
     exit: tokio::sync::oneshot::Sender<i32>,
 }
 
-pub(super) fn start(order: &Order, token: Option<&str>) -> Worker {
+pub(super) fn start(order: &Order, token: Option<&ScopeToken>) -> Worker {
     let (stdout, stdout_end) = tokio::io::duplex(64 * 1024);
     let (stderr, stderr_end) = tokio::io::duplex(64 * 1024);
     let (exit, exited) = tokio::sync::oneshot::channel();
@@ -33,7 +34,7 @@ pub(super) fn start(order: &Order, token: Option<&str>) -> Worker {
         order.id.clone(),
         Fake {
             order: order.clone(),
-            token: token.map(str::to_owned),
+            token: token.cloned(),
             interrupted: interrupted.clone(),
             stdout,
             stderr,

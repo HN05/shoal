@@ -261,7 +261,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
             options: Default::default(),
         };
         let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut request).await;
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut request).await;
         assert_eq!(authorized.is_ok(), allowed, "{parent:?}");
         if parent.is_none() {
             let WorkspaceMethod::CreateCommitWorkspace { parent, .. } = request else {

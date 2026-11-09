@@ -6,6 +6,7 @@
 pub(crate) mod starts;
 mod worker;
 
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -37,7 +38,7 @@ pub(crate) struct Operations {
     /// Scope token → the caller a running worker acts as, so the worker
     /// keeps its caller's scope, execution included, after that caller
     /// ends, until the worker exits.
-    scopes: Mutex<HashMap<String, Caller>>,
+    scopes: Mutex<HashMap<ScopeToken, Caller>>,
 }
 
 /// One operation's progress, as its followers read it.
@@ -92,20 +93,20 @@ impl Operations {
     }
 
     /// A new token that acts as `caller` until [`Self::revoke`] revokes it.
-    fn issue(&self, caller: &Caller) -> String {
-        let token = Uuid::new_v4().to_string();
+    fn issue(&self, caller: &Caller) -> ScopeToken {
+        let token = ScopeToken::generate();
         let mut scopes = self.scopes.lock().unwrap_or_else(PoisonError::into_inner);
         scopes.insert(token.clone(), caller.clone());
         token
     }
 
-    fn revoke(&self, token: &str) {
+    fn revoke(&self, token: &ScopeToken) {
         let mut scopes = self.scopes.lock().unwrap_or_else(PoisonError::into_inner);
         scopes.remove(token);
     }
 
     /// The caller a worker's `token` acts as, while the worker runs.
-    pub(crate) fn caller(&self, token: &str) -> Option<Caller> {
+    pub(crate) fn caller(&self, token: &ScopeToken) -> Option<Caller> {
         let scopes = self.scopes.lock().unwrap_or_else(PoisonError::into_inner);
         scopes.get(token).cloned()
     }
@@ -207,7 +208,7 @@ impl Manager {
             id: id.clone(),
             spec,
         };
-        let mut worker = match worker::spawn(&self.paths, &order, env, token.as_deref()) {
+        let mut worker = match worker::spawn(&self.paths, &order, env, token.as_ref()) {
             Ok(worker) => worker,
             Err(error) => {
                 if let Some(token) = &token {

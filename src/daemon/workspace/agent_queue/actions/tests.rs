@@ -307,7 +307,7 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
         entry: "two".into(),
     };
     assert!(
-        crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
             .await
             .is_err()
     );

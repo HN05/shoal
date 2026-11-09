@@ -66,3 +66,6 @@ impl rusqlite::types::FromSql for ScopeToken {
         String::column_result(value).map(Self)
     }
 }
+
+#[cfg(test)]
+mod tests;

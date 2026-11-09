@@ -44,7 +44,7 @@ pub struct Execution {
 pub struct ExecutionPlan {
     pub id: ExecutionId,
     pub workspace: Workspace,
-    pub scope_token: String,
+    pub scope_token: crate::scope_tokens::ScopeToken,
     /// Absolute setup command path when the execution runs configured setup.
     pub setup_cmd: Option<PathBuf>,
     /// Copy the main checkout's ignored files before the setup command.

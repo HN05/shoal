@@ -309,7 +309,7 @@ pub async fn environment(
 pub async fn revoke_environment(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    token: String,
+    token: crate::scope_tokens::ScopeToken,
 ) -> Result<()> {
     request(
         daemon,

@@ -5,6 +5,7 @@
 mod agents;
 mod snapshot;
 
+use crate::client::scope_tokens::ScopeToken;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -33,7 +34,7 @@ const SETTLE: Duration = Duration::from_millis(200);
 pub(super) struct Subscriber {
     pub manager: Arc<Manager>,
     pub caller: Option<Caller>,
-    pub scope: Option<String>,
+    pub scope: Option<ScopeToken>,
 }
 
 impl Subscriber {

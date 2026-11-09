@@ -1252,7 +1252,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             .begin_execution(&workspace.id, None, kind, None)
             .await
             .unwrap();
-        let token = started.plan.scope_token.as_str();
+        let token = &started.plan.scope_token;
         let caller = f.manager.caller(token).await.unwrap().unwrap();
         assert_eq!(caller.kind(), Some(kind));
         assert_eq!(caller.execution_id(), Some(&started.plan.id));
@@ -2262,7 +2262,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         )
         .await;
     assert!(
-        scope::authorize(&f.manager, Some("adoption-test"), &mut method)
+        scope::authorize(&f.manager, Some(&"adoption-test".into()), &mut method)
             .await
             .is_err()
     );

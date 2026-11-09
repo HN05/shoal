@@ -93,7 +93,7 @@ async fn a_scoped_app_reaches_only_its_workspace_tree() {
         panic!("expected an approval request");
     };
     assert_eq!(request.target, Target::Hold("review".into()));
-    let unknown = daemon.connector().scope("unknown");
+    let unknown = daemon.connector().scope("unknown".into());
     assert_eq!(code(inspect(&unknown, "own").await), ErrorCode::ScopeDenied);
 }
 

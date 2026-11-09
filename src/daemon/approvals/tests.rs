@@ -384,9 +384,10 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
             space: SpaceSelector::parse(target),
             number: shown.number,
         };
-        let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
-            .await
-            .is_ok();
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
+                .await
+                .is_ok();
         assert_eq!(authorized, allowed);
     }
 }

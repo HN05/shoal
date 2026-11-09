@@ -1,4 +1,5 @@
 //! The daemon's answers to [`SubscriptionMethod`] requests, and who may send them.
+use crate::client::scope_tokens::ScopeToken;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -16,13 +17,13 @@ pub(super) fn handle(
     manager: &Arc<Manager>,
     method: SubscriptionMethod,
     caller: Option<&Caller>,
-    scope: Option<&str>,
+    scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     let SubscriptionMethod::Subscribe { topics, log } = method;
     let subscriber = subscriptions::Subscriber {
         manager: manager.clone(),
         caller: caller.cloned(),
-        scope: scope.map(str::to_owned),
+        scope: scope.cloned(),
     };
     Ok(Answer::connection(move |stream, request_id, guard| {
         subscriber.run(stream, request_id, topics, log, guard)

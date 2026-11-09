@@ -102,7 +102,7 @@ pub(super) async fn handle(
         }),
         ChatMethod::ChatScope { chat } => {
             let id = manager.chat(&chat).await?.id;
-            Body::ScopeToken(crate::protocol::ScopeToken {
+            Body::ScopeToken(crate::protocol::ChatScope {
                 token: manager.chat_scope(&id).await?,
             })
         }

@@ -9,6 +9,7 @@
 //! closures, which cannot await another lock, or through [`Connections`],
 //! which already holds the first.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -76,7 +77,7 @@ pub(crate) struct Executions {
     closed: AtomicBool,
     shutting_down: AtomicBool,
     /// Scope token → the execution it was issued to.
-    scopes: Mutex<HashMap<String, Caller>>,
+    scopes: Mutex<HashMap<ScopeToken, Caller>>,
 }
 
 impl Executions {
@@ -224,12 +225,12 @@ impl Executions {
     }
 
     /// Bind a scope token to the execution it was issued to.
-    pub(crate) async fn issue_scope(&self, token: String, caller: Caller) {
+    pub(crate) async fn issue_scope(&self, token: ScopeToken, caller: Caller) {
         self.scopes.lock().await.insert(token, caller);
     }
 
     /// The execution a scope token was issued to, while it is connected.
-    pub(crate) async fn scope(&self, token: &str) -> Option<Caller> {
+    pub(crate) async fn scope(&self, token: &ScopeToken) -> Option<Caller> {
         self.scopes.lock().await.get(token).cloned()
     }
 
@@ -243,7 +244,7 @@ impl Executions {
 
     /// The scope tokens issued, for tests that pause registration.
     #[cfg(test)]
-    pub(crate) async fn scopes(&self) -> MutexGuard<'_, HashMap<String, Caller>> {
+    pub(crate) async fn scopes(&self) -> MutexGuard<'_, HashMap<ScopeToken, Caller>> {
         self.scopes.lock().await
     }
 
@@ -289,7 +290,7 @@ impl Connections<'_> {
         id: &ExecutionId,
         kind: ExecutionKind,
         workspace_id: &SpaceId,
-        scope_token: String,
+        scope_token: ScopeToken,
         agent_execution: Option<ExecutionId>,
         stopped: bool,
     ) -> watch::Receiver<bool> {

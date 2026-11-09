@@ -92,7 +92,7 @@ pub enum WorkCommand {
         workspace: Option<SpaceSelector>,
         /// Revoke a previously exported scope token.
         #[arg(long)]
-        revoke: Option<String>,
+        revoke: Option<crate::client::scope_tokens::ScopeToken>,
     },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {

@@ -501,7 +501,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             },
         ] {
             assert_eq!(
-                scope::authorize(&manager, Some("scope"), &mut method)
+                scope::authorize(&manager, Some(&"scope".into()), &mut method)
                     .await
                     .is_ok(),
                 allowed
@@ -509,7 +509,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         }
     }
     let mut listing = QuestionMethod::ListQuestions { space: None };
-    scope::authorize(&manager, Some("scope"), &mut listing)
+    scope::authorize(&manager, Some(&"scope".into()), &mut listing)
         .await
         .unwrap();
     assert!(matches!(
@@ -525,7 +525,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         QuestionMethod::ShowQuestion { number: item(1, 1) },
     ] {
         assert!(
-            scope::authorize(&manager, Some("scope"), &mut method)
+            scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
                 .is_err()
         );

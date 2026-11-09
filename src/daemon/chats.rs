@@ -7,12 +7,12 @@
 //! or Shoal saves it, the chat is stopped until it is restored, and it lasts
 //! until it is removed.
 use crate::client::repository_ids::RepositoryId;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use std::{path::Path, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
-use uuid::Uuid;
 
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
@@ -604,7 +604,7 @@ impl Manager {
     }
 
     /// The scope token the agent of the chat `id` carries.
-    pub(crate) async fn chat_scope(&self, id: &SpaceId) -> Result<String> {
+    pub(crate) async fn chat_scope(&self, id: &SpaceId) -> Result<ScopeToken> {
         let id = id.to_owned();
         let token = self.store.run(move |db| scope_token(db, &id)).await?;
         token.context("no such chat")
@@ -675,7 +675,7 @@ fn insert(
                 .transpose()?,
             hands_over,
             unique_id(process)?,
-            Uuid::new_v4().to_string(),
+            ScopeToken::generate(),
             workspace,
             chat.mode,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
@@ -697,7 +697,7 @@ fn insert(
 }
 
 /// The scope token of the chat `id`, which its agent carries.
-pub(crate) fn scope_token(db: &Connection, id: &SpaceId) -> Result<Option<String>> {
+pub(crate) fn scope_token(db: &Connection, id: &SpaceId) -> Result<Option<ScopeToken>> {
     Ok(db
         .query_row("SELECT scope_token FROM chats WHERE id=?1", [id], |row| {
             row.get(0)

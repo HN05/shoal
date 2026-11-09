@@ -1,5 +1,6 @@
 //! A daemon serving the protocol on the socket of a temporary state
 //! directory, for tests that connect to it the way the CLI and apps do.
+use crate::client::scope_tokens::ScopeToken;
 use std::{sync::Arc, time::Duration};
 
 use tokio::{
@@ -78,13 +79,13 @@ impl TestDaemon {
         self.connector().scope(self.scope_token(workspace).await)
     }
 
-    pub async fn scope_token(&self, workspace: &Workspace) -> String {
+    pub async fn scope_token(&self, workspace: &Workspace) -> ScopeToken {
         let environment = self
             .manager
             .workspace_environment(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap();
-        environment[crate::env::SCOPE_TOKEN].clone()
+        environment[crate::env::SCOPE_TOKEN].clone().into()
     }
 
     pub async fn workspace(&self, name: &str) -> Workspace {

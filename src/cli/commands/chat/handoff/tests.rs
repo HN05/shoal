@@ -4,8 +4,8 @@ use super::*;
 async fn the_starter_takes_the_places_report() {
     // Two starts at once hand over their tokens apart and take their own
     // reports.
-    let started = Handoff::create(Some("first")).unwrap();
-    let failed = Handoff::create(Some("second")).unwrap();
+    let started = Handoff::create(Some(&"first".into())).unwrap();
+    let failed = Handoff::create(Some(&"second".into())).unwrap();
     assert_ne!(started.path(), failed.path());
     for (handoff, token) in [(&started, "first"), (&failed, "second")] {
         let handed = std::fs::read_to_string(handoff.path().join(SCOPE)).unwrap();
@@ -21,7 +21,7 @@ async fn the_starter_takes_the_places_report() {
 #[test]
 fn the_handoff_is_private_and_goes_with_its_starter() {
     use std::os::unix::fs::PermissionsExt as _;
-    let handoff = Handoff::create(Some("token")).unwrap();
+    let handoff = Handoff::create(Some(&"token".into())).unwrap();
     let mode = std::fs::metadata(handoff.path())
         .unwrap()
         .permissions()
@@ -42,8 +42,8 @@ async fn an_unscoped_starter_hands_over_no_token_but_takes_the_report() {
 
 #[test]
 fn a_place_takes_a_scoped_token_once_and_refuses_a_handoff_its_starter_left() {
-    let scoped = Handoff::create(Some("token")).unwrap();
-    assert_eq!(take_scope(scoped.path()).unwrap().as_deref(), Some("token"));
+    let scoped = Handoff::create(Some(&"token".into())).unwrap();
+    assert_eq!(take_scope(scoped.path()).unwrap(), Some("token".into()));
     // A starter that stopped waiting removed its handoff, which never
     // starts the chat unscoped instead.
     let path = scoped.path().to_owned();

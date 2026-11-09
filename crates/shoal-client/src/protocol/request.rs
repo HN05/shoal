@@ -14,7 +14,7 @@ pub struct Request {
     pub id: u64,
     pub method: Method,
     #[serde(default)]
-    pub scope: Option<String>,
+    pub scope: Option<crate::scope_tokens::ScopeToken>,
 }
 
 impl Request {

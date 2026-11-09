@@ -227,7 +227,8 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         (&sibling.name, false),
     ] {
         let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut split(target)).await;
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut split(target))
+                .await;
         assert_eq!(authorized.is_ok(), allowed, "{target}");
     }
     let grandchild = manager
@@ -244,7 +245,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         done: Default::default(),
         sender_chat: None,
     };
-    crate::daemon::scope::authorize(&manager, Some("scope"), &mut done)
+    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut done)
         .await
         .unwrap();
     // Targets resolve to the named workspace, not the caller's own.
@@ -298,12 +299,13 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     ] {
         for mut method in [check(target), remove(target)] {
             let authorized =
-                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+                crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
         }
     }
     let mut own = remove(&parent.name);
-    let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut own).await;
+    let authorized =
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut own).await;
     assert!(authorized.is_err());
 
     // Removal would release the user's holds.
@@ -319,7 +321,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     // The check refuses too, so a batch refuses before removing any.
     for mut method in [check(&child.name), remove(&child.name)] {
         let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
         assert!(authorized.is_err(), "{method:?}");
     }
     // Removing it would release the holds of the workspaces below it too.
@@ -350,7 +352,8 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .await
         .unwrap();
     let mut method = remove(&child.name);
-    let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+    let authorized =
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
     assert!(authorized.is_err());
     manager
         .acquire_hold(
@@ -459,15 +462,17 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     ] {
         for mut method in [stop(target, false), restore(target, "ours")] {
             let authorized =
-                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+                crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
         }
         let mut users = restore(target, "users");
-        let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut users).await;
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut users).await;
         assert!(authorized.is_err(), "{target}");
         // Only the user starts a restore regardless of the limits.
         let mut now = restore_now(target, "ours", true);
-        let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut now).await;
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut now).await;
         assert!(authorized.is_err(), "{target}");
     }
     // The child resumes what it stopped, but not what its parent stopped.
@@ -482,19 +487,19 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         )
         .await;
     let mut method = restore(&grandchild.name, "ours");
-    crate::daemon::scope::authorize(&manager, Some("child"), &mut method)
+    crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut method)
         .await
         .unwrap();
     let mut method = restore(&child.name, "ours");
     assert!(
-        crate::daemon::scope::authorize(&manager, Some("child"), &mut method)
+        crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut method)
             .await
             .is_err()
     );
     // Only the user can tell that an execution Shoal cannot prove ended did.
     let mut acknowledged = stop(&child.name, true);
     let authorized =
-        crate::daemon::scope::authorize(&manager, Some("scope"), &mut acknowledged).await;
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut acknowledged).await;
     assert!(authorized.is_err());
 }
 
@@ -981,7 +986,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         ];
         for mut method in methods {
             let authorized =
-                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+                crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{} {method:?}", workspace.name);
         }
     }
@@ -992,7 +997,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
             shown: None,
         };
         let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut answer).await;
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut answer).await;
         assert_eq!(authorized.is_ok(), allowed, "{}", question.ask.question);
     }
 }
@@ -1170,7 +1175,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         answer: "Yes".into(),
         shown: None,
     };
-    crate::daemon::scope::authorize(&manager, Some("scope"), &mut answer)
+    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut answer)
         .await
         .unwrap();
     let QuestionMethod::AnswerQuestion {
@@ -1386,7 +1391,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         manager
             .executions
             .issue_scope(
-                format!("scope-{}", workspace.name),
+                format!("scope-{}", workspace.name).into(),
                 Caller {
                     space_id: workspace.id.clone(),
                     execution: None,
@@ -1404,7 +1409,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         };
         let authorized = crate::daemon::scope::authorize(
             &manager,
-            Some(&format!("scope-{}", workspace.name)),
+            Some(&format!("scope-{}", workspace.name).into()),
             &mut decide,
         )
         .await;
@@ -2178,7 +2183,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             env: None,
         };
         if !displayed {
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
                 .unwrap();
         }
@@ -2203,7 +2208,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         assert_ne!(replacement.key, shown.key);
         manager.notify_approval(&child.name, &replacement).await;
         if displayed {
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
                 .unwrap();
         }
@@ -2309,7 +2314,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             };
             let mut method = read();
             let caller =
-                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+                crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(caller.is_ok(), allowed);
             if !allowed {
                 continue;
@@ -2403,7 +2408,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         manager
             .executions
             .issue_scope(
-                workspace.name.to_string(),
+                workspace.name.to_string().into(),
                 Caller {
                     space_id: workspace.id.clone(),
                     execution: None,
@@ -2416,7 +2421,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         name: "review".into(),
         reason: None,
     });
-    crate::daemon::scope::authorize(&manager, Some("child"), &mut acquire)
+    crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut acquire)
         .await
         .unwrap();
     let unexplained = manager

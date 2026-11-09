@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope, test_support},
@@ -26,8 +27,9 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
         .workspace_environment(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    let token = &first[env::SCOPE_TOKEN];
-    assert_ne!(token, &second[env::SCOPE_TOKEN]);
+    let token = &ScopeToken::from(first[env::SCOPE_TOKEN].clone());
+    let second = ScopeToken::from(second[env::SCOPE_TOKEN].clone());
+    assert_ne!(token, &second);
     assert!(
         manager
             .inspect_workspace(&SpaceSelector::id(&workspace.id))
@@ -70,13 +72,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
         .await
         .unwrap();
     assert!(restored.caller(token).await.unwrap().is_none());
-    assert!(
-        restored
-            .caller(&second[env::SCOPE_TOKEN])
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(restored.caller(&second).await.unwrap().is_some());
     let id = workspace.id.clone();
     restored
         .store
@@ -86,13 +82,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
         })
         .await
         .unwrap();
-    assert!(
-        restored
-            .caller(&second[env::SCOPE_TOKEN])
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(restored.caller(&second).await.unwrap().is_none());
 }
 
 #[tokio::test]

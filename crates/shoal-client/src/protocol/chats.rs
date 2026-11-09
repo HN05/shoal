@@ -132,8 +132,8 @@ pub enum ChatMethod {
 
 /// The scope token a chat's agent carries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScopeToken {
-    pub token: String,
+pub struct ChatScope {
+    pub token: crate::scope_tokens::ScopeToken,
 }
 
 impl ChatMethod {

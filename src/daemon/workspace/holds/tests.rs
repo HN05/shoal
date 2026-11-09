@@ -79,7 +79,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         };
         for method in [&mut list, &mut release, &mut acquire] {
             assert_eq!(
-                scope::authorize(&manager, Some("scope"), method)
+                scope::authorize(&manager, Some(&"scope".into()), method)
                     .await
                     .is_ok(),
                 own
@@ -283,7 +283,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         name: "review".into(),
         reason: Some("Waiting for the parent's merge".into()),
     };
-    scope::authorize(&manager, Some("parent"), &mut acquire)
+    scope::authorize(&manager, Some(&"parent".into()), &mut acquire)
         .await
         .unwrap();
     manager
@@ -300,7 +300,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         workspace: SpaceSelector::parse(&child.name),
         unsaved: Default::default(),
     };
-    scope::authorize(&manager, Some("parent"), &mut remove)
+    scope::authorize(&manager, Some(&"parent".into()), &mut remove)
         .await
         .unwrap();
     // The child's own agent may release it, but not the user's.
@@ -318,7 +318,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             workspace: SpaceSelector::parse(&child.name),
             name: name.into(),
         };
-        scope::authorize(&manager, Some("child"), &mut release)
+        scope::authorize(&manager, Some(&"child".into()), &mut release)
             .await
             .unwrap();
     }
@@ -346,7 +346,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         ["editor"]
     );
     // The user's hold refuses the parent's agent removing the child.
-    scope::authorize(&manager, Some("parent"), &mut remove)
+    scope::authorize(&manager, Some(&"parent".into()), &mut remove)
         .await
         .unwrap_err();
 }

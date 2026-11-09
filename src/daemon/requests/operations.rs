@@ -1,4 +1,5 @@
 //! The daemon's answers to [`OperationMethod`] requests, and who may send them.
+use crate::client::scope_tokens::ScopeToken;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -23,7 +24,7 @@ pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: OperationMethod,
     caller: Option<&Caller>,
-    scope: Option<&str>,
+    scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         OperationMethod::StartOperation { spec, env } => Body::OperationStarted(Started {
@@ -33,7 +34,7 @@ pub(super) async fn handle(
             let entry = manager.operation(&id, caller).await?;
             let follower = Follower {
                 manager: manager.clone(),
-                scope: scope.map(str::to_owned),
+                scope: scope.cloned(),
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {
                 follower.follow(stream, request_id, entry, after, guard)
@@ -161,7 +162,7 @@ impl Scoped for OperationMethod {
 /// valid for as long as it follows.
 struct Follower {
     manager: Arc<Manager>,
-    scope: Option<String>,
+    scope: Option<ScopeToken>,
 }
 
 impl Follower {

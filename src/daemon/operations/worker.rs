@@ -2,6 +2,7 @@
 //! from the daemon as queued agents are, reading its order on standard
 //! input, with what it and its processes write relayed as the operation's
 //! output.
+use crate::client::scope_tokens::ScopeToken;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use futures_util::future::BoxFuture;
@@ -46,7 +47,7 @@ pub(super) fn spawn(
     paths: &Paths,
     order: &Order,
     env: Option<BTreeMap<String, String>>,
-    token: Option<&str>,
+    token: Option<&ScopeToken>,
 ) -> anyhow::Result<Worker> {
     use anyhow::Context as _;
     use std::process::Stdio;
@@ -69,7 +70,7 @@ pub(super) fn spawn(
     // count it, or that execution's end would stop it as a survivor.
     command.env_remove(crate::env::EXECUTION_ID);
     match token {
-        Some(token) => command.env(crate::env::SCOPE_TOKEN, token),
+        Some(token) => command.env(crate::env::SCOPE_TOKEN, token.expose()),
         None => command.env_remove(crate::env::SCOPE_TOKEN),
     };
     // SAFETY: setsid detaches the forked child without allocating, before exec.
@@ -123,7 +124,7 @@ pub(super) fn spawn(
     _paths: &Paths,
     order: &Order,
     _env: Option<BTreeMap<String, String>>,
-    token: Option<&str>,
+    token: Option<&ScopeToken>,
 ) -> anyhow::Result<Worker> {
     Ok(fake::start(order, token))
 }

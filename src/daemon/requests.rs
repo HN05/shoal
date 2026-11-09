@@ -24,6 +24,7 @@ mod secrets;
 mod simulators;
 mod subscriptions;
 pub(super) mod workspaces;
+use crate::client::scope_tokens::ScopeToken;
 use anyhow::Result;
 
 use super::{Server, answer::Answer, scope::Caller};
@@ -35,7 +36,7 @@ pub(super) async fn operation(
     server: &Server,
     operation: Operation,
     caller: Option<&Caller>,
-    scope: Option<&str>,
+    scope: Option<&ScopeToken>,
 ) -> Answer {
     handle(server, operation, caller, scope)
         .await
@@ -47,7 +48,7 @@ pub(super) async fn handle(
     server: &Server,
     operation: Operation,
     caller: Option<&Caller>,
-    scope: Option<&str>,
+    scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     match operation {
         Operation::Daemon(method) => daemon::handle(server, method).await,

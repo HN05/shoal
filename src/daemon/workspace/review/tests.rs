@@ -406,7 +406,7 @@ async fn scoped_callers_mark_only_their_own_workspace() {
             },
         ] {
             assert_eq!(
-                scope::authorize(&manager, Some("scope"), &mut method)
+                scope::authorize(&manager, Some(&"scope".into()), &mut method)
                     .await
                     .is_ok(),
                 allowed

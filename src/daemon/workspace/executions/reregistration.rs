@@ -2,6 +2,7 @@
 //! installed binary: it gets a new plan and records what its registration
 //! records.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
@@ -19,7 +20,7 @@ use crate::{
 
 /// What a registration reads from the execution's record and workspace.
 struct Registration {
-    scope_token: String,
+    scope_token: ScopeToken,
     ports: Vec<PortReservation>,
     directories: ProcessDirectories,
 }
@@ -88,7 +89,7 @@ fn register_again(
         .query_row(
             "SELECT scope_token FROM executions WHERE id=?1",
             [id],
-            |row| row.get::<_, Option<String>>(0),
+            |row| row.get::<_, Option<ScopeToken>>(0),
         )
         .optional()?
         .flatten()

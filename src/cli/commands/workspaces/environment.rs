@@ -19,7 +19,7 @@ use crate::{
 pub(in crate::cli::commands) async fn environment(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
-    revoke: Option<String>,
+    revoke: Option<crate::client::scope_tokens::ScopeToken>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(token) = revoke {

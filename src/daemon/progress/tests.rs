@@ -225,7 +225,7 @@ async fn scoped_callers_set_only_their_own_progress_and_read_below() {
         .await
         .unwrap();
     let allowed = async |method: &mut AgentMethod| {
-        scope::authorize(&manager, Some("scope"), method)
+        scope::authorize(&manager, Some(&"scope".into()), method)
             .await
             .is_ok()
     };

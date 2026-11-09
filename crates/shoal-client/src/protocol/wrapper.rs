@@ -18,7 +18,7 @@ pub struct Reattach {
     pub wrapper: Identity,
     pub child: Option<Identity>,
     pub group_id: u32,
-    pub scope_token: String,
+    pub scope_token: crate::scope_tokens::ScopeToken,
     /// Transient agent metadata the daemon lost with its memory.
     #[serde(default)]
     pub agent: Option<String>,

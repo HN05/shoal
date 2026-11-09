@@ -1,5 +1,6 @@
 //! The daemon's answers to [`DaemonMethod`] and exit requests, and who may
 //! send them.
+use crate::client::scope_tokens::ScopeToken;
 use anyhow::Result;
 use tokio::net::UnixStream;
 
@@ -59,7 +60,7 @@ pub(in crate::daemon) async fn exit(
     mut stream: UnixStream,
     request_id: u64,
     server: &Server,
-    scope: Option<&str>,
+    scope: Option<&ScopeToken>,
     mut request: ExitRequest,
     guard: OperationGuard,
 ) -> Result<()> {

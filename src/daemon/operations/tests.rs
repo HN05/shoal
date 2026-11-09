@@ -1,4 +1,5 @@
 use crate::client::execution_ids::ExecutionId;
+use crate::client::scope_tokens::ScopeToken;
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
@@ -185,7 +186,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .workspace_environment(&SpaceSelector::id(&own.id))
         .await
         .unwrap();
-    let token = &environment[crate::env::SCOPE_TOKEN];
+    let token = &ScopeToken::from(environment[crate::env::SCOPE_TOKEN].clone());
     let caller = manager.caller(token).await.unwrap().unwrap();
     let id = manager
         .start_operation(setup(&own), None, Some(&caller))
@@ -222,7 +223,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .unwrap();
     let worker = fake::take(&from_execution);
     let acting = manager
-        .caller(worker.token.as_deref().unwrap())
+        .caller(worker.token.as_ref().unwrap())
         .await
         .unwrap()
         .unwrap();

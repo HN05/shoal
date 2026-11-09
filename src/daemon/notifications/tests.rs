@@ -162,7 +162,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
             },
         ] {
             assert_eq!(
-                scope::authorize(&manager, Some("scope"), &mut method)
+                scope::authorize(&manager, Some(&"scope".into()), &mut method)
                     .await
                     .is_ok(),
                 allowed
@@ -177,7 +177,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
         NotificationMethod::ClearNotifications,
     ] {
         assert!(
-            scope::authorize(&manager, Some("scope"), &mut method)
+            scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
                 .is_err()
         );
