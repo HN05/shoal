@@ -718,7 +718,7 @@ impl Backend for Bitbucket {
         format!("pipelines/{number}")
     }
 
-    fn run_web_path(&self, _number: u64) -> Option<String> {
+    fn run_route(&self) -> Option<&'static str> {
         None
     }
 

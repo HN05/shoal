@@ -4,11 +4,10 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, ISSUE_ROUTES, IssueInput, PULL_ROUTES,
+    ForgeRepo, IssueInput,
     backends::{Backend, ForgeKind},
-    ci::run_action::run_repository,
     hosts::HostTypes,
-    repo::locator::ItemRoute,
+    repo::locator::{ISSUE_URL, PULL_URL, item_path, locate},
 };
 
 crate::state::states!(ItemKind {
@@ -202,13 +201,15 @@ impl ForgeRepo {
 /// The repository URL of a `kind` item URL, and the forge whose items alone
 /// use its route.
 fn item_repository(kind: LinkKind, url: &str) -> Result<(&str, Option<ForgeKind>)> {
-    let routes = match kind {
-        LinkKind::Issue => ISSUE_ROUTES,
-        LinkKind::Pr => PULL_ROUTES,
-        LinkKind::Ci => return run_repository(url),
-    };
-    let (repository, route) = ItemRoute::discover(url, routes)?;
-    Ok((repository, route.forge()))
+    match kind {
+        LinkKind::Issue => {
+            locate(item_path(url), |forge| Some(forge.issue_route().marker())).context(ISSUE_URL)
+        }
+        LinkKind::Pr => {
+            locate(item_path(url), |forge| Some(forge.pull_route().marker())).context(PULL_URL)
+        }
+        LinkKind::Ci => locate(url, |forge| forge.run_route()).context("expected a CI run URL"),
+    }
 }
 
 pub struct Link {
@@ -230,11 +231,7 @@ impl Link {
             IssueInput::parse(input) == IssueInput::Url,
             "expected an issue, PR, CI run or branch URL"
         );
-        let url = input
-            .split(['?', '#'])
-            .next()
-            .unwrap()
-            .trim_end_matches('/');
+        let url = item_path(input);
         if let Ok(repository) = ForgeRepo::from_issue_url(url) {
             repository.issue(url)?;
             return Ok(Self {

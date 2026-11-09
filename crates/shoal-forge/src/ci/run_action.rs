@@ -7,19 +7,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
+    backends::Backend,
     capability::{self, Capability},
     ci::{CiAction, JobState, id},
     hosts::HostTypes,
+    items::link::LinkKind,
     transport::api::{HttpMethod, Request},
 };
-
-/// What precedes a run's number in its web URL, and the forge that alone
-/// uses it; GitHub, Forgejo and Gitea share theirs.
-const RUN_ROUTES: &[(&str, Option<ForgeKind>)] = &[
-    ("/-/pipelines/", Some(ForgeKind::GitLab)),
-    ("/actions/runs/", None),
-];
 
 /// A workflow run in the repository, as its forge reports it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,14 +62,13 @@ pub fn validate_run_reference(input: &str) -> Result<()> {
 impl ForgeRepo {
     /// The repository a run's web URL belongs to.
     pub fn from_run_url(url: &str) -> Result<Self> {
-        let (repository, forge) = run_repository(url)?;
-        Self::parse_linked(repository, forge)
+        Self::from_item_url(LinkKind::Ci, url)
     }
 
     /// The repository a run's web URL belongs to, on the forge `hosts` says
     /// its host serves.
     pub async fn resolve_run_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve(run_repository(url)?.0, hosts).await
+        Self::resolve_item_url(LinkKind::Ci, url, hosts).await
     }
 
     /// The number of the run `input`, its web URL or the number in it, names,
@@ -85,11 +78,11 @@ impl ForgeRepo {
         let number = id(input)
             .or_else(|| self.kind.locate_run(self, input))
             .with_context(|| format!("{input} is not a CI run of {}", self.repository_url()))?;
-        let path = self
+        let route = self
             .kind
-            .run_web_path(number)
+            .run_route()
             .ok_or_else(|| capability::unsupported(&self.kind, Capability::ReadRuns))?;
-        Ok((number, format!("{}/{path}", self.repository_url())))
+        Ok((number, format!("{}{route}{number}", self.repository_url())))
     }
 
     /// The run `input`, its web URL or the number in it, names, once the
@@ -161,15 +154,6 @@ impl ForgeRepo {
         self.send(account, &request).await?;
         Ok(())
     }
-}
-
-/// The repository URL of a run's web URL, and the forge whose runs alone use
-/// its route.
-pub(crate) fn run_repository(url: &str) -> Result<(&str, Option<ForgeKind>)> {
-    RUN_ROUTES
-        .iter()
-        .find_map(|&(marker, forge)| Some((url.rsplit_once(marker)?.0, forge)))
-        .context("expected a CI run URL")
 }
 
 #[cfg(test)]

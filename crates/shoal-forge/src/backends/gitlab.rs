@@ -816,8 +816,8 @@ impl Backend for GitLab {
         format!("pipelines/{number}")
     }
 
-    fn run_web_path(&self, number: u64) -> Option<String> {
-        Some(format!("-/pipelines/{number}"))
+    fn run_route(&self) -> Option<&'static str> {
+        Some("/-/pipelines/")
     }
 
     /// A tag's pipeline ran on no branch, and a branch has one pipeline,

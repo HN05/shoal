@@ -23,10 +23,8 @@ use serde::{Deserialize, Serialize};
 
 use backends::{Backend, ForgeKind};
 use hosts::{HostType, HostTypes};
-use repo::{
-    locator::ItemRoute,
-    remote_url::{RemoteUrl, Transport},
-};
+use items::link::LinkKind;
+use repo::remote_url::{RemoteUrl, Transport};
 
 /// Classify before resolving a repository; validate identity and number at lookup.
 /// In particular, zero and overflowing numbers still use number-based targeting.
@@ -196,14 +194,13 @@ impl ForgeRepo {
 
     /// The repository an issue URL belongs to.
     pub fn from_issue_url(url: &str) -> Result<Self> {
-        let (repository, route) = ItemRoute::discover(url, ISSUE_ROUTES)?;
-        Self::parse_linked(repository, route.forge())
+        Self::from_item_url(LinkKind::Issue, url)
     }
 
     /// The repository an issue URL belongs to, on the forge `hosts` says
     /// its host serves.
     pub async fn resolve_issue_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve(ItemRoute::discover(url, ISSUE_ROUTES)?.0, hosts).await
+        Self::resolve_item_url(LinkKind::Issue, url, hosts).await
     }
 
     /// The user, organization or workspace the repository belongs to.
@@ -258,14 +255,13 @@ pub struct PullRequest {
 impl ForgeRepo {
     /// The repository a PR URL belongs to.
     pub fn from_pull_url(url: &str) -> Result<Self> {
-        let (repository, route) = ItemRoute::discover(url, PULL_ROUTES)?;
-        Self::parse_linked(repository, route.forge())
+        Self::from_item_url(LinkKind::Pr, url)
     }
 
     /// The repository a PR URL belongs to, on the forge `hosts` says its
     /// host serves.
     pub async fn resolve_pull_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve(ItemRoute::discover(url, PULL_ROUTES)?.0, hosts).await
+        Self::resolve_item_url(LinkKind::Pr, url, hosts).await
     }
 
     /// The PR `input` names, with where its head is.
@@ -307,15 +303,6 @@ impl ForgeRepo {
         })
     }
 }
-
-const ISSUE_ROUTES: &[ItemRoute] = &[ItemRoute::GitLabIssue, ItemRoute::Issue];
-
-const PULL_ROUTES: &[ItemRoute] = &[
-    ItemRoute::Pull,
-    ItemRoute::Pulls,
-    ItemRoute::MergeRequest,
-    ItemRoute::PullRequests,
-];
 
 /// Whether `path` names a repository as `owner/name`, or below nested groups
 /// where the forge `nests` them.

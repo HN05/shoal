@@ -1,10 +1,11 @@
-//! Issue and PR locator syntax; callers select the route for their forge.
+//! Issue, PR and CI run locator syntax; callers select the route for their
+//! forge.
 use anyhow::{Context, Result, ensure};
 
 use crate::{ForgeRepo, IssueInput, backends::ForgeKind};
 
-const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
-const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
+pub(crate) const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
+pub(crate) const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
     /-/merge_requests/<number> or /pull-requests/<number>";
 
 #[derive(Clone, Copy)]
@@ -45,37 +46,13 @@ impl ItemRoute {
 
     /// Repository discovery deliberately leaves number validation to lookup.
     pub fn split_url(self, input: &str) -> Option<ItemUrl<'_>> {
-        let url = input
-            .split(['?', '#'])
-            .next()
-            .unwrap()
-            .trim_end_matches('/');
+        let url = item_path(input);
         let (repository, number) = url.rsplit_once(self.marker())?;
         Some(ItemUrl {
             repository,
             number,
             url,
         })
-    }
-
-    /// The forge whose items use this route alone; GitHub, Forgejo and
-    /// Bitbucket share issue URLs.
-    pub fn forge(self) -> Option<ForgeKind> {
-        match self {
-            Self::Issue => None,
-            Self::GitLabIssue | Self::MergeRequest => Some(ForgeKind::GitLab),
-            Self::Pull => Some(ForgeKind::GitHub),
-            Self::Pulls => Some(ForgeKind::Forgejo),
-            Self::PullRequests => Some(ForgeKind::Bitbucket),
-        }
-    }
-
-    /// The repository URL of an item URL, and the first of `routes` it uses.
-    pub fn discover<'a>(input: &'a str, routes: &[Self]) -> Result<(&'a str, Self)> {
-        routes
-            .iter()
-            .find_map(|&route| Some((route.split_url(input)?.repository, route)))
-            .with_context(|| routes[0].diagnostic(ISSUE_URL, PULL_URL))
     }
 
     fn url(self, input: &str) -> Result<ItemUrl<'_>> {
@@ -122,4 +99,41 @@ impl ItemRoute {
         );
         Ok((number, url))
     }
+}
+
+/// An item URL without its query, fragment or trailing slash.
+pub(crate) fn item_path(input: &str) -> &str {
+    input
+        .split(['?', '#'])
+        .next()
+        .unwrap()
+        .trim_end_matches('/')
+}
+
+/// The repository URL that `url` gives before one of the routes `route_of`
+/// gives each forge, and the forge that alone uses that route. Of the
+/// routes `url` has, the one that ends last is taken, and of those that end
+/// there the longest, as GitLab's `/-/issues/` over `/issues/`.
+pub(crate) fn locate(
+    url: &str,
+    route_of: impl Fn(ForgeKind) -> Option<&'static str>,
+) -> Option<(&str, Option<ForgeKind>)> {
+    let routes: Vec<_> = ForgeKind::ALL
+        .iter()
+        .filter_map(|&forge| Some((forge, route_of(forge)?)))
+        .collect();
+    let (repository, route) = routes
+        .iter()
+        .filter_map(|&(_, route)| Some((url.rsplit_once(route)?.0, route)))
+        .max_by_key(|(repository, route)| (repository.len() + route.len(), route.len()))?;
+    let users: Vec<_> = routes
+        .iter()
+        .filter(|(_, other)| *other == route)
+        .map(|&(forge, _)| forge)
+        .collect();
+    let forge = match users[..] {
+        [forge] => Some(forge),
+        _ => None,
+    };
+    Some((repository, forge))
 }

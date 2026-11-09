@@ -677,10 +677,10 @@ pub(crate) trait Backend {
     /// in its web URL.
     fn run_path(&self, number: u64) -> String;
 
-    /// The path under the repository's web URL that shows the run numbered
-    /// `number`, or `None` where Shoal reads no runs.
-    fn run_web_path(&self, number: u64) -> Option<String> {
-        Some(format!("actions/runs/{number}"))
+    /// What precedes a run's number in the forge's run web URLs, or `None`
+    /// where Shoal reads no runs.
+    fn run_route(&self) -> Option<&'static str> {
+        Some("/actions/runs/")
     }
 
     /// The run numbered `number` that a read of its path returned as `value`.
