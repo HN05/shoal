@@ -632,3 +632,39 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
     .unwrap();
     assert_eq!(stopper.as_deref(), Some("parent"));
 }
+
+#[test]
+fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let agent = crate::execution::TrackedAgent {
+        narrowing: crate::config::permissions::PermissionsConfig::assigned(
+            &["push=propose".into()],
+        )
+        .unwrap(),
+        ..crate::execution::TrackedAgent::named("claude")
+    };
+    save_record(&paths, "workspace", "stopped", &agent, Some("asked"), None).unwrap();
+    LastSession::save(&paths, "workspace", &agent, "last").unwrap();
+    let replacement =
+        crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
+            .unwrap();
+    Saved::load(&paths, "workspace")
+        .unwrap()
+        .replace_narrowing(replacement)
+        .unwrap();
+    let record = Record::load(&record_path(&paths, "workspace", "stopped"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (record.narrowing, record.stop_reason.as_deref()),
+        (replacement, Some("asked"))
+    );
+    let last = LastSession::all(&paths, "workspace").unwrap();
+    assert_eq!(
+        last.iter()
+            .map(|last| (last.execution.as_str(), last.narrowing))
+            .collect::<Vec<_>>(),
+        [("last", replacement)]
+    );
+}

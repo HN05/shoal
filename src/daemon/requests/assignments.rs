@@ -24,6 +24,16 @@ pub(super) async fn handle(
             workspace,
             execution,
         } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
+        AssignmentMethod::ReplaceStoppedNarrowing {
+            workspace,
+            execution,
+            narrowing,
+        } => {
+            manager
+                .replace_stopped_narrowing(&workspace, &execution, narrowing)
+                .await?;
+            Body::Ok
+        }
         AssignmentMethod::MarkReady { space, selection } => {
             // Only a workspace process's mark waits for a review.
             let gated = caller.is_some();
@@ -65,6 +75,11 @@ impl Scoped for AssignmentMethod {
                     )
                     .await?,
             ),
+            AssignmentMethod::ReplaceStoppedNarrowing {
+                workspace,
+                execution,
+                ..
+            } => Some(manager.stopped_below(caller, workspace, execution).await?),
         })
     }
 }

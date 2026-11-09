@@ -35,4 +35,12 @@ pub enum AssignmentMethod {
         workspace: SpaceSelector,
         execution: Option<ExecutionId>,
     },
+    /// Give the workspace's stopped agent or last session `execution`
+    /// `narrowing` in place of the one it recorded, which its restore runs
+    /// under.
+    ReplaceStoppedNarrowing {
+        workspace: SpaceSelector,
+        execution: String,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    },
 }

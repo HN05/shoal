@@ -1228,6 +1228,45 @@ impl Saved {
     pub fn restores_outside_wrappers(&self) -> bool {
         (self.agents.iter().chain(&self.sessions)).any(|(_, path)| !waits_in_wrapper(path))
     }
+
+    /// Give each saved agent and last session `narrowing` in place of the
+    /// one it recorded, which its restore runs under; one consumed since
+    /// it was listed has nothing to replace.
+    pub fn replace_narrowing(
+        &self,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    ) -> Result<()> {
+        for (_, path) in &self.agents {
+            if let Some(record) = Record::load(path)? {
+                rewrite(
+                    path,
+                    &Record {
+                        narrowing,
+                        ..record
+                    },
+                )?;
+            }
+        }
+        for (_, path) in &self.sessions {
+            if let Some(last) = LastSession::load(path)? {
+                rewrite(path, &LastSession { narrowing, ..last })?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Save `saved` again at `path`, where a stopped agent's file is.
+fn rewrite(path: &Path, saved: &impl Serialize) -> Result<()> {
+    crate::fsutil::replace_atomically(
+        path,
+        &serde_json::to_vec(saved)?,
+        ReplaceOptions {
+            permissions: Permissions::Temporary,
+            sync: true,
+        },
+    )?;
+    Ok(())
 }
 
 /// Whether a live wrapper waits to restore the agent saved at `path`.

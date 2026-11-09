@@ -104,3 +104,20 @@ pub async fn discard_stopped_work(
     };
     request(daemon, method).await
 }
+
+/// Give `workspace`'s stopped agent or last session `execution`
+/// `narrowing` in place of the one it recorded, which its restore runs
+/// under.
+pub async fn replace_stopped_narrowing(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    execution: String,
+    narrowing: crate::config::permissions::PermissionsConfig,
+) -> Result<()> {
+    let method = AssignmentMethod::ReplaceStoppedNarrowing {
+        workspace,
+        execution,
+        narrowing,
+    };
+    request(daemon, method).await
+}

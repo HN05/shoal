@@ -101,4 +101,33 @@ impl Manager {
             executions,
         })
     }
+
+    /// Give the stopped agent or last session `execution` of the workspace
+    /// `selector` names `narrowing` in place of the one it recorded, which
+    /// its restore runs under. An agent its waiting wrapper restores keeps
+    /// the narrowing that wrapper launched it with, so it is refused.
+    pub async fn replace_stopped_narrowing(
+        &self,
+        selector: &SpaceSelector,
+        execution: &str,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    ) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        let mut saved = Saved::load(&self.paths, &workspace.id)?;
+        saved.retain_execution(execution, false);
+        ensure!(
+            !(saved.agents.is_empty() && saved.sessions.is_empty()),
+            "{} has no stopped agent {execution}",
+            workspace.name
+        );
+        ensure!(
+            !saved
+                .agents
+                .iter()
+                .any(|(_, path)| recovery::waits_in_wrapper(path)),
+            "the agent of {} restores in the wrapper that waits for it, which keeps its narrowing; resume it without --permission",
+            workspace.name
+        );
+        saved.replace_narrowing(narrowing)
+    }
 }
