@@ -24,6 +24,10 @@ use crate::{
     time::UnixTime,
 };
 
+/// Whether a poll has nothing left to read of the item at a URL, once the
+/// space's assignment is or is not done.
+pub(super) type ActivityEnded = fn(&rusqlite::Connection, &SpaceId, &str, bool) -> Result<bool>;
+
 pub(super) const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
 /// How many of one space's items a poll reads at once: each read runs curl
@@ -62,7 +66,7 @@ impl Manager {
         }
         drop(guard);
         let observed_at = UnixTime::now();
-        let items = self.items_to_look_up(&space, items).await?;
+        let items = self.items_to_look_up(&space, items, activity_ended).await?;
         let items = self.item_activity(items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
@@ -124,20 +128,22 @@ impl Manager {
         Some((branch, branch_conflicts(check.transpose()?, report)))
     }
 
-    /// The `items` whose activity is still to come: a merged PR has none,
-    /// and once the space's assignment is done neither has an item seen
-    /// closed, so a forge that cannot be reached fails no poll for them.
+    /// The `items` whose activity is still to come, unless `ended` says it
+    /// ended: a merged PR has none, and once the space's assignment is done
+    /// neither has an item seen closed, so a forge that cannot be reached
+    /// fails no poll for them.
     pub(super) async fn items_to_look_up(
         &self,
         space: &LinkSpace,
         items: Vec<(String, LinkKind)>,
+        ended: ActivityEnded,
     ) -> Result<Vec<(String, LinkKind)>> {
         let (id, done) = (space.id().to_owned(), space.done());
         self.store
             .run(move |db| {
                 let mut open = Vec::new();
                 for (url, kind) in items {
-                    if !activity_ended(db, &id, &url, done)? {
+                    if !ended(db, &id, &url, done)? {
                         open.push((url, kind));
                     }
                 }

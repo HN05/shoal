@@ -384,6 +384,27 @@ pub(super) fn save_observed_item(
     Ok(())
 }
 
+/// Whether the background poll has nothing left to read of the item: its
+/// watch saw the item's activity end and, for a related PR, which the poll
+/// reads until its own baseline holds the end, that baseline saw it too.
+pub(super) fn polled_activity_ended(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+    done: bool,
+) -> Result<bool> {
+    if !activity_ended(db, id, url, done)? {
+        return Ok(false);
+    }
+    if !concluding_prs(db, id)?
+        .iter()
+        .any(|concluding| concluding == url)
+    {
+        return Ok(true);
+    }
+    Ok(observed_item(db, id, url)?.is_some_and(|snapshot| snapshot.concluded()))
+}
+
 /// Whether the workspace's watch saw the item's activity end, as
 /// [`Snapshot::activity_ended`] decides.
 pub(super) fn activity_ended(

@@ -6,7 +6,9 @@ use futures_util::{StreamExt, stream};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    items::{concluding_prs, observed_item, polled_items, save_observed_item},
+    items::{
+        concluding_prs, observed_item, polled_activity_ended, polled_items, save_observed_item,
+    },
 };
 use crate::{
     client::space_ids::SpaceId,
@@ -78,7 +80,7 @@ impl Manager {
             return Ok(());
         }
         let observed_at = UnixTime::now();
-        let items = self.items_to_look_up(space, items).await?;
+        let items = (self.items_to_look_up(space, items, polled_activity_ended)).await?;
         let activity = self.item_activity(items, &Selection::default()).await;
         let mut observations = Vec::new();
         observations.extend(self.background_branch_observation(space, report).await);

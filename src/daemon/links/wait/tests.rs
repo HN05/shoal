@@ -3096,3 +3096,68 @@ async fn only_an_assigned_pr_leaves_branch_conflicts_to_the_forge() {
     register_watch(&manager, &id, "own").await;
     assert_eq!(report().await.unwrap(), BranchReport::ChangedOnBothSides);
 }
+
+#[tokio::test]
+async fn the_background_poll_reads_a_related_pr_until_its_baseline_holds_the_merge() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "baseline".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let pr = crate::model::LinkedItem {
+        kind: LinkKind::Pr,
+        url: "pr".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, pr)])
+        .await
+        .unwrap();
+    let state = || {
+        let id = id.clone();
+        manager.store.run(move |db| {
+            Ok((
+                super::items::polled_activity_ended(db, &id, "pr", false)?,
+                watches_open_pr(db, &id)?,
+            ))
+        })
+    };
+    let observed = |state: &str| vec![("pr".to_owned(), pr_snapshot("review", state))];
+    (manager
+        .record_background_activity(&id, observed("open"))
+        .await)
+        .unwrap();
+    // An open related PR keeps an idle agent's machine awake.
+    assert_eq!(state().await.unwrap(), (false, true));
+
+    // A watch sees the merge and delivers it first.
+    let delivered = manager
+        .record_activity(&id, observed("merged"), &Selection::default())
+        .await
+        .unwrap();
+    let deliveries = delivered
+        .iter()
+        .map(|update| update.delivery.clone())
+        .collect();
+    let selector = SpaceSelector::id(&id);
+    (manager.acknowledge_pr_updates(&selector, deliveries).await).unwrap();
+    assert_eq!(state().await.unwrap(), (false, true));
+
+    // The background poll still reads it, and records the merge.
+    (manager
+        .record_background_activity(&id, observed("merged"))
+        .await)
+        .unwrap();
+    assert_eq!(state().await.unwrap(), (true, false));
+    let events = manager.workspace_events(None, 100).await.unwrap();
+    assert!(events.iter().any(|item| matches!(item,
+        crate::daemon::events::EventItem::Event(event)
+            if event.details.item_activity.as_deref().is_some_and(|activity|
+                activity.update.kind == UpdateKind::Merged))));
+}
