@@ -1,7 +1,7 @@
 //! A local HTTP proxy between an AI agent and its API upstream, such as
 //! CLIProxyAPI or a provider's own API. It forwards each request with the
-//! agent's own credentials. It depends on no other Shoal code: Shoal runs one
-//! per agent and decides what its reports mean.
+//! agent's own credentials. It depends on no Shoal crate but `shoal-time`:
+//! Shoal runs one per agent and decides what its reports mean.
 mod clock;
 mod forward;
 mod request;
