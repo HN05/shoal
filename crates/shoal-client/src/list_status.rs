@@ -35,8 +35,9 @@ pub enum ListStatus {
 }
 
 impl ListStatus {
-    /// The workspace's state unless ready, then stopped work, an agent
-    /// that needs input, a recorded completion, a current ready mark, the agent's other turn
+    /// The workspace's state unless ready, then a recorded completion when
+    /// its work is stopped, stopped work, an agent that needs input, a
+    /// recorded completion, a current ready mark, the agent's other turn
     /// states, an agent or command running without one, the coordinator
     /// that does its work working, an outdated mark, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
@@ -50,6 +51,7 @@ impl ListStatus {
             WorkspaceState::Restoring => Self::Restoring,
             WorkspaceState::Updating => Self::Updating,
             WorkspaceState::Failed => Self::Failed,
+            WorkspaceState::Ready if stopped && workspace.done => Self::Finished,
             WorkspaceState::Ready if stopped => Self::Stopped,
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
             WorkspaceState::Ready if workspace.done => Self::Finished,
@@ -66,13 +68,15 @@ impl ListStatus {
         }
     }
 
-    /// A chat is stopped until it is restored; a running one needs input
+    /// A chat is stopped until it is restored, or finished when it recorded
+    /// completion; a running one needs input
     /// while its agent does, is finished once it records completion, ready
     /// once it marks its work ready, or else shows its agent's other turn
     /// states, or that it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
         match chat.restore {
+            Some(_) if chat.completion.is_some() => Self::Finished,
             Some(_) => Self::Stopped,
             None if agent == Some(AgentState::Waiting) => Self::NeedsInput,
             None if chat.completion.is_some() => Self::Finished,

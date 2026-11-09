@@ -2110,8 +2110,9 @@ and `waiting`, since an idle agent waits for the user or for activity that wakes
 it; a ready workspace whose agent or command reports no state, or a running
 chat whose agent reports none yet, is `process running`,
 one where nothing runs `inactive`, a current ready mark `ready`, and a recorded
-completion `finished`, which only stopped work and an agent needing input
-outrank. A row's marker groups statuses by what they ask of the user, in a
+completion `finished`, which only an agent needing input outranks. A done
+space with stopped work is `finished` too: its stopped agent has nothing left
+to do, and `stopped` would ask the user to resume it. A row's marker groups statuses by what they ask of the user, in a
 shape that reads without color. Like
 ready marks it is a status signal for integrations that never notifies,
 completes, or affects idle cleanup, though a failed report from a workspace
