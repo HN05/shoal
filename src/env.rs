@@ -1,7 +1,7 @@
 //! The environment Shoal gives the processes it starts, and what it reads of
 //! its own; [`crate::client::env`] names every variable.
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use anyhow::{Context, Result, bail};
 use std::{
     collections::BTreeMap,
@@ -431,7 +431,7 @@ pub fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
     }
 }
 
-static LAUNCH_QUEUE_ENTRY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static LAUNCH_QUEUE_ENTRY: std::sync::OnceLock<QueueEntryId> = std::sync::OnceLock::new();
 
 /// Keep the queue entry a launching process passed down, and drop it from the
 /// environment so the agent's own children do not inherit it.
@@ -443,7 +443,7 @@ pub(crate) unsafe fn take_queue_entry() {
         .ok()
         .filter(|entry| !entry.is_empty())
     {
-        let _ = LAUNCH_QUEUE_ENTRY.set(entry);
+        let _ = LAUNCH_QUEUE_ENTRY.set(entry.into());
     }
     // SAFETY: the caller guarantees no other thread reads the environment.
     unsafe { std::env::remove_var(QUEUE_ENTRY) };
@@ -500,13 +500,13 @@ pub(crate) fn session_exit_code(code: i32) -> i32 {
 }
 
 /// Record the queue entry whose slot the agent this process launches takes.
-pub(crate) fn launch_queue_entry(entry: &str) {
-    let _ = LAUNCH_QUEUE_ENTRY.set(entry.to_owned());
+pub(crate) fn launch_queue_entry(entry: &QueueEntryId) {
+    let _ = LAUNCH_QUEUE_ENTRY.set(entry.clone());
 }
 
 /// The queue entry an agent launched from this process takes over.
-pub(crate) fn queue_entry() -> Option<&'static str> {
-    LAUNCH_QUEUE_ENTRY.get().map(String::as_str)
+pub(crate) fn queue_entry() -> Option<&'static QueueEntryId> {
+    LAUNCH_QUEUE_ENTRY.get()
 }
 
 #[cfg(test)]

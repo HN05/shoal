@@ -7,7 +7,7 @@
 //! run there, and the forge's runner then stops it.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -30,7 +30,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub(crate) struct ClaimedJob {
     /// The ID its queue entry had.
-    pub id: String,
+    pub id: QueueEntryId,
     pub repository_id: RepositoryId,
     pub workspace_id: SpaceId,
     /// The execution running the forge's runner, once it started.
@@ -120,7 +120,8 @@ impl Manager {
         let Some(execution) = executions.into_iter().next() else {
             return Ok(false);
         };
-        self.record_job_execution(&job.id, execution.id).await?;
+        self.record_job_execution(job.id.as_str(), execution.id)
+            .await?;
         Ok(true)
     }
 
@@ -136,7 +137,7 @@ impl Manager {
         };
         for entry in entries {
             let entry = entry?;
-            let id = entry.file_name().to_string_lossy().into_owned();
+            let id = QueueEntryId::from(entry.file_name().to_string_lossy().into_owned());
             // Checked for each directory, under the lock a claim writes its
             // files with, so a claim recorded or begun meanwhile keeps them.
             let _files = self.runners.job_files().await;
@@ -151,7 +152,7 @@ impl Manager {
     }
 
     /// Whether the runner records a claim of the job `id`.
-    async fn job_claimed(&self, id: &str) -> Result<bool> {
+    async fn job_claimed(&self, id: &QueueEntryId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

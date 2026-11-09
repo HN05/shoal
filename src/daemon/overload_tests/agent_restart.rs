@@ -166,7 +166,10 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
             .map(|entry| entry.state)
     };
     let entries = manager.queue_entries().await.unwrap();
-    assert_eq!(state(&entries, &waiting.id), Some(QueueState::Queued));
+    assert_eq!(
+        state(&entries, waiting.id.as_str()),
+        Some(QueueState::Queued)
+    );
     assert!(!restarted.is_finished());
     // The new wrapper takes over the restore's slot and starts the agent.
     let mut renewed = child_command(
@@ -180,8 +183,11 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     wait_launched(&manager, &workspace, "renewed", 1).await;
     manager.dispatch_queue().await.unwrap();
     let entries = manager.queue_entries().await.unwrap();
-    assert_eq!(state(&entries, &restore.id), None);
-    assert_eq!(state(&entries, &waiting.id), Some(QueueState::Queued));
+    assert_eq!(state(&entries, restore.id.as_str()), None);
+    assert_eq!(
+        state(&entries, waiting.id.as_str()),
+        Some(QueueState::Queued)
+    );
     assert_eq!(exit_notifications(&manager).await, Vec::<String>::new());
     let agents = manager.running_agents().await.unwrap();
     let [agent] = agents.as_slice() else {
@@ -347,6 +353,6 @@ async fn renewed_agent_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
-    crate::env::launch_queue_entry(&std::env::var("SHOAL_TEST_QUEUE_ENTRY").unwrap());
+    crate::env::launch_queue_entry(&std::env::var("SHOAL_TEST_QUEUE_ENTRY").unwrap().into());
     run_tracked_agent("trap 'exit 0' TERM; touch renewed; while :; do sleep 1; done").await;
 }

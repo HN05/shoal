@@ -33,7 +33,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
         }
     }
     let action = ui::pick_choice(ctx, &format!("{}> ", entry.name), &actions)?;
-    let entry = Some(entry.id);
+    let entry = Some(entry.id.into());
     match action {
         Action::Start => changes::start(ctx, entry, false).await,
         Action::StartAttached => changes::start(ctx, entry, true).await,

@@ -17,7 +17,7 @@ use super::{
     limits::{Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
 };
-use crate::client::time::UnixTime;
+use crate::client::{queue::QueueEntryId, time::UnixTime};
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
     state::{QueueKind, QueueState},
@@ -29,7 +29,7 @@ pub(super) const START_GRACE: Duration = Duration::from_secs(120);
 
 /// An admitted entry the daemon starts itself.
 pub(crate) struct Start {
-    pub id: String,
+    pub id: QueueEntryId,
     pub name: SpaceName,
     pub env: BTreeMap<String, String>,
 }
@@ -39,7 +39,7 @@ struct WaitingWork {
     entries: Vec<Waiting>,
     /// Each restore a waiting wrapper carries out, by entry ID, with its
     /// execution and wake.
-    restores: HashMap<String, (ExecutionId, Wake)>,
+    restores: HashMap<QueueEntryId, (ExecutionId, Wake)>,
     /// The executions of the stopped agents whose restore the daemon starts,
     /// which hold no slot until it is admitted.
     stopped: HashSet<ExecutionId>,
@@ -47,7 +47,7 @@ struct WaitingWork {
 
 impl WaitingWork {
     /// Whether `admitted` holds an entry whose work is of `kind`.
-    fn admits(&self, admitted: &[String], kind: fn(&Work) -> bool) -> bool {
+    fn admits(&self, admitted: &[QueueEntryId], kind: fn(&Work) -> bool) -> bool {
         self.entries
             .iter()
             .any(|entry| kind(&entry.work) && admitted.contains(&entry.id))
@@ -57,7 +57,7 @@ impl WaitingWork {
     /// wrapper carries out.
     fn admitted_restores<'a>(
         &'a self,
-        admitted: &'a [String],
+        admitted: &'a [QueueEntryId],
     ) -> impl Iterator<Item = &'a (ExecutionId, Wake)> {
         admitted.iter().filter_map(|id| self.restores.get(id))
     }
@@ -65,7 +65,7 @@ impl WaitingWork {
     /// Whether `admitted` holds an entry that waited for healthy readings: a
     /// restore of an agent stopped mid-turn or a one-shot run protection
     /// stopped.
-    fn needs_recovery(&self, admitted: &[String]) -> bool {
+    fn needs_recovery(&self, admitted: &[QueueEntryId]) -> bool {
         self.admitted_restores(admitted)
             .any(|(_, wake)| *wake == Wake::Recovery)
             || self.admits(admitted, |work| *work == Work::OneShot { after_stop: true })
@@ -77,7 +77,7 @@ impl WaitingWork {
 /// slot. One whose processes may still run keeps its slot until they stop.
 fn dormant_restores(
     waiting: &[Waiting],
-    restores: &HashMap<String, (ExecutionId, Wake)>,
+    restores: &HashMap<QueueEntryId, (ExecutionId, Wake)>,
 ) -> HashSet<ExecutionId> {
     waiting
         .iter()
@@ -114,7 +114,7 @@ impl Manager {
     /// and return whether `caller`'s entry was admitted. An admitted restore
     /// is left to its waiting agent; nothing is admitted while the system
     /// shuts down. Requires the queue gate.
-    pub(super) async fn admit_waiting(&self, caller: Option<&str>) -> Result<bool> {
+    pub(super) async fn admit_waiting(&self, caller: Option<&QueueEntryId>) -> Result<bool> {
         if self.agent_queue.suspended() {
             return Ok(false);
         }
@@ -134,7 +134,11 @@ impl Manager {
 
     /// The entries of `work` that fit beside the slots in use, where
     /// `recovered` says whether healthy readings are published.
-    async fn fitting_entries(&self, work: &WaitingWork, recovered: bool) -> Result<Vec<String>> {
+    async fn fitting_entries(
+        &self,
+        work: &WaitingWork,
+        recovered: bool,
+    ) -> Result<Vec<QueueEntryId>> {
         let repositories = work
             .entries
             .iter()
@@ -158,9 +162,9 @@ impl Manager {
     fn grant_admission(
         &self,
         work: &WaitingWork,
-        admitted: Vec<String>,
+        admitted: Vec<QueueEntryId>,
         published: Option<u64>,
-    ) -> Option<Vec<String>> {
+    ) -> Option<Vec<QueueEntryId>> {
         if work.admits(&admitted, |work| matches!(work, Work::Job { .. })) {
             self.runners.wake();
         }
@@ -266,7 +270,7 @@ impl Manager {
     async fn hold_back_dependents(
         &self,
         waiting: &mut Vec<Waiting>,
-    ) -> Result<HashMap<String, String>> {
+    ) -> Result<HashMap<QueueEntryId, String>> {
         let readiness = self.dependency_readiness().await?;
         waiting.retain(|entry| {
             !matches!(
@@ -288,8 +292,8 @@ impl Manager {
     /// carry a start environment.
     pub(super) async fn mark_starting(
         &self,
-        admitted: Vec<String>,
-        mut bases: HashMap<String, String>,
+        admitted: Vec<QueueEntryId>,
+        mut bases: HashMap<QueueEntryId, String>,
     ) -> Result<Vec<Start>> {
         self.store
             .write(move |tx| {
@@ -323,11 +327,11 @@ impl Manager {
     pub(super) async fn start_launches(
         &self,
         starts: Vec<Start>,
-        caller: Option<&str>,
+        caller: Option<&QueueEntryId>,
     ) -> Result<bool> {
         let mut caller_admitted = false;
         for start in starts {
-            if Some(start.id.as_str()) == caller {
+            if Some(&start.id) == caller {
                 caller_admitted = true;
                 continue;
             }

@@ -10,6 +10,7 @@ use std::{
 use anyhow::Result;
 
 use super::{Grant, slots::Slot};
+use crate::client::queue::QueueEntryId;
 use crate::{
     config::{RunLimit, overload::Overload},
     daemon::workspace::{
@@ -104,7 +105,7 @@ impl Wake {
 /// A queued entry and the repository it starts an agent in.
 #[derive(Clone)]
 pub(crate) struct Waiting {
-    pub id: String,
+    pub id: QueueEntryId,
     pub repository: RepositoryId,
     pub work: Work,
 }
@@ -123,7 +124,7 @@ pub(crate) fn admit(
     waiting: &[Waiting],
     limits: &Limits,
     mut recovered: bool,
-) -> Vec<String> {
+) -> Vec<QueueEntryId> {
     let mut total = occupied.len();
     let mut starts = limits.starts;
     // Whether an agent or a job was admitted this pass, by measured load or
@@ -204,7 +205,7 @@ pub(crate) fn admit(
 /// whatever room is left, since a waiting job's cost may be that small.
 pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool {
     let probe = [Waiting {
-        id: String::new(),
+        id: QueueEntryId::from(String::new()),
         repository: String::new().into(),
         work: Work::Job {
             cost: capacity::JobCost {

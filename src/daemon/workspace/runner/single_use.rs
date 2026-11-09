@@ -8,6 +8,7 @@ use anyhow::Result;
 use rusqlite::params;
 
 use super::ends::ClaimedJob;
+use crate::client::queue::QueueEntryId;
 use crate::{
     daemon::workspace::Manager,
     forge::{ForgeRepo, ci::runner::took_job},
@@ -20,7 +21,7 @@ const IDLE_AFTER: Duration = Duration::from_secs(60);
 impl Manager {
     /// Keep `runner`, registered for the claimed job `id` alone, with its
     /// claim.
-    pub(super) async fn record_job_runner(&self, id: &str, runner: u64) -> Result<()> {
+    pub(super) async fn record_job_runner(&self, id: &QueueEntryId, runner: u64) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

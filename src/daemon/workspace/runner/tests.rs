@@ -1031,7 +1031,7 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let stray = manager.job_directory("stray");
+    let stray = manager.job_directory(&"stray".into());
     std::fs::create_dir_all(&stray).unwrap();
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.job_directory(&claimed[0].id).join("token").exists());

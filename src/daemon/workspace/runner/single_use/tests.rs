@@ -49,7 +49,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
 
     // A runner just started waits for the forge to give it its job.
     manager.release_idle_runners().await.unwrap();
-    launched_ago(manager, &job.id, 120).await;
+    launched_ago(manager, job.id.as_str(), 120).await;
     // One that runs a job, or has one left to take, stays.
     fixture.state.lock().unwrap().busy = Some(true);
     manager.release_idle_runners().await.unwrap();
@@ -80,7 +80,7 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     admit_and_claim(manager).await;
     let job = manager.claimed_jobs().await.unwrap().remove(0);
     let (_, started) = launched(job.workspace_id.as_str());
-    launched_ago(manager, &job.id, 120).await;
+    launched_ago(manager, job.id.as_str(), 120).await;
     // Its hook reported the job it took, which the forge no longer lists.
     let directory = manager.job_directory(&job.id);
     std::fs::write(directory.join("took-run"), "1\n").unwrap();

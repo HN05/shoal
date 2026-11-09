@@ -11,6 +11,7 @@ use super::{
     target::AddTarget,
 };
 use crate::client::operations::NewWorkspace;
+use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -41,7 +42,7 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
     };
     let issue = load_add_issue(ctx, &target, plan.issue.clone()).await;
     // A queued start reports a failed lookup as it reports any other failure.
-    let issue = failing_entry(ctx, plan.queue_entry.as_deref(), issue).await?;
+    let issue = failing_entry(ctx, plan.queue_entry.as_ref(), issue).await?;
     execute_add_with_target(ctx, plan, target, issue).await
 }
 
@@ -62,7 +63,7 @@ pub(super) async fn execute_add_with_target(
 /// over, freeing the slot with the error when `start` fails.
 pub(super) async fn holding<T>(
     ctx: &Context,
-    entry: &str,
+    entry: &QueueEntryId,
     start: impl std::future::Future<Output = Result<T>>,
 ) -> Result<T> {
     let _hold = queued_agents::Hold::start(&ctx.paths, entry).await;

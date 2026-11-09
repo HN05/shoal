@@ -45,7 +45,7 @@ pub(super) async fn selected_among(
     waiting.retain(|entry| offered(entry));
     ensure!(!waiting.is_empty(), "no agents wait in the queue");
     ui::require_argument(ctx, "queue entry", "entry")?;
-    Ok(pick_entry(ctx, &waiting, prompt).await?.id)
+    Ok(pick_entry(ctx, &waiting, prompt).await?.id.into())
 }
 
 /// Pick one of `entries`.
@@ -79,7 +79,7 @@ pub(super) async fn pick_place(ctx: &Context, selector: &str) -> Result<QueuePla
         labelled(ctx, &others).await?,
     )?;
     Ok(match place {
-        ui::Place::Before(id) => QueuePlace::Before(id),
+        ui::Place::Before(id) => QueuePlace::Before(id.into()),
         ui::Place::Last => QueuePlace::Last,
     })
 }
@@ -140,7 +140,7 @@ async fn labelled(ctx: &Context, entries: &[QueueEntry]) -> Result<ui::Entries> 
     let rows = queued_agents::rows(ctx, entries).await?;
     Ok(entries
         .iter()
-        .map(|entry| entry.id.clone())
+        .map(|entry| entry.id.to_string())
         .zip(rows)
         .collect())
 }

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// slot, or a CI job waiting for the runner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {
-    pub id: String,
+    pub id: crate::queue::QueueEntryId,
     pub kind: QueueKind,
     pub repository_id: RepositoryId,
     /// The workspace name: derived from the planned branch for a launch, the
@@ -101,7 +101,7 @@ pub enum QueuePlace {
     /// The 1-based position, as `shoal queue` numbers them.
     Position(usize),
     /// In front of the entry with this ID.
-    Before(String),
+    Before(crate::queue::QueueEntryId),
     Last,
 }
 

@@ -4,6 +4,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Transaction, params};
 
+use crate::client::queue::QueueEntryId;
 use crate::{model::QueuePlace, state::QueueState};
 
 /// `waiting`, entry IDs in queue order, with `moved` placed at `place`.
@@ -77,8 +78,12 @@ pub(super) fn place(tx: &Transaction<'_>, moved: &str, place: &QueuePlace) -> Re
 }
 
 /// Place the waiting entry `id` at `place` within `tx`.
-pub(crate) fn place_entry(tx: &Transaction<'_>, id: &str, place: &QueuePlace) -> Result<()> {
-    self::place(tx, id, place).map(|_| ())
+pub(crate) fn place_entry(
+    tx: &Transaction<'_>,
+    id: &QueueEntryId,
+    place: &QueuePlace,
+) -> Result<()> {
+    self::place(tx, id.as_str(), place).map(|_| ())
 }
 
 #[cfg(test)]

@@ -37,7 +37,7 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
             .await
             .unwrap();
         let job = ClaimedJob {
-            id: format!("job-{run}"),
+            id: format!("job-{run}").into(),
             repository_id: repo.id.clone(),
             workspace_id: workspace.id.clone(),
             execution_id: None,

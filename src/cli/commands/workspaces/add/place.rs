@@ -84,7 +84,7 @@ enum Placement {
     /// starts it in the background once admitted.
     Waiting(Box<QueueEntry>, usize),
     /// Here, holding the queue entry that tracks its slot, if any.
-    Here(Option<String>),
+    Here(Option<crate::client::queue::QueueEntryId>),
 }
 
 /// Place `launch` in the set-up `workspace`.

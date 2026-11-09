@@ -19,7 +19,7 @@ async fn starting_waits_for_a_hold_the_daemon_closed_unanswered() -> Result<()> 
     let listener = UnixListener::bind(&paths.socket)?;
     let starting = tokio::spawn({
         let paths = paths.clone();
-        async move { Hold::start(&paths, "entry").await }
+        async move { Hold::start(&paths, &"entry".into()).await }
     });
     let (mut stream, _) = bounded(listener.accept()).await?;
     let _: Request = protocol::read(&mut stream).await?;

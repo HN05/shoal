@@ -8,7 +8,7 @@
 //! shuts down waits in the queue again.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::{
     io::Write as _,
     os::unix::fs::OpenOptionsExt as _,
@@ -204,7 +204,8 @@ impl Manager {
         let execution = self
             .launch_job_command(claim.workspace, log, command)
             .await?;
-        self.record_job_execution(&claim.entry.id, execution).await
+        self.record_job_execution(claim.entry.id.as_str(), execution)
+            .await
     }
 
     /// Take one permit from `pool` for the job in `workspace`, returning
@@ -267,7 +268,7 @@ impl Manager {
     }
 
     /// The claimed job of the entry `id` takes over the slot its entry held.
-    async fn take_over_entry(&self, id: &str) -> Result<()> {
+    async fn take_over_entry(&self, id: &QueueEntryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -302,7 +303,7 @@ impl Manager {
         let labels = runner_labels(&claim.runner.labels);
         // Named for the claim: a job claimed again, after an earlier runner
         // took another job, may find that runner still registered.
-        let claim_id: String = claim.entry.id.chars().take(8).collect();
+        let claim_id: String = claim.entry.id.as_str().chars().take(8).collect();
         let name = format!("shoal-{}-{claim_id}", crate::process::machine::hostname());
         let launch = JobLaunch {
             runner: claim.registration.runner.as_ref(),
@@ -318,7 +319,7 @@ impl Manager {
     }
 
     /// The directory a claimed job's runner keeps its files in.
-    pub(super) fn job_directory(&self, id: &str) -> PathBuf {
+    pub(super) fn job_directory(&self, id: &QueueEntryId) -> PathBuf {
         self.paths.state.join("runner").join(id)
     }
 
@@ -376,7 +377,7 @@ impl Manager {
     }
 
     /// Put the admitted job `id` back in the queue, where it waits again.
-    async fn return_job(&self, id: &str) -> Result<()> {
+    async fn return_job(&self, id: &QueueEntryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

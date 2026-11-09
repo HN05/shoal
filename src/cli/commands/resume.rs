@@ -367,7 +367,7 @@ pub async fn start_entry(
     ctx: &Context,
     targets: SpaceTargets,
     execution: Option<ExecutionId>,
-    entry: String,
+    entry: crate::client::queue::QueueEntryId,
 ) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
@@ -414,7 +414,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
         execution.as_str(),
         "--focus",
         "--queue-entry",
-        &entry.id,
+        entry.id.as_str(),
     ]
     .map(OsString::from);
     terminal::restore_queued(ctx, &settings, &workspace, &record, &args).await

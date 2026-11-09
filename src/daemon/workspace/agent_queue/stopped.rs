@@ -7,7 +7,7 @@
 //! the slot its agent kept.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use std::{
@@ -38,7 +38,7 @@ struct Target {
 
 /// A stopped agent's restore to record.
 struct Restore {
-    id: String,
+    id: QueueEntryId,
     target: Target,
     agent: crate::agent::Agent,
     execution: ExecutionId,
@@ -59,7 +59,7 @@ impl Restore {
         automatic: bool,
     ) -> Result<Self> {
         Ok(Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: QueueEntryId::generate(),
             target,
             agent: agent.to_owned(),
             execution: execution.to_owned(),
@@ -70,7 +70,7 @@ impl Restore {
     }
 
     /// The restore, admitted as the entry `id` as it is recorded.
-    fn starting(self, id: String) -> Self {
+    fn starting(self, id: QueueEntryId) -> Self {
         Self {
             id,
             state: QueueState::Starting,
@@ -194,7 +194,7 @@ fn stopped_restores(db: &Connection) -> Result<HashSet<ExecutionId>> {
 }
 
 /// Each waiting restore the daemon starts: its ID, workspace and execution.
-fn waiting_restores(db: &Connection) -> Result<Vec<(String, SpaceId, ExecutionId)>> {
+fn waiting_restores(db: &Connection) -> Result<Vec<(QueueEntryId, SpaceId, ExecutionId)>> {
     Ok(db
         .prepare(
             "SELECT id,workspace_id,execution_id FROM agent_queue
@@ -208,7 +208,10 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(String, SpaceId, ExecutionId
 
 /// The IDs of the `waiting` restores whose recovery record or last session
 /// is gone. A file whose existence cannot be read counts as kept.
-fn resolved_restores(paths: &Paths, waiting: Vec<(String, SpaceId, ExecutionId)>) -> Vec<String> {
+fn resolved_restores(
+    paths: &Paths,
+    waiting: Vec<(QueueEntryId, SpaceId, ExecutionId)>,
+) -> Vec<QueueEntryId> {
     waiting
         .into_iter()
         .filter(|(_, workspace, execution)| {
@@ -245,7 +248,7 @@ fn delete_stopped_restores(db: &Connection, workspace_id: &SpaceId) -> Result<()
 }
 
 /// Delete the entries `ids` that still wait; a starting one belongs to its agent.
-fn delete_waiting(db: &Connection, ids: &[String]) -> Result<()> {
+fn delete_waiting(db: &Connection, ids: &[QueueEntryId]) -> Result<()> {
     for id in ids {
         db.execute(
             "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
@@ -343,7 +346,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         execution: &ExecutionId,
-        id: String,
+        id: QueueEntryId,
     ) -> Result<Start> {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
         let record = recovery::Record::load(&path)?
@@ -516,7 +519,7 @@ impl Manager {
     }
 
     /// Whether the entry `id` restores a stopped agent the daemon starts.
-    pub(super) async fn restores_stopped_agent(&self, id: &str) -> Result<bool> {
+    pub(super) async fn restores_stopped_agent(&self, id: &QueueEntryId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

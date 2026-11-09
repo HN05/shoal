@@ -1257,7 +1257,7 @@ async fn resumed_agent_child() {
         return;
     }
     if let Ok(entry) = std::env::var("SHOAL_TEST_QUEUE_ENTRY") {
-        crate::env::launch_queue_entry(&entry);
+        crate::env::launch_queue_entry(&entry.into());
     }
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);

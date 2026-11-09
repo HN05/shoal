@@ -54,7 +54,13 @@ pub(crate) fn spawn_start(paths: &Paths, start: &Start) -> Result<()> {
     use anyhow::Context as _;
     use std::process::Stdio;
 
-    let argv = internal_command(paths, false, Worker::QueueStart { entry: &start.id })?;
+    let argv = internal_command(
+        paths,
+        false,
+        Worker::QueueStart {
+            entry: start.id.as_str(),
+        },
+    )?;
     let mut child = detached_command(&argv)
         .envs(&start.env)
         .current_dir(&paths.home)
@@ -84,7 +90,7 @@ pub(super) async fn hold(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
-    entry: String,
+    entry: crate::client::queue::QueueEntryId,
     startup: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let mut changed = manager.store.watch_changes();

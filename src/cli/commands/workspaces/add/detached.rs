@@ -13,6 +13,7 @@ use super::{
     queue::{admit_launch, failing_entry, launch_dependencies},
     target::AddTarget,
 };
+use crate::client::queue::QueueEntryId;
 use crate::{
     cli::{
         agents,
@@ -133,7 +134,7 @@ fn waited_for(after: &[Dependency]) -> String {
 /// is already complete, in the background as the daemon starts it once
 /// that work completes, and report its entry.
 async fn start_admitted(ctx: &Context, target: &AddTarget, plan: AddPlan) -> Result<i32> {
-    let id = (plan.queue_entry.as_deref())
+    let id = (plan.queue_entry.as_ref().map(QueueEntryId::as_str))
         .context("the daemon admitted a waiting agent without an entry")?;
     // Read before the agent starts and takes the entry.
     let entry = (queued_agents::entries(ctx).await?.into_iter())

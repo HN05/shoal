@@ -2,7 +2,7 @@
 //! protection stopped mid-turn, an update for one stopped between turns,
 //! which has nothing to do until then, unless `shoal resume` asked for it.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
 use std::collections::HashSet;
@@ -32,7 +32,7 @@ pub(crate) enum Grant {
 
 /// A restore entry with the workspace and execution of its agent.
 struct RestoreRow {
-    id: String,
+    id: QueueEntryId,
     workspace: SpaceId,
     execution: ExecutionId,
 }
@@ -126,7 +126,7 @@ impl Manager {
 
     /// The IDs of the restore entries that wait for an update, whose agent
     /// stopped between turns.
-    pub(super) async fn restores_waiting_for_updates(&self) -> Result<HashSet<String>> {
+    pub(super) async fn restores_waiting_for_updates(&self) -> Result<HashSet<QueueEntryId>> {
         let restores = self.store.run(|db| restore_rows(db)).await?;
         let mut waiting = HashSet::new();
         for row in restores {

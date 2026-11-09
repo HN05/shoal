@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -29,13 +30,13 @@ async fn add_after(
     admission.entry.unwrap()
 }
 
-async fn entry(manager: &Manager, id: &str) -> QueueEntry {
+async fn entry(manager: &Manager, id: &QueueEntryId) -> QueueEntry {
     manager
         .queue_entries()
         .await
         .unwrap()
         .into_iter()
-        .find(|entry| entry.id == id)
+        .find(|entry| &entry.id == id)
         .unwrap()
 }
 

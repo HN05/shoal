@@ -5,7 +5,10 @@ use anyhow::Result;
 
 use super::listing::ListFilter;
 use crate::client::space_names::SpaceSelector;
-use crate::client::{queue, space_names::SpaceName};
+use crate::client::{
+    queue::{self, QueueEntryId},
+    space_names::SpaceName,
+};
 use crate::{
     cli::{context::Context, output::Palette, ui},
     model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
@@ -18,7 +21,7 @@ pub(super) enum Admission {
     /// Start now; the entry, when one tracks the slot, and the branch of a
     /// done dependency to build on.
     Start {
-        entry: Option<String>,
+        entry: Option<QueueEntryId>,
         base: Option<String>,
     },
     /// Wait in the queue behind this many entries in total.
@@ -89,19 +92,18 @@ pub(super) fn starts_when(entry: &QueueEntry) -> String {
 
 /// Record the workspace a starting entry opened, or the existing one a
 /// waiting launch opens.
-pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
-    queue::attach(
-        &ctx.paths,
-        entry.to_owned(),
-        SpaceSelector::id(&workspace.id),
-    )
-    .await
+pub(super) async fn attach(
+    ctx: &Context,
+    entry: &QueueEntryId,
+    workspace: &Workspace,
+) -> Result<()> {
+    queue::attach(&ctx.paths, entry.clone(), SpaceSelector::id(&workspace.id)).await
 }
 
 /// Free a starting entry's slot after its launch failed; the daemon notifies
 /// the user with `error`.
-pub(super) async fn fail(ctx: &Context, entry: &str, error: &anyhow::Error) {
-    let failed = queue::fail(&ctx.paths, entry.to_owned(), format!("{error:#}")).await;
+pub(super) async fn fail(ctx: &Context, entry: &QueueEntryId, error: &anyhow::Error) {
+    let failed = queue::fail(&ctx.paths, entry.clone(), format!("{error:#}")).await;
     if let Err(error) = failed {
         eprintln!("warning: cannot release the agent queue slot: {error:#}");
     }
@@ -109,16 +111,16 @@ pub(super) async fn fail(ctx: &Context, entry: &str, error: &anyhow::Error) {
 
 pub(super) use crate::client::queue::Hold;
 
-async fn plan(ctx: &Context, entry: &str) -> Result<(QueuedPlan, AddPlan)> {
-    let queued = queue::plan(&ctx.paths, entry.to_owned()).await?;
+async fn plan(ctx: &Context, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
+    let queued = queue::plan(&ctx.paths, entry.clone()).await?;
     let mut plan: AddPlan = serde_json::from_str(&queued.plan)?;
-    plan.queue_entry = Some(entry.to_owned());
+    plan.queue_entry = Some(entry.clone());
     Ok((queued, plan))
 }
 
 /// The daemon's worker for an admitted entry: open its tab or session, or
 /// restore its stopped agent.
-pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
+pub(super) async fn start(ctx: &Context, entry: QueueEntryId) -> Result<i32> {
     let started = async {
         let queued = entries(ctx)
             .await?
@@ -139,7 +141,7 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
 }
 
 /// Open the tab or session of the admitted launch `entry`.
-async fn start_launch(ctx: &Context, entry: &str) -> Result<()> {
+async fn start_launch(ctx: &Context, entry: &QueueEntryId) -> Result<()> {
     let (queued, plan) = plan(ctx, entry).await?;
     if let Some(workspace) = &queued.entry.opens {
         let workspace =

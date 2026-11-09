@@ -465,7 +465,7 @@ async fn open_execution(
             .is_some()
             .then(crate::env::queue_entry)
             .flatten()
-            .map(str::to_owned),
+            .cloned(),
         agent: agent.map(|agent| agent.name.clone()),
         model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
         mode: agent.map(|agent| agent.mode.clone()),

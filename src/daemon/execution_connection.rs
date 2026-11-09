@@ -39,7 +39,7 @@ pub(super) struct ExecutionContext {
     pub recover: bool,
     pub reattach: bool,
     /// The starting queue entry whose slot this agent takes over.
-    pub queue_entry: Option<String>,
+    pub queue_entry: Option<crate::client::queue::QueueEntryId>,
     /// The demo the command runs.
     pub demo: Option<crate::demos::Launch>,
     /// Where the wrapper runs in a terminal host.
@@ -125,7 +125,7 @@ pub(super) async fn execute(
         return protocol::write(&mut stream, &Response::new(request_id, body)).await;
     }
     let takes_entry = (kind == ExecutionKind::Command && agent.is_some())
-        .then_some(queue_entry.as_deref())
+        .then_some(queue_entry.as_ref())
         .flatten();
     let reserved = match takes_entry {
         Some(entry) => match manager.reserve_queue_entry(entry).await {

@@ -14,6 +14,7 @@ use super::{
     store::{ENTRY_COLUMNS, Launch, entry, insert_launch},
 };
 use crate::client::{
+    queue::QueueEntryId,
     space_names::{SpaceName, SpaceSelector},
     time::UnixTime,
 };
@@ -50,7 +51,7 @@ impl Manager {
                 waiting: 0,
             });
         }
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = QueueEntryId::generate();
         let state = if request.now {
             QueueState::Starting
         } else {
@@ -142,7 +143,7 @@ impl Manager {
             .await
     }
 
-    pub async fn queued_plan(&self, id: &str) -> Result<QueuedPlan> {
+    pub async fn queued_plan(&self, id: &QueueEntryId) -> Result<QueuedPlan> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -172,7 +173,7 @@ impl Manager {
     /// the agent has taken the slot.
     pub(crate) async fn reserve_queue_entry(
         &self,
-        entry: &str,
+        entry: &QueueEntryId,
     ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
         let gate = self.agent_queue.lock_admission().await;
         if self.agent_queue.suspended() {
@@ -187,7 +188,7 @@ impl Manager {
     }
 
     /// Return the starting entry `id` to the queue, to be admitted again.
-    async fn return_start(&self, id: &str) -> Result<()> {
+    async fn return_start(&self, id: &QueueEntryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -201,7 +202,7 @@ impl Manager {
     }
 
     /// Count an open hold on a starting entry.
-    pub(crate) async fn hold_queue_entry(&self, id: &str) -> Result<()> {
+    pub(crate) async fn hold_queue_entry(&self, id: &QueueEntryId) -> Result<()> {
         ensure!(
             self.queue_entry_starting(id).await?,
             "queue entry is no longer starting"
@@ -211,7 +212,7 @@ impl Manager {
     }
 
     /// Drop a hold; the entry's grace period starts once none remain.
-    pub(crate) async fn release_queue_hold(&self, id: &str) -> Result<()> {
+    pub(crate) async fn release_queue_hold(&self, id: &QueueEntryId) -> Result<()> {
         self.agent_queue.release(id);
         let (id, now) = (id.to_owned(), UnixTime::now());
         self.store
@@ -225,7 +226,7 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn queue_entry_starting(&self, id: &str) -> Result<bool> {
+    pub(crate) async fn queue_entry_starting(&self, id: &QueueEntryId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -241,7 +242,7 @@ impl Manager {
     /// Record the workspace a starting entry opened, or the existing one a
     /// waiting launch opens once admitted, which the daemon then starts as
     /// it starts any launch in an existing workspace.
-    pub async fn queue_attach(&self, id: &str, workspace: &SpaceSelector) -> Result<()> {
+    pub async fn queue_attach(&self, id: &QueueEntryId, workspace: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(workspace).await?;
         let opens = Self::ensure_holds_agents(&workspace).is_ok();
         let id = id.to_owned();
@@ -317,7 +318,7 @@ impl Manager {
     /// End a starting entry that cannot start its agent and say why. An entry
     /// that already ended, such as with its removed workspace, has no slot
     /// left to free.
-    pub async fn fail_queue_entry(&self, id: &str, error: &str) -> Result<()> {
+    pub async fn fail_queue_entry(&self, id: &QueueEntryId, error: &str) -> Result<()> {
         let entry_id = id.to_owned();
         let entry = self
             .store
@@ -355,7 +356,7 @@ impl Manager {
     /// The agent a queued launch started takes over the slot its entry kept.
     /// Only that launch's agent names the entry, so another agent registering
     /// in the same workspace leaves it starting.
-    pub(crate) async fn consume_queue_entry(&self, id: &str, workspace_id: &SpaceId) {
+    pub(crate) async fn consume_queue_entry(&self, id: &QueueEntryId, workspace_id: &SpaceId) {
         let (id, workspace_id) = (id.to_owned(), workspace_id.to_owned());
         let consumed = self
             .store

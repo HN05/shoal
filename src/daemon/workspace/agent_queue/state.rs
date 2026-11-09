@@ -15,12 +15,13 @@ use std::{
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
 
 use super::Grant;
+use crate::client::queue::QueueEntryId;
 
 #[derive(Default)]
 pub(crate) struct AgentQueue {
     admission: Mutex<()>,
     /// Open holds per starting queue entry.
-    holds: StdMutex<HashMap<String, usize>>,
+    holds: StdMutex<HashMap<QueueEntryId, usize>>,
     /// Executions whose stopped agent waits for its queued restore with
     /// every process stopped, with what admitted it once admission did.
     restore_waiters: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
@@ -60,14 +61,14 @@ pub(crate) enum OneShotStop {
 /// A one-shot request waiting for a slot.
 pub(crate) struct WaitingOneShot {
     /// Its queue ID, which no stored entry has.
-    pub id: String,
+    pub id: QueueEntryId,
     pub repository: RepositoryId,
     pub after_stop: bool,
 }
 
 /// The queue ID of one-shot request `number`, which no stored entry has.
-fn oneshot_id(number: u64) -> String {
-    format!("{ONESHOT_PREFIX}{number}")
+fn oneshot_id(number: u64) -> QueueEntryId {
+    format!("{ONESHOT_PREFIX}{number}").into()
 }
 
 const ONESHOT_PREFIX: &str = "oneshot:";
@@ -79,12 +80,12 @@ impl AgentQueue {
     }
 
     /// Count an open hold on the starting entry `id`.
-    pub(crate) fn hold(&self, id: &str) {
-        *self.holds.lock().unwrap().entry(id.to_owned()).or_default() += 1;
+    pub(crate) fn hold(&self, id: &QueueEntryId) {
+        *self.holds.lock().unwrap().entry(id.clone()).or_default() += 1;
     }
 
     /// Drop a hold on `id`.
-    pub(crate) fn release(&self, id: &str) {
+    pub(crate) fn release(&self, id: &QueueEntryId) {
         let mut holds = self.holds.lock().unwrap();
         if let Some(count) = holds.get_mut(id) {
             *count -= 1;
@@ -95,7 +96,7 @@ impl AgentQueue {
     }
 
     /// The starting entries with an open hold.
-    pub(crate) fn held(&self) -> HashSet<String> {
+    pub(crate) fn held(&self) -> HashSet<QueueEntryId> {
         self.holds.lock().unwrap().keys().cloned().collect()
     }
 
@@ -238,8 +239,9 @@ impl AgentQueue {
 
     /// Give the one-shot request with queue ID `id` its slot; false when
     /// `id` names no one-shot request.
-    pub(crate) fn admit_oneshot(&self, id: &str) -> bool {
+    pub(crate) fn admit_oneshot(&self, id: &QueueEntryId) -> bool {
         let Some(number) = id
+            .as_str()
             .strip_prefix(ONESHOT_PREFIX)
             .and_then(|number| number.parse().ok())
         else {

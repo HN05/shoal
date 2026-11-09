@@ -66,9 +66,9 @@ pub(super) async fn add(manager: &Manager, repository: &Repository, name: &str) 
 }
 
 /// Whether the daemon started `id`, passing the queuing terminal's Herdr variables.
-pub(super) fn started(id: &str) -> bool {
+pub(super) fn started(id: &QueueEntryId) -> bool {
     STARTED.lock().unwrap().iter().any(|(started, env)| {
-        started == id && env.get("HERDR_ENV").map(String::as_str) == Some("1")
+        id == started && env.get("HERDR_ENV").map(String::as_str) == Some("1")
     })
 }
 
@@ -581,6 +581,7 @@ async fn discard(manager: &Manager, workspace: &crate::model::Workspace, executi
     .unwrap();
 }
 
+use crate::client::queue::QueueEntryId;
 use QueueKind::{Launch, Restore};
 use QueueState::{Queued, Starting};
 

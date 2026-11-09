@@ -6,8 +6,8 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
 use super::dependencies;
-use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
     model::{QueueEntry, QueueRequest},
     state::{QueueKind, QueueState},
@@ -15,7 +15,7 @@ use crate::{
 
 /// A waiting row of the queue.
 pub(super) struct QueuedRow {
-    pub id: String,
+    pub id: QueueEntryId,
     pub repository: RepositoryId,
     pub kind: QueueKind,
     pub execution: Option<ExecutionId>,
@@ -52,7 +52,7 @@ pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
 
 /// A launch to record in the queue.
 pub(super) struct Launch {
-    pub id: String,
+    pub id: QueueEntryId,
     pub repository: RepositoryId,
     pub request: QueueRequest,
     pub state: QueueState,
@@ -121,7 +121,7 @@ pub(super) struct WaitingRestore {
 pub(super) fn record_waiting_restore(
     db: &rusqlite::Connection,
     restore: &WaitingRestore,
-) -> Result<String> {
+) -> Result<QueueEntryId> {
     let now = UnixTime::now();
     let workspace = &restore.workspace;
     db.execute(
@@ -129,7 +129,7 @@ pub(super) fn record_waiting_restore(
          VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9,1)
          ON CONFLICT(execution_id) DO UPDATE SET state=excluded.state,seen_at=excluded.seen_at",
         params![
-            uuid::Uuid::new_v4().to_string(),
+            QueueEntryId::generate(),
             QueueKind::Restore,
             workspace.repository_id,
             workspace.name,

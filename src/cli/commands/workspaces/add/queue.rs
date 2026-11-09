@@ -1,6 +1,8 @@
 //! Admitting an addition's agent to the agent queue, with the work it waits for.
 use anyhow::Result;
 
+use crate::client::queue::QueueEntryId;
+
 use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target::AddTarget};
 use crate::{
     cli::{
@@ -105,7 +107,7 @@ pub(super) async fn admit_launch(
 /// `result`, after failing the queue `entry`, if any, with its error.
 pub(super) async fn failing_entry<T>(
     ctx: &Context,
-    entry: Option<&str>,
+    entry: Option<&QueueEntryId>,
     result: Result<T>,
 ) -> Result<T> {
     if let (Some(entry), Err(error)) = (entry, &result) {

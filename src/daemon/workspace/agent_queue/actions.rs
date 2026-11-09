@@ -3,7 +3,7 @@
 //! workspace waits for. Each holds the queue gate, so dispatch cannot start
 //! the entry meanwhile.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -249,7 +249,7 @@ impl Manager {
     }
 
     /// Delete the entry `id` if it still waits, returning whether it did.
-    async fn delete_waiting_entry(&self, id: String) -> Result<bool> {
+    async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
         self.store.run(move |db| delete_waiting(db, &id)).await
     }
 
@@ -289,7 +289,11 @@ impl Manager {
 
     /// Record `restore`, which no entry has yet, at `place`, returning its
     /// entry's ID.
-    async fn place_restore(&self, restore: WaitingRestore, place: QueuePlace) -> Result<String> {
+    async fn place_restore(
+        &self,
+        restore: WaitingRestore,
+        place: QueuePlace,
+    ) -> Result<QueueEntryId> {
         self.store
             .write(move |tx| record_placed_restore(tx, &restore, &place))
             .await
@@ -297,10 +301,15 @@ impl Manager {
 
     /// Place the waiting entry `id` at `place`, only further back when
     /// `back_only`, returning its new position.
-    async fn place_entry(&self, id: String, place: QueuePlace, back_only: bool) -> Result<usize> {
+    async fn place_entry(
+        &self,
+        id: QueueEntryId,
+        place: QueuePlace,
+        back_only: bool,
+    ) -> Result<usize> {
         self.store
             .write(move |tx| {
-                let moved = order::place(tx, &id, &place)?;
+                let moved = order::place(tx, id.as_str(), &place)?;
                 ensure!(
                     !back_only || moved.to >= moved.from,
                     "workspace processes can only move queue entries back"
@@ -352,7 +361,7 @@ impl Manager {
 }
 
 /// Delete the entry `id` if it still waits, returning whether it did.
-fn delete_waiting(db: &rusqlite::Connection, id: &str) -> Result<bool> {
+fn delete_waiting(db: &rusqlite::Connection, id: &QueueEntryId) -> Result<bool> {
     let deleted = db.execute(
         "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
         params![id, QueueState::Queued],
@@ -382,7 +391,7 @@ fn record_placed_restore(
     tx: &rusqlite::Transaction<'_>,
     restore: &WaitingRestore,
     place: &QueuePlace,
-) -> Result<String> {
+) -> Result<QueueEntryId> {
     ensure!(
         !crate::daemon::store::exists(
             tx,
@@ -393,7 +402,7 @@ fn record_placed_restore(
         restore.workspace.name
     );
     let id = record_waiting_restore(tx, restore)?;
-    order::place(tx, &id, place)?;
+    order::place(tx, id.as_str(), place)?;
     Ok(id)
 }
 

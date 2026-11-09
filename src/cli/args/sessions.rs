@@ -54,7 +54,7 @@ pub enum SessionsCommand {
         /// The queue entry whose slot the restored agent takes, for the
         /// daemon's start of a queued restore.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        queue_entry: Option<String>,
+        queue_entry: Option<crate::client::queue::QueueEntryId>,
         /// The host that opened this place in the background for this
         /// restore, which records it as the workspace's before restoring.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]

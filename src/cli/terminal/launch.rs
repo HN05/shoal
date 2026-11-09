@@ -480,7 +480,7 @@ pub(in crate::cli) async fn run_agent(
     let worker = agent_worker(ctx, &current, workspace, agent, records, command)?;
     let mut env = place_env(ctx)?;
     if let Some(entry) = env::queue_entry() {
-        env.push((env::QUEUE_ENTRY, entry.to_owned()));
+        env.push((env::QUEUE_ENTRY, entry.to_string()));
     }
     let start = Start {
         state: &ctx.paths.state,

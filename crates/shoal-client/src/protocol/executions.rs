@@ -37,7 +37,7 @@ pub enum ExecutionMethod {
         reattach: bool,
         /// The agent queue entry whose slot this agent takes over.
         #[serde(default)]
-        queue_entry: Option<String>,
+        queue_entry: Option<crate::queue::QueueEntryId>,
         /// The demo this command runs, recorded with its execution.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         demo: Option<Box<crate::demos::Launch>>,

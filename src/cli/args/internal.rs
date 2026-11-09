@@ -177,7 +177,9 @@ pub enum InternalCommand {
     Operation,
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = workers::QUEUE_START)]
-    QueueStart { entry: String },
+    QueueStart {
+        entry: crate::client::queue::QueueEntryId,
+    },
     /// Add the planned workspace inside the place `host` opened for it.
     #[command(name = workers::ADD)]
     Add {

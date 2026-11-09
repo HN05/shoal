@@ -3,7 +3,7 @@
 //! in the slot the agent kept, and the restart follows the agent to the
 //! execution the new wrapper registers, which answers it once the agent runs.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
@@ -34,7 +34,7 @@ pub(crate) struct Handover {
     pub(super) workspace_id: SpaceId,
     pub(super) restarts: Restarts,
     /// The agent queue entry whose start runs the new wrapper, once recorded.
-    entry: Option<String>,
+    entry: Option<QueueEntryId>,
 }
 
 /// The restarts that start their agent in a new wrapper, by the execution
@@ -169,7 +169,7 @@ impl Manager {
             self.fail_renewal(execution, reason.into()).await;
             return;
         }
-        let entry = uuid::Uuid::new_v4().to_string();
+        let entry = QueueEntryId::generate();
         // The queue gate keeps dispatch from reading the entry as lost
         // between its publication here and its insertion.
         let gate = self.agent_queue.lock_admission().await;
@@ -202,11 +202,11 @@ impl Manager {
 
     /// Record that the queue entry `entry` starts the new wrapper of the
     /// agent that ran as `execution`; false when its restart was cancelled.
-    async fn follow_start(&self, execution: &ExecutionId, entry: &str) -> bool {
+    async fn follow_start(&self, execution: &ExecutionId, entry: &QueueEntryId) -> bool {
         self.executions
             .with_restarts(|_, renewals| match renewals.get_mut(execution) {
                 Some(Renewal::Starting(handover)) => {
-                    handover.entry = Some(entry.to_owned());
+                    handover.entry = Some(entry.clone());
                     true
                 }
                 _ => false,
@@ -216,14 +216,14 @@ impl Manager {
 
     /// The agent of `id`, which the queue entry `entry` started, continues
     /// the restart whose start that entry is.
-    pub(crate) async fn continue_restart(&self, entry: &str, id: &ExecutionId) {
+    pub(crate) async fn continue_restart(&self, entry: &QueueEntryId, id: &ExecutionId) {
         self.executions
             .with_restarts(|agents, renewals| {
                 let Some(agent) = agents.get_mut(id) else {
                     return;
                 };
                 let Some(renewal) = renewals.values_mut().find(|renewal| {
-                    matches!(renewal, Renewal::Starting(handover) if handover.entry.as_deref() == Some(entry))
+                    matches!(renewal, Renewal::Starting(handover) if handover.entry.as_ref() == Some(entry))
                 }) else {
                     return;
                 };
@@ -300,14 +300,14 @@ impl Manager {
 
     /// End the restart whose new wrapper the queue entry `entry` started,
     /// which ended with `reason` before the agent registered.
-    pub(crate) async fn fail_renewal_started_by(&self, entry: &str, reason: &str) {
+    pub(crate) async fn fail_renewal_started_by(&self, entry: &QueueEntryId, reason: &str) {
         let execution = self
             .executions
             .with_restarts(|_, renewals| {
                 renewals
                     .iter()
                     .find(|(_, renewal)| {
-                        matches!(renewal, Renewal::Starting(handover) if handover.entry.as_deref() == Some(entry))
+                        matches!(renewal, Renewal::Starting(handover) if handover.entry.as_ref() == Some(entry))
                     })
                     .map(|(execution, _)| execution.clone())
             })
@@ -322,7 +322,7 @@ impl Manager {
     /// start does. The restarts are read first, so a start recorded since
     /// is in the queue read after them.
     pub(crate) async fn fail_lost_renewals(&self) -> Result<()> {
-        let starting: Vec<(ExecutionId, String)> = self
+        let starting: Vec<(ExecutionId, QueueEntryId)> = self
             .executions
             .with_restarts(|_, renewals| {
                 renewals
@@ -351,7 +351,7 @@ impl Manager {
 }
 
 /// The IDs of every entry in the agent queue.
-fn queued_ids(db: &rusqlite::Connection) -> Result<HashSet<String>> {
+fn queued_ids(db: &rusqlite::Connection) -> Result<HashSet<QueueEntryId>> {
     Ok(db
         .prepare("SELECT id FROM agent_queue")?
         .query_map([], |row| row.get(0))?

@@ -4,7 +4,7 @@
 //! closed or is done in a workspace of the repository that links it. It
 //! builds on the branch of the done dependency that contains the others.
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
@@ -60,14 +60,14 @@ struct Recorded {
 /// Record `after` as the dependencies of `entry`, a launch in `repository`.
 pub(super) fn record(
     db: &Connection,
-    entry: &str,
+    entry: &QueueEntryId,
     repository: &RepositoryId,
     after: &[Dependency],
 ) -> Result<()> {
     for dependency in after {
         let (kind, target) = match dependency {
             Dependency::Issue(url) => (DependencyKind::Issue, url.clone()),
-            Dependency::Work(selector) => work(db, entry, repository, selector)?,
+            Dependency::Work(selector) => work(db, Some(entry), repository, selector)?,
         };
         db.execute(
             "INSERT OR IGNORE INTO agent_queue_dependencies(entry_id,kind,target) VALUES (?1,?2,?3)",
@@ -85,18 +85,18 @@ fn ensure_work_exists(
 ) -> Result<()> {
     for dependency in after {
         if let Dependency::Work(selector) = dependency {
-            work(db, "", repository, selector)?;
+            work(db, None, repository, selector)?;
         }
     }
     Ok(())
 }
 
-/// The workspace or queued launch of `repository` other than `entry` that
+/// The workspace or queued launch of `repository`, other than `entry`, that
 /// `selector` names. A launch that already opened its workspace stands for
 /// that workspace.
 fn work(
     db: &Connection,
-    entry: &str,
+    entry: Option<&QueueEntryId>,
     repository: &RepositoryId,
     selector: &str,
 ) -> Result<(DependencyKind, String)> {
@@ -113,7 +113,7 @@ fn work(
     let launch: Option<(String, Option<String>)> = db
         .query_row(
             "SELECT id,COALESCE(workspace_id,opens_workspace_id) FROM agent_queue
-             WHERE repository_id=?1 AND kind=?3 AND (id=?2 OR name=?2) AND id<>?4",
+             WHERE repository_id=?1 AND kind=?3 AND (id=?2 OR name=?2) AND id IS NOT ?4",
             params![repository, selector, QueueKind::Launch, entry],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -126,7 +126,11 @@ fn work(
 }
 
 /// Let `workspace`, which launch `entry` opened, stand for the launch.
-pub(super) fn replace_launch(db: &Connection, entry: &str, workspace: &SpaceId) -> Result<()> {
+pub(super) fn replace_launch(
+    db: &Connection,
+    entry: &QueueEntryId,
+    workspace: &SpaceId,
+) -> Result<()> {
     db.execute(
         "UPDATE OR IGNORE agent_queue_dependencies SET kind=?3,target=?2 WHERE kind=?4 AND target=?1",
         params![
@@ -158,7 +162,7 @@ impl Manager {
     }
 
     /// The readiness of each waiting launch with dependencies, by entry ID.
-    pub(super) async fn dependency_readiness(&self) -> Result<HashMap<String, Readiness>> {
+    pub(super) async fn dependency_readiness(&self) -> Result<HashMap<QueueEntryId, Readiness>> {
         let recorded = self.store.run(waiting_dependencies).await?;
         let mut readiness = HashMap::new();
         for (entry, progress) in self.entry_progress(recorded).await? {
@@ -170,10 +174,10 @@ impl Manager {
     /// The progress of each entry's dependencies, looking each one up once.
     async fn entry_progress(
         &self,
-        recorded: Vec<(String, Recorded)>,
-    ) -> Result<HashMap<String, Vec<Progress>>> {
+        recorded: Vec<(QueueEntryId, Recorded)>,
+    ) -> Result<HashMap<QueueEntryId, Vec<Progress>>> {
         let mut known = HashMap::new();
-        let mut entries: HashMap<String, Vec<Progress>> = HashMap::new();
+        let mut entries: HashMap<QueueEntryId, Vec<Progress>> = HashMap::new();
         for (entry, dependency) in recorded {
             let progress = match known.get(&dependency) {
                 Some(progress) => progress,
@@ -287,7 +291,7 @@ async fn issue_closed(hosts: &ForgeHosts<'_>, account: &Account, url: &str) -> R
 }
 
 /// Each dependency of the waiting launches with its entry, in queue order.
-fn waiting_dependencies(db: &mut Connection) -> Result<Vec<(String, Recorded)>> {
+fn waiting_dependencies(db: &mut Connection) -> Result<Vec<(QueueEntryId, Recorded)>> {
     Ok(db
         .prepare(
             "SELECT d.entry_id,q.repository_id,d.kind,d.target
@@ -296,7 +300,7 @@ fn waiting_dependencies(db: &mut Connection) -> Result<Vec<(String, Recorded)>> 
         )?
         .query_map([QueueState::Queued], |row| {
             Ok((
-                row.get::<_, String>(0)?,
+                row.get::<_, QueueEntryId>(0)?,
                 Recorded {
                     repository: row.get(1)?,
                     kind: row.get(2)?,

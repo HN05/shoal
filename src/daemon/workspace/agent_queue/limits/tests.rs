@@ -18,7 +18,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
     entries
         .iter()
         .map(|(id, repository)| Waiting {
-            id: id.to_string(),
+            id: id.to_string().into(),
             repository: (*repository).into(),
             work: if id.starts_with('r') {
                 Work::Restore {

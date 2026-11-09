@@ -13,6 +13,7 @@ use std::{
 
 use tokio::{sync::Notify, time::Instant};
 
+use crate::client::queue::QueueEntryId;
 use crate::daemon::{log, workspace::Manager};
 
 /// How often the runners are checked against the repositories' settings.
@@ -33,7 +34,7 @@ pub(crate) struct Runners {
     failures: Mutex<HashMap<RepositoryId, Instant>>,
     permits_busy: Mutex<HashMap<RepositoryId, Instant>>,
     /// The queue entries of the jobs whose claim runs.
-    claiming: Mutex<HashSet<String>>,
+    claiming: Mutex<HashSet<QueueEntryId>>,
     /// Admission admitted a job, or one ended.
     wake: Notify,
     /// Held while a claim writes a job's files and while the sweep of
@@ -85,15 +86,15 @@ impl Runners {
     }
 
     /// Take the claim of the job `entry`, unless one runs.
-    pub(crate) fn begin_claim(&self, entry: &str) -> bool {
-        lock(&self.claiming).insert(entry.to_owned())
+    pub(crate) fn begin_claim(&self, entry: &QueueEntryId) -> bool {
+        lock(&self.claiming).insert(entry.clone())
     }
 
-    pub(crate) fn end_claim(&self, entry: &str) {
+    pub(crate) fn end_claim(&self, entry: &QueueEntryId) {
         lock(&self.claiming).remove(entry);
     }
 
-    pub(crate) fn claiming(&self, entry: &str) -> bool {
+    pub(crate) fn claiming(&self, entry: &QueueEntryId) -> bool {
         lock(&self.claiming).contains(entry)
     }
 

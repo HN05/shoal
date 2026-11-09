@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use anyhow::Result;
 use rusqlite::params;
 
+use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceName;
 use crate::state::{QueueKind, QueueState};
 
@@ -19,7 +20,7 @@ pub(super) enum FailedStart {
 /// only once its transaction commits.
 pub(super) fn expire_starts(
     tx: &rusqlite::Transaction<'_>,
-    held: &HashSet<String>,
+    held: &HashSet<QueueEntryId>,
     cutoff: crate::time::UnixTime,
 ) -> Result<Vec<FailedStart>> {
     let stale = tx
@@ -30,7 +31,7 @@ pub(super) fn expire_starts(
         .query_map(params![QueueState::Starting, cutoff], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })?
-        .collect::<rusqlite::Result<Vec<(String, SpaceName, QueueKind, bool)>>>()?;
+        .collect::<rusqlite::Result<Vec<(QueueEntryId, SpaceName, QueueKind, bool)>>>()?;
     let mut failures = Vec::new();
     for (id, name, kind, unopened) in stale {
         if held.contains(&id) {

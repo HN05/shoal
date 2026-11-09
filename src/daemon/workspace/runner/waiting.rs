@@ -3,7 +3,7 @@
 //! the workspace that run links, and drops the entries of jobs the forge no
 //! longer lists as waiting, which another runner took or a cancel ended.
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -167,7 +167,7 @@ fn queue_job(
     repository_id: &RepositoryId,
     job: &QueuedJob,
 ) -> Result<()> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = QueueEntryId::generate();
     let name = SpaceName::derive(
         SpaceKind::Workspace,
         &format!("ci-{}-{}", job.job.name, job.job.id),
@@ -185,7 +185,7 @@ fn queue_job(
             serde_json::to_string(job)?,
         ],
     )?;
-    let restore: Option<String> = match &job.workspace_id {
+    let restore: Option<QueueEntryId> = match &job.workspace_id {
         Some(workspace) => rusqlite::OptionalExtension::optional(tx.query_row(
             "SELECT id FROM agent_queue WHERE workspace_id=?1 AND kind=?2 AND state=?3",
             params![workspace, QueueKind::Restore, QueueState::Queued],

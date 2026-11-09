@@ -47,7 +47,7 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
                  ('queued','launch','repo','queued','codex','{}','{}',NULL,'queued',0,99,NULL),
                  ('wrapper','restore','repo','wrapper','codex',NULL,NULL,'wrapper','starting',0,99,'workspace');",
             )?;
-            let held = HashSet::from(["held".to_owned()]);
+            let held = HashSet::from(["held".into()]);
             let failures = expire_starts(tx, &held, UnixTime::from_seconds(100))?;
             assert_eq!(failures.len(), 2);
             assert!(failures.contains(&FailedStart::UnopenedLaunch("launch".into())));

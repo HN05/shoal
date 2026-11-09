@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 
 use super::ends::ClaimedJob;
+use crate::client::queue::QueueEntryId;
 use crate::{
     daemon::workspace::Manager,
     forge::{
@@ -127,7 +128,7 @@ impl Manager {
         }
     }
 
-    async fn record_taken_job(&self, id: &str, job: &QueuedJob) -> Result<()> {
+    async fn record_taken_job(&self, id: &QueueEntryId, job: &QueuedJob) -> Result<()> {
         let (id, job) = (
             id.to_owned(),
             serde_json::to_string(job).context("record the job the runner took")?,

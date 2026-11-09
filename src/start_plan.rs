@@ -127,7 +127,7 @@ pub(crate) struct AddPlan {
     pub fork: Option<String>,
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
-    pub queue_entry: Option<String>,
+    pub queue_entry: Option<crate::client::queue::QueueEntryId>,
     /// The chat that planned the addition, which the workspace belongs to
     /// unless `parent` names another space.
     #[serde(default)]

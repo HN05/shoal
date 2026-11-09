@@ -1,4 +1,5 @@
 use crate::execution_ids::ExecutionId;
+use crate::queue::QueueEntryId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -23,18 +24,19 @@ pub enum QueueMethod {
     ListQueue,
     /// The plan a queued start runs.
     QueuedPlan {
-        entry: String,
+        entry: QueueEntryId,
     },
     /// Cancel a waiting entry, named by ID or workspace name; a cancelled
     /// restore leaves its agent stopped.
     QueueRemove {
         entry: String,
     },
-    /// Start a waiting entry now, regardless of the limits.
+    /// Start a waiting entry, named by ID or workspace name, now,
+    /// regardless of the limits.
     QueueStart {
         entry: String,
     },
-    /// Move a waiting entry to `place`, or stop a running agent and place
+    /// Move a waiting entry, named by ID or workspace name, to `place`, or stop a running agent and place
     /// its restore there.
     QueueMove {
         entry: String,
@@ -42,17 +44,17 @@ pub enum QueueMethod {
     },
     /// Keep a starting entry's slot while the connection stays open.
     QueueHold {
-        entry: String,
+        entry: QueueEntryId,
     },
     /// Record the workspace a starting entry opened, or the existing one a
     /// waiting launch opens.
     QueueAttach {
-        entry: String,
+        entry: QueueEntryId,
         workspace: SpaceSelector,
     },
     /// End a starting entry that could not start its agent.
     QueueFail {
-        entry: String,
+        entry: QueueEntryId,
         error: String,
     },
     /// Queue the restore of a stopped agent, which the daemon starts with
