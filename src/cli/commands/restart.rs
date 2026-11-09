@@ -131,11 +131,7 @@ async fn ensure_change_fits(
             "{} restarts already; restart it with --permission once it runs",
             restart.space.name()
         );
-        let repository = match &restart.space {
-            PresentSpace::Workspace(workspace) => Some(workspace.repository_id.as_str()),
-            PresentSpace::Chat(chat) => chat.repository_id.as_deref(),
-        };
-        let repository = repository.map(Into::into);
+        let repository = restart.space.repository_id().map(Into::into);
         super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
