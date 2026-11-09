@@ -17,6 +17,7 @@ use crate::{
         items::link::{ItemKind, LinkKind, Selection},
         updates::Snapshot,
     },
+    model::Relation,
     repository,
 };
 
@@ -128,23 +129,42 @@ type LinkedItems =
     fn(&rusqlite::Connection, &SpaceId, Option<LinkKind>) -> Result<Vec<(String, LinkKind)>>;
 
 /// The items a watch of `kind`, or of every kind, follows: the assigned
-/// issue and PRs, and the linked runs whose finish it has yet to deliver.
+/// issue and PRs, the related PRs whose conclusion it has yet to deliver,
+/// and the linked runs whose finish it has yet to deliver.
 pub(crate) fn followed_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
 ) -> Result<Vec<(String, LinkKind)>> {
-    with_runs(db, id, kind, unfinished_runs)
+    with_links(db, id, kind, undelivered)
 }
 
 /// The items the background poll reads for integrations: the assigned issue
-/// and PRs, and the linked runs its own baseline has not seen finish, apart
-/// from what watches delivered.
+/// and PRs, and the related PRs and linked runs its own baseline has not
+/// seen end, apart from what watches delivered.
 pub(super) fn polled_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
 ) -> Result<Vec<(String, LinkKind)>> {
-    with_runs(db, id, None, unpolled_runs)
+    with_links(db, id, None, unpolled)
+}
+
+/// The assigned issue and PRs of `kind`, or of every kind, alone.
+pub(crate) fn assigned_items(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    kind: Option<LinkKind>,
+) -> Result<Vec<(String, LinkKind)>> {
+    let kind = match kind {
+        None => None,
+        Some(kind) => match kind.item() {
+            Some(kind) => Some(kind),
+            None => return Ok(Vec::new()),
+        },
+    };
+    Ok((linked_items(db, id, kind)?.into_iter())
+        .map(|(url, kind)| (url, kind.into()))
+        .collect())
 }
 
 /// The items `shoal view` shows for `kind`, or every kind: every linked
@@ -161,82 +181,113 @@ fn shown_items(
         .collect())
 }
 
-/// The assigned issue and PRs of `kind`, or of every kind, and the runs
-/// `runs` lists when the kind takes runs.
-fn with_runs(
+/// Which of a space's linked runs or related PRs a use of its links still
+/// reads, given the URLs and when one's activity has ended.
+type Unended = fn(&rusqlite::Connection, &SpaceId, Vec<String>, Ended) -> Result<Vec<String>>;
+
+/// Whether a snapshot shows the end of a linked run's or related PR's
+/// activity.
+type Ended = fn(&Snapshot) -> bool;
+
+/// The assigned issue and PRs of `kind`, or of every kind, then the related
+/// PRs and the runs, when the kind takes them, that `unended` keeps.
+fn with_links(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
-    runs: fn(&rusqlite::Connection, &SpaceId) -> Result<Vec<String>>,
+    unended: Unended,
 ) -> Result<Vec<(String, LinkKind)>> {
-    let assigned = match kind {
-        None => linked_items(db, id, None)?,
-        Some(kind) => match kind.item() {
-            Some(kind) => linked_items(db, id, Some(kind))?,
-            None => Vec::new(),
-        },
-    };
-    let mut items = assigned
-        .into_iter()
-        .map(|(url, kind)| (url, kind.into()))
-        .collect::<Vec<_>>();
+    let mut items = assigned_items(db, id, kind)?;
+    if matches!(kind, None | Some(LinkKind::Pr)) {
+        let related = concluding_prs(db, id)?;
+        let open = unended(db, id, related, Snapshot::concluded)?;
+        items.extend(open.into_iter().map(|url| (url, LinkKind::Pr)));
+    }
     if matches!(kind, None | Some(LinkKind::Ci)) {
-        items.extend(runs(db, id)?.into_iter().map(|url| (url, LinkKind::Ci)));
+        let runs = unended(db, id, linked_runs(db, id)?, Snapshot::run_finished)?;
+        items.extend(runs.into_iter().map(|url| (url, LinkKind::Ci)));
     }
     Ok(items)
 }
 
+/// The PRs the workspace links as related and not as assigned, which its
+/// watches follow only until they merge or close.
+pub(super) fn concluding_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+    let assigned = linked_items(db, id, Some(ItemKind::Pr))?;
+    let mut related = linked_urls(db, id, LinkKind::Pr, Some(Relation::Related))?;
+    related.retain(|url| !assigned.iter().any(|(assigned, _)| assigned == url));
+    Ok(related)
+}
+
 /// Every run the workspace links, oldest first, once.
 fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+    linked_urls(db, id, LinkKind::Ci, None)
+}
+
+/// Every item of `kind` the workspace links under `relation`, or under any,
+/// oldest first, once.
+fn linked_urls(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    kind: LinkKind,
+    relation: Option<Relation>,
+) -> Result<Vec<String>> {
     let urls = db
         .prepare(
             "SELECT url FROM space_items WHERE space_id=?1 AND kind=?2
-             ORDER BY created_at, rowid",
+             AND (?3 IS NULL OR relation=?3) ORDER BY created_at, rowid",
         )?
-        .query_map(params![id, LinkKind::Ci], |row| row.get::<_, String>(0))?
+        .query_map(params![id, kind, relation], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut runs = Vec::new();
+    let mut unique = Vec::new();
     for url in urls {
-        if !runs.contains(&url) {
-            runs.push(url);
+        if !unique.contains(&url) {
+            unique.push(url);
         }
     }
-    Ok(runs)
+    Ok(unique)
 }
 
-/// The workspace's linked runs, except those whose finish the workspace's
-/// cursor holds as delivered, which ends their watch.
-fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
-    let mut runs = linked_runs(db, id)?;
+/// The `urls` except those whose end the workspace's cursor holds as
+/// delivered, which ends their watch.
+fn undelivered(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    mut urls: Vec<String>,
+    ended: Ended,
+) -> Result<Vec<String>> {
     let mut delivered = Vec::new();
-    for url in &runs {
+    for url in &urls {
         let record = cursor_record(db, id, url)?;
-        if record.is_some_and(|record| record.pending.is_empty() && record.snapshot.run_finished())
-        {
+        if record.is_some_and(|record| record.pending.is_empty() && ended(&record.snapshot)) {
             delivered.push(url.clone());
         }
     }
-    runs.retain(|url| !delivered.contains(url));
-    Ok(runs)
+    urls.retain(|url| !delivered.contains(url));
+    Ok(urls)
 }
 
-/// The workspace's linked runs the background poll has yet to see finish,
-/// or to queue the finish of on the workspace's cursor; the two are
-/// recorded apart, so a run is polled until both have it.
-fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
-    let mut runs = linked_runs(db, id)?;
+/// The `urls` the background poll has yet to see end, or to queue the end
+/// of on the workspace's cursor; the two are recorded apart, so an item is
+/// polled until both have it.
+fn unpolled(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    mut urls: Vec<String>,
+    ended: Ended,
+) -> Result<Vec<String>> {
     let mut finished = Vec::new();
-    for url in &runs {
+    for url in &urls {
         let observed = observed_item(db, id, url)?;
         let queued = cursor_record(db, id, url)?;
-        if observed.is_some_and(|snapshot| snapshot.run_finished())
-            && queued.is_some_and(|record| record.snapshot.run_finished())
+        if observed.is_some_and(|snapshot| ended(&snapshot))
+            && queued.is_some_and(|record| ended(&record.snapshot))
         {
             finished.push(url.clone());
         }
     }
-    runs.retain(|url| !finished.contains(url));
-    Ok(runs)
+    urls.retain(|url| !finished.contains(url));
+    Ok(urls)
 }
 
 /// The workspace's assigned issue and PRs, of `kind` or every kind.

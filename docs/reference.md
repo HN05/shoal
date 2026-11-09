@@ -4596,10 +4596,12 @@ and PR numbers. The relation is required:
 |---|---|
 | `assigned` | The work the workspace exists for: the rules below and in [ready for review](#ready-for-review) apply |
 | `opened` | Records that the workspace created the item; `issue open` and `pr open` record it themselves |
-| `related` | Records an item the work relates to |
+| `related` | Records an item the work relates to; for a PR, watches report its merge or close |
 
-Opened and related issues and PRs have no watch, completion or cleanup effect;
-`work status pr <number>` finds the workspaces that link an item under any relation.
+Opened and related issues and PRs have no completion or cleanup effect.
+Watches follow a related PR until they deliver that it merged or closed, and
+report nothing else of it unless it is also assigned; opened PRs and opened
+and related issues have no watch effect. `work status pr <number>` finds the workspaces that link an item under any relation.
 A run is linked only as opened or related, since an assigned item drives
 completion and cleanup, and records its workflow as its title. `shoal ci run`
 links the run it starts as opened where the forge reports its URL. Linked runs

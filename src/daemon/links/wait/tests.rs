@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::{
     branch_report::{BranchReport, branch_conflicts},
     framing::{Batch, Cut, frame_cut},
-    items::polled_items,
+    items::{followed_items, polled_items},
     poll::{wait_for_updates, watch_deadline},
     wake::UNWATCHED_WAKE_DELAY,
     *,
@@ -2832,4 +2832,223 @@ async fn the_background_poll_reads_spaces_together() {
             .unwrap();
     }
     manager.poll_linked_item_activity().await.unwrap();
+}
+
+fn pr_snapshot(comment: &str, state: &str) -> Snapshot {
+    serde_json::from_value(
+        json!({"kind": "pr", "comments": {"one": comment}, "checks": {},
+        "conflict": null, "state": state, "errors": {}}),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_related_prs_merge_reaches_the_agent_and_ends_its_follow() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "related".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let pr = crate::model::LinkedItem {
+        kind: LinkKind::Pr,
+        url: "pr".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, pr)])
+        .await
+        .unwrap();
+    let follows = || {
+        let id = id.clone();
+        manager
+            .store
+            .run(move |db| Ok((followed_items(db, &id, None)?, polled_items(db, &id)?)))
+    };
+    let both = (
+        vec![("pr".to_owned(), LinkKind::Pr)],
+        vec![("pr".to_owned(), LinkKind::Pr)],
+    );
+    assert_eq!(follows().await.unwrap(), both.clone());
+    let poll = |snapshot: Snapshot| {
+        let (manager, id) = (manager.clone(), id.clone());
+        async move {
+            let observed = vec![("pr".to_owned(), snapshot)];
+            (manager
+                .record_background_activity(&id, observed.clone())
+                .await)
+                .unwrap();
+            (manager
+                .queue_background_updates(&id, observed, UnixTime::now())
+                .await)
+                .unwrap();
+        }
+    };
+
+    // Its discussion is not the workspace's to hear about.
+    poll(pr_snapshot("first", "open")).await;
+    poll(pr_snapshot("second", "open")).await;
+    let selector = SpaceSelector::id(&id);
+    assert!(!manager.updates_waiting(&selector).await.unwrap());
+
+    // Its merge is, and is due to wake an agent stopped between turns.
+    poll(pr_snapshot("second", "merged")).await;
+    assert!(manager.updates_waiting(&selector).await.unwrap());
+    let delivered = manager.agent_updates(&selector).await.unwrap().updates;
+    assert_eq!(
+        delivered
+            .iter()
+            .map(|update| update.kind)
+            .collect::<Vec<_>>(),
+        [UpdateKind::Merged]
+    );
+    // The poll has queued the merge; watches follow the PR until delivered.
+    let (watched, polled) = follows().await.unwrap();
+    assert_eq!((watched, polled), (both.0, Vec::new()));
+    manager
+        .acknowledge_pr_updates(&selector, vec![delivered[0].delivery.clone()])
+        .await
+        .unwrap();
+    assert_eq!(follows().await.unwrap(), (Vec::new(), Vec::new()));
+}
+
+#[tokio::test]
+async fn an_assigned_pr_also_linked_as_related_reports_all_its_activity() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "both".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    register_watch(&manager, &id, "pr").await;
+    let pr = crate::model::LinkedItem {
+        kind: LinkKind::Pr,
+        url: "pr".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, pr)])
+        .await
+        .unwrap();
+    let followed = {
+        let id = id.clone();
+        manager.store.run(move |db| followed_items(db, &id, None))
+    };
+    assert_eq!(followed.await.unwrap(), [("pr".to_owned(), LinkKind::Pr)]);
+    let updates = manager
+        .record_activity(
+            &id,
+            vec![("pr".into(), pr_snapshot("review", "open"))],
+            &Selection::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(updates[0].kind, UpdateKind::Comment, "{updates:?}");
+}
+
+#[tokio::test]
+async fn unassigning_a_related_pr_keeps_its_cursor() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "unassign".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    register_watch(&manager, &id, "pr").await;
+    let pr = crate::model::LinkedItem {
+        kind: LinkKind::Pr,
+        url: "pr".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, pr)])
+        .await
+        .unwrap();
+    let merged = || vec![("pr".to_owned(), pr_snapshot("review", "merged"))];
+    let delivered = manager
+        .record_activity(&id, merged(), &Selection::default())
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&id);
+    let deliveries = delivered
+        .iter()
+        .map(|update| update.delivery.clone())
+        .collect();
+    (manager.acknowledge_pr_updates(&selector, deliveries).await).unwrap();
+    manager
+        .set_pr(&selector, super::super::pr::Action::Clear)
+        .await
+        .unwrap();
+    // The merge it delivered as assigned is not delivered again.
+    let again = manager
+        .record_activity(&id, merged(), &Selection::default())
+        .await
+        .unwrap();
+    assert!(again.is_empty(), "{again:?}");
+}
+
+#[tokio::test]
+async fn unlinking_a_related_pr_forgets_its_delivered_merge() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "relink".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let link = || {
+        let pr = crate::model::LinkedItem {
+            kind: LinkKind::Pr,
+            url: "pr".into(),
+            title: None,
+        };
+        manager.record_items(&id, vec![(crate::model::Relation::Related, pr)])
+    };
+    link().await.unwrap();
+    let merged = || vec![("pr".to_owned(), pr_snapshot("review", "merged"))];
+    let delivered = manager
+        .record_activity(&id, merged(), &Selection::default())
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&id);
+    let deliveries = delivered
+        .iter()
+        .map(|update| update.delivery.clone())
+        .collect();
+    (manager.acknowledge_pr_updates(&selector, deliveries).await).unwrap();
+    manager
+        .unlink_items(
+            &selector,
+            crate::model::Relation::Related,
+            Some(LinkKind::Pr),
+            None,
+        )
+        .await
+        .unwrap();
+    // Linked again, it is watched afresh.
+    link().await.unwrap();
+    let again = manager
+        .record_activity(&id, merged(), &Selection::default())
+        .await
+        .unwrap();
+    assert_eq!(again[0].kind, UpdateKind::Merged, "{again:?}");
 }

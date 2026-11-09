@@ -6,7 +6,7 @@ use rusqlite::OptionalExtension;
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
     cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending},
-    items::{NO_LINKED_ITEMS, followed_items, links_kind},
+    items::{NO_LINKED_ITEMS, concluding_prs, followed_items, links_kind},
     waits::ActiveWaits,
 };
 use crate::{
@@ -103,8 +103,9 @@ struct Poll {
 }
 
 /// Record `observations` from `poll` on the cursor of the space `id` in one
-/// transaction, and return the updates its watch reports. Observations of
-/// items the watch no longer follows are dropped.
+/// transaction, and return the updates its watch reports, only the merge or
+/// close of a related PR. Observations of items the watch no longer follows
+/// are dropped.
 fn record_observations(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -115,6 +116,11 @@ fn record_observations(
     let observed_at = poll.observed_at;
     require_ready_space(tx, id)?;
     let followed = recorded_urls(tx, id, poll, agents)?;
+    // A watch of an explicit item reports all of its activity.
+    let concluding = match poll.selection.input {
+        Some(_) => Vec::new(),
+        None => concluding_prs(tx, id)?,
+    };
     let mut updates = Vec::new();
     for (url, snapshot) in observations {
         if followed
@@ -124,7 +130,11 @@ fn record_observations(
             continue;
         }
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();
-        updates.extend(record.observe(snapshot, &url, observed_at));
+        updates.extend(if concluding.contains(&url) {
+            record.observe_conclusion(snapshot, &url, observed_at)
+        } else {
+            record.observe(snapshot, &url, observed_at)
+        });
         save_cursor_record(tx, id, &url, &record)?;
     }
     Ok(updates)

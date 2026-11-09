@@ -272,7 +272,8 @@ shoal watch pr [--timeout <seconds>]
 ```
 
 A link names its relation last: `assigned` for the space's own work, `opened`
-for an item it created another way, `related` for one the work relates to.
+for an item it created another way, `related` for one the work relates to;
+watches report a related PR's merge or close, and nothing else of it.
 Assigned PRs accumulate per workspace, whatever their head branch, such as a
 stacked PR pushed from the worktree; after `done`, cleanup waits until all
 have merged and contain HEAD, or the default branch has their changes, and a

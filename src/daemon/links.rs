@@ -329,40 +329,64 @@ fn remove(
     for (kind, url) in &removed {
         events::record_link(db, id, EventKind::Unlinked, relation, *kind, url)?;
     }
-    forget_unlinked_runs(db, id, &removed)?;
+    forget_unfollowed(db, id, &removed)?;
     Ok(removed.len())
 }
 
-/// Drop the replay cursors of the runs among `removed` that no relation
-/// links any more, so linking one again watches it afresh.
-fn forget_unlinked_runs(
-    db: &Connection,
-    id: &SpaceId,
-    removed: &[(LinkKind, String)],
-) -> Result<()> {
-    let mut unlinked = Vec::new();
+/// Drop the replay cursors of the runs and PRs among `removed` that no link
+/// follows any more, so linking one again watches it afresh.
+fn forget_unfollowed(db: &Connection, id: &SpaceId, removed: &[(LinkKind, String)]) -> Result<()> {
+    let mut unfollowed = Vec::new();
     for (kind, url) in removed {
-        let linked: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM space_items WHERE space_id=?1 AND url=?2)",
-            rusqlite::params![id, url],
-            |row| row.get(0),
-        )?;
-        if *kind == LinkKind::Ci && !linked {
-            unlinked.push(url.clone());
+        if !still_followed(db, id, *kind, url)? {
+            unfollowed.push(url.clone());
         }
     }
-    forget_activity(db, id, &unlinked)
+    forget_activity(db, id, &unfollowed)
 }
 
-/// Drop what assigned items kept while linked, their replay cursors and review
-/// marks, and journal each as unlinked.
+/// Whether a link of the space still follows the item at `url`, keeping its
+/// replay cursor: any link of a run, and an assigned or related link of a
+/// PR. An opened or related issue has no cursor of its own.
+fn still_followed(db: &Connection, id: &SpaceId, kind: LinkKind, url: &str) -> Result<bool> {
+    Ok(match kind {
+        LinkKind::Issue => true,
+        LinkKind::Pr => {
+            let assigned = wait::linked_items(db, id, Some(ItemKind::Pr))?;
+            assigned.iter().any(|(assigned, _)| assigned == url)
+                || linked_as(db, id, url, Some(Relation::Related))?
+        }
+        LinkKind::Ci => linked_as(db, id, url, None)?,
+    })
+}
+
+/// Whether the space links the item at `url` under `relation`, or under any
+/// relation that has no lifecycle effect.
+fn linked_as(db: &Connection, id: &SpaceId, url: &str, relation: Option<Relation>) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM space_items WHERE space_id=?1 AND url=?2
+         AND (?3 IS NULL OR relation=?3))",
+        rusqlite::params![id, url, relation],
+        |row| row.get(0),
+    )?)
+}
+
+/// Drop what assigned items kept while linked, their replay cursors, except
+/// those of PRs a related link still follows, and review marks, and journal
+/// each as unlinked.
 pub(crate) fn forget_assigned(
     db: &Connection,
     id: &SpaceId,
     kind: ItemKind,
     urls: &[String],
 ) -> Result<()> {
-    forget_activity(db, id, urls)?;
+    let mut unfollowed = Vec::new();
+    for url in urls {
+        if kind == ItemKind::Issue || !linked_as(db, id, url, Some(Relation::Related))? {
+            unfollowed.push(url.clone());
+        }
+    }
+    forget_activity(db, id, &unfollowed)?;
     review::forget(db, id, urls)?;
     for url in urls {
         events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
