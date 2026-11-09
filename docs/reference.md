@@ -733,7 +733,7 @@ footprint on macOS. `shoal work status` adds the process count, and `--json` giv
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when stopped agents or commands wait for `shoal resume`,
-`needs input`, `finished` after `shoal done` until `shoal done --undo`, `ready`, the other [agent states](#agent-state),
+`needs input`, `finished` after `shoal done` until `shoal done --undo` while the agent is not working, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
@@ -763,7 +763,7 @@ chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`).
 A chat's status is `stopped` until it is restored, then, in order of
-precedence, `needs input`, `finished`, `ready`, its agent's other
+precedence, `needs input`, `finished` while its agent is not working, `ready`, its agent's other
 [states](#agent-state), or `process running` before its agent reports one.
 <a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions
 and pending approval requests that no coordinating agent decides, each with its
