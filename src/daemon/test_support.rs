@@ -125,6 +125,25 @@ pub async fn configure(manager: &Manager, text: &str) {
 }
 
 impl Manager {
+    /// Create the workspace `name` of `repository` on a new branch from
+    /// `base`, with an optional Git profile and path.
+    pub async fn create_workspace(
+        &self,
+        repository: impl Into<crate::repository::Selector>,
+        name: String,
+        base: Option<String>,
+        git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
+    ) -> anyhow::Result<crate::model::Workspace> {
+        let new = crate::daemon::workspace::NewWorkspace {
+            git_profile,
+            path,
+            ..Default::default()
+        };
+        self.create_workspace_with(repository, name, base, new)
+            .await
+    }
+
     /// Move the repository's checkout to `path` and record it there, as an
     /// earlier version may have registered it.
     pub async fn move_checkout(&self, id: &RepositoryId, path: &Path) -> anyhow::Result<()> {

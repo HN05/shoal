@@ -43,7 +43,7 @@ impl Manager {
             &repo,
             name,
             branch,
-            super::WorkspaceSource::New {
+            super::creation::WorkspaceSource::New {
                 base,
                 parent: Some(parent.id),
             },

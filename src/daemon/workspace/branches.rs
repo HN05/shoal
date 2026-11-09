@@ -424,7 +424,7 @@ impl Manager {
                 &repo,
                 name.clone(),
                 name,
-                super::WorkspaceSource::Existing {
+                super::creation::WorkspaceSource::Existing {
                     branch,
                     base,
                     files,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::test_support;
-use crate::daemon::workspace::WorkspaceSource;
+use crate::daemon::workspace::creation::WorkspaceSource;
 use std::os::unix::fs::MetadataExt;
 
 #[tokio::test]
