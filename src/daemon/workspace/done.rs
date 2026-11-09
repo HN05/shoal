@@ -62,15 +62,6 @@ impl Manager {
         Ok(completion)
     }
 
-    /// The agent `execution_id` started again from its saved session in a
-    /// new wrapper, as `shoal resume` starts it, so it works on the
-    /// assignment again: withdraw the completion. A restart's agent keeps it.
-    pub(crate) async fn reopen_for_resumed_agent(&self, workspace_id: &str, execution_id: &str) {
-        if !self.restart_resumed(execution_id).await {
-            self.reopen_for_resume(workspace_id).await;
-        }
-    }
-
     /// `shoal resume` restores a stopped agent of the workspace, which says
     /// its work is not finished: withdraw a standing completion, so a
     /// protection stop restores the agent.

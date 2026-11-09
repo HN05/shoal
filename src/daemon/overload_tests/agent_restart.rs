@@ -79,23 +79,6 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
     serving.abort();
 }
 
-/// The restore of `execution`'s agent once the agent queue started it.
-async fn starting_restore(manager: &Manager, execution: &str) -> QueueEntry {
-    bounded(async {
-        loop {
-            let entries = manager.queue_entries().await.unwrap();
-            if let Some(entry) = entries
-                .into_iter()
-                .find(|entry| entry.execution.as_deref() == Some(execution))
-            {
-                return entry;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-}
-
 /// A launch in the fixture's repository, which waits for a slot.
 fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
     QueueRequest {
@@ -330,8 +313,8 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
         .env("SHOAL_TEST_RECORD", &record)
         .env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
     let renewed = run_child(renewed);
-    // The restart is answered once the new wrapper reported its agent's start.
     bounded(restarted).await.unwrap().unwrap();
+    wait_start_handled(&manager, &workspace).await;
     assert!(manager.completion(&workspace.id).await.unwrap().is_some());
     bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await

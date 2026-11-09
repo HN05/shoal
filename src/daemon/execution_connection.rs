@@ -65,6 +65,10 @@ struct Connected {
     /// The daemon resumed the stopped agent, whose restored child has not
     /// started.
     resuming: bool,
+    /// The wrapper took over no agent queue entry, so `shoal resume` started
+    /// it rather than the daemon, and the agent it restores works on the
+    /// assignment again.
+    unqueued: bool,
     /// The wrapper reads [`Control::RestoreWaits`].
     hears_restore_waits: bool,
     /// The daemon stopped the command before it finished.
@@ -188,6 +192,7 @@ pub(super) async fn execute(
         started: false,
         awaiting_restore: false,
         resuming: false,
+        unqueued: takes_entry.is_none(),
         // Registration requires this daemon's protocol.
         hears_restore_waits: true,
         stopped: false,
@@ -241,6 +246,8 @@ pub(super) async fn reattach(
         started: true,
         awaiting_restore: request.awaiting_restore.is_some(),
         resuming: false,
+        // Its agent started before the daemon restarted.
+        unqueued: false,
         hears_restore_waits: version >= protocol::RESTORE_WAITS,
         stopped: false,
         stop,
@@ -363,6 +370,7 @@ async fn relay(
         started,
         awaiting_restore,
         resuming,
+        unqueued,
         hears_restore_waits,
         stopped,
         stop,
@@ -431,8 +439,10 @@ async fn relay(
                 if let Some(tracked) = agent {
                     if !restored {
                         manager.forget_last_sessions(&workspace.id);
-                    } else if !resumed_here {
-                        (manager.reopen_for_resumed_agent(&workspace.id, execution_id)).await;
+                    } else if !resumed_here && *unqueued {
+                        // A restore the agent queue starts withdrew it when queued
+                        // if `shoal resume` asked for it.
+                        manager.reopen_for_resume(&workspace.id).await;
                     }
                     manager.agent_started(execution_id).await;
                     let started = agent_event(tracked, execution_id, None);

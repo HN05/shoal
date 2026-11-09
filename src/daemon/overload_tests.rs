@@ -1132,6 +1132,98 @@ async fn wait_withdrawn(manager: &Manager, workspace: &crate::model::Workspace) 
     .await;
 }
 
+/// Waits until the daemon handled the start of the workspace's running agent,
+/// whose event it records last.
+async fn wait_start_handled(manager: &Manager, workspace: &crate::model::Workspace) {
+    use crate::daemon::events::{EventItem, EventKind};
+    let execution = only_execution(manager, workspace).await;
+    bounded(async {
+        loop {
+            let events = manager.workspace_events(None, 100).await.unwrap();
+            if events.iter().any(|item| match item {
+                EventItem::Event(event) => {
+                    event.details.kind == EventKind::AgentStarted
+                        && (event.details.agent.as_ref())
+                            .and_then(|agent| agent.execution_id.as_deref())
+                            == Some(execution.as_str())
+                }
+                _ => false,
+            }) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+}
+
+/// The restore of `execution`'s agent once the agent queue started it.
+async fn starting_restore(manager: &Manager, execution: &str) -> crate::model::QueueEntry {
+    bounded(async {
+        loop {
+            let entries = manager.queue_entries().await.unwrap();
+            if let Some(entry) = entries.into_iter().find(|entry| {
+                entry.execution.as_deref() == Some(execution)
+                    && entry.state == crate::state::QueueState::Starting
+            }) {
+                return entry;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+}
+
+/// A restore Shoal queues on its own, such as one whose waiting wrapper
+/// failed to start the agent, keeps the completion when the new wrapper the
+/// agent queue starts restores the agent.
+#[tokio::test]
+async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = only_execution(&manager, &workspace).await;
+    manager
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    bounded(launched).await.unwrap().unwrap();
+    fs::remove_file(workspace.path.join("started")).unwrap();
+    assert!(
+        manager
+            .queue_failed_restore(&workspace, "fixture", &execution, 1)
+            .await
+    );
+    let restore = starting_restore(&manager, &execution).await;
+    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
+    let mut command = child_command(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::resumed_agent_child",
+    );
+    command
+        .env("SHOAL_TEST_RECORD", &record)
+        .env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
+    let restored = run_child(command);
+    wait_started(&manager, &workspace).await;
+    wait_start_handled(&manager, &workspace).await;
+    assert!(manager.completion(&workspace.id).await.unwrap().is_some());
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+        .await
+        .unwrap();
+    bounded(restored).await.unwrap().unwrap();
+    serving.abort();
+}
+
 async fn only_execution(manager: &Manager, workspace: &crate::model::Workspace) -> String {
     let mut executions = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))

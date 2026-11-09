@@ -295,7 +295,7 @@ impl Manager {
     }
 
     /// Whether a restart of `id` resumed its agent.
-    pub(crate) async fn restart_resumed(&self, id: &str) -> bool {
+    async fn restart_resumed(&self, id: &str) -> bool {
         self.executions
             .with_agent(id, |agent| {
                 agent
