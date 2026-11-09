@@ -27,7 +27,7 @@ pub struct ScopedExecution {
     pub kind: ExecutionKind,
     /// The agent execution whose process tree registered this one, as a
     /// command an agent runs with `shoal run`.
-    pub agent: Option<String>,
+    pub agent_execution: Option<String>,
 }
 
 /// Resolve `token` and confine `method` to the spaces the caller's scope

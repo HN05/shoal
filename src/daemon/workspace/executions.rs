@@ -257,7 +257,7 @@ struct ExecutionRecord {
     kind: ExecutionKind,
     parent_execution: Option<String>,
     /// The agent execution whose process tree registers it.
-    agent: Option<String>,
+    agent_execution: Option<String>,
     wrapper: Option<Identity>,
     scope_token: String,
     demo: Option<Launch>,
@@ -409,7 +409,7 @@ impl Manager {
         let (workspace, preparation) = self
             .prepare_execution(selector, wrapper.as_ref(), kind, caller, merge)
             .await?;
-        let agent = match caller {
+        let agent_execution = match caller {
             Some(caller) => self.caller_agent(caller).await.map(|agent| agent.execution),
             None => None,
         };
@@ -428,7 +428,7 @@ impl Manager {
                 &workspace.id,
                 wrapper,
                 kind,
-                (caller.and_then(Caller::execution_id), agent),
+                (caller.and_then(Caller::execution_id), agent_execution),
                 demo,
                 place,
             )
@@ -479,7 +479,7 @@ impl Manager {
         let repository = self.repository(&workspace.repository_id).await?;
         let id = Uuid::new_v4().to_string();
         let scope_token = Uuid::new_v4().to_string();
-        let (parent_execution, agent) = parents;
+        let (parent_execution, agent_execution) = parents;
         let (ports, directories) = self
             .persist_execution(
                 ExecutionRecord {
@@ -487,7 +487,7 @@ impl Manager {
                     workspace_id: workspace.id.clone(),
                     kind,
                     parent_execution: parent_execution.map(str::to_owned),
-                    agent: agent.clone(),
+                    agent_execution: agent_execution.clone(),
                     wrapper,
                     scope_token: scope_token.clone(),
                     demo,
@@ -506,7 +506,14 @@ impl Manager {
             directories.tmp_dir.as_deref(),
         );
         let receiver = connections
-            .connect(&id, kind, &workspace.id, scope_token.clone(), agent, false)
+            .connect(
+                &id,
+                kind,
+                &workspace.id,
+                scope_token.clone(),
+                agent_execution,
+                false,
+            )
             .await;
         Ok(RegisteredExecution {
             id,
@@ -533,7 +540,7 @@ impl Manager {
             workspace_id,
             kind,
             parent_execution,
-            agent,
+            agent_execution,
             wrapper,
             scope_token,
             demo,
@@ -559,7 +566,7 @@ impl Manager {
                         ExecutionState::Running,
                         store::json_text(wrapper.as_ref())?,
                         reattach_token,
-                        agent
+                        agent_execution
                     ],
                 )?;
                 if let Some(demo) = &demo {
@@ -847,7 +854,7 @@ impl Manager {
             !connections.is_connected(&request.execution),
             "execution is already connected"
         );
-        let (workspace_id, agent) = self.authorize_reattachment(request).await?;
+        let (workspace_id, agent_execution) = self.authorize_reattachment(request).await?;
         let workspace = self.workspace_by_id(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.
@@ -861,7 +868,7 @@ impl Manager {
                 ExecutionKind::Command,
                 &workspace.id,
                 request.scope_token.clone(),
-                agent,
+                agent_execution,
                 request.awaiting_restore.is_some(),
             )
             .await;
@@ -911,7 +918,7 @@ impl Manager {
             .write(move |tx| {
                 let execution = store::find_execution(tx, &request.execution)?
                     .context("execution record is missing")?;
-                let (token, agent): (Option<String>, Option<String>) = tx.query_row(
+                let (token, agent_execution): (Option<String>, Option<String>) = tx.query_row(
                     "SELECT scope_token,agent_execution FROM executions WHERE id=?1",
                     [&request.execution],
                     |row| Ok((row.get(0)?, row.get(1)?)),
@@ -928,7 +935,7 @@ impl Manager {
                     "UPDATE executions SET state=?2 WHERE id=?1",
                     params![request.execution, ExecutionState::Running],
                 )?;
-                Ok((execution.workspace_id, agent))
+                Ok((execution.workspace_id, agent_execution))
             })
             .await
     }

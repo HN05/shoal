@@ -243,7 +243,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
                     kind: super::super::ExecutionKind::Command,
-                    agent: None,
+                    agent_execution: None,
                 }),
             },
         )

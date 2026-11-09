@@ -762,7 +762,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
                     kind: crate::daemon::workspace::ExecutionKind::Command,
-                    agent: None,
+                    agent_execution: None,
                 }),
             },
         )

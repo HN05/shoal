@@ -838,7 +838,8 @@ impl Manager {
         if let Some(own) = self.execution_agent(&execution.id).await {
             return Some(own);
         }
-        self.execution_agent(execution.agent.as_deref()?).await
+        self.execution_agent(execution.agent_execution.as_deref()?)
+            .await
     }
 
     /// The agent execution `id` runs: tracked while connected, else as its

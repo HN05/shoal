@@ -212,7 +212,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         execution: Some(crate::daemon::scope::ScopedExecution {
             id: "ended".into(),
             kind: crate::daemon::workspace::ExecutionKind::Command,
-            agent: Some("claude".into()),
+            agent_execution: Some("agent".into()),
         }),
     };
     let from_execution = manager
