@@ -215,10 +215,11 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     )?;
     // Local merges go unrecorded again.
     db.execute_batch("DROP TABLE merges;")?;
-    // Spaces have no numbers again; chats take their triggers with them.
+    // Spaces have no numbers again, nor a view that reads them; chats take
+    // their triggers with them.
     db.execute_batch(
         "DROP TRIGGER workspace_numbered; DROP TRIGGER chat_started;
-         DROP VIEW free_space_number; DROP VIEW space_numbers;
+         DROP VIEW free_space_number; DROP VIEW space_numbers; DROP VIEW spaces;
          DROP INDEX workspaces_number; ALTER TABLE workspaces DROP COLUMN number;",
     )?;
     db.execute_batch("DROP TABLE changed_on_both_sides;")?;

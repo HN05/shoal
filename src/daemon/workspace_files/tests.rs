@@ -1262,6 +1262,7 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_progress_removed;
     CREATE TRIGGER chat_started AFTER INSERT ON chats BEGIN SELECT 1; END;
     DROP VIEW free_space_number;
     DROP VIEW space_numbers;
+    DROP VIEW spaces;
     DROP INDEX questions_number;
     DROP INDEX access_request_number;
     ALTER TABLE questions DROP COLUMN space_number;
