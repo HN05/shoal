@@ -1301,7 +1301,7 @@ pub(crate) fn change_permission(
 
 /// Save `saved` again at `path`, where a stopped agent's file is.
 fn rewrite(path: &Path, saved: &impl Serialize) -> Result<()> {
-    crate::fsutil::replace_atomically(
+    crate::fsutil::atomic::replace_atomically(
         path,
         &serde_json::to_vec(saved)?,
         ReplaceOptions {
