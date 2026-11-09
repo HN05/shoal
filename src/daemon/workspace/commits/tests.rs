@@ -2,13 +2,13 @@ use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 use std::path::Path;
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::{
         scope::{Caller, ScopedExecution},
         test_support::{commit, git, manager, repository},
     },
-    model::{MadeFor, Workspace},
+    model::{MadeFor, SpaceKind, Workspace},
     protocol::{CommitStart, WorkspaceMethod},
     state::WorkspaceState,
 };
@@ -95,7 +95,11 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     )
     .await
     .unwrap();
-    assert_eq!(bare.name, first[..7]);
+    // A short commit of only digits takes the kind as its prefix.
+    assert_eq!(
+        bare.name,
+        SpaceName::derive(SpaceKind::Workspace, &first[..7])
+    );
     assert_eq!(bare.at.unwrap().made_for, None);
 }
 
