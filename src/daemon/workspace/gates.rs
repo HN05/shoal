@@ -124,7 +124,7 @@ impl Gates {
     /// removal, without checking that the repository is available. Callers
     /// must not already hold it.
     pub(crate) async fn lock_git(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
-        self.git.gate(repository_id).lock_owned().await
+        self.git.gate(repository_id.as_str()).lock_owned().await
     }
 
     /// Hold the repository's fetch gate while a sync fetches its remotes, so
@@ -132,18 +132,18 @@ impl Gates {
     /// directory waits for the fetch, while commands that take only the Git
     /// gate do not. Callers take it before the Git gate.
     pub(crate) async fn lock_fetch(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
-        self.fetches.gate(repository_id).lock_owned().await
+        self.fetches.gate(repository_id.as_str()).lock_owned().await
     }
 
     /// [`Self::lock_git`] when nothing holds the gate.
     pub(crate) fn try_lock_git(&self, repository_id: &RepositoryId) -> Option<OwnedMutexGuard<()>> {
-        self.git.gate(repository_id).try_lock_owned().ok()
+        self.git.gate(repository_id.as_str()).try_lock_owned().ok()
     }
 
     /// The Git gate of `repository_id`, for tests that count who waits on it.
     #[cfg(test)]
     pub(crate) fn git_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
-        self.git.gate(repository_id)
+        self.git.gate(repository_id.as_str())
     }
 
     /// Order keeping the files attached to a repository's agent messages,
@@ -155,7 +155,10 @@ impl Gates {
         &self,
         repository_id: &RepositoryId,
     ) -> OwnedMutexGuard<()> {
-        self.message_files.gate(repository_id).lock_owned().await
+        self.message_files
+            .gate(repository_id.as_str())
+            .lock_owned()
+            .await
     }
 
     /// [`Self::lock_message_files`] for the files of the chats without a
@@ -168,7 +171,7 @@ impl Gates {
     /// waits on it.
     #[cfg(test)]
     pub(crate) fn message_files_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
-        self.message_files.gate(repository_id)
+        self.message_files.gate(repository_id.as_str())
     }
 
     /// Hold `host`'s gate, so concurrent first lookups ask a forge host once.

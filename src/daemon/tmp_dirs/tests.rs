@@ -38,7 +38,7 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
     assert_eq!(mode & 0o777, 0o700);
     std::fs::remove_dir(&expected).unwrap();
     let started = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     assert_eq!(started.plan.environment[env::TMPDIR], expected.as_os_str());
@@ -122,7 +122,7 @@ async fn a_tracked_execution_reserves_a_missing_repository_directory() {
         .unwrap();
 
     let started = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let directory = manager

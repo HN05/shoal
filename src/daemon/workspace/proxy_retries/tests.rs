@@ -20,7 +20,7 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
         .unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             super::super::ExecutionKind::Command,
             None,

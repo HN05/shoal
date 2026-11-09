@@ -68,7 +68,7 @@ async fn an_app_reads_repositories_and_workspaces_as_the_user() {
         code(connection::request::<SyncedRepository>(&app, sync).await),
         ErrorCode::NotFound
     );
-    assert_eq!(inspect(&app, &own.id).await.unwrap().name, "own");
+    assert_eq!(inspect(&app, own.id.as_str()).await.unwrap().name, "own");
     assert_eq!(code(inspect(&app, "missing").await), ErrorCode::NotFound);
 }
 
@@ -80,7 +80,7 @@ async fn a_scoped_app_reaches_only_its_workspace_tree() {
     let agent = daemon.scoped(&own).await;
     assert_eq!(inspect(&agent, "own").await.unwrap().id, own.id);
     assert_eq!(
-        code(inspect(&agent, &other.id).await),
+        code(inspect(&agent, other.id.as_str()).await),
         ErrorCode::ScopeDenied
     );
     // A workspace's agent asks to hold its own workspace.

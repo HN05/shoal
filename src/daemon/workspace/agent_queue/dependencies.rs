@@ -331,7 +331,7 @@ fn issue_workspaces(
             "SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1
              AND id IN (SELECT space_id FROM space_issue WHERE url=?2) ORDER BY name"
         ))?
-        .query_map([repository, url], store::workspace)?
+        .query_map(params![repository, url], store::workspace)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 

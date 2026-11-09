@@ -52,7 +52,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     let (first, second) = workspaces(&manager, temp.path()).await;
     let web = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -62,7 +62,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         .unwrap();
     let tui = manager
         .begin_execution_running(
-            &second.id,
+            second.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -89,7 +89,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     // A name belongs to one demo until its execution ends.
     manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -110,7 +110,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     );
     let replacement = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -132,7 +132,7 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
     let (first, _) = workspaces(&manager, temp.path()).await;
     let mut web = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -142,7 +142,7 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .unwrap();
     let mut tui = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -151,7 +151,7 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .await
         .unwrap();
     let mut command = manager
-        .begin_execution(&first.id, None, ExecutionKind::Command, None)
+        .begin_execution(first.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
 
@@ -244,7 +244,7 @@ async fn a_chat_lists_no_demos_of_its_own() {
         .unwrap();
     manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -269,7 +269,7 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
     let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
     let started = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             wrapper,
             ExecutionKind::Command,
             None,
@@ -335,7 +335,7 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     let child = ended();
     let started = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             wrapper,
             ExecutionKind::Command,
             None,
@@ -375,7 +375,7 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let started = manager
         .begin_execution_running(
-            &first.id,
+            first.id.as_str(),
             wrapper,
             ExecutionKind::Command,
             None,
@@ -415,7 +415,13 @@ async fn running_web_demos_list_their_url() {
     dns.id = "dns".into();
     for demo in [site, dns] {
         manager
-            .begin_execution_running(&first.id, None, ExecutionKind::Command, None, Some(demo))
+            .begin_execution_running(
+                first.id.as_str(),
+                None,
+                ExecutionKind::Command,
+                None,
+                Some(demo),
+            )
             .await
             .unwrap();
     }
@@ -466,13 +472,25 @@ async fn demos_journal_their_first_run_and_their_end() {
     app.preset = Some(crate::demos::Preset::Simulator);
     app.environment = BTreeMap::from([(crate::demos::SIM_UDID.into(), "UDID-1".into())]);
     let started = manager
-        .begin_execution_running(&first.id, None, ExecutionKind::Command, None, Some(app))
+        .begin_execution_running(
+            first.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(app),
+        )
         .await
         .unwrap();
     let mut unrun = launch("unrun");
     unrun.id = "unrun".into();
     let never = manager
-        .begin_execution_running(&first.id, None, ExecutionKind::Command, None, Some(unrun))
+        .begin_execution_running(
+            first.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(unrun),
+        )
         .await
         .unwrap();
     assert!(demo_events(&manager, &first.id).await.is_empty());

@@ -55,7 +55,7 @@ pub(crate) async fn authorize(
         if !manager.reaches(&caller, &id).await? {
             let home = manager.chat_home(&caller.space_id).await?;
             ensure!(
-                home.as_deref() == Some(id.as_str()),
+                home.as_ref() == Some(&id),
                 "workspace processes can only access their own space and those below it"
             );
             ensure!(

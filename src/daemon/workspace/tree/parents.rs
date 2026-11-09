@@ -157,7 +157,7 @@ fn assign(
     // A chat being removed takes no new workspace, nor a space gone; one
     // already below it stays there.
     let parent = match parent
-        .filter(|parent| !removing.reserved(parent) || current.as_deref() == Some(*parent))
+        .filter(|parent| !removing.reserved(parent) || current.as_ref() == Some(*parent))
     {
         Some(parent) if spaces::space_kind(tx, parent)?.is_some() => Some(parent),
         _ => None,

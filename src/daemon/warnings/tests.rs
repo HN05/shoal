@@ -24,7 +24,7 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
             .unwrap();
         if name != "idle" {
             let execution = manager
-                .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+                .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
                 .await
                 .unwrap();
             // The execution's stop receiver keeps the agent connected.
@@ -110,7 +110,7 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
             .await
             .unwrap();
         let execution = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
             .await
             .unwrap();
         let id = execution.plan.id.clone();
@@ -134,7 +134,7 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
     let busy = manager.workspace(&"busy".into()).await.unwrap();
     executions.push(
         manager
-            .begin_execution(&busy.id, None, ExecutionKind::Command, None)
+            .begin_execution(busy.id.as_str(), None, ExecutionKind::Command, None)
             .await
             .unwrap(),
     );

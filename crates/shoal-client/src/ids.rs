@@ -2,7 +2,9 @@
 //! only that kind of ID, serialized and stored as the text it is.
 
 /// Defines `$name` as an ID held as text, with the conversions and
-/// comparisons code that reads, stores and prints it needs.
+/// comparisons code that reads, stores and prints it needs. It does not
+/// dereference to `str`: code that uses it as text says so with `as_str()`
+/// or an `AsRef` impl.
 macro_rules! text_id {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
@@ -27,14 +29,6 @@ macro_rules! text_id {
             }
 
             pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl std::ops::Deref for $name {
-            type Target = str;
-
-            fn deref(&self) -> &str {
                 &self.0
             }
         }
@@ -77,6 +71,7 @@ macro_rules! text_id {
             }
         }
 
+        /// The ID an argument Shoal passes itself holds, as clap parses it.
         impl std::str::FromStr for $name {
             type Err = std::convert::Infallible;
 

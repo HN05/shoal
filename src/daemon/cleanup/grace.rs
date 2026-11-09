@@ -14,7 +14,7 @@ impl Manager {
             "INSERT INTO cleanup_grace(space_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
              ON CONFLICT(space_id) DO UPDATE SET claimed=1
              RETURNING cleanup_at",
-            id,
+            id.as_str(),
             grace,
         )
         .await

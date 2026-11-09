@@ -85,7 +85,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     manager
@@ -137,7 +137,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         config.machine.overload.recovery.enabled = enabled;
         manager.publish_config(config);
         let execution = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
             .await
             .unwrap();
         let id = &execution.plan.id;
@@ -215,7 +215,7 @@ async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = &execution.plan.id;
@@ -278,15 +278,15 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         .unwrap();
     std::fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
     let command = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let first = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let second = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     manager
@@ -374,7 +374,7 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
             .await
             .unwrap();
         let execution = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
             .await
             .unwrap();
         manager
@@ -450,7 +450,7 @@ async fn overload_stops_attached_agents_only_after_the_others() {
             .await
             .unwrap();
         let execution = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
             .await
             .unwrap();
         let id = execution.plan.id.clone();
@@ -509,7 +509,7 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -559,7 +559,7 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
         .unwrap();
     assert_eq!(workspace.mode, None);
     let id = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap()
         .plan

@@ -37,7 +37,7 @@ impl Manager {
     pub(crate) async fn linked_job_workspaces(&self, id: &SpaceId) -> Result<Vec<Workspace>> {
         let mut workspaces = Vec::new();
         for job in self.claimed_jobs().await? {
-            if job.job.workspace_id.as_deref() != Some(id) {
+            if job.job.workspace_id.as_ref() != Some(id) {
                 continue;
             }
             // A job that ended meanwhile is gone with its workspace.

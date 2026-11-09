@@ -547,7 +547,7 @@ async fn empty_caches_on_request(
 ) -> Result<Vec<CacheCleanup>> {
     let mut report = Vec::new();
     for repo in repositories {
-        if !pick.covers(crate::repository::name(&repo), &repo.id) {
+        if !pick.covers(crate::repository::name(&repo), repo.id.as_str()) {
             continue;
         }
         let emptying = match manager.empty_caches(&repo, dry_run).await {
@@ -580,7 +580,7 @@ async fn remove_on_request(
 ) -> Result<()> {
     let named = matches!(pick, Pick::Only(_));
     for workspace in workspaces {
-        if !pick.covers(&workspace.name, &workspace.id) {
+        if !pick.covers(&workspace.name, workspace.id.as_str()) {
             continue;
         }
         if workspace.state != WorkspaceState::Ready {
@@ -637,7 +637,7 @@ async fn remove_chats_on_request(
 ) -> Result<()> {
     let named = matches!(pick, Pick::Only(_));
     for chat in chats {
-        if !pick.covers(&chat.name, &chat.id) {
+        if !pick.covers(&chat.name, chat.id.as_str()) {
             continue;
         }
         let snapshot = match manager.requested_chat_candidacy(&chat).await {

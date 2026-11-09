@@ -190,7 +190,7 @@ pub(super) fn owner(
     Ok(db
         .query_row(
             "SELECT id FROM workspaces WHERE repository_id=?1 AND branch=?2",
-            [repository_id, branch],
+            params![repository_id, branch],
             |row| row.get(0),
         )
         .optional()?)

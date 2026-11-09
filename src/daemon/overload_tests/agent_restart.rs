@@ -140,7 +140,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     bounded(launched).await.unwrap().unwrap();
     manager.fail_lost_renewals().await.unwrap();
     drop(gate);
-    let restore = starting_restore(&manager, &execution).await;
+    let restore = starting_restore(&manager, execution.as_str()).await;
     assert_eq!(restore.state, QueueState::Starting);
     bounded(async {
         while !crate::daemon::queued_starts::tests::STARTED
@@ -209,7 +209,7 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
         }
     });
     bounded(launched).await.unwrap().unwrap();
-    let restore = starting_restore(&manager, &execution).await;
+    let restore = starting_restore(&manager, execution.as_str()).await;
     manager
         .fail_queue_entry(&restore.id, "no terminal host can start queued agents")
         .await
@@ -241,7 +241,7 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
         }
     });
     bounded(launched).await.unwrap().unwrap();
-    let restore = starting_restore(&manager, &execution).await;
+    let restore = starting_restore(&manager, execution.as_str()).await;
     let agents = manager.running_agents().await.unwrap();
     let [agent] = agents.as_slice() else {
         panic!("expected the restarting agent: {agents:?}");
@@ -315,7 +315,7 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
         }
     });
     bounded(launched).await.unwrap().unwrap();
-    let restore = starting_restore(&manager, &execution).await;
+    let restore = starting_restore(&manager, execution.as_str()).await;
     let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
     let mut renewed = child_command(
         &manager,

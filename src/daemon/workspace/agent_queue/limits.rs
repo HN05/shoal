@@ -132,7 +132,7 @@ pub(crate) fn admit(
     let mut started = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
     for repository in occupied {
-        *used.entry(repository).or_default() += 1;
+        *used.entry(repository.as_str()).or_default() += 1;
     }
     let mut jobs = limits.jobs.running;
     let mut admitted = Vec::new();
@@ -176,7 +176,7 @@ pub(crate) fn admit(
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
         };
-        let used = used.entry(&entry.repository).or_default();
+        let used = used.entry(entry.repository.as_str()).or_default();
         let full = |count: usize, limit: u32| count.saturating_sub(own) >= limit as usize;
         if [limits.global, limits.disk]
             .into_iter()

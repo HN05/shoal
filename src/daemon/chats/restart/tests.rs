@@ -198,7 +198,7 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
         .unwrap();
 
     let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
-    assert_eq!(stopper.as_deref(), Some("coordinator"));
+    assert_eq!(stopper.as_ref().map(SpaceId::as_str), Some("coordinator"));
     HELD.lock().unwrap().retain(|name| *name != chat.name);
     let _ = restart.await.unwrap();
     restoring.kill();

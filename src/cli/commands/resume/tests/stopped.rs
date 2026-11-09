@@ -461,7 +461,7 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
     )
     .unwrap();
     let unrelated = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     assert_eq!(

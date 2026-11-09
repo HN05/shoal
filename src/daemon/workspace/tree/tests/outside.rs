@@ -410,9 +410,10 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         }
     };
     let by_other =
-        crate::daemon::scope::authorize(&manager, Some(&token), &mut resume(&chat.id)).await;
+        crate::daemon::scope::authorize(&manager, Some(&token), &mut resume(chat.id.as_str()))
+            .await;
     assert!(by_other.is_err());
-    let mut by_below = resume(&below_id);
+    let mut by_below = resume(below_id.as_str());
     crate::daemon::scope::authorize(&manager, Some(&token), &mut by_below)
         .await
         .unwrap();

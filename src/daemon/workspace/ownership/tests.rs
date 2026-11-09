@@ -39,7 +39,7 @@ fn ownership_uses_the_same_marker_path_and_identity_evidence() -> Result<()> {
         &other,
         Path::new("/missing"),
         None,
-        Some(&other.id)
+        Some(other.id.as_str())
     )?);
     assert!(!owns_git_dir(
         &other,

@@ -153,7 +153,7 @@ async fn a_message_for_running_work_wakes_only_while_work_runs() {
     queue(Delivery::WhileWorkRuns).await.unwrap();
     assert!(changed.has_changed().unwrap());
     let command = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     assert!(wakes().await);
@@ -235,7 +235,7 @@ async fn run_agent(
     workspace: &crate::model::Workspace,
 ) -> crate::daemon::workspace::StartedExecution {
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     manager
@@ -406,7 +406,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     // Its agent's wrapper waits to reattach, as after a daemon restart.
     let reattaching = create("reattaching").await.unwrap();
     let execution = manager
-        .begin_execution(&reattaching.id, None, ExecutionKind::Command, None)
+        .begin_execution(reattaching.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();

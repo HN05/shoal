@@ -37,7 +37,7 @@ async fn split_child(manager: &Manager, root: &std::path::Path) -> (Workspace, W
 /// execution finishes.
 async fn start_agent(manager: &Manager, workspace: &Workspace) -> super::super::StartedExecution {
     let started = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     manager

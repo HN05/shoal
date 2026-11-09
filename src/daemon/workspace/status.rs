@@ -50,8 +50,7 @@ impl Manager {
         workspace.job = self.workspace_job(&workspace.id).await?;
         let jobs = self.linked_job_workspaces(&workspace.id).await?;
         let proxy_retry = self.proxy_retry(&executions);
-        simulators
-            .retain(|simulator| simulator.workspace_id.as_deref() == Some(workspace.id.as_str()));
+        simulators.retain(|simulator| simulator.workspace_id.as_ref() == Some(&workspace.id));
         let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);
         let sync = self.checkout_sync(&workspace.repository_id);
         // A worktree Git cannot read shows none, as `diff_error` says why.

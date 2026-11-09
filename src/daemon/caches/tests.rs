@@ -39,7 +39,7 @@ async fn caches_empty_only_while_nothing_uses_them() {
     };
 
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     assert_eq!(
@@ -102,7 +102,7 @@ async fn executions_do_not_start_without_their_caches() {
     std::fs::create_dir_all(&caches).unwrap();
     std::fs::write(caches.join("owner"), "someone else\n").unwrap();
     let refused = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await;
     assert!(
         refused.is_err(),

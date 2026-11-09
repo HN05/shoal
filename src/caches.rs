@@ -69,7 +69,8 @@ impl Layout {
         let real = |directory: &Path| {
             fs::symlink_metadata(directory).is_ok_and(|metadata| metadata.is_dir())
         };
-        (is_marked_dir(&self.root, &self.owner) && real(&shared) && real(&cache)).then_some(cache)
+        (is_marked_dir(&self.root, self.owner.as_str()) && real(&shared) && real(&cache))
+            .then_some(cache)
     }
 
     /// Each configured cache's directory, created when missing.
@@ -77,7 +78,7 @@ impl Layout {
         if caches.is_empty() {
             return Ok(BTreeMap::new());
         }
-        create_marked_dir(&self.root, &self.owner)
+        create_marked_dir(&self.root, self.owner.as_str())
             .with_context(|| format!("create {}", self.root.display()))?;
         self.ensure_owned()?;
         let directories = self.locate(caches);
@@ -131,7 +132,7 @@ impl Layout {
     /// Delete the caches [`Self::move_aside`] moved, including any an
     /// interrupted pass left behind; a directory Shoal did not create stays.
     pub fn purge(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !is_marked_dir(&self.root, self.owner.as_str()) {
             return Ok(());
         }
         remove_dir(&self.root.join(TRASH))
@@ -140,7 +141,7 @@ impl Layout {
     /// Delete every cache with the directory itself, when the repository
     /// goes; a directory Shoal did not create is the user's and stays.
     pub fn remove(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !is_marked_dir(&self.root, self.owner.as_str()) {
             return Ok(());
         }
         remove_dir(&self.root)
@@ -148,7 +149,7 @@ impl Layout {
 
     fn ensure_owned(&self) -> Result<()> {
         ensure!(
-            is_marked_dir(&self.root, &self.owner),
+            is_marked_dir(&self.root, self.owner.as_str()),
             "{} is not a cache directory Shoal created; move it away to share caches",
             self.root.display()
         );

@@ -427,7 +427,7 @@ pub(super) async fn connected_agent(
 ) -> (ExecutionId, tokio::sync::watch::Receiver<bool>) {
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             crate::daemon::workspace::ExecutionKind::Command,
             None,
@@ -890,7 +890,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .unwrap();
     let entry = admission.entry.unwrap();
     assert!(!admission.start);
-    assert_eq!(entry.opens.as_deref(), Some(child.id.as_str()));
+    assert_eq!(entry.opens.as_ref(), Some(&child.id));
     assert_eq!(entry.workspace_id, None);
     assert_eq!(entry.state, QueueState::Starting);
     assert!(started(&entry.id));
@@ -963,7 +963,7 @@ async fn a_waiting_launch_attached_to_an_existing_workspace_opens_it() {
         .unwrap();
     let entries = manager.queue_entries().await.unwrap();
     let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
-    assert_eq!(waiting.opens.as_deref(), Some(set_up.id.as_str()));
+    assert_eq!(waiting.opens.as_ref(), Some(&set_up.id));
     assert!(manager.has_queued_launch(&set_up.id).await.unwrap());
 }
 

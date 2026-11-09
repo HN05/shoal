@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    client::space_ids::SpaceId,
     daemon::{
         events::{EventItem, EventKind},
         scope::{self, Caller},
@@ -282,12 +283,12 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
     assert_eq!(events.len(), 1);
     assert_eq!(
         (
-            events[0].workspace_id.as_deref(),
-            events[0].chat_id.as_deref()
+            events[0].workspace_id.as_ref().map(SpaceId::as_str),
+            events[0].chat_id.as_ref().map(SpaceId::as_str)
         ),
         (None, Some(chat.id.as_str()))
     );
-    assert_eq!(events[0].repository_id.as_deref(), Some(repo.id.as_str()));
+    assert_eq!(events[0].repository_id.as_ref(), Some(&repo.id));
 
     let id = chat.id.clone();
     manager

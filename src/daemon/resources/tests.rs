@@ -232,7 +232,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
             queue,
         };
         match manager
-            .acquire_resource(&SpaceSelector::parse(&workspace), request, None)
+            .acquire_resource(&SpaceSelector::parse(workspace.as_str()), request, None)
             .await
         {
             Ok(Allocation::Granted(lease)) => Ok(lease.name),
@@ -257,7 +257,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     };
     assert!(
         manager
-            .acquire_resource(&SpaceSelector::parse(&workspace), request, None)
+            .acquire_resource(&SpaceSelector::parse(workspace.as_str()), request, None)
             .await
             .is_err()
     );
@@ -273,7 +273,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     assert!(queued.starts_with("1 earlier"), "{queued}");
     manager
         .release_resource(
-            &SpaceSelector::parse(&workspace),
+            &SpaceSelector::parse(workspace.as_str()),
             "lock".into(),
             "held".into(),
         )

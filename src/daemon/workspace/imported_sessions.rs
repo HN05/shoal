@@ -223,10 +223,10 @@ impl Layout {
         if copies.is_empty() {
             return Ok(());
         }
-        create_marked_dir(&self.root, &self.owner)
+        create_marked_dir(&self.root, self.owner.as_str())
             .with_context(|| format!("create {}", self.root.display()))?;
         ensure!(
-            is_marked_dir(&self.root, &self.owner),
+            is_marked_dir(&self.root, self.owner.as_str()),
             "{} is not a directory Shoal created for session files; move it away",
             self.root.display()
         );
@@ -253,7 +253,7 @@ impl Layout {
 
     /// The list of the files kept for the workspace `id`.
     fn listed(&self, id: &SpaceId) -> Result<Vec<SessionFile>> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !is_marked_dir(&self.root, self.owner.as_str()) {
             return Ok(Vec::new());
         }
         let list = self.root.join(id).join(LIST);
@@ -269,7 +269,7 @@ impl Layout {
     /// Move the files kept for the workspace `from` to the workspace `to`.
     fn hand_over(&self, from: &SpaceId, to: &SpaceId) -> Result<()> {
         ensure!(
-            is_marked_dir(&self.root, &self.owner),
+            is_marked_dir(&self.root, self.owner.as_str()),
             "{} is not a directory Shoal created for session files",
             self.root.display()
         );
@@ -279,7 +279,7 @@ impl Layout {
     }
 
     fn remove_one(&self, id: &SpaceId) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !is_marked_dir(&self.root, self.owner.as_str()) {
             return Ok(());
         }
         remove_dir(&self.root.join(id))
@@ -287,7 +287,7 @@ impl Layout {
 
     /// Delete the files kept for workspaces other than `owners`.
     fn remove_unowned(&self, owners: &HashSet<String>) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !is_marked_dir(&self.root, self.owner.as_str()) {
             return Ok(());
         }
         for entry in std::fs::read_dir(&self.root)? {
@@ -302,7 +302,7 @@ impl Layout {
     }
 
     fn remove(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !is_marked_dir(&self.root, self.owner.as_str()) {
             return Ok(());
         }
         remove_dir(&self.root)

@@ -125,10 +125,10 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
     assert_eq!(handles(&queued), ["a", "b"]);
     let first = queued[0].job.as_ref().unwrap();
     assert_eq!(first.run.trigger, Trigger::Pull { number: 12 });
-    assert_eq!(first.workspace_id.as_deref(), Some(pull.id.as_str()));
+    assert_eq!(first.workspace_id.as_ref(), Some(&pull.id));
     assert_eq!(queued[0].name, "ci-rust-4");
     let second = queued[1].job.as_ref().unwrap();
-    assert_eq!(second.workspace_id.as_deref(), Some(topic.id.as_str()));
+    assert_eq!(second.workspace_id.as_ref(), Some(&topic.id));
 
     // Polling again queues nothing twice.
     manager.refresh_waiting_jobs().await.unwrap();

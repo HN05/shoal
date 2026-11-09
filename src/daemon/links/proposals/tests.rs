@@ -338,7 +338,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
+    assert_eq!(routed.decider.as_ref(), Some(&parent.id));
 
     // The parent proposes its own issues, so it may not open this one, with
     // or without edits.

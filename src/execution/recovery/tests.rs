@@ -613,7 +613,7 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
         &ExecutionId::from("execution"),
     )
     .unwrap();
-    assert_eq!(stopper.as_deref(), Some("parent"));
+    assert_eq!(stopper.as_ref().map(SpaceId::as_str), Some("parent"));
     // A stop that names no stopper keeps the one the record names.
     keep_as_last_session(
         &paths,
@@ -630,7 +630,7 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
         &ExecutionId::from("execution"),
     )
     .unwrap();
-    assert_eq!(stopper.as_deref(), Some("parent"));
+    assert_eq!(stopper.as_ref().map(SpaceId::as_str), Some("parent"));
 }
 
 #[test]

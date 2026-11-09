@@ -83,7 +83,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     // A capable wrapper from before the restart.
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             Some(wrapper.clone()),
             ExecutionKind::Command,
             None,

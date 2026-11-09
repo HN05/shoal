@@ -23,7 +23,7 @@ async fn agent(
     session: &str,
 ) -> Result<ExecutionId> {
     let id = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await?
         .plan
         .id;
@@ -96,8 +96,8 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
     assert_eq!(
         sessions.sessions,
         vec![
-            reported("claude", "s1", &running, true),
-            reported("codex", "s2", &waiting, false),
+            reported("claude", "s1", running.as_str(), true),
+            reported("codex", "s2", waiting.as_str(), false),
             reported("claude", "s3", "ended", false),
         ]
     );

@@ -336,8 +336,8 @@ async fn fork_pull_workspace(
     };
     let new = NewWorkspace {
         parent: crate::cli::ui::current_chat(&None)
-            .as_deref()
-            .map(SpaceSelector::parse),
+            .as_ref()
+            .map(SpaceSelector::id),
         options: CreationOptions {
             skip_setup: true,
             ..Default::default()

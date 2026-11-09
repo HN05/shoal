@@ -31,7 +31,11 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         let (client, stream) = UnixStream::pair().unwrap();
         let workspace = workspace.id.clone();
         let served = tokio::spawn(async move {
-            let updates = pr_updates(manager.clone(), SpaceSelector::parse(&workspace), Some(60));
+            let updates = pr_updates(
+                manager.clone(),
+                SpaceSelector::parse(workspace.as_str()),
+                Some(60),
+            );
             answer::answer_wait(stream, 5, &manager, updates).await
         });
         (client, served)

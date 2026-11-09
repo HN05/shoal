@@ -997,7 +997,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         async move {
             manager
                 .split_workspace(
-                    &SpaceSelector::parse(&parent),
+                    &SpaceSelector::parse(parent.as_str()),
                     name.into(),
                     None,
                     Default::default(),

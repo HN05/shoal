@@ -123,7 +123,12 @@ impl Running {
         let control: Control = read(&mut self.connection).await;
         // No execution starts while the stop runs, to outlive it.
         self.manager
-            .begin_execution(&self.workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(
+                self.workspace.id.as_str(),
+                None,
+                ExecutionKind::Command,
+                None,
+            )
             .await
             .expect_err("an execution registered while the daemon stops work");
         let finished = ExecutionEvent::Finished { exit_code: 143 };

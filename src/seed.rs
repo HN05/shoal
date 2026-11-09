@@ -66,7 +66,7 @@ impl Layout {
     /// Create the seed directory, or require the existing one to be this
     /// repository's.
     pub fn claim(&self) -> Result<()> {
-        create_marked_dir(&self.root, &self.owner)?;
+        create_marked_dir(&self.root, self.owner.as_str())?;
         self.ensure_owned()
     }
 
@@ -74,7 +74,7 @@ impl Layout {
     /// never builds in or deletes from one it did not create.
     pub fn ensure_owned(&self) -> Result<()> {
         anyhow::ensure!(
-            is_marked_dir(&self.root, &self.owner),
+            is_marked_dir(&self.root, self.owner.as_str()),
             "{} is not a seed directory Shoal created; move it away to use the seed",
             self.root.display()
         );

@@ -27,7 +27,7 @@ pub enum Selector {
 impl Selector {
     pub fn value(&self) -> &str {
         match self {
-            Self::Id(id) => id,
+            Self::Id(id) => id.as_str(),
             Self::Value(value) | Self::Path { value, .. } => value,
         }
     }

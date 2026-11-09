@@ -636,9 +636,9 @@ async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
     manager.overload_recovery.publish(Some(epoch));
     assert_ne!(bounded(launched).await.unwrap().unwrap(), 0);
     let entries = manager.queue_entries().await.unwrap();
-    let restore = entries
-        .iter()
-        .find(|entry| entry.execution.as_deref() == Some(execution.as_str()));
+    let restore = entries.iter().find(|entry| {
+        entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution.as_str())
+    });
     assert_eq!(
         restore.map(|entry| entry.kind),
         Some(crate::state::QueueKind::Restore)
@@ -1145,7 +1145,7 @@ async fn wait_start_handled(manager: &Manager, workspace: &crate::model::Workspa
                 EventItem::Event(event) => {
                     event.details.kind == EventKind::AgentStarted
                         && (event.details.agent.as_ref())
-                            .and_then(|agent| agent.execution_id.as_deref())
+                            .and_then(|agent| agent.execution_id.as_ref().map(ExecutionId::as_str))
                             == Some(execution.as_str())
                 }
                 _ => false,
@@ -1164,7 +1164,7 @@ async fn starting_restore(manager: &Manager, execution: &str) -> crate::model::Q
         loop {
             let entries = manager.queue_entries().await.unwrap();
             if let Some(entry) = entries.into_iter().find(|entry| {
-                entry.execution.as_deref() == Some(execution)
+                entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution)
                     && entry.state == crate::state::QueueState::Starting
             }) {
                 return entry;
@@ -1204,7 +1204,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
             .queue_failed_restore(&workspace, "fixture", &execution, 1)
             .await
     );
-    let restore = starting_restore(&manager, &execution).await;
+    let restore = starting_restore(&manager, execution.as_str()).await;
     let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
     let mut command = child_command(
         &manager,

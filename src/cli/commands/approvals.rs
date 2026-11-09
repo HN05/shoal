@@ -107,7 +107,7 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
                 .id
         }
     };
-    Ok(request.decider.as_deref() == Some(owner.as_str()))
+    Ok(request.decider.as_ref() == Some(&owner))
 }
 
 /// Read `y` or `n`; anything else leaves the request undecided.

@@ -98,7 +98,7 @@ async fn every_route_records_one_added_event_per_file() {
         .await
         .unwrap();
     let added = &events[2];
-    assert_eq!(added.workspace_id.as_deref(), Some(workspace.id.as_str()));
+    assert_eq!(added.workspace_id.as_ref(), Some(&workspace.id));
     assert_eq!(added.chat_id, None);
     assert_eq!(added.repository_id.as_ref(), Some(&workspace.repository_id));
     // The event's file is the record as `shoal files` lists it.
@@ -250,7 +250,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     );
     // A removed workspace's events keep its identity.
     let gone = &removed[3];
-    assert_eq!(gone.workspace_id.as_deref(), Some(expired.id.as_str()));
+    assert_eq!(gone.workspace_id.as_ref(), Some(&expired.id));
     assert_eq!(gone.file.workspace.as_deref(), Some("expired"));
     assert_eq!(gone.repository_id.as_ref(), Some(&workspace.repository_id));
 }
@@ -299,7 +299,7 @@ async fn a_chats_file_events_name_the_chat() {
         ]
     );
     for event in &events {
-        assert_eq!(event.chat_id.as_deref(), Some(chat.id.as_str()));
+        assert_eq!(event.chat_id.as_ref(), Some(&chat.id));
         assert_eq!(event.workspace_id, None);
         assert_eq!(event.file.chat.as_deref(), Some("planning"));
     }
@@ -357,7 +357,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
         ]
     );
     for event in &events {
-        assert_eq!(event.chat_id.as_deref(), Some(chat.id.as_str()));
+        assert_eq!(event.chat_id.as_ref(), Some(&chat.id));
         assert_eq!(event.repository_id, None);
     }
 }

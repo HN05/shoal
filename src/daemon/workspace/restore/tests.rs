@@ -88,7 +88,7 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
         .unwrap();
 
     assert!(process.wait().await.unwrap().success());
-    let removed = record(&manager, &workspace.id).await.unwrap();
+    let removed = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(
         git(
             &checkout,
@@ -137,7 +137,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .unwrap();
     // Its unpushed commit keeps the branch.
     assert_ne!(git(&checkout, &["branch", "--list", "topic"]), "");
-    let removed = record(&manager, &workspace.id).await.unwrap();
+    let removed = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(removed.name, "topic");
     assert_eq!(removed.checkpoint.branch.as_deref(), Some("topic"));
     assert_eq!(removed.checkpoint.head, head.trim());
@@ -202,7 +202,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         &["update-ref", "refs/shoal/checkpoints/unknown/1", "HEAD"],
     );
     manager.expire_checkpoints().await.unwrap();
-    assert!(record(&manager, &workspace.id).await.is_some());
+    assert!(record(&manager, workspace.id.as_str()).await.is_some());
     assert_eq!(checkpoint_refs(&checkout), [reference]);
     let id = workspace.id.clone();
     manager
@@ -221,7 +221,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .await
         .unwrap();
     manager.expire_checkpoints().await.unwrap();
-    assert!(record(&manager, &workspace.id).await.is_none());
+    assert!(record(&manager, workspace.id.as_str()).await.is_none());
     assert!(checkpoint_refs(&checkout).is_empty());
 }
 
@@ -380,7 +380,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         .unwrap();
     assert!(claimed.expires_at >= floor);
     assert!(claimed.checkpoint.expires_at >= floor);
-    let saved = record(&manager, &workspace.id).await.unwrap();
+    let saved = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(saved.expires_at, claimed.expires_at);
     assert_eq!(saved.checkpoint.expires_at, claimed.checkpoint.expires_at);
     let id = workspace.id.clone();
@@ -536,7 +536,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .save_removal_record(&workspace, EventCause::Manual)
         .await
         .unwrap();
-    let saved = record(&manager, &workspace.id).await.unwrap();
+    let saved = record(&manager, workspace.id.as_str()).await.unwrap();
     let urls: Vec<_> = saved
         .links
         .related
@@ -616,7 +616,7 @@ async fn a_failed_removal_keeps_its_checkpoint() {
         .await;
     fs::write(&config, valid).unwrap();
     assert!(removed.is_err());
-    let record = record(&manager, &workspace.id).await.unwrap();
+    let record = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(
         git(
             &checkout,
@@ -699,7 +699,10 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
         "first\n"
     );
     assert_eq!(
-        record(&manager, &workspace.id).await.unwrap().checkpoint,
+        record(&manager, workspace.id.as_str())
+            .await
+            .unwrap()
+            .checkpoint,
         second
     );
     // An unchanged retry extends the latest checkpoint instead.

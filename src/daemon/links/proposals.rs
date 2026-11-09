@@ -246,7 +246,7 @@ impl Manager {
         let request = self.pending_proposal(request).await?;
         if let Some(workspace) = routed_to {
             ensure!(
-                request.decider.as_deref() == Some(workspace),
+                request.decider.as_ref() == Some(workspace),
                 "approval request {} is not routed to this space",
                 request.number
             );

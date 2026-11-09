@@ -16,7 +16,7 @@ use crate::{
 /// A tracked agent `name` in `workspace`.
 async fn agent(manager: &Manager, workspace: &Workspace, name: &str) -> ExecutionId {
     let id = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap()
         .plan

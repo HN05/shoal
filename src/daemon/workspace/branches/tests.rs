@@ -720,16 +720,16 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
     }
     for (repository, branch, existing, options) in [
         ("missing", None, None, none),
-        (&f.repo_id, Some("bad..name"), None, none),
-        (&f.repo_id, None, Some("absent"), none),
+        (f.repo_id.as_str(), Some("bad..name"), None, none),
+        (f.repo_id.as_str(), None, Some("absent"), none),
         (
-            &f.repo_id,
+            f.repo_id.as_str(),
             None,
             Some("owned"),
             options(Some("main"), None, None),
         ),
         (
-            &f.repo_id,
+            f.repo_id.as_str(),
             None,
             Some("topic"),
             NewWorktreeOptions {
@@ -737,23 +737,33 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
                 ..none
             },
         ),
-        (&f.repo_id, None, None, options(Some("absent"), None, None)),
         (
-            &f.repo_id,
+            f.repo_id.as_str(),
+            None,
+            None,
+            options(Some("absent"), None, None),
+        ),
+        (
+            f.repo_id.as_str(),
             Some("new"),
             None,
             options(None, Some("absent"), None),
         ),
         (
-            &f.repo_id,
+            f.repo_id.as_str(),
             Some("new"),
             None,
             options(None, None, Some(&*f.repo)),
         ),
         // A path that no workspace can use is refused before the branch is known.
-        (&f.repo_id, None, None, options(None, None, Some(&*f.repo))),
         (
-            &f.repo_id,
+            f.repo_id.as_str(),
+            None,
+            None,
+            options(None, None, Some(&*f.repo)),
+        ),
+        (
+            f.repo_id.as_str(),
             Some("owned"),
             None,
             options(None, None, Some(&*new_path)),
@@ -1249,7 +1259,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         }
         let started = f
             .manager
-            .begin_execution(&workspace.id, None, kind, None)
+            .begin_execution(workspace.id.as_str(), None, kind, None)
             .await
             .unwrap();
         let token = &started.plan.scope_token;
@@ -1341,7 +1351,7 @@ async fn setup_releases_git_gate_after_registration_and_on_preparation_failure()
     drop(guard);
     assert!(
         f.manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
             .await
             .is_err()
     );
@@ -1353,7 +1363,7 @@ async fn setup_releases_git_gate_after_registration_and_on_preparation_failure()
     .unwrap();
     let started = f
         .manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
         .await
         .unwrap();
     assert!(gate.try_lock().is_ok(), "setup only locks registration");
@@ -1408,7 +1418,7 @@ async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failu
     for exit in [Some(0), None] {
         let started = f
             .manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Merge, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Merge, None)
             .await
             .unwrap();
         assert!(started.plan.merge.is_some());
@@ -1433,7 +1443,7 @@ async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failu
     fs::write(workspace.path.join("dirty"), "preserve me").unwrap();
     assert!(
         f.manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Merge, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Merge, None)
             .await
             .is_err()
     );
@@ -2183,7 +2193,7 @@ async fn adoption_replaces_markers_of_forgotten_workspaces_only() {
     );
     assert_ne!(w.number, 0);
     // One naming a recorded workspace refuses adoption and stays in place.
-    let (path, marker) = marked("adopt/owned", &w.id);
+    let (path, marker) = marked("adopt/owned", w.id.as_str());
     f.manager
         .adopt_workspace(&f.repo_id, &path, false)
         .await

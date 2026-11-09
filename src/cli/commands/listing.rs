@@ -75,7 +75,7 @@ impl ListFilter {
 
     fn keeps_repository(&self, repository_id: &RepositoryId) -> bool {
         self.repository
-            .as_deref()
+            .as_ref()
             .is_none_or(|id| id == repository_id)
     }
 

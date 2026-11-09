@@ -235,7 +235,7 @@ impl Manager {
     ) -> Result<ApprovalRequest> {
         let request = self.show_approval(number).await?;
         ensure!(
-            request.decider.as_deref() == Some(caller.space_id.as_str()),
+            request.decider.as_ref() == Some(&caller.space_id),
             "workspace processes decide only the approval requests routed to them; ask the user to run this command"
         );
         Ok(request)

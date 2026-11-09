@@ -23,7 +23,7 @@ async fn only_the_agents_workspace_reports_its_attachment() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();

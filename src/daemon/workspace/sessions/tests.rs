@@ -164,9 +164,9 @@ async fn removal_closes_every_owned_session_and_orphan_sweep_preserves_live_owne
         let other = manager
             .create_workspace(&workspace.repository_id, "kept".into(), None, None, None)
             .await?;
-        host.add("agent", &workspace.id)?;
-        host.add("shell", &workspace.id)?;
-        host.add("kept", &other.id)?;
+        host.add("agent", workspace.id.as_str())?;
+        host.add("shell", workspace.id.as_str())?;
+        host.add("kept", other.id.as_str())?;
         host.add("orphan", "no-longer-recorded")?;
         if missing {
             std::fs::remove_dir_all(&workspace.path)?;
@@ -188,7 +188,7 @@ async fn removal_closes_every_owned_session_and_orphan_sweep_preserves_live_owne
 #[tokio::test]
 async fn refused_removal_keeps_sessions() -> Result<()> {
     let (_root, manager, workspace, host) = fixture().await?;
-    host.add("agent", &workspace.id)?;
+    host.add("agent", workspace.id.as_str())?;
     std::fs::write(workspace.path.join("unsaved"), "work")?;
     assert!(
         manager
@@ -209,8 +209,8 @@ async fn refused_removal_keeps_sessions() -> Result<()> {
 async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_retried() -> Result<()>
 {
     let (_root, manager, workspace, host) = fixture().await?;
-    host.add("bad", &workspace.id)?;
-    host.add("good", &workspace.id)?;
+    host.add("bad", workspace.id.as_str())?;
+    host.add("good", workspace.id.as_str())?;
     host.fail.store(true, Ordering::Relaxed);
     manager
         .remove_workspace(
@@ -246,7 +246,7 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
             } else {
                 "connected"
             };
-            host.add(name, &workspace.id)?;
+            host.add(name, workspace.id.as_str())?;
             host.demo(name, name)?;
             let demo = Launch {
                 id: name.into(),
@@ -259,7 +259,7 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
             };
             let started = manager
                 .begin_execution_running(
-                    &workspace.id,
+                    workspace.id.as_str(),
                     None,
                     ExecutionKind::Command,
                     None,
@@ -303,7 +303,7 @@ async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspac
     use crate::{daemon::workspace::ExecutionKind, demos::Launch};
 
     let (_root, manager, workspace, host) = fixture().await?;
-    host.add("reused", &workspace.id)?;
+    host.add("reused", workspace.id.as_str())?;
     host.demo("reused", "old-launch")?;
     let demo = Launch {
         id: "old-launch".into(),
@@ -316,7 +316,7 @@ async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspac
     };
     let started = manager
         .begin_execution_running(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -336,7 +336,7 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
 
     for replacement in [false, true] {
         let (_root, manager, workspace, host) = fixture().await?;
-        host.add("bad", &workspace.id)?;
+        host.add("bad", workspace.id.as_str())?;
         host.demo("bad", "launch")?;
         host.fail.store(true, Ordering::Relaxed);
         let demo = Launch {
@@ -350,7 +350,7 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
         };
         let started = manager
             .begin_execution_running(
-                &workspace.id,
+                workspace.id.as_str(),
                 None,
                 ExecutionKind::Command,
                 None,
@@ -434,7 +434,7 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
     };
     let started = manager
         .begin_execution_running(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             ExecutionKind::Command,
             None,
@@ -489,9 +489,9 @@ async fn rex_fixture(
 #[tokio::test]
 async fn removal_closes_only_the_blocks_shoal_recorded_creating() -> Result<()> {
     let (_root, manager, workspace, host) = rex_fixture(&["created"]).await?;
-    host.add("created", &workspace.id)?;
+    host.add("created", workspace.id.as_str())?;
     // The user's own block ran an agent, but Shoal never recorded creating it.
-    host.add("users", &workspace.id)?;
+    host.add("users", workspace.id.as_str())?;
     manager.close_owned_places(Some(workspace.id.clone())).await;
     assert_eq!(host.closed()?, ["created"]);
     assert!(manager.owned_places(None).await?.is_empty());
@@ -501,8 +501,8 @@ async fn removal_closes_only_the_blocks_shoal_recorded_creating() -> Result<()> 
 #[tokio::test]
 async fn the_sweep_retries_failed_closes_once_the_workspace_is_gone() -> Result<()> {
     let (_root, manager, workspace, host) = rex_fixture(&["bad", "live"]).await?;
-    host.add("bad", &workspace.id)?;
-    host.add("live", &workspace.id)?;
+    host.add("bad", workspace.id.as_str())?;
+    host.add("live", workspace.id.as_str())?;
     host.fail.store(true, Ordering::Relaxed);
     manager.close_owned_places(Some(workspace.id.clone())).await;
     assert_eq!(host.closed()?, ["live"]);
@@ -554,7 +554,7 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
     let taker = manager
         .create_workspace(&workspace.repository_id, "taker".into(), None, None, None)
         .await?;
-    host.add("shared", &workspace.id)?;
+    host.add("shared", workspace.id.as_str())?;
     let _started = manager
         .begin_execution_placed(
             &SpaceSelector::id(&taker.id),
@@ -639,8 +639,8 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
     let child = manager
         .create_workspace(&workspace.repository_id, "child".into(), None, None, None)
         .await?;
-    host.add("parent", &workspace.id)?;
-    host.add("chatted", &workspace.id)?;
+    host.add("parent", workspace.id.as_str())?;
+    host.add("chatted", workspace.id.as_str())?;
     // A parent agent's `shoal run --workspace child` runs in the parent's block.
     let _nested = manager
         .begin_execution_placed(
@@ -698,7 +698,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
     let other = manager
         .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
         .await?;
-    host.add("labelled", &workspace.id)?;
+    host.add("labelled", workspace.id.as_str())?;
     assert!(
         manager
             .place_ownership(
@@ -754,7 +754,7 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
     manager
         .record_owned_place(&SpaceSelector::id(&workspace.id), on("first"))
         .await?;
-    host.add("w1:p1", &workspace.id)?;
+    host.add("w1:p1", workspace.id.as_str())?;
     // An agent in the user's pane of the same ID on another server takes
     // nothing over, and records nothing.
     let mut users = on("second");
@@ -816,7 +816,7 @@ async fn a_session_its_host_labels_closes_through_the_host_without_a_record() ->
     let other = manager
         .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
         .await?;
-    host.add("labelled", &workspace.id)?;
+    host.add("labelled", workspace.id.as_str())?;
     let session = Origin::created(HostName::Zmx, "labelled".into());
     assert_eq!(
         manager.close_recorded_place(&other.id, &session).await?,

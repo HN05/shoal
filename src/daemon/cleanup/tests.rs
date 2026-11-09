@@ -502,7 +502,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     let before_command = snapshot(&manager).await.unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             crate::daemon::workspace::ExecutionKind::Command,
             None,

@@ -14,7 +14,7 @@ fn populate(db: &mut Connection, count: usize) -> Result<()> {
         let id = format!("00000000-0000-0000-0000-{index:012}");
         let current = owner(index / 2);
         // Two records per owner; unrelated claimed devices last belonged to 0.
-        let mut sim = record(&id, Some(&current), Some(&owner(0)));
+        let mut sim = record(&id, Some(current.as_str()), Some(owner(0).as_str()));
         if index % 2 == 1 {
             sim["workspace_id"] = Value::Null;
             sim["last_workspace_id"] = json!(current);
@@ -38,7 +38,13 @@ fn legacy_list(db: &Connection, owner: &str) -> Result<Vec<Simulator>> {
         .into_iter()
         .map(|r| serde_json::from_str::<Simulator>(&r))
         .collect::<serde_json::Result<Vec<_>>>()?;
-    records.retain(|s| s.workspace_id.as_deref().or(s.last_workspace_id.as_deref()) == Some(owner));
+    records.retain(|s| {
+        s.workspace_id
+            .as_ref()
+            .map(SpaceId::as_str)
+            .or(s.last_workspace_id.as_ref().map(SpaceId::as_str))
+            == Some(owner)
+    });
     Ok(records)
 }
 
@@ -68,7 +74,7 @@ fn indexed_plan_and_decode_counts_stay_bounded_as_inventory_grows() -> Result<()
         assert_eq!(DECODED_RECORDS.get(), 2, "inventory {size}");
         assert_eq!(
             serde_json::to_value(selected)?,
-            serde_json::to_value(legacy_list(&db, &owner(0))?)?
+            serde_json::to_value(legacy_list(&db, owner(0).as_str())?)?
         );
         DECODED_RECORDS.set(0);
         for index in size..size + 100 {

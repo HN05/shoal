@@ -37,7 +37,7 @@ pub(super) async fn launch(
     command: JobCommand,
 ) -> anyhow::Result<ExecutionId> {
     let started = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await?;
     let id = started.plan.id.clone();
     LAUNCHED
@@ -550,7 +550,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
     manager.finish_ended_jobs().await.unwrap();
     let kept = manager.claimed_jobs().await.unwrap();
     assert_eq!(
-        kept[0].execution_id.as_deref(),
+        kept[0].execution_id.as_ref().map(ExecutionId::as_str),
         Some(started.plan.id.as_str())
     );
 
@@ -649,7 +649,7 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
         .unwrap();
     let named = job.job.as_ref().unwrap();
     assert_eq!(named.job.name, "rust");
-    assert_eq!(named.workspace_id.as_deref(), Some(topic.id.as_str()));
+    assert_eq!(named.workspace_id.as_ref(), Some(&topic.id));
     let linked = manager.linked_job_workspaces(&topic.id).await.unwrap();
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].id, claimed[0].workspace_id);
@@ -793,7 +793,7 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::parse(&workspace),
+            workspace: SpaceSelector::parse(workspace.as_str()),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,

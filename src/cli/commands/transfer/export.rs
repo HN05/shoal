@@ -349,7 +349,7 @@ fn check_chat_export(chat: Chat) -> Result<Chat> {
         chat.name
     );
     ensure!(
-        crate::env::chat().as_deref() != Some(chat.id.as_str()),
+        crate::env::chat().as_ref() != Some(&chat.id),
         "this process runs in chat {}, which the export ends; export it from another terminal",
         chat.name
     );

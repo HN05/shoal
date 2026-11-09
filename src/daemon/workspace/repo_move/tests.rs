@@ -134,7 +134,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     )
     .await;
     let setup = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
         .await;
     assert!(setup.is_err());
     fs::write(destination.join("partial"), "")?;
@@ -552,7 +552,12 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
     let identity = crate::process::identity::capture(wrapper.id().context("no PID")?)?
         .context("wrapper exited")?;
     let execution = manager
-        .begin_execution(&workspace.id, Some(identity), ExecutionKind::Command, None)
+        .begin_execution(
+            workspace.id.as_str(),
+            Some(identity),
+            ExecutionKind::Command,
+            None,
+        )
         .await?;
 
     // The wrapper stops with its execution, so it does not count.

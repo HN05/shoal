@@ -113,7 +113,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .is_err()
     );
 
-    link(&manager, &workspace.id, &pr, Some(&issue)).await;
+    link(&manager, workspace.id.as_str(), &pr, Some(&issue)).await;
     let listed = manager.list_workspaces().await.unwrap();
     assert_eq!(
         listed[0].links,
@@ -317,7 +317,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
     let forge = ForgeRepo::parse(&github.remote()).unwrap();
     let (_, pr) = forge.pull("12").unwrap();
     let (_, issue) = forge.issue("7").unwrap();
-    link(&manager, &workspace.id, &pr, Some(&issue)).await;
+    link(&manager, workspace.id.as_str(), &pr, Some(&issue)).await;
     github.push(&current_head(&workspace).await.unwrap());
     let marked_urls = |ready: &ReadyMarks| -> Vec<String> {
         (ready.marks.iter())
@@ -643,7 +643,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap()
         .pull("12")
         .unwrap();
-    link(&manager, &workspace.id, &pr, None).await;
+    link(&manager, workspace.id.as_str(), &pr, None).await;
     github.push(&current_head(&workspace).await.unwrap());
     let draft = || github.draft();
     let mutations = || github.mutations();

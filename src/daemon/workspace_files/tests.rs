@@ -41,7 +41,7 @@ async fn command_caller(
     caller: Option<&Caller>,
 ) -> Caller {
     let token = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, caller)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, caller)
         .await
         .unwrap()
         .plan

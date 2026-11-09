@@ -76,7 +76,10 @@ async fn resumed_agents_start_from_the_daemon_as_slots_free() {
             .queue_stopped_restore(&SpaceSelector::from(&workspace.name), &execution, herdr())
             .await
             .unwrap();
-        assert_eq!(entry.execution.as_deref(), Some(execution.as_str()));
+        assert_eq!(
+            entry.execution.as_ref().map(ExecutionId::as_str),
+            Some(execution.as_str())
+        );
         entries.push(entry);
     }
     // Queueing again keeps the restore's place.
@@ -139,7 +142,7 @@ async fn only_an_ended_execution_with_a_record_can_be_queued() {
         .await
         .unwrap_err();
     let (running, _connection) = connected_agent(&manager, &workspace).await;
-    stop(&manager, &workspace, &running, STOPPED);
+    stop(&manager, &workspace, running.as_str(), STOPPED);
     manager
         .queue_stopped_restore(&"work".into(), &running, herdr())
         .await
@@ -154,7 +157,7 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     let open = create(&manager, &repo, "open").await;
     let done = create(&manager, &repo, "done").await;
     let (running, _connection) = connected_agent(&manager, &open).await;
-    signal_stop(&manager, &open, &running);
+    signal_stop(&manager, &open, running.as_str());
     signal_stop(&manager, &open, "ended");
     stop(&manager, &open, "manual", STOPPED);
     manager
@@ -171,11 +174,14 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     let entries = manager.queue_entries().await.unwrap();
     // Without a limit the daemon starts it at once, as its terminal would.
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].execution.as_deref(), Some("ended"));
+    assert_eq!(
+        entries[0].execution.as_ref().map(ExecutionId::as_str),
+        Some("ended")
+    );
     assert!(started(&entries[0].id));
     assert_eq!(requested(&manager, &open, "ended"), None);
     // The running execution, like a done workspace's agent, keeps its request.
-    assert_eq!(requested(&manager, &open, &running), Some(herdr()));
+    assert_eq!(requested(&manager, &open, running.as_str()), Some(herdr()));
     assert_eq!(requested(&manager, &done, "finished"), Some(herdr()));
 }
 
@@ -189,7 +195,7 @@ async fn entry(manager: &Manager, execution: &str) -> QueueEntry {
         .await
         .unwrap()
         .into_iter()
-        .find(|entry| entry.execution.as_deref() == Some(execution))
+        .find(|entry| entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution))
         .unwrap()
 }
 
@@ -202,8 +208,8 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     for (name, record) in [("idle", IDLE), ("resumed", IDLE), ("working", STOPPED)] {
         let workspace = create(&manager, &repo, name).await;
         let execution = ExecutionId::from(format!("{name}-agent"));
-        signal_stop(&manager, &workspace, &execution);
-        stop(&manager, &workspace, &execution, record);
+        signal_stop(&manager, &workspace, execution.as_str());
+        stop(&manager, &workspace, execution.as_str(), record);
         workspaces.push(workspace);
     }
     // The idle agents hold no slot, so the one stopped mid-turn takes it.
@@ -274,11 +280,11 @@ async fn resuming_an_agent_its_wrapper_waits_for_admits_the_wrappers_restore() {
     let agents = stopped_agents(&manager, &workspaces.iter().collect::<Vec<_>>()).await;
     let mut restoring = Vec::new();
     for (workspace, (execution, _)) in workspaces.iter().zip(&agents) {
-        stop(&manager, workspace, execution, IDLE);
+        stop(&manager, workspace, execution.as_str(), IDLE);
         restoring.push(await_restore(&manager, execution).await);
     }
     manager.dispatch_queue().await.unwrap();
-    let waiting = entry(&manager, &agents[1].0).await;
+    let waiting = entry(&manager, agents[1].0.as_str()).await;
     assert!(waiting.waits_for_update && waiting.state == Queued);
 
     // The wrapper's restore keeps its place and waits only for a slot.
@@ -287,7 +293,7 @@ async fn resuming_an_agent_its_wrapper_waits_for_admits_the_wrappers_restore() {
         .await
         .unwrap();
     assert_eq!(resumed.id, waiting.id);
-    assert!(!entry(&manager, &agents[1].0).await.waits_for_update);
+    assert!(!entry(&manager, agents[1].0.as_str()).await.waits_for_update);
     manager.dispatch_queue().await.unwrap();
     let mut restoring = restoring.into_iter();
     let idle = restoring.next().unwrap();
@@ -295,7 +301,7 @@ async fn resuming_an_agent_its_wrapper_waits_for_admits_the_wrappers_restore() {
         bounded(restoring.next().unwrap()).await.unwrap().unwrap(),
         Grant::Queue
     );
-    assert!(entry(&manager, &agents[0].0).await.waits_for_update);
+    assert!(entry(&manager, agents[0].0.as_str()).await.waits_for_update);
 
     // Started now, it goes beyond the limit in its wrapper.
     let now = manager
@@ -521,7 +527,7 @@ async fn a_stop_claims_only_the_agents_nothing_stopped_before() {
     let (running, _running) = connected_agent(&manager, &workspace).await;
     // A protection stop's agent keeps its execution while its wrapper waits.
     let (paused, _paused) = connected_agent(&manager, &workspace).await;
-    stop(&manager, &workspace, &paused, STOPPED);
+    stop(&manager, &workspace, paused.as_str(), STOPPED);
     let unstopped = manager.unstopped_executions(&workspace.id).await.unwrap();
     assert_eq!(unstopped, [running]);
 }

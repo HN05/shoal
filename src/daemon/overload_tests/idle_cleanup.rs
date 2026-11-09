@@ -13,7 +13,7 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let id = stop_agent_in(&manager, &workspace, AgentState::Idle).await;
-    wait_restore_waits(&manager, &id).await;
+    wait_restore_waits(&manager, id.as_str()).await;
     let snapshot = manager
         .cleanup_candidacy(&workspace.id)
         .await
@@ -74,7 +74,7 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let id = stop_agent_in(&manager, &workspace, AgentState::Idle).await;
-    wait_restore_waits(&manager, &id).await;
+    wait_restore_waits(&manager, id.as_str()).await;
     let snapshot = manager
         .cleanup_candidacy(&workspace.id)
         .await
@@ -119,7 +119,7 @@ async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let id = stop_agent_in(&manager, &workspace, AgentState::Working).await;
-    wait_restore_waits(&manager, &id).await;
+    wait_restore_waits(&manager, id.as_str()).await;
     assert_eq!(
         manager.cleanup_candidacy(&workspace.id).await.unwrap(),
         Err(CleanupReason::Recovering)

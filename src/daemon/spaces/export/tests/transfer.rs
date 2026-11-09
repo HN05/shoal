@@ -84,7 +84,7 @@ async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
     assert!(
         manager
             .export_space(
-                &SpaceSelector::parse(workspace),
+                &SpaceSelector::parse(workspace.as_str()),
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,
                 file.clone(),

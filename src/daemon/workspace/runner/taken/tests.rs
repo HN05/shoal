@@ -13,7 +13,7 @@ use crate::daemon::{
 async fn report(manager: &Manager, run: u64) -> (ClaimedJob, std::path::PathBuf) {
     admit_and_claim(manager).await;
     let job = manager.claimed_jobs().await.unwrap().remove(0);
-    launched(&job.workspace_id);
+    launched(job.workspace_id.as_str());
     let directory = manager.job_directory(&job.id);
     // The hook holds a job of another run than the claimed one back.
     if run != 1 {

@@ -522,11 +522,11 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
 
     // The new name is refused where a new chat's would be.
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
-    assert!(rename(&talk.id, "worker").await.is_err());
-    assert!(rename(&talk.id, "other").await.is_err());
+    assert!(rename(talk.id.as_str(), "worker").await.is_err());
+    assert!(rename(talk.id.as_str(), "other").await.is_err());
     assert!(rename("gone", "topic").await.is_err());
     assert_eq!(
-        rename(&talk.id, "talk").await.unwrap(),
+        rename(talk.id.as_str(), "talk").await.unwrap(),
         RenamedChat {
             chat: talk.clone(),
             previous_name: "talk".into(),
@@ -534,7 +534,7 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     );
 
     // The reply names the chat as it was before.
-    let renamed = rename(&talk.id, "topic").await.unwrap();
+    let renamed = rename(talk.id.as_str(), "topic").await.unwrap();
     assert_eq!(
         renamed,
         RenamedChat {

@@ -112,7 +112,10 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         )
         .await
         .unwrap();
-    let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
+    let updates = manager
+        .wait_prs(workspace.id.as_str(), Some(60))
+        .await
+        .unwrap();
     assert!(updates.updates.is_empty() && !updates.timed_out);
     assert_eq!(updates.messages[0].message, "Rebase onto main");
     manager
@@ -122,7 +125,12 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         )
         .await
         .unwrap();
-    assert!(manager.wait_prs(&workspace.id, Some(60)).await.is_err());
+    assert!(
+        manager
+            .wait_prs(workspace.id.as_str(), Some(60))
+            .await
+            .is_err()
+    );
 
     let mut queued = manager.signals.watch_agent_messages();
     let waiting = {
@@ -1708,7 +1716,10 @@ async fn messages_waiting_for_work_come_with_the_next_updates() {
         .await
         .unwrap();
     // A message that wakes the agent would end the wait on its own.
-    let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
+    let updates = manager
+        .wait_prs(workspace.id.as_str(), Some(60))
+        .await
+        .unwrap();
     assert_eq!(updates.updates.len(), 1);
     assert_eq!(updates.messages[0].message, "Memory is low");
 }
@@ -2160,12 +2171,22 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         )
         .await
         .unwrap();
-    assert!(restarted.wait_prs(&workspace.id, Some(0)).await.is_err());
-    assert!(restarted.wait_prs(&workspace.id, Some(3601)).await.is_err());
+    assert!(
+        restarted
+            .wait_prs(workspace.id.as_str(), Some(0))
+            .await
+            .is_err()
+    );
+    assert!(
+        restarted
+            .wait_prs(workspace.id.as_str(), Some(3601))
+            .await
+            .is_err()
+    );
     // The longest timeout passes validation and reaches the missing links.
     assert!(
         restarted
-            .wait_prs(&workspace.id, Some(3600))
+            .wait_prs(workspace.id.as_str(), Some(3600))
             .await
             .unwrap_err()
             .to_string()
@@ -2647,7 +2668,10 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
         .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
         .await
         .unwrap();
-    let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
+    let updates = manager
+        .wait_prs(workspace.id.as_str(), Some(60))
+        .await
+        .unwrap();
     assert_eq!(updates.updates.len(), 1);
     assert!(updates.messages.is_empty(), "{updates:?}");
     let unread = manager

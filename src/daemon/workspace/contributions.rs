@@ -43,7 +43,11 @@ impl Manager {
             return Ok(());
         }
         let grace = self.repository_settings(&repo.id).await?.cleanup.grace();
-        if UnixTime::now() < self.claim_contribution_grace(&repo.id, grace).await? {
+        if UnixTime::now()
+            < self
+                .claim_contribution_grace(repo.id.as_str(), grace)
+                .await?
+        {
             return Ok(());
         }
         if let Some(removal) = self.remove_finished_contribution(&repo.id).await? {

@@ -87,8 +87,7 @@ impl SimulatorExt for Simulator {
     }
 
     fn is_leased_by(&self, workspace_id: &SpaceId, name: &str) -> bool {
-        self.workspace_id.as_deref() == Some(workspace_id)
-            && self.lease_name.as_deref() == Some(name)
+        self.workspace_id.as_ref() == Some(workspace_id) && self.lease_name.as_deref() == Some(name)
     }
 
     fn device<'a>(&self, inventory: &'a Inventory) -> Option<&'a simctl::Device> {

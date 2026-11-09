@@ -159,7 +159,7 @@ enum Listed<'a> {
 }
 
 impl<'a> Listed<'a> {
-    fn id(&self) -> &'a str {
+    fn id(&self) -> &'a SpaceId {
         match self {
             Self::Workspace(workspace) => &workspace.id,
             Self::Chat(chat) => &chat.id,
@@ -168,7 +168,7 @@ impl<'a> Listed<'a> {
 
     /// The space it lists under: its parent, or for a CI job's workspace,
     /// which has none, the workspace its run's PR or branch links.
-    fn parent(&self) -> Option<&'a str> {
+    fn parent(&self) -> Option<&'a SpaceId> {
         let parent = match self {
             Self::Workspace(workspace) => workspace.parent.as_ref(),
             Self::Chat(chat) => chat.parent.as_ref(),
@@ -177,10 +177,10 @@ impl<'a> Listed<'a> {
             Self::Workspace(workspace) => workspace
                 .job
                 .as_ref()
-                .and_then(|job| job.workspace_id.as_deref()),
+                .and_then(|job| job.workspace_id.as_ref()),
             Self::Chat(_) => None,
         };
-        parent.map(|parent| parent.id.as_str()).or(linked)
+        parent.map(|parent| &parent.id).or(linked)
     }
 }
 
@@ -201,7 +201,7 @@ impl<'a> SpaceTree<'a> {
 
     /// The spaces whose parent is not listed.
     fn roots(&self) -> Vec<Listed<'a>> {
-        let listed: HashSet<&str> = self.spaces().map(|space| space.id()).collect();
+        let listed: HashSet<&SpaceId> = self.spaces().map(|space| space.id()).collect();
         (self.spaces())
             .filter(|space| space.parent().is_none_or(|parent| !listed.contains(parent)))
             .collect()

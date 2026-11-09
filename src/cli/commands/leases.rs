@@ -181,7 +181,7 @@ async fn select_held(
     let simulators = inspection
         .simulators
         .into_iter()
-        .filter(|sim| sim.workspace_id.as_deref() == Some(&inspection.workspace.id))
+        .filter(|sim| sim.workspace_id.as_ref() == Some(&inspection.workspace.id))
         .filter_map(|sim| sim.lease_name.map(|name| Held::Sim { name }));
     let resources = inspection.resources.into_iter().map(|lease| {
         if lease.repository.is_some() {

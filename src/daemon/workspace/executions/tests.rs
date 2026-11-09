@@ -59,7 +59,7 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
         .await
         .unwrap();
     let error = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("injected registration failure"));
@@ -90,7 +90,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
         let id = workspace.id.clone();
         tokio::spawn(async move {
             manager
-                .begin_execution(&id, None, ExecutionKind::Setup, None)
+                .begin_execution(id.as_str(), None, ExecutionKind::Setup, None)
                 .await
         })
     };
@@ -190,7 +190,7 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
     for hook in ["exit 7", "mv .git .git.saved"] {
         let (_root, manager, workspace) = fixture(hook).await;
         let error = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
             .await
             .unwrap_err();
         let after = manager.workspace_by_id(&workspace.id).await.unwrap();
@@ -260,13 +260,13 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
             .unwrap()
             .unwrap();
         let started = manager
-            .begin_execution(&workspace.id, Some(wrapper), kind, None)
+            .begin_execution(workspace.id.as_str(), Some(wrapper), kind, None)
             .await
             .unwrap();
         fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
         fs::remove_file(workspace.path.join("before.sh")).unwrap();
         // Reading it again shows the marker where macOS does not hide it.
-        let mut child = waiting_process(&workspace.path, Some(&started.plan.id));
+        let mut child = waiting_process(&workspace.path, Some(started.plan.id.as_str()));
         let identity = crate::process::identity::capture(child.id().unwrap())
             .unwrap()
             .unwrap();
@@ -357,7 +357,7 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
         let (_root, manager, workspace) = fixture("exit 0").await;
         let started = manager
             .begin_execution(
-                &workspace.id,
+                workspace.id.as_str(),
                 process::capture(std::process::id()).unwrap(),
                 ExecutionKind::Setup,
                 None,
@@ -423,7 +423,7 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
 async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
     let (_root, manager, workspace) = fixture("exit 0").await;
     let started = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
         .await
         .unwrap();
     assert!(
@@ -451,7 +451,7 @@ async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
 async fn stopping_allows_the_child_stop_and_completion_budgets() -> Result<()> {
     let (_root, manager, workspace) = fixture("true").await;
     let mut running = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await?;
     // Pause only after fixture setup, which uses real subprocesses.
     tokio::time::pause();
@@ -497,13 +497,13 @@ async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
     // Connected receivers keep the daemon from signalling the recorded child,
     // which is this test process.
     let unstarted = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await?;
     let child = process::capture(std::process::id())?.context("test process identity")?;
     let mut running = Vec::new();
     for _ in 0..2 {
         let started = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
             .await?;
         manager
             .record_execution_child(started.plan.id.clone(), Some(child.clone()), child.pid)
@@ -551,7 +551,7 @@ async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
 async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
     let (_root, manager, workspace) = fixture("true").await;
     let mut running = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = running.plan.id.clone();
@@ -568,7 +568,7 @@ async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
             .is_some_and(|request| request.save == Save::Everything)
     );
     manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap_err();
     manager
@@ -584,7 +584,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     let wrapper = process::capture(std::process::id()).unwrap().unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             Some(wrapper.clone()),
             ExecutionKind::Command,
             None,
@@ -674,7 +674,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
     let wrapper = process::capture(std::process::id()).unwrap().unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             Some(wrapper.clone()),
             ExecutionKind::Command,
             None,
@@ -727,7 +727,7 @@ async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
     let wrapper = process::capture(std::process::id()).unwrap().unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             Some(wrapper.clone()),
             ExecutionKind::Command,
             None,
@@ -782,7 +782,7 @@ async fn setup_executions_cannot_reattach() {
     let wrapper = process::capture(std::process::id()).unwrap().unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             Some(wrapper.clone()),
             ExecutionKind::Setup,
             None,
@@ -821,7 +821,7 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
         fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
         let started = manager
             .begin_execution(
-                &workspace.id,
+                workspace.id.as_str(),
                 process::capture(std::process::id()).unwrap(),
                 ExecutionKind::Command,
                 None,

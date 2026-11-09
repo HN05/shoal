@@ -315,7 +315,7 @@ pub(in crate::cli) async fn restore_queued(
         return Ok(());
     }
     let origin = queued_origin()?;
-    let repo = groups::Repo::Id(&workspace.repository_id);
+    let repo = groups::Repo::Id(workspace.repository_id.as_str());
     groups::first_queued(
         ctx,
         settings,
@@ -347,7 +347,7 @@ pub(in crate::cli) async fn run_in_background(
     let Some(places) = host.places() else {
         return Ok(None);
     };
-    let repo = groups::Repo::Id(&workspace.repository_id);
+    let repo = groups::Repo::Id(workspace.repository_id.as_str());
     let origin = groups::beside(ctx, &host, &repo, &workspace.path).await?;
     let beside = host.beside(origin.as_ref());
     start_in_background(ctx, &host, places, beside, workspace, args).await?;
@@ -474,7 +474,7 @@ pub(in crate::cli) async fn run_agent(
     let Some(run) = AgentRun::of(&current) else {
         return Ok(None);
     };
-    let repo = groups::Repo::Id(&workspace.repository_id);
+    let repo = groups::Repo::Id(workspace.repository_id.as_str());
     let origin = groups::beside(ctx, &current, &repo, &workspace.path).await?;
     let beside = current.beside(origin.as_ref());
     let worker = agent_worker(ctx, &current, workspace, agent, records, command)?;

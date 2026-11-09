@@ -467,7 +467,7 @@ fn route(
         None if request.routed => return Ok(request),
         None => {}
         Some(from) => ensure!(
-            request.decider.as_deref() == Some(from),
+            request.decider.as_ref() == Some(from),
             "approval request {} is no longer this space's to decide",
             request.number
         ),
@@ -971,7 +971,7 @@ impl Manager {
             .write(move |tx| {
                 let stored = by_key(tx, &key)?.context("the approval request no longer exists")?;
                 ensure!(
-                    stored.decider.as_deref() == Some(coordinator.as_str()),
+                    stored.decider.as_ref() == Some(&coordinator),
                     "approval request {id} is not routed to this space"
                 );
                 crate::refusal::ensure_unchanged(
@@ -1089,7 +1089,7 @@ impl Manager {
             format_args!("approval request {number}"),
         )?;
         ensure!(
-            request.decider.as_deref() == Some(space.id()),
+            request.decider.as_ref() == Some(space.id()),
             "approval request {number} is not {}'s to decide",
             space.name()
         );

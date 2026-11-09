@@ -113,7 +113,7 @@ impl Manager {
         let Some((owner, origin)) = self.place_owner(place).await? else {
             return self.close_labelled_session(workspace, place).await;
         };
-        if owner.as_deref() != Some(workspace) {
+        if owner.as_ref() != Some(workspace) {
             return Ok(PlaceClose::OwnedElsewhere);
         }
         let host = self

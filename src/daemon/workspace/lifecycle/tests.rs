@@ -954,7 +954,7 @@ fn workspace_process(root: &std::path::Path, workspace: &str) -> tokio::process:
 #[tokio::test]
 async fn removal_stops_processes_carrying_the_workspace_identity() {
     let (root, manager, workspace) = fixture().await;
-    let mut owned = workspace_process(root.path(), &workspace.id);
+    let mut owned = workspace_process(root.path(), workspace.id.as_str());
     let mut unrelated = workspace_process(root.path(), "another-workspace");
     let owned_identity = identity::capture(owned.id().unwrap()).unwrap().unwrap();
     let unrelated_identity = identity::capture(unrelated.id().unwrap()).unwrap().unwrap();
@@ -1324,7 +1324,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         })
         .await
         .unwrap();
-    assert_eq!(parent.as_deref(), Some(top.id.as_str()));
+    assert_eq!(parent.as_ref(), Some(&top.id));
 }
 
 #[tokio::test]

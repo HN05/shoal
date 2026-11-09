@@ -183,7 +183,7 @@ impl AddPlan {
     /// Whether the plan opens `workspace`'s branch in its repository without
     /// creating anything.
     pub fn opens(&self, workspace: &Workspace) -> bool {
-        self.workspace.as_deref() == Some(workspace.id.as_str())
+        self.workspace.as_ref() == Some(&workspace.id)
             && self.repository.value() == workspace.repository_id
             && self.creation.branch.is_none()
             && self.creation.path.is_none()

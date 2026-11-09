@@ -38,7 +38,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     assert_eq!(job.runner_id, Some(77));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.head);
-    let (command, started) = launched(&workspace.id);
+    let (command, started) = launched(workspace.id.as_str());
     let copy = manager.job_directory(&job.id).join("runner");
     assert_eq!(command.argv, [copy.join("run.sh").into_os_string()]);
     assert!(copy.join("run.sh").exists() && copy.join("bin/Runner.Listener").exists());
@@ -79,7 +79,7 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     admit_and_claim(manager).await;
     let job = manager.claimed_jobs().await.unwrap().remove(0);
-    let (_, started) = launched(&job.workspace_id);
+    let (_, started) = launched(job.workspace_id.as_str());
     launched_ago(manager, &job.id, 120).await;
     // Its hook reported the job it took, which the forge no longer lists.
     let directory = manager.job_directory(&job.id);

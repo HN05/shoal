@@ -224,7 +224,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {
         assert!(
             manager
-                .withdraw_message(&SpaceSelector::parse(workspace), id)
+                .withdraw_message(&SpaceSelector::parse(workspace.as_str()), id)
                 .await
                 .is_err()
         );

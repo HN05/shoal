@@ -50,15 +50,15 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let command = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let agent = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let gone = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     track(&manager, &workspace, &agent.plan.id, "claude", true).await;
@@ -120,7 +120,7 @@ async fn agents_are_listed_by_the_names_agent_selection_takes() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     // Happy records its agents as `happy codex`; `--agent` spells it `happy-codex`.
@@ -143,7 +143,7 @@ async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
     let mut ids = Vec::new();
     for name in ["claude", "codex"] {
         let execution = manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
             .await
             .unwrap();
         track(&manager, &workspace, &execution.plan.id, name, true).await;
@@ -185,11 +185,11 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let custom = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let stopped = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     track(&manager, &workspace, &custom.plan.id, "custom", false).await;
@@ -293,7 +293,7 @@ async fn a_restart_waiting_for_processes_answers_at_once_and_still_resumes() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -323,7 +323,7 @@ async fn a_second_request_joins_the_restart_in_progress() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -377,7 +377,7 @@ async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -408,7 +408,7 @@ async fn a_late_join_answers_as_the_restart_ended() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -433,7 +433,7 @@ async fn a_late_join_of_a_cancelled_restart_fails() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -456,7 +456,7 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -504,7 +504,7 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -554,7 +554,7 @@ async fn a_join_counts_the_restart_for_the_run_that_continues() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -630,7 +630,7 @@ async fn restores_of(manager: &Manager, execution: &str) -> usize {
     let entries = manager.queue_entries().await.unwrap();
     entries
         .iter()
-        .filter(|entry| entry.execution.as_deref() == Some(execution))
+        .filter(|entry| entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution))
         .count()
 }
 
@@ -641,7 +641,8 @@ async fn restores_of(manager: &Manager, execution: &str) -> usize {
 async fn a_stop_cancels_a_restart_between_its_wrappers() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
-    let begin = || manager.begin_execution(&workspace.id, None, ExecutionKind::Command, None);
+    let begin =
+        || manager.begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None);
     let first = begin().await.unwrap();
     let before = first.plan.id.clone();
 
@@ -662,7 +663,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
     manager
         .restart_in_new_wrapper(&workspace, &before, true)
         .await;
-    assert_eq!(restores_of(&manager, &before).await, 0);
+    assert_eq!(restores_of(&manager, before.as_str()).await, 0);
 
     let second = begin().await.unwrap();
     let after = second.plan.id.clone();
@@ -670,14 +671,14 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
     manager
         .restart_in_new_wrapper(&workspace, &after, true)
         .await;
-    assert_eq!(restores_of(&manager, &after).await, 1);
+    assert_eq!(restores_of(&manager, after.as_str()).await, 1);
     manager
         .cancel_stopped_restores(&workspace.id)
         .await
         .unwrap();
     let error = answered(restarting).await.unwrap_err();
     assert!(format!("{error}").contains("cancelled"), "{error}");
-    assert_eq!(restores_of(&manager, &after).await, 0);
+    assert_eq!(restores_of(&manager, after.as_str()).await, 0);
 
     for id in [&before, &after] {
         assert!(recovery::record_path(&manager.paths, &workspace.id, id).is_file());

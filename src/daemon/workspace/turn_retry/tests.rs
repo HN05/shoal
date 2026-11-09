@@ -67,7 +67,7 @@ async fn another_agent(
         .unwrap();
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             super::super::ExecutionKind::Command,
             None,
@@ -159,7 +159,13 @@ async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
 async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
     let before = now();
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     let after = now();
     let pending = retry(&manager, &workspace).await.unwrap();
     assert_eq!(
@@ -171,7 +177,13 @@ async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() 
         "{pending:?}"
     );
     // A second report of the same failure, such as from a proxy, keeps it.
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     assert_eq!(retry(&manager, &workspace).await.unwrap(), pending);
     // Nothing is delivered before it is due.
     let early = manager.deliver_turn_retries_at(pending.due_at - secs(1));
@@ -187,29 +199,71 @@ async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() 
     assert!(retry(&manager, &workspace).await.unwrap().delivered);
 
     // The turn it starts failing again counts the next attempt.
-    report(&manager, &workspace, &execution, AgentState::Working).await;
+    report(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        AgentState::Working,
+    )
+    .await;
     assert!(retry(&manager, &workspace).await.is_some());
-    fail(&manager, &workspace, &execution, TurnFailure::ServerError).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::ServerError,
+    )
+    .await;
     let second = retry(&manager, &workspace).await.unwrap();
     assert_eq!((second.attempt, second.delivered), (2, false));
     deliver_now(&manager).await;
     // The turn ending normally finishes it.
-    report(&manager, &workspace, &execution, AgentState::Working).await;
-    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    report(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        AgentState::Working,
+    )
+    .await;
+    report(&manager, &workspace, execution.as_str(), AgentState::Idle).await;
     assert_eq!(retry(&manager, &workspace).await, None);
 }
 
 #[tokio::test]
 async fn a_new_turn_or_a_busy_agent_cancels_a_retry() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
-    fail(&manager, &workspace, &execution, TurnFailure::ServerError).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::ServerError,
+    )
+    .await;
     // The user's prompt starts a turn before the retry is due.
-    report(&manager, &workspace, &execution, AgentState::Working).await;
+    report(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        AgentState::Working,
+    )
+    .await;
     assert_eq!(retry(&manager, &workspace).await, None);
 
     // An agent that is no longer idle when the retry is due is not asked.
-    fail(&manager, &workspace, &execution, TurnFailure::ServerError).await;
-    report(&manager, &workspace, &execution, AgentState::Waiting).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::ServerError,
+    )
+    .await;
+    report(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        AgentState::Waiting,
+    )
+    .await;
     assert_eq!(deliver_now(&manager).await, None);
     assert_eq!(retry(&manager, &workspace).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
@@ -218,7 +272,13 @@ async fn a_new_turn_or_a_busy_agent_cancels_a_retry() {
 #[tokio::test]
 async fn a_finished_assignment_cancels_its_retry() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     manager
         .mark_done(
             &SpaceSelector::from(&workspace.name),
@@ -252,8 +312,20 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
             .await
             .unwrap();
     }
-    fail(&manager, &full, &full_execution, TurnFailure::Overloaded).await;
-    fail(&manager, &open, &open_execution, TurnFailure::Overloaded).await;
+    fail(
+        &manager,
+        &full,
+        full_execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
+    fail(
+        &manager,
+        &open,
+        open_execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     let at = now();
     let next = manager
         .deliver_turn_retries_at(at + secs(3600))
@@ -289,7 +361,13 @@ async fn turn_failures(manager: &Manager) -> Vec<String> {
 async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
     let (_temp, manager, workspace, execution, _connection) =
         agent("[agents.claude]\nretry = false\n").await;
-    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
     assert_eq!(retry(&manager, &workspace).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
     let told = turn_failures(&manager).await;
@@ -298,18 +376,42 @@ async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
     // Later turns failing, read notification or not, add nothing, and the
     // agent waiting for the user is no turn that went through.
     for state in [AgentState::Working, AgentState::Waiting] {
-        report(&manager, &workspace, &execution, state).await;
-        fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+        report(&manager, &workspace, execution.as_str(), state).await;
+        fail(
+            &manager,
+            &workspace,
+            execution.as_str(),
+            TurnFailure::RateLimited,
+        )
+        .await;
     }
-    report(&manager, &workspace, &execution, AgentState::Idle).await;
-    fail(&manager, &workspace, &execution, TurnFailure::Other).await;
+    report(&manager, &workspace, execution.as_str(), AgentState::Idle).await;
+    fail(&manager, &workspace, execution.as_str(), TurnFailure::Other).await;
     assert_eq!(turn_failures(&manager).await, Vec::<String>::new());
 
     // Once a turn ends normally, the next failed one is told again.
-    report(&manager, &workspace, &execution, AgentState::Working).await;
-    report(&manager, &workspace, &execution, AgentState::Idle).await;
-    report(&manager, &workspace, &execution, AgentState::Working).await;
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    report(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        AgentState::Working,
+    )
+    .await;
+    report(&manager, &workspace, execution.as_str(), AgentState::Idle).await;
+    report(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        AgentState::Working,
+    )
+    .await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     let told = turn_failures(&manager).await;
     assert_eq!(told.len(), 1, "{told:?}");
 }
@@ -317,7 +419,7 @@ async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
 #[tokio::test]
 async fn a_failure_no_retry_fixes_is_told_with_retry_on() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
-    fail(&manager, &workspace, &execution, TurnFailure::Other).await;
+    fail(&manager, &workspace, execution.as_str(), TurnFailure::Other).await;
     assert_eq!(retry(&manager, &workspace).await, None);
     let told = turn_failures(&manager).await;
     assert_eq!(told.len(), 1, "{told:?}");
@@ -327,11 +429,29 @@ async fn a_failure_no_retry_fixes_is_told_with_retry_on() {
 async fn an_outage_is_retried_until_it_ends_without_a_cap() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
     for _ in 0..20 {
-        fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+        fail(
+            &manager,
+            &workspace,
+            execution.as_str(),
+            TurnFailure::Overloaded,
+        )
+        .await;
         deliver_now(&manager).await;
-        report(&manager, &workspace, &execution, AgentState::Working).await;
+        report(
+            &manager,
+            &workspace,
+            execution.as_str(),
+            AgentState::Working,
+        )
+        .await;
     }
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     let pending = retry(&manager, &workspace).await.unwrap();
     assert_eq!((pending.attempt, pending.delivered), (21, false));
     assert!(
@@ -356,14 +476,26 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
         )
         .await
         .unwrap();
-    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
     let pending = retry(&manager, &workspace).await.unwrap();
     assert_eq!(pending.due_at, reset + RESET_MARGIN);
     assert_eq!(deliver_now(&manager).await, None);
 
     // The agent's own report arrives first, as Claude's may.
     let (other, execution, _other_connection) = another_agent(&manager, "other").await;
-    fail(&manager, &other, &execution, TurnFailure::RateLimited).await;
+    fail(
+        &manager,
+        &other,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
     let early = retry(&manager, &other).await.unwrap();
     assert!(early.due_at < reset, "{early:?}");
     manager
@@ -395,8 +527,14 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, None);
-    report(&manager, &other, &execution, AgentState::Working).await;
-    fail(&manager, &other, &execution, TurnFailure::Overloaded).await;
+    report(&manager, &other, execution.as_str(), AgentState::Working).await;
+    fail(
+        &manager,
+        &other,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     let transient = retry(&manager, &other).await.unwrap();
     assert!(transient.due_at < reset, "{transient:?}");
     manager
@@ -455,7 +593,7 @@ async fn stored_reset(manager: &Manager, execution: &ExecutionId) -> Option<Unix
 #[tokio::test]
 async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
-    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    report(&manager, &workspace, execution.as_str(), AgentState::Idle).await;
     let (id, execution) = (workspace.id.clone(), execution.clone());
     let reset = UnixTime::from_seconds(4_000_000_000_000);
     let due_at = manager
@@ -498,7 +636,7 @@ async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
 #[tokio::test]
 async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result<()> {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
-    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    report(&manager, &workspace, execution.as_str(), AgentState::Idle).await;
     let id = workspace.id.clone();
     let scheduling_execution = execution.clone();
     let pending = manager
@@ -532,13 +670,25 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
     assert!(manager.notifications(false, 10).await?.is_empty());
 
     // A transient failure after a long usage limit starts its own backoff.
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
     let transient = retry(&manager, &workspace)
         .await
         .context("transient retry")?;
     assert_eq!(transient.attempt, 1);
     deliver_now(&manager).await;
-    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
     let limited = retry(&manager, &workspace)
         .await
         .context("usage-limit retry")?;
@@ -551,6 +701,12 @@ async fn a_repository_setting_decides_whether_its_agents_retry() {
     let (_temp, manager, workspace, execution, _connection) =
         agent("[agents.claude]\nretry = false\n").await;
     std::fs::write(workspace.path.join(".shoal.toml"), RETRY_ON).unwrap();
-    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
     assert!(retry(&manager, &workspace).await.is_some());
 }

@@ -409,7 +409,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
     let record = crate::execution::recovery::saved_path(&ctx.paths, &workspace.id, execution);
     let args = [
         "resume",
-        &workspace.id,
+        workspace.id.as_str(),
         "--execution",
         execution.as_str(),
         "--focus",
@@ -1009,7 +1009,7 @@ async fn start_session(
     .await?;
     let args = [
         "resume",
-        &workspace.id,
+        workspace.id.as_str(),
         "--execution",
         id.as_str(),
         "--focus",

@@ -396,7 +396,7 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
     let workspace = workspace(&manager, &temp).await;
     let started = manager
         .begin_execution(
-            &workspace.id,
+            workspace.id.as_str(),
             None,
             super::super::ExecutionKind::Command,
             None,

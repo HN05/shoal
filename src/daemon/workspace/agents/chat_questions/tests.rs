@@ -43,7 +43,7 @@ async fn agent_named(name: &str) -> Fixture {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -285,7 +285,7 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&child.id, None, ExecutionKind::Command, None)
+        .begin_execution(child.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -377,7 +377,10 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         )
         .await
         .unwrap();
-    assert_eq!((&*asked.space_id, &*asked.space), (&*chat.id, "planning"));
+    assert_eq!(
+        (asked.space_id.as_str(), &*asked.space),
+        (chat.id.as_str(), "planning")
+    );
     let listed = manager
         .questions(Some(&SpaceSelector::from(&chat.name)))
         .await

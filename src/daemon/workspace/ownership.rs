@@ -347,7 +347,7 @@ fn release_stale_marker(
 /// Mark the admin directory as `workspace_id`'s unless it already is,
 /// returning whether it already was, and its filesystem identity.
 fn mark_git_dir(git_dir: &Path, workspace_id: &SpaceId) -> Result<(bool, String)> {
-    let marked = marked_owner(git_dir)?.as_deref() == Some(workspace_id);
+    let marked = marked_owner(git_dir)?.as_deref() == Some(workspace_id.as_str());
     if !marked {
         mark_owner(git_dir, workspace_id.as_str())?;
     }

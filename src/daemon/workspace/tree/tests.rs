@@ -711,7 +711,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
                 db.execute(
                     "INSERT INTO space_items(space_id,relation,kind,url)
                      VALUES (?1,'related','issue',?2),(?1,'related','ci',?3)",
-                    [&id, issue, run],
+                    [id.as_str(), issue, run],
                 )?;
                 Ok(())
             })
@@ -1028,7 +1028,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
     for workspace in [&parent, &child] {
         let started = manager
             .begin_execution(
-                &workspace.id,
+                workspace.id.as_str(),
                 None,
                 super::super::ExecutionKind::Command,
                 None,
@@ -1094,7 +1094,12 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .await
         .unwrap();
     let started = manager
-        .begin_execution(&child.id, None, super::super::ExecutionKind::Command, None)
+        .begin_execution(
+            child.id.as_str(),
+            None,
+            super::super::ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     // An agent without turn reports, which protection stops.
@@ -1359,7 +1364,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap()
         .unwrap();
     // The direct parent decides, whether or not it holds a grant.
-    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
+    assert_eq!(routed.decider.as_ref(), Some(&parent.id));
     let messages = |workspace: &Workspace| {
         let id = workspace.id.clone();
         let manager = &manager;
@@ -1450,7 +1455,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .escalate_approval(&SpaceSelector::id(&parent.id), requested.number, None)
         .await
         .unwrap();
-    assert_eq!(escalated.decider.as_deref(), Some(root.id.as_str()));
+    assert_eq!(escalated.decider.as_ref(), Some(&root.id));
     assert_eq!(messages(&root).await.len(), told + 1);
     let escalated = manager
         .escalate_approval(&SpaceSelector::id(&root.id), requested.number, None)
@@ -1768,7 +1773,7 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(routed.decider.as_deref(), Some(chat.id.as_str()));
+    assert_eq!(routed.decider.as_ref(), Some(&chat.id));
 
     // Saved after the request reached it, the chat decides it no more.
     manager.save_chats(ChatRestore::Resume).await;
@@ -1866,7 +1871,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(routed.decider.as_deref(), Some(chat.id.as_str()));
+    assert_eq!(routed.decider.as_ref(), Some(&chat.id));
     let told = manager.chat_messages(&chat.id).await.unwrap();
     assert!(!told.is_empty());
     // A malformed record of another space's history, its own or one its
@@ -2028,7 +2033,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap()
         .unwrap();
     assert_eq!(
-        (kept.decider.as_deref(), kept.status),
+        (kept.decider.as_ref().map(SpaceId::as_str), kept.status),
         (Some(parent.id.as_str()), DecisionStatus::Pending)
     );
 
@@ -2445,7 +2450,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
+    assert_eq!(routed.decider.as_ref(), Some(&parent.id));
     assert!(
         manager
             .workspace_by_id(&child.id)

@@ -156,10 +156,10 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         let state = |execution: &str| {
             let entry = entries
                 .iter()
-                .find(|entry| entry.execution.as_deref() == Some(execution));
+                .find(|entry| entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution));
             entry.expect("the restore was not queued").state
         };
-        (state("earlier"), state(&plan.id))
+        (state("earlier"), state(plan.id.as_str()))
     };
     use crate::state::QueueState::{Queued, Starting};
     assert_eq!(restores().await, (Queued, Queued));
@@ -264,7 +264,7 @@ async fn a_shutdown_keeps_a_protection_stopped_agent_from_resuming() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();

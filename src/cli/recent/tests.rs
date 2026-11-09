@@ -19,12 +19,21 @@ fn previous_skips_the_current_and_missing_spaces() {
         let current: Vec<&SpaceId> = current.iter().collect();
         history.previous("attach", &spaces, &current)
     };
-    assert_eq!(previous(&[]).as_deref(), Some("b"));
-    assert_eq!(previous(&ids(["b"])).as_deref(), Some("chat"));
-    assert_eq!(previous(&ids(["b", "chat"])).as_deref(), Some("a"));
+    assert_eq!(previous(&[]).as_ref().map(SpaceId::as_str), Some("b"));
+    assert_eq!(
+        previous(&ids(["b"])).as_ref().map(SpaceId::as_str),
+        Some("chat")
+    );
+    assert_eq!(
+        previous(&ids(["b", "chat"])).as_ref().map(SpaceId::as_str),
+        Some("a")
+    );
     let [a, b] = ids(["a", "b"]);
     assert_eq!(
-        history.previous("attach", &[&a, &b], &[&b]).as_deref(),
+        history
+            .previous("attach", &[&a, &b], &[&b])
+            .as_ref()
+            .map(SpaceId::as_str),
         Some("a")
     );
     assert!(history.previous("cd", &spaces, &[]).is_none());
