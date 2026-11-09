@@ -2508,9 +2508,9 @@ user may trust one worker to merge, or a parent give a child less than it has.
 What bounds it is the giver: a value is accepted only from one who holds it,
 the user, who holds every permission, or a space's agent up to its own
 effective value. The daemon checks this wherever a scoped process brings a
-value in, giving, queueing, restoring a chat or registering an agent, against
-what the space recorded, so an agent cannot raise its own permissions by
-replaying a record; a reattaching wrapper keeps the value its execution
+value in; a restore or registration may also bring back what the space
+recorded, but nothing more, so an agent cannot raise its own permissions by
+replaying a record, and a reattaching wrapper keeps the value its execution
 recorded. A value recorded before given values applied as given, when each
 check capped it at the parent's, applies as given since: the records name no
 giver to check it against, and none was ever wider than its mode. `shoal resume` and `shoal restart` take `--permission` too and change
