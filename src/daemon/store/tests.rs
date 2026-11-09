@@ -464,6 +464,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 144 {
         db.execute_batch(include_str!("spaces.sql"))?;
     }
+    if version >= 145 {
+        super::space_names::rename_invalid_copies(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -765,6 +768,68 @@ fn migration_renames_names_a_number_could_be_read_as() -> Result<()> {
     assert_eq!(events(&db)?, before);
     db.execute("UPDATE chats SET name='renamed'", [])?;
     assert_eq!(events(&db)?, before + 1);
+    Ok(())
+}
+
+#[test]
+fn migration_renames_the_names_records_copied() -> Result<()> {
+    let mut db = historical_database(144)?;
+    db.execute_batch(
+        r#"INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','talk','claude',1,'b',1);
+         INSERT INTO notifications(id,created_at,workspace,kind,message)
+             VALUES (1,1,'123','alert','a'),(2,1,'','alert','b'),(3,1,'worker','alert','c');
+         INSERT INTO workspace_files(id,space_id,space,repository_id,source,name,path,bytes,created_at)
+             VALUES (1,'workspace','4','repo','result','4','/f/4',1,1),
+                 (2,'chat','5','repo','result','5','/f/5',1,1);
+         INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
+             VALUES ('clean','workspace','{"workspace_name":"6"}');
+         INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
+             VALUES ('empty','workspace','hold','h1','{"space":""}',0,1),
+                 ('digits','workspace','hold','h2','{"space":"8"}',0,2),
+                 ('valid','workspace','hold','h3','{"space":"worker"}',0,3);
+         INSERT INTO workspace_events(record)
+             VALUES ('{"kind":"test","name":"9"}'),
+                 ('{"kind":"test","chat":{"name":"10"}}'),
+                 ('{"kind":"test","file":{"chat":"11","name":"12"}}');"#,
+    )?;
+    migrate(&mut db)?;
+    let column = |sql: &str| -> Result<Vec<Option<String>>> {
+        Ok(db
+            .prepare(sql)?
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    let names = |values: &[Option<&str>]| -> Vec<Option<String>> {
+        values
+            .iter()
+            .map(|value| value.map(str::to_owned))
+            .collect()
+    };
+    assert_eq!(
+        column("SELECT workspace FROM notifications ORDER BY id")?,
+        names(&[Some("workspace-123"), None, Some("worker")])
+    );
+    assert_eq!(
+        column("SELECT space FROM workspace_files ORDER BY id")?,
+        names(&[Some("workspace-4"), Some("chat-5")])
+    );
+    assert_eq!(
+        column("SELECT json_extract(record,'$.workspace_name') FROM simulator_clean_requests")?,
+        names(&[Some("workspace-6")])
+    );
+    assert_eq!(
+        column("SELECT json_extract(record,'$.space') FROM access_requests ORDER BY number")?,
+        names(&[None, Some("workspace-8"), Some("worker")])
+    );
+    assert_eq!(
+        column(
+            "SELECT COALESCE(json_extract(record,'$.name'),json_extract(record,'$.chat.name'),
+                json_extract(record,'$.file.chat') || ' ' || json_extract(record,'$.file.name'))
+            FROM workspace_events WHERE json_extract(record,'$.kind')='test' ORDER BY id"
+        )?,
+        names(&[Some("workspace-9"), Some("chat-10"), Some("chat-11 12")])
+    );
     Ok(())
 }
 
@@ -1802,7 +1867,8 @@ fn approval_requests_name_the_space_that_made_them() -> Result<()> {
         records,
         [
             r#"{"space_id":"workspace","space":"worker"}"#,
-            r#"{"space_id":"workspace","space":""}"#,
+            // Its empty name goes when names are checked.
+            r#"{"space_id":"workspace"}"#,
             "not json",
         ]
     );

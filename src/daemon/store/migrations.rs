@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 144;
+pub(super) const SCHEMA_VERSION: i64 = 145;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -407,6 +407,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (142, include_str!("space_progress.sql"), None),
     (143, PERMISSION_NARROWINGS, None),
     (144, include_str!("spaces.sql"), None),
+    (145, "", Some(super::space_names::rename_invalid_copies)),
 ];
 
 /// The space whose process stopped a stopped chat, such as by a restart
