@@ -12,7 +12,7 @@ use crate::{
         events::{self, EventKind},
         item_numbers::{self, ItemKind, ItemNumber},
         notifications::{self, NotificationKind},
-        store,
+        store::require_ready,
         workspace::Manager,
     },
     model::PresentSpace,
@@ -199,7 +199,7 @@ pub fn check(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
-    store::require_ready(tx, &request.space_id)?;
+    require_ready(tx, &request.space_id)?;
     if let Some(existing) = current(tx, &request.space_id, &request.target, &request.name)? {
         ensure!(
             existing.specification == request.specification
@@ -397,7 +397,7 @@ impl Manager {
     ) -> Result<bool> {
         self.store
             .write(move |tx| {
-                store::require_ready(tx, &owner)?;
+                require_ready(tx, &owner)?;
                 let released = release(tx, &owner, &target, &name)?;
                 Ok(released)
             })

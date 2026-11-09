@@ -16,7 +16,7 @@ use crate::{
         item_numbers::ItemNumber,
         log,
         scope::Caller,
-        store,
+        store::require_ready,
         workspace::Manager,
     },
 };
@@ -135,7 +135,7 @@ pub struct Decision {
 /// same decision is a no-op.
 pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
-    store::require_ready(tx, &request.space_id)?;
+    require_ready(tx, &request.space_id)?;
     ensure!(
         !matches!(
             request.status,
