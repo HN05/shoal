@@ -156,12 +156,12 @@ const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 /// The agent a request comes from.
 pub(crate) struct CallerAgent {
     pub(crate) execution: ExecutionId,
-    pub(crate) name: String,
+    pub(crate) name: crate::agent::Agent,
     pub(crate) workspace_id: SpaceId,
 }
 
 pub(crate) struct Agent {
-    name: String,
+    name: crate::agent::Agent,
     /// The model and effort it runs with, which its recovery records keep.
     model: ModelChoice,
     /// The mode it started in, which its recovery records keep.
@@ -248,7 +248,7 @@ impl Manager {
     pub(crate) async fn notify_agent_exit(
         &self,
         workspace: &crate::model::Workspace,
-        agent: &str,
+        agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
         overload: Option<(&ExecutionId, &str)>,
@@ -348,7 +348,7 @@ impl Manager {
     pub(crate) async fn post_agent_exit(
         &self,
         workspace: &crate::model::Workspace,
-        agent: &str,
+        agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
     ) {
@@ -376,7 +376,7 @@ impl Manager {
     async fn run_agent_exit_hook(
         &self,
         workspace: &crate::model::Workspace,
-        agent: &str,
+        agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
     ) -> anyhow::Result<()> {
@@ -862,14 +862,14 @@ impl Manager {
         Some(CallerAgent {
             execution: id.to_owned(),
             // Named as `--agent` and recovery records name it.
-            name: name.replace(' ', "-"),
+            name: name.normalized(),
             workspace_id,
         })
     }
 
     /// The agent and workspace the record of execution `id` names, if it
     /// ran one.
-    async fn recorded_agent(&self, id: &ExecutionId) -> Option<(String, SpaceId)> {
+    async fn recorded_agent(&self, id: &ExecutionId) -> Option<(crate::agent::Agent, SpaceId)> {
         let execution = id.to_owned();
         let recorded = self
             .store
@@ -890,7 +890,7 @@ impl Manager {
     }
 
     /// The name of the connected agent that `execution` runs.
-    pub(crate) async fn agent_name(&self, execution: &ExecutionId) -> Option<String> {
+    pub(crate) async fn agent_name(&self, execution: &ExecutionId) -> Option<crate::agent::Agent> {
         self.executions
             .with_agent(execution, |agent| agent.name.clone())
             .await
@@ -1196,7 +1196,7 @@ fn least_work<'a>(
 /// An agent asked to stop for protection.
 pub(crate) struct StoppedAgent {
     id: ExecutionId,
-    pub name: String,
+    pub name: crate::agent::Agent,
     pub workspace: SpaceName,
     workspace_id: SpaceId,
     recover: bool,

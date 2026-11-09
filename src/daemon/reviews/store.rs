@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::{
-    agent::ModelChoice,
+    agent::{Agent, ModelChoice},
     reviews::{
         Check, FailureReason, Finding, FindingId, Outcome, OutcomeKind, Posted, Reply, Review,
         ReviewId, ReviewState, ReviewStatus, ReviewTarget,
@@ -37,7 +37,7 @@ pub(crate) fn queue(
     db: &Connection,
     workspace_id: &SpaceId,
     target: &ReviewTarget,
-    agent: &str,
+    agent: &Agent,
     model: &ModelChoice,
     now: crate::time::UnixTime,
 ) -> Result<Queued> {
@@ -194,7 +194,7 @@ pub(crate) fn start(
 pub(crate) fn finish(
     tx: &rusqlite::Transaction<'_>,
     id: ReviewId,
-    reviewer: &str,
+    reviewer: &Agent,
     output: &ReviewerOutput,
     now: crate::time::UnixTime,
 ) -> Result<bool> {
@@ -259,7 +259,7 @@ fn record_check(db: &Connection, id: ReviewId, checked: &Checked) -> Result<()> 
 pub(crate) fn fail(
     db: &Connection,
     id: ReviewId,
-    reviewer: Option<&str>,
+    reviewer: Option<&Agent>,
     reason: FailureReason,
     now: crate::time::UnixTime,
 ) -> Result<bool> {

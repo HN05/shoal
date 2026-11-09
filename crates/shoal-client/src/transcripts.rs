@@ -27,7 +27,7 @@ use crate::{
 /// reported, such as those before a `/clear`, stay unknown.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportedSession {
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     pub session: String,
     /// The execution the agent ran as, in a workspace.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,7 +43,7 @@ pub struct SpaceSessions {
     pub sessions: Vec<ReportedSession>,
     /// The tool of each agent with a session, by agent name, as the space's
     /// settings describe it.
-    pub integrations: BTreeMap<String, IntegrationKind>,
+    pub integrations: BTreeMap<crate::agent::Agent, IntegrationKind>,
     /// The `[env]` values the repository's tracked agents ran with.
     pub environments: Vec<BTreeMap<String, String>>,
 }

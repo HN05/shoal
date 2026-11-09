@@ -608,7 +608,7 @@ pub(super) async fn launch(
         parent: parent.clone(),
         instructions: brief.system,
         opening: brief.first_message,
-        model: crate::agents::resolve_model(&settings, agent.name(), model.clone()),
+        model: crate::agents::resolve_model(&settings, &agent, model.clone()),
         repository: repo,
         workspace: topic.workspace.clone(),
         settings,
@@ -616,7 +616,7 @@ pub(super) async fn launch(
         restores: restore.clone(),
         links: topic.links.clone(),
     };
-    if let Some(code) = agents::start_chat(ctx, agent.name(), &launch).await? {
+    if let Some(code) = agents::start_chat(ctx, &agent, &launch).await? {
         return Ok(Started::Exited(code));
     }
     let agents::ChatLaunch {
@@ -659,13 +659,13 @@ pub(super) async fn launch(
         handoff.wait().await?;
         return Ok(Started::Background(BackgroundChat {
             chat: name.into(),
-            agent: agent.name().to_owned(),
+            agent: agent.clone(),
             repository: repo.registered().map(|repo| repo.id.clone()),
             place: note,
         }));
     }
     ensure!(ctx.interactive(), "chat needs a terminal");
-    let model_args = crate::agents::model_args(&settings, agent.name(), &resolved)?;
+    let model_args = crate::agents::model_args(&settings, &agent, &resolved)?;
     let name = if asks_name {
         ask_name(ctx, &name).await?
     } else {
@@ -674,10 +674,10 @@ pub(super) async fn launch(
     if place == ChatPlace::Beside && start_beside(ctx, &settings, &repo, beside(&name)).await? {
         return Ok(Started::Exited(0));
     }
-    agents::trust_chat(ctx, &settings, agent.name(), repo.registered(), home).await;
+    agents::trust_chat(ctx, &settings, &agent, repo.registered(), home).await;
     let new = crate::client::chats::NewChat {
         name: &name,
-        agent: agent.name(),
+        agent: &agent,
         mode: &topic.mode,
         narrowing: narrowing.value(),
         parent: parent.as_ref(),
@@ -699,7 +699,7 @@ pub(super) async fn launch(
         &settings,
         [
             model_args,
-            agents::chat_dir_args(&settings, agent.name(), &ctx.paths.home, &chat),
+            agents::chat_dir_args(&settings, &agent, &ctx.paths.home, &chat),
         ]
         .concat(),
         home.path(),
@@ -717,7 +717,7 @@ pub(super) async fn launch(
         &chat,
         &token,
         &command,
-        &settings.launch(agent.name()).environment_with(&resolved),
+        &settings.launch(&agent).environment_with(&resolved),
     )
     .map(Started::Exited)
 }
@@ -745,21 +745,18 @@ impl SessionArgs<'_> {
         if !self.fork {
             return Ok(resumed_args(settings, agent, session));
         }
-        if let Err(error) = crate::agents::ensure_forks(settings, agent.name()) {
+        if let Err(error) = crate::agents::ensure_forks(settings, agent) {
             eprintln!("warning: {error:#}, so the chat starts a new session");
             return Ok(Vec::new());
         }
-        agents::fork_args(settings, agent.name(), session, self.directory)
+        agents::fork_args(settings, agent, session, self.directory)
     }
 }
 
 /// The arguments with which `agent` continues `session`; an agent without
 /// resume arguments starts a new one, with a warning.
 fn resumed_args(settings: &Effective, agent: &Agent, session: &str) -> Vec<OsString> {
-    let resumed = settings
-        .launch(agent.name())
-        .arguments
-        .resume_args(Some(session));
+    let resumed = settings.launch(agent).arguments.resume_args(Some(session));
     if resumed.is_none() {
         eprintln!(
             "warning: {} has no resume arguments, so the chat starts a new session",
@@ -849,7 +846,7 @@ pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<
     let Some(agent) = agent.or_else(|| settings.agent.default.clone()) else {
         return Ok(None);
     };
-    crate::agents::ensure_available(agent.name(), settings)?;
+    crate::agents::ensure_available(&agent, settings)?;
     Ok(Some(agent))
 }
 
@@ -869,8 +866,8 @@ pub(super) fn checked_agent(
 /// Refuse `model` for `agent` before anything else is asked for, when its
 /// launch cannot pass the values on.
 pub(super) fn check_model(settings: &Effective, agent: &Agent, model: &ModelChoice) -> Result<()> {
-    let resolved = crate::agents::resolve_model(settings, agent.name(), model.clone());
-    crate::agents::check_model(settings, agent.name(), &resolved)
+    let resolved = crate::agents::resolve_model(settings, agent, model.clone());
+    crate::agents::check_model(settings, agent, &resolved)
 }
 
 fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
@@ -883,10 +880,10 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     ui::require_argument(ctx, "agent", "agent")?;
     let choices: Vec<_> = names
         .iter()
-        .map(|name| (name.clone(), name.as_str()))
+        .map(|agent| (agent.clone(), agent.name()))
         .collect();
-    let agent: Agent = ui::pick_choice(ctx, "Agent> ", &choices)?.parse()?;
-    crate::agents::ensure_available(agent.name(), settings)?;
+    let agent: Agent = ui::pick_choice(ctx, "Agent> ", &choices)?;
+    crate::agents::ensure_available(&agent, settings)?;
     Ok(agent)
 }
 
@@ -976,7 +973,7 @@ fn command(
     opening: Option<String>,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    let name = agent.name();
+    let name = agent;
     // Instructions that join the prompt start a turn before the user speaks.
     let (instructions, opening) = match settings.launch(name).arguments.instructions {
         Some(_) => (instructions, opening),
@@ -1003,7 +1000,7 @@ fn command(
     );
     configured::expand_outside_workspace(
         &settings.launchers,
-        name,
+        name.name(),
         &[
             ("{path}", path.as_os_str()),
             ("{prompt}", OsStr::new(&prompt)),
@@ -1026,7 +1023,7 @@ fn brief(
     let place = templates::Place::Chat {
         repo: repo.registered().map(repository::name),
         home: topic.home(repo),
-        delivery: agents::chat_delivery(settings, agent.name()),
+        delivery: agents::chat_delivery(settings, agent),
     };
     let mut brief = match topic.subject.as_ref().filter(|_| !resumes) {
         Some(subject) => templates::brief(settings, &topic.mode, place, Some(subject))?,
@@ -1040,11 +1037,7 @@ fn brief(
             }
         }
     };
-    let in_first_message = settings
-        .launch(agent.name())
-        .arguments
-        .instructions
-        .is_none();
+    let in_first_message = settings.launch(agent).arguments.instructions.is_none();
     if resumes && in_first_message {
         brief.system.clear();
     }

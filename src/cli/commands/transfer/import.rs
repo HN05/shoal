@@ -234,7 +234,7 @@ impl Package {
             .find_map(|last| last.session.clone());
         Ok(chat::Options {
             narrowing: chat::Narrowing::Recorded(packaged.narrowing),
-            agent: Some(packaged.agent.parse()?),
+            agent: Some(packaged.agent.name().parse()?),
             place,
             name: Some(crate::client::chats::free_name(&ctx.paths, packaged.name.clone()).await?),
             model: Default::default(),

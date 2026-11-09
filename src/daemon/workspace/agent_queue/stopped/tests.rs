@@ -510,7 +510,7 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
         .try_into()
         .unwrap();
     assert_eq!(
-        (last.execution.as_str(), last.agent.as_str()),
+        (last.execution.as_str(), last.agent.name()),
         ("signalled", "claude")
     );
     // A signal stopped it before this stop, so its workspace process cannot

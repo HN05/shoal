@@ -62,7 +62,7 @@ pub(super) async fn run(
     if scoped {
         selection.ensure_below()?;
     }
-    let plan = selection.plan(agent.as_ref().map(Agent::name), options.in_place);
+    let plan = selection.plan(agent.as_ref(), options.in_place);
     if plan.restarts.is_empty() && plan.skipped.is_empty() {
         let message = match &agent {
             Some(agent) => format!("No running {agent} agents"),
@@ -100,7 +100,7 @@ pub(super) async fn run(
     if interrupted {
         // The daemon goes on with the restarts it was asked for.
         let agents = running_agents(ctx).await?;
-        return progress.interrupted(ctx, &agents, agent.as_ref().map(Agent::name));
+        return progress.interrupted(ctx, &agents, agent.as_ref());
     }
     progress.finish(ctx)
 }

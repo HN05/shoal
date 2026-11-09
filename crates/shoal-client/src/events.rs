@@ -344,7 +344,7 @@ pub struct SimulatorEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentEvent {
     /// The agent's name, such as `claude`.
-    pub name: String,
+    pub name: crate::agent::Agent,
     /// The execution that runs it; null for a chat's agent.
     pub execution_id: Option<ExecutionId>,
     /// The code an agent exited with; null when its wrapper disconnected

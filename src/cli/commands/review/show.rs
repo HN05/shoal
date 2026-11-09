@@ -118,7 +118,7 @@ fn render_list(reviews: &[Review], json: bool) {
             "{:>5}  {}  {status}{unresolved}{outdated}  {}",
             review.id,
             review.workspace,
-            review.reviewer.as_deref().unwrap_or(&review.agent)
+            review.reviewer.as_ref().unwrap_or(&review.agent)
         );
     }
 }

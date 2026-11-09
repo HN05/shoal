@@ -22,7 +22,7 @@ pub struct RunningAgent {
     /// The workspace it runs in, or the chat it is the agent of.
     pub space_id: SpaceId,
     /// `None` for an execution whose wrapper is gone, which may have run an agent.
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// Whether its wrapper can start its session again.
     pub restorable: bool,
     /// The turn state the agent reported last; unknown after a daemon restart
@@ -76,6 +76,6 @@ pub struct PendingRestart {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSession {
     /// Named as `--agent` names it.
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     pub session: String,
 }

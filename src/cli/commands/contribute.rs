@@ -70,7 +70,7 @@ fn ensure_agent_available(ctx: &Context, agent: Option<&Agent>) -> Result<()> {
         return Ok(());
     };
     let settings = Config::load(&ctx.paths)?.resolve(&ConfigLayers::default())?;
-    agents::ensure_available(agent.name(), &settings)
+    agents::ensure_available(agent, &settings)
 }
 
 /// Register `source` as a contribution and say where its pushes go.

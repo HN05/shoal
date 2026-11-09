@@ -25,9 +25,13 @@ impl Manager {
             _ => bail!("{name} runs several agents; stop them with shoal stop {name}"),
         };
         let manual = format!("use shoal stop {name} and shoal resume {name}");
-        let agent = running.agent.as_deref().with_context(|| {
-            format!("execution {} is disconnected; {manual}", running.execution)
-        })?;
+        let agent = running
+            .agent
+            .as_ref()
+            .map(|agent| agent.name())
+            .with_context(|| {
+                format!("execution {} is disconnected; {manual}", running.execution)
+            })?;
         ensure!(
             running.restorable,
             "{agent} has no command to resume its session; {manual}"

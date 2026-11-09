@@ -16,7 +16,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::cli) struct Recorded<'a> {
     pub place: &'a Origin,
-    pub agent: Option<&'a str>,
+    pub agent: Option<&'a crate::agent::Agent>,
     /// Why Shoal stopped that agent, while its wrapper waits to restore it.
     pub stopped: Option<&'a Protection>,
 }
@@ -28,7 +28,7 @@ impl<'a> Recorded<'a> {
         let executions = executions.iter().filter_map(|execution| {
             Some(Self {
                 place: execution.origin.as_ref()?,
-                agent: execution.agent.as_deref(),
+                agent: execution.agent.as_ref(),
                 stopped: execution.stopped.as_ref(),
             })
         });
@@ -75,7 +75,7 @@ pub(in crate::cli) async fn sessions(
         .zip(found)
         .filter_map(|(recorded, session)| {
             Some(Session {
-                agent: recorded.agent.map(str::to_owned),
+                agent: recorded.agent.cloned(),
                 stopped: recorded.stopped.cloned(),
                 ..session?
             })

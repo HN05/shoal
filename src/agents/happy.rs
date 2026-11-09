@@ -57,12 +57,12 @@ impl App for Happy {
         "Happy"
     }
 
-    fn agent(&self) -> &'static str {
-        self.0.as_str()
+    fn agent(&self) -> crate::agent::Agent {
+        crate::agent::Agent::unchecked(self.0.as_str().to_owned())
     }
 
-    fn execution_agent(&self) -> String {
-        format!("happy {}", self.0.as_str())
+    fn execution_agent(&self) -> crate::agent::Agent {
+        crate::agent::Agent::unchecked(format!("happy {}", self.0.as_str()))
     }
 
     fn place(&self) -> &'static str {

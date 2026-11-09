@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, sync::LazyLock};
 use anyhow::{Context, Result};
 use serde::Serialize;
 
+use crate::agent::Agent;
 use crate::config::{
     Config,
     agents::AgentTool,
@@ -205,37 +206,40 @@ impl Effective {
         self.settings
     }
 
-    /// Agent `name`'s launch profile; an agent no AI tool describes takes no
+    /// `agent`'s launch profile; an agent no AI tool describes takes no
     /// arguments and changes nothing in its environment.
-    pub fn launch(&self, name: &str) -> &crate::ai::LaunchProfile {
+    pub fn launch(&self, agent: &Agent) -> &crate::ai::LaunchProfile {
         static NONE: LazyLock<crate::ai::LaunchProfile> = LazyLock::new(Default::default);
-        self.tools.get(name).map_or(&NONE, |tool| &tool.launch)
+        self.tools
+            .get(agent.name())
+            .map_or(&NONE, |tool| &tool.launch)
     }
 
-    /// The model and effort a launch of agent `name` runs with: each
+    /// The model and effort a launch of `agent` runs with: each
     /// `requested` value, else `[agent] model` and `effort` when `[agent]
     /// default` names it, else its AI tool's.
     pub fn model(
         &self,
-        name: &str,
+        agent: &Agent,
         requested: crate::agent::ModelChoice,
     ) -> crate::agent::ModelChoice {
         let chosen = match &self.agent.default {
-            Some(default) if default.name() == name => crate::agent::ModelChoice {
+            Some(default) if default == agent => crate::agent::ModelChoice {
                 model: self.agent.model.clone(),
                 effort: self.agent.effort.clone(),
             },
             _ => Default::default(),
         };
-        let configured = self.tools.get(name).map(|tool| tool.model.clone());
+        let configured = (self.tools.get(agent.name())).map(|tool| tool.model.clone());
         requested.or(chosen).or(configured.unwrap_or_default())
     }
 
-    /// Refuse agent `name` as a reviewer unless it is an AI tool with a
-    /// review template that config does not turn off.
-    pub fn check_reviewer(&self, name: &str) -> anyhow::Result<()> {
+    /// Refuse `agent` as a reviewer unless it is an AI tool with a review
+    /// template that config does not turn off.
+    pub fn check_reviewer(&self, agent: &Agent) -> anyhow::Result<()> {
+        let name = agent.name();
         anyhow::ensure!(
-            !self.turned_off(name),
+            !self.turned_off(agent),
             "{name} is turned off: its [agents] entry sets enabled = false"
         );
         let tool = self
@@ -250,24 +254,23 @@ impl Effective {
         Ok(())
     }
 
-    /// Whether agent `name`'s own `[agents]` entry turns it off with
-    /// `enabled = false`.
-    pub fn turned_off(&self, name: &str) -> bool {
-        self.agents.get(name).and_then(|agent| agent.enabled) == Some(false)
+    /// Whether `agent`'s own `[agents]` entry turns it off with `enabled =
+    /// false`.
+    pub fn turned_off(&self, agent: &Agent) -> bool {
+        (self.agents.get(agent.name())).and_then(|agent| agent.enabled) == Some(false)
     }
 
-    /// The integration agent `name` runs with; none for an agent no AI tool
+    /// The integration `agent` runs with; none for an agent no AI tool
     /// describes.
-    pub fn integration(&self, name: &str) -> crate::ai::IntegrationKind {
+    pub fn integration(&self, agent: &Agent) -> crate::ai::IntegrationKind {
         self.tools
-            .get(name)
+            .get(agent.name())
             .map_or(crate::ai::IntegrationKind::None, |tool| tool.integration)
     }
 
-    /// The proxy agent `name`'s tracked launches reach their upstream
-    /// through.
-    pub fn proxy(&self, name: &str) -> Option<&crate::config::proxies::Proxy> {
-        self.proxies.get(name)
+    /// The proxy `agent`'s tracked launches reach their upstream through.
+    pub fn proxy(&self, agent: &Agent) -> Option<&crate::config::proxies::Proxy> {
+        self.proxies.get(agent.name())
     }
 }
 

@@ -268,7 +268,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 log.as_os_str().to_owned(),
             ]);
             if let Some(agent) = agent {
-                args.extend(["--agent".into(), agent.name.as_str().into()]);
+                args.extend(["--agent".into(), agent.name.name().into()]);
                 args.extend(model_args(&agent.model));
                 args.extend(["--mode".into(), agent.mode.as_str().into()]);
                 args.extend(narrowing_args(agent));
@@ -296,7 +296,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             args.extend([
                 SESSION.into(),
                 workspace.as_str().into(),
-                agent.name.as_str().into(),
+                agent.name.name().into(),
             ]);
             args.extend(model_args(&agent.model));
             args.extend(["--mode".into(), agent.mode.as_str().into()]);
@@ -374,7 +374,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 TAKE_OVER.into(),
                 workspace.as_str().into(),
                 "--agent".into(),
-                agent.name.as_str().into(),
+                agent.name.name().into(),
             ]);
             args.extend(model_args(&agent.model));
             args.extend(["--mode".into(), agent.mode.as_str().into()]);

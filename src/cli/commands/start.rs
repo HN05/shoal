@@ -529,11 +529,11 @@ async fn forked(
     } = crate::client::agents::session(&ctx.paths, parent.clone()).await?;
     let agent = match agent {
         Some(agent) => agent,
-        None => running.parse()?,
+        None => running.name().parse()?,
     };
     let target = ConfigTarget::Workspace(parent.clone());
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
-    crate::agents::ensure_forks(&settings, agent.name())?;
+    crate::agents::ensure_forks(&settings, &agent)?;
     Ok((parent, agent, session))
 }
 

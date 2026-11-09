@@ -1,6 +1,7 @@
 //! Apps that run agent sessions detached from any terminal, such as Happy,
 //! in which the user continues them: what Shoal asks of such an [`App`] to
 //! start a session and deliver its first message.
+use crate::agent::Agent;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;
@@ -15,10 +16,10 @@ pub(crate) trait App: Sync {
     fn name(&self) -> &'static str;
 
     /// The agent the app runs.
-    fn agent(&self) -> &'static str;
+    fn agent(&self) -> Agent;
 
     /// What a workspace session's execution records as its agent.
-    fn execution_agent(&self) -> String;
+    fn execution_agent(&self) -> Agent;
 
     /// Where its sessions run, for a user looking for one.
     fn place(&self) -> &'static str;
@@ -79,7 +80,7 @@ pub(crate) struct Delivered {
 pub(crate) fn model_args(
     app: &dyn App,
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     model: &ModelChoice,
 ) -> Result<Vec<OsString>> {
     if model.is_empty() {
@@ -92,5 +93,5 @@ pub(crate) fn model_args(
         app.name(),
         app.agent()
     );
-    super::model_args(settings, app.agent(), model)
+    super::model_args(settings, &app.agent(), model)
 }

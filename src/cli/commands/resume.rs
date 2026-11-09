@@ -677,6 +677,7 @@ async fn start_told(
 ) -> Result<i32> {
     let agent = &session.agent;
     let launch: crate::agent::Agent = agent
+        .name()
         .parse()
         .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
     let options = crate::cli::agents::LaunchOptions {
@@ -771,7 +772,7 @@ fn agent_label(path: &Path) -> String {
     let record = Record::load(path).ok().flatten();
     let mut label = record
         .as_ref()
-        .map_or_else(|| "agent".to_owned(), |record| record.agent.clone());
+        .map_or_else(|| "agent".to_owned(), |record| record.agent.to_string());
     label.push_str(&stop_time(path));
     let idle = record.as_ref().is_some_and(Record::between_turns);
     if let Some(reason) = record.and_then(|record| record.stop_reason) {
@@ -784,7 +785,7 @@ fn agent_label(path: &Path) -> String {
 /// How the agent picker names a last session: its agent and when it stopped.
 fn session_label(path: &Path) -> String {
     let agent = LastSession::load(path).ok().flatten();
-    let mut label = agent.map_or_else(|| "agent".to_owned(), |last| last.agent);
+    let mut label = agent.map_or_else(|| "agent".to_owned(), |last| last.agent.into());
     label.push_str(&stop_time(path));
     label
 }

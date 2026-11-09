@@ -239,7 +239,10 @@ async fn reattachment_child() {
         );
         assert_eq!(reattach.group_id, group_id);
         assert_eq!(reattach.scope_token, plan.scope_token);
-        assert_eq!(reattach.agent.as_deref(), Some("codex"));
+        assert_eq!(
+            reattach.agent.as_ref().map(|agent| agent.name()),
+            Some("codex")
+        );
         protocol::write(
             daemon.get_mut(),
             &protocol::Response::new(1, protocol::Body::Ok),

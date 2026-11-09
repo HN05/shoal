@@ -326,7 +326,7 @@ fn tracked_execution_requests_require_a_known_kind() {
             panic!("execution must use the shared request");
         };
         assert_eq!(decoded, kind);
-        assert_eq!(agent.as_deref(), Some("test-agent"));
+        assert_eq!(agent, Some("test-agent".into()));
     }
     for kind in [None, Some("unknown"), Some("Setup")] {
         let mut request = json!({"execute": {"workspace": "worker", "wrapper": wrapper}});

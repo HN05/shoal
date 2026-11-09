@@ -63,7 +63,7 @@ pub enum Source {
 /// agent's session directory.
 #[derive(Debug, Clone)]
 pub struct SessionSource {
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     pub session: String,
     pub path: PathBuf,
     pub source: PathBuf,

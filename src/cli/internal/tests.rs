@@ -261,8 +261,8 @@ fn detached_round_trips_literal_arguments_and_globals() {
             assert_eq!(workspace, "workspace-id");
             assert_eq!(parsed_log, log);
             assert_eq!(
-                parsed_agent.as_deref(),
-                agent.map(|agent| agent.name.as_str())
+                parsed_agent.as_ref().map(|agent| agent.name()),
+                agent.map(|agent| agent.name.name())
             );
             let model = crate::agent::ModelChoice::from(model);
             assert_eq!(

@@ -435,9 +435,8 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     let app = daemon.connector();
     let launch = |agent: &str, mode: Option<&str>| {
         Box::new(QueuedLaunch {
-            agent: agent.into(),
             mode: mode.map(Into::into),
-            ..Default::default()
+            ..QueuedLaunch::new(agent.into())
         })
     };
     let create = |issue: Option<&str>, agent: Option<Box<QueuedLaunch>>| {

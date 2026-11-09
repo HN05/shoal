@@ -39,7 +39,7 @@ pub(crate) use terminal::{reset_input_modes, run_in_terminal};
 /// restores keep.
 #[derive(Debug, Clone)]
 pub struct TrackedAgent {
-    pub name: String,
+    pub name: crate::agent::Agent,
     pub model: crate::agent::ModelChoice,
     pub mode: String,
     /// The permissions `--permission` gives its agent, whatever its mode's.
@@ -49,7 +49,7 @@ pub struct TrackedAgent {
 #[cfg(test)]
 impl TrackedAgent {
     /// Agent `name` running with the tool's own model and effort.
-    pub fn named(name: impl Into<String>) -> Self {
+    pub fn named(name: impl Into<crate::agent::Agent>) -> Self {
         Self {
             narrowing: Default::default(),
             name: name.into(),

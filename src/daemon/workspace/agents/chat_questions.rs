@@ -44,7 +44,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         execution: Option<&ExecutionId>,
-    ) -> Result<(Turn, String, crate::config::Effective)> {
+    ) -> Result<(Turn, crate::agent::Agent, crate::config::Effective)> {
         let refusal = || {
             format!(
                 "only an agent Shoal runs in workspace {} asks in its chat",
@@ -66,7 +66,10 @@ impl Manager {
 
     /// The turn of `chat`'s agent, with the agent and the settings of its
     /// repository.
-    async fn chat_turn(&self, chat: &Chat) -> Result<(Turn, String, crate::config::Effective)> {
+    async fn chat_turn(
+        &self,
+        chat: &Chat,
+    ) -> Result<(Turn, crate::agent::Agent, crate::config::Effective)> {
         let settings = self.chat_settings(chat).await?;
         Ok((Turn::Chat(chat.id.clone()), chat.agent.clone(), settings))
     }

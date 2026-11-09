@@ -41,7 +41,7 @@ impl Manager {
                         }
                         Some(RunningAgent {
                             // Named as `--agent` and recovery records name it.
-                            agent: agent.map(|agent| agent.name.replace(' ', "-")),
+                            agent: agent.map(|agent| agent.name.normalized()),
                             restorable: agent.is_some_and(|agent| agent.recover),
                             state: agent.and_then(|agent| agent.turn),
                             interrupted: agent.is_some_and(|agent| agent.interrupted),
@@ -132,7 +132,7 @@ impl Manager {
                         (&agent.name, &mut agent.restarts)
                     }
                 };
-                anyhow::Ok(restarts.join(name, &of_run, run))
+                anyhow::Ok(restarts.join(name.name(), &of_run, run))
             })
             .await?;
         match joined {
@@ -192,7 +192,7 @@ impl Manager {
             return Ok(answer);
         }
         if let Some(restart) = &mut agent.restarts.current {
-            restart.ensure_changes(&agent.name, change.as_ref())?;
+            restart.ensure_changes(agent.name.name(), change.as_ref())?;
             return Ok(restart.answer(run));
         }
         ensure!(

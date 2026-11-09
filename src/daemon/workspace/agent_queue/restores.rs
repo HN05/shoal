@@ -19,7 +19,7 @@ impl Manager {
     pub(crate) async fn queue_restore(
         &self,
         execution: &ExecutionId,
-        agent: &str,
+        agent: &crate::agent::Agent,
         workspace_id: &SpaceId,
     ) -> Result<()> {
         let restore = WaitingRestore {

@@ -14,7 +14,7 @@ use futures_util::future::BoxFuture;
 use super::{ChatLaunch, Launch};
 use crate::client::output::agents::{DetachedChat, DetachedSession};
 use crate::{
-    agent::ModelChoice,
+    agent::{Agent, ModelChoice},
     agents::{
         Integration,
         detached::{App, Delivered, Prepared, Session, model_args},
@@ -127,7 +127,7 @@ fn report_session(
 ) -> Result<()> {
     let report = DetachedSession {
         workspace: workspace.clone(),
-        agent: app.agent().to_owned(),
+        agent: app.agent(),
         execution_id: launch.execution_id.clone(),
         pid: launch.pid,
         log: launch.log.clone(),
@@ -150,7 +150,7 @@ fn report_session(
 
 /// Where a session of agent `name` keeps its files: under the workspace's
 /// state, named after the time it starts.
-fn session_files(paths: &Paths, workspace: &Workspace, name: &str) -> PathBuf {
+fn session_files(paths: &Paths, workspace: &Workspace, name: &Agent) -> PathBuf {
     let stamp_millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
@@ -194,7 +194,7 @@ fn with_effort(
 ) -> Box<dyn Prepared> {
     let variable = app
         .takes_agent_args()
-        .then(|| settings.launch(app.agent()).effort_environment(model))
+        .then(|| settings.launch(&app.agent()).effort_environment(model))
         .flatten();
     match variable {
         Some(variable) => Box::new(WithEnv {
@@ -237,7 +237,7 @@ fn instruction_args(
     instructions: &str,
 ) -> Option<Vec<OsString>> {
     settings
-        .launch(app.agent())
+        .launch(&app.agent())
         .arguments
         .instruction_args(instructions)
         .filter(|_| app.takes_agent_args())
@@ -252,7 +252,7 @@ async fn workspace_dir_args(
     workspace: &Workspace,
 ) -> Vec<OsString> {
     if app.takes_agent_args() {
-        crate::agents::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace).await
+        crate::agents::workspace_dir_args(&ctx.paths, settings, &app.agent(), workspace).await
     } else {
         Vec::new()
     }
@@ -262,7 +262,7 @@ async fn workspace_dir_args(
 /// works in, when it takes arguments.
 fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) -> Vec<OsString> {
     if app.takes_agent_args() {
-        super::chat_dir_args(settings, app.agent(), home, chat)
+        super::chat_dir_args(settings, &app.agent(), home, chat)
     } else {
         Vec::new()
     }
@@ -276,7 +276,7 @@ pub(super) async fn start_chat(
     ctx: &Context,
     integration: &dyn Integration,
     app: &dyn App,
-    name: &str,
+    name: &Agent,
     chat: &ChatLaunch,
 ) -> Result<i32> {
     let ChatLaunch {

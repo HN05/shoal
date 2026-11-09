@@ -94,7 +94,7 @@ async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Re
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
-    let agent: Agent = launch.agent.parse()?;
+    let agent: Agent = launch.agent.name().parse()?;
     if agents::runs_its_own_way(&agent, &settings) {
         return admit_here(ctx, workspace, launch).await;
     }

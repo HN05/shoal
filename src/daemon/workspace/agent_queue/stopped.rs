@@ -40,7 +40,7 @@ struct Target {
 struct Restore {
     id: String,
     target: Target,
-    agent: String,
+    agent: crate::agent::Agent,
     execution: ExecutionId,
     env: String,
     /// Shoal queued it on its own rather than `shoal resume`, so an agent
@@ -54,7 +54,7 @@ impl Restore {
     fn new(
         target: Target,
         execution: &ExecutionId,
-        agent: &str,
+        agent: &crate::agent::Agent,
         env: &BTreeMap<String, String>,
         automatic: bool,
     ) -> Result<Self> {
@@ -226,7 +226,7 @@ fn stopped_agent(
     paths: &Paths,
     workspace_id: &SpaceId,
     execution: &ExecutionId,
-) -> Result<Option<String>> {
+) -> Result<Option<crate::agent::Agent>> {
     let record = recovery::Record::load(&recovery::record_path(paths, workspace_id, execution))?;
     if let Some(record) = record {
         return Ok(Some(record.agent));
@@ -373,7 +373,7 @@ impl Manager {
     pub(crate) async fn queue_failed_restore(
         &self,
         workspace: &crate::model::Workspace,
-        agent: &str,
+        agent: &crate::agent::Agent,
         execution: &ExecutionId,
         code: i32,
     ) -> bool {

@@ -15,7 +15,10 @@ async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace)
         panic!("expected one agent: {agents:?}");
     };
     assert_eq!(agent.space_id, workspace.id);
-    assert_eq!(agent.agent.as_deref(), Some("fixture"));
+    assert_eq!(
+        agent.agent.as_ref().map(|agent| agent.name()),
+        Some("fixture")
+    );
     assert!(agent.restorable);
     agent.execution.clone()
 }

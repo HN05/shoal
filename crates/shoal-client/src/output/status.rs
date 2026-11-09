@@ -25,7 +25,7 @@ pub struct StatusView {
 pub struct AgentSession {
     pub name: String,
     /// The agent the daemon recorded running there, when one runs there.
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// Terminals attached to the session; a host that cannot count them
     /// gives one while it shows the session.
     pub clients: u32,

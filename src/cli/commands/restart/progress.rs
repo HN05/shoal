@@ -105,7 +105,7 @@ impl Progress {
         self,
         ctx: &Context,
         agents: &[RunningAgent],
-        agent: Option<&str>,
+        agent: Option<&crate::agent::Agent>,
     ) -> Result<i32> {
         let pending: Vec<String> = agents
             .iter()
@@ -163,7 +163,7 @@ fn restarted(
     }
 }
 
-fn interruption(pending: &[String], agent: Option<&str>) -> String {
+fn interruption(pending: &[String], agent: Option<&crate::agent::Agent>) -> String {
     if pending.is_empty() {
         return "Interrupted".into();
     }

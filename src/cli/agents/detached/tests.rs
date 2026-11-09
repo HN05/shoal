@@ -52,7 +52,7 @@ fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments()
     let settings = config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap();
-    let happy = crate::agents::agent_integration(&settings, "happy-claude")
+    let happy = crate::agents::agent_integration(&settings, &"happy-claude".into())
         .detached()
         .expect("Happy runs its agents detached");
     let directories = vec![OsString::from("--add-dir=/root/repo")];

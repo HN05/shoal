@@ -34,7 +34,7 @@ impl Unretried {
         }
     }
 
-    fn message(&self, agent: &str, failure: TurnFailure) -> String {
+    fn message(&self, agent: &crate::agent::Agent, failure: TurnFailure) -> String {
         match self {
             Self::Unfixable => format!(
                 "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
@@ -92,7 +92,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         execution: &ExecutionId,
-        agent: &str,
+        agent: &crate::agent::Agent,
         failure: TurnFailure,
         reason: Unretried,
     ) -> Result<()> {

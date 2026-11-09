@@ -73,7 +73,7 @@ pub struct Reopened {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoredChat {
     pub chat: String,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// Its repository's ID; none for a chat without one.
     pub repository: Option<RepositoryId>,
     /// Where it runs and how to reach it, as the host that runs it says;

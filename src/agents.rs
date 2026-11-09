@@ -21,6 +21,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::Result;
 
 use crate::{
+    agent::Agent,
     ai::IntegrationKind,
     config::{Effective, templates},
     model::Workspace,
@@ -207,13 +208,13 @@ pub(crate) const ADDED: &[Added] = &[
 ];
 
 /// The agent `name`, when an integration adds it.
-pub(crate) fn added(name: &str) -> Option<&'static Added> {
-    ADDED.iter().find(|added| added.name == name)
+pub(crate) fn added(name: &Agent) -> Option<&'static Added> {
+    ADDED.iter().find(|added| *name == added.name)
 }
 
 /// The integration agent `name` runs with under `settings`: its AI tool's,
 /// else that of the integration adding it.
-pub(crate) fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integration {
+pub(crate) fn agent_integration(settings: &Effective, name: &Agent) -> &'static dyn Integration {
     match settings.integration(name) {
         IntegrationKind::None => added(name).map_or(&Configured, |added| added.integration),
         kind => integration(kind),
@@ -222,7 +223,7 @@ pub(crate) fn agent_integration(settings: &Effective, name: &str) -> &'static dy
 
 /// Why `settings` turn agent `name` off, if they do: its own `enabled =
 /// false`, or what turns off the integration that adds it.
-pub(crate) fn agent_off(settings: &Effective, name: &str) -> Option<&'static str> {
+pub(crate) fn agent_off(settings: &Effective, name: &Agent) -> Option<&'static str> {
     if settings.turned_off(name) {
         return Some("its [agents] entry sets enabled = false");
     }

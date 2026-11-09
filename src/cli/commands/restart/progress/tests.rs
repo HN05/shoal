@@ -70,7 +70,7 @@ fn an_interruption_names_the_restarts_that_go_on() {
     let plain = interruption(&pending, None);
     assert!(plain.contains("shoal restart api web "), "{plain}");
     // The command keeps to the agents the run selected.
-    let selected = interruption(&pending, Some("codex"));
+    let selected = interruption(&pending, Some(&"codex".into()));
     assert!(
         selected.contains("shoal restart api web --agent codex "),
         "{selected}"

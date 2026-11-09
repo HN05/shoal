@@ -156,7 +156,7 @@ async fn start_saved(
             Some(change) => change.applied_to(chat.narrowing),
             None => chat.narrowing,
         }),
-        agent: Some(chat.agent.parse()?),
+        agent: Some(chat.agent.name().parse()?),
         place,
         name: Some(chat.name.clone()),
         model: Default::default(),

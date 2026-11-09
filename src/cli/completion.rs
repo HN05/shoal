@@ -16,6 +16,7 @@ use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    agent::Agent,
     cli::{
         agents,
         availability::{self, Fit, Need},
@@ -56,7 +57,7 @@ struct Settings {
     commands: Commands,
     providers: BTreeSet<String>,
     /// Agents pickers offer, installed or not.
-    agents: Vec<String>,
+    agents: Vec<Agent>,
     /// The modes `shoal start` takes.
     modes: Vec<String>,
 }
@@ -148,7 +149,12 @@ pub fn command() -> Command {
         {
             continue;
         }
-        let about = if typed.settings().agents.contains(&name) {
+        let about = if typed
+            .settings()
+            .agents
+            .iter()
+            .any(|agent| *agent == name.as_str())
+        {
             format!("Run {name} in a workspace")
         } else {
             "Configured workspace command".to_owned()
@@ -235,7 +241,9 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                         .settings()
                         .agents
                         .iter()
-                        .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
+                        .filter(|agent| {
+                            agent.name().starts_with(current.to_string_lossy().as_ref())
+                        })
                         .filter(|name| typed.launchable(name, &search_path))
                         .cloned()
                         .collect::<BTreeSet<_>>()
@@ -290,8 +298,10 @@ impl Typed {
     fn command_names(&self, search_path: &OsStr) -> Vec<String> {
         let settings = self.settings();
         let commands = (self.commands().keys()).filter(|name| !settings.providers.contains(*name));
-        let agents = (settings.agents.iter()).filter(|name| self.launchable(name, search_path));
-        let mut names: BTreeSet<String> = commands.chain(agents).cloned().collect();
+        let agents = (settings.agents.iter())
+            .filter(|agent| self.launchable(agent, search_path))
+            .map(|agent| agent.name().to_owned());
+        let mut names: BTreeSet<String> = commands.cloned().chain(agents).collect();
         names.extend(self.custom.clone());
         names.into_iter().collect()
     }
@@ -300,9 +310,9 @@ impl Typed {
         &self.settings().commands
     }
 
-    /// Whether `name` is an agent whose programs are on `search_path`.
-    fn launchable(&self, name: &str, search_path: &OsStr) -> bool {
-        agents::installed(name, self.commands(), search_path)
+    /// Whether `agent`'s programs are on `search_path`.
+    fn launchable(&self, agent: &Agent, search_path: &OsStr) -> bool {
+        agents::installed(agent, self.commands(), search_path)
     }
 
     fn settings(&self) -> &Settings {
@@ -322,7 +332,7 @@ impl Typed {
                     .collect(),
                 agents: crate::ai::PROVIDERS
                     .iter()
-                    .map(|provider| provider.name.to_owned())
+                    .filter_map(|provider| provider.name.parse().ok())
                     .collect(),
                 modes: crate::config::modes::built_in_modes().into_keys().collect(),
             };
@@ -678,7 +688,12 @@ fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
         Err(_) => crate::config::modes::built_in_modes().into_keys().collect(),
     };
     let agents = resolved.map_or_else(
-        |_| providers.iter().cloned().collect(),
+        |_| {
+            providers
+                .iter()
+                .filter_map(|name| name.parse().ok())
+                .collect()
+        },
         |settings| agents::names(&settings),
     );
     Settings {

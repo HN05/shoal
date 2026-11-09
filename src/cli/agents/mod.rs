@@ -42,20 +42,20 @@ pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
 
 /// Where a chat of agent `name` runs when an integration it adds starts it
 /// outside any terminal, such as an app.
-pub(in crate::cli) fn chat_place(name: &str) -> Option<&'static str> {
+pub(in crate::cli) fn chat_place(name: &Agent) -> Option<&'static str> {
     let app = added(name).and_then(|added| added.integration.detached());
     app.map(crate::agents::detached::App::place)
 }
 
 /// How updates reach the chat agent `name` launched under `settings`.
-pub(in crate::cli) fn chat_delivery(settings: &Effective, name: &str) -> templates::Delivery {
+pub(in crate::cli) fn chat_delivery(settings: &Effective, name: &Agent) -> templates::Delivery {
     launch::chat_delivery(agent_integration(settings, name))
 }
 
 /// One launch of an agent in a ready workspace; settings are never cached
 /// across launches.
 pub(in crate::cli) struct Launch {
-    pub name: String,
+    pub name: Agent,
     pub workspace: Workspace,
     pub settings: Effective,
     /// Shoal's guidance and the mode's rules.
@@ -256,9 +256,7 @@ pub(in crate::cli) fn runs_in_session(agent: &Agent, settings: &Effective) -> bo
 /// Whether a launch of `agent` under `settings` leaves the launching process
 /// at once, as one its integration runs detached, such as Happy, does.
 pub(in crate::cli) fn runs_its_own_way(agent: &Agent, settings: &Effective) -> bool {
-    agent_integration(settings, agent.name())
-        .detached()
-        .is_some()
+    agent_integration(settings, agent).detached().is_some()
 }
 
 /// Start an agent in a ready workspace, giving it the prompt the way it
@@ -276,9 +274,9 @@ pub(super) async fn launch_agent(
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
-    let integration = agent_integration(&settings, agent.name());
+    let integration = agent_integration(&settings, &agent);
     let fork = match &options.fork {
-        Some(session) => fork_args(&settings, agent.name(), session, &workspace.path)?,
+        Some(session) => fork_args(&settings, &agent, session, &workspace.path)?,
         None => Vec::new(),
     };
     let place = templates::Place::Workspace {
@@ -290,11 +288,11 @@ pub(super) async fn launch_agent(
         first_message: prompt,
     } = opening.brief(&settings, place)?;
     let model = match options.model {
-        ModelRequest::Override(requested) => resolve_model(&settings, agent.name(), requested),
+        ModelRequest::Override(requested) => resolve_model(&settings, &agent, requested),
         ModelRequest::Kept(model) => model,
     };
     let launch = Launch {
-        name: agent.into(),
+        name: agent,
         workspace,
         settings,
         instructions,
@@ -348,7 +346,7 @@ async fn classify(
     name: &str,
     workspace: Option<&SpaceSelector>,
 ) -> Result<NamedRun> {
-    if added(name).is_some() {
+    if (name.parse::<Agent>()).is_ok_and(|agent| added(&agent).is_some()) {
         return Ok(NamedRun::Agent);
     }
     let target = agent_target(ctx, workspace).await?;
@@ -460,7 +458,7 @@ pub(super) async fn default_agent(
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     match agent.or(settings.agent.default.clone()) {
         Some(agent) => {
-            ensure_available(agent.name(), &settings)?;
+            ensure_available(&agent, &settings)?;
             Ok(Some(agent))
         }
         None => pick_default_agent(ctx, &settings),
@@ -488,39 +486,36 @@ pub(in crate::cli) fn pick_reviewer(ctx: &Context, settings: &Effective) -> Resu
 fn pick_agent(
     ctx: &Context,
     settings: &Effective,
-    available: impl Fn(&str) -> bool,
+    available: impl Fn(&Agent) -> bool,
 ) -> Result<Option<Agent>> {
     ensure!(
         ctx.interactive(),
         "no agent selected; pass --agent or set agent.default in the repository or global config"
     );
-    let mut choices: Vec<_> = names(settings)
-        .into_iter()
-        .filter(|name| available(name))
-        .map(|name| (name.parse().ok(), name))
+    let agents = names(settings);
+    let mut choices: Vec<_> = agents
+        .iter()
+        .filter(|agent| available(agent))
+        .map(|agent| (Some(agent.clone()), agent.name()))
         .collect();
     // A picker cannot run without fzf. Treat that as “No agent” so callers
     // without the optional interactive dependency retain the existing flow.
     if choices.is_empty() || !ui::can_pick(ctx) {
         return Ok(None);
     }
-    choices.push((None, "No agent".into()));
-    let choices: Vec<_> = choices
-        .iter()
-        .map(|(agent, label)| (agent.clone(), label.as_str()))
-        .collect();
+    choices.push((None, "No agent"));
     let picked: Option<Agent> = ui::pick_choice(ctx, "Agent> ", &choices)?;
     // The picker offers agents by their own programs; the launch may need
     // a session host too, refused before anything is created.
     if let Some(agent) = &picked {
-        ensure_available(agent.name(), settings)?;
+        ensure_available(agent, settings)?;
     }
     Ok(picked)
 }
 
 /// The agents pickers and completion offer under `settings`, built-in
 /// providers first, leaving out those `settings` turn off.
-pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
+pub(in crate::cli) fn names(settings: &Effective) -> Vec<Agent> {
     let mut names: Vec<String> = crate::ai::PROVIDERS
         .iter()
         .map(|provider| provider.name.to_owned())
@@ -535,8 +530,9 @@ pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
             names.push((*name).to_owned());
         }
     }
-    names.retain(|name| agent_off(settings, name).is_none());
-    names
+    let mut agents: Vec<Agent> = names.iter().filter_map(|name| name.parse().ok()).collect();
+    agents.retain(|agent| agent_off(settings, agent).is_none());
+    agents
 }
 
 /// Agent names Shoal knows without configuration, for help and completion.
@@ -556,7 +552,7 @@ pub(in crate::cli) fn builtin_names() -> Vec<String> {
 /// Whether every executable the agent itself starts is available, so pickers
 /// and completion offer only agents that can launch; a launch refuses a
 /// missing session host itself.
-pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &OsStr) -> bool {
+pub(in crate::cli) fn installed(name: &Agent, commands: &Commands, search_path: &OsStr) -> bool {
     programs(name, commands, None).is_some_and(|programs| {
         programs
             .into_iter()
@@ -567,23 +563,23 @@ pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &O
 /// Refuse a reviewer without a review template or whose review command's
 /// program is missing. A review runs without a session, so it needs no
 /// terminal host.
-pub(in crate::cli) fn ensure_reviewer_available(name: &str, settings: &Effective) -> Result<()> {
+pub(in crate::cli) fn ensure_reviewer_available(name: &Agent, settings: &Effective) -> Result<()> {
     settings.check_reviewer(name)?;
     let program = settings
         .launchers
-        .get(name)
+        .get(name.name())
         .and_then(|argv| argv.first())
         .with_context(|| {
             format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
         })?;
-    ensure_program(name, program)
+    ensure_program(name.name(), program)
 }
 
 /// The arguments that start agent `name` in `directory` from a fork of
 /// `session`, refusing an agent [`ensure_forks`] refuses.
 pub(in crate::cli) fn fork_args(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     session: &str,
     directory: &Path,
 ) -> Result<Vec<OsString>> {
@@ -604,7 +600,7 @@ pub(in crate::cli) fn fork_args(
 /// of the global config beside `home`, which it may write.
 pub(in crate::cli) fn chat_dir_args(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     home: &Path,
     chat: &Chat,
 ) -> Vec<OsString> {
@@ -650,7 +646,7 @@ fn launch_config_dir(file: &Path) -> Option<PathBuf> {
 /// to the configured command run in place of Shoal.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
-    name: &str,
+    name: &Agent,
     chat: &ChatLaunch,
 ) -> Result<Option<i32>> {
     let integration = agent_integration(&chat.settings, name);
@@ -664,7 +660,7 @@ pub(in crate::cli) async fn start_chat(
 
 /// The key that cancels the running turn of agent `name` under `settings`,
 /// unless Shoal knows none.
-pub(in crate::cli) fn interrupt_key(settings: &Effective, name: &str) -> Option<&'static str> {
+pub(in crate::cli) fn interrupt_key(settings: &Effective, name: &Agent) -> Option<&'static str> {
     agent_integration(settings, name).interrupt_key()
 }
 
@@ -719,7 +715,7 @@ pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
 }
 
 /// The agents the workspace saves for `shoal resume`.
-fn saved_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<String>> {
+fn saved_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<Agent>> {
     let saved = recovery::Saved::load(paths, workspace_id)?;
     let mut agents = Vec::new();
     for agent in saved.agent_names() {
@@ -730,7 +726,7 @@ fn saved_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<String>> {
 
 /// Trust the path of `workspace` for each of `agents` as a tracked launch
 /// does. Failures only warn.
-async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
+async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<Agent>) {
     let settings = match crate::client::workspaces::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
@@ -760,7 +756,7 @@ async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
 pub(in crate::cli) async fn trust_chat(
     ctx: &Context,
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     repository: Option<&Repository>,
     home: ChatHome<'_>,
 ) {

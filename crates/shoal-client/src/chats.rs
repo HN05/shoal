@@ -21,7 +21,7 @@ use crate::{
 #[derive(Clone, Copy)]
 pub struct NewChat<'a> {
     pub name: &'a SpaceName,
-    pub agent: &'a str,
+    pub agent: &'a crate::agent::Agent,
     pub mode: &'a str,
     /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,

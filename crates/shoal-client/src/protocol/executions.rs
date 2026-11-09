@@ -16,7 +16,7 @@ pub enum ExecutionMethod {
         wrapper: Identity,
         kind: ExecutionKind,
         #[serde(default)]
-        agent: Option<String>,
+        agent: Option<crate::agent::Agent>,
         /// The model and effort the agent runs with.
         #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
         model: crate::agent::ModelChoice,

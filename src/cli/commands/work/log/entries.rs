@@ -18,10 +18,10 @@ pub(super) fn describe(entry: &LogEntry) -> (String, String) {
         LogEntry::Chat(event) => {
             let chat = &event.chat;
             let (label, details) = match event.kind {
-                ChatEventKind::Started => ("Created", chat.agent.clone()),
+                ChatEventKind::Started => ("Created", chat.agent.to_string()),
                 ChatEventKind::Renamed => ("Renamed", chat.name.to_string()),
-                ChatEventKind::Saved => ("Agent stopped", chat.agent.clone()),
-                ChatEventKind::Restored => ("Agent started", chat.agent.clone()),
+                ChatEventKind::Saved => ("Agent stopped", chat.agent.to_string()),
+                ChatEventKind::Restored => ("Agent started", chat.agent.to_string()),
                 ChatEventKind::Ended => ("Removed", String::new()),
             };
             (label.to_owned(), details)
@@ -154,7 +154,7 @@ fn cause(cause: EventCause) -> String {
 }
 
 fn agent(event: &EventDetails) -> String {
-    (event.agent.as_ref()).map_or_else(String::new, |agent| agent.name.clone())
+    (event.agent.as_ref()).map_or_else(String::new, |agent| agent.name.to_string())
 }
 
 fn exit(event: &EventDetails) -> String {

@@ -194,7 +194,7 @@ async fn check_reviewer(
         return Ok(());
     };
     super::super::chat::check_model(&settings, &agent, model)?;
-    crate::cli::agents::ensure_reviewer_available(agent.name(), &settings)
+    crate::cli::agents::ensure_reviewer_available(&agent, &settings)
 }
 
 impl Reviewer {
@@ -491,7 +491,7 @@ async fn queue(
     };
     // Refused here, before the daemon queues a review it could not run.
     super::super::chat::check_model(settings, &agent, &model)?;
-    crate::cli::agents::ensure_reviewer_available(agent.name(), settings)?;
+    crate::cli::agents::ensure_reviewer_available(&agent, settings)?;
     let review =
         crate::client::reviews::run(&ctx.paths, workspace.clone(), target, agent, model).await?;
     let message = format!(

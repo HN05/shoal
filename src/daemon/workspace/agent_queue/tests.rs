@@ -784,7 +784,7 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
     // The first wrapper never got its restore, so it reattaches waiting and
     // keeps its place instead of queueing a second restore.
     restarted
-        .queue_restore(&agents[0].0, "claude", &first.id)
+        .queue_restore(&agents[0].0, &"claude".into(), &first.id)
         .await
         .unwrap();
     let restoring = await_restore(&restarted, &agents[0].0).await;

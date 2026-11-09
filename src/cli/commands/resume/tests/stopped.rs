@@ -340,7 +340,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
     let [quit] = last().try_into().unwrap();
     assert_eq!(
-        (quit.agent.as_str(), quit.session.as_deref(), quit.moved),
+        (quit.agent.name(), quit.session.as_deref(), quit.moved),
         ("fixture", Some("quit-session"), false)
     );
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());

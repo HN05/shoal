@@ -133,7 +133,10 @@ async fn agents_are_listed_by_the_names_agent_selection_takes() {
     )
     .await;
     let agents = manager.running_agents().await.unwrap();
-    assert_eq!(agents[0].agent.as_deref(), Some("happy-codex"));
+    assert_eq!(
+        agents[0].agent.as_ref().map(|agent| agent.name()),
+        Some("happy-codex")
+    );
 }
 
 #[tokio::test]

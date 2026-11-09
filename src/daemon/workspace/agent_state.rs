@@ -239,7 +239,7 @@ impl Manager {
             (PresentSpace::Workspace(_), None) => return None,
         };
         let mut tools = self.present_space_settings(&space).await.ok()?.tools;
-        tools.remove(&agent)
+        tools.remove(agent.name())
     }
 
     /// Record `state` as [`Self::set_agent_state`] does, for a report that

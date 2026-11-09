@@ -16,7 +16,7 @@ pub enum QueueMethod {
     /// default host once the queue admits it. Answers with the entry.
     QueueAgent {
         workspace: SpaceSelector,
-        agent: String,
+        agent: crate::agent::Agent,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
     },

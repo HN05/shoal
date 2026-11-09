@@ -179,11 +179,11 @@ async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_st
             .len()
     };
     f.manager
-        .post_agent_exit(&f.workspace, "claude", Some(0), false)
+        .post_agent_exit(&f.workspace, &"claude".into(), Some(0), false)
         .await;
     assert_eq!(count().await, 0);
     f.manager
-        .post_agent_exit(&f.workspace, "claude", Some(0), true)
+        .post_agent_exit(&f.workspace, &"claude".into(), Some(0), true)
         .await;
     assert_eq!(count().await, 1);
 }

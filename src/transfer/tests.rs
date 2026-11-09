@@ -161,7 +161,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         .manifest
         .sessions_on(Some("m2"), None)
         .reported()
-        .map(|(agent, session)| (agent.to_owned(), session.to_owned()))
+        .map(|(agent, session)| (agent.to_string(), session.to_owned()))
         .collect();
     assert_eq!(reported, [("claude".to_owned(), "s1".to_owned())]);
     // Without its files, another machine starts a new session.

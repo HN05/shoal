@@ -426,10 +426,19 @@ impl Manager {
     }
 
     /// Whether the AI tool `agent` names has `retry` on in `workspace`.
-    async fn retries(&self, workspace: &crate::model::Workspace, agent: &str) -> bool {
+    async fn retries(
+        &self,
+        workspace: &crate::model::Workspace,
+        agent: &crate::agent::Agent,
+    ) -> bool {
         self.workspace_settings(workspace)
             .await
-            .is_ok_and(|settings| settings.tools.get(agent).is_some_and(|tool| tool.retry))
+            .is_ok_and(|settings| {
+                settings
+                    .tools
+                    .get(agent.name())
+                    .is_some_and(|tool| tool.retry)
+            })
     }
 
     /// Deliver the retries due now; when the next one is due.

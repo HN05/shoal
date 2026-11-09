@@ -152,7 +152,7 @@ fn running_record(execution: &Execution, session: Option<String>) -> Option<Reco
     Some(Record {
         narrowing: execution.narrowing,
         // Named as recovery records name it.
-        agent: execution.agent.as_ref()?.replace(' ', "-"),
+        agent: execution.agent.as_ref()?.normalized(),
         stop_reason: None,
         stage: None,
         origin: None,

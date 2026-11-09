@@ -30,7 +30,7 @@ pub(crate) enum Renewal {
 /// registers it.
 pub(crate) struct Handover {
     /// The agent's name and workspace.
-    pub(super) name: String,
+    pub(super) name: crate::agent::Agent,
     pub(super) workspace_id: SpaceId,
     pub(super) restarts: Restarts,
     /// The agent queue entry whose start runs the new wrapper, once recorded.
@@ -70,7 +70,7 @@ impl Handover {
         change: Option<&PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         if let Some(restart) = &self.restarts.current {
-            restart.ensure_changes(&self.name, change)?;
+            restart.ensure_changes(self.name.name(), change)?;
         }
         Ok(self.answer(run))
     }
@@ -101,7 +101,7 @@ pub(super) fn handed_over(renewals: &Renewals) -> impl Iterator<Item = RunningAg
         Some(RunningAgent {
             execution: execution.clone(),
             space_id: handover.workspace_id.clone(),
-            agent: Some(handover.name.replace(' ', "-")),
+            agent: Some(handover.name.normalized()),
             restorable: true,
             state: None,
             interrupted: false,

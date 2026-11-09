@@ -9,11 +9,13 @@ use crate::{
     processes::Stopped,
 };
 
-/// An agent, by its workspace's name and its own.
+/// An agent, by its workspace's name and its own, which is unknown for an
+/// execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Agent {
     pub workspace: String,
-    pub agent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::agent::Agent>,
 }
 
 /// A stopped workspace's processes.
@@ -97,7 +99,7 @@ pub struct Restarted {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestartedAgent {
     pub space: String,
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// Where it runs now, when its wrapper runs in a terminal host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<crate::sessions::Origin>,
@@ -107,7 +109,7 @@ pub struct RestartedAgent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skipped {
     pub space: String,
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     pub reason: String,
 }
 
@@ -139,7 +141,7 @@ pub struct Delivery {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetachedSession {
     pub workspace: crate::model::Workspace,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     pub execution_id: ExecutionId,
     pub pid: u32,
     pub log: std::path::PathBuf,

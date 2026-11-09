@@ -65,8 +65,14 @@ async fn running_turns(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<Ve
         let settings = settings(ctx, &workspace).await?;
         for agent in agents.into_iter().filter(|agent| runs_turn(agent.state)) {
             let target = Target::of(&workspace, agent)?;
-            let key = agents::interrupt_key(&settings, &target.agent)
-                .with_context(|| format!("Shoal knows no key that interrupts {}", target.agent))?;
+            let key = (target.agent.as_ref())
+                .and_then(|agent| agents::interrupt_key(&settings, agent))
+                .with_context(|| {
+                    format!(
+                        "Shoal knows no key that interrupts {}",
+                        name(target.agent.as_ref())
+                    )
+                })?;
             interruptions.push(Interruption { target, key });
         }
     }
@@ -165,12 +171,17 @@ async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
     .await
 }
 
+/// `agent`'s name, or a stand-in for one whose wrapper is gone.
+fn name(agent: Option<&crate::agent::Agent>) -> &str {
+    agent.map_or("the agent", |agent| agent.name())
+}
+
 /// An agent Shoal types into, by workspace and name as output shows it, with
 /// its execution and the place it runs in.
 #[derive(Debug)]
 struct Target {
     workspace: String,
-    agent: String,
+    agent: Option<crate::agent::Agent>,
     workspace_id: SpaceId,
     execution: ExecutionId,
     place: Origin,
@@ -179,16 +190,16 @@ struct Target {
 impl Target {
     /// `agent` of `workspace`, refusing one that runs in no terminal host.
     fn of(workspace: &Workspace, agent: RunningAgent) -> Result<Self> {
-        let name = agent.agent.unwrap_or_else(|| "the agent".into());
         let place = agent.origin.with_context(|| {
             format!(
-                "{name} in {} runs in no terminal session Shoal can type into",
+                "{} in {} runs in no terminal session Shoal can type into",
+                name(agent.agent.as_ref()),
                 workspace.name
             )
         })?;
         Ok(Self {
             workspace: workspace.name.to_string(),
-            agent: name,
+            agent: agent.agent,
             workspace_id: workspace.id.clone(),
             execution: agent.execution,
             place,
@@ -205,7 +216,7 @@ impl Target {
 
     /// The agent and its workspace, as messages name them.
     fn described(&self) -> String {
-        format!("{} in {}", self.agent, self.workspace)
+        format!("{} in {}", name(self.agent.as_ref()), self.workspace)
     }
 }
 

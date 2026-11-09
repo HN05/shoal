@@ -11,7 +11,7 @@ use anyhow::{Context as _, Result};
 
 use super::{agent_integration, delivery, hook_args};
 use crate::{
-    agent::ModelChoice,
+    agent::{Agent, ModelChoice},
     config::{Effective, modes, templates},
     fsutil,
     model::Workspace,
@@ -22,7 +22,7 @@ use crate::{
 /// without the template for a value it sets.
 pub(crate) fn model_args(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     model: &ModelChoice,
 ) -> Result<Vec<OsString>> {
     settings
@@ -33,7 +33,7 @@ pub(crate) fn model_args(
 }
 
 /// The refusal of a model or effort for agent `name`, which lacks `template`.
-fn missing_template(name: &str, template: &str) -> anyhow::Error {
+fn missing_template(name: &Agent, template: &str) -> anyhow::Error {
     let option = template.trim_end_matches("_args");
     anyhow::anyhow!(
         "cannot start {name} with a configured or requested {option}: set [agents.{name}] {template}"
@@ -47,7 +47,7 @@ fn missing_template(name: &str, template: &str) -> anyhow::Error {
 /// mode's, with a warning, so a restore never waits on config.
 pub(crate) fn restored_instruction_args(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     workspace: &Workspace,
     mode: &str,
 ) -> Vec<OsString> {
@@ -89,7 +89,7 @@ pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>
 pub(crate) async fn workspace_args(
     paths: &Paths,
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     workspace: &Workspace,
 ) -> Result<Vec<OsString>> {
     let proxied = settings.proxy(name).is_some();
@@ -105,7 +105,7 @@ pub(crate) async fn workspace_args(
 pub(crate) async fn workspace_dir_args(
     paths: &Paths,
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     workspace: &Workspace,
 ) -> Vec<OsString> {
     let workspaces_dir = workspaces_dir(paths, workspace).await;
@@ -115,7 +115,7 @@ pub(crate) async fn workspace_dir_args(
 /// The arguments that give agent `name` the configured agent directories as
 /// other working directories, so it may read what the tools it runs leave
 /// there without a permission prompt.
-fn agent_dir_args(settings: &Effective, name: &str, home: &Path) -> Vec<OsString> {
+fn agent_dir_args(settings: &Effective, name: &Agent, home: &Path) -> Vec<OsString> {
     let arguments = &settings.launch(name).arguments;
     agent_dirs(settings, home)
         .iter()
@@ -127,7 +127,7 @@ fn agent_dir_args(settings: &Effective, name: &str, home: &Path) -> Vec<OsString
 /// `extra`, resolved as agents compare paths, as other working directories.
 pub(crate) fn dir_args(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     home: &Path,
     extra: &[PathBuf],
 ) -> Vec<OsString> {

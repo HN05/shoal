@@ -200,7 +200,7 @@ impl Attaches for Zmx {
         &'a self,
         start: &'a Start<'a>,
         owner: Owner<'a>,
-        agent: &'a str,
+        agent: &'a crate::agent::Agent,
     ) -> BoxFuture<'a, Result<String>> {
         Box::pin(run(start, owner, agent))
     }
@@ -243,9 +243,9 @@ fn in_session() -> bool {
 /// Start `start`, `agent`'s tracked execution for `owner`, in a new session
 /// and attach this terminal to it, returning the session. zmx does not
 /// report the agent's exit status; the daemon still records the exit.
-async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String> {
+async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -> Result<String> {
     // Launches check zmx before any work; resumed agents reach it here.
-    ensure_program(agent, Tool::Zmx.program())?;
+    ensure_program(agent.name(), Tool::Zmx.program())?;
     let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach").arg("--labels").arg(format!(

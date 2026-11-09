@@ -21,7 +21,7 @@ pub struct Reattach {
     pub scope_token: crate::scope_tokens::ScopeToken,
     /// Transient agent metadata the daemon lost with its memory.
     #[serde(default)]
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// The model and effort the agent runs with.
     #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
     pub model: crate::agent::ModelChoice,

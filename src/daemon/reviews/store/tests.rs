@@ -52,14 +52,14 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 model: Some("opus".into()),
                 effort: None,
             };
-            let first = queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, "claude", &model, UnixTime::from_seconds(1))?;
+            let first = queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, &"claude".into(), &model, UnixTime::from_seconds(1))?;
             assert!(matches!(first, Queued::New(_)));
             assert_eq!(load(db, first.id())?.unwrap().model, model);
             let again = queue(
                 db,
                 &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
-                "codex",
+                &"codex".into(),
                 &Default::default(),
                 UnixTime::from_seconds(2),
             )?;
@@ -75,7 +75,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 db,
                 &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
-                "claude",
+                &"claude".into(),
                 &Default::default(),
                 UnixTime::from_seconds(4),
             );
@@ -84,7 +84,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
             assert_eq!(cancelled_by(db, first.id())?.as_deref(), Some("work"));
             assert!(!cancel(db, first.id(), None, UnixTime::from_seconds(6))?);
             assert!(matches!(
-                queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, "claude", &Default::default(), UnixTime::from_seconds(7))?,
+                queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, &"claude".into(), &Default::default(), UnixTime::from_seconds(7))?,
                 Queued::New(id) if id > first.id()
             ));
             Ok(())
@@ -103,7 +103,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 tx,
                 &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
-                "claude",
+                &"claude".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )?
@@ -112,7 +112,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
             assert!(finish(
                 tx,
                 first,
-                "claude",
+                &"claude".into(),
                 &output(2, Vec::new()),
                 UnixTime::from_seconds(3)
             )?);
@@ -146,7 +146,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 tx,
                 &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
-                "codex",
+                &"codex".into(),
                 &Default::default(),
                 UnixTime::from_seconds(6),
             )?
@@ -166,7 +166,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
             assert!(finish(
                 tx,
                 second,
-                "claude",
+                &"claude".into(),
                 &output(0, checked),
                 UnixTime::from_seconds(8)
             )?);
@@ -237,7 +237,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 db,
                 &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
-                "claude",
+                &"claude".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )?
@@ -250,7 +250,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
             assert!(fail(
                 db,
                 id,
-                Some("codex"),
+                Some(&"codex".into()),
                 FailureReason::RateLimit,
                 UnixTime::from_seconds(3)
             )?);
@@ -272,7 +272,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 tx,
                 &SpaceId::from("work"),
                 &ReviewTarget::Workspace,
-                "claude",
+                &"claude".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )?
@@ -281,7 +281,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
             finish(
                 tx,
                 id,
-                "claude",
+                &"claude".into(),
                 &output(1, Vec::new()),
                 UnixTime::from_seconds(3),
             )?;

@@ -165,7 +165,7 @@ impl AddPlan {
             place_name: None,
             issue: issue.map(|issue| issue.url),
             agent: ResolvedAddAgent {
-                agent: Some(agent.parse()?),
+                agent: Some(agent.name().parse()?),
                 model,
             },
             args: args.into_iter().map(OsString::from).collect(),
@@ -192,8 +192,8 @@ impl AddPlan {
     }
 
     /// The agent's name, when the addition starts one.
-    pub fn agent_name(&self) -> Option<String> {
-        self.agent.agent.clone().map(String::from)
+    pub fn agent_name(&self) -> Option<Agent> {
+        self.agent.agent.clone()
     }
 
     /// The found issue's URL.

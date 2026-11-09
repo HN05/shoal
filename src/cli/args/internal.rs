@@ -147,8 +147,8 @@ pub enum InternalCommand {
         workspace: SpaceId,
         #[arg(long)]
         log: PathBuf,
-        #[arg(long)]
-        agent: Option<String>,
+        #[arg(long, value_parser = agent)]
+        agent: Option<crate::agent::Agent>,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
         /// The mode the agent started in.
@@ -196,7 +196,8 @@ pub enum InternalCommand {
     #[command(name = workers::SESSION)]
     Session {
         workspace: SpaceId,
-        agent: String,
+        #[arg(value_parser = agent)]
+        agent: crate::agent::Agent,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
         /// The mode the agent started in.
@@ -234,8 +235,8 @@ pub enum InternalCommand {
     #[command(name = workers::TAKE_OVER)]
     TakeOver {
         workspace: SpaceId,
-        #[arg(long)]
-        agent: String,
+        #[arg(long, value_parser = agent)]
+        agent: crate::agent::Agent,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
         /// The mode the agent started in.
@@ -260,6 +261,11 @@ pub enum InternalCommand {
         #[arg(last = true)]
         setup_cmd: Option<PathBuf>,
     },
+}
+
+/// The agent a worker runs, which Shoal recorded and passes on unchecked.
+fn agent(name: &str) -> Result<crate::agent::Agent, String> {
+    Ok(crate::agent::Agent::unchecked(name.to_owned()))
 }
 
 /// A `--permission` narrowing a worker receives as JSON.

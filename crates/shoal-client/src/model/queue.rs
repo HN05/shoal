@@ -16,7 +16,7 @@ pub struct QueueEntry {
     /// The workspace name: derived from the planned branch for a launch, the
     /// stopped agent's for a restore.
     pub name: SpaceName,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// The mode a launch's agent starts in; none for a restore, which keeps
     /// its agent's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -123,7 +123,7 @@ pub enum Dependency {
 pub struct QueueRequest {
     pub repository: crate::repository::Selector,
     pub name: SpaceName,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// The mode the agent starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,

@@ -329,7 +329,7 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 7]) 
             progress_cell(chat.progress.as_ref()),
             (
                 status_line(chat.progress.as_ref())
-                    .unwrap_or(&chat.agent)
+                    .unwrap_or(chat.agent.name())
                     .to_owned(),
                 None,
             ),

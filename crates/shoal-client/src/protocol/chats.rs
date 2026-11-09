@@ -18,7 +18,7 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
         name: SpaceName,
-        agent: String,
+        agent: crate::agent::Agent,
         /// The mode its agent starts in; `chat` when omitted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,

@@ -37,15 +37,15 @@ impl Manager {
         &self,
         workspace: &Workspace,
         caller: Option<&ExecutionId>,
-    ) -> Result<(ExecutionId, String)> {
-        let mut running: Vec<(ExecutionId, String)> = self
+    ) -> Result<(ExecutionId, crate::agent::Agent)> {
+        let mut running: Vec<(ExecutionId, crate::agent::Agent)> = self
             .executions
             .with_agents(|agents| {
                 agents
                     .iter()
                     .filter(|(_, agent)| agent.workspace_id == workspace.id)
                     // Named as `--agent` and recovery records name it.
-                    .map(|(id, agent)| (id.clone(), agent.name.replace(' ', "-")))
+                    .map(|(id, agent)| (id.clone(), agent.name.normalized()))
                     .collect()
             })
             .await;

@@ -21,7 +21,7 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
         commands.insert(name.into(), vec![program]);
     }
     let search_path = bin.path().as_os_str();
-    let installed = |name: &str| installed(name, &commands, search_path);
+    let installed = |name: &str| installed(&name.into(), &commands, search_path);
 
     assert!(installed("claude"));
     assert!(!installed("codex"));
@@ -77,7 +77,7 @@ fn a_chat_agent_gets_its_temporary_directory_after_the_configured_ones() {
     fs::create_dir(&cache).unwrap();
     let chat = chat("chat", Some("repo"), Some(cache.join("chat-id")));
     assert_eq!(
-        chat_dir_args(&defaults, "codex", home.path(), &chat),
+        chat_dir_args(&defaults, &"codex".into(), home.path(), &chat),
         [
             OsString::from("--add-dir"),
             tmp.into(),
@@ -96,7 +96,7 @@ fn a_setup_chat_without_a_repository_may_write_the_global_config() {
     let home = tempfile::tempdir().unwrap();
     let tmp = OsString::from(fs::canonicalize("/tmp").unwrap());
     let setup = chat(crate::config::modes::SETUP, None, None);
-    let args = chat_dir_args(&defaults, "codex", home.path(), &setup);
+    let args = chat_dir_args(&defaults, &"codex".into(), home.path(), &setup);
     let file = crate::config::Config::path_for_home(home.path());
     let config_dir = fs::canonicalize(file.parent().unwrap()).unwrap();
     assert_eq!(
@@ -109,7 +109,7 @@ fn a_setup_chat_without_a_repository_may_write_the_global_config() {
         ]
     );
     let other = chat(crate::config::modes::ORCHESTRATE, None, None);
-    let args = chat_dir_args(&defaults, "codex", home.path(), &other);
+    let args = chat_dir_args(&defaults, &"codex".into(), home.path(), &other);
     assert_eq!(args, [OsString::from("--add-dir"), tmp]);
 }
 
@@ -120,15 +120,15 @@ fn enabled_turns_an_agent_off_and_happys_agents_on() {
         config.resolve(&Default::default()).unwrap()
     };
     let off = settings("[agents.claude]\nenabled = false\n");
-    assert!(agent_off(&off, "claude").is_some());
-    assert!(agent_off(&off, "codex").is_none());
-    assert!(!names(&off).contains(&"claude".to_owned()));
+    assert!(agent_off(&off, &"claude".into()).is_some());
+    assert!(agent_off(&off, &"codex".into()).is_none());
+    assert!(!names(&off).contains(&"claude".into()));
     // A turned-off agent does not review either.
-    assert!(off.check_reviewer("claude").is_err());
-    assert!(off.check_reviewer("codex").is_ok());
-    assert!(agent_off(&off, "happy-codex").is_some());
+    assert!(off.check_reviewer(&"claude".into()).is_err());
+    assert!(off.check_reviewer(&"codex".into()).is_ok());
+    assert!(agent_off(&off, &"happy-codex".into()).is_some());
     let on = settings("[agents.happy]\nenabled = true\n");
-    assert!(agent_off(&on, "happy-codex").is_none());
+    assert!(agent_off(&on, &"happy-codex".into()).is_none());
 }
 
 #[test]
@@ -139,11 +139,11 @@ fn a_reviewer_needs_only_its_review_command_installed() {
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
-    ensure_reviewer_available("present", &settings).unwrap();
-    let refused = ensure_reviewer_available("absent", &settings).unwrap_err();
+    ensure_reviewer_available(&"present".into(), &settings).unwrap();
+    let refused = ensure_reviewer_available(&"absent".into(), &settings).unwrap_err();
     assert!(
         refused.to_string().contains("no-such-reviewer"),
         "{refused}"
     );
-    assert!(ensure_reviewer_available("unknown", &settings).is_err());
+    assert!(ensure_reviewer_available(&"unknown".into(), &settings).is_err());
 }

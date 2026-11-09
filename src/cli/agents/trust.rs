@@ -115,7 +115,7 @@ pub(super) async fn chat(
 
 /// The workspace's repository trust paths, or the workspace alone when its
 /// repository cannot be resolved.
-async fn workspace_trust_paths(ctx: &Context, workspace: &Workspace, agent: &str) -> Vec<PathBuf> {
+async fn workspace_trust_paths(ctx: &Context, workspace: &Workspace, tool: &str) -> Vec<PathBuf> {
     match crate::client::repositories::list(&ctx.paths)
         .await
         .and_then(|repos| {
@@ -126,7 +126,7 @@ async fn workspace_trust_paths(ctx: &Context, workspace: &Workspace, agent: &str
         }) {
         Ok(repo) => repository_trust_paths(&repo, &workspace.path),
         Err(error) => {
-            eprintln!("warning: could not resolve repository trust paths for {agent}: {error:#}");
+            eprintln!("warning: could not resolve repository trust paths for {tool}: {error:#}");
             vec![workspace.path.clone()]
         }
     }

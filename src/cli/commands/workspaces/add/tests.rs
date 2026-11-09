@@ -13,9 +13,8 @@ fn plan(args: &[&str]) -> AddPlan {
         WorkspaceState::Ready,
     );
     let launch = QueuedLaunch {
-        agent: "claude".into(),
         args: args.iter().map(|&arg| arg.into()).collect(),
-        ..Default::default()
+        ..QueuedLaunch::new("claude".into())
     };
     AddPlan::agent_in(&workspace, launch).expect("claude is a built-in agent")
 }

@@ -20,7 +20,7 @@ pub(crate) use crate::client::executions::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent::ModelChoice,
+    agent::{Agent, ModelChoice},
     config::named_commands,
     fsutil::atomic::{Permissions, ReplaceOptions},
     model::Workspace,
@@ -33,7 +33,7 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct Recovery {
-    pub agent: String,
+    pub agent: Agent,
     /// The model and effort the agent runs with, which its restore keeps.
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
@@ -142,7 +142,7 @@ pub(crate) fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>)
 struct RestoreCommand<'a> {
     paths: &'a Paths,
     settings: &'a crate::config::Effective,
-    name: &'a str,
+    name: &'a Agent,
     workspace: &'a Workspace,
     prompt: &'a std::ffi::OsStr,
     model_args: Vec<OsString>,
@@ -159,7 +159,7 @@ impl RestoreCommand<'_> {
         let mut command = named_commands::expand_with_fields(
             self.paths,
             &self.settings.resume_commands,
-            self.name,
+            self.name.name(),
             self.workspace,
             vec![],
             &[("{prompt}", self.prompt)],
@@ -183,7 +183,7 @@ impl RestoreCommand<'_> {
         let takes_field = self
             .settings
             .launchers
-            .get(self.name)
+            .get(self.name.name())
             .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
         if !takes_field {
             args.push(self.prompt.to_owned());
@@ -191,7 +191,7 @@ impl RestoreCommand<'_> {
         named_commands::expand_with_fields(
             self.paths,
             &self.settings.launchers,
-            self.name,
+            self.name.name(),
             self.workspace,
             args,
             &[("{prompt}", self.prompt)],
@@ -204,7 +204,7 @@ impl RestoreCommand<'_> {
 /// with, the mode and narrowing it started with, and the session it
 /// reported, if any.
 pub(crate) struct Restored<'a> {
-    pub agent: &'a str,
+    pub agent: &'a Agent,
     pub model: &'a ModelChoice,
     pub mode: &'a str,
     pub narrowing: crate::config::permissions::PermissionsConfig,
@@ -244,7 +244,7 @@ impl Recovery {
         resolved.unwrap_or_else(|error| {
             eprintln!("warning: automatic agent recovery unavailable: {error:#}");
             Self {
-                agent: agent.name.replace(' ', "-"),
+                agent: agent.name.normalized(),
                 model: agent.model.clone(),
                 mode: agent.mode.clone(),
                 narrowing: agent.narrowing,
@@ -273,14 +273,14 @@ impl Recovery {
             ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
         )
         .await?;
-        let name = restored.agent.replace(' ', "-");
+        let name = restored.agent.normalized();
         // A restore of an agent config turned off waits, as one it cannot
         // run with its model does.
         anyhow::ensure!(
             !settings.turned_off(&name),
             "{name} is turned off: its [agents] entry sets enabled = false"
         );
-        let configured = settings.resume_commands.get(&name);
+        let configured = settings.resume_commands.get(name.name());
         let resume_args = settings
             .launch(&name)
             .arguments
@@ -453,7 +453,7 @@ impl RecordExt for Record {
         origin: Option<Origin>,
     ) -> Self {
         Self {
-            agent: agent.name.replace(' ', "-"),
+            agent: agent.name.normalized(),
             stop_reason: reason.map(str::to_owned),
             stage: Some(stage),
             origin,
@@ -935,7 +935,7 @@ impl LastSessionExt for LastSession {
     ) -> Result<()> {
         Self {
             execution: id.to_owned(),
-            agent: agent.name.replace(' ', "-"),
+            agent: agent.name.normalized(),
             session: reported_session(paths, workspace_id, id),
             moved: false,
             copied: None,
@@ -1183,7 +1183,7 @@ impl Saved {
 
     /// The agent of each saved agent and then each last session, `None` for
     /// one consumed since the workspace's state was read.
-    pub fn agent_names(&self) -> impl Iterator<Item = Result<Option<String>>> + '_ {
+    pub fn agent_names(&self) -> impl Iterator<Item = Result<Option<Agent>>> + '_ {
         let records = (self.agents.iter())
             .map(|(_, path)| Record::load(path).map(|record| record.map(|r| r.agent)));
         let sessions = (self.sessions.iter())

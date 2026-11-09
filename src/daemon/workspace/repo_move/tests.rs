@@ -597,7 +597,7 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
                     db,
                     &id,
                     &crate::reviews::ReviewTarget::Workspace,
-                    "claude",
+                    &"claude".into(),
                     &Default::default(),
                     UnixTime::from_seconds(1),
                 )

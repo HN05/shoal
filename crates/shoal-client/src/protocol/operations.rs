@@ -193,9 +193,9 @@ pub struct Preparation {
 
 /// An agent to queue in a ready workspace, as a `shoal start` without a
 /// terminal or a scoped one queues the new workspace's.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueuedLaunch {
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// Its first message when no issue gives it one.
     pub prompt: Option<String>,
     /// The mode it starts in; the default mode when omitted.
@@ -226,6 +226,24 @@ pub struct QueuedLaunch {
     /// Start at once regardless of the limits, which scoped callers cannot.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
+}
+
+impl QueuedLaunch {
+    /// A launch of `agent` that asks for nothing else.
+    pub fn new(agent: crate::agent::Agent) -> Self {
+        Self {
+            agent,
+            prompt: None,
+            mode: None,
+            narrowing: Default::default(),
+            model: ModelChoice::default(),
+            args: Vec::new(),
+            fork: None,
+            issue: None,
+            env: None,
+            now: false,
+        }
+    }
 }
 
 /// The issue a queued agent works on: its URL, which the start looks up

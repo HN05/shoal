@@ -20,7 +20,7 @@ pub struct Execution {
     pub origin: Option<crate::sessions::Origin>,
     /// The agent it runs, when it runs one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// The model and effort its agent runs with.
     #[serde(default, flatten)]
     pub model: crate::agent::ModelChoice,

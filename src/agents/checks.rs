@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
-pub(crate) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
+pub(crate) fn ensure_available(name: &Agent, settings: &Effective) -> Result<()> {
     if let Some(reason) = agent_off(settings, name) {
         anyhow::bail!("cannot start {name}: {reason}");
     }
@@ -23,13 +23,13 @@ pub(crate) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
 
 /// Refuse an agent whose executables are missing, the session host a launch
 /// here under `settings` starts it in among them.
-fn ensure_installed(name: &str, settings: &Effective) -> Result<()> {
+fn ensure_installed(name: &Agent, settings: &Effective) -> Result<()> {
     let launcher = crate::terminal::launcher_program(settings);
     let programs = programs(name, &settings.launchers, launcher).with_context(|| {
         format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
     })?;
     for program in programs {
-        ensure_program(name, program)?;
+        ensure_program(name.name(), program)?;
     }
     Ok(())
 }
@@ -37,7 +37,7 @@ fn ensure_installed(name: &str, settings: &Effective) -> Result<()> {
 /// The executables an agent starts; `None` when it has no launcher. A
 /// terminal agent also starts `launcher`, its session host's program.
 pub(crate) fn programs<'a>(
-    name: &str,
+    name: &Agent,
     commands: &'a Commands,
     launcher: Option<&'static str>,
 ) -> Option<Vec<&'a str>> {
@@ -45,7 +45,7 @@ pub(crate) fn programs<'a>(
         return Some(programs);
     }
     commands
-        .get(name)
+        .get(name.name())
         .and_then(|argv| argv.first())
         .map(|program| {
             let mut programs = vec![program.as_str()];
@@ -56,7 +56,7 @@ pub(crate) fn programs<'a>(
 
 /// Refuse agent `name` when it cannot start from a fork of a session: it
 /// has no arguments for one, or an app runs it apart from any terminal.
-pub(crate) fn ensure_forks(settings: &Effective, name: &str) -> Result<()> {
+pub(crate) fn ensure_forks(settings: &Effective, name: &Agent) -> Result<()> {
     if let Some(app) = agent_integration(settings, name).detached() {
         anyhow::bail!(
             "cannot fork a session of {name}: {} cannot start one from a fork",
@@ -75,13 +75,13 @@ pub(crate) fn ensure_forks(settings: &Effective, name: &str) -> Result<()> {
 /// from the configuration of the agent an app it runs in starts.
 pub(crate) fn resolve_model(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     requested: ModelChoice,
 ) -> ModelChoice {
     let model = settings.model(name, requested);
     let started = agent_integration(settings, name)
         .detached()
-        .and_then(|app| settings.tools.get(app.agent()));
+        .and_then(|app| settings.tools.get(app.agent().name()));
     match started {
         Some(tool) => model.or(tool.model.clone()),
         None => model,
@@ -91,7 +91,7 @@ pub(crate) fn resolve_model(
 /// Refuse agent `name` with `model` before anything starts when its launch
 /// cannot pass the values on: through its own templates, or those of the
 /// agent an app it runs in starts.
-pub(crate) fn check_model(settings: &Effective, name: &str, model: &ModelChoice) -> Result<()> {
+pub(crate) fn check_model(settings: &Effective, name: &Agent, model: &ModelChoice) -> Result<()> {
     match agent_integration(settings, name).detached() {
         Some(app) => detached::model_args(app, settings, name, model).map(drop),
         None => model_args(settings, name, model).map(drop),
@@ -107,13 +107,13 @@ pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -
         .as_deref()
         .unwrap_or(crate::config::modes::DEFAULT);
     crate::config::modes::resolve(&settings.modes, mode, SpaceKind::Workspace, true)?;
-    let agent: Agent = launch.agent.parse()?;
-    ensure_available(agent.name(), settings)?;
+    let agent = &launch.agent;
+    ensure_available(agent, settings)?;
     if launch.fork.is_some() {
-        ensure_forks(settings, agent.name())?;
+        ensure_forks(settings, agent)?;
     }
-    let model = resolve_model(settings, agent.name(), launch.model.clone());
-    check_model(settings, agent.name(), &model)
+    let model = resolve_model(settings, agent, launch.model.clone());
+    check_model(settings, agent, &model)
 }
 
 #[cfg(test)]

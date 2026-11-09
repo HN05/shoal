@@ -11,6 +11,7 @@ use anyhow::{Result, ensure};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    agent::Agent,
     cli::{commands::workspaces, context::Context},
     client::transcripts::{self, AgentEnvironment},
     config::Effective,
@@ -139,7 +140,7 @@ fn session_dir(
     settings: &Effective,
     workspace_environment: &BTreeMap<String, OsString>,
     home: &Path,
-    name: &str,
+    name: &Agent,
 ) -> Result<Option<PathBuf>> {
     let mut configured = workspace_environment.clone();
     settings

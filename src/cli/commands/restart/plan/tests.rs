@@ -23,7 +23,7 @@ fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> Runn
     RunningAgent {
         execution: format!("{}-execution", workspace.name).into(),
         space_id: workspace.id.clone(),
-        agent: agent.map(str::to_owned),
+        agent: agent.map(Into::into),
         restorable,
         state: None,
         interrupted: false,
@@ -95,7 +95,7 @@ fn an_agent_name_selects_its_agents_and_unrestorable_ones_are_skipped() {
         spaces: spaces([claude, codex, custom, gone, commands]),
         named: false,
     };
-    let plan = selection.plan(Some("claude"), false);
+    let plan = selection.plan(Some(&"claude".into()), false);
     assert_eq!(restarted(&plan), ["claude"]);
     assert_eq!(skipped(&plan), ["custom", "gone"]);
 }
@@ -108,7 +108,7 @@ fn a_named_workspace_without_the_agent_is_reported() {
         spaces: spaces([codex]),
         named: true,
     };
-    let plan = selection.plan(Some("claude"), false);
+    let plan = selection.plan(Some(&"claude".into()), false);
     assert!(plan.restarts.is_empty());
     assert_eq!(skipped(&plan), ["codex"]);
 }

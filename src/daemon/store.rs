@@ -602,7 +602,7 @@ pub fn executions(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Executi
 }
 
 /// The agent execution `id` runs, when it runs one.
-pub fn execution_agent(db: &Connection, id: &ExecutionId) -> Result<Option<String>> {
+pub fn execution_agent(db: &Connection, id: &ExecutionId) -> Result<Option<crate::agent::Agent>> {
     Ok(db
         .query_row("SELECT agent FROM executions WHERE id=?1", [id], |row| {
             row.get(0)
@@ -613,7 +613,7 @@ pub fn execution_agent(db: &Connection, id: &ExecutionId) -> Result<Option<Strin
 
 /// A recorded execution that runs an agent.
 pub struct AgentExecution {
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     pub state: ExecutionState,
     /// Whether its wrapper runs the agent now, rather than waiting to start
     /// it or to restore one protection or a queue move stopped.

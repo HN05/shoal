@@ -21,7 +21,7 @@ fn a_repeated_place_keeps_the_agent_recorded_there() {
     let session = Origin::created(HostName::Zmx, "work".to_owned());
     let agent = Recorded {
         place: &session,
-        agent: Some("claude"),
+        agent: Some(&"claude".into()),
         stopped: None,
     };
     let other = Origin::created(HostName::Zmx, "other".to_owned());
@@ -49,7 +49,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         child: None,
         group_id: None,
         origin: Some(origin.clone()),
-        agent: agent.map(str::to_owned),
+        agent: agent.map(Into::into),
         stopped: None,
     };
     let detached = Execution {
@@ -67,7 +67,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         [
             Recorded {
                 place: &agent,
-                agent: Some("claude"),
+                agent: Some(&"claude".into()),
                 stopped: None,
             },
             unrecorded(&setup),
@@ -113,7 +113,7 @@ fn a_workspace_records_where_a_stopped_agent_waits() {
         Recorded::workspace(&[execution], &[]),
         [Recorded {
             place: &place,
-            agent: Some("claude"),
+            agent: Some(&"claude".into()),
             stopped: Some(&protection),
         }]
     );

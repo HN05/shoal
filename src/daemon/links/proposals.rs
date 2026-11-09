@@ -55,7 +55,7 @@ impl OpenOutcomeExt for OpenOutcome {
 #[derive(Debug, Clone, Default)]
 pub struct Proposer {
     /// The agent running the command, when Shoal tracks one.
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
 }
 
 /// The workspace branch was renamed or moved past the commit a PR proposal

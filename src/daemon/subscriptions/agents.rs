@@ -25,7 +25,7 @@ pub(super) struct Agents {
     /// Queued launches and restores, by the workspace they start in.
     queued: HashMap<SpaceId, QueueEntry>,
     /// The first stopped agent with a session to restore, by workspace ID.
-    stopped: HashMap<SpaceId, String>,
+    stopped: HashMap<SpaceId, crate::agent::Agent>,
 }
 
 impl Agents {
@@ -114,7 +114,10 @@ async fn queued(manager: &Manager) -> Result<HashMap<SpaceId, QueueEntry>> {
 /// The agent each of `workspaces` can resume: its first stopped agent,
 /// which protection or a restart stopped, or else its first last session,
 /// which a normal stop or exit keeps.
-fn stopped(manager: &Manager, workspaces: &[Workspace]) -> Result<HashMap<SpaceId, String>> {
+fn stopped(
+    manager: &Manager,
+    workspaces: &[Workspace],
+) -> Result<HashMap<SpaceId, crate::agent::Agent>> {
     let mut stopped = HashMap::new();
     for workspace in workspaces {
         let paths = &manager.paths;

@@ -13,7 +13,7 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
     let settings = config.resolve(&Default::default()).unwrap();
     let with = |name: &str, command: &[&str]| {
         let mut command: Vec<OsString> = command.iter().map(Into::into).collect();
-        with_proxy_args(&settings, name, &mut command);
+        with_proxy_args(&settings, &name.into(), &mut command);
         command
     };
     // Claude gets settings of its own for the wrapper's merge to fill in.
@@ -72,7 +72,7 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
     let plain = crate::config::Config::from_toml("").unwrap();
     let plain = plain.resolve(&Default::default()).unwrap();
     let mut command: Vec<OsString> = vec!["claude".into(), "--continue".into()];
-    with_proxy_args(&plain, "claude", &mut command);
+    with_proxy_args(&plain, &"claude".into(), &mut command);
     assert_eq!(command, ["claude", "--continue"]);
 }
 
@@ -84,14 +84,14 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
-    assert!(ensure_available("pi", &settings).is_err());
+    assert!(ensure_available(&"pi".into(), &settings).is_err());
     // Every launch, a resumed one included, prepares its proxy this way.
-    assert!(launch_proxy(&settings, "pi").is_err());
-    let claude = launch_proxy(&settings, "claude").unwrap().unwrap();
+    assert!(launch_proxy(&settings, &"pi".into()).is_err());
+    let claude = launch_proxy(&settings, &"claude".into()).unwrap().unwrap();
     assert_eq!(claude.upstream, "http://127.0.0.1:8317");
-    assert!(launch_proxy(&settings, "codex").unwrap().is_none());
+    assert!(launch_proxy(&settings, &"codex".into()).unwrap().is_none());
     // Claude can; whether it is installed is another matter.
-    if let Err(error) = ensure_available("claude", &settings) {
+    if let Err(error) = ensure_available(&"claude".into(), &settings) {
         assert!(!error.to_string().contains("proxy"), "{error}");
     }
 }

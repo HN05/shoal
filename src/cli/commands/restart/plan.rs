@@ -94,7 +94,7 @@ impl Selection {
     /// cannot restart, `in_place` when asked, or already run again. Agents
     /// protection stopped wait for their restore and are left out, and
     /// reported as skipped when their space was named and runs no other.
-    pub(super) fn plan(self, agent: Option<&str>, in_place: bool) -> Plan {
+    pub(super) fn plan(self, agent: Option<&crate::agent::Agent>, in_place: bool) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
             skipped: Vec::new(),
@@ -107,14 +107,14 @@ impl Selection {
                 .iter()
                 .filter(|running| running.space_id == *space.id())
                 .filter(|running| {
-                    agent.is_none() || running.agent.is_none() || running.agent.as_deref() == agent
+                    agent.is_none() || running.agent.is_none() || running.agent.as_ref() == agent
                 })
                 .cloned()
                 .partition(|running| running.stopped.is_some());
             if agents.is_empty() && self.named {
                 plan.skipped.push(Skipped {
                     space: space.name().to_string(),
-                    agent: agent.map(str::to_owned),
+                    agent: agent.cloned(),
                     reason: absent_reason(space.name(), agent, &stopped),
                 });
             }
@@ -237,7 +237,11 @@ pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) ->
 
 /// Why the named `space` restarts no agent named `agent`, when the only ones
 /// it has are those of `stopped`, which protection stopped.
-fn absent_reason(space: &str, agent: Option<&str>, stopped: &[RunningAgent]) -> String {
+fn absent_reason(
+    space: &str,
+    agent: Option<&crate::agent::Agent>,
+    stopped: &[RunningAgent],
+) -> String {
     if let Some(reason) = stopped
         .iter()
         .find_map(|running| stopped_reason(space, running))
@@ -255,7 +259,11 @@ fn absent_reason(space: &str, agent: Option<&str>, stopped: &[RunningAgent]) -> 
 /// now.
 pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
     let protection = running.stopped.as_ref()?;
-    let agent = running.agent.as_deref().unwrap_or("its agent");
+    let agent = running
+        .agent
+        .as_ref()
+        .map(|agent| agent.name())
+        .unwrap_or("its agent");
     Some(format!(
         "{agent} is stopped ({}) and resumes once {}; restore it now with shoal queue start {space}",
         protection.reason, protection.resumes_when

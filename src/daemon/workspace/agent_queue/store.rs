@@ -112,7 +112,7 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
 pub(super) struct WaitingRestore {
     pub workspace: crate::model::Workspace,
     pub execution: ExecutionId,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
 }
 
 /// Record `restore` behind the work already waiting, as Shoal's own,

@@ -269,7 +269,7 @@ pub(crate) trait Attaches: Sessions {
         &'a self,
         start: &'a Start<'a>,
         owner: Owner<'a>,
-        agent: &'a str,
+        agent: &'a crate::agent::Agent,
     ) -> BoxFuture<'a, Result<String>>;
 
     /// Run `start`, a chat, in a new session and attach this terminal to

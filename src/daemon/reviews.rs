@@ -383,13 +383,13 @@ impl Manager {
 
 /// The agent that reviews: the one asked for, else `[review] agent`, else
 /// `agent.default`. It must have a review template.
-fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<String> {
+fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
     let agent = agent
         .or_else(|| settings.review.agent.clone())
         .or_else(|| settings.agent.default.clone())
         .context("no reviewer: pass --agent, or set review.agent or agent.default")?;
-    settings.check_reviewer(agent.name())?;
-    Ok(agent.name().to_owned())
+    settings.check_reviewer(&agent)?;
+    Ok(agent)
 }
 
 #[cfg(test)]

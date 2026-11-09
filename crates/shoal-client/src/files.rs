@@ -42,7 +42,7 @@ pub enum Attacher {
     /// A request from an agent's process tree.
     Agent {
         /// The agent, named as `--agent` names it.
-        agent: String,
+        agent: crate::agent::Agent,
         /// The execution that ran the agent, which a restart replaces.
         execution: ExecutionId,
         /// The session the agent reported, which outlives a resume; none
@@ -53,7 +53,7 @@ pub enum Attacher {
     /// A request from a chat's agent, which runs outside any execution.
     Chat {
         /// The chat's agent, named as `--agent` names it.
-        agent: String,
+        agent: crate::agent::Agent,
         /// The chat's ID.
         chat: SpaceId,
     },

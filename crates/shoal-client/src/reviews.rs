@@ -336,7 +336,7 @@ pub struct Review {
     pub workspace: SpaceName,
     pub target: ReviewTarget,
     /// The agent asked to review.
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// The model and effort asked for `agent`; what it leaves out follows
     /// the agent's configuration.
     #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
@@ -344,7 +344,7 @@ pub struct Review {
     /// The agent that produced the result, which differs from `agent` after
     /// a fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reviewer: Option<String>,
+    pub reviewer: Option<crate::agent::Agent>,
     pub state: ReviewState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<FailureReason>,

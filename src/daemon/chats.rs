@@ -57,7 +57,7 @@ impl Manager {
         &self,
         repository: crate::repository::Selector,
         name: SpaceName,
-        agent: String,
+        agent: crate::agent::Agent,
         pid: u32,
         origin: Option<crate::sessions::Origin>,
         hands_over: bool,
@@ -82,7 +82,7 @@ impl Manager {
         &self,
         workspace: &SpaceSelector,
         name: SpaceName,
-        agent: String,
+        agent: crate::agent::Agent,
         pid: u32,
         origin: Option<crate::sessions::Origin>,
         hands_over: bool,
@@ -616,7 +616,7 @@ impl Manager {
 /// session it starts, and the space it goes below.
 pub struct NewChat {
     pub name: SpaceName,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     pub mode: String,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,

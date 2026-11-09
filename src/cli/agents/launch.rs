@@ -137,7 +137,7 @@ async fn command(
     named_commands::expand_with_fields(
         &ctx.paths,
         &settings.launchers,
-        name,
+        name.name(),
         workspace,
         args,
         &[("{prompt}", OsStr::new(&prompt))],
@@ -159,7 +159,7 @@ pub(super) fn chat_delivery(integration: &dyn Integration) -> templates::Deliver
 /// prompt leads `args` when the command has no `{prompt}`.
 pub(in crate::cli) fn input(
     settings: &Effective,
-    name: &str,
+    name: &Agent,
     instructions: String,
     prompt: Option<String>,
     hooks: Vec<OsString>,
@@ -172,7 +172,7 @@ pub(in crate::cli) fn input(
     let (instruction_args, prompt) = separate_instructions(instruction_args, instructions, prompt);
     let takes_prompt = settings
         .launchers
-        .get(name)
+        .get(name.name())
         .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
     if !prompt.is_empty() && !takes_prompt {
         args.insert(0, prompt.clone().into());

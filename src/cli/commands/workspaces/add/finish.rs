@@ -209,7 +209,7 @@ fn queued_launch(
         return Ok(None);
     };
     Ok(Some(Box::new(QueuedLaunch {
-        agent: chosen.clone().into(),
+        agent: chosen.clone(),
         prompt: prompt.clone(),
         mode: mode.clone(),
         narrowing,

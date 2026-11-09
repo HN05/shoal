@@ -78,7 +78,7 @@ states!(
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Record {
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
     /// Unknown for records saved before stages existed, which may come from
@@ -180,7 +180,7 @@ pub struct LastSession {
     /// is named after it; one saved without it gets a new ID.
     #[serde(default = "unnamed_execution")]
     pub execution: ExecutionId,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
     /// The workspace moved where the session is not available.

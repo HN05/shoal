@@ -96,8 +96,12 @@ async fn built_in_restore_child() {
         let settings = crate::client::workspaces::settings(&manager.paths, target)
             .await
             .unwrap();
-        let rules =
-            crate::agents::restored_instruction_args(&settings, agent, &workspace, "worker");
+        let rules = crate::agents::restored_instruction_args(
+            &settings,
+            &agent.into(),
+            &workspace,
+            "worker",
+        );
         assert!(!rules.is_empty());
         let expected: Vec<std::ffi::OsString> = restore
             .iter()
@@ -185,10 +189,11 @@ async fn built_in_restore_child() {
             ][..],
         ),
     ] {
+        let agent = crate::agent::Agent::from(agent);
         let restored = crate::execution::recovery::Restored {
             mode: "worker",
             narrowing: Default::default(),
-            agent,
+            agent: &agent,
             model: &model,
             session: Some("s1"),
         };
@@ -277,6 +282,10 @@ async fn built_in_restore_child() {
         model: Some("m1".into()),
         effort: None,
     };
+    let (codex, custom) = (
+        crate::agent::Agent::from("codex"),
+        crate::agent::Agent::from("custom"),
+    );
     let with_model = |agent| crate::execution::recovery::Restored {
         mode: "worker",
         narrowing: Default::default(),
@@ -284,7 +293,7 @@ async fn built_in_restore_child() {
         model: &model,
         session: None,
     };
-    let kept = Recovery::resolve(&manager.paths, &workspace, with_model("codex"), None, None)
+    let kept = Recovery::resolve(&manager.paths, &workspace, with_model(&codex), None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -292,7 +301,7 @@ async fn built_in_restore_child() {
         ["saved-session", "-m", "m1", "--"].map(std::ffi::OsString::from)
     );
     // A tool that cannot take it refuses the restore, which waits.
-    let refused = Recovery::resolve(&manager.paths, &workspace, with_model("custom"), None, None);
+    let refused = Recovery::resolve(&manager.paths, &workspace, with_model(&custom), None, None);
     assert!(refused.await.is_err());
     // So does the restore of an agent config turns off.
     let config = fs::read_to_string(workspace.path.join(".shoal.toml")).unwrap();
@@ -301,7 +310,7 @@ async fn built_in_restore_child() {
         format!("{config}enabled = false\n"),
     )
     .unwrap();
-    let off = Recovery::resolve(&manager.paths, &workspace, with_model("codex"), None, None);
+    let off = Recovery::resolve(&manager.paths, &workspace, with_model(&codex), None, None);
     assert!(off.await.is_err());
     fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
     // A restore tells the session why and when it stopped.
@@ -519,7 +528,10 @@ async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
         .run(move |db| store::execution_agent(db, &id))
         .await
         .unwrap();
-    assert_eq!(agent_name.as_deref(), Some("fixture"));
+    assert_eq!(
+        agent_name.as_ref().map(|agent| agent.name()),
+        Some("fixture")
+    );
     let wrapper = execution.wrapper.clone().unwrap();
     crate::process::identity::signal(&wrapper, libc::SIGTERM).unwrap();
     // The agent traps the stop the wrapper sends it, which follows the save,
@@ -1201,7 +1213,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
     fs::remove_file(workspace.path.join("started")).unwrap();
     assert!(
         manager
-            .queue_failed_restore(&workspace, "fixture", &execution, 1)
+            .queue_failed_restore(&workspace, &"fixture".into(), &execution, 1)
             .await
     );
     let restore = starting_restore(&manager, execution.as_str()).await;
@@ -1446,10 +1458,8 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
 
 /// The restore of `agent` with the tool's own model and effort, from
 /// `session` when given.
-fn restored<'a>(
-    agent: &'a str,
-    session: Option<&'a str>,
-) -> crate::execution::recovery::Restored<'a> {
+fn restored<'a>(agent: &str, session: Option<&'a str>) -> crate::execution::recovery::Restored<'a> {
+    let agent = Box::leak(Box::new(agent.into()));
     static OWN: crate::agent::ModelChoice = crate::agent::ModelChoice {
         model: None,
         effort: None,

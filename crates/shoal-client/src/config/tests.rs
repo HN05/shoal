@@ -262,18 +262,24 @@ fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
     let effective = global.effective(&repo).unwrap();
     assert!(crate::ai::agents(&effective.tools).any(|agent| agent == "claude-direct"));
     assert_eq!(
-        effective.integration("claude-direct"),
+        effective.integration(&"claude-direct".into()),
         crate::ai::IntegrationKind::Claude
     );
     assert_eq!(
         effective.launchers["claude-direct"],
         ["claude", "--verbose"]
     );
-    let direct = effective.launch("claude-direct");
-    assert_eq!(direct.arguments, effective.launch("claude").arguments);
+    let direct = effective.launch(&"claude-direct".into());
+    assert_eq!(
+        direct.arguments,
+        effective.launch(&"claude".into()).arguments
+    );
     assert!(direct.environment.remove.contains("ANTHROPIC_BASE_URL"));
-    assert_eq!(effective.launch("claude").environment, Default::default());
-    assert_eq!(effective.launch("undefined"), &Default::default());
+    assert_eq!(
+        effective.launch(&"claude".into()).environment,
+        Default::default()
+    );
+    assert_eq!(effective.launch(&"undefined".into()), &Default::default());
 }
 
 #[test]
@@ -374,7 +380,7 @@ fn an_empty_repository_env_remove_keeps_every_variable() {
         global
             .effective(&repo::parse(repo).unwrap())
             .unwrap()
-            .launch("claude")
+            .launch(&"claude".into())
             .environment
             .remove
             .contains("ANTHROPIC_API_KEY")
@@ -397,11 +403,11 @@ fn a_launch_model_comes_from_the_request_then_the_choosing_setting_then_the_tool
     };
     // `[agent]` effort applies to the agent `default` chooses only.
     assert_eq!(
-        effective.model("codex", Default::default()),
+        effective.model(&"codex".into(), Default::default()),
         choice("gpt", "xhigh")
     );
     assert_eq!(
-        effective.model("claude", Default::default()),
+        effective.model(&"claude".into(), Default::default()),
         ModelChoice {
             model: None,
             effort: Some("medium".into()),
@@ -411,8 +417,11 @@ fn a_launch_model_comes_from_the_request_then_the_choosing_setting_then_the_tool
         model: Some("o9".into()),
         effort: None,
     };
-    assert_eq!(effective.model("codex", requested), choice("o9", "xhigh"));
-    assert!(effective.model("pi", Default::default()).is_empty());
+    assert_eq!(
+        effective.model(&"codex".into(), requested),
+        choice("o9", "xhigh")
+    );
+    assert!(effective.model(&"pi".into(), Default::default()).is_empty());
     let paths = Paths::for_test("/home/test");
     assert!(Config::parse("[agent]\nmodel = ''\n", &paths).is_err());
 }

@@ -285,7 +285,11 @@ fn plan(moves: &RepositoryMoves, workspaces: &[Workspace]) -> String {
             .iter()
             .find(|workspace| workspace.id == execution.workspace_id)
             .map_or(execution.workspace_id.as_str(), |workspace| &workspace.name);
-        let what = execution.agent.as_deref().unwrap_or("command");
+        let what = execution
+            .agent
+            .as_ref()
+            .map(|agent| agent.name())
+            .unwrap_or("command");
         text.push_str(&format!("\n  {workspace}: {what}"));
     }
     text

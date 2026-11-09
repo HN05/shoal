@@ -15,7 +15,7 @@ use super::{
 };
 use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
-    agent::ModelChoice,
+    agent::{Agent, ModelChoice},
     config::{Effective, templates},
     daemon::{
         log, oneshot,
@@ -224,7 +224,7 @@ impl Manager {
         commits: &Commits,
         files: &Files,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Result<(String, Ended)> {
+    ) -> Result<(Agent, Ended)> {
         self.prepare_checkout(workspace, &commits.head, files)
             .await?;
         let run = Run {
@@ -244,8 +244,7 @@ impl Manager {
         let fallback = settings
             .review
             .fallback_agent
-            .as_ref()
-            .map(|agent| agent.name().to_owned())
+            .clone()
             .filter(|fallback| *fallback != agent && !settings.turned_off(fallback));
         Ok(match (ended, fallback) {
             (Ended::Failed(reason), Some(fallback)) if reason != FailureReason::TimedOut => {
@@ -282,7 +281,7 @@ impl Manager {
     async fn attempt(
         &self,
         run: &Run<'_>,
-        agent: &str,
+        agent: &Agent,
         model: &ModelChoice,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended {
@@ -304,7 +303,7 @@ impl Manager {
         &self,
         id: ReviewId,
         workspace: &Workspace,
-        reviewer: &str,
+        reviewer: &Agent,
         ended: Ended,
     ) -> Result<Pass> {
         // A managed update waits for the review's posting and delivery,
@@ -565,7 +564,7 @@ async fn release_run(
 /// this run, after its launcher and the arguments selecting the model.
 fn reviewer_for<'a>(
     run: &Run<'a>,
-    agent: &str,
+    agent: &Agent,
     model: &ModelChoice,
     home: &Path,
 ) -> Result<Reviewer<'a>> {
@@ -580,7 +579,7 @@ fn reviewer_for<'a>(
     settings.check_reviewer(agent)?;
     let tool = settings
         .tools
-        .get(agent)
+        .get(agent.name())
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
     let args = arguments

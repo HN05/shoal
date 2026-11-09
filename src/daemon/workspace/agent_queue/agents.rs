@@ -14,14 +14,13 @@ impl Manager {
     pub(crate) async fn queue_agent(
         &self,
         workspace: &SpaceSelector,
-        agent: String,
+        agent: crate::agent::Agent,
         prompt: Option<String>,
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
         let launch = QueuedLaunch {
-            agent,
             prompt,
-            ..Default::default()
+            ..QueuedLaunch::new(agent)
         };
         check_queued_launch(&launch, &self.workspace_settings(&workspace).await?)?;
         let request = queued_agent_request(&workspace, launch)?;

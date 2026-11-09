@@ -448,10 +448,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     let full = create("full").await.unwrap();
     // Queued without the check that claude is on PATH, which CI lacks.
     for workspace in [&queued, &full] {
-        let launch = crate::protocol::operations::QueuedLaunch {
-            agent: "claude".into(),
-            ..Default::default()
-        };
+        let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
         let request = crate::start_plan::queued_agent_request(workspace, launch).unwrap();
         manager.queue_add(request).await.unwrap();
     }

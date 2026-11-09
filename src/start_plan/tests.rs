@@ -2,10 +2,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::protocol::operations::QueuedLaunch;
 
 fn claude() -> QueuedLaunch {
-    QueuedLaunch {
-        agent: "claude".into(),
-        ..Default::default()
-    }
+    QueuedLaunch::new("claude".into())
 }
 
 #[test]
@@ -87,7 +84,10 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
 fn a_plan_queued_by_an_earlier_version_reads_and_writes_back_unchanged() {
     let queued = r#"{"repository":"repo","creation":{"path":null,"branch":null,"existing":"child","base":null,"git_profile":null,"pr":null,"options":{"skip_setup":false,"disposable":false}},"place_name":null,"issue":"https://forge.example/team/project/issues/7","agent":{"agent":"claude","model":{"model":"opus","effort":"high"}},"args":[{"Unix":[84,97,107,101,32,116,104,101,32,99,104,105,108,100,32,112,97,114,116]}],"prompt":"Split it","mode":"plan","fork":"parent-session","queue_entry":null,"chat":null,"parent":null,"workspace":"19d40cc0-b385-4221-a22c-bc3daa9f5ea7"}"#;
     let plan: super::AddPlan = serde_json::from_str(queued).expect("the queued plan parses");
-    assert_eq!(plan.agent_name().as_deref(), Some("claude"));
+    assert_eq!(
+        plan.agent_name().as_ref().map(|agent| agent.name()),
+        Some("claude")
+    );
     assert_eq!(plan.args, ["Take the child part"]);
     assert_eq!(plan.mode.as_deref(), Some("plan"));
     assert_eq!(serde_json::to_string(&plan).unwrap(), queued);

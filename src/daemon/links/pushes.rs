@@ -326,7 +326,10 @@ impl Manager {
 
 /// The push of the workspace branch's current commit to where it pushes,
 /// as `shoal pr open` runs it.
-async fn branch_push(workspace: &Workspace, agent: Option<String>) -> Result<PushSpecification> {
+async fn branch_push(
+    workspace: &Workspace,
+    agent: Option<crate::agent::Agent>,
+) -> Result<PushSpecification> {
     let branch = workspace.require_branch("pushing")?;
     Ok(PushSpecification {
         remote: git::push_remote(&workspace.path, branch).await?,

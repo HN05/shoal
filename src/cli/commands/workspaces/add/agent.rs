@@ -88,7 +88,7 @@ pub(super) async fn choose_add_agent(
         }
     };
     if let Some(agent) = &agent {
-        crate::agents::ensure_available(agent.name(), settings.get().await?)?;
+        crate::agents::ensure_available(agent, settings.get().await?)?;
     }
     Ok(AgentChoice::Chosen(agent))
 }
@@ -112,8 +112,8 @@ fn check_model(
     agent: &Agent,
     model: &ModelChoice,
 ) -> Result<()> {
-    let resolved = crate::agents::resolve_model(settings, agent.name(), model.clone());
-    crate::agents::check_model(settings, agent.name(), &resolved)
+    let resolved = crate::agents::resolve_model(settings, agent, model.clone());
+    crate::agents::check_model(settings, agent, &resolved)
 }
 
 /// A picked issue defaults its agent as `--issue` does.

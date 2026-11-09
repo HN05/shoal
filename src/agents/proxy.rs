@@ -1,5 +1,6 @@
 //! How an agent's API requests reach Shoal's proxy: whether an integration
 //! can be pointed there, and the arguments and environment that point it.
+use crate::agent::Agent;
 use std::{collections::BTreeMap, ffi::OsString, path::Path};
 
 use anyhow::{Result, ensure};
@@ -69,7 +70,7 @@ pub(crate) fn route_through_proxy(
 /// `command`, a configured command of agent `name` that Shoal gives no
 /// hooks, with the arguments that send its API requests to its proxy when it
 /// has one it can use.
-pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Vec<OsString>) {
+pub(crate) fn with_proxy_args(settings: &Effective, name: &Agent, command: &mut Vec<OsString>) {
     let kind = settings.integration(name);
     if settings.proxy(name).is_none() || !routes_through_proxy(kind) {
         return;
@@ -82,7 +83,7 @@ pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Ve
 /// included.
 pub(crate) fn launch_proxy<'a>(
     settings: &'a Effective,
-    name: &str,
+    name: &Agent,
 ) -> Result<Option<&'a crate::proxy::Proxy>> {
     let Some(proxy) = settings.proxy(name) else {
         return Ok(None);

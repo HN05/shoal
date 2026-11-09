@@ -97,12 +97,15 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
         panic!("not a chat: {:?}", import.manifest);
     };
     assert_eq!(
-        (packaged.name.as_str(), packaged.agent.as_str()),
+        (packaged.name.as_str(), packaged.agent.name()),
         ("plan-cache", "claude")
     );
     assert!(import.bundle.is_none());
     let sessions = import.manifest.sessions.as_ref().unwrap();
-    assert_eq!(sessions.reported().collect::<Vec<_>>(), [("claude", "s1")]);
+    assert_eq!(
+        sessions.reported().collect::<Vec<_>>(),
+        [(&crate::agent::Agent::from("claude"), "s1")]
+    );
     assert_eq!(
         sessions.last_sessions[0].execution.as_str(),
         chat.id.as_str()
@@ -438,7 +441,10 @@ async fn a_chat_copy_keeps_the_chat_running() {
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
     assert!(matches!(import.manifest.space, Space::Chat(_)));
     let sessions = import.manifest.sessions.as_ref().unwrap();
-    assert_eq!(sessions.reported().collect::<Vec<_>>(), [("claude", "s1")]);
+    assert_eq!(
+        sessions.reported().collect::<Vec<_>>(),
+        [(&crate::agent::Agent::from("claude"), "s1")]
+    );
     manager.stop_chat(&chat.id).await.unwrap();
 }
 

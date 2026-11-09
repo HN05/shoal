@@ -8,12 +8,12 @@ fn launches_name_the_missing_program_or_undefined_agent() {
     .unwrap()
     .resolve(&crate::config::repo::ConfigLayers::default())
     .unwrap();
-    let error = ensure_installed("probe", &settings).unwrap_err();
+    let error = ensure_installed(&"probe".into(), &settings).unwrap_err();
     assert!(
         error.to_string().contains("shoal-test-missing-program"),
         "{error}"
     );
-    assert!(ensure_installed("undefined", &settings).is_err());
+    assert!(ensure_installed(&"undefined".into(), &settings).is_err());
 }
 
 #[test]
@@ -29,11 +29,11 @@ fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {
     };
     // `[agent]` chose happy-claude, so its effort applies over Claude's own.
     assert_eq!(
-        resolve_model(&settings, "happy-claude", Default::default()),
+        resolve_model(&settings, &"happy-claude".into(), Default::default()),
         choice(Some("opus"), "xhigh")
     );
     assert_eq!(
-        resolve_model(&settings, "happy-codex", Default::default()),
+        resolve_model(&settings, &"happy-codex".into(), Default::default()),
         ModelChoice::default()
     );
     let requested = ModelChoice {
@@ -41,7 +41,7 @@ fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {
         effort: Some("high".into()),
     };
     assert_eq!(
-        resolve_model(&settings, "happy-claude", requested),
+        resolve_model(&settings, &"happy-claude".into(), requested),
         choice(Some("opus"), "high")
     );
 }

@@ -30,7 +30,7 @@ pub(crate) struct AgentCommand {
 /// launch environment over `configured`.
 pub(crate) fn agent_command(
     settings: &Effective,
-    agent: &str,
+    agent: &crate::agent::Agent,
     model: &ModelChoice,
     args: Vec<OsString>,
     configured: &BTreeMap<String, OsString>,
@@ -38,11 +38,11 @@ pub(crate) fn agent_command(
 ) -> Result<AgentCommand> {
     let tool = settings
         .tools
-        .get(agent)
+        .get(agent.name())
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let launcher = settings
         .launchers
-        .get(agent)
+        .get(agent.name())
         .with_context(|| format!("{agent} has no launcher"))?;
     let selection = tool
         .launch

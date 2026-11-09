@@ -64,7 +64,7 @@ pub enum Hook<'a> {
     PostDone(&'a crate::model::Completion),
     PostReady(&'a [crate::model::ReviewMark]),
     PostAgentExit {
-        agent: &'a str,
+        agent: &'a crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
     },

@@ -16,7 +16,7 @@ use crate::{
 #[derive(Clone)]
 enum ExecuteChoice {
     /// An agent, run as `shoal run <name>`.
-    Agent(String),
+    Agent(crate::agent::Agent),
     /// A desktop app, opened as `shoal open --app <app>`.
     App(DesktopApp),
     Shell,
@@ -43,7 +43,7 @@ pub(super) async fn execute_command(
     let agents = agents::names(&settings)
         .into_iter()
         .filter(|name| agents::installed(name, &settings.launchers, &search_path))
-        .map(|name| (ExecuteChoice::Agent(name.clone()), name));
+        .map(|agent| (ExecuteChoice::Agent(agent.clone()), agent.into()));
     let apps = APPS
         .into_iter()
         .filter(|(_, app)| agents::app(*app).available(&search_path))
@@ -59,7 +59,7 @@ pub(super) async fn execute_command(
     let choice = ui::pick_choice(ctx, "Execute> ", &choices)?;
     Ok(match choice {
         ExecuteChoice::Agent(name) => Command::Run {
-            name: Some(name),
+            name: Some(name.into()),
             workspace,
             args: vec![],
         },

@@ -319,7 +319,7 @@ pub struct IssueSpecification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// Findings of proposals the user marked as duplicates of this one,
     /// posted as comments once it is opened.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -348,7 +348,7 @@ pub struct PullSpecification {
     pub pull: NewPull,
     pub commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// What is left to do to the PR once approval posted it, such as its
     /// labels and reviewers, until it is done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -382,7 +382,7 @@ pub struct PushSpecification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaces: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
 }
 
 impl PushSpecification {

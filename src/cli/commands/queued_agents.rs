@@ -27,7 +27,7 @@ pub(super) enum Admission {
 
 /// An agent launch to admit.
 pub(super) struct Launch {
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// The workspace the launch opens.
     pub name: SpaceName,
     pub issue_title: Option<String>,

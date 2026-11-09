@@ -291,7 +291,12 @@ pub fn resumable(paths: &Paths, workspace_id: &SpaceId) -> Option<(String, bool)
     }
     let mut parts = saved
         .agent_names()
-        .map(|agent| agent.ok().flatten().unwrap_or_else(|| "agent".to_owned()))
+        .map(|agent| {
+            agent
+                .ok()
+                .flatten()
+                .map_or_else(|| "agent".to_owned(), String::from)
+        })
         .collect::<Vec<_>>();
     match saved.commands.len() {
         0 => {}

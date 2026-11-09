@@ -119,7 +119,10 @@ async fn a_review_reads_the_committed_head_and_stores_its_findings() {
     std::fs::write(fixture.workspace.path.join("uncommitted"), "edit").unwrap();
     let review = fixture.review().await;
     assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    assert_eq!(review.reviewer.as_deref(), Some("fake"));
+    assert_eq!(
+        review.reviewer.as_ref().map(|agent| agent.name()),
+        Some("fake")
+    );
     let head = crate::git::run(&fixture.workspace.path, &["rev-parse", "HEAD"])
         .await
         .unwrap();
@@ -158,14 +161,20 @@ async fn a_failed_reviewer_falls_back_once_and_failures_are_typed() {
     let review = fixture.review().await;
     assert_eq!(review.state, ReviewState::Failed);
     assert_eq!(review.failure, Some(FailureReason::RateLimit));
-    assert_eq!(review.reviewer.as_deref(), Some("first"));
+    assert_eq!(
+        review.reviewer.as_ref().map(|agent| agent.name()),
+        Some("first")
+    );
 
     configure(&fixture.manager, "[review]\nagent = 'first'\nfallback_agent = 'second'\n[agents.first]\ncommand = ['false']\nreview = ['{prompt}', '{schema}']\n[agents.second]\ncommand = ['echo']\nreview = ['{prompt}', '{schema}']\n").await;
     let review = fixture.review().await;
     assert_eq!(review.state, ReviewState::Failed);
     assert_eq!(review.failure, Some(FailureReason::InvalidOutput));
     assert_eq!(
-        (review.agent.as_str(), review.reviewer.as_deref()),
+        (
+            review.agent.name(),
+            review.reviewer.as_ref().map(|agent| agent.name())
+        ),
         ("first", Some("second"))
     );
 }
@@ -182,7 +191,10 @@ async fn a_fallback_reviewer_produces_the_review() {
     .await;
     let review = fixture.review().await;
     assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    assert_eq!(review.reviewer.as_deref(), Some("second"));
+    assert_eq!(
+        review.reviewer.as_ref().map(|agent| agent.name()),
+        Some("second")
+    );
 }
 
 #[tokio::test]
@@ -301,7 +313,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
                 db,
                 &id,
                 &ReviewTarget::Workspace,
-                "absent",
+                &"absent".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )
@@ -385,7 +397,7 @@ async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
                 db,
                 &id,
                 &ReviewTarget::Workspace,
-                "absent",
+                &"absent".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )
@@ -946,7 +958,7 @@ async fn finished_reviews(
                     tx,
                     &id,
                     &ReviewTarget::Workspace,
-                    "absent",
+                    &"absent".into(),
                     &Default::default(),
                     UnixTime::from_seconds(1),
                 )?
@@ -957,7 +969,13 @@ async fn finished_reviews(
                         "findings": [{"path": "a", "line": 1, "severity": "nit",
                             "title": "Long", "body": body}]}),
                 )?;
-                store::finish(tx, review, "absent", &output, UnixTime::from_seconds(3))?;
+                store::finish(
+                    tx,
+                    review,
+                    &"absent".into(),
+                    &output,
+                    UnixTime::from_seconds(3),
+                )?;
                 ids.push(review);
             }
             Ok(ids)
@@ -1043,7 +1061,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
                 db,
                 &id,
                 &ReviewTarget::Workspace,
-                "absent",
+                &"absent".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )?
@@ -1098,7 +1116,7 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
                 db,
                 &id,
                 &ReviewTarget::Workspace,
-                "absent",
+                &"absent".into(),
                 &Default::default(),
                 UnixTime::from_seconds(1),
             )?

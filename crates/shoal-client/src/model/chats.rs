@@ -26,7 +26,7 @@ pub struct Chat {
     pub repository_id: Option<RepositoryId>,
     /// Unique among workspace names and the names of other chats.
     pub name: SpaceName,
-    pub agent: String,
+    pub agent: crate::agent::Agent,
     /// The mode its agent started in, which its restores keep.
     #[serde(default = "chat_mode")]
     pub mode: String,

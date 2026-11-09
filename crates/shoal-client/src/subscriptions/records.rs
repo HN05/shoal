@@ -135,7 +135,7 @@ states!(
 pub struct AgentActivity {
     pub state: ActivityState,
     /// The agent's name, such as `claude`, when known.
-    pub agent: Option<String>,
+    pub agent: Option<crate::agent::Agent>,
     /// When the state was reported, when known.
     pub since: Option<crate::time::UnixTime>,
 }

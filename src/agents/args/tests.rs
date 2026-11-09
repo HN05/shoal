@@ -14,15 +14,15 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     let defaults = settings("");
     let tmp = fs::canonicalize("/tmp").unwrap();
     assert_eq!(
-        agent_dir_args(&defaults, "claude", home.path()),
+        agent_dir_args(&defaults, &"claude".into(), home.path()),
         [OsString::from(format!("--add-dir={}", tmp.display()))]
     );
     assert_eq!(
-        agent_dir_args(&defaults, "codex", home.path()),
+        agent_dir_args(&defaults, &"codex".into(), home.path()),
         [OsString::from("--add-dir"), tmp.clone().into()]
     );
     // A tool that takes no other working directory gets none.
-    assert!(agent_dir_args(&defaults, "pi", home.path()).is_empty());
+    assert!(agent_dir_args(&defaults, &"pi".into(), home.path()).is_empty());
     // `~/` names a path under the home directory; one reached again through
     // a symlink counts once.
     let configured = settings("agent.dirs = ['/tmp', '~/cache', '~/link']\n");
@@ -38,7 +38,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     assert_eq!(
         dir_args(
             &defaults,
-            "codex",
+            &"codex".into(),
             home.path(),
             &[PathBuf::from("/root/repo")]
         ),
@@ -61,7 +61,7 @@ fn a_restored_agent_whose_mode_is_gone_gets_the_default_rules() {
         "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
     }))
     .unwrap();
-    let told = |mode| restored_instruction_args(&settings, "claude", &workspace, mode);
+    let told = |mode| restored_instruction_args(&settings, &"claude".into(), &workspace, mode);
     let kept = told(modes::DEFAULT);
     assert!(!kept.is_empty());
     assert_eq!(told("removed"), kept);
