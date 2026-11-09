@@ -737,7 +737,8 @@ footprint on macOS. `shoal work status` adds the process count, and `--json` giv
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when stopped agents or commands wait for `shoal resume` and the
 workspace is not done, `needs input`, `finished` after `shoal done` until
-`shoal done --undo`, also while its agents are stopped, `ready`, the other [agent states](#agent-state),
+`shoal done --undo` or `shoal resume` withdraws the completion, also while its
+work is stopped, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
