@@ -6,14 +6,13 @@
 use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow, ensure};
-use rusqlite::params;
+use anyhow::{Result, anyhow};
 
 use super::restores::resume;
 use crate::{
     config::permissions::PermissionChange,
     daemon::{
-        log, store,
+        log,
         workspace::{Manager, restarted},
     },
     model::{Chat, RunningAgent},
@@ -153,29 +152,6 @@ impl Manager {
             .map_err(|error| anyhow!("{error}; restore it with shoal resume {}", chat.name))?;
         let restored = self.chat_by_id(&chat.id).await?;
         Ok(restored.and_then(|chat| chat.origin))
-    }
-
-    /// Give each saved chat its agent's permissions, which its restore runs
-    /// under, all or none: a chat restored or removed since refuses them.
-    pub(crate) async fn give_saved_chats(
-        &self,
-        given: Vec<(SpaceId, crate::config::permissions::PermissionsConfig)>,
-    ) -> Result<()> {
-        let given = (given.into_iter())
-            .map(|(id, given)| Ok((id, store::narrowing_column(&given)?)))
-            .collect::<Result<Vec<_>>>()?;
-        self.store
-            .write(move |tx| {
-                for (id, narrowing) in given {
-                    let updated = tx.execute(
-                        "UPDATE chats SET narrowing=?2 WHERE id=?1 AND restore IS NOT NULL",
-                        params![id, narrowing],
-                    )?;
-                    ensure!(updated == 1, "chat {id} is no longer saved");
-                }
-                Ok(())
-            })
-            .await
     }
 }
 

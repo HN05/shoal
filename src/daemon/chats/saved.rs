@@ -126,6 +126,29 @@ impl Manager {
         processes::stop_owned(id, &recorded, stopped, &wrappers, record).await
     }
 
+    /// Give each saved chat its agent's permissions, which its restore runs
+    /// under, all or none: a chat restored or removed since refuses them.
+    pub(crate) async fn give_saved_chats(
+        &self,
+        given: Vec<(SpaceId, PermissionsConfig)>,
+    ) -> Result<()> {
+        let given = (given.into_iter())
+            .map(|(id, given)| Ok((id, store::narrowing_column(&given)?)))
+            .collect::<Result<Vec<_>>>()?;
+        self.store
+            .write(move |tx| {
+                for (id, narrowing) in given {
+                    let updated = tx.execute(
+                        "UPDATE chats SET narrowing=?2 WHERE id=?1 AND restore IS NOT NULL",
+                        params![id, narrowing],
+                    )?;
+                    ensure!(updated == 1, "chat {id} is no longer saved");
+                }
+                Ok(())
+            })
+            .await
+    }
+
     /// Run the stopped chat `id` again as process `pid` under `narrowing`,
     /// which replaces the one it recorded, at `origin` in a terminal host
     /// when it runs in one, or when `hands_over`, in a session `pid` starts
