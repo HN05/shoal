@@ -92,6 +92,34 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
     serving.abort();
 }
 
+/// `shoal resume` of the agent says the work is not finished, so its
+/// restore in the waiting wrapper withdraws the completion.
+#[tokio::test]
+async fn resuming_an_idle_agent_of_a_held_done_workspace_withdraws_the_completion() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = idle_in_held_done_workspace(&manager, &workspace).await;
+    sweep(&manager).await;
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+    manager
+        .queue_stopped_restore(
+            &SpaceSelector::id(&workspace.id),
+            &execution,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+    serving.abort();
+}
+
 #[tokio::test]
 async fn an_idle_agent_with_a_background_command_keeps_running() {
     let (_root, manager, workspace, serving) = fixture().await;

@@ -280,6 +280,10 @@ impl Manager {
 
     /// Queue the restore of the agent stopped as `execution` in
     /// `workspace`, starting it at once when `now`, and return its entry.
+    /// Asking for it says the work is not finished, so it withdraws the
+    /// workspace's completion, whichever wrapper restores the agent; only
+    /// once the queue's gate is released, since recording a completion takes
+    /// that gate under the workspace's PR gate.
     async fn add_stopped_restore(
         &self,
         workspace: &SpaceSelector,
@@ -288,6 +292,21 @@ impl Manager {
         now: bool,
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
+        let id = workspace.id.clone();
+        let entry = (self.record_stopped_restore(workspace, execution, env, now)).await?;
+        self.reopen_for_resume(&id).await;
+        Ok(entry)
+    }
+
+    /// Record the restore of the agent stopped as `execution` in
+    /// `workspace`, starting it at once when `now`, and return its entry.
+    async fn record_stopped_restore(
+        &self,
+        workspace: Workspace,
+        execution: &str,
+        env: BTreeMap<String, String>,
+        now: bool,
+    ) -> Result<QueueEntry> {
         let agent = stopped_agent(&self.paths, &workspace.id, execution)?
             .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
         let target = Target {

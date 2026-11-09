@@ -460,10 +460,10 @@ stopped, resume prints them as `shoal run` commands. Either way they are reporte
 Several spaces, each workspace among them with stopped work or a last session, or `--all` for every
 stopped chat and every workspace whose assignment is not done, resume together and report commands without an agent,
 skipping agents whose wrapper still waits to restore them; a done workspace's
-agent restores only when its workspace is named. An agent restored from its
-saved session in a new wrapper works on the assignment again, so its start
-withdraws the workspace's completion, as `shoal done --undo` does, and a later
-protection stop restores it; a restart keeps the completion.
+agent restores only when its workspace is named. Resuming it says the work is
+not finished, so it withdraws the workspace's completion, as `shoal done
+--undo` does, and a later protection stop restores the agent; Shoal's own
+restores and restarts keep the completion.
 `--now` starts the agents at once regardless of the limits; with several stopped
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
