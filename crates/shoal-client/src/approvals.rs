@@ -17,7 +17,7 @@ use crate::{
         create::{NewIssue, NewPull},
     },
     item_numbers::ItemNumber,
-    links::BranchPush,
+    links::{BranchPush, PushOutcome},
     protocol::ApprovalMethod,
     resources::{Definition, LockMode, RepositoryView, Scope},
     sim::Profile,
@@ -644,6 +644,16 @@ pub async fn withdraw(
 pub async fn push_held(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<bool> {
     let BranchPush { held } = request(daemon, ApprovalMethod::BranchPush { workspace }).await?;
     Ok(held)
+}
+
+/// Push `push` from `workspace` at once, or record it for the user's
+/// approval.
+pub async fn request_push(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    push: PushSpecification,
+) -> Result<PushOutcome> {
+    request(daemon, ApprovalMethod::RequestPush { workspace, push }).await
 }
 
 /// Decide the approved push `key` by how it ended, with `failure` when it

@@ -11,16 +11,17 @@ use std::io::{BufRead as _, Write as _};
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        client,
         context::Context,
         ui::{self, Fallback, NoCurrentWorkspace},
     },
-    client::{approvals::PushSpecification, links::PushOutcome},
+    client::{
+        approvals::{self, PushSpecification},
+        links::PushOutcome,
+        space_names::SpaceSelector,
+    },
     git,
-    protocol::ApprovalMethod,
     tools::Tool,
 };
 
@@ -162,15 +163,7 @@ impl Session {
         refspec: &str,
     ) -> Result<PushOutcome> {
         let push = self.specification(refspec).await?;
-        let workspace = workspace.to_owned();
-        client::request(
-            &ctx.paths,
-            ApprovalMethod::RequestPush {
-                workspace: workspace.clone(),
-                push,
-            },
-        )
-        .await
+        approvals::request_push(&ctx.paths, workspace.clone(), push).await
     }
 
     /// What pushing `refspec` changes on the remote: the object its source
