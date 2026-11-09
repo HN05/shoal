@@ -16,6 +16,8 @@ pub(crate) struct Seeds {
     failures: Mutex<HashMap<RepositoryId, Build>>,
     /// Running seed builds, which repository removal cancels and waits for.
     builds: Mutex<HashMap<RepositoryId, Arc<SeedSlot>>>,
+    /// Woken when a snapshot needs a spare.
+    spares: tokio::sync::Notify,
 }
 
 impl Seeds {
@@ -38,6 +40,18 @@ impl Seeds {
         }
         failures.remove(repository_id);
         false
+    }
+
+    /// Have the spare task refill spares: a workspace took one, or a new
+    /// snapshot has none.
+    pub(super) fn want_spare(&self) {
+        self.spares.notify_one();
+    }
+
+    /// Wait until [`Self::want_spare`] asks for a refill, or return at once
+    /// when it asked since the last wait.
+    pub(super) async fn spare_wanted(&self) {
+        self.spares.notified().await;
     }
 
     /// Remember the build that failed, or forget an earlier failure.

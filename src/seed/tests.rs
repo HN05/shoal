@@ -255,5 +255,58 @@ async fn outputs_never_pass_through_a_symlink() {
             .await
             .is_err()
     );
+    // Nor does the spare, which stays for another worktree.
+    snapshot.refill_spare_with(&copy, &layout).await.unwrap();
+    let taken = snapshot.take_spare(&layout, &workspace, &paths).unwrap();
+    assert!(taken.is_none() && layout.has_spare());
     assert!(!outside.join("build").exists());
+}
+
+#[tokio::test]
+async fn a_new_worktree_takes_the_spare_instead_of_cloning() {
+    let root = tempfile::tempdir().unwrap();
+    let copy = copier(root.path());
+    let layout = Layout::new(root.path(), &"repo".into());
+    layout.claim().unwrap();
+    fs::create_dir_all(layout.worktree().join("ios/build")).unwrap();
+    fs::write(layout.worktree().join("ios/build/app"), "binary").unwrap();
+    set_time(&layout.worktree().join("ios/build/app"), 2_000);
+    let paths = vec!["ios/build".to_owned()];
+    freeze(&copy, &layout, "c1", &paths, Vec::new())
+        .await
+        .unwrap();
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
+    assert!(snapshot.refill_spare_with(&copy, &layout).await.unwrap());
+    assert!(!snapshot.refill_spare_with(&copy, &layout).await.unwrap());
+
+    // A worktree that has an output already clones the rest.
+    let built = root.path().join("built");
+    fs::create_dir_all(built.join("ios/build")).unwrap();
+    let taken = snapshot.take_spare(&layout, &built, &paths).unwrap();
+    assert!(taken.is_none() && layout.has_spare());
+
+    let workspace = root.path().join("workspace");
+    fs::create_dir_all(&workspace).unwrap();
+    let taken = snapshot.take_spare(&layout, &workspace, &paths).unwrap();
+    assert_eq!(taken.as_deref(), Some(paths.as_slice()));
+    let app = workspace.join("ios/build/app");
+    assert_eq!(fs::read_to_string(&app).unwrap(), "binary");
+    assert_eq!(time(&app), 2_000);
+    // The snapshot keeps its outputs for clones and later spares.
+    assert!(!layout.has_spare() && !layout.spare_taken().exists());
+    let next = root.path().join("next");
+    fs::create_dir_all(&next).unwrap();
+    assert!(
+        snapshot
+            .take_spare(&layout, &next, &paths)
+            .unwrap()
+            .is_none()
+    );
+    assert!(snapshot.refill_spare_with(&copy, &layout).await.unwrap());
+
+    // A new snapshot retires the spare of the one it replaces.
+    freeze(&copy, &layout, "c2", &paths, Vec::new())
+        .await
+        .unwrap();
+    assert!(!layout.has_spare());
 }

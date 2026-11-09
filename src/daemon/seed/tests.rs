@@ -235,6 +235,43 @@ async fn seeded(manager: &Manager, root: &Path, script: &str) -> (PathBuf, Repos
 }
 
 #[tokio::test]
+async fn new_workspaces_take_the_spare_which_is_then_refilled() {
+    let (temp, manager) = manager().await;
+    configure(&manager, NO_PRESSURE).await;
+    let (_, repo) = seeded(
+        &manager,
+        temp.path(),
+        "#!/bin/sh\nmkdir -p out\necho built > out/built\n",
+    )
+    .await;
+    manager.refresh_seeds().await;
+    let layout = Layout::of(&repo).unwrap();
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
+    }
+    // The new snapshot asked for its spare.
+    tokio::time::timeout(Duration::from_secs(60), manager.seeds.spare_wanted())
+        .await
+        .expect("the build wants a spare");
+    manager.refill_spares().await;
+    assert!(layout.has_spare());
+    let workspace = manager
+        .create_workspace(&repo.id, "feature".into(), None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("out/built")).unwrap(),
+        "built\n"
+    );
+    assert!(!layout.has_spare());
+    tokio::time::timeout(Duration::from_secs(60), manager.seeds.spare_wanted())
+        .await
+        .expect("taking the spare wants another");
+    manager.refill_spares().await;
+    assert!(layout.has_spare());
+}
+
+#[tokio::test]
 async fn repository_removal_cancels_a_running_build() {
     let (temp, manager) = manager().await;
     configure(&manager, NO_PRESSURE).await;

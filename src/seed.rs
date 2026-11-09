@@ -143,6 +143,26 @@ impl Layout {
     pub fn remove_retired(&self) -> Result<()> {
         remove_dir(&self.retired())
     }
+
+    /// A ready clone of the snapshot's outputs, which goes with the snapshot.
+    fn spare(&self) -> PathBuf {
+        self.snapshot().join("spare")
+    }
+
+    /// Whether the snapshot has a spare ready.
+    pub fn has_spare(&self) -> bool {
+        self.spare().symlink_metadata().is_ok()
+    }
+
+    fn spare_staging(&self) -> PathBuf {
+        self.snapshot().join("spare.new")
+    }
+
+    /// Where a new worktree moves the spare before taking its outputs, so a
+    /// refill can replace it meanwhile.
+    fn spare_taken(&self) -> PathBuf {
+        self.snapshot().join("spare.taken")
+    }
 }
 
 /// What a frozen snapshot holds: the commit it was built from, the outputs it
@@ -257,6 +277,88 @@ impl Snapshot {
         Ok(cloned)
     }
 
+    /// Clone the outputs into the spare a new worktree takes instead of
+    /// cloning them itself, unless one is ready. Returns whether it cloned.
+    /// Callers exclude other changes to the snapshot, but not takers.
+    pub async fn refill_spare(&self, layout: &Layout) -> Result<bool> {
+        self.refill_spare_with(&clone_tree, layout).await
+    }
+
+    /// [`Self::refill_spare`], copying each output tree with `copy`.
+    async fn refill_spare_with(
+        &self,
+        copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+        layout: &Layout,
+    ) -> Result<bool> {
+        layout.ensure_owned()?;
+        if layout.has_spare() {
+            return Ok(false);
+        }
+        let staging = layout.spare_staging();
+        remove_dir(&staging)?;
+        fs::create_dir_all(&staging)?;
+        let outputs = layout.snapshot().join(OUTPUTS);
+        for path in &self.paths {
+            let destination = staging.join(path);
+            let result = match destination.parent() {
+                Some(parent) => fs::create_dir_all(parent).map_err(anyhow::Error::from),
+                None => Ok(()),
+            };
+            let result = match result {
+                Ok(()) => copy(&outputs.join(path), &destination).await,
+                Err(error) => Err(error),
+            };
+            if let Err(error) = result {
+                remove_dir(&staging)?;
+                return Err(error);
+            }
+        }
+        fs::rename(&staging, layout.spare())
+            .with_context(|| format!("rename {}", staging.display()))?;
+        Ok(true)
+    }
+
+    /// Move the spare's outputs into a new worktree, as
+    /// [`Self::clone_outputs`] would clone them, and return the paths moved.
+    /// `None` leaves the worktree to clone them: no spare is ready, the
+    /// worktree already has one of the outputs, or a move failed, as onto
+    /// another filesystem, which puts the spare back. Callers exclude other
+    /// takers.
+    pub fn take_spare(
+        &self,
+        layout: &Layout,
+        worktree: &Path,
+        paths: &[String],
+    ) -> Result<Option<Vec<String>>> {
+        let fits = (self.paths.iter())
+            .all(|path| paths.contains(path) && worktree.join(path).symlink_metadata().is_err());
+        if !fits {
+            return Ok(None);
+        }
+        let taken = layout.spare_taken();
+        remove_dir(&taken)?;
+        match fs::rename(layout.spare(), &taken) {
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+            result => result.with_context(|| format!("rename {}", layout.spare().display()))?,
+        }
+        let mut moved = Vec::new();
+        for path in &self.paths {
+            // The clone that follows meets the same problem and reports it.
+            if move_output(&taken, worktree, path).is_err() {
+                for path in &moved {
+                    // The rename back cannot cross filesystems, as it came.
+                    fs::rename(worktree.join(path), taken.join(path))
+                        .with_context(|| format!("return {path} to the spare"))?;
+                }
+                return put_back(layout, &taken).map(|()| None);
+            }
+            moved.push(path.clone());
+        }
+        // What is left are the outputs' empty parent directories.
+        remove_dir(&taken)?;
+        Ok(Some(moved))
+    }
+
     /// Give each file the seed's modification time unless the worktree's
     /// commit `changed` it, so build tools treat only changed files as new.
     pub fn restore_times(&self, worktree: &Path, changed: &HashSet<String>) -> Result<()> {
@@ -289,8 +391,9 @@ pub struct Staged {
 impl Staged {
     /// Make the staged outputs, built from `commit` under `settings`, the
     /// snapshot. `files` are the tracked files whose content matches
-    /// `commit`; only their times are recorded. The replaced snapshot waits
-    /// for [`Layout::remove_retired`]. Callers exclude readers.
+    /// `commit`; only their times are recorded. The replaced snapshot, with
+    /// its spare, waits for [`Layout::remove_retired`]. Callers exclude
+    /// readers.
     pub fn install(
         self,
         layout: &Layout,
@@ -315,6 +418,26 @@ impl Staged {
         }
         fs::rename(&staging, &current)?;
         Ok(())
+    }
+}
+
+/// Move the output `path` from the spare `taken` into `worktree`.
+fn move_output(taken: &Path, worktree: &Path, path: &str) -> Result<()> {
+    ensure_no_symlink(worktree, path)?;
+    let destination = worktree.join(path);
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(taken.join(path), &destination)
+        .with_context(|| format!("move {}", destination.display()))
+}
+
+/// Make the spare `taken` the spare again, or delete it when a refill has
+/// made another meanwhile.
+fn put_back(layout: &Layout, taken: &Path) -> Result<()> {
+    match fs::rename(taken, layout.spare()) {
+        Ok(()) => Ok(()),
+        Err(_) => remove_dir(taken),
     }
 }
 

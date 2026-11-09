@@ -3339,7 +3339,9 @@ running in its process group is stopped when it exits.
 A successful build freezes `paths` as a copy-on-write snapshot: APFS clones on
 macOS, reflinks on Linux, never a full copy. A new worktree whose own settings
 match the snapshot's clones its paths before setup, keeping any path that already
-exists; a [copy](#copies) of a workspace's current files has that workspace's
+exists. The daemon keeps one spare clone of them in `.seed/snapshot`, which a new
+worktree without any of the paths takes instead of cloning, and clones the next
+one in the background; a [copy](#copies) of a workspace's current files has that workspace's
 outputs instead. When it clones at least one, it gives every tracked file its commit left
 unchanged the seed's modification time, so tools that compare modification times,
 such as Cargo and make, rebuild only changed files; next to outputs the worktree

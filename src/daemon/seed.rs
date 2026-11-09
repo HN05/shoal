@@ -99,6 +99,19 @@ pub async fn run(manager: Arc<Manager>) {
     }
 }
 
+/// Refill spares apart from builds, which can run for minutes: when a
+/// workspace took one or a build froze a snapshot, and every
+/// [`REFRESH_INTERVAL`] after a failure or a daemon restart.
+pub async fn run_spares(manager: Arc<Manager>) {
+    loop {
+        manager.refill_spares().await;
+        tokio::select! {
+            _ = tokio::time::sleep(REFRESH_INTERVAL) => {}
+            _ = manager.seeds.spare_wanted() => {}
+        }
+    }
+}
+
 impl Manager {
     /// Rebuild, one at a time, each seed whose default branch moved since its
     /// snapshot. A commit whose build failed is not retried until the branch
@@ -193,7 +206,10 @@ impl Manager {
             slot.cancel.subscribe(),
         )
         .await?;
-        self.freeze_seed(repo, layout, plan, build).await
+        self.freeze_seed(repo, layout, plan, build).await?;
+        // The new snapshot needs its own spare.
+        self.seeds.want_spare();
+        Ok(())
     }
 
     /// Replace the snapshot with the outputs the seed worktree built, cloning
@@ -206,6 +222,8 @@ impl Manager {
         plan: &Plan,
         build: &(String, String),
     ) -> Result<()> {
+        let slot = self.seeds.slot(&repo.id);
+        let _snapshot = slot.snapshot.lock().await;
         let staged = Snapshot::stage(layout, &plan.paths).await?;
         self.install_snapshot(repo, layout, staged, build).await?;
         let retired = layout.clone();
@@ -230,6 +248,49 @@ impl Manager {
         );
         let files = git::seed::unmodified_files(&worktree).await?;
         staged.install(layout, tip.to_owned(), settings.to_owned(), files)
+    }
+
+    /// Give each repository's current snapshot a spare clone of its outputs,
+    /// which the next new workspace takes instead of cloning them while it
+    /// holds the Git gate.
+    pub async fn refill_spares(&self) {
+        let repositories = match self.repositories().await {
+            Ok(repositories) => repositories,
+            Err(error) => return log!("seed spares: {error:#}"),
+        };
+        for repo in repositories {
+            if let Err(error) = self.refill_spare(&repo.id).await {
+                let name = crate::repository::name(&repo);
+                log!("seed spare for {name}: {error:#}");
+            }
+        }
+    }
+
+    /// Clone a spare of the repository's snapshot when it has none and its
+    /// settings still describe the snapshot.
+    async fn refill_spare(&self, id: &RepositoryId) -> Result<()> {
+        let slot = self.seeds.slot(id);
+        let _snapshot = slot.snapshot.lock().await;
+        // Read under the lock: a move or removal of the repository holds it.
+        let Ok(repo) = self.repository(id).await else {
+            return Ok(());
+        };
+        let Some(layout) = Layout::of(&repo) else {
+            return Ok(());
+        };
+        let Some(snapshot) = Snapshot::open(&layout)? else {
+            return Ok(());
+        };
+        if layout.has_spare() {
+            return Ok(());
+        }
+        let Some(plan) = self.seed_plan(&repo, &layout).await? else {
+            return Ok(());
+        };
+        if snapshot.settings == plan.settings()? {
+            snapshot.refill_spare(&layout).await?;
+        }
+        Ok(())
     }
 
     /// Start a new worktree from its repository's seed snapshot when the
@@ -259,7 +320,8 @@ impl Manager {
                 );
                 return Ok(());
             }
-            start_from_snapshot(&layout, &snapshot, &workspace.path, &plan.paths).await
+            self.start_from_snapshot(&layout, &snapshot, &workspace.path, &plan.paths)
+                .await
         };
         if let Err(error) = started.await {
             self.notify(
@@ -271,15 +333,42 @@ impl Manager {
         }
     }
 
-    /// Stop the repository's seed build, if one runs, and keep new ones out
-    /// until the returned guard drops. Take it before the Git gate, which a
-    /// build takes while holding its own.
+    /// Give the new `worktree` the snapshot's outputs among `paths`: the
+    /// spare's, which the spare task then replaces, or else a clone of them.
+    async fn start_from_snapshot(
+        &self,
+        layout: &Layout,
+        snapshot: &Snapshot,
+        worktree: &Path,
+        paths: &[String],
+    ) -> Result<()> {
+        let outputs = match snapshot.take_spare(layout, worktree, paths)? {
+            Some(taken) => {
+                self.seeds.want_spare();
+                taken
+            }
+            None => snapshot.clone_outputs(layout, worktree, paths).await?,
+        };
+        // Restored times are only safe beside the outputs built after them: on
+        // outputs the worktree already had, they would hide changed sources.
+        if outputs.is_empty() {
+            return Ok(());
+        }
+        let changed = git::seed::changed_between(worktree, &snapshot.commit, "HEAD").await?;
+        snapshot.restore_times(worktree, &changed)
+    }
+
+    /// Stop the repository's seed build, if one runs, and keep new ones and
+    /// spare refills out until the returned guard drops. Take it before the
+    /// Git gate, which a build takes while holding its own.
     pub(super) async fn stop_seed_build(&self, repository_id: &RepositoryId) -> SeedStop {
         let slot = self.seeds.slot(repository_id);
         slot.cancel.send_replace(true);
         let guard = slot.gate.clone().lock_owned().await;
+        let snapshot = slot.snapshot.clone().lock_owned().await;
         SeedStop {
             _guard: guard,
+            _snapshot: snapshot,
             slot,
         }
     }
@@ -373,29 +462,13 @@ pub(super) async fn is_seed_worktree(repo: &Repository, layout: &Layout) -> Resu
     Ok(owner == Some(layout.worktree_owner()))
 }
 
-async fn start_from_snapshot(
-    layout: &Layout,
-    snapshot: &Snapshot,
-    worktree: &Path,
-    paths: &[String],
-) -> Result<()> {
-    // Restored times are only safe beside the outputs built after them: on
-    // outputs the worktree already had, they would hide changed sources.
-    if snapshot
-        .clone_outputs(layout, worktree, paths)
-        .await?
-        .is_empty()
-    {
-        return Ok(());
-    }
-    let changed = git::seed::changed_between(worktree, &snapshot.commit, "HEAD").await?;
-    snapshot.restore_times(worktree, &changed)
-}
-
 /// One repository's seed build: held while a build runs, and set to cancel it.
 pub(crate) struct SeedSlot {
     gate: Arc<tokio::sync::Mutex<()>>,
     cancel: watch::Sender<bool>,
+    /// Held while the snapshot or its spare changes, which a build does only
+    /// once it has built.
+    snapshot: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Default for SeedSlot {
@@ -403,13 +476,16 @@ impl Default for SeedSlot {
         Self {
             gate: Default::default(),
             cancel: watch::channel(false).0,
+            snapshot: Default::default(),
         }
     }
 }
 
-/// Keeps seed builds out of a repository; dropping it allows them again.
+/// Keeps seed builds and spare refills out of a repository; dropping it
+/// allows them again.
 pub(super) struct SeedStop {
     _guard: tokio::sync::OwnedMutexGuard<()>,
+    _snapshot: tokio::sync::OwnedMutexGuard<()>,
     slot: Arc<SeedSlot>,
 }
 

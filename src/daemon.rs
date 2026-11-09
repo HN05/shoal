@@ -194,6 +194,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         expire_simulators,
     );
     spawn_supervised(&mut background, &manager, "seed builds", seed::run);
+    spawn_supervised(&mut background, &manager, "seed spares", seed::run_spares);
     spawn_supervised(&mut background, &manager, "runner", runner::run);
     spawn_supervised(
         &mut background,
