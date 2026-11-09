@@ -63,3 +63,24 @@ fn own_changes_are_not_reported_back() {
         [UpdateKind::Comment]
     );
 }
+
+#[test]
+fn a_conclusion_watch_reports_only_the_merge_or_close() {
+    let mut record = WatchRecord::default();
+    let first = record.observe_conclusion(
+        snapshot(json!({"discussion:1": "one"}), "open"),
+        "pr",
+        UnixTime::EPOCH,
+    );
+    assert!(first.is_empty(), "{first:?}");
+    let comments = json!({"discussion:1": "one", "discussion:2": "two"});
+    assert!(
+        (record.observe_conclusion(snapshot(comments.clone(), "open"), "pr", UnixTime::EPOCH))
+            .is_empty()
+    );
+    let merged = record.observe_conclusion(snapshot(comments, "merged"), "pr", UnixTime::EPOCH);
+    assert_eq!(
+        merged.iter().map(|update| update.kind).collect::<Vec<_>>(),
+        [UpdateKind::Merged]
+    );
+}

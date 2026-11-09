@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use shoal_time::UnixTime;
 
-use super::{Edited, Snapshot, Update, held::HeldPasses};
+use super::{Edited, Snapshot, Update, UpdateKind, held::HeldPasses};
 use crate::items::item::ItemState;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -37,11 +37,31 @@ impl WatchRecord {
     /// by a poll that started at `observed_at`. Updates still pending are
     /// reported again instead, and the cursor stays until they are
     /// acknowledged; new updates become one delivery that stays pending.
-    pub fn observe(
+    pub fn observe(&mut self, snapshot: Snapshot, url: &str, observed_at: UnixTime) -> Vec<Update> {
+        self.observe_reporting(snapshot, url, observed_at, |_| true)
+    }
+
+    /// [`Self::observe`] for an item followed only to learn how it ends,
+    /// which reports only that it merged or closed.
+    pub fn observe_conclusion(
+        &mut self,
+        snapshot: Snapshot,
+        url: &str,
+        observed_at: UnixTime,
+    ) -> Vec<Update> {
+        self.observe_reporting(snapshot, url, observed_at, |update| {
+            matches!(update.kind, UpdateKind::Merged | UpdateKind::Closed)
+        })
+    }
+
+    /// [`Self::observe`], delivering only the new updates `reported` keeps;
+    /// the snapshot takes in the rest unreported.
+    fn observe_reporting(
         &mut self,
         mut snapshot: Snapshot,
         url: &str,
         observed_at: UnixTime,
+        reported: impl Fn(&Update) -> bool,
     ) -> Vec<Update> {
         if !self.pending.is_empty() {
             return self.pending.clone();
@@ -49,7 +69,9 @@ impl WatchRecord {
         snapshot.normalize(&self.snapshot, UnixTime::now());
         self.discount_own_changes(&mut snapshot, observed_at);
         let changes = self.snapshot.changes(&snapshot, url);
-        self.pending = one_delivery(self.held.deliver(&snapshot, changes));
+        let mut delivered = self.held.deliver(&snapshot, changes);
+        delivered.retain(reported);
+        self.pending = one_delivery(delivered);
         self.snapshot = snapshot;
         self.pending.clone()
     }
