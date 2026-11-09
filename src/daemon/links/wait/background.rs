@@ -3,11 +3,10 @@
 //! space's watch cursor.
 use anyhow::Result;
 use futures_util::{StreamExt, stream};
-use rusqlite::{OptionalExtension, params};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    items::{concluding_prs, polled_items},
+    items::{concluding_prs, observed_item, polled_items, save_observed_item},
 };
 use crate::{
     client::space_ids::SpaceId,
@@ -196,16 +195,7 @@ fn record_on_baseline(
     item: &Observed<'_>,
     mut snapshot: Snapshot,
 ) -> Result<bool> {
-    let previous: Option<String> = tx
-        .query_row(
-            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
-            params![id, item.url],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let previous: Option<Snapshot> = previous
-        .map(|text| serde_json::from_str(&text))
-        .transpose()?;
+    let previous = observed_item(tx, id, item.url)?;
     // The first item read establishes the baseline.
     if previous.is_none() && snapshot.unread() {
         return Ok(false);
@@ -214,19 +204,28 @@ fn record_on_baseline(
         previous.as_ref().unwrap_or(&Snapshot::default()),
         UnixTime::now(),
     );
+    let merged = match &previous {
+        Some(previous) => journal_changes(tx, id, item, previous, &snapshot)?,
+        None => false,
+    };
+    save_observed_item(tx, id, item.url, &snapshot)?;
+    Ok(merged)
+}
+
+/// Record the changes of `item` from `previous` to `next` that its space
+/// hears about in the space's events; returns whether it merged.
+fn journal_changes(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    item: &Observed<'_>,
+    previous: &Snapshot,
+    next: &Snapshot,
+) -> Result<bool> {
     let mut merged = false;
-    if let Some(previous) = previous {
-        let changes = previous.changes(&snapshot, item.url).into_iter();
-        for update in changes.filter(|update| !item.concluding || update.kind.concludes()) {
-            merged |= update.kind == UpdateKind::Merged;
-            crate::daemon::events::record_item_activity(tx, id, item.kind, item.url, &update)?;
-        }
+    let changes = previous.changes(next, item.url).into_iter();
+    for update in changes.filter(|update| !item.concluding || update.kind.concludes()) {
+        merged |= update.kind == UpdateKind::Merged;
+        crate::daemon::events::record_item_activity(tx, id, item.kind, item.url, &update)?;
     }
-    tx.execute(
-        "INSERT INTO space_item_activity(space_id,url,record)
-         VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-        params![id, item.url, serde_json::to_string(&snapshot)?],
-    )?;
     Ok(merged)
 }

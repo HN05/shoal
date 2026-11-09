@@ -346,7 +346,11 @@ pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<St
 }
 
 /// The item as the workspace's last poll saw it, if one has.
-fn observed_item(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<Snapshot>> {
+pub(super) fn observed_item(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+) -> Result<Option<Snapshot>> {
     let record: Option<String> = db
         .query_row(
             "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
@@ -357,6 +361,21 @@ fn observed_item(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<O
     Ok(record
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
+}
+
+/// Store `snapshot` as the item as the workspace's last poll saw it.
+pub(super) fn save_observed_item(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+    snapshot: &Snapshot,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)
+         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
+        params![id, url, serde_json::to_string(snapshot)?],
+    )?;
+    Ok(())
 }
 
 /// Whether the workspace's watch saw the item's activity end, as
