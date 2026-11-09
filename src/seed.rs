@@ -296,22 +296,10 @@ impl Snapshot {
         }
         let staging = layout.spare_staging();
         remove_dir(&staging)?;
-        fs::create_dir_all(&staging)?;
         let outputs = layout.snapshot().join(OUTPUTS);
-        for path in &self.paths {
-            let destination = staging.join(path);
-            let result = match destination.parent() {
-                Some(parent) => fs::create_dir_all(parent).map_err(anyhow::Error::from),
-                None => Ok(()),
-            };
-            let result = match result {
-                Ok(()) => copy(&outputs.join(path), &destination).await,
-                Err(error) => Err(error),
-            };
-            if let Err(error) = result {
-                remove_dir(&staging)?;
-                return Err(error);
-            }
+        if let Err(error) = clone_spare(copy, &outputs, &staging, &self.paths).await {
+            remove_dir(&staging)?;
+            return Err(error);
         }
         fs::rename(&staging, layout.spare())
             .with_context(|| format!("rename {}", staging.display()))?;
@@ -412,6 +400,24 @@ impl Staged {
         fs::rename(&staging, &current)?;
         Ok(())
     }
+}
+
+/// Copy the snapshot's `outputs` among `paths` into `staging` with `copy`.
+async fn clone_spare(
+    copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+    outputs: &Path,
+    staging: &Path,
+    paths: &[String],
+) -> Result<()> {
+    fs::create_dir_all(staging)?;
+    for path in paths {
+        let destination = staging.join(path);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        copy(&outputs.join(path), &destination).await?;
+    }
+    Ok(())
 }
 
 /// Move the spare out of the way of refills and return where it went, or
