@@ -2499,23 +2499,28 @@ space's set comes from its agent's mode: `[modes.NAME.permissions]` over
 key is then the narrower of that and the parent's effective value, so no child
 has more than its parent. The modes that coordinate default `merge` and
 `issue_other_repositories` to `"direct"` so they can decide their children's;
-`worker` keeps the key defaults. A parent may give a child less than it has
-with `shoal start --permission KEY=VALUE`, a narrowing recorded with the
-agent's mode, since it belongs to that agent as its mode does: restores and
-restarts keep both, and a new agent in the space brings its own. `shoal resume`
-and `shoal restart` take `--permission` too and replace the recorded narrowing,
-so a parent changes what a child may do without ending its session; the mode
-stays, since changing it would change the agent's rules mid-session. The
-replacement goes into the record a restore reads, so a restore here, in the
-background or from the queue runs under it alike. A wrapper that restores its
-own agent, after an in-place restart or a protection stop, keeps the push
-rules it launched with, so it refuses a replacement rather than half apply
-it. A narrowing never widens: a value above the mode's is refused, because asking for more
-than the mode gives is a mistake worth saying, while one above the parent's
-is recorded as given and capped at each check, since the parent's own
-permissions may change, and a copy of today's value would outlast that. Effective
+`worker` keeps the key defaults. `shoal start --permission KEY=VALUE` gives an
+agent a permission, recorded with its mode since it belongs to that agent as
+its mode does: restores and restarts keep both, and a new agent in the space
+brings its own. A given value applies as given, whatever the mode or the
+parent allows, because it is a decision about that agent, not a default: the
+user may trust one worker to merge, or a parent give a child less than it has.
+What bounds it is the giver: a value is accepted only from one who holds it,
+the user, who holds every permission, or a space's agent up to its own
+effective value. The daemon checks this wherever a scoped process brings a
+value in, giving, queueing, restoring a chat or registering an agent, against
+what the space recorded, so an agent cannot raise its own permissions by
+replaying a record; a reattaching wrapper keeps the value its execution
+recorded. `shoal resume` and `shoal restart` take `--permission` too and change
+the given values per key, `KEY=mode` dropping one, so a parent changes what a
+child may do without ending its session or restating the rest; the mode stays,
+since changing it would change the agent's rules mid-session. The change goes
+into the record a restore reads, so a restore here, in the background or from
+the queue runs with it alike. A wrapper that restores its own agent, after an
+in-place restart or a protection stop, keeps the push rules it launched with,
+so it refuses a change rather than half apply it. Effective
 permissions are computed at each check from the current config, the recorded
-modes and narrowings and the tree, never stored, so a config change reaches
+modes and given values and the tree, never stored, so a config change reaches
 running agents; only the push rewrites, which are
 Git environment fixed at launch, wait for a restart. A check uses the acting
 space's permissions, so a parent acting on a child acts under its own.

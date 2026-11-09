@@ -19694,11 +19694,11 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert_eq!(fixture.ok(&["work"]), before);
 }
 
-/// `--permission` narrows the started agent's mode, which the workspace
-/// records with the mode and its status shows; a value wider than the
-/// mode's is refused before anything is created.
+/// `--permission` gives the started agent a permission, narrower or wider
+/// than its mode's, which the workspace records with the mode and its
+/// status shows; an unknown key is refused before anything is created.
 #[test]
-fn start_narrows_the_agents_permissions_and_records_them() {
+fn start_gives_the_agent_permissions_and_records_them() {
     let fixture = Fixture::with_config(Some(
         "agent.default = 'helper'\n[agents.helper]\ncommand = ['fake-agent']\n",
     ));
@@ -19709,25 +19709,35 @@ fn start_narrows_the_agents_permissions_and_records_them() {
     let start = [
         "--json", "start", repo, "narrowed", "--here", "--agent", "helper",
     ];
-    let output = fixture.run(&[&start[..], &["--permission", "push=propose"]].concat());
+    let given = [
+        "--permission",
+        "push=propose",
+        "--permission",
+        "merge=direct",
+    ];
+    let output = fixture.run(&[&start[..], &given[..]].concat());
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     let status = fixture.ok(&["work", "status", "narrowed"]);
     assert_eq!(
-        status["workspace"]["narrowing"]["push"], "propose",
+        status["workspace"]["narrowing"],
+        serde_json::json!({"push": "propose", "merge": "direct"}),
         "{status}"
     );
-    let push = &status["permissions"]["push"];
+    // A narrower and a wider value than the worker mode's apply as given.
+    for (key, value) in [("push", "propose"), ("merge", "direct")] {
+        let permission = &status["permissions"][key];
+        assert_eq!(
+            (permission["value"].as_str(), permission["from"].as_str()),
+            (Some(value), Some("narrowing")),
+            "{status}"
+        );
+    }
     assert_eq!(
-        (push["value"].as_str(), push["from"].as_str()),
-        (Some("propose"), Some("narrowing"))
+        status["permissions"]["issue_open"]["from"], "mode",
+        "{status}"
     );
-    assert_eq!(status["permissions"]["merge"]["from"], "mode", "{status}");
 
     let before = fixture.ok(&["work"]);
-    let wider = ["start", repo, "wider", "--here", "--agent", "helper"];
-    let wider = [&wider[..], &["--permission", "merge=direct"]].concat();
-    let output = fixture.run(&wider);
-    assert!(!output.status.success(), "{output:?}");
     let unknown = [
         "start",
         repo,
@@ -19739,14 +19749,23 @@ fn start_narrows_the_agents_permissions_and_records_them() {
     let output = fixture.run(&unknown);
     assert!(!output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["work"]), before);
-    // A chat's mode bounds its narrowing too.
-    let chats = fixture.ok(&["work", "--chats"]);
+    // A chat takes a value wider than its mode's too.
     let chat = [
         "start", "--chat", repo, "--mode", "plan", "--agent", "helper", "--here",
     ];
-    let output = fixture.run(&[&chat[..], &["--permission", "api_writes=direct"]].concat());
-    assert!(!output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["work", "--chats"]), chats);
+    let mut command = fixture.command();
+    command
+        .args(chat)
+        .args(["--permission", "api_writes=direct"]);
+    // Take the offered chat name.
+    let (output, transcript) = fixture.interactive_command(&mut command, "\n");
+    assert_eq!(output.status.code(), Some(7), "{output:?}\n{transcript}");
+    let chats = fixture.ok(&["work", "--chats"]);
+    assert_eq!(
+        chats[0]["narrowing"],
+        serde_json::json!({"api_writes": "direct"}),
+        "{chats}"
+    );
 }
 
 /// Save a stopped agent of `waiter` that started with `push=propose` for
@@ -19767,12 +19786,13 @@ fn stop_narrowed_agent(fixture: &Fixture, workspace: &Value) -> PathBuf {
     record
 }
 
-/// `shoal resume --permission` replaces the narrowing a stopped agent
-/// recorded, which its restore registers; without it the restore keeps the
-/// recorded one, and a value wider than the agent's mode is refused before
-/// anything is restored or replaced.
+/// `shoal resume --permission` changes the permissions a stopped agent was
+/// given, which its restore registers: a key it names takes its value, even
+/// wider than the mode's, `KEY=mode` drops one, and the rest keep theirs.
+/// Without it the restore keeps them all, and a refused resume changes
+/// nothing.
 #[test]
-fn resume_replaces_the_narrowing_a_stopped_agent_recorded() {
+fn resume_changes_the_permissions_a_stopped_agent_was_given() {
     let fixture = Fixture::with_config(Some(
         "[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'exit 0']\n",
     ));
@@ -19795,11 +19815,8 @@ fn resume_replaces_the_narrowing_a_stopped_agent_recorded() {
 
     let record = stop_narrowed_agent(&fixture, &workspace);
     let kept = || -> Value { serde_json::from_slice(&fs::read(&record).unwrap()).unwrap() };
-    let output = resume(&["--permission", "merge=direct"]);
-    assert!(!output.status.success(), "{output:?}");
-    assert_eq!(kept()["narrowing"], serde_json::json!({"push": "propose"}));
-    // A resume refused after the narrowing fits, here because no host can
-    // start the restore in the background, replaces nothing either.
+    // A resume refused once the change fits, here because no host can start
+    // the restore in the background, changes nothing.
     let bin = fixture.root.path().join("no-host-bin");
     fs::create_dir(&bin).unwrap();
     let output = fixture
@@ -19817,9 +19834,16 @@ fn resume_replaces_the_narrowing_a_stopped_agent_recorded() {
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
     assert_eq!(kept()["narrowing"], serde_json::json!({"push": "propose"}));
-    let output = resume(&["--permission", "api_writes=deny"]);
+    let output = resume(&["--permission", "merge=direct"]);
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(narrowing(), serde_json::json!({"api_writes": "deny"}));
+    assert_eq!(
+        narrowing(),
+        serde_json::json!({"push": "propose", "merge": "direct"})
+    );
+    stop_narrowed_agent(&fixture, &workspace);
+    let output = resume(&["--permission", "push=mode"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(narrowing(), Value::Null);
 }
 
 /// The narrowing a restore the daemon starts from the queue runs under,
@@ -19851,22 +19875,21 @@ fn a_queued_restore_keeps_the_recorded_narrowing() {
     );
 }
 
-/// A restore the daemon starts from the queue runs under the narrowing its
+/// A restore the daemon starts from the queue runs with the permissions its
 /// `shoal resume --permission` gave.
 #[test]
-fn a_queued_restore_runs_under_the_narrowing_its_resume_gave() {
+fn a_queued_restore_runs_with_the_permissions_its_resume_gave() {
     assert_eq!(
         queued_restore_narrowing(&["--permission", "api_writes=deny"]),
-        serde_json::json!({"api_writes": "deny"})
+        serde_json::json!({"push": "propose", "api_writes": "deny"})
     );
 }
 
-/// `shoal resume --permission` restores a stopped chat under the narrowing
-/// it gives, which the chat records in place of its own; without it the
-/// chat keeps the recorded one, and a value wider than its mode's is
-/// refused before it restores.
+/// `shoal resume --permission` restores a stopped chat with the permissions
+/// it gives, even wider than its mode's, which the chat records with the
+/// keys it leaves out; without it the chat keeps them all.
 #[test]
-fn resume_replaces_the_narrowing_a_stopped_chat_recorded() {
+fn resume_changes_the_permissions_a_stopped_chat_was_given() {
     let mut fixture = chat_session_fixture();
     save_running_chat(&fixture, |fixture| {
         let output = fixture.run(&["daemon", "stop"]);
@@ -19882,20 +19905,14 @@ fn resume_replaces_the_narrowing_a_stopped_chat_recorded() {
         assert!(output.status.success(), "{output:?}\n{transcript}");
     };
 
-    let output = fixture.run(&[
-        "resume",
-        "talk",
-        "--focus",
-        "--permission",
-        "api_writes=direct",
-    ]);
-    assert!(!output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["work", "--chats"])[0]["restore"], "resume");
     // The restored agent exits at once, which stops the chat again.
     resume(&fixture, &["--permission", "push=propose"]);
     assert_eq!(narrowing(&fixture), serde_json::json!({"push": "propose"}));
+    let wider = serde_json::json!({"push": "propose", "api_writes": "direct"});
+    resume(&fixture, &["--permission", "api_writes=direct"]);
+    assert_eq!(narrowing(&fixture), wider);
     resume(&fixture, &[]);
-    assert_eq!(narrowing(&fixture), serde_json::json!({"push": "propose"}));
+    assert_eq!(narrowing(&fixture), wider);
 }
 
 /// A repository's own mode decides the kind of space, its rules and the

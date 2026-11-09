@@ -25,7 +25,7 @@ use crate::{
 pub(super) struct HereLaunch {
     pub agent: ResolvedAddAgent,
     pub opening: agents::Opening,
-    /// The `--permission` narrowing of the mode's permissions.
+    /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
     pub fork: Option<String>,

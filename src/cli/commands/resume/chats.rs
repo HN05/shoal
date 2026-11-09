@@ -1,8 +1,8 @@
 //! `shoal resume` for the stopped chats: each comes back under its own
 //! name, continuing its session, in a background place where a restored
-//! agent opens, or in this terminal with `--focus`, under the narrowing it
-//! recorded or one `--permission` replaces it with; `--discard` removes it
-//! instead.
+//! agent opens, or in this terminal with `--focus`, with the permissions it
+//! was given and what `--permission` changes in them; `--discard` removes
+//! it instead.
 use crate::client::space_names::SpaceSelector;
 use anyhow::{Context as _, Result, ensure};
 
@@ -14,18 +14,18 @@ use crate::{
         ui,
     },
     client::output::{batch::Failure, resume::RestoredChat},
-    config::permissions::PermissionsConfig,
+    config::permissions::PermissionChange,
     model::{Chat, Spaces},
 };
 
-/// Restore the stopped `chat` in this terminal, under `narrowing` when
-/// given.
+/// Restore the stopped `chat` in this terminal, making `change` when given
+/// to the permissions it was given.
 pub(super) async fn restore_here(
     ctx: &Context,
     chat: &Chat,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    match restore(ctx, chat, ChatPlace::Here, narrowing).await? {
+    match restore(ctx, chat, ChatPlace::Here, change).await? {
         Started::Exited(code) => Ok(code),
         Started::Background(_) => Ok(0),
     }
@@ -72,16 +72,16 @@ async fn discard(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<Chat> {
     )
 }
 
-/// Restore each of the stopped `chats` in the background, under `narrowing`
+/// Restore each of the stopped `chats` in the background, making `change`
 /// when given, returning those it restored and those it failed for.
 pub(super) async fn restore_each(
     ctx: &Context,
     chats: &[Chat],
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> (Vec<RestoredChat>, Vec<Failure>) {
     let mut report = ui::Report::new("restore");
     for chat in chats {
-        match restore(ctx, chat, ChatPlace::Background, narrowing).await {
+        match restore(ctx, chat, ChatPlace::Background, change).await {
             Ok(started) => {
                 let restored = restored(chat, started);
                 let message = match &restored.place {
@@ -116,17 +116,17 @@ fn restored(chat: &Chat, started: Started) -> RestoredChat {
 
 /// Start the stopped `chat` again at `place`, in its repository's checkout
 /// or the worktree of its workspace, under its own name and agent,
-/// continuing the session it reported, under `narrowing` when given,
-/// otherwise the one it recorded. A failure here, such as a session this
+/// continuing the session it reported, with the permissions it was given
+/// and `change` made to them when given. A failure here, such as a session this
 /// process starts for an app, reaches the user through the daemon, as one in
 /// the place it opens does.
 async fn restore(
     ctx: &Context,
     chat: &Chat,
     place: ChatPlace,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<Started> {
-    let started = start_saved(ctx, chat, place, narrowing).await;
+    let started = start_saved(ctx, chat, place, change).await;
     crate::client::chats::keep_failed_restore(&ctx.paths, Some(&chat.id), started).await
 }
 
@@ -135,7 +135,7 @@ async fn start_saved(
     ctx: &Context,
     chat: &Chat,
     place: ChatPlace,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<Started> {
     let repo = saved_repository(ctx, chat).await?;
     let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
@@ -152,10 +152,10 @@ async fn start_saved(
         (None, ChatRepository::Outside(_)) => chat::Topic::outside_repositories(&chat.mode),
     };
     let options = chat::Options {
-        narrowing: match narrowing {
-            Some(narrowing) => chat::Narrowing::Requested(narrowing),
-            None => chat::Narrowing::Recorded(chat.narrowing),
-        },
+        narrowing: chat::Narrowing::Recorded(match change {
+            Some(change) => change.applied_to(chat.narrowing),
+            None => chat.narrowing,
+        }),
         agent: Some(chat.agent.parse()?),
         place,
         name: Some(chat.name.clone()),

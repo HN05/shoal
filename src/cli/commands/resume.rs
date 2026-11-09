@@ -14,7 +14,7 @@ use crate::execution::recovery::waits_in_wrapper;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
     client::recovery::ReconcileOptions,
-    config::permissions::PermissionsConfig,
+    config::permissions::PermissionChange,
     execution::recovery::{
         Copied, LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
         consume, saved_at,
@@ -41,9 +41,9 @@ pub struct Options {
     pub now: bool,
     /// Restore one agent or chat in this terminal.
     pub focus: bool,
-    /// The narrowing that replaces the one the restored agents and chats
-    /// recorded; without one they keep it.
-    pub narrowing: Option<PermissionsConfig>,
+    /// What changes in the permissions the restored agents and chats were
+    /// given; without it they keep them.
+    pub change: Option<PermissionChange>,
 }
 
 /// `shoal resume`: the selected spaces, or every one for `--all` or when no
@@ -51,16 +51,17 @@ pub struct Options {
 /// restores queue unless `now`, or `focus`, which restores one agent or
 /// chat in this terminal. Without a terminal every restore queues, which
 /// `now` starts at once, since this process can start none of them. A
-/// replacement narrowing reaches every selected agent and chat before any
-/// restores.
+/// change to the permissions given is checked for every selected agent and
+/// chat before any restores.
 pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> Result<i32> {
     let Options {
         execution,
         discard,
         now,
         focus,
-        narrowing,
+        change,
     } = options;
+    let change = change.as_ref();
     let scoped = crate::env::inherits_scope(&ctx.paths.state);
     if scoped {
         ensure_below(&targets, now || focus)?;
@@ -70,26 +71,26 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     if named
         && !discard
         && execution.is_none()
-        && let Some(code) = continue_turns(ctx, &mut selected, narrowing.is_some()).await?
+        && let Some(code) = continue_turns(ctx, &mut selected, change.is_some()).await?
     {
         return Ok(code);
     }
-    if let Some(narrowing) = &narrowing {
-        narrowing::check(ctx, &selected, execution.as_deref(), narrowing).await?;
+    if let Some(change) = change {
+        narrowing::check(ctx, &selected, execution.as_deref(), change).await?;
     }
     if scoped && !discard {
-        return queue_below(ctx, selected, execution, narrowing).await;
+        return queue_below(ctx, selected, execution, change).await;
     }
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
         ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
-            run(ctx, workspace.clone(), execution, discard, focus, narrowing).await
+            run(ctx, workspace.clone(), execution, discard, focus, change).await
         }
         ([], Some([workspace])) => {
-            queue_workspace(ctx, workspace.clone(), execution, queuing, narrowing).await
+            queue_workspace(ctx, workspace.clone(), execution, queuing, change).await
         }
         ([chat], Some([])) if focus && execution.is_none() => {
-            chats::restore_here(ctx, chat, narrowing).await
+            chats::restore_here(ctx, chat, change).await
         }
         _ => {
             ensure!(
@@ -100,7 +101,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
                 !focus,
                 "--focus restores the agent of one workspace or chat"
             );
-            resume_each(ctx, selected, discard, queuing, narrowing).await
+            resume_each(ctx, selected, discard, queuing, change).await
         }
     }
 }
@@ -142,12 +143,12 @@ fn report_nothing(ctx: &Context, started: bool) -> Result<i32> {
 /// Continue the turns an interrupt ended of the agents in the `selected`
 /// workspaces, which keeps the workspaces without one, refusing those and
 /// selected chats, which a request that also resumes stopped work would
-/// report apart from it, and a `replacing` narrowing, which a running agent
-/// cannot take. `None` when no turn ended so.
+/// report apart from it, and a `changing` --permission, which a running
+/// agent cannot take. `None` when no turn ended so.
 async fn continue_turns(
     ctx: &Context,
     selected: &mut Selected,
-    replacing: bool,
+    changing: bool,
 ) -> Result<Option<i32>> {
     let Some(workspaces) = &mut selected.workspaces else {
         return Ok(None);
@@ -162,8 +163,8 @@ async fn continue_turns(
         "resume interrupted turns and stopped work separately"
     );
     ensure!(
-        !replacing,
-        "an interrupted turn continues in its running agent, which keeps its narrowing; restart the agent with --permission instead"
+        !changing,
+        "an interrupted turn continues in its running agent, which keeps its permissions; restart the agent with --permission instead"
     );
     continuation.submit(ctx).await.map(Some)
 }
@@ -184,7 +185,7 @@ fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 }
 
 /// Resume the `selected` spaces together, reporting them at once: restore
-/// the stopped chats, under `narrowing` when given, or remove them for
+/// the stopped chats, making `change` when given, or remove them for
 /// `discard`, and queue the restores of the workspaces' stopped agents,
 /// start them as `queuing` says, or forget the stopped work for `discard`.
 async fn resume_each(
@@ -192,7 +193,7 @@ async fn resume_each(
     selected: Selected,
     discard: bool,
     queuing: Queuing,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let stopped = match &selected.workspaces {
         None => stopped_work(ctx, discard).await?,
@@ -207,8 +208,8 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    narrowing::apply(ctx, &stopped, narrowing).await?;
-    let (chats, failed) = chats::restore_each(ctx, &selected.chats, narrowing).await;
+    narrowing::apply(ctx, &stopped, change).await?;
+    let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
     match queuing {
         Queuing::Here { now: true } => {
             let resumed = Resumed {
@@ -226,14 +227,14 @@ async fn resume_each(
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` workspaces below this process's, only `execution`'s when
 /// given, and restore the `selected` chats in a background place, under
-/// `narrowing` when given; the daemon refuses those this process or one
+/// `change` when given; the daemon refuses those this process or one
 /// below it did not stop, before any restore, and starts the workspaces'
 /// agents detached.
 async fn queue_below(
     ctx: &Context,
     selected: Selected,
     execution: Option<ExecutionId>,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let mut stopped = Vec::new();
     for selector in selected.workspaces.unwrap_or_default() {
@@ -242,8 +243,8 @@ async fn queue_below(
     for chat in &selected.chats {
         crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
     }
-    narrowing::apply(ctx, &stopped, narrowing).await?;
-    let (chats, failed) = chats::restore_each(ctx, &selected.chats, narrowing).await;
+    narrowing::apply(ctx, &stopped, change).await?;
+    let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
     queue::queue_all(ctx, stopped, chats, failed, false).await
 }
 
@@ -296,7 +297,7 @@ async fn stopped_agents(
 }
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
-/// when given, to start as `queuing` says, under `narrowing` when given.
+/// when given, to start as `queuing` says, making `change` when given.
 /// Without stopped agents, a last session continues at once, as resuming
 /// the workspace by itself does not wait for a slot it never held: where it
 /// stopped or in the background, or for a noninteractive process through
@@ -306,7 +307,7 @@ async fn queue_workspace(
     workspace: SpaceSelector,
     execution: Option<ExecutionId>,
     queuing: Queuing,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
@@ -322,7 +323,7 @@ async fn queue_workspace(
     let last_session = saved.agents.is_empty() && !saved.sessions.is_empty();
     let now = match queuing {
         Queuing::Here { .. } if last_session => {
-            return continue_last_session(ctx, &workspace, saved, false, narrowing).await;
+            return continue_last_session(ctx, &workspace, saved, false, change).await;
         }
         Queuing::Here { .. } => false,
         Queuing::Daemon { now } => now || last_session,
@@ -331,7 +332,7 @@ async fn queue_workspace(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    narrowing::apply(ctx, &stopped, narrowing).await?;
+    narrowing::apply(ctx, &stopped, change).await?;
     queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
 }
 
@@ -446,7 +447,7 @@ fn background_workspace(targets: &SpaceTargets) -> Option<SpaceId> {
 /// Resume `workspace`'s stopped agent, the `execution` one when given, or
 /// forget its stopped work for `discard`. The agent restores in this
 /// terminal when `here`, otherwise where it stopped or in the background,
-/// under `narrowing` when given; one whose wrapper waits to restore it
+/// making `change` when given; one whose wrapper waits to restore it
 /// starts there at once.
 pub async fn run(
     ctx: &Context,
@@ -454,7 +455,7 @@ pub async fn run(
     execution: Option<ExecutionId>,
     discard: bool,
     here: bool,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<i32> {
     if discard {
         return discard_work(ctx, workspace, execution).await;
@@ -471,7 +472,7 @@ pub async fn run(
     );
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
         let workspace = &inspection.workspace;
-        return continue_last_session(ctx, workspace, saved, here, narrowing).await;
+        return continue_last_session(ctx, workspace, saved, here, change).await;
     }
     let recovery_id = execution
         .as_ref()
@@ -497,7 +498,7 @@ pub async fn run(
         !active(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
-    narrowing::apply_one(ctx, workspace, &selected_id, narrowing).await?;
+    narrowing::apply_one(ctx, workspace, &selected_id, change).await?;
     if !here {
         let session = (workspace.clone(), selected_id, selected);
         return start_sessions(ctx, vec![session], true, Resumed::default()).await;
@@ -539,16 +540,16 @@ async fn discard_work(
 /// Continue one of the workspace's last sessions that `saved` keeps, the
 /// only one or one picked on a terminal, telling it about the stopped
 /// commands: in this terminal when `here`, otherwise where it stopped or in
-/// the background, under `narrowing` when given.
+/// the background, making `change` when given.
 async fn continue_last_session(
     ctx: &Context,
     workspace: &Workspace,
     saved: Saved,
     here: bool,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let (id, path) = select_agent(ctx, &saved.sessions, session_label)?;
-    narrowing::apply_one(ctx, workspace, &id, narrowing).await?;
+    narrowing::apply_one(ctx, workspace, &id, change).await?;
     if !here {
         let session = (workspace.clone(), id, path);
         return start_sessions(ctx, vec![session], true, Resumed::default()).await;

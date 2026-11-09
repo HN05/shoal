@@ -236,10 +236,11 @@ A space's permissions (`issue_open`, `pr_open`, `issue_other_repositories`,
 never wider than those of the space above it; `shoal work status` lists them,
 each with where it comes from. A command acting on a space below uses the
 caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
-less than its mode would, such as `--permission push=propose`; a value wider
-than the mode's is refused, and one wider than yours still gets no more than
-yours. `shoal resume` and `shoal restart` take `--permission` too, replacing
-the narrowing the agent recorded; without it they keep it.
+a permission whatever its mode allows, such as `--permission push=propose`;
+you give only what your own space holds, and a value above that is refused.
+`shoal resume` and `shoal restart` take `--permission` too, which sets the
+keys it names, `KEY=mode` dropping one, and keeps the rest; without it they
+keep them all.
 
 Where a space's permissions require approval for issues and PRs, `issue open`
 and `pr open` exit 0 with `proposed`, an approval request, instead of the item;

@@ -73,7 +73,7 @@ pub(super) async fn start(
             &settings.modes,
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
-        options.check_narrowing(&settings, &mode, true)?;
+        options.check_given(ctx, Some(&repo.id)).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::repository(&repo, &mode)
@@ -108,7 +108,7 @@ pub(super) async fn start_outside_repositories(
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
         let settings = crate::client::workspaces::settings(&ctx.paths, repository.config()).await?;
         crate::config::modes::resolve(&settings.modes, &topic.mode, SpaceKind::Chat, false)?;
-        options.check_narrowing(&settings, &topic.mode, false)?;
+        options.check_given(ctx, None).await?;
         begin(ctx, repository, settings, topic, options).await
     }
     .await;
@@ -145,7 +145,7 @@ pub(super) async fn start_in_workspace(
             &settings.modes,
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
-        options.check_narrowing(&settings, &mode, true)?;
+        options.check_given(ctx, Some(&repo.id)).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::workspace(workspace, &mode)
@@ -275,7 +275,7 @@ pub(super) struct Options {
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
     pub parent: Option<SpaceSelector>,
-    /// The narrowing of the mode's permissions.
+    /// The permissions given to the agent, whatever the mode's.
     pub narrowing: Narrowing,
 }
 
@@ -346,24 +346,15 @@ impl Options {
         Ok(())
     }
 
-    /// Refuse a requested narrowing wider than the permissions of the chat
-    /// mode `mode` under `settings`, in a repository when `registered`, as
-    /// soon as the mode is chosen; a recorded one stays as it is.
-    pub fn check_narrowing(
-        &self,
-        settings: &Effective,
-        mode: &str,
-        registered: bool,
-    ) -> Result<()> {
-        let Narrowing::Requested(narrowing) = self.narrowing else {
+    /// Refuse requested permissions this scoped process does not hold for
+    /// an action in the registered repository `repository`, before any
+    /// picker opens; recorded ones stay as they are.
+    pub async fn check_given(&self, ctx: &Context, repository: Option<&str>) -> Result<()> {
+        let Narrowing::Requested(given) = self.narrowing else {
             return Ok(());
         };
-        let mode = crate::config::permissions::SpaceMode {
-            name: mode,
-            kind: SpaceKind::Chat,
-            repository: registered,
-        };
-        narrowing.ensure_within_mode(settings, mode)
+        let repository = repository.map(crate::repository::Selector::from);
+        super::resume::narrowing::ensure_held(ctx, repository, &given).await
     }
 }
 
@@ -520,13 +511,15 @@ pub(super) async fn begin(
     }
 }
 
-/// A chat's narrowing of its mode's permissions, by where it came from.
+/// The permissions given to a chat's agent, by where they came from.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Narrowing {
-    /// The `--permission` its starter asked for, which the mode bounds.
+    /// The `--permission` its starter asked for, which a scoped starter
+    /// must hold.
     Requested(crate::config::permissions::PermissionsConfig),
-    /// The narrowing a restored or imported chat recorded, which it keeps
-    /// whatever its mode allows now.
+    /// The permissions a restored or imported chat was given, with what a
+    /// resume's `--permission` changed, which the resume checked and the
+    /// daemon checks again for what differs from the chat's.
     Recorded(crate::config::permissions::PermissionsConfig),
 }
 

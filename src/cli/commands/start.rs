@@ -18,7 +18,11 @@ use crate::{
         context::Context,
         ui::{self, Fallback, ModeChoice},
     },
-    config::{self, Effective, modes, permissions::PermissionsConfig, templates},
+    config::{
+        self, Effective, modes,
+        permissions::{PermissionChange, PermissionsConfig},
+        templates,
+    },
     forge::{
         IssueInput,
         items::link::{Link, LinkTarget},
@@ -457,7 +461,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         after: args.after,
         model: args.model.into(),
         mode: Some(mode),
-        narrowing: PermissionsConfig::combined(&args.narrowing),
+        narrowing: given(&args.permissions),
         prompt: None,
         parent,
         fork,
@@ -600,7 +604,7 @@ fn chat_options(args: &mut StartArgs) -> chat::Options {
         parent: args.parent.take(),
         narrowing: match args.recorded_narrowing.take() {
             Some(recorded) => chat::Narrowing::Recorded(recorded),
-            None => chat::Narrowing::Requested(PermissionsConfig::combined(&args.narrowing)),
+            None => chat::Narrowing::Requested(given(&args.permissions)),
         },
     }
 }
@@ -651,6 +655,11 @@ fn positional_target(
         "a positional repository cannot be combined with --repo"
     );
     Ok((Some(positional), issue))
+}
+
+/// The permissions a start's `--permission` assignments give its agent.
+fn given(changes: &[PermissionChange]) -> PermissionsConfig {
+    PermissionChange::combined(changes).applied_to(PermissionsConfig::default())
 }
 
 #[cfg(test)]

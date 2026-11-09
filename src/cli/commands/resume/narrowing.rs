@@ -1,48 +1,47 @@
-//! `--permission` on `shoal resume` and `shoal restart`: a narrowing that
-//! replaces the one the restored or restarted agents and chats recorded.
-//! Each one's mode bounds it, which is checked for every selected space
-//! before anything restarts or restores, and a restore replaces it in the
-//! records it restores once nothing refuses it.
+//! `--permission` on `shoal resume` and `shoal restart`: a change to the
+//! permissions the restored or restarted agents and chats were given. A
+//! scoped process gives only what it holds, which is checked for every
+//! selected space before anything restarts or restores, and a restore makes
+//! the change in the records it restores once nothing refuses it.
 use anyhow::{Context as _, Result, ensure};
 
 use super::targets::Selected;
 use crate::client::space_names::SpaceSelector;
-use crate::execution::recovery::{LastSessionExt, RecordExt};
 use crate::{
     cli::context::Context,
-    config::permissions::{PermissionsConfig, SpaceMode},
-    execution::recovery::{LastSession, Record, Saved, waits_in_wrapper},
-    model::{Chat, SpaceKind, Workspace},
-    protocol::{ConfigTarget, SavedAgent},
+    config::permissions::{PermissionChange, PermissionsConfig},
+    execution::recovery::{Saved, waits_in_wrapper},
+    model::Workspace,
+    protocol::SavedAgent,
 };
 
-/// Refuse `narrowing` for the stopped agents and last sessions of the
+/// Refuse `change` for the stopped agents and last sessions of the
 /// `selected` workspaces, only `execution`'s when given, and the selected
-/// chats, where it is wider than one's mode or one's waiting wrapper
-/// restores it, which keeps the narrowing it launched with. It writes
-/// nothing: each restore gives the records it restores the narrowing with
-/// [`apply`] once nothing refuses it.
+/// chats, where this process does not hold what it gives or one's waiting
+/// wrapper restores it, which keeps the permissions it launched with. It
+/// writes nothing: each restore makes the change in the records it restores
+/// with [`apply`] once nothing refuses it.
 pub(super) async fn check(
     ctx: &Context,
     selected: &Selected,
     execution: Option<&str>,
-    narrowing: &PermissionsConfig,
+    change: &PermissionChange,
 ) -> Result<()> {
     let selectors = (selected.workspaces.as_deref())
-        .context("--permission replaces the narrowing of the spaces a resume names")?;
+        .context("--permission changes the permissions of the spaces a resume names")?;
     for selector in selectors {
         let (workspace, saved) = saved_agents(ctx, selector, execution).await?;
         ensure!(
             !saved.agents.iter().any(|(_, path)| waits_in_wrapper(path)),
-            "the agent of {} restores in the wrapper that waits for it, which keeps its narrowing; resume it without --permission",
+            "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
             workspace.name
         );
-        for mode in recorded_modes(&saved)? {
-            ensure_fits_workspace(ctx, &workspace, &mode, narrowing).await?;
-        }
+        let repository = Some(workspace.repository_id.as_str().into());
+        ensure_held(ctx, repository, &change.set).await?;
     }
     for chat in &selected.chats {
-        ensure_fits_chat(ctx, chat, narrowing).await?;
+        let repository = chat.repository_id.as_deref().map(Into::into);
+        ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
 }
@@ -64,13 +63,13 @@ async fn saved_agents(
     Ok((workspace, saved))
 }
 
-/// Have the daemon give each agent and last session the `stopped`
-/// workspaces keep `narrowing`, when given, in place of the one it
-/// recorded, as their restores begin; it replaces none when it refuses one.
+/// Have the daemon make `change`, when given, to the permissions each agent
+/// and last session the `stopped` workspaces keep was given, as their
+/// restores begin; it changes none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
     stopped: &[(Workspace, Saved)],
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agents = stopped.iter().flat_map(|(workspace, saved)| {
         (saved.agents.iter().chain(&saved.sessions)).map(|(execution, _)| SavedAgent {
@@ -78,7 +77,7 @@ pub(super) async fn apply(
             execution: execution.clone(),
         })
     });
-    replace(ctx, agents.collect(), narrowing).await
+    request(ctx, agents.collect(), change).await
 }
 
 /// [`apply`] for the agent or last session `execution` of `workspace`.
@@ -86,79 +85,41 @@ pub(super) async fn apply_one(
     ctx: &Context,
     workspace: &Workspace,
     execution: &str,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agent = SavedAgent {
         workspace: SpaceSelector::id(&workspace.id),
         execution: execution.to_owned(),
     };
-    replace(ctx, vec![agent], narrowing).await
+    request(ctx, vec![agent], change).await
 }
 
-/// Have the daemon give the stopped `agents` `narrowing`, when given.
-async fn replace(
+/// Have the daemon make `change`, when given, for the stopped `agents`.
+async fn request(
     ctx: &Context,
     agents: Vec<SavedAgent>,
-    narrowing: Option<PermissionsConfig>,
+    change: Option<&PermissionChange>,
 ) -> Result<()> {
-    match narrowing {
-        Some(narrowing) if !agents.is_empty() => {
-            crate::client::assignments::replace_stopped_narrowing(&ctx.paths, agents, narrowing)
-                .await
+    match change {
+        Some(change) if !agents.is_empty() => {
+            let change = change.clone();
+            crate::client::assignments::change_stopped_permissions(&ctx.paths, agents, change).await
         }
         _ => Ok(()),
     }
 }
 
-/// Refuse `narrowing` where it is wider than the permissions of `mode`, the
-/// mode of an agent of `workspace`.
-pub(in crate::cli::commands) async fn ensure_fits_workspace(
+/// Refuse `given` where this scoped process does not hold it for an action
+/// in the registered repository `repository`; the user, without a scope,
+/// gives any.
+pub(in crate::cli::commands) async fn ensure_held(
     ctx: &Context,
-    workspace: &Workspace,
-    mode: &str,
-    narrowing: &PermissionsConfig,
+    repository: Option<crate::repository::Selector>,
+    given: &PermissionsConfig,
 ) -> Result<()> {
-    let settings = crate::client::workspaces::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
-    let mode = SpaceMode {
-        name: mode,
-        kind: SpaceKind::Workspace,
-        repository: true,
-    };
-    (narrowing.ensure_within_mode(&settings, mode))
-        .with_context(|| format!("the agent of {}", workspace.name))
-}
-
-/// Refuse `narrowing` where it is wider than the permissions of `chat`'s
-/// mode, which a restore or restart keeps.
-pub(in crate::cli::commands) async fn ensure_fits_chat(
-    ctx: &Context,
-    chat: &Chat,
-    narrowing: &PermissionsConfig,
-) -> Result<()> {
-    let repo = super::chats::saved_repository(ctx, chat).await?;
-    let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
-    let mode = SpaceMode {
-        name: &chat.mode,
-        kind: SpaceKind::Chat,
-        repository: chat.repository_id.is_some(),
-    };
-    (narrowing.ensure_within_mode(&settings, mode))
-        .with_context(|| format!("the agent of chat {}", chat.name))
-}
-
-/// The modes the agents and last sessions `saved` keeps started in; one
-/// consumed since it was listed has none.
-fn recorded_modes(saved: &Saved) -> Result<Vec<String>> {
-    let mut modes = Vec::new();
-    for (_, path) in &saved.agents {
-        modes.extend(Record::load(path)?.map(|record| record.mode));
+    if !crate::env::is_scoped() || given.is_empty() {
+        return Ok(());
     }
-    for (_, path) in &saved.sessions {
-        modes.extend(LastSession::load(path)?.map(|last| last.mode));
-    }
-    Ok(modes)
+    let held = crate::client::workspaces::held_permissions(&ctx.paths, repository).await?;
+    given.ensure_held(&held)
 }

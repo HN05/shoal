@@ -5,7 +5,7 @@ use crate::cli::{
     commands::{demo, queue, restart, resume, sessions},
     context::Context,
 };
-use crate::config::permissions::PermissionsConfig;
+use crate::config::permissions::PermissionChange;
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand) -> Result<i32> {
     match command {
@@ -23,7 +23,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             discard,
             now,
             focus,
-            narrowing,
+            permissions,
             queue_entry,
             opened_in,
             close_in,
@@ -41,7 +41,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                         discard,
                         now,
                         focus,
-                        narrowing: replacement(&narrowing),
+                        change: change(&permissions),
                     };
                     resume::select(&ctx, targets, options).await
                 }
@@ -54,13 +54,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             wait,
             sequential,
             in_place,
-            narrowing,
+            permissions,
         } => {
             let options = restart::Options {
                 wait,
                 sequential,
                 in_place,
-                narrowing: replacement(&narrowing),
+                change: change(&permissions),
             };
             restart::run(&ctx, targets, agent, options).await
         }
@@ -72,8 +72,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
     }
 }
 
-/// The narrowing the `--permission` assignments of a resume or restart
-/// give, which replaces the recorded one; none without any, which keeps it.
-fn replacement(narrowings: &[PermissionsConfig]) -> Option<PermissionsConfig> {
-    (!narrowings.is_empty()).then(|| PermissionsConfig::combined(narrowings))
+/// What the `--permission` assignments of a resume or restart change in the
+/// permissions the agents were given; none without any, which keeps them.
+fn change(changes: &[PermissionChange]) -> Option<PermissionChange> {
+    (!changes.is_empty()).then(|| PermissionChange::combined(changes))
 }

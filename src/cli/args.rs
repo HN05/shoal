@@ -98,12 +98,13 @@ pub(in crate::cli) fn item_reference(input: &str) -> Result<String, std::convert
     })
 }
 
-/// The narrowing one `--permission KEY=VALUE` gives, refusing an unknown
-/// key or value before anything is asked.
+/// The change one `--permission KEY=VALUE` makes, `KEY=mode` dropping the
+/// key's given value, refusing an unknown key or value before anything is
+/// asked.
 pub(in crate::cli) fn permission_assignment(
     text: &str,
-) -> Result<crate::config::permissions::PermissionsConfig, String> {
-    crate::config::permissions::PermissionsConfig::assigned(&[text.to_owned()])
+) -> Result<crate::config::permissions::PermissionChange, String> {
+    crate::config::permissions::PermissionChange::assigned(text)
         .map_err(|error| format!("{error:#}"))
 }
 

@@ -14,7 +14,7 @@ use crate::{
     agent::Agent,
     cli::{args::SpaceTargets, commands::resume, context::Context},
     client::{agents, executions::STAGGER},
-    config::permissions::PermissionsConfig,
+    config::permissions::PermissionChange,
     execution::recovery,
     model::{PresentSpace, RunningAgent, Workspace},
     protocol::{ErrorCode, RemoteError},
@@ -36,7 +36,7 @@ const PARALLEL_RESTARTS: usize = 16;
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How a run restarts the agents it selects.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct Options {
     /// Restart each agent only once its turn ends.
     pub wait: bool,
@@ -44,9 +44,8 @@ pub(super) struct Options {
     pub sequential: bool,
     /// Restart each agent in its wrapper rather than a new one.
     pub in_place: bool,
-    /// The narrowing each restarted agent runs under instead of the one it
-    /// recorded.
-    pub narrowing: Option<PermissionsConfig>,
+    /// What changes in the permissions each restarted agent was given.
+    pub change: Option<PermissionChange>,
 }
 
 pub(super) async fn run(
@@ -81,15 +80,15 @@ pub(super) async fn run(
         )?;
         return Ok(0);
     }
-    if let Some(narrowing) = &options.narrowing {
-        ensure_narrowing_fits(ctx, &plan.restarts, narrowing).await?;
+    if let Some(change) = &options.change {
+        ensure_change_fits(ctx, &plan.restarts, change).await?;
     }
     let mut progress = Progress::new(&plan.restarts, plan.skipped.len());
     for skipped in plan.skipped {
         progress.skip(ctx, skipped);
     }
     let interrupted = tokio::select! {
-        restarted = restart_all(ctx, &mut progress, plan.restarts, &plan.run, options) => {
+        restarted = restart_all(ctx, &mut progress, plan.restarts, &plan.run, &options) => {
             restarted?;
             false
         }
@@ -118,13 +117,13 @@ fn ensure_named(targets: &SpaceTargets) -> Result<()> {
     Ok(())
 }
 
-/// Refuse `narrowing` before any agent restarts where it is wider than the
-/// permissions of the mode of an agent `restarts` restarts, or where one
-/// joins a restart in progress, which keeps the narrowing it started with.
-async fn ensure_narrowing_fits(
+/// Refuse `change` before any agent restarts where this scoped process
+/// does not hold what it gives an agent `restarts` restarts, or where one
+/// joins a restart in progress, which keeps the permissions it started with.
+async fn ensure_change_fits(
     ctx: &Context,
     restarts: &[Restart],
-    narrowing: &PermissionsConfig,
+    change: &PermissionChange,
 ) -> Result<()> {
     for restart in restarts {
         ensure!(
@@ -132,15 +131,12 @@ async fn ensure_narrowing_fits(
             "{} restarts already; restart it with --permission once it runs",
             restart.space.name()
         );
-        match &restart.space {
-            PresentSpace::Workspace(workspace) => {
-                let mode = (workspace.mode.as_deref()).unwrap_or(crate::config::modes::DEFAULT);
-                resume::narrowing::ensure_fits_workspace(ctx, workspace, mode, narrowing).await?;
-            }
-            PresentSpace::Chat(chat) => {
-                resume::narrowing::ensure_fits_chat(ctx, chat, narrowing).await?;
-            }
-        }
+        let repository = match &restart.space {
+            PresentSpace::Workspace(workspace) => Some(workspace.repository_id.as_str()),
+            PresentSpace::Chat(chat) => chat.repository_id.as_deref(),
+        };
+        let repository = repository.map(Into::into);
+        resume::narrowing::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
 }
@@ -150,7 +146,7 @@ async fn restart_all(
     progress: &mut Progress,
     restarts: Vec<Restart>,
     run: &str,
-    options: Options,
+    options: &Options,
 ) -> Result<()> {
     if options.sequential {
         restart_in_turn(ctx, progress, restarts, run, options).await
@@ -162,7 +158,7 @@ async fn restart_all(
 impl Restart {
     /// Restart the agent as `options` say, or join its restart, as part of
     /// `run`, returning the place it runs in now.
-    async fn run(&self, ctx: &Context, run: &str, options: Options) -> Result<Option<Origin>> {
+    async fn run(&self, ctx: &Context, run: &str, options: &Options) -> Result<Option<Origin>> {
         let run = Some(run.to_owned());
         match &self.space {
             // The daemon names how to restore a chat whose restart failed.
@@ -172,7 +168,7 @@ impl Restart {
                     SpaceSelector::id(&chat.id),
                     self.joins.clone(),
                     run,
-                    options.narrowing,
+                    options.change.clone(),
                 )
                 .await
             }
@@ -189,13 +185,12 @@ impl Restart {
         ctx: &Context,
         workspace: &Workspace,
         run: Option<String>,
-        options: Options,
+        options: &Options,
     ) -> Result<Option<Origin>> {
         let execution = self.agent.execution.clone();
         let joins = self.joins.clone();
-        let (in_place, narrowing) = (options.in_place, options.narrowing);
-        let restarted =
-            agents::restart(&ctx.paths, execution, joins, run, in_place, narrowing).await;
+        let (in_place, change) = (options.in_place, options.change.clone());
+        let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place, change).await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself, as a
             // wrapper waiting for its restore does.
@@ -226,7 +221,7 @@ async fn restart_in_turn(
     progress: &mut Progress,
     mut restarts: Vec<Restart>,
     run: &str,
-    options: Options,
+    options: &Options,
 ) -> Result<()> {
     let mut previous: Option<Instant> = None;
     while !restarts.is_empty() {
@@ -257,7 +252,7 @@ async fn restart_together(
     progress: &mut Progress,
     mut waiting: Vec<Restart>,
     run: &str,
-    options: Options,
+    options: &Options,
 ) -> Result<()> {
     let wait = options.wait;
     let mut running = FuturesUnordered::new();

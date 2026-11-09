@@ -67,14 +67,14 @@ pub struct StartArgs {
     /// --chat or --in, else worker.
     #[arg(short = 'm', long)]
     pub mode: Option<String>,
-    /// Narrow a permission of the mode, as KEY=VALUE such as push=propose;
-    /// repeatable. A value wider than the mode's is refused, and one wider
-    /// than the parent space's gets no more than the parent's.
+    /// Set a permission of the agent, as KEY=VALUE such as push=propose or
+    /// merge=direct, whatever its mode or the space above allows;
+    /// repeatable. A space's agent gives only what it holds itself.
     #[arg(long = "permission", value_name = "KEY=VALUE", value_parser = permission_assignment)]
-    pub narrowing: Vec<crate::config::permissions::PermissionsConfig>,
-    /// The narrowing a restored or imported chat recorded, as JSON, which a
-    /// start in a background place keeps unchecked.
-    #[arg(long, hide = true, value_parser = recorded, conflicts_with = "narrowing")]
+    pub permissions: Vec<crate::config::permissions::PermissionChange>,
+    /// The permissions a restored or imported chat was given, as JSON,
+    /// which a start in a background place keeps unchecked.
+    #[arg(long, hide = true, value_parser = recorded, conflicts_with = "permissions")]
     pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
     /// Start in a chat, whatever the mode's kind.
     #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]

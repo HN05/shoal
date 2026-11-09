@@ -40,16 +40,17 @@ pub enum SessionsCommand {
         /// agent limits.
         #[arg(short = 'f', long, conflicts_with_all = ["discard", "all"])]
         focus: bool,
-        /// Replace the narrowing the restored agents and chats recorded, as
-        /// KEY=VALUE such as push=propose; repeatable. A value wider than
-        /// an agent's mode is refused before anything is restored.
+        /// Set a permission of the restored agents and chats, as KEY=VALUE
+        /// such as push=direct, whatever their mode allows; KEY=mode drops
+        /// the value given before, and keys left out keep theirs.
+        /// Repeatable. A space's agent gives only what it holds itself.
         #[arg(
             long = "permission",
             value_name = "KEY=VALUE",
             value_parser = permission_assignment,
             conflicts_with_all = ["discard", "all", "queue_entry"]
         )]
-        narrowing: Vec<crate::config::permissions::PermissionsConfig>,
+        permissions: Vec<crate::config::permissions::PermissionChange>,
         /// The queue entry whose slot the restored agent takes, for the
         /// daemon's start of a queued restore.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]
@@ -83,16 +84,17 @@ pub enum SessionsCommand {
         /// Restart each agent in the terminal it runs in.
         #[arg(long)]
         in_place: bool,
-        /// Replace the narrowing the restarted agents recorded, as KEY=VALUE
-        /// such as push=propose; repeatable. A value wider than an agent's
-        /// mode is refused before any agent restarts.
+        /// Set a permission of the restarted agents, as KEY=VALUE such as
+        /// push=direct, whatever their mode allows; KEY=mode drops the value
+        /// given before, and keys left out keep theirs. Repeatable. A
+        /// space's agent gives only what it holds itself.
         #[arg(
             long = "permission",
             value_name = "KEY=VALUE",
             value_parser = permission_assignment,
             conflicts_with = "in_place"
         )]
-        narrowing: Vec<crate::config::permissions::PermissionsConfig>,
+        permissions: Vec<crate::config::permissions::PermissionChange>,
     },
     /// List the agent queue, or start, move or cancel an entry.
     ///

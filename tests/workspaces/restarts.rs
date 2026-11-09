@@ -128,22 +128,29 @@ fn restart_restores_a_chat_in_a_new_place() {
     wait_zmx_sessions_ended(&home);
 }
 
-/// `shoal restart --permission` starts the agent's new wrapper under the
-/// narrowing it gives in place of the recorded one, which a later restart
-/// without it keeps; a value wider than the agent's mode is refused before
-/// the agent stops.
+/// `shoal restart --permission` starts the agent's new wrapper with the
+/// permissions it gives, even wider than its mode's, and the keys it leaves
+/// out keep the values given before, as a later restart without it keeps
+/// them all; an unknown key is refused before the agent stops.
 #[test]
-fn restart_replaces_the_narrowing_of_a_workspaces_agent() {
+fn restart_gives_a_workspaces_agent_permissions() {
     let fixture = parent_fixture();
     let workspace = fixture.add("narrowed");
     let running = Running::start(&fixture, "narrowed", &workspace);
     let first = wait_registered_execution(&fixture, "narrowed")["id"].clone();
-    let output = fixture.run(&["restart", "narrowed", "--permission", "merge=direct"]);
+    let output = fixture.run(&["restart", "narrowed", "--permission", "pushes=propose"]);
     assert!(!output.status.success(), "{output:?}");
     assert!(!running.path.join("restored").exists());
     assert_eq!(wait_registered_execution(&fixture, "narrowed")["id"], first);
 
-    for args in [&["--permission", "push=propose"][..], &[]] {
+    let propose = serde_json::json!({"push": "propose"});
+    let wider = serde_json::json!({"push": "propose", "merge": "direct"});
+    let steps = [
+        (&["--permission", "push=propose"][..], &propose),
+        (&["--permission", "merge=direct"][..], &wider),
+        (&[][..], &wider),
+    ];
+    for (args, given) in steps {
         let _ = fs::remove_file(running.path.join("restored"));
         fixture.ok(&[&["restart", "narrowed"][..], args].concat());
         wait_until("agent to restore", || {
@@ -151,20 +158,25 @@ fn restart_replaces_the_narrowing_of_a_workspaces_agent() {
         });
         let status = fixture.ok(&["work", "status", "narrowed"]);
         assert_eq!(
-            status["workspace"]["narrowing"],
-            serde_json::json!({"push": "propose"}),
+            &status["workspace"]["narrowing"], given,
             "{args:?}: {status}"
         );
     }
+    let status = fixture.ok(&["work", "status", "narrowed"]);
+    assert_eq!(
+        status["permissions"]["merge"]["value"], "direct",
+        "{status}"
+    );
     drop(running);
     wait_zmx_sessions_ended(fixture.root.path());
 }
 
-/// `shoal restart --permission` restores a chat under the narrowing it
-/// gives in place of the recorded one, which a later restart without it
-/// keeps; a value wider than the chat's mode is refused before it stops.
+/// `shoal restart --permission` restores a chat with the permissions it
+/// gives, even wider than its mode's, keeping the keys it leaves out, as a
+/// later restart without it keeps them all; an unknown key is refused
+/// before the chat stops.
 #[test]
-fn restart_replaces_the_narrowing_of_a_chats_agent() {
+fn restart_gives_a_chats_agent_permissions() {
     let fixture = parent_fixture();
     let home = fixture.root.path().to_owned();
     let restored = home.join("chat-restored");
@@ -179,7 +191,7 @@ fn restart_replaces_the_narrowing_of_a_chats_agent() {
             )
         });
         wait_until("chat started", || home.join("chat-started").exists());
-        let output = fixture.run(&["restart", "talk", "--permission", "api_writes=direct"]);
+        let output = fixture.run(&["restart", "talk", "--permission", "pushes=propose"]);
         assert!(!output.status.success(), "{output:?}");
         assert_eq!(fixture.ok(&["work", "--chats"])[0]["restore"], Value::Null);
         fixture.ok(&["restart", "talk", "--permission", "push=propose"]);
@@ -189,10 +201,15 @@ fn restart_replaces_the_narrowing_of_a_chats_agent() {
     wait_until("chat restored", || restored.exists());
     assert_eq!(narrowing(), serde_json::json!({"push": "propose"}));
 
+    let wider = serde_json::json!({"push": "propose", "api_writes": "direct"});
+    fs::remove_file(&restored).unwrap();
+    fixture.ok(&["restart", "talk", "--permission", "api_writes=direct"]);
+    wait_until("chat restored again", || restored.exists());
+    assert_eq!(narrowing(), wider);
     fs::remove_file(&restored).unwrap();
     fixture.ok(&["restart", "talk"]);
-    wait_until("chat restored again", || restored.exists());
-    assert_eq!(narrowing(), serde_json::json!({"push": "propose"}));
+    wait_until("chat restored a third time", || restored.exists());
+    assert_eq!(narrowing(), wider);
     fixture.ok(&["rm", "talk", "--yes"]);
     wait_zmx_sessions_ended(&home);
 }

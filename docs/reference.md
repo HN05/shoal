@@ -431,15 +431,16 @@ even with `--wait`, and skips the agents that run restarted already. A
 restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal resume`. `--permission KEY=VALUE`,
-repeatable, restarts each agent under that narrowing of its mode's
-[permissions](#mode-permissions) in place of the one it recorded. A value
-wider than an agent's mode is refused before any agent stops, and so is
+repeatable, restarts each agent with that [permission](#mode-permissions)
+given, as [`shoal start`](#mode-permissions) gives it, `KEY=mode` dropping
+one given before, while the keys it leaves out keep theirs. A value the
+caller does not hold is refused before any agent stops, and so is
 `--permission` with `--in-place`, whose wrapper keeps the push rules it
 launched with, or for an agent another run is restarting. An agent protection stopped waits
 for its restore and is left out; a named space whose only agent waits is
 reported with why it stopped and that `shoal queue start` restores it now. An agent or chat that does not start
 again, as when no terminal host can open its new place, stays stopped for
-`shoal resume`, under the narrowing `--permission` gave it, and the exit
+`shoal resume`, with the permissions `--permission` gave it, and the exit
 status is 1. One whose stopped
 processes do not exit is reported as pending with their PIDs and the command that
 ends them, which also sets the exit status to 1, and restarts once they exit
@@ -492,11 +493,12 @@ regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 `--permission KEY=VALUE`, repeatable, restores each selected agent and chat
-under that narrowing of its mode's [permissions](#mode-permissions) in place of
-the one it recorded, which its records keep from then on, and needs the spaces
-named or picked. A value wider than an agent's or chat's mode is refused before
-anything is restored, and so is an agent its waiting wrapper restores or one
-whose interrupted turn continues, since both keep the launch they run under.
+with that [permission](#mode-permissions) given, `KEY=mode` dropping one
+given before, while the keys it leaves out keep theirs; its records keep them
+from then on. It needs the spaces named or picked. A value the caller does not
+hold is refused before anything is restored, and so is an agent its waiting
+wrapper restores or one whose interrupted turn continues, since both keep the
+launch they run under.
 A stopped [chat](#chats) restores at once under its name, continuing
 its session, in a background place where a restored agent opens, once the
 chat is about to run its agent there or with the error that stopped it, or in
@@ -2280,8 +2282,8 @@ otherwise; `worker` always starts in a workspace, and config that gives it
 another kind is refused. Without `--mode`, a terminal offers the modes in a
 picker with the kind of space each starts in, and without one the start takes
 `worker`, or `chat` with `--chat` or `--in`, which the picker lists first.
-`--permission KEY=VALUE`, repeatable, narrows the mode's
-[permissions](#mode-permissions) for that agent. The picker opens once the start has checked the arguments it was given, and offers
+`--permission KEY=VALUE`, repeatable, gives that agent a
+[permission](#mode-permissions) whatever its mode allows. The picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,
 `--base` or another flag only a workspace takes, a chat for `--name`, and only
 modes in a repository when they name a repository or issue or ask for a kind
@@ -2365,10 +2367,12 @@ push = "propose"
 ```
 
 Each space has its own permissions. A top-level space has those of its
-agent's mode, narrowed by the `--permission` its agent started with; a space
-below another has, for each key, the narrowest of those and its parent's
-effective value, so a child never has more than its parent. A space whose agent has not started, such as one `shoal split`
-created, has `[permissions]` and the keys' defaults, narrowed the same way.
+agent's mode; a space below another has, for each key, the narrower of its
+mode's and its parent's effective value, so a child gets no more than its
+parent on its own. A key the `--permission` given to its agent sets takes that
+value instead, narrower or wider. A space whose agent has not started, such as
+one `shoal split` created, has `[permissions]` and the keys' defaults, capped
+by its parent the same way.
 A chat without a repository resolves its mode's keys in the config of the
 repository the action is in, and in the global config otherwise. Shoal
 computes the permissions at each check from the current config, the recorded
@@ -2380,22 +2384,26 @@ acts under its own. `shoal work status` lists a space's permissions, each with
 `mode`, `narrowing` or `parent` for where it comes from; `--json` gives them
 as `permissions`, each key with its `value` and `from`.
 
-`shoal start --permission KEY=VALUE`, repeatable, narrows the new agent's
-permissions below its mode's, such as a parent giving a child less than it
-has itself:
+`shoal start --permission KEY=VALUE`, repeatable, gives the new agent a
+permission whatever its mode or the space above it allows, such as a parent
+giving a child less than it has itself, or the user giving a worker more than
+its mode:
 
 ```sh
 shoal start my-project fix-login --permission push=propose --permission merge=propose
+shoal start my-project release --permission merge=direct
 ```
 
-A value wider than the mode's is refused before anything is created; one
-wider than the parent space's effective value is recorded as given, and each
-check caps it at the parent's, as it does every key. Shoal records the
-narrowing with the agent's mode, on its execution, queue entry, workspace or
-chat, and a restore or restart keeps it unless its `--permission` replaces it,
-up to the mode's, as for a new agent; nothing changes it while the agent
-runs. `shoal work status --json` gives the recorded narrowing as `narrowing`,
-beside the effective `permissions`.
+Whoever gives a value must hold it: the user, from a terminal without a
+scope, holds every permission, while a space's agent gives only up to its own
+space's effective value for each key, and a value above that is refused
+before anything is created. Shoal records the given permissions with the
+agent's mode, on its execution, queue entry, workspace or chat, and a restore
+or restart keeps them; `shoal resume` and `shoal restart` take `--permission`
+too, which sets the keys it names, `KEY=mode` dropping one, and keeps the
+rest. Nothing changes them while the agent runs. `shoal work status --json`
+gives the recorded ones as `narrowing`, beside the effective `permissions`,
+where a given key's `from` is `narrowing`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,

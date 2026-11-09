@@ -70,7 +70,7 @@ pub(in crate::cli) struct Launch {
     pub model: ModelChoice,
     /// The mode it starts in.
     pub mode: String,
-    /// The `--permission` narrowing of the mode's permissions.
+    /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
@@ -124,7 +124,7 @@ pub(in crate::cli) struct ChatLaunch {
     pub name: crate::client::space_names::SpaceName,
     /// The mode its agent starts in.
     pub mode: String,
-    /// The `--permission` narrowing of the mode's permissions.
+    /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below.
     pub parent: Option<SpaceSelector>,
@@ -228,7 +228,7 @@ pub(in crate::cli) struct LaunchOptions {
     pub fork: Option<String>,
     /// The model and effort the launch asks for.
     pub model: ModelRequest,
-    /// The `--permission` narrowing of the mode's permissions.
+    /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 

@@ -236,10 +236,12 @@ instead of the PR delivery guidance below.
   The `issue_other_repositories` permission governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. These permissions
   are the acting caller's space's, from its agent's mode (`[modes.NAME.permissions]` over
-  `[permissions]`), narrowed by the `--permission` its agent started with or a resume or
-  restart replaced that with, never wider than its parent's, computed at each check through one daemon
-  operation; flag a check that reads a repository's `[permissions]` directly. This is cooperative,
-  not a security boundary, so judge it as such.
+  `[permissions]`), never wider than its parent's, with each key the `--permission` given to its
+  agent at start, resume or restart sets taking that value as given, computed at each check
+  through one daemon operation; flag a check that reads a repository's `[permissions]` directly.
+  A scoped process gives only values its own space holds, which the daemon checks wherever such
+  a process brings a value in; flag a path that records one unchecked. This is cooperative, not a
+  security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace
   lookups use current ownership, falling back to last ownership only when unclaimed;

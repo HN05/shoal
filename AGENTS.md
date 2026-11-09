@@ -246,12 +246,14 @@ for delivering a PR, under Committing near the end, decide when work is done.
   does the same for a scoped issue in another repository, which is never linked.
 - Permissions belong to spaces. A space's are its agent's mode's
   (`[modes.NAME.permissions]` over `[permissions]` over the built-in mode's
-  defaults over the key's), narrowed by the `--permission` its agent started
-  with, which is recorded beside each `mode` column and kept by restores and
-  restarts unless their own `--permission` replaces it, and each narrowed to
-  its parent's effective value; one daemon
+  defaults over the key's), each narrowed to its parent's effective value,
+  then each key the `--permission` given to its agent sets takes that value as
+  given; it is recorded beside each `mode` column, kept by restores and
+  restarts, and changed per key by their own `--permission`. A scoped process
+  gives only values its own space holds, which the daemon checks wherever such
+  a process brings one in. One daemon
   operation computes them at each check from current config, the recorded
-  modes and narrowings and the tree; a scoped check reads the acting caller's space's
+  modes and given values and the tree; a scoped check reads the acting caller's space's
   through it, never a repository's settings, and a chat without a repository
   resolves its mode in the config of the repository the action is in.
 - Lifecycle states, resource scopes, approval targets and approval

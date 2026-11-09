@@ -53,7 +53,7 @@ pub(in crate::cli::commands) struct AddOptions {
     pub model: crate::agent::ModelChoice,
     /// The mode the agent starts in; the default mode when `None`.
     pub mode: Option<ModeChoice>,
-    /// The `--permission` narrowing of the mode's permissions.
+    /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The agent's subject when no issue gives it one.
     pub prompt: Option<String>,
@@ -79,40 +79,6 @@ impl AddOptions {
     }
 }
 
-/// Refuse `narrowing` where it is wider than the permissions of the
-/// workspace mode `choice` names, the default mode without one, in the
-/// repository's `settings`; a mode still to be picked is checked once it
-/// is.
-async fn ensure_narrowing_fits(
-    settings: &AddSettings<'_>,
-    narrowing: &crate::config::permissions::PermissionsConfig,
-    choice: Option<&ModeChoice>,
-) -> Result<()> {
-    let name = match choice {
-        _ if narrowing.is_empty() => return Ok(()),
-        Some(ModeChoice::Pick { .. }) => return Ok(()),
-        Some(ModeChoice::Named(mode)) => mode.as_str(),
-        None => crate::config::modes::DEFAULT,
-    };
-    let mode = crate::config::permissions::SpaceMode {
-        name,
-        kind: crate::model::SpaceKind::Workspace,
-        repository: true,
-    };
-    narrowing.ensure_within_mode(settings.get().await?, mode)
-}
-
-/// [`ensure_narrowing_fits`] for the chosen `mode`, the default mode
-/// without one, once a picked mode is known.
-async fn ensure_narrowing_fits_chosen(
-    settings: &AddSettings<'_>,
-    narrowing: &crate::config::permissions::PermissionsConfig,
-    mode: Option<&str>,
-) -> Result<()> {
-    let chosen = mode.map(|mode| ModeChoice::Named(mode.to_owned()));
-    ensure_narrowing_fits(settings, narrowing, chosen.as_ref()).await
-}
-
 pub(in crate::cli::commands) async fn add(
     ctx: &Context,
     repository: Option<crate::repository::Selector>,
@@ -133,7 +99,9 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
-    ensure_narrowing_fits(&settings, &options.narrowing, options.mode.as_ref()).await?;
+    let repository = Some(target.selector.clone());
+    crate::cli::commands::resume::narrowing::ensure_held(ctx, repository, &options.narrowing)
+        .await?;
     let agent = choose_add_agent(&settings, agent).await?;
     check_chosen_model(&settings, &agent, &options.model).await?;
     let picked = match issue {
@@ -147,7 +115,6 @@ pub(in crate::cli::commands) async fn add(
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
-    ensure_narrowing_fits_chosen(&settings, &options.narrowing, mode.as_deref()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     start_as(&mut plan, &options, mode);
