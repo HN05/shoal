@@ -21,8 +21,8 @@ pub struct QueueEntry {
     /// its agent's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
-    /// The `--permission` narrowing a launch's agent started with, which narrows the
-    /// permissions of its mode.
+    /// The permissions `--permission` gave a launch's agent, which apply as
+    /// given whatever its mode's.
     #[serde(
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
@@ -127,8 +127,8 @@ pub struct QueueRequest {
     /// The mode the agent starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
-    /// The `--permission` narrowing the agent started with, which narrows the
-    /// permissions of its mode.
+    /// The permissions `--permission` gave the agent, which apply as
+    /// given whatever its mode's.
     #[serde(
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"

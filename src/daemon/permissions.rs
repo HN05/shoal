@@ -1,7 +1,8 @@
 //! A space's effective permissions: those of its agent's mode, narrowed by
-//! the `--permission` its agent started with and by the effective
-//! permissions of the space above it, up to a top-level space. They are computed at each check from current config, the
-//! recorded modes and the tree, so a config change reaches running agents.
+//! the effective permissions of the space above it, up to a top-level
+//! space, with each key the `--permission` given to its agent sets as given.
+//! They are computed at each check from current config, the recorded modes
+//! and the tree, so a config change reaches running agents.
 use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result};
 
@@ -54,6 +55,23 @@ impl Manager {
         (self.permissions_below_parent(&self.config(), &space, agent, repository)).await
     }
 
+    /// Refuse the permissions `given` sets where `caller` does not hold them
+    /// for an action in the registered repository `repository`: a scoped
+    /// process gives only what its own space holds, the user any.
+    pub(crate) async fn ensure_caller_holds(
+        &self,
+        caller: Option<&SpaceId>,
+        given: &PermissionsConfig,
+        repository: Option<&RepositoryId>,
+    ) -> Result<()> {
+        match caller {
+            Some(caller) if !given.is_empty() => {
+                given.ensure_held(&self.space_permissions(caller, repository).await?)
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// The effective permissions an agent starting in `mode` in `workspace`
     /// with `narrowing` has, which its launch follows before the mode is
     /// recorded.
@@ -75,8 +93,9 @@ impl Manager {
         (self.permissions_below_parent(&config, &space, agent, Some(&repository))).await
     }
 
-    /// The permissions of `space`'s `agent`, its mode and narrowing, none
-    /// wider than the effective ones of the space above it.
+    /// The permissions of `space`'s `agent`: those of its mode, none wider
+    /// than the effective ones of the space above it, with what its
+    /// `--permission` gives.
     async fn permissions_below_parent(
         &self,
         config: &Config,
@@ -84,18 +103,8 @@ impl Manager {
         agent: Option<RecordedAgent<'_>>,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        let own = self
-            .agent_permissions(config, space, agent, repository)
-            .await?;
-        Ok(
-            match self
-                .parent_permissions(config, space.id(), repository)
-                .await?
-            {
-                Some(parent) => own.below(&parent),
-                None => own,
-            },
-        )
+        let parent = (self.parent_permissions(config, space.id(), repository)).await?;
+        (self.agent_permissions(config, space, agent, parent, repository)).await
     }
 
     /// The effective permissions of the space above `id`, each space's
@@ -111,29 +120,32 @@ impl Manager {
         for above in self.ancestors(id).await?.into_iter().rev() {
             let space = self.space_by_id(&above.id).await?;
             let agent = recorded_agent(&space);
-            let own = (self.agent_permissions(config, &space, agent, repository)).await?;
-            effective = Some(match effective {
-                Some(parent) => own.below(&parent),
-                None => own,
-            });
+            effective =
+                Some((self.agent_permissions(config, &space, agent, effective, repository)).await?);
         }
         Ok(effective)
     }
 
-    /// The permissions of `space`'s `agent`, those of its mode narrowed by
-    /// its narrowing, before the spaces above it narrow them.
+    /// The permissions of `space`'s `agent`: those of its mode, none wider
+    /// than `parent`'s, the effective ones of the space above it, with each
+    /// key its `--permission` gives as given.
     async fn agent_permissions(
         &self,
         config: &Config,
         space: &PresentSpace,
         agent: Option<RecordedAgent<'_>>,
+        parent: Option<Permissions>,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         let settings = self.mode_settings(config, space, repository).await?;
-        let (mode, narrowing) = agent.unzip();
+        let (mode, given) = agent.unzip();
         let permissions = permissions::resolve(&settings, mode)
             .with_context(|| format!("the permissions of {}", space.name()))?;
-        Ok(permissions.narrowed(&narrowing.unwrap_or_default()))
+        let permissions = match parent {
+            Some(parent) => permissions.below(&parent),
+            None => permissions,
+        };
+        Ok(permissions.given(&given.unwrap_or_default()))
     }
 
     /// The settings `space`'s mode resolves in: a workspace's own, a chat's

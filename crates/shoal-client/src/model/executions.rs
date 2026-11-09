@@ -27,8 +27,8 @@ pub struct Execution {
     /// The mode its agent started in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
-    /// The `--permission` narrowing its agent started with, which narrows the
-    /// permissions of its mode.
+    /// The permissions `--permission` gave its agent, which apply as
+    /// given whatever its mode's.
     #[serde(
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"

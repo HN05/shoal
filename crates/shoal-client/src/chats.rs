@@ -23,7 +23,7 @@ pub struct NewChat<'a> {
     pub name: &'a SpaceName,
     pub agent: &'a str,
     pub mode: &'a str,
-    /// The `--permission` narrowing of the mode's permissions.
+    /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below; a scoped caller's daemon puts it below the
     /// caller's own space without one.

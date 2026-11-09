@@ -129,15 +129,56 @@ fn a_narrowing_takes_known_keys_and_values_and_round_trips() {
 }
 
 #[test]
-fn a_narrowing_never_widens_the_mode() {
+fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
     let settings = settings("", "");
     let worker = resolve(&settings, mode("worker")).unwrap();
+    let chat = resolve(&settings, mode("chat")).unwrap();
     let wider = PermissionsConfig::assigned(&["merge=direct".to_owned()]).unwrap();
-    assert!(wider.ensure_within(&worker).is_err());
+    // A wider value than the mode's applies, even below a narrower parent.
+    let given = worker.below(&worker).given(&wider);
+    assert_eq!(given.merge.value, Opening::Direct);
+    assert_eq!(given.merge.from, PermissionSource::Narrowing);
+    assert_eq!(given.push, worker.push);
     let narrower = PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap();
-    assert!(narrower.ensure_within(&worker).is_ok());
-    let narrowed = worker.narrowed(&narrower);
-    assert_eq!(narrowed.push.value, Pushes::Propose);
-    assert_eq!(narrowed.push.from, PermissionSource::Narrowing);
-    assert_eq!(narrowed.merge, worker.merge);
+    assert_eq!(chat.given(&narrower).push.value, Pushes::Propose);
+    // Only one that holds a value gives it.
+    assert!(wider.ensure_held(&worker).is_err());
+    assert!(wider.ensure_held(&chat).is_ok());
+    assert!(narrower.ensure_held(&worker).is_ok());
+}
+
+#[test]
+fn a_permission_change_keeps_the_keys_it_does_not_name() {
+    let given =
+        PermissionsConfig::assigned(&["push=propose".to_owned(), "merge=propose".to_owned()])
+            .unwrap();
+    let change = |assignments: &[&str]| {
+        let changes: Vec<_> = (assignments.iter())
+            .map(|assignment| PermissionChange::assigned(assignment).unwrap())
+            .collect();
+        PermissionChange::combined(&changes)
+    };
+    let widened = change(&["push=direct"]).applied_to(given);
+    assert_eq!(
+        (widened.push, widened.merge),
+        (Some(Pushes::Direct), Some(Opening::Propose))
+    );
+    let dropped = change(&["merge=mode"]).applied_to(given);
+    assert_eq!((dropped.push, dropped.merge), (Some(Pushes::Propose), None));
+    // A later assignment of a key replaces an earlier one, either way.
+    assert_eq!(
+        change(&["merge=mode", "merge=direct"])
+            .applied_to(given)
+            .merge,
+        Some(Opening::Direct)
+    );
+    assert_eq!(
+        change(&["merge=direct", "merge=mode"])
+            .applied_to(given)
+            .merge,
+        None
+    );
+    for refused in ["pushes=mode", "push=never"] {
+        assert!(PermissionChange::assigned(refused).is_err());
+    }
 }

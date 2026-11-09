@@ -143,9 +143,9 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
     assert_eq!(recorded.push.value, Pushes::Direct);
 }
 
-/// Record `assignments` as the narrowing the agent of the space `id`, in
-/// `table`, started with.
-async fn narrow(manager: &Manager, table: &str, id: &SpaceId, assignments: &[&str]) {
+/// Record `assignments` as the `--permission` given to the agent of the
+/// space `id`, in `table`.
+async fn give(manager: &Manager, table: &str, id: &SpaceId, assignments: &[&str]) {
     let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
     let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
     let json = serde_json::to_string(&narrowing).unwrap();
@@ -161,14 +161,16 @@ async fn narrow(manager: &Manager, table: &str, id: &SpaceId, assignments: &[&st
 }
 
 #[tokio::test]
-async fn a_narrowing_narrows_its_space_and_the_spaces_below() {
+async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
     let (temp, manager) = manager().await;
     let repo = register(&temp, &manager, "repo").await;
     let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker")).await;
     let split = workspace(&manager, &repo, "split", &worker.id, None).await;
-    narrow(&manager, "chats", &top.id, &["merge=propose"]).await;
-    narrow(&manager, "workspaces", &worker.id, &["push=propose"]).await;
+    give(&manager, "chats", &top.id, &["merge=propose"]).await;
+    // Wider than the worker mode's merge and the chat's above it.
+    let assignments = ["push=propose", "merge=direct"];
+    give(&manager, "workspaces", &worker.id, &assignments).await;
     let of = |id: SpaceId| {
         let manager = manager.clone();
         let repository = repo.id.clone();
@@ -183,6 +185,8 @@ async fn a_narrowing_narrows_its_space_and_the_spaces_below() {
     let below = of(worker.id.clone()).await;
     assert_eq!(below.push.value, Pushes::Propose);
     assert_eq!(below.push.from, PermissionSource::Narrowing);
+    assert_eq!(below.merge.value, Opening::Direct);
+    assert_eq!(below.merge.from, PermissionSource::Narrowing);
     let split = of(split.id.clone()).await;
     assert_eq!(split.push.value, Pushes::Propose);
     assert_eq!(split.push.from, PermissionSource::Parent);

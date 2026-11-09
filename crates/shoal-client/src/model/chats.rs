@@ -30,8 +30,8 @@ pub struct Chat {
     /// The mode its agent started in, which its restores keep.
     #[serde(default = "chat_mode")]
     pub mode: String,
-    /// The `--permission` narrowing its agent started with, which narrows the
-    /// permissions of its mode.
+    /// The permissions `--permission` gave its agent, which apply as
+    /// given whatever its mode's.
     #[serde(
         default,
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"

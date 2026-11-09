@@ -42,7 +42,7 @@ pub struct TrackedAgent {
     pub name: String,
     pub model: crate::agent::ModelChoice,
     pub mode: String,
-    /// The `--permission` narrowing of its mode's permissions.
+    /// The permissions `--permission` gives its agent, whatever its mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
 }
 

@@ -1,7 +1,8 @@
 //! `[permissions]` and `[modes.NAME.permissions]`: what a scoped agent may do
 //! at once, after approval, or not at all. Each value is ordered from the
 //! narrowest to the widest, `deny` < `propose` < `direct`, so a space below
-//! another never gets more than its parent.
+//! another never gets more than its parent, unless a `--permission` given to
+//! its agent sets the key, which applies as given.
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
@@ -114,25 +115,6 @@ impl PermissionsConfig {
         Ok(narrowing)
     }
 
-    /// One narrowing of `narrowings`, each a `--permission` assignment, a
-    /// later one of a key replacing an earlier one.
-    pub fn combined(narrowings: &[Self]) -> Self {
-        let mut combined = Self::default();
-        for narrowing in narrowings {
-            combined.merge(*narrowing, Merge::SameLevel);
-        }
-        combined
-    }
-
-    /// Refuse a key this narrowing sets wider than the permissions of
-    /// `mode` in `settings`, which a narrowing never widens.
-    pub fn ensure_within_mode(&self, settings: &Settings, mode: SpaceMode) -> Result<()> {
-        match self.is_empty() {
-            true => Ok(()),
-            false => self.ensure_within(&resolve(settings, Some(mode))?),
-        }
-    }
-
     /// Whether the narrowing sets no key.
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
@@ -159,34 +141,118 @@ impl PermissionsConfig {
             .collect()
     }
 
-    /// Refuse a key this narrowing sets wider than `mode`, the permissions
-    /// of the agent's mode, which a narrowing never widens.
-    pub fn ensure_within(&self, mode: &Permissions) -> Result<()> {
+    /// Refuse a key these permissions set wider than the giver's own
+    /// permission for it, `held`, since a scoped caller gives only what it
+    /// holds itself.
+    pub fn ensure_held(&self, held: &Permissions) -> Result<()> {
         fn within<T: Ord + Copy + std::fmt::Display>(
             key: PermissionKey,
             value: Option<T>,
-            mode: Permission<T>,
+            held: Permission<T>,
         ) -> Result<()> {
             match value {
-                Some(value) if value > mode.value => bail!(
-                    "--permission {key}={value} is wider than \"{}\", the {key} permission of the agent's mode",
-                    mode.value
+                Some(value) if value > held.value => bail!(
+                    "--permission {key}={value} is wider than {}; a space gives only what it holds",
+                    held.cited(key.as_str())
                 ),
                 _ => Ok(()),
             }
         }
-        within(PermissionKey::IssueOpen, self.issue_open, mode.issue_open)?;
-        within(PermissionKey::PrOpen, self.pr_open, mode.pr_open)?;
+        within(PermissionKey::IssueOpen, self.issue_open, held.issue_open)?;
+        within(PermissionKey::PrOpen, self.pr_open, held.pr_open)?;
         within(
             PermissionKey::IssueOtherRepositories,
             self.issue_other_repositories,
-            mode.issue_other_repositories,
+            held.issue_other_repositories,
         )?;
-        within(PermissionKey::Merge, self.merge, mode.merge)?;
-        within(PermissionKey::Push, self.push, mode.push)?;
-        within(PermissionKey::ApiWrites, self.api_writes, mode.api_writes)
+        within(PermissionKey::Merge, self.merge, held.merge)?;
+        within(PermissionKey::Push, self.push, held.push)?;
+        within(PermissionKey::ApiWrites, self.api_writes, held.api_writes)
+    }
+
+    /// The keys these permissions set to another value than `recorded`
+    /// sets, which a restore brings in rather than keeps.
+    pub fn beyond(&self, recorded: &Self) -> Self {
+        (PermissionKey::ALL.iter())
+            .filter(|&&key| self.get(key) == recorded.get(key))
+            .fold(*self, |beyond, &key| beyond.without(key))
+    }
+
+    /// These permissions without the value they set for `key`.
+    fn without(mut self, key: PermissionKey) -> Self {
+        match key {
+            PermissionKey::IssueOpen => self.issue_open = None,
+            PermissionKey::PrOpen => self.pr_open = None,
+            PermissionKey::IssueOtherRepositories => self.issue_other_repositories = None,
+            PermissionKey::Merge => self.merge = None,
+            PermissionKey::Push => self.push = None,
+            PermissionKey::ApiWrites => self.api_writes = None,
+        }
+        self
     }
 }
+
+/// What `--permission` assignments change in the permissions an agent was
+/// given: each key `set` names takes its value, each `KEY=mode` in `dropped`
+/// loses the one it was given, and the rest keep theirs.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermissionChange {
+    #[serde(default, skip_serializing_if = "PermissionsConfig::is_empty")]
+    pub set: PermissionsConfig,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dropped: Vec<PermissionKey>,
+}
+
+impl PermissionChange {
+    /// The change `--permission KEY=VALUE` makes, where `mode` as the value
+    /// drops the key's given value; refusing an unknown key or value.
+    pub fn assigned(assignment: &str) -> Result<Self> {
+        match assignment.split_once('=') {
+            Some((key, value)) if value.trim() == MODE_VALUE => {
+                let key = (PermissionKey::ALL.iter())
+                    .find(|known| known.as_str() == key.trim())
+                    .with_context(|| format!("--permission {assignment}: unknown key"))?;
+                Ok(Self {
+                    set: PermissionsConfig::default(),
+                    dropped: vec![*key],
+                })
+            }
+            _ => Ok(Self {
+                set: PermissionsConfig::assigned(&[assignment.to_owned()])?,
+                dropped: Vec::new(),
+            }),
+        }
+    }
+
+    /// One change of `changes`, a later one of a key replacing an earlier
+    /// one.
+    pub fn combined(changes: &[Self]) -> Self {
+        let mut combined = Self::default();
+        for change in changes {
+            for &key in &change.dropped {
+                combined.set = combined.set.without(key);
+                if !combined.dropped.contains(&key) {
+                    combined.dropped.push(key);
+                }
+            }
+            combined
+                .dropped
+                .retain(|&key| change.set.get(key).is_none());
+            combined.set.merge(change.set, Merge::SameLevel);
+        }
+        combined
+    }
+
+    /// The permissions `given`, an agent was given, after this change.
+    pub fn applied_to(&self, given: PermissionsConfig) -> PermissionsConfig {
+        let mut applied = (self.dropped.iter()).fold(given, |given, &key| given.without(key));
+        applied.merge(self.set, Merge::SameLevel);
+        applied
+    }
+}
+
+/// The value `--permission KEY=mode` gives to drop a key's given value.
+pub const MODE_VALUE: &str = "mode";
 
 states!(
     /// A permission, by the key config names it with.
@@ -205,8 +271,8 @@ states!(
     PermissionSource {
         /// Its agent's mode, with `[permissions]` and the key's default.
         Mode => "mode",
-        /// The `--permission` its agent was started, resumed or restarted
-        /// with.
+        /// The `--permission` given to its agent when it started, resumed or
+        /// restarted.
         Narrowing => "narrowing",
         /// The space above it, whose permission is narrower.
         Parent => "parent",
@@ -228,15 +294,15 @@ impl<T: Ord + Copy> Permission<T> {
         }
     }
 
-    /// This permission narrowed to `value`, where a narrowing sets one
-    /// narrower.
-    fn narrowed(self, value: Option<T>) -> Self {
+    /// This permission set to `value`, where a `--permission` given to the
+    /// agent sets one, whatever its mode and the space above allow.
+    fn given(self, value: Option<T>) -> Self {
         match value {
-            Some(value) if value < self.value => Self {
+            Some(value) => Self {
                 value,
                 from: PermissionSource::Narrowing,
             },
-            _ => self,
+            None => self,
         }
     }
 
@@ -264,7 +330,7 @@ impl<T: std::fmt::Display> Permission<T> {
 fn cite(key: &str, value: &dyn std::fmt::Display, from: PermissionSource) -> String {
     let from = match from {
         PermissionSource::Mode => "its agent's mode",
-        PermissionSource::Narrowing => "the --permission its agent started with",
+        PermissionSource::Narrowing => "the --permission given to its agent",
         PermissionSource::Parent => "the space above it",
     };
     format!("the space's {key} permission is \"{value}\", from {from}")
@@ -282,16 +348,16 @@ pub struct Permissions {
 }
 
 impl Permissions {
-    /// These permissions with `narrowing`'s keys where they are narrower.
-    pub fn narrowed(self, narrowing: &PermissionsConfig) -> Self {
+    /// These permissions with each key `given` sets, as given.
+    pub fn given(self, given: &PermissionsConfig) -> Self {
         Self {
-            issue_open: self.issue_open.narrowed(narrowing.issue_open),
-            pr_open: self.pr_open.narrowed(narrowing.pr_open),
+            issue_open: self.issue_open.given(given.issue_open),
+            pr_open: self.pr_open.given(given.pr_open),
             issue_other_repositories: (self.issue_other_repositories)
-                .narrowed(narrowing.issue_other_repositories),
-            merge: self.merge.narrowed(narrowing.merge),
-            push: self.push.narrowed(narrowing.push),
-            api_writes: self.api_writes.narrowed(narrowing.api_writes),
+                .given(given.issue_other_repositories),
+            merge: self.merge.given(given.merge),
+            push: self.push.given(given.push),
+            api_writes: self.api_writes.given(given.api_writes),
         }
     }
 
