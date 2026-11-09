@@ -36,10 +36,9 @@ pub enum ListStatus {
 
 impl ListStatus {
     /// The workspace's state unless ready, then stopped work, an agent
-    /// that needs input, a recorded completion while the agent is not
-    /// working, a current ready mark, the agent's turn states, an agent or
-    /// command running without one, the coordinator that does its work
-    /// working, an outdated mark, or inactive.
+    /// that needs input, a recorded completion, a current ready mark, the agent's other turn
+    /// states, an agent or command running without one, the coordinator
+    /// that does its work working, an outdated mark, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
         let agent = workspace.agent_state.map(|status| status.state);
@@ -53,9 +52,7 @@ impl ListStatus {
             WorkspaceState::Failed => Self::Failed,
             WorkspaceState::Ready if stopped => Self::Stopped,
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
-            WorkspaceState::Ready if workspace.done && agent != Some(AgentState::Working) => {
-                Self::Finished
-            }
+            WorkspaceState::Ready if workspace.done => Self::Finished,
             WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
             WorkspaceState::Ready => match agent {
                 Some(state) => Self::agent(state),
@@ -70,17 +67,15 @@ impl ListStatus {
     }
 
     /// A chat is stopped until it is restored; a running one needs input
-    /// while its agent does, is finished once it records completion unless
-    /// its agent is working, ready once it marks its work ready, or else
-    /// shows its agent's turn states, or that it runs without one.
+    /// while its agent does, is finished once it records completion, ready
+    /// once it marks its work ready, or else shows its agent's other turn
+    /// states, or that it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
         match chat.restore {
             Some(_) => Self::Stopped,
             None if agent == Some(AgentState::Waiting) => Self::NeedsInput,
-            None if chat.completion.is_some() && agent != Some(AgentState::Working) => {
-                Self::Finished
-            }
+            None if chat.completion.is_some() => Self::Finished,
             None if !chat.review.is_empty() => Self::Ready,
             None => agent.map_or(Self::ProcessRunning, Self::agent),
         }
