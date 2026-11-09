@@ -81,7 +81,7 @@ impl Manager {
         giver: Option<&SpaceId>,
         space: &PresentSpace,
         change: &PermissionChange,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<()> {
         let Some(giver) = giver else {
             return Ok(());
@@ -107,7 +107,7 @@ impl Manager {
         };
         let repository = chat.repository_id.clone();
         let space = PresentSpace::Chat(chat.clone());
-        (self.ensure_change_held(giver, &space, change, repository.as_deref())).await
+        (self.ensure_change_held(giver, &space, change, repository.as_ref())).await
     }
 
     /// Refuse an agent in `mode` of `workspace` the scoped process of the
@@ -146,7 +146,7 @@ impl Manager {
     ) -> Result<()> {
         let change = PermissionChange::between(&chat.narrowing, given);
         let space = PresentSpace::Chat(chat.clone());
-        let repository = chat.repository_id.as_deref();
+        let repository = chat.repository_id.as_ref();
         (self.ensure_change_held(giver, &space, &change, repository)).await
     }
 

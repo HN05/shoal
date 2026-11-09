@@ -151,7 +151,7 @@ async fn ensure_caller_holds(
         (None, None) => None,
     };
     let giver = Some(&caller.space_id);
-    (manager.ensure_caller_holds(giver, given, repository.as_deref())).await
+    (manager.ensure_caller_holds(giver, given, repository.as_ref())).await
 }
 
 /// The ID of the chat a restart names, or of one that ended meanwhile,

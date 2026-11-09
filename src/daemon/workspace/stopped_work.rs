@@ -145,7 +145,7 @@ impl Manager {
         ensure!(chat.restore.is_some(), "chat {} is not stopped", chat.name);
         let repository = chat.repository_id.clone();
         let space = crate::model::PresentSpace::Chat(chat.clone());
-        (self.ensure_change_held(giver, &space, change, repository.as_deref())).await?;
+        (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
         Ok(chat)
     }
 
@@ -162,7 +162,7 @@ impl Manager {
         let (workspace, execution) = (self.workspace(&agent.workspace).await?, &agent.execution);
         let repository = Some(workspace.repository_id.clone());
         let space = crate::model::PresentSpace::Workspace(workspace.clone());
-        (self.ensure_change_held(giver, &space, change, repository.as_deref())).await?;
+        (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
         saved.retain_execution(execution, false);
         ensure!(
