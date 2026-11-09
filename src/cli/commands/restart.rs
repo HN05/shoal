@@ -12,7 +12,7 @@ use crate::client::output::agents::Restarted;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    cli::{args::SpaceTargets, commands::resume, context::Context},
+    cli::{args::SpaceTargets, context::Context},
     client::{agents, executions::STAGGER},
     config::permissions::PermissionChange,
     execution::recovery,
@@ -136,7 +136,7 @@ async fn ensure_change_fits(
             PresentSpace::Chat(chat) => chat.repository_id.as_deref(),
         };
         let repository = repository.map(Into::into);
-        resume::narrowing::ensure_held(ctx, repository, &change.set).await?;
+        super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
 }

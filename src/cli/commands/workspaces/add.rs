@@ -100,8 +100,7 @@ pub(in crate::cli::commands) async fn add(
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
     let repository = Some(target.selector.clone());
-    crate::cli::commands::resume::narrowing::ensure_held(ctx, repository, &options.narrowing)
-        .await?;
+    crate::cli::commands::permissions::ensure_held(ctx, repository, &options.narrowing).await?;
     let agent = choose_add_agent(&settings, agent).await?;
     check_chosen_model(&settings, &agent, &options.model).await?;
     let picked = match issue {

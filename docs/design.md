@@ -2511,7 +2511,9 @@ effective value. The daemon checks this wherever a scoped process brings a
 value in, giving, queueing, restoring a chat or registering an agent, against
 what the space recorded, so an agent cannot raise its own permissions by
 replaying a record; a reattaching wrapper keeps the value its execution
-recorded. `shoal resume` and `shoal restart` take `--permission` too and change
+recorded. A value recorded before given values applied as given, when each
+check capped it at the parent's, applies as given since: the records name no
+giver to check it against, and none was ever wider than its mode. `shoal resume` and `shoal restart` take `--permission` too and change
 the given values per key, `KEY=mode` dropping one, so a parent changes what a
 child may do without ending its session or restating the rest; the mode stays,
 since changing it would change the agent's rules mid-session. The change goes

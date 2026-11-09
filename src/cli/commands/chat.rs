@@ -354,7 +354,7 @@ impl Options {
             return Ok(());
         };
         let repository = repository.map(crate::repository::Selector::from);
-        super::resume::narrowing::ensure_held(ctx, repository, &given).await
+        super::permissions::ensure_held(ctx, repository, &given).await
     }
 }
 

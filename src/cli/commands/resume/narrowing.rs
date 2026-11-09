@@ -9,7 +9,7 @@ use super::targets::Selected;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
-    config::permissions::{PermissionChange, PermissionsConfig},
+    config::permissions::PermissionChange,
     execution::recovery::{Saved, waits_in_wrapper},
     model::Workspace,
     protocol::SavedAgent,
@@ -37,11 +37,11 @@ pub(super) async fn check(
             workspace.name
         );
         let repository = Some(workspace.repository_id.as_str().into());
-        ensure_held(ctx, repository, &change.set).await?;
+        super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     for chat in &selected.chats {
         let repository = chat.repository_id.as_deref().map(Into::into);
-        ensure_held(ctx, repository, &change.set).await?;
+        super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
 }
@@ -107,19 +107,4 @@ async fn request(
         }
         _ => Ok(()),
     }
-}
-
-/// Refuse `given` where this scoped process does not hold it for an action
-/// in the registered repository `repository`; the user, without a scope,
-/// gives any.
-pub(in crate::cli::commands) async fn ensure_held(
-    ctx: &Context,
-    repository: Option<crate::repository::Selector>,
-    given: &PermissionsConfig,
-) -> Result<()> {
-    if !crate::env::is_scoped() || given.is_empty() {
-        return Ok(());
-    }
-    let held = crate::client::workspaces::held_permissions(&ctx.paths, repository).await?;
-    given.ensure_held(&held)
 }

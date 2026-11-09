@@ -36,6 +36,7 @@ mod messages;
 mod notifications;
 pub(crate) mod operations;
 
+mod permissions;
 mod ports;
 mod progress;
 mod push_gate;
