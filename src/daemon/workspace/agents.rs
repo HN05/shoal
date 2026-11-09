@@ -1065,10 +1065,22 @@ impl Manager {
             id: id.into(),
             name: agent.name.clone(),
             workspace: agent.workspace.clone(),
+            workspace_id: agent.workspace_id.clone(),
             recover: agent.recover,
             handoff_saved: handoff.is_ok(),
             protection,
         })
+    }
+
+    /// Whether `shoal done` finished the workspace's assignment, which leaves
+    /// an agent `protection` stopped nothing to do, so its restore waits for
+    /// `shoal resume`.
+    pub(crate) async fn done_cancels_restore(
+        &self,
+        workspace_id: &str,
+        protection: &Protection,
+    ) -> anyhow::Result<bool> {
+        Ok(protection.ends_with_assignment() && self.completion(workspace_id).await?.is_some())
     }
 
     async fn notify_protection_stop(&self, agent: &StoppedAgent) {
@@ -1076,15 +1088,23 @@ impl Manager {
             id,
             name,
             workspace,
+            workspace_id,
             protection,
             ..
         } = agent;
+        let done =
+            (self.done_cancels_restore(workspace_id, protection).await).unwrap_or_else(|error| {
+                log!("completion unavailable to the stop notice: {error:#}");
+                false
+            });
         let recovery = if !agent.recover {
             "automatic recovery unavailable: configure [agents.<name>] resume_command with a session restore command".into()
         } else if protection.follows_overload_recovery()
             && !self.config().machine.overload.recovery.enabled
         {
             "automatic recovery disabled by machine.overload.recovery.enabled".into()
+        } else if done {
+            "no automatic restore, since the workspace is marked done; shoal resume withdraws the completion".into()
         } else {
             format!(
                 "automatic session restore waits until {}",
@@ -1169,6 +1189,7 @@ pub(crate) struct StoppedAgent {
     id: String,
     pub name: String,
     pub workspace: String,
+    workspace_id: String,
     recover: bool,
     handoff_saved: bool,
     /// What its automatic restore waits for.

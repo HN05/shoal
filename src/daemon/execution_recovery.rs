@@ -92,9 +92,12 @@ pub(super) async fn pause(
         Ok(stopped) => stopped,
         Err(error) => return Ok(restore_failed(error)),
     };
-    match assignment_done(manager, workspace_id, &protection).await {
+    match manager
+        .done_cancels_restore(workspace_id, &protection)
+        .await
+    {
         Ok(false) => {}
-        Ok(true) => return Ok(done_cancels_restore()),
+        Ok(true) => return Ok(cancelled_as_done()),
         Err(error) => return Ok(restore_failed(error)),
     }
     // Take a place in the agent queue as the agent stops, so restores and
@@ -248,17 +251,7 @@ fn restore_failed(error: anyhow::Error) -> Action {
     )))
 }
 
-/// Whether `shoal done` finished the workspace's assignment, which leaves an
-/// agent `protection` stopped nothing to do.
-async fn assignment_done(
-    manager: &Manager,
-    workspace_id: &SpaceId,
-    protection: &Protection,
-) -> Result<bool> {
-    Ok(protection.ends_with_assignment() && manager.completion(workspace_id).await?.is_some())
-}
-
-fn done_cancels_restore() -> Action {
+fn cancelled_as_done() -> Action {
     Action::Stop(Cancel::because("the assignment is done"))
 }
 
@@ -353,8 +346,11 @@ async fn prepare_resume(
     grant: Grant,
     protection: &Protection,
 ) -> Result<Action> {
-    if assignment_done(manager, workspace_id, protection).await? {
-        return Ok(done_cancels_restore());
+    if manager
+        .done_cancels_restore(workspace_id, protection)
+        .await?
+    {
+        return Ok(cancelled_as_done());
     }
     resume(manager, execution_id, workspace_id, Some(grant)).await
 }
