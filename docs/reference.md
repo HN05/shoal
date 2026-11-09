@@ -4600,7 +4600,7 @@ and PR numbers. The relation is required:
 
 Opened and related issues and PRs have no completion or cleanup effect.
 Watches follow a related PR until they deliver that it merged or closed, and
-report nothing else of it unless it is also assigned; opened PRs and opened
+report nothing else of it but a failed lookup unless it is also assigned; opened PRs and opened
 and related issues have no watch effect. `work status pr <number>` finds the workspaces that link an item under any relation.
 A run is linked only as opened or related, since an assigned item drives
 completion and cleanup, and records its workflow as its title. `shoal ci run`

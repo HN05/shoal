@@ -2965,7 +2965,8 @@ items are the work the workspace exists for and drive completion and cleanup;
 and Shoal records `opened` itself for the issues, PRs and CI runs it creates.
 A related PR is linked to learn when it ends, often another workspace's PR the
 work waits for, so watches follow it until they deliver its merge or close and
-report none of its discussion, checks or edits, which belong to its own space.
+report none of its discussion, checks or edits, which belong to its own space; a
+failed lookup is reported, since it would hide the end.
 A CI run is a linked item of its own kind, never `assigned`, because a run
 cannot complete an assignment: watches follow it until they deliver its finish,
 since a dispatched Forgejo run belongs to no PR and a run can outlive its PR's

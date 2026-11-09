@@ -78,6 +78,14 @@ fn a_conclusion_watch_reports_only_the_merge_or_close() {
         (record.observe_conclusion(snapshot(comments.clone(), "open"), "pr", UnixTime::EPOCH))
             .is_empty()
     );
+    let mut unreadable = snapshot(comments.clone(), "open");
+    unreadable.errors.insert("item".into(), "not found".into());
+    let failed = record.observe_conclusion(unreadable, "pr", UnixTime::EPOCH);
+    assert_eq!(
+        failed.iter().map(|update| update.kind).collect::<Vec<_>>(),
+        [UpdateKind::LookupFailed]
+    );
+    record.pending.clear();
     let merged = record.observe_conclusion(snapshot(comments, "merged"), "pr", UnixTime::EPOCH);
     assert_eq!(
         merged.iter().map(|update| update.kind).collect::<Vec<_>>(),

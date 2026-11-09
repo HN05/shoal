@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use shoal_time::UnixTime;
 
-use super::{Edited, Snapshot, Update, held::HeldPasses};
+use super::{Edited, Snapshot, Update, UpdateKind, held::HeldPasses};
 use crate::items::item::ItemState;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -42,14 +42,17 @@ impl WatchRecord {
     }
 
     /// [`Self::observe`] for an item followed only to learn how it ends,
-    /// which reports only that it merged or closed.
+    /// which reports only that it merged or closed, or that reading it
+    /// failed, since a failure would otherwise hide the end.
     pub fn observe_conclusion(
         &mut self,
         snapshot: Snapshot,
         url: &str,
         observed_at: UnixTime,
     ) -> Vec<Update> {
-        self.observe_reporting(snapshot, url, observed_at, |update| update.kind.concludes())
+        self.observe_reporting(snapshot, url, observed_at, |update| {
+            update.kind.concludes() || update.kind == UpdateKind::LookupFailed
+        })
     }
 
     /// [`Self::observe`], delivering only the new updates `reported` keeps;
