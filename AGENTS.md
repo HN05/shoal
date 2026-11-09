@@ -491,6 +491,8 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   its `commit_id` in
   `shoal forge api 'repos/{owner}/{repo}/pulls/<number>/reviews'`, and every
   head that only rebases it; check that before `shoal ready`.
+- When your work is a PR, run `shoal done` only after it merges: until then,
+  keep handling its reviews, CI results and merge conflicts.
 
 ## Shoal feedback
 
