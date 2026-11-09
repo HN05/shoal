@@ -105,9 +105,10 @@ impl Manager {
 }
 
 impl Manager {
-    /// The selected items in link order, with the worktree to look them up
-    /// from. With `elsewhere`, an issue or PR URL of another repository
-    /// selects that item.
+    /// The selected items in link order, each with the relations the space
+    /// links it under, and the worktree to look them up from. With
+    /// `elsewhere`, an issue or PR URL of another repository selects that
+    /// item.
     pub(crate) async fn select_items(
         &self,
         space: &crate::daemon::links::space::LinkSpace,
@@ -122,7 +123,11 @@ impl Manager {
             Some(item) => vec![item],
             None => (self.selected_items(space, selection).await?)
                 .into_iter()
-                .map(|(url, kind)| SelectedItem { url, kind })
+                .map(|(url, kind)| SelectedItem {
+                    relations: space.links().relations_of(&url),
+                    url,
+                    kind,
+                })
                 .collect(),
         };
         Ok(Selected {
@@ -164,7 +169,14 @@ impl Manager {
         }
         let forge = self.item_url_forge(kind, input).await?;
         let (_, url) = forge.item(kind, input)?;
-        Ok(Some((forge, SelectedItem { url, kind })))
+        Ok(Some((
+            forge,
+            SelectedItem {
+                url,
+                kind,
+                relations: Vec::new(),
+            },
+        )))
     }
 }
 

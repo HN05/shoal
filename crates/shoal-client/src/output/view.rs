@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     forge::{ci::run_view::RunView, items::link::LinkKind, review::view::ItemView},
+    model::Relation,
     output::outputs,
     reviews::Review,
 };
@@ -11,9 +12,19 @@ use crate::{
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Shown {
-    Item(Box<ItemView>),
+    Item(ShownItem),
     Run(ShownRun),
     Review(ShownReview),
+}
+
+/// An issue or PR as the forge reports it, with the relations under which
+/// the space links it.
+#[derive(Serialize, Deserialize)]
+pub struct ShownItem {
+    #[serde(flatten)]
+    pub view: Box<ItemView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<Relation>,
 }
 
 /// The workspace's latest local review.
@@ -28,6 +39,8 @@ pub struct ShownReview {
 #[derive(Serialize, Deserialize)]
 pub struct ShownRun {
     pub kind: LinkKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<Relation>,
     #[serde(flatten)]
     pub read: RunRead,
 }

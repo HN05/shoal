@@ -76,7 +76,11 @@ impl Manager {
             None => forge.item_kind(account, input.parse()?).await?.into(),
         };
         let (_, url) = forge.item(kind, input)?;
-        Ok(SelectedItem { url, kind })
+        Ok(SelectedItem {
+            url,
+            kind,
+            relations: Vec::new(),
+        })
     }
 
     /// The kind of the item numbered `number` in `context`: in a space,
@@ -203,6 +207,7 @@ async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>>
             .map(|item| SelectedItem {
                 url: item.url,
                 kind: item.kind,
+                relations: Vec::new(),
             })
             .collect(),
     };

@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 
 use super::{ci, links};
-use crate::client::output::view::{RunRead, Shown, ShownReview, ShownRun};
+use crate::client::output::view::{RunRead, Shown, ShownItem, ShownReview, ShownRun};
 use crate::{
     cli::{
         args::items::{ItemArgs, ViewArgs},
@@ -16,8 +16,9 @@ use crate::{
     forge::{
         ci::{checks::CheckLog, run_view::JobRef},
         items::{link::Selection, reaction::Reaction},
-        review::view::{AutoMerge, Details, ItemView, PrDetails, Review},
+        review::view::{AutoMerge, Details, PrDetails, Review},
     },
+    model::Relation,
     protocol::ItemContext,
 };
 
@@ -82,7 +83,7 @@ trait ShownExt {
 impl ShownExt for Shown {
     fn failed(&self) -> bool {
         match self {
-            Self::Item(view) => view.details.is_none(),
+            Self::Item(item) => item.view.details.is_none(),
             Self::Run(run) => matches!(run.read, RunRead::Failed { .. }),
             Self::Review(_) => false,
         }
@@ -98,17 +99,20 @@ fn render_views(views: &[Shown], json: bool) {
             outln!();
         }
         match view {
-            Shown::Item(view) => render(view, palette, emoji),
+            Shown::Item(item) => render(item, palette, emoji),
             Shown::Review(shown) => super::review::show::render(&shown.review, palette),
             Shown::Run(ShownRun {
                 read: RunRead::Read(view),
+                relations,
                 ..
-            }) => ci::render_run(view),
+            }) => ci::render_run(view, relations),
             Shown::Run(ShownRun {
                 read: RunRead::Failed { url, errors },
+                relations,
                 ..
             }) => {
                 outln!("Run:      {url}");
+                render_relations(relations);
                 for error in errors {
                     outln!("{}", palette.paint(Style::Warning, error));
                 }
@@ -183,18 +187,21 @@ pub(super) fn render_log(log: &CheckLog) {
     }
 }
 
-fn render(view: &ItemView, palette: Palette, emoji: bool) {
+fn render(item: &ShownItem, palette: Palette, emoji: bool) {
+    let view = &item.view;
     let kind = view.kind.title();
     match &view.details {
         Some(details) => {
             let heading = format!("{kind} #{}: {}", details.number, details.title);
             outln!("{}", palette.paint(Style::Heading, heading));
             outln!("URL:      {}", view.url);
+            render_relations(&item.relations);
             render_details(&view.url, details, palette, emoji);
         }
         None => {
             outln!("{}", palette.paint(Style::Heading, kind));
             outln!("URL:      {}", view.url);
+            render_relations(&item.relations);
         }
     }
     for log in &view.check_logs {
@@ -203,6 +210,14 @@ fn render(view: &ItemView, palette: Palette, emoji: bool) {
     }
     for error in &view.errors {
         outln!("{}", palette.paint(Style::Warning, error));
+    }
+}
+
+/// The relations under which the space links an item, when it does.
+pub(super) fn render_relations(relations: &[Relation]) {
+    if !relations.is_empty() {
+        let names: Vec<_> = relations.iter().map(|relation| relation.as_str()).collect();
+        outln!("Relation: {}", names.join(", "));
     }
 }
 

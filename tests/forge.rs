@@ -486,8 +486,12 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
 fn apps_read_forge_items_through_the_daemon() {
     use shoal_client::forge::items::link::{ItemKind, LinkKind, Selection};
     use shoal_client::{
-        connection::Connector, forge_reads, output::view::Shown, paths::Paths,
-        protocol::ItemContext, views,
+        connection::Connector,
+        forge_reads,
+        output::view::{Shown, ShownItem},
+        paths::Paths,
+        protocol::ItemContext,
+        views,
     };
     let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut responses = failed_check_responses();
@@ -599,7 +603,7 @@ fn apps_read_forge_items_through_the_daemon() {
         let shown = runtime
             .block_on(views::read(&app, context, pr_8(), false))
             .unwrap();
-        let [Shown::Item(view)] = shown.as_slice() else {
+        let [Shown::Item(ShownItem { view, .. })] = shown.as_slice() else {
             panic!("expected one item view");
         };
         let details = view.details.as_ref().expect("the PR's details");
@@ -625,7 +629,7 @@ fn apps_read_forge_items_through_the_daemon() {
         .block_on(views::read(&app, workspace(), bare_8(), false))
         .unwrap();
     assert!(
-        matches!(shown.as_slice(), [Shown::Item(view)] if view.kind == ItemKind::Pr && view.details.is_some()),
+        matches!(shown.as_slice(), [Shown::Item(ShownItem { view, .. })] if view.kind == ItemKind::Pr && view.details.is_some()),
     );
     fixture.requests();
 
@@ -712,7 +716,7 @@ fn apps_read_forge_items_through_the_daemon() {
     let shown = runtime
         .block_on(views::read(&agent, workspace(), pr_8(), false))
         .unwrap();
-    let [Shown::Item(view)] = shown.as_slice() else {
+    let [Shown::Item(ShownItem { view, .. })] = shown.as_slice() else {
         panic!("expected one item view");
     };
     assert_eq!(view.check_logs.len(), 2, "{:?}", view.errors);
@@ -733,7 +737,7 @@ fn apps_read_forge_items_through_the_daemon() {
     let shown = runtime
         .block_on(views::read(&app, workspace(), pr_8(), false))
         .unwrap();
-    let [Shown::Item(view)] = shown.as_slice() else {
+    let [Shown::Item(ShownItem { view, .. })] = shown.as_slice() else {
         panic!("expected one item view");
     };
     assert_eq!(view.check_logs.len(), 2, "{:?}", view.errors);
@@ -2438,6 +2442,29 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
     assert_eq!(links["prs"], json!([format!("{}/pulls/8", fixture.web)]));
     let watched = fixture.ok(&["watch", "pr", "--space", "topic"]);
     assert_eq!(watched["updates"][0]["kind"], "comment", "{watched}");
+
+    // `view` shows every linked item with its relations.
+    fixture.ok(&["link", "pr", "10", "related", "--space", "topic"]);
+    fixture.ok(&["link", "pr", "8", "opened", "--space", "topic"]);
+    let output = fixture.run(&["view", "--space", "topic", "--no-comments", "--json"]);
+    let shown: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let relations: Vec<_> = (shown.as_array().unwrap().iter())
+        .map(|item| (item["url"].clone(), item["relations"].clone()))
+        .collect();
+    assert_eq!(
+        relations,
+        [
+            (
+                json!(format!("{}/pulls/8", fixture.web)),
+                json!(["assigned", "opened"])
+            ),
+            (
+                json!(format!("{}/pulls/10", fixture.web)),
+                json!(["related"])
+            ),
+        ],
+        "{shown}"
+    );
 }
 
 #[test]

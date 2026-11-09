@@ -276,7 +276,7 @@ have merged and contain HEAD, or the default branch has their changes, and a
 closed, unmerged PR keeps it waiting until it is unlinked. `unlink` without a
 number unlinks every assigned PR.
 
-`shoal view` shows the linked items with the linked issue, each item's
+`shoal view` shows every linked item with its relations, each item's
 description, comments and reviews with inline comments, and the log tails and
 URLs of failed CI jobs where the forge reads job logs; `--check` selects one
 check's log.

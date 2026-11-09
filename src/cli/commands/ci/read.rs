@@ -14,6 +14,7 @@ use crate::{
         run_action::{Run, validate_run_reference},
         run_view::{JobRef, RunFilter, RunView, validate_filter},
     },
+    model::Relation,
     protocol::ItemContext,
 };
 
@@ -41,7 +42,7 @@ pub(in crate::cli::commands) async fn view(
     let view = ctx
         .progress("Reading run", views::read_run(&ctx.paths, context, &run))
         .await?;
-    ctx.show(&view, render_run)?;
+    ctx.show(&view, |view| render_run(view, &[]))?;
     Ok(0)
 }
 
@@ -67,8 +68,9 @@ pub(super) async fn list(
     Ok(0)
 }
 
-pub(in crate::cli::commands) fn render_run(view: &RunView) {
+pub(in crate::cli::commands) fn render_run(view: &RunView, relations: &[Relation]) {
     outln!("Run:      {}", view.run.url);
+    items_view::render_relations(relations);
     outln!("State:    {}", view.run.state);
     if let Some(branch) = &view.run.branch {
         outln!("Branch:   {branch}");

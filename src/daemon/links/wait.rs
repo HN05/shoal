@@ -1057,7 +1057,7 @@ impl Manager {
 
     /// The explicitly selected item, or the space's linked items of the
     /// selected kind that `linked` lists.
-    async fn selection_items(
+    pub(super) async fn selection_items(
         &self,
         space: &LinkSpace,
         selection: &Selection,
@@ -1556,14 +1556,18 @@ pub(crate) fn polled_items(
     with_runs(db, id, None, unpolled_runs)
 }
 
-/// The items `shoal view` shows for `kind`, or every kind: the assigned
-/// issue and PRs, and every linked run.
+/// The items `shoal view` shows for `kind`, or every kind: every linked
+/// item once, the assigned issue and PRs first.
 fn shown_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
 ) -> Result<Vec<(String, LinkKind)>> {
-    with_runs(db, id, kind, linked_runs)
+    let links = crate::daemon::store::space_links(db, id)?;
+    Ok((links.items().into_iter())
+        .filter(|item| kind.is_none_or(|kind| item.kind == kind))
+        .map(|item| (item.url, item.kind))
+        .collect())
 }
 
 /// The assigned issue and PRs of `kind`, or of every kind, and the runs

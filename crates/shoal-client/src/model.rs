@@ -306,8 +306,6 @@ impl SpaceLinks {
         }
     }
 
-    /// Every linked item once: the assigned issue and PRs, then those opened
-    /// and related.
     /// Every link with its relation: the assigned issue and PRs, then the
     /// opened and related items.
     pub fn relations(&self) -> Vec<(Relation, LinkedItem)> {
@@ -326,6 +324,14 @@ impl SpaceLinks {
         let opened = (self.opened.iter().cloned()).map(|item| (Relation::Opened, item));
         let related = (self.related.iter().cloned()).map(|item| (Relation::Related, item));
         assigned.chain(opened).chain(related).collect()
+    }
+
+    /// The relations under which the item at `url` is linked.
+    pub fn relations_of(&self, url: &str) -> Vec<Relation> {
+        (self.relations().into_iter())
+            .filter(|(_, item)| item.url == url)
+            .map(|(relation, _)| relation)
+            .collect()
     }
 
     /// Each linked item once, the first relation's title kept unless a later
@@ -1994,6 +2000,10 @@ pub struct Selected {
 pub struct SelectedItem {
     pub url: String,
     pub kind: crate::forge::items::link::LinkKind,
+    /// The relations under which the space links the item; none for an
+    /// item it does not link.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<Relation>,
 }
 
 impl Selected {

@@ -4595,7 +4595,8 @@ chat from completion cleanup; the activity Shoal polls for its items reaches its
 messages, through the chat's hooks, and wakes it as they do. Its links go with it
 when it is removed. A chat started on an issue is assigned the issue.
 
-`shoal view` shows linked items as the forge reports them now: title, state,
+`shoal view` shows every linked item, with the relations it is linked under, as
+the forge reports it now: title, state,
 author, labels, assignees, milestone, description, comments, and reviews with their inline comments,
 with the reactions on the item and each comment where the forge has them, as
 emoji on a terminal in a UTF-8 locale other than the Linux console and by name
@@ -4612,7 +4613,8 @@ by the runner or listed by Forgejo 17 and later. The tail is taken after removin
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and
 Forgejo start each line with. The daemon fetches logs as the repository's agent
 account; successful and pending checks omit log output.
-`--check NAME` selects only that failed check's log on one PR. Unavailable logs
+`--check NAME` selects only that failed check's log on one PR, without a number
+the assigned one. Unavailable logs
 report an error, as does a check that links no CI job in the repository, such as
 an outside service's; log downloads are limited to 8 MiB.
 Linked runs show as `shoal view ci` shows a run (see [CI runs](#ci-runs)).

@@ -8,6 +8,7 @@ fn selected_numbers_name_one_kind() {
     let item = |kind, url: &str| SelectedItem {
         kind,
         url: url.into(),
+        relations: Vec::new(),
     };
     let mut selected = Selected {
         path: PathBuf::new(),

@@ -16,7 +16,7 @@ use crate::{
         review::view::ItemView,
     },
     model::SelectedItem,
-    output::view::{RunRead, Shown, ShownRun},
+    output::view::{RunRead, Shown, ShownItem, ShownRun},
     protocol::{CiMethod, ItemContext, ItemMethod, ViewPiece},
 };
 
@@ -82,6 +82,7 @@ async fn read_runs(
             });
         runs.push(ShownRun {
             kind: LinkKind::Ci,
+            relations: item.relations.clone(),
             read,
         });
     }
@@ -99,7 +100,12 @@ fn in_selection_order(
     items
         .iter()
         .filter_map(|item| match item.kind.item() {
-            Some(_) => views.next().map(|view| Shown::Item(Box::new(view))),
+            Some(_) => views.next().map(|view| {
+                Shown::Item(ShownItem {
+                    view: Box::new(view),
+                    relations: item.relations.clone(),
+                })
+            }),
             None => runs.next().map(Shown::Run),
         })
         .collect()
