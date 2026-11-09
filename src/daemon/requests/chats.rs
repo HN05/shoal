@@ -60,14 +60,8 @@ pub(super) async fn handle(
             hands_over,
         } => {
             let recorded = manager.chat(&chat).await?;
-            // A restore keeps what the chat recorded; a scoped process gives
-            // the rest only where it holds it.
-            let given = narrowing.beyond(&recorded.narrowing);
             let giver = caller.map(|caller| &caller.space_id);
-            let repository = recorded.repository_id.as_deref();
-            manager
-                .ensure_caller_holds(giver, &given, repository)
-                .await?;
+            (manager.ensure_restore_held(giver, &recorded, &narrowing)).await?;
             let restored = manager.restore_chat(&recorded.id, pid, narrowing, origin, hands_over);
             Body::Chat(restored.await?)
         }

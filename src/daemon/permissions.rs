@@ -7,13 +7,13 @@ use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result};
 
 use crate::{
-    client::space_ids::SpaceId,
+    client::{space_ids::SpaceId, space_names::SpaceSelector},
     config::{
         Config,
         permissions::{self, Permissions, PermissionsConfig, SpaceMode},
     },
     daemon::{scope::Caller, workspace::Manager},
-    model::{PresentSpace, SpaceKind, Workspace},
+    model::{Chat, PresentSpace, SpaceKind, Workspace},
 };
 
 impl Manager {
@@ -70,6 +70,36 @@ impl Manager {
             }
             _ => Ok(()),
         }
+    }
+
+    /// Refuse an agent of `workspace` the scoped process of the space
+    /// `giver` registers with `given` where it sets a key to another value
+    /// than the workspace recorded that the process does not hold.
+    pub(crate) async fn ensure_registration_held(
+        &self,
+        giver: Option<&SpaceId>,
+        workspace: &SpaceSelector,
+        given: &PermissionsConfig,
+    ) -> Result<()> {
+        if giver.is_none() {
+            return Ok(());
+        }
+        let recorded = self.workspace(workspace).await?;
+        let repository = Some(recorded.repository_id.as_str());
+        (self.ensure_caller_holds(giver, &given.beyond(&recorded.narrowing), repository)).await
+    }
+
+    /// Refuse a restore of `chat` the scoped process of the space `giver`
+    /// asks for with `given` where it sets a key to another value than the
+    /// chat recorded that the process does not hold.
+    pub(crate) async fn ensure_restore_held(
+        &self,
+        giver: Option<&SpaceId>,
+        chat: &Chat,
+        given: &PermissionsConfig,
+    ) -> Result<()> {
+        let repository = chat.repository_id.as_deref();
+        (self.ensure_caller_holds(giver, &given.beyond(&chat.narrowing), repository)).await
     }
 
     /// The effective permissions an agent starting in `mode` in `workspace`

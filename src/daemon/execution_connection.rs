@@ -115,16 +115,10 @@ pub(super) async fn execute(
         let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
         return protocol::write(&mut stream, &Response::new(request_id, body)).await;
     }
-    // A scoped process registers an agent only under the permissions its
-    // workspace recorded or those it holds itself.
-    if let (Some(caller), Some(agent)) = (&caller, &agent)
-        && let Err(error) = async {
-            let recorded = manager.workspace(&workspace).await?;
-            let given = agent.narrowing.beyond(&recorded.narrowing);
-            let repository = Some(recorded.repository_id.as_str());
-            (manager.ensure_caller_holds(Some(&caller.space_id), &given, repository)).await
-        }
-        .await
+    let giver = caller.as_ref().map(|caller| &caller.space_id);
+    if let Some(agent) = &agent
+        && let Err(error) =
+            (manager.ensure_registration_held(giver, &workspace, &agent.narrowing)).await
     {
         let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
         return protocol::write(&mut stream, &Response::new(request_id, body)).await;

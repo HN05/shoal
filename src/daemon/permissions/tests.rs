@@ -1,7 +1,7 @@
 //! Effective permissions in a tree of chats and workspaces.
 use crate::client::repository_ids::RepositoryId;
 use crate::{
-    client::space_ids::SpaceId,
+    client::{space_ids::SpaceId, space_names::SpaceSelector},
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
     daemon::{
         test_support::{chat, manager, repository, workspace_below as workspace},
@@ -190,4 +190,49 @@ async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
     let split = of(split.id.clone()).await;
     assert_eq!(split.push.value, Pushes::Propose);
     assert_eq!(split.push.from, PermissionSource::Parent);
+}
+
+#[tokio::test]
+async fn a_scoped_process_registers_and_restores_only_what_it_holds_or_was_recorded() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None)).await;
+    let worker = worker.unwrap();
+    let child = workspace(&manager, &repo, "child", &worker.id, Some("worker")).await;
+    let (talk, _process) = chat(&manager, "talk", "chat", Some(&repo), Some(&worker.id)).await;
+    // The user gave both a merge the worker does not hold.
+    give(&manager, "workspaces", &child.id, &["merge=direct"]).await;
+    give(&manager, "chats", &talk.id, &["merge=direct"]).await;
+    let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
+    let assigned = |assignments: &[&str]| {
+        let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
+        crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap()
+    };
+    let (giver, child) = (Some(&worker.id), SpaceSelector::id(&child.id));
+
+    // What the space recorded comes back, with what the giver holds.
+    let recorded = assigned(&["merge=direct", "push=propose"]);
+    let registered = manager.ensure_registration_held(giver, &child, &recorded);
+    registered.await.unwrap();
+    manager
+        .ensure_restore_held(giver, &talk, &recorded)
+        .await
+        .unwrap();
+    // A value the giver does not hold, recorded nowhere, is refused.
+    let wider = assigned(&["merge=direct", "api_writes=direct"]);
+    let registered = manager.ensure_registration_held(giver, &child, &wider);
+    assert!(registered.await.is_err());
+    assert!(
+        manager
+            .ensure_restore_held(giver, &talk, &wider)
+            .await
+            .is_err()
+    );
+    // The user gives any.
+    let registered = manager.ensure_registration_held(None, &child, &wider);
+    registered.await.unwrap();
+    manager
+        .ensure_restore_held(None, &talk, &wider)
+        .await
+        .unwrap();
 }

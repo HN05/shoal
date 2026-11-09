@@ -2496,8 +2496,8 @@ Permissions belong to spaces, not repositories, because a top-level chat the
 user talks with may be trusted with more than a worker several levels down. A
 space's set comes from its agent's mode: `[modes.NAME.permissions]` over
 `[permissions]` over the built-in mode's defaults over each key's default. Each
-key is then the narrower of that and the parent's effective value, so no child
-has more than its parent. The modes that coordinate default `merge` and
+key is then the narrower of that and the parent's effective value, so a child
+gets no more than its parent from its mode. The modes that coordinate default `merge` and
 `issue_other_repositories` to `"direct"` so they can decide their children's;
 `worker` keeps the key defaults. `shoal start --permission KEY=VALUE` gives an
 agent a permission, recorded with its mode since it belongs to that agent as
