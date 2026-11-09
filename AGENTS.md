@@ -80,7 +80,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   own `view` or `watch`.
 - Forge requests, and logic that reads forge data without the daemon's state,
   such as check states, item snapshots, item URLs and run IDs, live in
-  `crates/shoal-forge`, which depends on no other Shoal code; it takes the
+  `crates/shoal-forge`, which depends on no Shoal crate but
+  `shoal-subprocess`, `shoal-forge-derive` and `shoal-time`; it takes the
   account to act as, while scope, approvals, identity choice and workspace
   records stay in the daemon. What one forge does its own way belongs in its
   `Backend` implementation, never in a match on the forge kind, and reading an
@@ -92,7 +93,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   a named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `cli`, and `shoal-client` depends on no Shoal crate but
-  `shoal-forge`, `shoal-subprocess` and `shoal-config-derive`.
+  `shoal-forge`, `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
+- `crates/shoal-time` holds the wall-clock timestamp type every crate shares,
+  and depends on no Shoal crate.
 - Modules under `cli` serve only the CLI. Code that the daemon, the execution
   wrapper, the proxy or the workers use, directly or through code they call,
   lives in a top-level module named for what it does, outside `cli`; nothing

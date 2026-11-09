@@ -24,7 +24,7 @@ fn activity_changes_report_finished_checks_without_waiting_for_the_set() {
         .checks
         .insert("review".into(), check("review", true));
     reviewed.comments.insert("review".into(), "finding".into());
-    reviewed.normalize(&pending, 1000);
+    reviewed.normalize(&pending, UnixTime::from_seconds(1000));
     let updates = pending.changes(&reviewed, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -53,7 +53,7 @@ fn conflicts_are_reported_again_for_a_new_head_or_base_once_confirmed() {
             },
             ..Default::default()
         };
-        next.normalize(previous, 1000);
+        next.normalize(previous, UnixTime::from_seconds(1000));
         let messages = previous
             .changes(&next, "pr")
             .into_iter()
@@ -89,6 +89,8 @@ fn conflicts_are_reported_again_for_a_new_head_or_base_once_confirmed() {
 
 #[test]
 fn a_sources_failures_are_reported_once_per_interval() {
+    let start = UnixTime::from_seconds(1000);
+    let second = Duration::from_secs(1);
     let observed = |error: Option<&str>| {
         let mut snapshot = Snapshot::default();
         if let Some(error) = error {
@@ -106,22 +108,22 @@ fn a_sources_failures_are_reported_once_per_interval() {
             .collect::<Vec<_>>();
         (next, kinds)
     };
-    let (first, kinds) = poll(&Snapshot::default(), Some("refused after 2 ms"), 1000);
+    let (first, kinds) = poll(&Snapshot::default(), Some("refused after 2 ms"), start);
     assert_eq!(kinds, [UpdateKind::LookupFailed]);
     // Neither another error nor a passing poll in between reports it again.
-    let (changed, kinds) = poll(&first, Some("refused after 6 ms"), 1001);
+    let (changed, kinds) = poll(&first, Some("refused after 6 ms"), start + second);
     assert!(kinds.is_empty());
-    let (passed, kinds) = poll(&changed, None, 1002);
+    let (passed, kinds) = poll(&changed, None, start + second * 2);
     assert!(kinds.is_empty());
     let (quiet, kinds) = poll(
         &passed,
         Some("broken pipe"),
-        1000 + FAILURE_REPORT_INTERVAL - 1,
+        start + FAILURE_REPORT_INTERVAL - second,
     );
     assert!(kinds.is_empty());
-    let (again, kinds) = poll(&quiet, Some("broken pipe"), 1000 + FAILURE_REPORT_INTERVAL);
+    let (again, kinds) = poll(&quiet, Some("broken pipe"), start + FAILURE_REPORT_INTERVAL);
     assert_eq!(kinds, [UpdateKind::LookupFailed]);
-    let (recovered, kinds) = poll(&again, None, 1000 + 2 * FAILURE_REPORT_INTERVAL);
+    let (recovered, kinds) = poll(&again, None, start + FAILURE_REPORT_INTERVAL * 2);
     assert!(kinds.is_empty());
     assert!(recovered.reported.is_empty());
 }
@@ -133,7 +135,7 @@ fn an_unread_item_keeps_its_activity_and_reports_its_failure_once() {
     let poll = |previous: &Snapshot, now| {
         let refused = anyhow::anyhow!("connection refused");
         let mut next = Snapshot::unread_item(LinkKind::Issue, &refused);
-        next.normalize(previous, now);
+        next.normalize(previous, UnixTime::from_seconds(now));
         let updates = previous.changes(&next, "issue");
         (next, updates)
     };
@@ -150,7 +152,7 @@ fn an_unread_item_keeps_its_activity_and_reports_its_failure_once() {
     assert!(updates.is_empty(), "{updates:?}");
     // Reading the item again reports nothing it already showed.
     let mut read = seen.clone();
-    read.normalize(&still, 1002);
+    read.normalize(&still, UnixTime::from_seconds(1002));
     assert!(still.changes(&read, "issue").is_empty());
 }
 
@@ -315,7 +317,7 @@ fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
 fn a_rate_limited_lookup_leaves_the_snapshot_incomplete_without_failing() {
     let limit = RateLimited {
         host: "forge.example".into(),
-        until: 1,
+        until: UnixTime::from_seconds(1),
     };
     let mut snapshot = Snapshot::default();
     let error = anyhow::Error::new(limit.clone()).context("GET comments");
@@ -337,7 +339,7 @@ fn a_failed_comment_lookup_keeps_that_sources_comments() {
     failed.record_comments("discussion", Err(anyhow::anyhow!("timed out")));
     failed.record_comments("reviews", Ok(Vec::new()));
     failed.record_comments("inline", Err(anyhow::anyhow!("HTTP 500")));
-    failed.normalize(&previous, 1000);
+    failed.normalize(&previous, UnixTime::from_seconds(1000));
     assert_eq!(
         failed.comments.keys().collect::<Vec<_>>(),
         ["discussion:1", "inline:3"]
@@ -452,7 +454,10 @@ fn rest_checks_are_distinct_and_wake_when_they_complete() {
             ("deploy", CheckState::Skipped),
         ],
     );
-    snapshot.normalize(&rest_snapshot("rev-1", true, &[]), 1000);
+    snapshot.normalize(
+        &rest_snapshot("rev-1", true, &[]),
+        UnixTime::from_seconds(1000),
+    );
     let updates = Snapshot::default().changes(&snapshot, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -501,7 +506,7 @@ fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
     failed
         .comments
         .insert("discussion:1".into(), "new finding".into());
-    failed.normalize(&before, 1000);
+    failed.normalize(&before, UnixTime::from_seconds(1000));
     let updates = before.changes(&failed, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -519,7 +524,7 @@ fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
         .insert("discussion:1".into(), "new finding".into());
     assert!(failed.changes(&recovered, "pr").is_empty());
     let mut unknown = Snapshot::default();
-    unknown.normalize(&recovered, 1000);
+    unknown.normalize(&recovered, UnixTime::from_seconds(1000));
     assert_eq!(unknown.conflict, Some(true));
 }
 
@@ -532,7 +537,7 @@ fn a_forgejo_conflict_is_reported_again_after_its_base_moves() {
         let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
         let mut snapshot = Snapshot::default();
         snapshot.record_checks(&pull, Ok(Vec::new()));
-        snapshot.normalize(previous, 1000);
+        snapshot.normalize(previous, UnixTime::from_seconds(1000));
         let kinds = previous
             .changes(&snapshot, "pr")
             .iter()
@@ -558,7 +563,7 @@ fn a_forgejo_push_waits_for_a_second_poll_to_report_a_conflict() {
         let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
         let mut snapshot = Snapshot::default();
         snapshot.record_checks(&pull, Ok(Vec::new()));
-        snapshot.normalize(previous, 1000);
+        snapshot.normalize(previous, UnixTime::from_seconds(1000));
         let kinds = previous
             .changes(&snapshot, "pr")
             .iter()

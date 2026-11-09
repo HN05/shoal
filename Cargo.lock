@@ -1192,6 +1192,7 @@ dependencies = [
  "shoal-config-derive",
  "shoal-forge",
  "shoal-subprocess",
+ "shoal-time",
  "tempfile",
  "tokio",
  "toml",
@@ -1221,6 +1222,7 @@ dependencies = [
  "serde_json",
  "shoal-forge-derive",
  "shoal-subprocess",
+ "shoal-time",
  "tempfile",
  "tokio",
  "uuid",
@@ -1248,6 +1250,7 @@ dependencies = [
  "hyper-util",
  "serde",
  "serde_json",
+ "shoal-time",
  "tokio",
 ]
 
@@ -1259,6 +1262,17 @@ dependencies = [
  "libc",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "shoal-time"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

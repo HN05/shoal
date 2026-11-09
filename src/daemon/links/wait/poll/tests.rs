@@ -10,11 +10,18 @@ fn a_rate_limited_poll_waits_for_the_limit_but_at_least_the_interval() {
         })
         .context("GET issues/8")
     };
-    let (updates, interval) =
-        limited_poll(Err(limit(1_600)), UnixTime::from_seconds(1_000)).unwrap();
+    let (updates, interval) = limited_poll(
+        Err(limit(UnixTime::from_seconds(1_600))),
+        UnixTime::from_seconds(1_000),
+    )
+    .unwrap();
     assert!(updates.is_empty());
     assert_eq!(interval, Duration::from_secs(600));
-    let (_, interval) = limited_poll(Err(limit(1_001)), UnixTime::from_seconds(1_000)).unwrap();
+    let (_, interval) = limited_poll(
+        Err(limit(UnixTime::from_seconds(1_001))),
+        UnixTime::from_seconds(1_000),
+    )
+    .unwrap();
     assert_eq!(interval, POLL_INTERVAL);
     let error = limited_poll(
         Err(anyhow::anyhow!("HTTP 500")),
@@ -32,7 +39,7 @@ async fn a_rate_limited_watch_keeps_polling_after_the_limit() {
             0 => Err(anyhow::Error::new(
                 crate::forge::transport::limits::RateLimited {
                     host: "forge.example".into(),
-                    until: 0,
+                    until: UnixTime::EPOCH,
                 },
             )),
             _ => Err(anyhow::anyhow!("HTTP 500")),

@@ -14,10 +14,10 @@ fn response(status: u16, headers: &[(&str, &str)]) -> Response {
 
 #[test]
 fn refusals_wait_for_retry_after_then_the_reset_then_a_minute() {
-    let now = 1_800_000_000;
+    let now = UnixTime::from_seconds(1_800_000_000);
     assert_eq!(
         limit(&response(429, &[("retry-after", "30")]), now),
-        Some(Limit::Refused(now + 30))
+        Some(Limit::Refused(now + Duration::from_secs(30)))
     );
     let github = [
         ("x-ratelimit-remaining", "0"),
@@ -25,13 +25,13 @@ fn refusals_wait_for_retry_after_then_the_reset_then_a_minute() {
     ];
     assert_eq!(
         limit(&response(403, &github), now),
-        Some(Limit::Refused(now + 600))
+        Some(Limit::Refused(now + Duration::from_secs(600)))
     );
     // GitLab's reset may count seconds from now.
     let gitlab = [("ratelimit-remaining", "0"), ("ratelimit-reset", "45")];
     assert_eq!(
         limit(&response(429, &gitlab), now),
-        Some(Limit::Refused(now + 45))
+        Some(Limit::Refused(now + Duration::from_secs(45)))
     );
     assert_eq!(
         limit(&response(429, &[]), now),
@@ -45,7 +45,7 @@ fn refusals_wait_for_retry_after_then_the_reset_then_a_minute() {
 
 #[test]
 fn permission_errors_and_remaining_requests_are_not_limits() {
-    let now = 1_800_000_000;
+    let now = UnixTime::from_seconds(1_800_000_000);
     assert_eq!(limit(&response(403, &[]), now), None);
     let remaining = [
         ("x-ratelimit-remaining", "12"),
@@ -58,7 +58,7 @@ fn permission_errors_and_remaining_requests_are_not_limits() {
     ];
     assert_eq!(
         limit(&response(200, &exhausted), now),
-        Some(Limit::Exhausted(now + 600))
+        Some(Limit::Exhausted(now + Duration::from_secs(600)))
     );
 }
 
@@ -66,7 +66,7 @@ fn permission_errors_and_remaining_requests_are_not_limits() {
 fn limits_are_found_among_an_errors_causes() {
     let limited = RateLimited {
         host: "forge.example".into(),
-        until: 1,
+        until: UnixTime::from_seconds(1),
     };
     let error = anyhow::Error::new(limited.clone()).context("GET issues/1");
     assert_eq!(rate_limited(&error), Some(&limited));
@@ -77,8 +77,14 @@ fn limits_are_found_among_an_errors_causes() {
 fn a_limit_waits_until_it_ends_and_not_after() {
     let limited = RateLimited {
         host: "forge.example".into(),
-        until: 1_600,
+        until: UnixTime::from_seconds(1_600),
     };
-    assert_eq!(limited.wait_from(1_000), Duration::from_secs(600));
-    assert_eq!(limited.wait_from(2_000), Duration::ZERO);
+    assert_eq!(
+        limited.wait_from(UnixTime::from_seconds(1_000)),
+        Duration::from_secs(600)
+    );
+    assert_eq!(
+        limited.wait_from(UnixTime::from_seconds(2_000)),
+        Duration::ZERO
+    );
 }

@@ -67,7 +67,7 @@ impl crate::clock::Clock for Backwards {
         *now
     }
 
-    fn unix_seconds(&self) -> u64 {
+    fn unix_time(&self) -> UnixTime {
         crate::clock::MANUAL_UNIX_START
     }
 
@@ -90,18 +90,23 @@ fn a_failure_read_before_the_outage_started_does_not_break_it() {
 
 #[test]
 fn an_error_that_names_its_reset_says_how_long_to_wait() {
-    let now = 1_700_000_000;
+    let seconds = 1_700_000_000;
+    let now = UnixTime::from_seconds(seconds);
     assert_eq!(
         error_wait(&serde_json::json!({"resets_in_seconds": 7200}), now),
         Some(Duration::from_secs(7200))
     );
     assert_eq!(
-        error_wait(&serde_json::json!({"resets_at": now + 86_400}), now),
+        error_wait(&serde_json::json!({"resets_at": seconds + 86_400}), now),
         Some(Duration::from_secs(86_400))
     );
     // A reset that has passed asks for no wait.
     assert_eq!(
-        error_wait(&serde_json::json!({"resets_at": now - 60}), now),
+        error_wait(&serde_json::json!({"resets_at": seconds - 60}), now),
+        Some(Duration::ZERO)
+    );
+    assert_eq!(
+        error_wait(&serde_json::json!({"resets_at": -60}), now),
         Some(Duration::ZERO)
     );
     assert_eq!(

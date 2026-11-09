@@ -183,7 +183,7 @@ impl Manager {
                     }
                     snapshot.normalize(
                         previous.as_ref().unwrap_or(&Snapshot::default()),
-                        UnixTime::now().unsigned_seconds(),
+                        UnixTime::now(),
                     );
                     if let Some(previous) = previous {
                         for update in previous.changes(&snapshot, &url) {

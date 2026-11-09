@@ -192,7 +192,7 @@ impl Manager {
         let message = format!(
             "{} is limiting Shoal's requests until {}; polling waits until then",
             limit.host,
-            UnixTime::from_unsigned_seconds(limit.until).local_minutes()
+            limit.until.local_minutes()
         );
         self.notify(None, NotificationKind::ForgeLimited, message)
             .await;
@@ -267,10 +267,7 @@ fn limited_poll(polled: Result<Vec<Update>>, now: UnixTime) -> Result<(Vec<Updat
             let Some(limit) = rate_limited(&error) else {
                 return Err(error);
             };
-            Ok((
-                Vec::new(),
-                POLL_INTERVAL.max(limit.wait_from(now.unsigned_seconds())),
-            ))
+            Ok((Vec::new(), POLL_INTERVAL.max(limit.wait_from(now))))
         }
     }
 }

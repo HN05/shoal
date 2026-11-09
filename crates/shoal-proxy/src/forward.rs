@@ -311,7 +311,7 @@ fn named_wait(
     error: Option<&serde_json::Value>,
     clock: &dyn Clock,
 ) -> Option<Duration> {
-    let now = clock.unix_seconds();
+    let now = clock.unix_time();
     [
         retry::retry_after(headers),
         error.and_then(|error| retry::error_wait(error, now)),

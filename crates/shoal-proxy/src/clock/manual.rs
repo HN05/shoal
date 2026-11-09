@@ -1,6 +1,8 @@
 //! The clock the proxy's tests move by hand.
 use std::time::Duration;
 
+use shoal_time::UnixTime;
+
 use super::{Clock, Sleep};
 
 /// A clock that moves only when a test advances it, to the end of the
@@ -25,8 +27,8 @@ struct Sleeper {
     wake: tokio::sync::oneshot::Sender<()>,
 }
 
-/// The Unix second a [`Manual`] clock starts at.
-pub(crate) const MANUAL_UNIX_START: u64 = 1_700_000_000;
+/// The wall-clock time a [`Manual`] clock starts at.
+pub(crate) const MANUAL_UNIX_START: UnixTime = UnixTime::from_seconds(1_700_000_000);
 
 impl Manual {
     /// Wait until something waits, then move to the end of the earliest
@@ -110,8 +112,8 @@ impl Clock for Manual {
         self.state.lock().unwrap().now
     }
 
-    fn unix_seconds(&self) -> u64 {
-        MANUAL_UNIX_START + self.now().as_secs()
+    fn unix_time(&self) -> UnixTime {
+        MANUAL_UNIX_START + self.now()
     }
 
     fn sleep(&self, duration: Duration) -> Sleep {

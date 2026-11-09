@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::json;
+use std::time::Duration;
 
 fn response(headers: &[(&str, &str)]) -> Response {
     Response {
@@ -38,27 +39,38 @@ fn reads_are_recalled_by_their_validators_until_a_response_has_none() {
 #[test]
 fn requests_wait_until_a_refusal_or_exhausted_limit_resets() {
     let memory = Memory::default();
-    let now = 1_800_000_000;
+    let now = UnixTime::from_seconds(1_800_000_000);
+    let seconds = Duration::from_secs;
     let mut refused = response(&[("retry-after", "30")]);
     refused.status = 429;
     let limited = RateLimited {
         host: "forge.example".into(),
-        until: now + 30,
+        until: now + seconds(30),
     };
     assert_eq!(
         memory.observe_limit("forge.example", &refused, now),
         Err(limited.clone())
     );
-    assert_eq!(memory.check_limit("forge.example", now + 29), Err(limited));
+    assert_eq!(
+        memory.check_limit("forge.example", now + seconds(29)),
+        Err(limited)
+    );
     assert_eq!(memory.check_limit("other.example", now), Ok(()));
-    assert_eq!(memory.check_limit("forge.example", now + 30), Ok(()));
+    assert_eq!(
+        memory.check_limit("forge.example", now + seconds(30)),
+        Ok(())
+    );
     // The last request before the reset succeeds; the next one waits.
     let exhausted = response(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "60")]);
     assert_eq!(
         memory.observe_limit("forge.example", &exhausted, now),
         Ok(())
     );
-    assert!(memory.check_limit("forge.example", now + 59).is_err());
+    assert!(
+        memory
+            .check_limit("forge.example", now + seconds(59))
+            .is_err()
+    );
     assert_eq!(
         memory.observe_limit("forge.example", &response(&[]), now),
         Ok(())

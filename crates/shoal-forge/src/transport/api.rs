@@ -5,6 +5,7 @@ use std::{path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
+use shoal_time::UnixTime;
 use tokio::process::Command;
 
 use crate::{
@@ -12,7 +13,6 @@ use crate::{
     account::Account,
     backends::Backend,
     transport::{
-        limits::unix_seconds,
         programs,
         resend::{Resend, Transient, resending},
         response::{Headed, Response, WRITE_OUT, split_output},
@@ -261,10 +261,10 @@ impl ForgeRepo {
         exchange: impl Future<Output = Result<T>>,
     ) -> Result<T> {
         let memory = account.memory();
-        memory.check_limit(&self.host, unix_seconds())?;
+        memory.check_limit(&self.host, UnixTime::now())?;
         let response = exchange.await?;
         // Relative limits count from the response, which may have taken a while.
-        memory.observe_limit(&self.host, &response, unix_seconds())?;
+        memory.observe_limit(&self.host, &response, UnixTime::now())?;
         Ok(response)
     }
 

@@ -1,9 +1,13 @@
 //! Issue, PR and CI run activity as snapshots, and the updates between two
 //! of them.
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_time::UnixTime;
 
 use crate::{
     ForgeRepo,
@@ -18,7 +22,7 @@ use crate::{
 /// How long after a source's failure was reported it is not reported again,
 /// however its error changes or it passes in between, so a failing source
 /// cannot silence a wait indefinitely nor end one on every poll.
-const FAILURE_REPORT_INTERVAL: u64 = 600;
+const FAILURE_REPORT_INTERVAL: Duration = Duration::from_secs(600);
 
 /// The failed jobs a finished run's update names; `view ci` lists them all.
 pub(crate) const MAX_LISTED_JOBS: usize = 10;
@@ -126,10 +130,10 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) failed_jobs: Vec<FailedJob>,
     pub(crate) errors: BTreeMap<String, String>,
-    /// Unix seconds when each source that failed within the report interval
-    /// was last reported.
+    /// When each source that failed within the report interval was last
+    /// reported.
     #[serde(default)]
-    pub(crate) reported: BTreeMap<String, u64>,
+    pub(crate) reported: BTreeMap<String, UnixTime>,
     /// The rate limit a source's lookup ran into, which leaves the snapshot
     /// incomplete without that source having failed.
     #[serde(skip)]
@@ -173,8 +177,8 @@ pub struct MergeCheck {
 
 impl Snapshot {
     /// Retain unavailable activity and schedule reports against the preceding
-    /// observation. `now` is the current time in Unix seconds.
-    pub fn normalize(&mut self, previous: &Self, now: u64) {
+    /// observation at `now`.
+    pub fn normalize(&mut self, previous: &Self, now: UnixTime) {
         if self.unread {
             self.keep_previous(previous);
         } else {
@@ -444,11 +448,11 @@ impl Snapshot {
     /// Keeps each source's report time until the interval passes and takes
     /// `now` for a failing source without one, so `changes` reports a
     /// source's failures at most once per interval.
-    fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
+    fn schedule_failure_reports(&mut self, previous: &Self, now: UnixTime) {
         self.reported = previous
             .reported
             .iter()
-            .filter(|&(_, &at)| now.saturating_sub(at) < FAILURE_REPORT_INTERVAL)
+            .filter(|&(_, &at)| now.duration_since(at) < FAILURE_REPORT_INTERVAL)
             .map(|(source, &at)| (source.clone(), at))
             .collect();
         for source in self.errors.keys() {

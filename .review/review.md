@@ -23,7 +23,7 @@ instead of the PR delivery guidance below.
   that crate's connection and client-side logic; the CLI sends each daemon
   request through a named client operation and never builds one itself.
   `shoal-client` depends on no Shoal crate but `shoal-forge`,
-  `shoal-subprocess` and `shoal-config-derive`.
+  `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
 - Modules under `cli` serve only the CLI: flag code outside `src/cli`, other
   than the crate's `main`, that names the `cli` module, and code under `cli`
   that the daemon, the execution wrapper, the proxy or the workers need.

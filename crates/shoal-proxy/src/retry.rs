@@ -1,7 +1,8 @@
 //! Which upstream failures the proxy retries, and how long it waits.
-use std::{sync::Mutex, time::Duration};
+use std::{str::FromStr, sync::Mutex, time::Duration};
 
 use hyper::{HeaderMap, StatusCode};
+use shoal_time::UnixTime;
 use std::sync::Arc;
 
 use crate::clock::Clock;
@@ -180,27 +181,22 @@ impl Outage {
     }
 }
 
-/// The wait an upstream error's reset time asks for at Unix second `now`,
-/// as a usage limit gives it: `resets_in_seconds`, or `resets_at` in Unix
-/// seconds.
-pub(crate) fn error_wait(error: &serde_json::Value, now: u64) -> Option<Duration> {
+/// The wait an upstream error's reset time asks for at `now`, as a usage
+/// limit gives it: `resets_in_seconds`, or `resets_at` in Unix seconds.
+pub(crate) fn error_wait(error: &serde_json::Value, now: UnixTime) -> Option<Duration> {
     if let Some(seconds) = error["resets_in_seconds"].as_u64() {
         return Some(Duration::from_secs(seconds));
     }
-    Some(until(error["resets_at"].as_u64()?, now))
+    let reset = UnixTime::from_seconds(error["resets_at"].as_i64()?);
+    Some(reset.duration_since(now))
 }
 
-/// The wait at Unix second `now` until Anthropic's subscription usage limit
-/// resets, which its `anthropic-ratelimit-unified-reset` header gives in
-/// Unix seconds.
-pub(crate) fn limit_reset(headers: &HeaderMap, now: u64) -> Option<Duration> {
+/// The wait at `now` until Anthropic's subscription usage limit resets,
+/// which its `anthropic-ratelimit-unified-reset` header gives in Unix
+/// seconds.
+pub(crate) fn limit_reset(headers: &HeaderMap, now: UnixTime) -> Option<Duration> {
     let reset = header_seconds(headers, "anthropic-ratelimit-unified-reset")?;
-    Some(until(reset, now))
-}
-
-/// The wait from Unix second `now` until Unix second `at`.
-fn until(at: u64, now: u64) -> Duration {
-    Duration::from_secs(at.saturating_sub(now))
+    Some(UnixTime::from_seconds(reset).duration_since(now))
 }
 
 /// The wait a `Retry-After` header in seconds asks for.
@@ -209,7 +205,7 @@ pub(crate) fn retry_after(headers: &HeaderMap) -> Option<Duration> {
 }
 
 /// The whole number of seconds header `name` holds.
-fn header_seconds(headers: &HeaderMap, name: &str) -> Option<u64> {
+fn header_seconds<T: FromStr>(headers: &HeaderMap, name: &str) -> Option<T> {
     headers.get(name)?.to_str().ok()?.trim().parse().ok()
 }
 

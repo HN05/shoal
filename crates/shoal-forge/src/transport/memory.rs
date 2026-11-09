@@ -8,6 +8,7 @@ use std::{
 };
 
 use serde_json::Value;
+use shoal_time::UnixTime;
 
 use crate::transport::{
     limits::{Limit, RateLimited, limit},
@@ -28,8 +29,8 @@ struct State {
     reads: HashMap<String, Read>,
     /// Counts recalls and reads, ordering them by last use.
     uses: u64,
-    /// Unix seconds until which each host limits requests.
-    limits: HashMap<String, u64>,
+    /// Until when each host limits requests.
+    limits: HashMap<String, UnixTime>,
 }
 
 struct Read {
@@ -41,7 +42,7 @@ struct Read {
 
 impl Memory {
     /// Refuse a request to `host` at `now` while the forge limits them.
-    pub(crate) fn check_limit(&self, host: &str, now: u64) -> Result<(), RateLimited> {
+    pub(crate) fn check_limit(&self, host: &str, now: UnixTime) -> Result<(), RateLimited> {
         let mut state = self.lock();
         match state.limits.get(host) {
             Some(&until) if until > now => Err(RateLimited {
@@ -62,7 +63,7 @@ impl Memory {
         &self,
         host: &str,
         response: &impl Headed,
-        now: u64,
+        now: UnixTime,
     ) -> Result<(), RateLimited> {
         let Some(limit) = limit(response, now) else {
             return Ok(());

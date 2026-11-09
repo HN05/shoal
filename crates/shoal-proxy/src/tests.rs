@@ -663,7 +663,7 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
 
 #[tokio::test]
 async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
-    let reset = (clock::MANUAL_UNIX_START + 7200).to_string();
+    let reset = (clock::MANUAL_UNIX_START + Duration::from_secs(7200)).to_string();
     let limited = reset.clone();
     let upstream = FakeUpstream::start(move |_| {
         let mut response = reply(
@@ -763,7 +763,7 @@ async fn a_short_retry_after_does_not_hide_a_later_reset() {
 
 #[tokio::test]
 async fn a_rate_limit_inside_a_claude_stream_waits_for_the_reset_its_headers_name() {
-    let reset = (clock::MANUAL_UNIX_START + 7200).to_string();
+    let reset = (clock::MANUAL_UNIX_START + Duration::from_secs(7200)).to_string();
     let upstream = FakeUpstream::start(move |_| {
         let mut response = sse(
             "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"}}\n\n",

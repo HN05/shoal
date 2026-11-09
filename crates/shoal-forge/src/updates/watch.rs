@@ -4,9 +4,10 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use shoal_time::UnixTime;
 
 use super::{Edited, Snapshot, Update, held::HeldPasses};
-use crate::{items::item::ItemState, transport::limits::unix_seconds};
+use crate::items::item::ItemState;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct WatchRecord {
@@ -18,7 +19,7 @@ pub struct WatchRecord {
     /// poll has seen change yet.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     authored: BTreeSet<String>,
-    /// Unix seconds when the workspace last set the item's state or edited
+    /// When the workspace last set the item's state or edited
     /// its details through Shoal; observations that started by then cannot
     /// show it.
     #[serde(
@@ -26,7 +27,7 @@ pub struct WatchRecord {
         alias = "own_state_at",
         skip_serializing_if = "Option::is_none"
     )]
-    own_change_at: Option<u64>,
+    own_change_at: Option<UnixTime>,
     #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
     held: HeldPasses,
 }
@@ -36,11 +37,16 @@ impl WatchRecord {
     /// by a poll that started at `observed_at`. Updates still pending are
     /// reported again instead, and the cursor stays until they are
     /// acknowledged; new updates become one delivery that stays pending.
-    pub fn observe(&mut self, mut snapshot: Snapshot, url: &str, observed_at: u64) -> Vec<Update> {
+    pub fn observe(
+        &mut self,
+        mut snapshot: Snapshot,
+        url: &str,
+        observed_at: UnixTime,
+    ) -> Vec<Update> {
         if !self.pending.is_empty() {
             return self.pending.clone();
         }
-        snapshot.normalize(&self.snapshot, unix_seconds());
+        snapshot.normalize(&self.snapshot, UnixTime::now());
         self.discount_own_changes(&mut snapshot, observed_at);
         let changes = self.snapshot.changes(&snapshot, url);
         self.pending = one_delivery(self.held.deliver(&snapshot, changes));
@@ -50,7 +56,7 @@ impl WatchRecord {
 
     /// Take the changes the workspace made through Shoal that `snapshot`
     /// shows as already seen, so its watch does not report them back.
-    fn discount_own_changes(&mut self, snapshot: &mut Snapshot, observed_at: u64) {
+    fn discount_own_changes(&mut self, snapshot: &mut Snapshot, observed_at: UnixTime) {
         self.snapshot.adopt_authored(snapshot, &mut self.authored);
         // A poll that started by the agent's own change may have read the
         // item before it.
@@ -74,11 +80,11 @@ impl WatchRecord {
         self.authored.extend(authored);
         if let Some(state) = state {
             self.snapshot.adopt_state(Some(state.into()));
-            self.own_change_at = Some(unix_seconds());
+            self.own_change_at = Some(UnixTime::now());
         }
         if !edited.is_empty() {
             self.snapshot.adopt_edited(edited);
-            self.own_change_at = Some(unix_seconds());
+            self.own_change_at = Some(UnixTime::now());
         }
     }
 }

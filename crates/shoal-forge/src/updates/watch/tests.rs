@@ -12,10 +12,10 @@ fn snapshot(comments: Value, state: &str) -> Snapshot {
 #[test]
 fn new_updates_become_one_delivery_reported_until_acknowledged() {
     let mut record = WatchRecord::default();
-    record.observe(snapshot(json!({}), "open"), "pr", 0);
+    record.observe(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
     record.pending.clear();
     let comments = json!({"discussion:1": "one", "discussion:2": "two"});
-    let updates = record.observe(snapshot(comments, "closed"), "pr", 0);
+    let updates = record.observe(snapshot(comments, "closed"), "pr", UnixTime::EPOCH);
     assert_eq!(
         updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
         [UpdateKind::Comment, UpdateKind::Closed]
@@ -28,7 +28,7 @@ fn new_updates_become_one_delivery_reported_until_acknowledged() {
     );
     // Until the caller clears them, the pending updates are reported again
     // and the next observation waits.
-    let reopened = record.observe(snapshot(json!({}), "open"), "pr", 0);
+    let reopened = record.observe(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
     assert_eq!(reopened, updates);
     assert_eq!(record.snapshot.state(), Some(SnapshotState::Closed));
 }
@@ -36,7 +36,11 @@ fn new_updates_become_one_delivery_reported_until_acknowledged() {
 #[test]
 fn own_changes_are_not_reported_back() {
     let mut record = WatchRecord::default();
-    record.observe(snapshot(json!({"discussion:1": "theirs"}), "open"), "pr", 0);
+    record.observe(
+        snapshot(json!({"discussion:1": "theirs"}), "open"),
+        "pr",
+        UnixTime::EPOCH,
+    );
     record.pending.clear();
     record.adopt_own_change(
         vec!["discussion:2".into()],
@@ -45,11 +49,15 @@ fn own_changes_are_not_reported_back() {
     );
     // A poll that read the item before the change keeps the adopted state.
     let stale = snapshot(json!({"discussion:1": "theirs"}), "open");
-    assert!(record.observe(stale, "pr", 0).is_empty());
+    assert!(record.observe(stale, "pr", UnixTime::EPOCH).is_empty());
     let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
-    assert!(record.observe(snapshot(own, "closed"), "pr", 0).is_empty());
+    assert!(
+        record
+            .observe(snapshot(own, "closed"), "pr", UnixTime::EPOCH)
+            .is_empty()
+    );
     let next = json!({"discussion:1": "theirs", "discussion:2": "mine", "discussion:3": "new"});
-    let updates = record.observe(snapshot(next, "closed"), "pr", u64::MAX);
+    let updates = record.observe(snapshot(next, "closed"), "pr", UnixTime::MAX);
     assert_eq!(
         updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
         [UpdateKind::Comment]

@@ -1,6 +1,7 @@
 use super::*;
 use crate::updates::{SnapshotKind, SnapshotState, UpdateKind};
 use serde_json::json;
+use shoal_time::UnixTime;
 
 fn pull(mergeable: Value) -> Current {
     let pull = json!({"number": 7, "title": "Fix", "state": "open", "body": "",
@@ -104,7 +105,7 @@ fn completed_checks_wake_individually_while_other_checks_run() {
     let mut first = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
     first.conflict = observed.conflict;
     first.conflict_at = observed.conflict_at.clone();
-    observed.normalize(&first, 1000);
+    observed.normalize(&first, UnixTime::from_seconds(1000));
     let updates = first.changes(&observed, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),

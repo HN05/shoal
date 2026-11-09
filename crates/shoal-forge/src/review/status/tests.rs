@@ -1,3 +1,5 @@
+use shoal_time::UnixTime;
+
 use super::*;
 
 #[test]
@@ -5,7 +7,7 @@ fn rate_limited_checks_are_reported_as_unread() {
     let snapshot = Snapshot {
         limited: Some(crate::transport::limits::RateLimited {
             host: "forge.example".into(),
-            until: u64::MAX,
+            until: UnixTime::MAX,
         }),
         ..Snapshot::default()
     };

@@ -22,6 +22,7 @@ shoal-forge = { path = "crates/shoal-forge" }
 shoal-forge-derive = { path = "crates/shoal-forge-derive" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
+shoal-time = { path = "crates/shoal-time" }
 tempfile = "3"
 tokio = "1"
 toml = "1.1.6"

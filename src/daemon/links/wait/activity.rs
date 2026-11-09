@@ -124,7 +124,7 @@ fn record_observations(
             continue;
         }
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();
-        updates.extend(record.observe(snapshot, &url, observed_at.unsigned_seconds()));
+        updates.extend(record.observe(snapshot, &url, observed_at));
         save_cursor_record(tx, id, &url, &record)?;
     }
     Ok(updates)

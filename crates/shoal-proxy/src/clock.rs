@@ -2,6 +2,8 @@
 //! test moves by hand in its tests, so no test depends on how fast it runs.
 use std::{future::Future, pin::Pin, time::Duration};
 
+use shoal_time::UnixTime;
+
 #[cfg(test)]
 mod manual;
 #[cfg(test)]
@@ -13,9 +15,8 @@ pub(crate) trait Clock: Send + Sync {
     /// The time since the clock started.
     fn now(&self) -> Duration;
 
-    /// The wall-clock time in Unix seconds, which an upstream's reset times
-    /// are given in.
-    fn unix_seconds(&self) -> u64;
+    /// The wall-clock time, which an upstream's reset times are given in.
+    fn unix_time(&self) -> UnixTime;
 
     /// A future that completes once `duration` has passed: a wait between
     /// attempts.
@@ -41,10 +42,8 @@ impl Clock for Tokio {
         self.0.elapsed()
     }
 
-    fn unix_seconds(&self) -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |since| since.as_secs())
+    fn unix_time(&self) -> UnixTime {
+        UnixTime::now()
     }
 
     fn sleep(&self, duration: Duration) -> Sleep {

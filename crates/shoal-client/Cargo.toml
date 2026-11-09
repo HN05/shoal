@@ -9,7 +9,7 @@ license.workspace = true
 
 [features]
 # Store typed names in SQLite columns.
-rusqlite = ["dep:rusqlite"]
+rusqlite = ["dep:rusqlite", "shoal-time/rusqlite"]
 # Take typed names as CLI values.
 clap = ["dep:clap"]
 # Conversions and paths for the tests of crates that use this one.
@@ -27,6 +27,7 @@ serde_json.workspace = true
 shoal-config-derive.workspace = true
 shoal-forge.workspace = true
 shoal-subprocess.workspace = true
+shoal-time.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }
 toml.workspace = true
 toml_edit.workspace = true
