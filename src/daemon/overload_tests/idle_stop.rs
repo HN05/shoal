@@ -86,6 +86,9 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
         "restored"
     );
+    // Shoal ended the agent, so its restore in the waiting wrapper keeps the
+    // completion.
+    assert!(manager.completion(&workspace.id).await.unwrap().is_some());
     serving.abort();
 }
 
