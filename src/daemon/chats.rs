@@ -757,7 +757,7 @@ fn ensure_place_free(
 fn rename(
     tx: &rusqlite::Transaction<'_>,
     owner: &Path,
-    chat: &str,
+    chat: &SpaceId,
     name: &SpaceName,
 ) -> Result<(Chat, Chat)> {
     let old = recorded(tx, owner)?

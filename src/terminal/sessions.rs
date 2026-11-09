@@ -34,7 +34,7 @@ impl<'a> Owner<'a> {
         }
     }
 
-    pub fn id(self) -> &'a str {
+    pub fn id(self) -> &'a SpaceId {
         match self {
             Self::Workspace(id) | Self::Chat(id) => id,
         }

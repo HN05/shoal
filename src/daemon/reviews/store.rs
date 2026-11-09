@@ -69,7 +69,7 @@ pub(crate) fn queue(
 /// The workspace's queued or running review.
 pub(crate) fn active(
     db: &Connection,
-    workspace_id: &str,
+    workspace_id: &SpaceId,
 ) -> Result<Option<(ReviewId, ReviewState)>> {
     Ok(db
         .query_row(

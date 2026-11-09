@@ -115,7 +115,7 @@ fn usage(
     pending: &mut HashMap<Identity, Vec<Counted>>,
 ) -> HashMap<SpaceId, WorkspaceUsage> {
     let mut usage: HashMap<SpaceId, WorkspaceUsage> = HashMap::new();
-    let mut used: HashMap<&str, u64> = HashMap::new();
+    let mut used: HashMap<&SpaceId, u64> = HashMap::new();
     for (identity, (workspace, reading)) in &current.processes {
         let entry = usage.entry(workspace.clone()).or_default();
         if !current.unreaped.contains(identity) {
@@ -147,7 +147,7 @@ fn usage(
             .get(&identity)
             .map_or(0, |(_, before)| before.reaped);
         let (shown, waiting) = reconcile(reading.reaped.saturating_sub(before), counted);
-        if let Some(used) = used.get_mut(workspace.as_str()) {
+        if let Some(used) = used.get_mut(workspace) {
             *used = used.saturating_sub(shown);
         }
         if !waiting.is_empty() {
@@ -156,7 +156,7 @@ fn usage(
     }
     let elapsed = current.time.duration_since(previous.time).as_nanos() as f64;
     for (workspace, entry) in &mut usage {
-        let used = used.get(workspace.as_str()).copied().unwrap_or_default();
+        let used = used.get(workspace).copied().unwrap_or_default();
         entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
     }
     usage
@@ -198,22 +198,20 @@ fn routed_to_reapers(
     current: &Sample,
     pending: &HashMap<Identity, Vec<Counted>>,
 ) -> HashMap<Identity, Vec<Counted>> {
-    let live: HashMap<(&str, u32), &Identity> = current
+    let live: HashMap<(&SpaceId, u32), &Identity> = current
         .processes
         .iter()
-        .map(|(identity, (workspace, _))| ((workspace.as_str(), identity.pid), identity))
+        .map(|(identity, (workspace, _))| ((workspace, identity.pid), identity))
         .collect();
-    let ended: HashMap<(&str, u32), u32> = previous
+    let ended: HashMap<(&SpaceId, u32), u32> = previous
         .processes
         .iter()
         .filter(|(identity, _)| !current.processes.contains_key(identity))
-        .map(|(identity, (workspace, reading))| {
-            ((workspace.as_str(), identity.pid), reading.parent)
-        })
+        .map(|(identity, (workspace, reading))| ((workspace, identity.pid), reading.parent))
         .collect();
     let mut routed: HashMap<Identity, Vec<Counted>> = HashMap::new();
     for (identity, (workspace, reading)) in &previous.processes {
-        if !ended.contains_key(&(workspace.as_str(), identity.pid)) {
+        if !ended.contains_key(&(workspace, identity.pid)) {
             continue;
         }
         let Some((reaper, direct)) = reaper(&live, &ended, workspace, reading.parent) else {
@@ -244,8 +242,8 @@ fn routed_to_reapers(
 /// `parent`, reached through `ended` ancestors and their parents, and
 /// whether it is the parent itself.
 fn reaper<'a>(
-    live: &HashMap<(&str, u32), &'a Identity>,
-    ended: &HashMap<(&str, u32), u32>,
+    live: &HashMap<(&SpaceId, u32), &'a Identity>,
+    ended: &HashMap<(&SpaceId, u32), u32>,
     workspace: &SpaceId,
     mut parent: u32,
 ) -> Option<(&'a Identity, bool)> {

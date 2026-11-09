@@ -16,6 +16,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
 use super::Manager;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     fsutil::marked_dirs::{create_marked_dir, is_marked_dir},
@@ -59,12 +60,12 @@ impl Manager {
     pub(super) async fn discard_imported_sessions(
         &self,
         repo: &Repository,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
     ) -> Result<()> {
         let Some(layout) = Layout::of(repo) else {
             return Ok(());
         };
-        let workspace_id = workspace_id.to_owned();
+        let workspace_id = workspace_id.clone();
         tokio::task::spawn_blocking(move || layout.remove_one(&workspace_id))
             .await
             .context("delete the kept session files")?
@@ -85,7 +86,7 @@ impl Manager {
     pub(super) async fn hand_over_imported_sessions(
         &self,
         removed: &RemovedWorkspace,
-        to: &str,
+        to: &SpaceId,
     ) -> Result<Vec<CarriedSessionFile>> {
         if removed.session_files.is_empty() {
             return Ok(Vec::new());
@@ -93,7 +94,7 @@ impl Manager {
         let repo = self.repository(&removed.repository_id).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
         let kept = layout.kept(to, &removed.session_files);
-        let (from, to) = (removed.workspace_id.clone(), to.to_owned());
+        let (from, to) = (removed.workspace_id.clone(), to.clone());
         let _sweep = self.gates.lock_checkpoints().await;
         tokio::task::spawn_blocking(move || layout.hand_over(&from, &to))
             .await
@@ -196,7 +197,7 @@ impl Layout {
 
     /// The session files `files` kept for the workspace `id`, each named by
     /// its place among them.
-    fn kept(&self, id: &str, files: &[SessionFile]) -> Vec<CarriedSessionFile> {
+    fn kept(&self, id: &SpaceId, files: &[SessionFile]) -> Vec<CarriedSessionFile> {
         let directory = self.root.join(id);
         files
             .iter()
@@ -212,7 +213,12 @@ impl Layout {
     /// the workspace `id`, which starts empty, and is left out without any,
     /// beside the list `listed` of what they are; a failure leaves none of
     /// them.
-    fn keep(&self, id: &str, listed: &[SessionFile], copies: &[(PathBuf, PathBuf)]) -> Result<()> {
+    fn keep(
+        &self,
+        id: &SpaceId,
+        listed: &[SessionFile],
+        copies: &[(PathBuf, PathBuf)],
+    ) -> Result<()> {
         self.remove_one(id)?;
         if copies.is_empty() {
             return Ok(());
@@ -246,7 +252,7 @@ impl Layout {
     }
 
     /// The list of the files kept for the workspace `id`.
-    fn listed(&self, id: &str) -> Result<Vec<SessionFile>> {
+    fn listed(&self, id: &SpaceId) -> Result<Vec<SessionFile>> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(Vec::new());
         }
@@ -261,7 +267,7 @@ impl Layout {
     }
 
     /// Move the files kept for the workspace `from` to the workspace `to`.
-    fn hand_over(&self, from: &str, to: &str) -> Result<()> {
+    fn hand_over(&self, from: &SpaceId, to: &SpaceId) -> Result<()> {
         ensure!(
             is_marked_dir(&self.root, &self.owner),
             "{} is not a directory Shoal created for session files",
@@ -272,7 +278,7 @@ impl Layout {
             .with_context(|| format!("move {} to {}", from.display(), to.display()))
     }
 
-    fn remove_one(&self, id: &str) -> Result<()> {
+    fn remove_one(&self, id: &SpaceId) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }

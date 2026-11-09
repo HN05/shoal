@@ -49,7 +49,7 @@ impl Manager {
         let workspace = self.workspace_by_id(&workspace.id).await?;
         let (id, repository_id) = (workspace.id.clone(), workspace.repository_id.clone());
         self.store
-            .write(move |tx| change_base(tx, &repository_id, &id, base.as_deref()))
+            .write(move |tx| change_base(tx, &repository_id, &id, base.as_ref()))
             .await?;
         self.workspace_by_id(&workspace.id).await
     }
@@ -61,10 +61,10 @@ fn change_base(
     tx: &rusqlite::Transaction<'_>,
     repository_id: &RepositoryId,
     id: &SpaceId,
-    base: Option<&str>,
+    base: Option<&SpaceId>,
 ) -> Result<()> {
     let base = match base {
-        Some(base) => Some(base_workspace(tx, repository_id, base)?),
+        Some(base) => Some(base_workspace(tx, repository_id, base.as_str())?),
         None => None,
     };
     if let Some(base) = &base {

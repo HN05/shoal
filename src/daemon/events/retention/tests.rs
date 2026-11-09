@@ -65,7 +65,7 @@ async fn a_restored_workspace_takes_the_removed_ones_events() {
             journal(db, "removed", "removed", 0)?;
             journal(db, "other", "created", 0)?;
             journal(db, "restored", "created", 0)?;
-            adopt(db, "removed", "restored")?;
+            adopt(db, &"removed".into(), &"restored".into())?;
             spaces(db)
         })
         .await

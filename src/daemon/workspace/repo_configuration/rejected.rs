@@ -3,6 +3,8 @@
 //! that reads the workspace's settings meets the same one.
 use std::{collections::HashMap, sync::Mutex};
 
+use crate::client::space_ids::SpaceId;
+
 use crate::daemon::{
     log,
     notifications::{About, NotificationKind},
@@ -13,23 +15,23 @@ use crate::model::Workspace;
 /// The error last reported for each workspace whose config file the
 /// current format rejects, by workspace ID.
 #[derive(Default)]
-pub(crate) struct RejectedConfigs(Mutex<HashMap<String, String>>);
+pub(crate) struct RejectedConfigs(Mutex<HashMap<SpaceId, String>>);
 
 impl RejectedConfigs {
     /// Remember `error` for the workspace `id`; whether it differs from the
     /// one remembered.
-    fn changed(&self, id: &str, error: &str) -> bool {
+    fn changed(&self, id: &SpaceId, error: &str) -> bool {
         let mut rejected = self.0.lock().unwrap();
         if rejected.get(id).is_some_and(|reported| reported == error) {
             return false;
         }
-        rejected.insert(id.to_owned(), error.to_owned());
+        rejected.insert(id.clone(), error.to_owned());
         true
     }
 
     /// Forget the workspace `id`, whose file the format accepts again or
     /// which is gone, so a later rejection is reported anew.
-    pub(crate) fn forget(&self, id: &str) {
+    pub(crate) fn forget(&self, id: &SpaceId) {
         self.0.lock().unwrap().remove(id);
     }
 }

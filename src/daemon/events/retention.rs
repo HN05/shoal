@@ -119,7 +119,7 @@ fn forget(tx: &Transaction<'_>, ids: &[SpaceId]) -> Result<()> {
 /// Give the events of the removed workspace `from` to the workspace `to`
 /// that restores it, in the transaction that hands it the checkpoints, so
 /// its log goes on where it ended.
-pub(crate) fn adopt(db: &Connection, from: &str, to: &str) -> Result<()> {
+pub(crate) fn adopt(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE workspace_events SET record=json_set(record,'$.workspace_id',?2)
             WHERE space_id=?1 AND json_extract(record,'$.workspace_id')=?1",

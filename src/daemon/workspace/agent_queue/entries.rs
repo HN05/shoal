@@ -279,7 +279,7 @@ impl Manager {
     }
 
     /// Whether an agent launch in the workspace waits in the queue or starts.
-    pub(crate) async fn has_queued_launch(&self, workspace_id: &str) -> Result<bool> {
+    pub(crate) async fn has_queued_launch(&self, workspace_id: &SpaceId) -> Result<bool> {
         let workspace_id = workspace_id.to_owned();
         self.store
             .run(move |db| {
@@ -352,7 +352,7 @@ impl Manager {
     /// The agent a queued launch started takes over the slot its entry kept.
     /// Only that launch's agent names the entry, so another agent registering
     /// in the same workspace leaves it starting.
-    pub(crate) async fn consume_queue_entry(&self, id: &str, workspace_id: &str) {
+    pub(crate) async fn consume_queue_entry(&self, id: &str, workspace_id: &SpaceId) {
         let (id, workspace_id) = (id.to_owned(), workspace_id.to_owned());
         let consumed = self
             .store
