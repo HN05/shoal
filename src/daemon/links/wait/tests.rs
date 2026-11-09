@@ -2907,6 +2907,19 @@ async fn a_related_prs_merge_reaches_the_agent_and_ends_its_follow() {
             .collect::<Vec<_>>(),
         [UpdateKind::Merged]
     );
+    // Only the merge goes into the workspace's events.
+    let events = manager.workspace_events(None, 100).await.unwrap();
+    let journaled = events
+        .iter()
+        .filter_map(|item| match item {
+            crate::daemon::events::EventItem::Event(event) => {
+                event.details.item_activity.as_deref()
+            }
+            _ => None,
+        })
+        .map(|activity| activity.update.kind)
+        .collect::<Vec<_>>();
+    assert_eq!(journaled, [UpdateKind::Merged]);
     // The poll has queued the merge; watches follow the PR until delivered.
     let (watched, polled) = follows().await.unwrap();
     assert_eq!((watched, polled), (both.0, Vec::new()));

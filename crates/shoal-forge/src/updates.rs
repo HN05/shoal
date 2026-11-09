@@ -57,6 +57,13 @@ crate::state::states!(UpdateKind {
     BaseMerged => "base_merged",
 });
 
+impl UpdateKind {
+    /// Whether the update says how an item ended: it merged or closed.
+    pub fn concludes(self) -> bool {
+        matches!(self, Self::Merged | Self::Closed)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Update {
     pub url: String,

@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, params};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    items::polled_items,
+    items::{concluding_prs, polled_items},
 };
 use crate::{
     client::space_ids::SpaceId,
@@ -16,7 +16,7 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        items::link::Selection,
+        items::link::{LinkKind, Selection},
         updates::{Snapshot, UpdateKind},
     },
     time::UnixTime,
@@ -159,50 +159,74 @@ impl Manager {
             .write(move |tx| {
                 require_ready_space(tx, &id)?;
                 let linked = polled_items(tx, &id)?;
+                let concluding = concluding_prs(tx, &id)?;
                 let mut merged = false;
-                for (url, kind, mut snapshot) in
-                    observations.into_iter().filter_map(|(url, snapshot)| {
-                        linked
-                            .iter()
-                            .find(|(linked_url, _)| linked_url == &url)
-                            .map(|(_, kind)| (url, *kind, snapshot))
-                    })
-                {
-                    let previous: Option<String> = tx
-                        .query_row(
-                            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
-                            params![id, url],
-                            |row| row.get(0),
-                        )
-                        .optional()?;
-                    let previous: Option<Snapshot> = previous
-                        .map(|text| serde_json::from_str(&text))
-                        .transpose()?;
-                    // The first item read establishes the baseline.
-                    if previous.is_none() && snapshot.unread() {
+                for (url, snapshot) in observations {
+                    let Some((_, kind)) = linked.iter().find(|(linked, _)| linked == &url) else {
                         continue;
-                    }
-                    snapshot.normalize(
-                        previous.as_ref().unwrap_or(&Snapshot::default()),
-                        UnixTime::now(),
-                    );
-                    if let Some(previous) = previous {
-                        for update in previous.changes(&snapshot, &url) {
-                            merged |= update.kind == UpdateKind::Merged;
-                            crate::daemon::events::record_item_activity(
-                                tx, &id, kind, &url, &update,
-                            )?;
-                        }
-                    }
-                    tx.execute(
-                        "INSERT INTO space_item_activity(space_id,url,record)
-                         VALUES (?1,?2,?3)
-                         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-                        params![id, url, serde_json::to_string(&snapshot)?],
-                    )?;
+                    };
+                    let item = Observed {
+                        kind: *kind,
+                        url: &url,
+                        concluding: concluding.contains(&url),
+                    };
+                    merged |= record_on_baseline(tx, &id, &item, snapshot)?;
                 }
                 Ok(merged)
             })
             .await
     }
+}
+
+/// An item the background poll observed.
+struct Observed<'a> {
+    kind: LinkKind,
+    url: &'a str,
+    /// Whether the space follows it only to learn how it ends, so only its
+    /// merge or close goes into the space's events.
+    concluding: bool,
+}
+
+/// Record `snapshot` of `item` on the background poll's baseline for the
+/// space `id`, and the changes from the previous one in its events; returns
+/// whether the item merged.
+fn record_on_baseline(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    item: &Observed<'_>,
+    mut snapshot: Snapshot,
+) -> Result<bool> {
+    let previous: Option<String> = tx
+        .query_row(
+            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
+            params![id, item.url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let previous: Option<Snapshot> = previous
+        .map(|text| serde_json::from_str(&text))
+        .transpose()?;
+    // The first item read establishes the baseline.
+    if previous.is_none() && snapshot.unread() {
+        return Ok(false);
+    }
+    snapshot.normalize(
+        previous.as_ref().unwrap_or(&Snapshot::default()),
+        UnixTime::now(),
+    );
+    let mut merged = false;
+    if let Some(previous) = previous {
+        let changes = previous.changes(&snapshot, item.url).into_iter();
+        for update in changes.filter(|update| !item.concluding || update.kind.concludes()) {
+            merged |= update.kind == UpdateKind::Merged;
+            crate::daemon::events::record_item_activity(tx, id, item.kind, item.url, &update)?;
+        }
+    }
+    tx.execute(
+        "INSERT INTO space_item_activity(space_id,url,record)
+         VALUES (?1,?2,?3)
+         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
+        params![id, item.url, serde_json::to_string(&snapshot)?],
+    )?;
+    Ok(merged)
 }

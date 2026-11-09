@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use shoal_time::UnixTime;
 
-use super::{Edited, Snapshot, Update, UpdateKind, held::HeldPasses};
+use super::{Edited, Snapshot, Update, held::HeldPasses};
 use crate::items::item::ItemState;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -49,9 +49,7 @@ impl WatchRecord {
         url: &str,
         observed_at: UnixTime,
     ) -> Vec<Update> {
-        self.observe_reporting(snapshot, url, observed_at, |update| {
-            matches!(update.kind, UpdateKind::Merged | UpdateKind::Closed)
-        })
+        self.observe_reporting(snapshot, url, observed_at, |update| update.kind.concludes())
     }
 
     /// [`Self::observe`], delivering only the new updates `reported` keeps;
