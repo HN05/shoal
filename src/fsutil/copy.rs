@@ -218,9 +218,10 @@ pub(crate) async fn copy_directory(source: &Path, destination: &Path) -> anyhow:
 }
 
 /// Clone `source`, a file or directory tree, to `destination` as
-/// [`clone_tree`] does, or copy it where it cannot be cloned, keeping
-/// symlinks, modes and times.
-pub async fn clone_or_copy_tree(source: &Path, destination: &Path) -> anyhow::Result<()> {
+/// [`clone_tree`] does, or where it cannot be cloned copy it with `cp`,
+/// which keeps modification times too, unlike [`clone_or_copy`]. A failed
+/// copy leaves what it wrote.
+pub async fn clone_or_copy_keeping_times(source: &Path, destination: &Path) -> anyhow::Result<()> {
     if clone_tree(source, destination).await.is_ok() {
         return Ok(());
     }
