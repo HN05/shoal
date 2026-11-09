@@ -9,6 +9,7 @@ use anyhow::{Result, ensure};
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::{self, Saved};
+use crate::protocol::SavedAgent;
 
 /// A workspace process that stopped another workspace's executions, which
 /// may resume the agents among them.
@@ -102,17 +103,28 @@ impl Manager {
         })
     }
 
-    /// Give the stopped agent or last session `execution` of the workspace
-    /// `selector` names `narrowing` in place of the one it recorded, which
-    /// its restore runs under. An agent its waiting wrapper restores keeps
-    /// the narrowing that wrapper launched it with, so it is refused.
+    /// Give each of the stopped `agents` `narrowing` in place of the one it
+    /// recorded, which its restore runs under, once none of them is refused.
     pub async fn replace_stopped_narrowing(
         &self,
-        selector: &SpaceSelector,
-        execution: &str,
+        agents: &[SavedAgent],
         narrowing: crate::config::permissions::PermissionsConfig,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
+        let mut replaced = Vec::new();
+        for agent in agents {
+            replaced.push(self.replaceable(agent).await?);
+        }
+        for saved in replaced {
+            saved.replace_narrowing(narrowing)?;
+        }
+        Ok(())
+    }
+
+    /// What the stopped `agent` saved, refusing one that saved nothing and
+    /// one its waiting wrapper restores, which keeps the narrowing that
+    /// wrapper launched it with.
+    async fn replaceable(&self, agent: &SavedAgent) -> Result<Saved> {
+        let (workspace, execution) = (self.workspace(&agent.workspace).await?, &agent.execution);
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
         saved.retain_execution(execution, false);
         ensure!(
@@ -128,6 +140,9 @@ impl Manager {
             "the agent of {} restores in the wrapper that waits for it, which keeps its narrowing; resume it without --permission",
             workspace.name
         );
-        saved.replace_narrowing(narrowing)
+        Ok(saved)
     }
 }
+
+#[cfg(test)]
+mod tests;

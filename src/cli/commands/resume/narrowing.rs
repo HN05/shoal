@@ -13,7 +13,7 @@ use crate::{
     config::permissions::{PermissionsConfig, SpaceMode},
     execution::recovery::{LastSession, Record, Saved, waits_in_wrapper},
     model::{Chat, SpaceKind, Workspace},
-    protocol::ConfigTarget,
+    protocol::{ConfigTarget, SavedAgent},
 };
 
 /// Refuse `narrowing` for the stopped agents and last sessions of the
@@ -66,18 +66,19 @@ async fn saved_agents(
 
 /// Have the daemon give each agent and last session the `stopped`
 /// workspaces keep `narrowing`, when given, in place of the one it
-/// recorded, as their restores begin.
+/// recorded, as their restores begin; it replaces none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
     stopped: &[(Workspace, Saved)],
     narrowing: Option<PermissionsConfig>,
 ) -> Result<()> {
-    for (workspace, saved) in stopped {
-        for (execution, _) in saved.agents.iter().chain(&saved.sessions) {
-            apply_one(ctx, workspace, execution, narrowing).await?;
-        }
-    }
-    Ok(())
+    let agents = stopped.iter().flat_map(|(workspace, saved)| {
+        (saved.agents.iter().chain(&saved.sessions)).map(|(execution, _)| SavedAgent {
+            workspace: SpaceSelector::id(&workspace.id),
+            execution: execution.clone(),
+        })
+    });
+    replace(ctx, agents.collect(), narrowing).await
 }
 
 /// [`apply`] for the agent or last session `execution` of `workspace`.
@@ -87,17 +88,26 @@ pub(super) async fn apply_one(
     execution: &str,
     narrowing: Option<PermissionsConfig>,
 ) -> Result<()> {
-    let Some(narrowing) = narrowing else {
-        return Ok(());
+    let agent = SavedAgent {
+        workspace: SpaceSelector::id(&workspace.id),
+        execution: execution.to_owned(),
     };
-    let selector = SpaceSelector::id(&workspace.id);
-    crate::client::assignments::replace_stopped_narrowing(
-        &ctx.paths,
-        selector,
-        execution.to_owned(),
-        narrowing,
-    )
-    .await
+    replace(ctx, vec![agent], narrowing).await
+}
+
+/// Have the daemon give the stopped `agents` `narrowing`, when given.
+async fn replace(
+    ctx: &Context,
+    agents: Vec<SavedAgent>,
+    narrowing: Option<PermissionsConfig>,
+) -> Result<()> {
+    match narrowing {
+        Some(narrowing) if !agents.is_empty() => {
+            crate::client::assignments::replace_stopped_narrowing(&ctx.paths, agents, narrowing)
+                .await
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Refuse `narrowing` where it is wider than the permissions of `mode`, the

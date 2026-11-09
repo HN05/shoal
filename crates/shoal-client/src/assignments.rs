@@ -105,19 +105,14 @@ pub async fn discard_stopped_work(
     request(daemon, method).await
 }
 
-/// Give `workspace`'s stopped agent or last session `execution`
-/// `narrowing` in place of the one it recorded, which its restore runs
-/// under.
+/// Give each of the stopped `agents` `narrowing` in place of the one it
+/// recorded, which its restore runs under; the daemon replaces none when it
+/// refuses one.
 pub async fn replace_stopped_narrowing(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    execution: String,
+    agents: Vec<crate::protocol::SavedAgent>,
     narrowing: crate::config::permissions::PermissionsConfig,
 ) -> Result<()> {
-    let method = AssignmentMethod::ReplaceStoppedNarrowing {
-        workspace,
-        execution,
-        narrowing,
-    };
+    let method = AssignmentMethod::ReplaceStoppedNarrowing { agents, narrowing };
     request(daemon, method).await
 }

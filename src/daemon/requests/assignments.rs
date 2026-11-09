@@ -24,13 +24,9 @@ pub(super) async fn handle(
             workspace,
             execution,
         } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
-        AssignmentMethod::ReplaceStoppedNarrowing {
-            workspace,
-            execution,
-            narrowing,
-        } => {
+        AssignmentMethod::ReplaceStoppedNarrowing { agents, narrowing } => {
             manager
-                .replace_stopped_narrowing(&workspace, &execution, narrowing)
+                .replace_stopped_narrowing(&agents, narrowing)
                 .await?;
             Body::Ok
         }
@@ -75,11 +71,13 @@ impl Scoped for AssignmentMethod {
                     )
                     .await?,
             ),
-            AssignmentMethod::ReplaceStoppedNarrowing {
-                workspace,
-                execution,
-                ..
-            } => Some(manager.stopped_below(caller, workspace, execution).await?),
+            // Every agent is checked before the handler replaces any.
+            AssignmentMethod::ReplaceStoppedNarrowing { agents, .. } => {
+                for agent in agents {
+                    (manager.stopped_below(caller, &mut agent.workspace, &agent.execution)).await?;
+                }
+                None
+            }
         })
     }
 }
