@@ -1605,13 +1605,9 @@ fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
     fixture.add("streamed");
     let temporary = fixture.root.path().join("cli-tmp");
     fs::create_dir(&temporary).unwrap();
-    let (reader, writer) = std::io::pipe().unwrap();
-    drop(reader);
-    let exported = fixture
-        .command()
+    let exported = support::close_stdout(&mut fixture.command())
         .args(["move", "export", "streamed", "-o", "-"])
         .env("TMPDIR", &temporary)
-        .stdout(writer)
         .output()
         .unwrap();
     assert_eq!(exported.status.code(), Some(141), "{exported:?}");

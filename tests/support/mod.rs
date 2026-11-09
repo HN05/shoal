@@ -100,6 +100,30 @@ pub fn cli(root: &Path) -> Command {
     isolated(root, shoal_binary())
 }
 
+/// Give `command` a stdout pipe whose reader has closed before it starts. The
+/// child makes the pipe after it forks: a reader closed here could still be
+/// open in another test's child forked in the meantime, until that one execs,
+/// and a write into the pipe would succeed.
+#[allow(dead_code)]
+pub fn close_stdout(command: &mut Command) -> &mut Command {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: pipe, close and dup2 are async-signal-safe and touch no memory
+    // but the array on the stack. Stdio is set up before this runs.
+    unsafe {
+        command.stdout(Stdio::null()).pre_exec(|| {
+            let mut ends = [0; 2];
+            if libc::pipe(ends.as_mut_ptr()) != 0
+                || libc::close(ends[0]) != 0
+                || libc::dup2(ends[1], libc::STDOUT_FILENO) < 0
+                || libc::close(ends[1]) != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        })
+    }
+}
+
 /// The `shoal` binary Cargo built for this test run. Cargo also sets the
 /// variable at run time, and that value wins: a test binary that a workspace
 /// keeps from its seed build is not rebuilt for a new binary path, so its

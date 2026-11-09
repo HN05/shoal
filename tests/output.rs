@@ -195,12 +195,8 @@ fn a_closed_stdout_ends_commands_quietly() {
         vec!["--version"],
         vec!["custom-tool", "--help"],
     ] {
-        let (reader, writer) = std::io::pipe().unwrap();
-        drop(reader);
-        let output = support::cli(root.path())
+        let output = support::close_stdout(&mut support::cli(root.path()))
             .args(&args)
-            .stdin(Stdio::null())
-            .stdout(writer)
             .stderr(Stdio::piped())
             .output()
             .unwrap();
@@ -223,12 +219,8 @@ fn a_closed_stdout_ends_unterminated_output_quietly() {
             |_| serde_json::json!({"type": "local_config_path", "data": local}),
         );
     });
-    let (reader, writer) = std::io::pipe().unwrap();
-    drop(reader);
-    let output = support::cli(root.path())
+    let output = support::close_stdout(&mut support::cli(root.path()))
         .args(["repo", "config", "/test"])
-        .stdin(Stdio::null())
-        .stdout(writer)
         .stderr(Stdio::piped())
         .output()
         .unwrap();
