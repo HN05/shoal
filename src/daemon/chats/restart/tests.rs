@@ -54,9 +54,10 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
 
     let coordinator = Some(SpaceId::from("coordinator"));
-    let error = (manager.restart_chat(&chat.id, run("a"), coordinator.clone(), None))
-        .await
-        .unwrap_err();
+    let narrowing =
+        crate::config::permissions::PermissionsConfig::assigned(&["push=propose".into()]).unwrap();
+    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.clone(), Some(narrowing));
+    let error = restart.await.unwrap_err();
 
     assert!(
         format!("{error:#}").contains("shoal resume unrestored"),
@@ -65,6 +66,9 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     assert!(!process.wait().unwrap().success());
     let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
+    // It waits under the narrowing the restart gave it, as a workspace
+    // agent's record does.
+    assert_eq!(saved.narrowing, narrowing);
     // The space whose process asked for the restart stopped it.
     let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
     assert_eq!(stopper, coordinator);

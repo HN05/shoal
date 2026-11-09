@@ -439,7 +439,8 @@ launched with, or for an agent another run is restarting. An agent protection st
 for its restore and is left out; a named space whose only agent waits is
 reported with why it stopped and that `shoal queue start` restores it now. An agent or chat that does not start
 again, as when no terminal host can open its new place, stays stopped for
-`shoal resume`, and the exit status is 1. One whose stopped
+`shoal resume`, under the narrowing `--permission` gave it, and the exit
+status is 1. One whose stopped
 processes do not exit is reported as pending with their PIDs and the command that
 ends them, which also sets the exit status to 1, and restarts once they exit
 unless `shoal stop` cancels it.

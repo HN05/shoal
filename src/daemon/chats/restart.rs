@@ -6,13 +6,14 @@
 use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
+use rusqlite::params;
 
 use super::restores::resume;
 use crate::{
     config::permissions::PermissionsConfig,
     daemon::{
-        log,
+        log, store,
         workspace::{Manager, restarted},
     },
     model::{Chat, RunningAgent},
@@ -122,10 +123,11 @@ impl Manager {
     }
 
     /// Save `chat` and stop its agent for the process of the space
-    /// `stopped_by`, then restore it, under `narrowing` when given, returning
-    /// the place it runs in again. A chat whose restore fails stays stopped
-    /// for `shoal resume`, the stopper's to resume, under the narrowing it
-    /// recorded.
+    /// `stopped_by`, give it `narrowing` when given in place of the one it
+    /// recorded, as a workspace agent's restart gives its record, then
+    /// restore it, returning the place it runs in again. A chat whose
+    /// restore fails stays stopped for `shoal resume`, the stopper's to
+    /// resume, under the narrowing it has then.
     async fn save_and_restore(
         &self,
         chat: &Chat,
@@ -133,7 +135,11 @@ impl Manager {
         narrowing: Option<PermissionsConfig>,
     ) -> Result<Option<Origin>> {
         self.save_chat(&chat.id, stopped_by).await?;
-        let restored = resume(&self.paths, chat, narrowing)
+        if let Some(narrowing) = narrowing {
+            self.replace_saved_chat_narrowing(&chat.id, narrowing)
+                .await?;
+        }
+        let restored = resume(&self.paths, chat)
             .await
             .map_err(|error| format!("{error:#}"));
         restored
@@ -141,6 +147,26 @@ impl Manager {
             .map_err(|error| anyhow!("{error}; restore it with shoal resume {}", chat.name))?;
         let restored = self.chat_by_id(&chat.id).await?;
         Ok(restored.and_then(|chat| chat.origin))
+    }
+
+    /// Give the saved chat `id` `narrowing` in place of the one it
+    /// recorded, which its restore runs under.
+    async fn replace_saved_chat_narrowing(
+        &self,
+        id: &str,
+        narrowing: PermissionsConfig,
+    ) -> Result<()> {
+        let (id, narrowing) = (id.to_owned(), store::narrowing_column(&narrowing)?);
+        self.store
+            .run(move |db| {
+                let updated = db.execute(
+                    "UPDATE chats SET narrowing=?2 WHERE id=?1 AND restore IS NOT NULL",
+                    params![id, narrowing],
+                )?;
+                ensure!(updated == 1, "the chat is no longer saved");
+                Ok(())
+            })
+            .await
     }
 }
 
