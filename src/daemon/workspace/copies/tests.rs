@@ -49,7 +49,11 @@ impl Fixture {
         }
     }
 
-    async fn copy(&self, checkpoint: Option<u64>, place: CopyPlace) -> Result<Workspace> {
+    async fn copy(
+        &self,
+        checkpoint: Option<CheckpointNumber>,
+        place: CopyPlace,
+    ) -> Result<Workspace> {
         let source = CopySource {
             workspace: SpaceSelector::parse(&self.source.name),
             checkpoint,
@@ -96,7 +100,10 @@ async fn a_copy_takes_the_files_and_diff_base_of_its_source() {
     );
     let copied = copy.copied_from.unwrap();
     assert_eq!(copied.workspace.unwrap().id, f.source.id);
-    assert_eq!((copied.checkpoint, copied.starting_checkpoint), (None, 1));
+    assert_eq!(
+        (copied.checkpoint, copied.starting_checkpoint),
+        (None, 1.into())
+    );
     assert_eq!(
         copied.head,
         git(&f.source.path, &["rev-parse", "HEAD"]).trim()

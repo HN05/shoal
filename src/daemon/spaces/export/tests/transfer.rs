@@ -542,7 +542,7 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
         manager
             .copy_space(
                 &SpaceSelector::from(&workspace.name),
-                Some(99),
+                Some(99.into()),
                 directory.path().join("missing.shoal")
             )
             .await

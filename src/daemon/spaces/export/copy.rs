@@ -7,6 +7,7 @@ use anyhow::{Result, ensure};
 
 use super::Prepared;
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, LastSession, Record, StoppedAgent},
@@ -44,7 +45,7 @@ impl Manager {
     pub(super) async fn copy_workspace(
         &self,
         workspace: Workspace,
-        number: Option<u64>,
+        number: Option<CheckpointNumber>,
     ) -> Result<Prepared> {
         let checkpoint = match number {
             Some(number) => self.numbered_checkpoint(&workspace, number).await?,

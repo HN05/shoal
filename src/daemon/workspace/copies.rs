@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Manager, NewWorkspace, restore::RestoredFiles};
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     git::{self, worktrunk},
@@ -51,7 +52,10 @@ enum SourceFiles {
     /// The live worktree's current files, ignored ones included.
     Worktree(PathBuf),
     /// A checkpoint's, by its number and the commit that keeps its files.
-    Checkpoint { number: u64, commit: String },
+    Checkpoint {
+        number: CheckpointNumber,
+        commit: String,
+    },
 }
 
 impl Source {
@@ -62,7 +66,7 @@ impl Source {
     }
 
     /// The copied workspace's checkpoint the copy starts from.
-    fn checkpoint(&self) -> Option<u64> {
+    fn checkpoint(&self) -> Option<CheckpointNumber> {
         match self.files {
             SourceFiles::Worktree(_) => None,
             SourceFiles::Checkpoint { number, .. } => Some(number),
@@ -143,7 +147,11 @@ impl Manager {
     }
 
     /// Checkpoint `number` of the existing `workspace`.
-    async fn live_checkpoint_source(&self, workspace: Workspace, number: u64) -> Result<Source> {
+    async fn live_checkpoint_source(
+        &self,
+        workspace: Workspace,
+        number: CheckpointNumber,
+    ) -> Result<Source> {
         let checkpoint = self
             .copied_checkpoint(&workspace.id, &workspace.name, number)
             .await?;
@@ -156,7 +164,11 @@ impl Manager {
 
     /// Checkpoint `number` of the removed workspace `selector` names, with
     /// the diff base its removal record keeps.
-    async fn removed_source(&self, selector: &SpaceSelector, number: u64) -> Result<Source> {
+    async fn removed_source(
+        &self,
+        selector: &SpaceSelector,
+        number: CheckpointNumber,
+    ) -> Result<Source> {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = self
             .copied_checkpoint(&removed.workspace_id, &removed.name, number)
@@ -182,7 +194,12 @@ impl Manager {
 
     /// Checkpoint `number` of workspace `id`, named `name`, refused when it
     /// could not keep the unsaved files.
-    async fn copied_checkpoint(&self, id: &SpaceId, name: &str, number: u64) -> Result<Checkpoint> {
+    async fn copied_checkpoint(
+        &self,
+        id: &SpaceId,
+        name: &str,
+        number: CheckpointNumber,
+    ) -> Result<Checkpoint> {
         let id = id.to_owned();
         let checkpoint = self
             .store
@@ -361,17 +378,17 @@ impl Manager {
         &self,
         id: &SpaceId,
         source: &Source,
-        starting: u64,
+        starting: CheckpointNumber,
         index: String,
     ) -> Result<()> {
         let (id, source_id) = (id.to_owned(), source.workspace_id.clone());
-        let checkpoint = source.checkpoint().map(|number| number as i64);
+        let checkpoint = source.checkpoint();
         self.store
             .run(move |db| {
                 db.execute(
                     "UPDATE workspaces SET copied_from=?2,copied_from_checkpoint=?3,
                         starting_checkpoint=?4,starting_index=?5 WHERE id=?1",
-                    params![id, source_id, checkpoint, starting as i64, index],
+                    params![id, source_id, checkpoint, starting, index],
                 )?;
                 Ok(())
             })
@@ -418,8 +435,8 @@ pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
                 };
                 Ok(CopiedFrom {
                     workspace,
-                    checkpoint: row.get::<_, Option<i64>>(3)?.map(|number| number as u64),
-                    starting_checkpoint: row.get::<_, i64>(4)? as u64,
+                    checkpoint: row.get(3)?,
+                    starting_checkpoint: row.get(4)?,
                     head: row.get(5)?,
                     commit: row.get(6)?,
                     index: row.get::<_, Option<String>>(7)?.unwrap_or_default(),

@@ -1,3 +1,4 @@
+use crate::model::CheckpointNumber;
 use crate::recovery::ReconcileOptions;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -15,12 +16,12 @@ pub enum RecoveryMethod {
     /// none when no workspace matches.
     Checkpoints {
         workspace: SpaceSelector,
-        after: Option<u64>,
+        after: Option<CheckpointNumber>,
     },
     /// Return a workspace to one of its checkpoints.
     RestoreCheckpoint {
         workspace: SpaceSelector,
-        checkpoint: u64,
+        checkpoint: CheckpointNumber,
     },
     /// Inspect one workspace, or all, and with `options` repair what verifies.
     Reconcile {

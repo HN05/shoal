@@ -8,7 +8,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     executions::{Copied, LastSession, StoppedAgent},
-    model::{RemovedWorkspace, RestoredWorkspace},
+    model::{CheckpointNumber, RemovedWorkspace, RestoredWorkspace},
     protocol::{RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
@@ -175,7 +175,7 @@ pub async fn export(
 pub async fn copy(
     daemon: &impl Daemon,
     space: SpaceSelector,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
     file: PathBuf,
 ) -> Result<ExportedSpace> {
     request(

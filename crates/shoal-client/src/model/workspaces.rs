@@ -1,5 +1,7 @@
 //! Workspace records and the commit, copy or branch they start from.
-use super::{AgentStatus, QueuedJob, ReviewMark, SpaceLinks, SpaceRef, WorkspaceHold};
+use super::{
+    AgentStatus, CheckpointNumber, QueuedJob, ReviewMark, SpaceLinks, SpaceRef, WorkspaceHold,
+};
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
@@ -139,9 +141,9 @@ pub struct CopiedFrom {
     /// That workspace's checkpoint the copy started from; `None` for a copy
     /// of its files at the time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checkpoint: Option<u64>,
+    pub checkpoint: Option<CheckpointNumber>,
     /// The number of the copy's own checkpoint of what it started with.
-    pub starting_checkpoint: u64,
+    pub starting_checkpoint: CheckpointNumber,
     /// That checkpoint's HEAD, and the commit that keeps its files.
     pub head: String,
     pub commit: String,

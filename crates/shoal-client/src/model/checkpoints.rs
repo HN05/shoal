@@ -19,13 +19,18 @@ crate::state::states!(
     }
 );
 
+crate::ids::number!(
+    /// The number of one of a workspace's checkpoints, which counts them
+    /// from 1.
+    CheckpointNumber(u64)
+);
+
 /// A workspace's HEAD and unsaved files, kept until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Checkpoint {
     pub workspace_id: SpaceId,
     pub repository_id: RepositoryId,
-    /// Counts the workspace's checkpoints from 1.
-    pub number: u64,
+    pub number: CheckpointNumber,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub cause: CheckpointCause,

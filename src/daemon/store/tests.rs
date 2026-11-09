@@ -1021,7 +1021,7 @@ fn removal_snapshots_become_checkpoints_their_records_name() -> Result<()> {
         crate::model::Checkpoint {
             workspace_id: "gone".into(),
             repository_id: "repo".into(),
-            number: 1,
+            number: 1.into(),
             name: None,
             cause: crate::model::CheckpointCause::Removal,
             branch: Some("topic".into()),

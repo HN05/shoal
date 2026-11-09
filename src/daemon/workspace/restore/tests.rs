@@ -326,7 +326,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .take_checkpoint(&"topic".into(), None)
         .await
         .unwrap();
-    assert_eq!(next.number, checkpoints[0].number + 1);
+    assert_eq!(next.number, checkpoints[0].number.get() + 1);
     assert!(
         checkpoint_refs(&checkout).contains(&git::checkpoint::reference(&checkpoints[0].commit))
     );
@@ -693,7 +693,7 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
     fs::remove_file(workspace.path.join("first")).unwrap();
     fs::write(workspace.path.join("second"), "second\n").unwrap();
     let second = save().await;
-    assert_eq!((first.number, second.number), (1, 2));
+    assert_eq!((first.number, second.number), (1.into(), 2.into()));
     assert_eq!(
         git(&checkout, &["show", &format!("{}:first", first.commit)]),
         "first\n"

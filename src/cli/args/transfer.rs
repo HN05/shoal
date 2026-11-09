@@ -5,6 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::cli::args::ConfirmationArgs;
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -75,7 +76,7 @@ pub struct ExportArgs {
     /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal work restore
     /// lists them.
     #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
-    pub checkpoint: Option<u64>,
+    pub checkpoint: Option<CheckpointNumber>,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
 }
@@ -121,7 +122,7 @@ pub struct SshArgs {
     pub keep: bool,
     /// Copy the workspace at this earlier checkpoint, numbered as shoal work restore lists them.
     #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
-    pub checkpoint: Option<u64>,
+    pub checkpoint: Option<CheckpointNumber>,
     /// Leave the agents stopped on the other machine instead of queueing their restores; chats
     /// still start there, in the background.
     #[arg(long)]

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::ConfigTarget;
 use super::Lifetime;
 use crate::config::hooks::HookKind;
+use crate::model::CheckpointNumber;
 use crate::space_names::SpaceSelector;
 
 /// Requests that create, find, inspect and change workspaces.
@@ -177,7 +178,7 @@ pub enum WorkspaceMethod {
     CopySpace {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        checkpoint: Option<u64>,
+        checkpoint: Option<CheckpointNumber>,
         file: std::path::PathBuf,
     },
     DiffBase {
@@ -286,7 +287,7 @@ pub struct CopySource {
     /// ID only with `checkpoint`.
     pub workspace: SpaceSelector,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checkpoint: Option<u64>,
+    pub checkpoint: Option<CheckpointNumber>,
 }
 
 /// PR `number`'s head, which `origin` serves under `reference`, expected at

@@ -1,6 +1,7 @@
 //! `shoal move ssh --keep`: copy spaces to another machine's Shoal, which
 //! opens each as a new space, leaving them running here.
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use anyhow::Result;
 
 use super::{super::export, Remote, arrived, summary};
@@ -18,7 +19,7 @@ pub(super) async fn copy_spaces(
     ctx: &Context,
     remote: &Remote,
     spaces: &[PresentSpace],
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
     resume: bool,
 ) -> Result<i32> {
     let staging = tempfile::tempdir()?;
@@ -46,7 +47,7 @@ async fn copy_one(
     remote: &Remote,
     directory: &export::ExportDirectory,
     space: &PresentSpace,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
     resume: bool,
 ) -> Result<Imported> {
     let file = directory.file(space.name());

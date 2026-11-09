@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
-    model::{Checkpoint, RestoredCheckpoint, Workspace},
+    model::{Checkpoint, CheckpointNumber, RestoredCheckpoint, Workspace},
     processes::Identity,
     protocol::RecoveryMethod,
     state::{ExecutionState, states},
@@ -98,7 +98,7 @@ pub async fn checkpoints(
 pub async fn restore_checkpoint(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    checkpoint: u64,
+    checkpoint: CheckpointNumber,
 ) -> Result<RestoredCheckpoint> {
     let method = RecoveryMethod::RestoreCheckpoint {
         workspace,

@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{
     daemon::{log, scope::Caller},
     git,
@@ -123,7 +124,7 @@ impl Manager {
         Ok(Checkpoint {
             workspace_id: workspace.id.clone(),
             repository_id: workspace.repository_id.clone(),
-            number: 0,
+            number: CheckpointNumber::default(),
             name,
             cause,
             branch: snapshot.branch,
@@ -181,14 +182,14 @@ impl Manager {
     pub async fn checkpoints(
         &self,
         selector: &SpaceSelector,
-        after: Option<u64>,
+        after: Option<CheckpointNumber>,
     ) -> Result<Option<Vec<Checkpoint>>> {
         let Ok(workspace) = self.workspace(selector).await else {
             return Ok(None);
         };
         let id = workspace.id;
         self.store
-            .run(move |db| checkpoint_page(db, &id, after.unwrap_or(0)))
+            .run(move |db| checkpoint_page(db, &id, after.unwrap_or_default()))
             .await
             .map(Some)
     }
@@ -197,7 +198,7 @@ impl Manager {
     pub(crate) async fn numbered_checkpoint(
         &self,
         workspace: &Workspace,
-        number: u64,
+        number: CheckpointNumber,
     ) -> Result<Checkpoint> {
         let (id, name) = (workspace.id.clone(), workspace.name.clone());
         self.store
@@ -216,7 +217,7 @@ impl Manager {
     pub async fn restore_checkpoint(
         &self,
         selector: &SpaceSelector,
-        number: u64,
+        number: CheckpointNumber,
         caller: Option<&Caller>,
     ) -> Result<RestoredCheckpoint> {
         let workspace = self.workspace(selector).await?;
@@ -453,17 +454,20 @@ fn branch_label(branch: Option<&str>) -> String {
 
 /// Record a checkpoint under the workspace's next number, in the caller's
 /// transaction.
-pub(super) fn insert_numbered(tx: &rusqlite::Transaction, checkpoint: &Checkpoint) -> Result<u64> {
+pub(super) fn insert_numbered(
+    tx: &rusqlite::Transaction,
+    checkpoint: &Checkpoint,
+) -> Result<CheckpointNumber> {
     // The sequence outlives expired checkpoints, so a number never names a
     // second one.
-    let number: i64 = tx.query_row(
+    let number: CheckpointNumber = tx.query_row(
         "INSERT INTO checkpoint_numbers(workspace_id,last) VALUES (?1,1)
             ON CONFLICT(workspace_id) DO UPDATE SET last=last+1 RETURNING last",
         [&checkpoint.workspace_id],
         |row| row.get(0),
     )?;
     let record = Checkpoint {
-        number: number as u64,
+        number,
         ..checkpoint.clone()
     };
     tx.execute(
@@ -487,7 +491,7 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
             WHERE workspace_id=?1 AND number=?2 AND expires_at > unixepoch()",
         params![
             checkpoint.workspace_id,
-            checkpoint.number as i64,
+            checkpoint.number,
             checkpoint.expires_at,
             serde_json::to_string(checkpoint)?,
         ],
@@ -513,12 +517,7 @@ fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
         };
         db.execute(
             "UPDATE checkpoints SET workspace_id=?3, record=?4 WHERE workspace_id=?1 AND number=?2",
-            params![
-                from,
-                record.number as i64,
-                to,
-                serde_json::to_string(&record)?
-            ],
+            params![from, record.number, to, serde_json::to_string(&record)?],
         )?;
     }
     Ok(())
@@ -584,14 +583,14 @@ fn latest(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Checkpoint>>
 pub(super) fn find(
     db: &Connection,
     workspace_id: &SpaceId,
-    number: u64,
+    number: CheckpointNumber,
 ) -> Result<Option<Checkpoint>> {
     let record: Option<String> = db
         .query_row(
             &format!(
                 "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number=?2 AND {KEPT}"
             ),
-            params![workspace_id, number as i64],
+            params![workspace_id, number],
             |row| row.get(0),
         )
         .optional()?;
@@ -613,12 +612,16 @@ const NAME_LIMIT: usize = 200;
 
 /// The checkpoints numbered after `after`, oldest first, as many as fit in
 /// [`PAGE_BYTES`] and at least one.
-fn checkpoint_page(db: &Connection, workspace_id: &SpaceId, after: u64) -> Result<Vec<Checkpoint>> {
+fn checkpoint_page(
+    db: &Connection,
+    workspace_id: &SpaceId,
+    after: CheckpointNumber,
+) -> Result<Vec<Checkpoint>> {
     let mut statement = db.prepare(&format!(
         "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number > ?2 AND {KEPT}
             ORDER BY number"
     ))?;
-    let mut rows = statement.query(params![workspace_id, after as i64])?;
+    let mut rows = statement.query(params![workspace_id, after])?;
     let (mut page, mut bytes) = (Vec::new(), 0);
     while let Some(row) = rows.next()? {
         let record: String = row.get(0)?;

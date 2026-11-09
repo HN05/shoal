@@ -9,6 +9,7 @@ use super::{
     repository_spaces, selected_spaces, warn,
 };
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{
     cli::{
         context::Context,
@@ -26,7 +27,7 @@ pub(in super::super) async fn export_copy(
     ctx: &Context,
     names: Vec<SpaceSelector>,
     file: PathBuf,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
     if names.len() > 1 || file.is_dir() {
@@ -61,7 +62,7 @@ async fn copy_into(
     ctx: &Context,
     spaces: &[PresentSpace],
     directory: PathBuf,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
     ensure_one_at_checkpoint(spaces.len(), checkpoint)?;
     let directory = ExportDirectory::create(directory)?;
@@ -79,7 +80,7 @@ async fn copy_one(
     ctx: &Context,
     directory: &ExportDirectory,
     space: &PresentSpace,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
 ) -> Result<ExportedSpace> {
     let output = Output::reserve(&directory.file(space.name()))?;
     copy(
@@ -95,7 +96,7 @@ async fn copy_one(
 /// number names a checkpoint of one workspace.
 pub(in super::super) fn ensure_one_at_checkpoint(
     count: usize,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
 ) -> Result<()> {
     ensure!(
         checkpoint.is_none() || count == 1,
@@ -109,7 +110,7 @@ pub(in super::super) fn ensure_one_at_checkpoint(
 pub(in super::super) async fn copy(
     ctx: &Context,
     space: SpaceSelector,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
     file: PathBuf,
 ) -> Result<ExportedSpace> {
     let exported = crate::client::transfer::copy(&ctx.paths, space, checkpoint, file).await?;

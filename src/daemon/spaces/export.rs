@@ -6,6 +6,7 @@ use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
 
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{
     client::transcripts::Environments,
     config::Effective,
@@ -63,7 +64,7 @@ impl Manager {
     pub async fn copy_space(
         &self,
         selector: &SpaceSelector,
-        checkpoint: Option<u64>,
+        checkpoint: Option<CheckpointNumber>,
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;

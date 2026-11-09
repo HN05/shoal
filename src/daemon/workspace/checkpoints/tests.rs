@@ -46,14 +46,14 @@ impl Fixture {
         git(&self.workspace.path, args)
     }
 
-    async fn set_expiry(&self, number: u64, expires_at: crate::time::UnixTime) {
+    async fn set_expiry(&self, number: CheckpointNumber, expires_at: crate::time::UnixTime) {
         let id = self.workspace.id.clone();
         self.manager
             .store
             .run(move |db| {
                 db.execute(
                     "UPDATE checkpoints SET expires_at=?3 WHERE workspace_id=?1 AND number=?2",
-                    params![id, number as i64, expires_at],
+                    params![id, number, expires_at],
                 )?;
                 Ok(())
             })
@@ -91,7 +91,7 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
         .await
         .unwrap();
     assert_eq!(second.number, 2);
-    f.set_expiry(2, crate::time::UnixTime::from_seconds(1))
+    f.set_expiry(2.into(), crate::time::UnixTime::from_seconds(1))
         .await;
     manager.checkpoint_after_agent(&f.workspace.id).await;
     let numbers = async || {
@@ -304,7 +304,7 @@ async fn restore_returns_to_a_checkpoint_after_keeping_the_current_state() {
     assert_eq!(f.read("untracked").as_deref(), Some("later\n"));
 
     manager
-        .restore_checkpoint(&"topic".into(), 99, None)
+        .restore_checkpoint(&"topic".into(), 99.into(), None)
         .await
         .unwrap_err();
 }
@@ -434,7 +434,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
         .take_checkpoint(&"topic".into(), None)
         .await
         .unwrap();
-    let (id, number) = (f.workspace.id.clone(), start.number as i64);
+    let (id, number) = (f.workspace.id.clone(), start.number);
     manager
         .store
         .run(move |db| {

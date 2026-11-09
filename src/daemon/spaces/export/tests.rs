@@ -420,7 +420,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
     let refused = manager
         .copy_space(
             &"plan-cache".into(),
-            Some(1),
+            Some(1.into()),
             root.path().join("refused.shoal"),
         )
         .await

@@ -5,6 +5,7 @@ use std::{ffi::OsString, path::PathBuf};
 use clap::{Args, Subcommand};
 
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, ModelArgs, item_reference, permission_assignment},
@@ -201,7 +202,7 @@ pub struct CopyArgs {
     /// instead of its current files; shoal work restore <workspace> lists
     /// them.
     #[arg(long, value_name = "NUMBER", conflicts_with = "base")]
-    pub checkpoint: Option<u64>,
+    pub checkpoint: Option<CheckpointNumber>,
 }
 
 impl CopyArgs {

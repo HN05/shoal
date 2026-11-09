@@ -11,6 +11,7 @@ use super::resume::Stopped;
 use crate::client::output::resume::{Queued, Reopened};
 use crate::client::recovery;
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 use crate::{
     cli::{
         context::Context,
@@ -53,7 +54,7 @@ pub(super) async fn checkpoint(
 pub(super) async fn run(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
-    checkpoint: Option<u64>,
+    checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
     let scoped = crate::env::inherits_scope(&ctx.paths.state);
     let Some(workspace) = workspace else {
@@ -124,7 +125,7 @@ async fn checkpoints(ctx: &Context, workspace: &SpaceSelector) -> Result<Option<
 async fn restore_checkpoint(
     ctx: &Context,
     workspace: SpaceSelector,
-    checkpoint: u64,
+    checkpoint: CheckpointNumber,
 ) -> Result<i32> {
     let restored: RestoredCheckpoint = ctx
         .progress(

@@ -5,6 +5,7 @@ use clap::Subcommand;
 
 use crate::cli::{args::item_reference, list_status};
 use crate::client::space_names::SpaceSelector;
+use crate::model::CheckpointNumber;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -160,7 +161,7 @@ pub enum WorkCommand {
     Restore {
         workspace: Option<SpaceSelector>,
         #[arg(requires = "workspace")]
-        checkpoint: Option<u64>,
+        checkpoint: Option<CheckpointNumber>,
     },
     /// Run or retry workspace setup and the post-setup hook.
     Setup {
