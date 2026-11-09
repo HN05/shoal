@@ -667,4 +667,12 @@ fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
             .collect::<Vec<_>>(),
         [("last", replacement)]
     );
+
+    // A record a restore claimed is refused, and none changes.
+    let record = record_path(&paths, "workspace", "stopped");
+    let _restoring = claim(&record).unwrap();
+    let saved = Saved::load(&paths, "workspace").unwrap();
+    assert!(saved.replace_narrowing(Default::default()).is_err());
+    let last = LastSession::all(&paths, "workspace").unwrap();
+    assert_eq!(last[0].narrowing, replacement);
 }

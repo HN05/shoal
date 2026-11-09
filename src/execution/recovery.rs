@@ -1230,12 +1230,15 @@ impl Saved {
     }
 
     /// Give each saved agent and last session `narrowing` in place of the
-    /// one it recorded, which its restore runs under; one consumed since
-    /// it was listed has nothing to replace.
+    /// one it recorded, which its restore runs under, holding the claim a
+    /// restore takes on each, so one a restore holds is refused before any
+    /// changes.
     pub fn replace_narrowing(
         &self,
         narrowing: crate::config::permissions::PermissionsConfig,
     ) -> Result<()> {
+        let paths = self.agents.iter().chain(&self.sessions);
+        let _claims = (paths.map(|(_, path)| claim(path))).collect::<Result<Vec<_>>>()?;
         for (_, path) in &self.agents {
             if let Some(record) = Record::load(path)? {
                 rewrite(
