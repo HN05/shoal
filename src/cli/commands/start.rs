@@ -43,13 +43,7 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         args.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     ensure_copy_fits(&args)?;
-    ensure!(
-        PermissionChange::combined(&args.permissions)
-            .dropped
-            .is_empty(),
-        "--permission KEY={} drops a value given before, and a new agent has none; leave the key out",
-        crate::config::permissions::MODE_VALUE
-    );
+    ensure_nothing_dropped(&args)?;
     match start_of(ctx, &mut args).await? {
         Start::Workspace(mode) => in_workspace(ctx, args, mode).await,
         Start::Chat(mode) => in_chat(ctx, args, mode).await,
@@ -488,6 +482,19 @@ fn ensure_copy_fits(args: &StartArgs) -> Result<()> {
     Ok(())
 }
 
+/// Refuse a `--permission KEY=mode`, which drops a value given before, and
+/// a new agent has none.
+fn ensure_nothing_dropped(args: &StartArgs) -> Result<()> {
+    ensure!(
+        PermissionChange::combined(&args.permissions)
+            .dropped
+            .is_empty(),
+        "--permission KEY={} drops a value given before, and a new agent has none; leave the key out",
+        crate::config::permissions::MODE_VALUE
+    );
+    Ok(())
+}
+
 /// The parent, agent and session of a `--fork` start: one forked from the
 /// `copied` workspace's agent goes below `parent` as any start does, while
 /// one forked from the parent's agent goes below that workspace.
@@ -665,7 +672,7 @@ fn positional_target(
 }
 
 /// The permissions a start's `--permission` assignments give its agent,
-/// which [`run`] refused a `KEY=mode` among.
+/// among which [`ensure_nothing_dropped`] refused a `KEY=mode`.
 fn given(changes: &[PermissionChange]) -> PermissionsConfig {
     PermissionChange::combined(changes).set
 }
