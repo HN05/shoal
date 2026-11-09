@@ -430,7 +430,12 @@ restarting continues the run that asked for it: it reports on that restart,
 even with `--wait`, and skips the agents that run restarted already. A
 restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
-skipped, for `shoal stop` and `shoal resume`. An agent protection stopped waits
+skipped, for `shoal stop` and `shoal resume`. `--permission KEY=VALUE`,
+repeatable, restarts each agent under that narrowing of its mode's
+[permissions](#mode-permissions) in place of the one it recorded. A value
+wider than an agent's mode is refused before any agent stops, and so is
+`--permission` with `--in-place`, whose wrapper keeps the push rules it
+launched with, or for an agent another run is restarting. An agent protection stopped waits
 for its restore and is left out; a named space whose only agent waits is
 reported with why it stopped and that `shoal queue start` restores it now. An agent or chat that does not start
 again, as when no terminal host can open its new place, stays stopped for
@@ -485,6 +490,12 @@ is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
+`--permission KEY=VALUE`, repeatable, restores each selected agent and chat
+under that narrowing of its mode's [permissions](#mode-permissions) in place of
+the one it recorded, which its records keep from then on, and needs the spaces
+named or picked. A value wider than an agent's or chat's mode is refused before
+anything is restored, and so is an agent its waiting wrapper restores or one
+whose interrupted turn continues, since both keep the launch they run under.
 A stopped [chat](#chats) restores at once under its name, continuing
 its session, in a background place where a restored agent opens, once the
 chat is about to run its agent there or with the error that stopped it, or in
@@ -2380,7 +2391,8 @@ A value wider than the mode's is refused before anything is created; one
 wider than the parent space's effective value is recorded as given, and each
 check caps it at the parent's, as it does every key. Shoal records the
 narrowing with the agent's mode, on its execution, queue entry, workspace or
-chat, and a restore or restart keeps it; nothing changes it while the agent
+chat, and a restore or restart keeps it unless its `--permission` replaces it,
+up to the mode's, as for a new agent; nothing changes it while the agent
 runs. `shoal work status --json` gives the recorded narrowing as `narrowing`,
 beside the effective `permissions`.
 

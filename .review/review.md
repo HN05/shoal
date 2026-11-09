@@ -236,7 +236,8 @@ instead of the PR delivery guidance below.
   The `issue_other_repositories` permission governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. These permissions
   are the acting caller's space's, from its agent's mode (`[modes.NAME.permissions]` over
-  `[permissions]`), never wider than its parent's, computed at each check through one daemon
+  `[permissions]`), narrowed by the `--permission` its agent started with or a resume or
+  restart replaced that with, never wider than its parent's, computed at each check through one daemon
   operation; flag a check that reads a repository's `[permissions]` directly. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks

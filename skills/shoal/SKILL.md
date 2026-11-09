@@ -238,7 +238,8 @@ each with where it comes from. A command acting on a space below uses the
 caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
 less than its mode would, such as `--permission push=propose`; a value wider
 than the mode's is refused, and one wider than yours still gets no more than
-yours.
+yours. `shoal resume` and `shoal restart` take `--permission` too, replacing
+the narrowing the agent recorded; without it they keep it.
 
 Where a space's permissions require approval for issues and PRs, `issue open`
 and `pr open` exit 0 with `proposed`, an approval request, instead of the item;

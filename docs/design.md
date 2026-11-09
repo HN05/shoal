@@ -2502,8 +2502,15 @@ has more than its parent. The modes that coordinate default `merge` and
 `worker` keeps the key defaults. A parent may give a child less than it has
 with `shoal start --permission KEY=VALUE`, a narrowing recorded with the
 agent's mode, since it belongs to that agent as its mode does: restores and
-restarts keep both, and a new agent in the space brings its own. A narrowing
-never widens: a value above the mode's is refused, because asking for more
+restarts keep both, and a new agent in the space brings its own. `shoal resume`
+and `shoal restart` take `--permission` too and replace the recorded narrowing,
+so a parent changes what a child may do without ending its session; the mode
+stays, since changing it would change the agent's rules mid-session. The
+replacement goes into the record a restore reads, so a restore here, in the
+background or from the queue runs under it alike. A wrapper that restores its
+own agent, after an in-place restart or a protection stop, keeps the push
+rules it launched with, so it refuses a replacement rather than half apply
+it. A narrowing never widens: a value above the mode's is refused, because asking for more
 than the mode gives is a mistake worth saying, while one above the parent's
 is recorded as given and capped at each check, since the parent's own
 permissions may change, and a copy of today's value would outlast that. Effective

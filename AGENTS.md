@@ -248,7 +248,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   (`[modes.NAME.permissions]` over `[permissions]` over the built-in mode's
   defaults over the key's), narrowed by the `--permission` its agent started
   with, which is recorded beside each `mode` column and kept by restores and
-  restarts, and each narrowed to its parent's effective value; one daemon
+  restarts unless their own `--permission` replaces it, and each narrowed to
+  its parent's effective value; one daemon
   operation computes them at each check from current config, the recorded
   modes and narrowings and the tree; a scoped check reads the acting caller's space's
   through it, never a repository's settings, and a chat without a repository
