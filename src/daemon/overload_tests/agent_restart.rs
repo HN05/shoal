@@ -298,6 +298,48 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
     serving.abort();
 }
 
+/// A restart's new wrapper restores the agent from its record, as
+/// `shoal resume` does, but the restart keeps a done workspace's completion.
+#[tokio::test]
+async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = agent_execution(&manager, &workspace).await;
+    manager
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            crate::client::assignments::Done::default(),
+            &crate::daemon::workspace_files::Attacher::User,
+        )
+        .await
+        .unwrap();
+    let restarted = tokio::spawn({
+        let (manager, execution) = (manager.clone(), execution.clone());
+        async move { manager.restart_agent(&execution, None, false, None).await }
+    });
+    bounded(launched).await.unwrap().unwrap();
+    let restore = starting_restore(&manager, &execution).await;
+    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
+    let mut renewed = child_command(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::resumed_agent_child",
+    );
+    renewed
+        .env("SHOAL_TEST_RECORD", &record)
+        .env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
+    let renewed = run_child(renewed);
+    // The restart is answered once the new wrapper reported its agent's start.
+    bounded(restarted).await.unwrap().unwrap();
+    assert!(manager.completion(&workspace.id).await.unwrap().is_some());
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+        .await
+        .unwrap();
+    bounded(renewed).await.unwrap().unwrap();
+    serving.abort();
+}
+
 /// The new wrapper the agent queue starts for a restart: it takes over the
 /// queue entry `SHOAL_TEST_QUEUE_ENTRY` names, and its agent writes `renewed`.
 #[tokio::test]

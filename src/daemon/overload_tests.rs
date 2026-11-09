@@ -1143,12 +1143,16 @@ async fn only_execution(manager: &Manager, workspace: &crate::model::Workspace) 
 }
 
 /// The agent saved at `SHOAL_TEST_RECORD`, restored in a new wrapper as
-/// `shoal resume` restores it.
+/// `shoal resume` restores it, taking over the queue entry
+/// `SHOAL_TEST_QUEUE_ENTRY` names, if any, as a restart's new wrapper does.
 #[tokio::test]
 #[ignore = "isolated restoring wrapper launched by overload tests"]
 async fn resumed_agent_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
+    }
+    if let Ok(entry) = std::env::var("SHOAL_TEST_QUEUE_ENTRY") {
+        crate::env::launch_queue_entry(&entry);
     }
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);
