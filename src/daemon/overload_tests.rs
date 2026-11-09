@@ -1248,7 +1248,7 @@ async fn resumed_agent_child() {
     }
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);
-    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let record = std::env::var_os("SHOAL_TEST_RECORD").unwrap();
     let script = "trap 'exit 0' TERM; touch started; while :; do sleep 1; done";
     let code = crate::execution::run_recovery(

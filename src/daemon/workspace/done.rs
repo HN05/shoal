@@ -65,7 +65,7 @@ impl Manager {
     /// `shoal resume` restores a stopped agent of the workspace, which says
     /// its work is not finished: withdraw a standing completion, so a
     /// protection stop restores the agent.
-    pub(crate) async fn reopen_for_resume(&self, workspace_id: &str) {
+    pub(crate) async fn reopen_for_resume(&self, workspace_id: &SpaceId) {
         match self.completion(workspace_id).await {
             Ok(Some(_)) => {}
             Ok(None) => return,

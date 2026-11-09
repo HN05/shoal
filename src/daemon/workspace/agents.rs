@@ -1077,7 +1077,7 @@ impl Manager {
     /// `shoal resume`.
     pub(crate) async fn done_cancels_restore(
         &self,
-        workspace_id: &str,
+        workspace_id: &SpaceId,
         protection: &Protection,
     ) -> anyhow::Result<bool> {
         Ok(protection.ends_with_assignment() && self.completion(workspace_id).await?.is_some())
@@ -1189,7 +1189,7 @@ pub(crate) struct StoppedAgent {
     id: String,
     pub name: String,
     pub workspace: String,
-    workspace_id: String,
+    workspace_id: SpaceId,
     recover: bool,
     handoff_saved: bool,
     /// What its automatic restore waits for.
