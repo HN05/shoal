@@ -1,7 +1,7 @@
 //! Renaming the recorded space names a number could be read as, or that
 //! break the space name rule otherwise, and the copies other records keep
-//! of them, so every name reads as a [`SpaceName`]. Nothing else follows a
-//! rename: no journal event, message or file move, so a renamed chat's
+//! of them, so every name reads as a [`SpaceName`]. A rename records no
+//! journal event, sends no message and moves no file, so a renamed chat's
 //! files stay under its old name.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
