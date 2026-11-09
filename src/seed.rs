@@ -138,6 +138,11 @@ impl Layout {
     fn retired(&self) -> PathBuf {
         self.root.join("snapshot.old")
     }
+
+    /// Delete the snapshot a new one replaced.
+    pub fn remove_retired(&self) -> Result<()> {
+        remove_dir(&self.retired())
+    }
 }
 
 /// What a frozen snapshot holds: the commit it was built from, the outputs it
@@ -164,34 +169,26 @@ impl Snapshot {
         }
     }
 
-    /// Freeze the seed worktree's `paths` built from `commit`, replacing the
-    /// current snapshot. `files` are the tracked files whose content matches
-    /// `commit`; only their times are recorded. Callers exclude readers.
-    pub async fn freeze(
-        layout: &Layout,
-        commit: String,
-        settings: String,
-        paths: &[String],
-        files: Vec<String>,
-    ) -> Result<()> {
-        Self::freeze_with(&clone_tree, layout, commit, settings, paths, files).await
+    /// Clone the seed worktree's outputs among `paths` for the next
+    /// snapshot, while the current one stays in use. Callers exclude other
+    /// changes to the snapshot.
+    pub async fn stage(layout: &Layout, paths: &[String]) -> Result<Staged> {
+        Self::stage_with(&clone_tree, layout, paths).await
     }
 
-    /// [`Self::freeze`], copying each output tree with `copy`.
-    async fn freeze_with(
+    /// [`Self::stage`], copying each output tree with `copy`.
+    async fn stage_with(
         copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
         layout: &Layout,
-        commit: String,
-        settings: String,
         paths: &[String],
-        files: Vec<String>,
-    ) -> Result<()> {
+    ) -> Result<Staged> {
         layout.ensure_owned()?;
         let staging = layout.staging();
         remove_dir(&staging)?;
+        layout.remove_retired()?;
         fs::create_dir_all(staging.join(OUTPUTS))?;
         let worktree = layout.worktree();
-        let mut frozen = Vec::new();
+        let mut staged = Vec::new();
         for path in paths {
             let source = worktree.join(path);
             if source.symlink_metadata().is_err() {
@@ -202,23 +199,9 @@ impl Snapshot {
                 fs::create_dir_all(parent)?;
             }
             copy(&source, &destination).await?;
-            frozen.push(path.clone());
+            staged.push(path.clone());
         }
-        let snapshot = Self {
-            commit,
-            settings,
-            paths: frozen,
-            times: modification_times(&worktree, files)?,
-        };
-        fs::write(staging.join(MANIFEST), serde_json::to_vec(&snapshot)?)?;
-        let current = layout.snapshot();
-        let retired = layout.retired();
-        remove_dir(&retired)?;
-        if current.exists() {
-            fs::rename(&current, &retired)?;
-        }
-        fs::rename(&staging, &current)?;
-        remove_dir(&retired)
+        Ok(Staged { paths: staged })
     }
 
     /// Clone the frozen outputs among `paths` into a new worktree, leaving
@@ -293,6 +276,44 @@ impl Snapshot {
                 .and_then(|file| file.set_modified(time))
                 .with_context(|| format!("set modification time of {}", path.display()))?;
         }
+        Ok(())
+    }
+}
+
+/// Outputs cloned for the next snapshot, which [`Staged::install`] makes the
+/// current one.
+pub struct Staged {
+    paths: Vec<String>,
+}
+
+impl Staged {
+    /// Make the staged outputs, built from `commit` under `settings`, the
+    /// snapshot. `files` are the tracked files whose content matches
+    /// `commit`; only their times are recorded. The replaced snapshot waits
+    /// for [`Layout::remove_retired`]. Callers exclude readers.
+    pub fn install(
+        self,
+        layout: &Layout,
+        commit: String,
+        settings: String,
+        files: Vec<String>,
+    ) -> Result<()> {
+        layout.ensure_owned()?;
+        let staging = layout.staging();
+        let snapshot = Snapshot {
+            commit,
+            settings,
+            paths: self.paths,
+            times: modification_times(&layout.worktree(), files)?,
+        };
+        fs::write(staging.join(MANIFEST), serde_json::to_vec(&snapshot)?)?;
+        let current = layout.snapshot();
+        let retired = layout.retired();
+        remove_dir(&retired)?;
+        if current.exists() {
+            fs::rename(&current, &retired)?;
+        }
+        fs::rename(&staging, &current)?;
         Ok(())
     }
 }

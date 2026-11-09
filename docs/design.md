@@ -976,7 +976,9 @@ copy-on-write clone costs no space until a branch rewrites a file and needs no
 tool support. The daemon owns a locked, detached seed worktree in the repository
 directory, builds it when the branch moves and freezes the configured outputs as
 a snapshot, so a running build never reaches a workspace. Creation clones the
-snapshot under the repository Git gate and restores the seed's modification times
+snapshot under the repository Git gate; a new snapshot is cloned and the old one
+deleted outside the gate, which it takes only to swap them, since a large build
+tree takes seconds to clone or delete. Creation restores the seed's modification times
 on tracked files its commit left unchanged, since mtime-based tools otherwise treat
 every freshly checked-out file as new. Platforms without clones skip the seed
 rather than copy. Seeds are best effort: failures notify and never fail creation,

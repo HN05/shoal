@@ -22,13 +22,14 @@ use crate::{
             identity,
         },
     },
+    fsutil::off_runtime,
     git::{
         self,
         default_branch::{self, DefaultBranchLookup},
     },
     model::{Repository, Workspace},
     seed::{
-        Layout, Snapshot,
+        Layout, Snapshot, Staged,
         build::{self, Build, Step},
     },
     state::WorkspaceState,
@@ -169,8 +170,9 @@ impl Manager {
         repo: &Repository,
         layout: &Layout,
         plan: &Plan,
-        (tip, settings): &(String, String),
+        build: &(String, String),
     ) -> Result<()> {
+        let tip = &build.0;
         let slot = self.seeds.slot(&repo.id);
         let _build = slot.gate.lock().await;
         if self.repository(&repo.id).await.is_err() {
@@ -191,7 +193,34 @@ impl Manager {
             slot.cancel.subscribe(),
         )
         .await?;
-        // Creation clones under the same gate, so it never sees a partial swap.
+        self.freeze_seed(repo, layout, plan, build).await
+    }
+
+    /// Replace the snapshot with the outputs the seed worktree built, cloning
+    /// them and deleting the replaced snapshot outside the Git gate, which
+    /// creation holds while it starts from the snapshot.
+    async fn freeze_seed(
+        &self,
+        repo: &Repository,
+        layout: &Layout,
+        plan: &Plan,
+        build: &(String, String),
+    ) -> Result<()> {
+        let staged = Snapshot::stage(layout, &plan.paths).await?;
+        self.install_snapshot(repo, layout, staged, build).await?;
+        let retired = layout.clone();
+        off_runtime::run(move || retired.remove_retired()).await
+    }
+
+    /// Make `staged` the snapshot of the seed worktree built at `tip`, under
+    /// the Git gate, so creation never sees a partial swap.
+    async fn install_snapshot(
+        &self,
+        repo: &Repository,
+        layout: &Layout,
+        staged: Staged,
+        (tip, settings): &(String, String),
+    ) -> Result<()> {
         let _git = self.gates.lock_git(&repo.id).await;
         self.ensure_repository_available(&repo.id).await?;
         let worktree = layout.worktree();
@@ -200,14 +229,7 @@ impl Manager {
             "the seed worktree moved during its build"
         );
         let files = git::seed::unmodified_files(&worktree).await?;
-        Snapshot::freeze(
-            layout,
-            tip.to_owned(),
-            settings.to_owned(),
-            &plan.paths,
-            files,
-        )
-        .await
+        staged.install(layout, tip.to_owned(), settings.to_owned(), files)
     }
 
     /// Start a new worktree from its repository's seed snapshot when the

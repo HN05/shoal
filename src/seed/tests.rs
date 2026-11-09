@@ -45,6 +45,19 @@ async fn copy(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Stage, install and retire a snapshot as a seed build does.
+async fn freeze(
+    copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+    layout: &Layout,
+    commit: &str,
+    paths: &[String],
+    files: Vec<String>,
+) -> Result<()> {
+    let staged = Snapshot::stage_with(copy, layout, paths).await?;
+    staged.install(layout, commit.into(), "s".into(), files)?;
+    layout.remove_retired()
+}
+
 #[tokio::test]
 async fn snapshots_clone_natively_or_not_at_all() {
     let root = tempfile::tempdir().unwrap();
@@ -53,7 +66,7 @@ async fn snapshots_clone_natively_or_not_at_all() {
     fs::create_dir_all(layout.worktree().join("out")).unwrap();
     fs::write(layout.worktree().join("out/built"), "built").unwrap();
     let paths = vec!["out".to_owned()];
-    let frozen = Snapshot::freeze(&layout, "c1".into(), "s".into(), &paths, Vec::new()).await;
+    let frozen = freeze(&clone_tree, &layout, "c1", &paths, Vec::new()).await;
     if !native_cloning(root.path()) {
         // Copying would cost the disk space cloning saves.
         assert!(frozen.is_err());
@@ -93,9 +106,7 @@ async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
     // The build modified one tracked file, so the caller leaves it out.
     let files = vec!["src/same.rs".into(), "src/changed.rs".into()];
     let paths = vec!["target".to_owned(), "missing".to_owned()];
-    Snapshot::freeze_with(&copy, &layout, "c1".into(), "s".into(), &paths, files)
-        .await
-        .unwrap();
+    freeze(&copy, &layout, "c1", &paths, files).await.unwrap();
     // A rebuild in the seed worktree does not reach the snapshot.
     fs::write(seed.join("target/debug/app"), "rebuilding").unwrap();
 
@@ -138,7 +149,7 @@ async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
             .is_empty()
     );
 
-    Snapshot::freeze_with(&copy, &layout, "c2".into(), "s".into(), &paths, Vec::new())
+    freeze(&copy, &layout, "c2", &paths, Vec::new())
         .await
         .unwrap();
     let snapshot = Snapshot::open(&layout).unwrap().unwrap();
@@ -204,7 +215,7 @@ async fn a_failed_clone_leaves_no_outputs_behind() {
         fs::write(layout.worktree().join(path).join("built"), path).unwrap();
     }
     let paths = vec!["first".to_owned(), "second".to_owned()];
-    Snapshot::freeze_with(&copy, &layout, "c1".into(), "s".into(), &paths, Vec::new())
+    freeze(&copy, &layout, "c1", &paths, Vec::new())
         .await
         .unwrap();
     // The second output disappears from the snapshot, so cloning it fails.
@@ -229,7 +240,7 @@ async fn outputs_never_pass_through_a_symlink() {
     layout.claim().unwrap();
     fs::create_dir_all(layout.worktree().join("ios/build")).unwrap();
     let paths = vec!["ios/build".to_owned()];
-    Snapshot::freeze_with(&copy, &layout, "c1".into(), "s".into(), &paths, Vec::new())
+    freeze(&copy, &layout, "c1", &paths, Vec::new())
         .await
         .unwrap();
     let workspace = root.path().join("workspace");
