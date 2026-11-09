@@ -100,7 +100,7 @@ async fn starting_restore(manager: &Manager, execution: &str) -> QueueEntry {
 fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
     QueueRequest {
         narrowing: Default::default(),
-        repository: workspace.repository_id.as_str().into(),
+        repository: (&workspace.repository_id).into(),
         name: "waiting".into(),
         agent: "claude".into(),
         mode: None,

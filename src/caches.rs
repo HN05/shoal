@@ -3,6 +3,7 @@
 //! `.caches/shared`,
 //! and `[env]` names it with `{cache.NAME}`. Only caches whose tools lock or
 //! address entries by content are safe to share between live workspaces.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::BTreeMap,
     fs,
@@ -28,11 +29,11 @@ const TRASH: &str = "trash";
 #[derive(Debug, Clone)]
 pub struct Layout {
     root: PathBuf,
-    owner: String,
+    owner: RepositoryId,
 }
 
 impl Layout {
-    pub fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+    pub fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
             root: workspaces_dir.join(".caches"),
             owner: repository_id.to_owned(),

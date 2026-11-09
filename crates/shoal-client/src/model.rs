@@ -1,4 +1,5 @@
 //! Records shared by the daemon, its SQLite store, and CLI output.
+use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -14,7 +15,7 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repository {
-    pub id: String,
+    pub id: RepositoryId,
     pub path: PathBuf,
     pub source: String,
     /// Monotonic usage counter; higher means more recently used.
@@ -39,7 +40,7 @@ pub struct LocalConfigEdit {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryRemoval {
     pub removed: bool,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub path: PathBuf,
     pub workspaces_removed: usize,
     /// Canonical worktree paths removed during this operation and prior retry attempts.
@@ -77,7 +78,7 @@ pub struct Workspace {
     /// it goes.
     #[serde(default)]
     pub number: u32,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub name: SpaceName,
     /// What its agent calls the work, which its tabs show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -405,7 +406,7 @@ crate::state::states!(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Checkpoint {
     pub workspace_id: SpaceId,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     /// Counts the workspace's checkpoints from 1.
     pub number: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -434,7 +435,7 @@ pub struct RestoredCheckpoint {
 /// A Git worktree under a repository's Shoal directory that no workspace owns.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UntrackedWorktree {
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub path: std::path::PathBuf,
 }
 
@@ -442,7 +443,7 @@ pub struct UntrackedWorktree {
 /// a remote or the default branch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeptBranch {
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     /// The repository's name, or its path when it has none.
     pub repository: String,
     pub branch: String,
@@ -458,7 +459,7 @@ pub struct KeptBranch {
 /// A kept branch to delete, at the commit the user saw.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BranchTarget {
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub branch: String,
     pub head: String,
 }
@@ -467,7 +468,7 @@ pub struct BranchTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemovedWorkspace {
     pub workspace_id: SpaceId,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub name: SpaceName,
     /// The checkpoint taken at removal.
     pub checkpoint: Checkpoint,
@@ -625,7 +626,7 @@ crate::state::states!(
 
 impl Workspace {
     pub fn new_record(
-        repository_id: String,
+        repository_id: RepositoryId,
         name: SpaceName,
         path: PathBuf,
         branch: Option<String>,
@@ -941,7 +942,7 @@ pub struct WorktreeStatus {
 /// How the background sync of a repository's default branch went.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckoutSync {
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     /// When the default branch last followed its remote.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synced_at: Option<crate::time::UnixTime>,
@@ -1200,7 +1201,7 @@ impl ConflictCheck {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulledBranch {
     pub branch: String,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub previous_commit: String,
     pub commit: String,
     pub updated: bool,
@@ -1232,7 +1233,7 @@ pub struct OpenedWorkspace {
 /// A repository's remote fetched and its local default branch fast-forwarded.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SyncedRepository {
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     /// The default branch's upstream remote, absent when it has none.
     pub remote: Option<String>,
     pub default_branch: PulledBranch,
@@ -1242,7 +1243,7 @@ pub struct SyncedRepository {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergedBranch {
     pub workspace_id: SpaceId,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub branch: String,
     pub default_branch: String,
     pub previous_commit: String,
@@ -1300,7 +1301,7 @@ pub struct UnmergePlan {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Unmerged {
     pub workspace_id: SpaceId,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub branch: String,
     pub default_branch: String,
     /// The branch's commit that had merged.
@@ -1489,7 +1490,7 @@ pub struct Chat {
     pub number: u32,
     /// The repository it belongs to; none for a chat that manages the
     /// spaces of every repository.
-    pub repository_id: Option<String>,
+    pub repository_id: Option<RepositoryId>,
     /// Unique among workspace names and the names of other chats.
     pub name: SpaceName,
     pub agent: String,
@@ -1571,7 +1572,7 @@ impl<'a> ChatHome<'a> {
     }
 
     /// The chat's repository; none at `root_dir`.
-    pub fn repository_id(self) -> Option<&'a str> {
+    pub fn repository_id(self) -> Option<&'a RepositoryId> {
         match self {
             Self::Checkout(repository) => Some(&repository.id),
             Self::Workspace(workspace) => Some(&workspace.repository_id),
@@ -1638,10 +1639,10 @@ impl PresentSpace {
     }
 
     /// Its repository; none for a chat without one.
-    pub fn repository_id(&self) -> Option<&str> {
+    pub fn repository_id(&self) -> Option<&RepositoryId> {
         match self {
             Self::Workspace(workspace) => Some(&workspace.repository_id),
-            Self::Chat(chat) => chat.repository_id.as_deref(),
+            Self::Chat(chat) => chat.repository_id.as_ref(),
         }
     }
 
@@ -1831,7 +1832,7 @@ pub struct AgentSession {
 pub struct QueueEntry {
     pub id: String,
     pub kind: QueueKind,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     /// The workspace name: derived from the planned branch for a launch, the
     /// stopped agent's for a restore.
     pub name: String,

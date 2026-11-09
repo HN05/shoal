@@ -45,7 +45,7 @@ pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRe
     QueueRequest {
         narrowing: Default::default(),
         mode: None,
-        repository: repository.id.as_str().into(),
+        repository: (&repository.id).into(),
         name: name.into(),
         agent: "claude".into(),
         issue_title: None,
@@ -1232,9 +1232,7 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
     limit_globally(&manager, 1);
     let first = add(&manager, &repo, "first").await.entry.unwrap();
     let launch = add(&manager, &repo, "launch").await.entry.unwrap();
-    let mut review = manager
-        .agent_queue
-        .request_oneshot(repo.id.as_str(), false, || {});
+    let mut review = manager.agent_queue.request_oneshot(&repo.id, false, || {});
     let workspace = manager
         .create_workspace(&repo.id, "first".into(), None, None, None)
         .await
@@ -1276,7 +1274,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     let counted = stops.clone();
     let mut run = manager
         .agent_queue
-        .request_oneshot(repo.id.as_str(), false, move || {
+        .request_oneshot(&repo.id, false, move || {
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         });
     manager.dispatch_queue().await.unwrap();
@@ -1292,7 +1290,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
     // Neither the stopped run nor a held one is stopped again, so the next
     // stop falls to the agents, of which there are none.
-    manager.agent_queue.hold_oneshot(repo.id.as_str());
+    manager.agent_queue.hold_oneshot(&repo.id);
     assert!(
         !manager
             .stop_agent_for_overload("critical memory pressure")
@@ -1302,9 +1300,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
     drop(run);
 
-    let mut again = manager
-        .agent_queue
-        .request_oneshot(repo.id.as_str(), true, || {});
+    let mut again = manager.agent_queue.request_oneshot(&repo.id, true, || {});
     manager.dispatch_queue().await.unwrap();
     crate::daemon::test_support::assert_pending(again.admitted()).await;
     publish_recovery(&manager);

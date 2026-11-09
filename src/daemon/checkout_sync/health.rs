@@ -1,5 +1,6 @@
 //! What a repository's syncs found: when its remotes were last fetched, when
 //! its default branch last followed them, and the failure since then.
+use crate::client::repository_ids::RepositoryId;
 use std::time::Duration;
 
 use anyhow::Error;
@@ -54,7 +55,7 @@ impl Health {
     }
 
     /// What the finished syncs found; none before the first one finishes.
-    pub(super) fn view(&self, repository_id: &str) -> Option<CheckoutSync> {
+    pub(super) fn view(&self, repository_id: &RepositoryId) -> Option<CheckoutSync> {
         (self.synced_at.is_some() || self.failure.is_some()).then(|| CheckoutSync {
             repository_id: repository_id.to_owned(),
             synced_at: self.synced_at,

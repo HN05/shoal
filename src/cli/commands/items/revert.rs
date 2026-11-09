@@ -1,6 +1,7 @@
 //! `shoal pr revert`: open a PR that undoes a merged one for a workspace or
 //! chat, through the forge where it reverts PRs, and otherwise from a new
 //! workspace whose branch reverts the merge with `git revert`.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
@@ -177,7 +178,7 @@ async fn revert_workspace(
 /// `chat`, if any.
 async fn start_workspace(
     ctx: &Context,
-    repository: String,
+    repository: RepositoryId,
     name: String,
     base: Option<String>,
     chat: Option<SpaceId>,
@@ -185,7 +186,7 @@ async fn start_workspace(
     let new = NewWorkspace {
         base,
         parent: chat.map(SpaceSelector::Id),
-        ..NewWorkspace::new(Selector::Value(repository), WorkspaceStart::Name(name))
+        ..NewWorkspace::new(Selector::Id(repository), WorkspaceStart::Name(name))
     };
     operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
 }

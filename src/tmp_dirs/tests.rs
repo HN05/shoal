@@ -6,7 +6,7 @@ use super::*;
 #[test]
 fn directories_are_private_listed_and_removed_one_at_a_time() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     let workspace = layout.prepare(&SpaceId::from("workspace-id")).unwrap();
     assert_eq!(workspace, root.path().join(".tmp/workspace-id"));
     let mode = fs::metadata(&workspace).unwrap().permissions().mode();
@@ -35,7 +35,7 @@ fn directories_are_private_listed_and_removed_one_at_a_time() {
 #[test]
 fn only_a_directory_marked_for_the_repository_is_used() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     fs::create_dir_all(layout.root().join("user-files")).unwrap();
     assert!(layout.prepare(&SpaceId::from("workspace-id")).is_err());
     assert!(layout.list().unwrap().is_empty());
@@ -50,7 +50,7 @@ fn only_a_directory_marked_for_the_repository_is_used() {
 #[test]
 fn a_symlink_in_place_of_a_directory_is_refused() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     layout.prepare(&SpaceId::from("other")).unwrap();
     let outside = root.path().join("outside");
     fs::create_dir(&outside).unwrap();
@@ -64,7 +64,7 @@ fn a_symlink_in_place_of_a_directory_is_refused() {
 #[test]
 fn only_a_created_directory_is_an_existing_one() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     assert_eq!(layout.existing(&SpaceId::from("space")), None);
     let created = layout.prepare(&SpaceId::from("space")).unwrap();
     assert_eq!(layout.existing(&SpaceId::from("space")), Some(created));
@@ -77,7 +77,7 @@ fn only_a_created_directory_is_an_existing_one() {
     let unmarked = tempfile::tempdir().unwrap();
     fs::create_dir_all(unmarked.path().join(".tmp/space")).unwrap();
     assert_eq!(
-        Layout::new(unmarked.path(), "repo").existing(&SpaceId::from("space")),
+        Layout::new(unmarked.path(), &"repo".into()).existing(&SpaceId::from("space")),
         None
     );
 }

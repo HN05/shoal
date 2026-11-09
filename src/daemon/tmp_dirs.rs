@@ -1,5 +1,6 @@
 //! Deleting the temporary directories of workspaces and chats once they are
 //! gone.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
@@ -15,7 +16,11 @@ use crate::{
 impl Manager {
     /// Delete the temporary directory of the workspace or chat `id` of the
     /// repository `repository_id` once its record is gone.
-    pub(crate) async fn delete_tmp_dir(&self, repository_id: &str, id: &SpaceId) -> Result<()> {
+    pub(crate) async fn delete_tmp_dir(
+        &self,
+        repository_id: &RepositoryId,
+        id: &SpaceId,
+    ) -> Result<()> {
         let repo = self.repository(repository_id).await?;
         let Some(layout) = Layout::of(&repo) else {
             return Ok(());
@@ -59,7 +64,7 @@ impl Manager {
     async fn sweep_layout_tmp_dirs(
         &self,
         layout: Option<Layout>,
-        repository_id: Option<&str>,
+        repository_id: Option<&RepositoryId>,
     ) -> Result<()> {
         let Some(layout) = layout else {
             return Ok(());
@@ -86,10 +91,13 @@ impl Manager {
 
     /// The IDs of the repository's workspaces and chats, or of the chats
     /// without a repository.
-    async fn recorded_ids(&self, repository_id: Option<&str>) -> Result<BTreeSet<SpaceId>> {
-        let repository_id = repository_id.map(str::to_owned);
+    async fn recorded_ids(
+        &self,
+        repository_id: Option<&RepositoryId>,
+    ) -> Result<BTreeSet<SpaceId>> {
+        let repository_id = repository_id.cloned();
         self.store
-            .run(move |db| recorded_ids(db, repository_id.as_deref()))
+            .run(move |db| recorded_ids(db, repository_id.as_ref()))
             .await
     }
 }
@@ -109,7 +117,10 @@ async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<()> {
 
 /// The IDs of the repository's workspaces and chats, or of the chats
 /// without a repository.
-fn recorded_ids(db: &mut Connection, repository_id: Option<&str>) -> Result<BTreeSet<SpaceId>> {
+fn recorded_ids(
+    db: &mut Connection,
+    repository_id: Option<&RepositoryId>,
+) -> Result<BTreeSet<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM spaces WHERE repository_id IS ?1")?
         .query_map([repository_id], |row| row.get(0))?

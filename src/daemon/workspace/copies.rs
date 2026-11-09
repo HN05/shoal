@@ -1,6 +1,7 @@
 //! Copies: workspaces that start from another workspace's current files or
 //! from one of its checkpoints, and record what they started with in a
 //! starting checkpoint of their own.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
@@ -34,7 +35,7 @@ pub(crate) enum CopyPlace {
 /// workspace's HEAD, diff base and files.
 struct Source {
     workspace_id: SpaceId,
-    repository_id: String,
+    repository_id: RepositoryId,
     name: String,
     branch: Option<String>,
     base_ref: Option<String>,

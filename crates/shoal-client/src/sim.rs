@@ -1,4 +1,5 @@
 //! Xcode simulators as Shoal configures, leases and audits them.
+use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use std::collections::BTreeMap;
 
@@ -208,7 +209,7 @@ pub struct EvictedDevice {
 pub struct CleanRequest {
     pub workspace_id: SpaceId,
     pub workspace_name: String,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub execution_id: Option<String>,
     pub requested_at: crate::time::UnixTime,
     pub updated_at: crate::time::UnixTime,

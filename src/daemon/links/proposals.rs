@@ -252,7 +252,7 @@ impl Manager {
             );
         }
         self.ensure_not_pushing(&request)?;
-        let repository = request.repository_id.as_deref();
+        let repository = request.repository_id.as_ref();
         let space = self.find_link_space(&request.space_id, repository).await?;
         let space = space.as_ref();
         // A PR an earlier approval posted was pushed already.
@@ -410,7 +410,7 @@ impl Manager {
         }
         let repository = request
             .repository_id
-            .as_deref()
+            .as_ref()
             .context("the space that made the proposal is gone")?;
         let settings = self.repository_settings(repository).await?;
         Ok((settings, self.repository(repository).await?.path))
@@ -802,7 +802,7 @@ impl Manager {
         }
         let repository = request
             .repository_id
-            .as_deref()
+            .as_ref()
             .context("the space that made the proposal is gone")?;
         let repository = self.repository(repository).await?;
         self.checkout_forge_account(&repository).await

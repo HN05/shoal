@@ -1,4 +1,5 @@
 //! What `shoal resume` and `shoal work restore` print.
+use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -72,8 +73,8 @@ pub struct Reopened {
 pub struct RestoredChat {
     pub chat: String,
     pub agent: String,
-    /// Its repository; none for a chat without one.
-    pub repository: Option<String>,
+    /// Its repository's ID; none for a chat without one.
+    pub repository: Option<RepositoryId>,
     /// Where it runs and how to reach it, as the host that runs it says;
     /// none when an app runs it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

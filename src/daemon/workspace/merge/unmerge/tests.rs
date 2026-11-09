@@ -1,3 +1,4 @@
+use crate::client::repository_ids::RepositoryId;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::client::space_names::SpaceSelector;
@@ -15,7 +16,7 @@ struct Fixture {
     root: tempfile::TempDir,
     repo: PathBuf,
     manager: Arc<Manager>,
-    repo_id: String,
+    repo_id: RepositoryId,
 }
 
 impl Fixture {

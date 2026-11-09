@@ -4,16 +4,16 @@ use crate::{config::repo::CacheScope, presets};
 #[test]
 fn only_a_cache_directory_marked_for_the_repository_is_owned() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     fs::create_dir(layout.root()).unwrap();
     assert_eq!(layout.owned("go"), None, "unmarked");
     layout.remove().unwrap();
     fs::remove_dir(layout.root()).unwrap();
-    Layout::new(root.path(), "other")
+    Layout::new(root.path(), &"other".into())
         .prepare(&configured(&["go"]))
         .unwrap();
     assert_eq!(layout.owned("go"), None, "another repository's");
-    Layout::new(root.path(), "other").remove().unwrap();
+    Layout::new(root.path(), &"other".into()).remove().unwrap();
     let outside = root.path().join("outside");
     fs::create_dir(&outside).unwrap();
     layout.prepare(&configured(&["go"])).unwrap();
@@ -43,7 +43,7 @@ fn configured(names: &[&str]) -> BTreeMap<String, Cache> {
 #[test]
 fn caches_are_created_emptied_and_removed_only_when_owned() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     let directory = root.path().join(".caches");
     assert!(layout.prepare(&BTreeMap::new()).unwrap().is_empty());
     assert!(!directory.exists());
@@ -65,7 +65,7 @@ fn caches_are_created_emptied_and_removed_only_when_owned() {
     let directories = layout.prepare(&configured(&["go", "sccache"])).unwrap();
 
     // Another repository's directory is never used or deleted.
-    let other = Layout::new(root.path(), "other");
+    let other = Layout::new(root.path(), &"other".into());
     assert!(other.prepare(&configured(&["go"])).is_err());
     assert!(other.move_aside().is_err());
     other.remove().unwrap();
@@ -79,7 +79,7 @@ fn caches_are_created_emptied_and_removed_only_when_owned() {
 #[test]
 fn emptying_keeps_the_caches_of_preset_files() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     let directories = layout
         .prepare(&configured(&[
             "go",

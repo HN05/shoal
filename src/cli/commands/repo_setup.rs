@@ -64,7 +64,7 @@ pub(super) async fn start(
     };
     workspaces::add(
         ctx,
-        Some(repo.id.clone()),
+        Some(repo.id.clone().into()),
         creation(&repo).await?,
         None,
         workspaces::AgentLaunch::Explicit(Some(agent)),

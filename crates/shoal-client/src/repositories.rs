@@ -1,6 +1,7 @@
 //! Registered repositories: registering, renaming, moving and removing
 //! them, their checkouts' sync, branches and local configuration, and the
 //! agent configs Shoal keeps for them.
+use crate::repository_ids::RepositoryId;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
@@ -133,7 +134,7 @@ pub async fn edit_local_config(
 /// The agent environments Shoal keeps for the repository `repository_id`.
 pub async fn agent_environments(
     daemon: &impl Daemon,
-    repository_id: String,
+    repository_id: RepositoryId,
 ) -> Result<Vec<BTreeMap<String, String>>> {
     pages(
         daemon,
@@ -144,7 +145,10 @@ pub async fn agent_environments(
 
 /// Forget the agent environments kept for the removed repository
 /// `repository_id`.
-pub async fn forget_agent_environments(daemon: &impl Daemon, repository_id: String) -> Result<()> {
+pub async fn forget_agent_environments(
+    daemon: &impl Daemon,
+    repository_id: RepositoryId,
+) -> Result<()> {
     call(
         daemon,
         RepositoryMethod::ForgetAgentEnvironments { repository_id },
@@ -158,13 +162,13 @@ pub async fn forget_agent_environments(daemon: &impl Daemon, repository_id: Stri
 /// does for a workspace's agent.
 pub async fn keep_agent_environment(
     daemon: &impl Daemon,
-    repository: &str,
+    repository: &RepositoryId,
     environment: BTreeMap<String, String>,
 ) -> Result<()> {
     call(
         daemon,
         RepositoryMethod::KeepRepositoryAgentEnvironment {
-            repository: repository.to_owned(),
+            repository: repository.clone(),
             environment,
         },
     )

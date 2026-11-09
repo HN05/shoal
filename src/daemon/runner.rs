@@ -4,6 +4,7 @@
 //! [`POLL_INTERVAL`], and whenever admission admits a job, the jobs that
 //! ended give up their workspaces, admitted jobs are claimed, and the
 //! forge's waiting jobs are read while the machine has room for one.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -29,8 +30,8 @@ const PERMITS_BUSY_FOR: Duration = Duration::from_secs(15);
 /// failed to change or found its permits all held, and the jobs being claimed.
 #[derive(Default)]
 pub(crate) struct Runners {
-    failures: Mutex<HashMap<String, Instant>>,
-    permits_busy: Mutex<HashMap<String, Instant>>,
+    failures: Mutex<HashMap<RepositoryId, Instant>>,
+    permits_busy: Mutex<HashMap<RepositoryId, Instant>>,
     /// The queue entries of the jobs whose claim runs.
     claiming: Mutex<HashSet<String>>,
     /// Admission admitted a job, or one ended.
@@ -57,24 +58,24 @@ impl Runners {
     }
 
     /// Whether `repository_id`'s runner may be tried again.
-    pub(crate) fn due(&self, repository_id: &str) -> bool {
+    pub(crate) fn due(&self, repository_id: &RepositoryId) -> bool {
         lock(&self.failures)
             .get(repository_id)
             .is_none_or(|failed| failed.elapsed() >= RETRY_AFTER)
     }
 
-    pub(crate) fn failed(&self, repository_id: &str) {
+    pub(crate) fn failed(&self, repository_id: &RepositoryId) {
         lock(&self.failures).insert(repository_id.to_owned(), Instant::now());
     }
 
     /// Whether `repository_id`'s permit pool was full a moment ago.
-    pub(crate) fn permits_busy(&self, repository_id: &str) -> bool {
+    pub(crate) fn permits_busy(&self, repository_id: &RepositoryId) -> bool {
         lock(&self.permits_busy)
             .get(repository_id)
             .is_some_and(|busy| busy.elapsed() < PERMITS_BUSY_FOR)
     }
 
-    pub(crate) fn found_permits_busy(&self, repository_id: &str) {
+    pub(crate) fn found_permits_busy(&self, repository_id: &RepositoryId) {
         lock(&self.permits_busy).insert(repository_id.to_owned(), Instant::now());
     }
 

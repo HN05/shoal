@@ -173,7 +173,7 @@ impl Manager {
         let base = self.restore_base(removed).await?;
         let opened = self
             .open_branch_restoring(
-                removed.repository_id.as_str(),
+                &removed.repository_id,
                 &branch,
                 base,
                 Default::default(),
@@ -390,7 +390,7 @@ impl Manager {
     /// The branch to open: one at the removed HEAD, or at a later commit when
     /// nothing unsaved has to be applied, created at HEAD when it was deleted.
     async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<String> {
-        let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
+        let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
         let checkpoint = &removed.checkpoint;
         let branch = checkpoint
             .branch

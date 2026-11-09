@@ -3,6 +3,7 @@
 //! workspaces, in a directory its agents are given as a working directory,
 //! and the store records each copy with how it came, so `shoal files` lists
 //! them.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
@@ -44,7 +45,7 @@ pub(crate) struct Space {
     pub(crate) name: String,
     /// The repository whose directory keeps its files; none for a chat
     /// without a repository, whose files `root_dir` keeps.
-    pub(crate) repository_id: Option<String>,
+    pub(crate) repository_id: Option<RepositoryId>,
     /// The `root_dir` a chat without a repository keeps its files in, the
     /// one it started in; none for a space of a repository.
     pub(crate) root_dir: Option<PathBuf>,
@@ -62,7 +63,7 @@ pub(crate) enum HomeKey {
 
 impl HomeKey {
     /// Its repository's ID; none for a `root_dir`.
-    pub(crate) fn repository_id(&self) -> Option<String> {
+    pub(crate) fn repository_id(&self) -> Option<RepositoryId> {
         match self {
             Self::Repository(repo) => Some(repo.id.clone()),
             Self::Root(_) => None,
@@ -103,10 +104,6 @@ impl FilesHome {
         }
     }
 }
-
-/// The key of the gate of the files of the chats without a repository,
-/// which no repository ID takes.
-const OUTSIDE_GATE: &str = "";
 
 impl From<Workspace> for Space {
     fn from(workspace: Workspace) -> Self {
@@ -515,11 +512,10 @@ impl Manager {
         &self,
         key: &HomeKey,
     ) -> Result<(FilesHome, OwnedMutexGuard<()>)> {
-        let gate = match key {
-            HomeKey::Repository(repo) => repo.id.clone(),
-            HomeKey::Root(_) => OUTSIDE_GATE.to_owned(),
+        let guard = match key {
+            HomeKey::Repository(repo) => self.gates.lock_message_files(&repo.id).await,
+            HomeKey::Root(_) => self.gates.lock_outside_message_files().await,
         };
-        let guard = self.gates.lock_message_files(&gate).await;
         let home = match key {
             HomeKey::Repository(repo) => FilesHome::Repository(self.repository(&repo.id).await?),
             HomeKey::Root(root_dir) => FilesHome::Outside(self.outside_files_layout(root_dir)),

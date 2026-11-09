@@ -1,6 +1,7 @@
 //! Operations on one entry: adding a launch, listing entries, and a starting
 //! entry's way from its reservation to the agent that takes its slot or its
 //! failure.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -90,12 +91,12 @@ impl Manager {
     async fn launch_target(
         &self,
         workspace: &SpaceSelector,
-        repository_id: &str,
+        repository_id: &RepositoryId,
     ) -> Result<SpaceId> {
         let workspace = self.workspace(workspace).await?;
         Self::ensure_holds_agents(&workspace)?;
         ensure!(
-            workspace.repository_id == repository_id,
+            workspace.repository_id == *repository_id,
             "workspace {} belongs to another repository",
             workspace.name
         );

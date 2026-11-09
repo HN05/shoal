@@ -55,8 +55,8 @@ impl Manager {
     /// chat without one in the global config.
     async fn status_permissions(&self, space: &PresentSpace) -> Result<Permissions> {
         let repository = match space {
-            PresentSpace::Workspace(workspace) => Some(workspace.repository_id.as_str()),
-            PresentSpace::Chat(chat) => chat.repository_id.as_deref(),
+            PresentSpace::Workspace(workspace) => Some(&workspace.repository_id),
+            PresentSpace::Chat(chat) => chat.repository_id.as_ref(),
         };
         self.space_permissions(space.id(), repository).await
     }

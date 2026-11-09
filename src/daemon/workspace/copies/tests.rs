@@ -54,7 +54,7 @@ impl Fixture {
             workspace: SpaceSelector::parse(&self.source.name),
             checkpoint,
         };
-        let repository = self.source.repository_id.as_str().into();
+        let repository = (&self.source.repository_id).into();
         (self.manager)
             .create_copy(repository, &source, place, NewWorkspace::default())
             .await
@@ -144,7 +144,7 @@ async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
         checkpoint: None,
     };
     let copy = f.manager.create_copy(
-        repository.as_str().into(),
+        (&repository).into(),
         &request,
         CopyPlace::Branch(None),
         NewWorkspace::default(),

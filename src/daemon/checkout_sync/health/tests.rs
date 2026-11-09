@@ -24,7 +24,7 @@ fn a_failure_needs_the_user_once_it_lasts_and_is_told_once() {
     assert!(health.needs_user(lasted));
     assert_eq!(health.notify(lasted).as_deref(), Some("diverged"));
     assert_eq!(health.notify(lasted), None);
-    let view = health.view("repo").unwrap();
+    let view = health.view(&"repo".into()).unwrap();
     assert_eq!(view.synced_at, Some(UnixTime::from_seconds(100)));
     assert_eq!(view.failing_since, Some(UnixTime::from_seconds(160)));
     assert_eq!(view.error.as_deref(), Some("diverged"));
@@ -35,10 +35,10 @@ fn a_fetch_alone_shows_nothing_until_the_sync_finishes() {
     let start = Instant::now();
     let mut health = Health::default();
     health.fetched(start);
-    assert_eq!(health.view("repo"), None);
+    assert_eq!(health.view(&"repo".into()), None);
     health.record(None, start, UnixTime::from_seconds(100));
     assert_eq!(
-        health.view("repo").unwrap().synced_at,
+        health.view(&"repo".into()).unwrap().synced_at,
         Some(UnixTime::from_seconds(100))
     );
 }
@@ -55,7 +55,7 @@ fn a_successful_sync_ends_the_failure() {
     let lasted = start + NEEDS_USER_AFTER;
     health.record(None, lasted, UnixTime::from_seconds(2000));
     assert!(!health.needs_user(lasted));
-    let view = health.view("repo").unwrap();
+    let view = health.view(&"repo".into()).unwrap();
     assert_eq!(view.synced_at, Some(UnixTime::from_seconds(2000)));
     assert_eq!((view.failing_since, view.error), (None, None));
 }

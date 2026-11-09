@@ -81,7 +81,7 @@ pub(crate) fn queued_agent_request(
     let (agent, now) = (launch.agent.clone(), launch.now);
     let plan = AddPlan::agent_in(workspace, launch)?;
     Ok(QueueRequest {
-        repository: workspace.repository_id.as_str().into(),
+        repository: (&workspace.repository_id).into(),
         name: workspace.name.clone(),
         agent,
         mode: plan.mode.clone(),
@@ -157,7 +157,7 @@ impl AddPlan {
             now: _,
         } = launch;
         Ok(Self {
-            repository: workspace.repository_id.as_str().into(),
+            repository: (&workspace.repository_id).into(),
             creation: Creation {
                 existing: workspace.branch.clone(),
                 ..Default::default()

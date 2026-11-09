@@ -1,4 +1,5 @@
 //! The workspace `--copy` and `--checkpoint` start a new one from.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
@@ -16,7 +17,7 @@ use crate::{
 pub(super) struct Copied {
     pub source: CopySource,
     /// The ID of the copied workspace's repository.
-    pub repository: String,
+    pub repository: RepositoryId,
     /// The name a copy takes without one of its own: the copied branch's,
     /// or the workspace's, with `-copy` added.
     pub name: String,
@@ -56,7 +57,10 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
 
 /// The ID of the removed workspace `selector` names, by name or ID, of its
 /// repository, and its branch or else its name.
-async fn removed(ctx: &Context, selector: SpaceSelector) -> Result<(SpaceId, String, String)> {
+async fn removed(
+    ctx: &Context,
+    selector: SpaceSelector,
+) -> Result<(SpaceId, RepositoryId, String)> {
     let removed = crate::client::removal::removed(&ctx.paths).await?;
     let removed = removed
         .into_iter()

@@ -2,6 +2,7 @@
 //! the jobs a repository's runner may take, with the run each belongs to and
 //! the workspace that run links, and drops the entries of jobs the forge no
 //! longer lists as waiting, which another runner took or a cancel ended.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -87,13 +88,13 @@ impl Manager {
     pub(super) async fn run_workspace(
         &self,
         forge: &ForgeRepo,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         run: &JobRun,
     ) -> Result<Option<SpaceId>> {
         let workspaces = self.list_workspaces().await?;
         let mut own = workspaces
             .into_iter()
-            .filter(|workspace| workspace.repository_id == repository_id);
+            .filter(|workspace| workspace.repository_id == *repository_id);
         Ok(match &run.trigger {
             Trigger::Pull { number } => own.find(|workspace| {
                 workspace
@@ -116,7 +117,7 @@ impl Manager {
 /// the runner still knows: queued, starting, claimed or passed over.
 fn forget_unlisted_jobs(
     tx: &rusqlite::Transaction<'_>,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     listed: &HashSet<String>,
 ) -> Result<HashSet<String>> {
     let entries = tx
@@ -161,7 +162,11 @@ fn forget_unlisted_jobs(
 
 /// Queue `job` behind the work already waiting, except that it goes ahead of
 /// a waiting restore of the agent of the workspace its run links.
-fn queue_job(tx: &rusqlite::Transaction<'_>, repository_id: &str, job: &QueuedJob) -> Result<()> {
+fn queue_job(
+    tx: &rusqlite::Transaction<'_>,
+    repository_id: &RepositoryId,
+    job: &QueuedJob,
+) -> Result<()> {
     let id = uuid::Uuid::new_v4().to_string();
     let name = SpaceName::derive(
         SpaceKind::Workspace,

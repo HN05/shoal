@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
@@ -33,7 +34,7 @@ const HELD_DONE_IDLE: Setup = Setup {
 /// A workspace named `name` whose agent `setup` describes.
 async fn agent(
     manager: &Manager,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     name: &str,
     setup: Setup,
 ) -> (Workspace, StartedExecution) {

@@ -5,6 +5,7 @@
 //! agent registers, or while waiting once what it restores is gone, as after
 //! `shoal resume --now` or a discard. A restart's restore starts at once, in
 //! the slot its agent kept.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -30,7 +31,7 @@ use crate::{
 #[derive(Clone)]
 struct Target {
     id: SpaceId,
-    repository: String,
+    repository: RepositoryId,
     name: String,
 }
 

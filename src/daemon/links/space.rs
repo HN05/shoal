@@ -2,6 +2,7 @@
 //! a running chat, which acts in its repository's registered checkout and
 //! links items the same way, without a branch or an assignment that
 //! completes.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::Path;
 
@@ -47,7 +48,7 @@ impl LinkSpace {
         }
     }
 
-    pub(crate) fn repository_id(&self) -> &str {
+    pub(crate) fn repository_id(&self) -> &RepositoryId {
         match self {
             Self::Workspace(workspace) => &workspace.repository_id,
             Self::Chat { checkout, .. } => &checkout.id,
@@ -155,7 +156,7 @@ impl Manager {
 
     /// The chat without a repository `chat` names, acting in the registered
     /// repository `repository` names, which counts as its own.
-    async fn chat_in(&self, chat: &SpaceSelector, repository: &str) -> Result<LinkSpace> {
+    async fn chat_in(&self, chat: &SpaceSelector, repository: &RepositoryId) -> Result<LinkSpace> {
         let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
         Ok(LinkSpace::Chat { chat, checkout })
     }
@@ -165,7 +166,7 @@ impl Manager {
     pub(crate) async fn chat_acting_in(
         &self,
         chat: &SpaceSelector,
-        repository: &str,
+        repository: &RepositoryId,
     ) -> Result<(Chat, Repository)> {
         let chat = self.chat(chat).await?;
         anyhow::ensure!(
@@ -181,7 +182,7 @@ impl Manager {
     pub(crate) async fn find_link_space(
         &self,
         id: &SpaceId,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<Option<LinkSpace>> {
         let owned = id.to_owned();
         let kind = (self.store)

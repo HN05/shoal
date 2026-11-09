@@ -52,9 +52,9 @@ async fn ids_and_sources_take_precedence_over_a_colliding_path() {
         repository("registered", "/tmp/one", None),
         repository("other", "/tmp/checkout", None),
     ];
-    for value in [&repositories[0].id, &repositories[0].source] {
+    for value in [repositories[0].id.as_str(), &repositories[0].source] {
         let selector = Selector::Path {
-            value: value.clone(),
+            value: value.to_owned(),
             path: "/tmp/checkout".into(),
         };
         assert_eq!(

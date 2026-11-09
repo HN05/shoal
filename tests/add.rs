@@ -20,7 +20,11 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         (vec!["start", url], vec![], "issue number must be positive"),
         (
             vec!["start", "--issue", url, "--agent", "custom"],
-            vec!["list_repositories", "layered_config test", "issue_details"],
+            vec![
+                "list_repositories",
+                "layered_config id:test",
+                "issue_details",
+            ],
             "issue number must be positive",
         ),
         (
@@ -117,8 +121,8 @@ fn unregistered_repositories_are_registered_on_confirmation() {
     let registered = vec![
         "list_repositories",
         "register_repository https://other.example/team/repo",
-        "check_creation registered",
-        "layered_config registered",
+        "check_creation id:registered",
+        "layered_config id:registered",
     ];
     let url_args: &[&str] = &["start", "https://other.example/team/repo/issues/7"];
     let explicit_args: &[&str] = &["start", "0", "--repo", "https://other.example/team/repo"];
@@ -234,8 +238,7 @@ impl FakeDaemon {
                     }
                     "layered_config" => {
                         let target = &request["method"]["layered_config"]["target"];
-                        method =
-                            format!("layered_config {}", target["repository"].as_str().unwrap());
+                        method = format!("layered_config {}", selector(&target["repository"]));
                         json!({"type": "layered_config", "data": {
                             "worktree_file": {}, "local_config": {
                                 "agent": {"default": "custom"}, "agents": {"custom": {"command": ["false"]}}
@@ -244,13 +247,14 @@ impl FakeDaemon {
                     }
                     "check_creation" => {
                         let check = &request["method"]["check_creation"];
-                        let repository = check["repository"].as_str().unwrap();
+                        let repository = selector(&check["repository"]);
                         let branch = check["branch"].as_str();
                         method = format!("check_creation {repository}");
                         if let Some(branch) = branch {
                             method = format!("{method} {branch}");
                         }
-                        let refusal = if !["test", "registered"].contains(&repository) {
+                        let id = repository.strip_prefix("id:").unwrap_or(&repository);
+                        let refusal = if !["test", "registered"].contains(&id) {
                             Some("repository is not registered")
                         } else if branch == Some("taken") {
                             Some("workspace name already exists: taken")
@@ -299,5 +303,14 @@ impl FakeDaemon {
         let mut sentinel = UnixStream::connect(&self.socket).unwrap();
         writeln!(sentinel).unwrap();
         self.server.join().unwrap()
+    }
+}
+
+/// A repository selector as the requests record it: its text, or a known
+/// ID as `id:<id>`.
+fn selector(value: &Value) -> String {
+    match value.as_str() {
+        Some(text) => text.to_owned(),
+        None => format!("id:{}", value["id"].as_str().unwrap()),
     }
 }

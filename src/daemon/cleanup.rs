@@ -3,6 +3,7 @@
 //! directory was deleted outside Shoal; the user can remove the idle
 //! candidates on request. A chat has no worktree, so it meets every condition
 //! on one, and goes once its agent stopped and nothing keeps it.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use std::{
@@ -502,7 +503,7 @@ impl Targets {
             Some(selector) => Some(manager.repository(selector).await?.id),
             None => None,
         };
-        let within = |id: &str| repository.as_deref().is_none_or(|only| only == id);
+        let within = |id: &RepositoryId| repository.as_ref().is_none_or(|only| only == id);
         // A chat without a repository is in none of them.
         let chat_within = |chat: &Chat| match &chat.repository_id {
             Some(id) => within(id),

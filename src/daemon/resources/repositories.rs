@@ -1,4 +1,5 @@
 //! Borrow registered checkouts without creating or deleting filesystem views.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 use std::{
@@ -114,7 +115,10 @@ pub(super) fn record(db: &Connection, lease: &ResourceLease) -> Result<()> {
 
 /// Check in the transaction that records removal, excluding its own workspaces
 /// whose leases will be released by the shared workspace removal path.
-pub(crate) fn ensure_no_external_leases(db: &Connection, repository_id: &str) -> Result<()> {
+pub(crate) fn ensure_no_external_leases(
+    db: &Connection,
+    repository_id: &RepositoryId,
+) -> Result<()> {
     ensure!(
         !borrowed(db, repository_id)?,
         "repository is borrowed by another workspace; release its repo resource leases first"
@@ -124,7 +128,7 @@ pub(crate) fn ensure_no_external_leases(db: &Connection, repository_id: &str) ->
 
 /// Whether a workspace of another repository holds a lease on one of the
 /// repository's resources.
-pub(crate) fn borrowed(db: &Connection, repository_id: &str) -> Result<bool> {
+pub(crate) fn borrowed(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     store::exists(
         db,
         "SELECT 1 FROM repository_resource_leases r

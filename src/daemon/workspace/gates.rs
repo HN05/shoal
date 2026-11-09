@@ -1,6 +1,7 @@
 //! The daemon's gates: each orders one kind of change against the others
 //! that would conflict with it, and is taken through the operation named
 //! for it.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
@@ -122,7 +123,7 @@ impl Gates {
     /// Hold the repository's gate for ref updates and worktree creation and
     /// removal, without checking that the repository is available. Callers
     /// must not already hold it.
-    pub(crate) async fn lock_git(&self, repository_id: &str) -> OwnedMutexGuard<()> {
+    pub(crate) async fn lock_git(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
         self.git.gate(repository_id).lock_owned().await
     }
 
@@ -130,18 +131,18 @@ impl Gates {
     /// syncs of one repository never overlap and moving or removing its
     /// directory waits for the fetch, while commands that take only the Git
     /// gate do not. Callers take it before the Git gate.
-    pub(crate) async fn lock_fetch(&self, repository_id: &str) -> OwnedMutexGuard<()> {
+    pub(crate) async fn lock_fetch(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
         self.fetches.gate(repository_id).lock_owned().await
     }
 
     /// [`Self::lock_git`] when nothing holds the gate.
-    pub(crate) fn try_lock_git(&self, repository_id: &str) -> Option<OwnedMutexGuard<()>> {
+    pub(crate) fn try_lock_git(&self, repository_id: &RepositoryId) -> Option<OwnedMutexGuard<()>> {
         self.git.gate(repository_id).try_lock_owned().ok()
     }
 
     /// The Git gate of `repository_id`, for tests that count who waits on it.
     #[cfg(test)]
-    pub(crate) fn git_gate(&self, repository_id: &str) -> Arc<Mutex<()>> {
+    pub(crate) fn git_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
         self.git.gate(repository_id)
     }
 
@@ -150,14 +151,23 @@ impl Gates {
     /// other sends, workspace removal and moving the repository's directory,
     /// so a queued message names copies that exist where it says. Callers
     /// holding the repository's Git gate take it after that one.
-    pub(crate) async fn lock_message_files(&self, repository_id: &str) -> OwnedMutexGuard<()> {
+    pub(crate) async fn lock_message_files(
+        &self,
+        repository_id: &RepositoryId,
+    ) -> OwnedMutexGuard<()> {
         self.message_files.gate(repository_id).lock_owned().await
+    }
+
+    /// [`Self::lock_message_files`] for the files of the chats without a
+    /// repository, whose key no repository ID takes.
+    pub(crate) async fn lock_outside_message_files(&self) -> OwnedMutexGuard<()> {
+        self.message_files.gate("").lock_owned().await
     }
 
     /// The attached-files gate of `repository_id`, for tests that count who
     /// waits on it.
     #[cfg(test)]
-    pub(crate) fn message_files_gate(&self, repository_id: &str) -> Arc<Mutex<()>> {
+    pub(crate) fn message_files_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
         self.message_files.gate(repository_id)
     }
 

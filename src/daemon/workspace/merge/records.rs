@@ -2,6 +2,7 @@
 //! unmerge` undoes. The daemon updates them when a merge or unmerge
 //! execution ends, from what the default branch holds then rather than what
 //! the worker reports, and drops the ones that can no longer be undone.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
@@ -21,7 +22,7 @@ use crate::{
 /// A local merge of a workspace's branch into its repository's default branch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LocalMerge {
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub default_branch: String,
     pub workspace_id: SpaceId,
     /// The workspace's name when it merged.
@@ -223,7 +224,7 @@ async fn replayed_commits(
 fn replace_replayed(
     tx: &rusqlite::Transaction<'_>,
     undone: i64,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     default: &str,
     rewritten: &HashMap<String, String>,
 ) -> Result<()> {
@@ -254,7 +255,11 @@ fn insert(db: &Connection, merge: &LocalMerge) -> Result<()> {
 }
 
 /// The recorded merges into `repository_id`'s `default` branch, oldest first.
-fn list(db: &Connection, repository_id: &str, default: &str) -> Result<Vec<RecordedMerge>> {
+fn list(
+    db: &Connection,
+    repository_id: &RepositoryId,
+    default: &str,
+) -> Result<Vec<RecordedMerge>> {
     let mut statement = db.prepare(
         "SELECT id,repository_id,default_branch,workspace_id,workspace,branch,
             source_commit,previous_commit,result_commit

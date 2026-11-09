@@ -1,6 +1,7 @@
 //! Contribution repositories, which Shoal removes once nothing of them is
 //! left: no work, nothing waiting to start, and nothing `shoal work restore`
 //! could still bring back.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 
@@ -97,7 +98,7 @@ impl Manager {
         git::status::unretained_work(&repo.path, &kept).await
     }
 
-    async fn contribution_in_use(&self, id: &str) -> Result<bool> {
+    async fn contribution_in_use(&self, id: &RepositoryId) -> Result<bool> {
         let id = id.to_owned();
         self.store.run(move |db| in_use(db, &id)).await
     }
@@ -160,11 +161,11 @@ async fn advertised_refs(checkout: &std::path::Path) -> Result<Vec<git::RemoteHe
 /// pending issue proposal, a kept branch, an unexpired checkpoint, removal
 /// record or removed chat's files, or a resource another repository's
 /// workspace borrows.
-fn in_use(db: &Connection, id: &str) -> Result<bool> {
+fn in_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
     Ok(recorded_use(db, id)? || crate::daemon::resources::borrowed(db, id)?)
 }
 
-fn recorded_use(db: &Connection, id: &str) -> Result<bool> {
+fn recorded_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
     store::exists(
         db,
         "SELECT 1 FROM spaces WHERE repository_id=?1

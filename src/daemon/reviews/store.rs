@@ -1,5 +1,6 @@
 //! Review rows: queueing, the state changes of a run, and the answers to
 //! findings, each in the caller's connection or transaction.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -80,7 +81,7 @@ pub(crate) fn active(
 }
 
 /// The queued or running reviews of the repository's workspaces.
-pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<ReviewId>> {
+pub(crate) fn active_in(db: &Connection, repository_id: &RepositoryId) -> Result<Vec<ReviewId>> {
     Ok(db
         .prepare(
             "SELECT reviews.id FROM reviews JOIN workspaces ON workspaces.id=workspace_id
@@ -414,7 +415,10 @@ pub(crate) fn list(db: &Connection, ids: &[SpaceId]) -> Result<Vec<Review>> {
 }
 
 /// The IDs of the repository's workspaces, or of every workspace.
-pub(crate) fn workspaces(db: &Connection, repository: Option<&str>) -> Result<Vec<SpaceId>> {
+pub(crate) fn workspaces(
+    db: &Connection,
+    repository: Option<&RepositoryId>,
+) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM workspaces WHERE ?1 IS NULL OR repository_id=?1")?
         .query_map([repository], |row| row.get(0))?

@@ -275,7 +275,7 @@ pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
 
 pub(super) struct AddInput {
     pub positional: Option<String>,
-    pub repository: Option<String>,
+    pub repository: Option<crate::repository::Selector>,
     pub issue: Option<String>,
 }
 
@@ -311,7 +311,7 @@ pub(super) async fn add(
         );
         return workspaces::add(
             ctx,
-            input.positional,
+            input.positional.map(ui::repository_selector).transpose()?,
             creation,
             input.issue,
             AgentLaunch::Add(agent),
@@ -342,7 +342,7 @@ pub(super) async fn add(
     }
     let mut repos = crate::client::repositories::list(&ctx.paths).await?;
     let repository = match input.repository {
-        Some(repository) => ui::repository_selector(repository)?,
+        Some(repository) => repository,
         None => match &link {
             Some(link) => super::issues::registered_remote(
                 ctx,
@@ -363,7 +363,7 @@ pub(super) async fn add(
     if issue {
         return workspaces::add(
             ctx,
-            Some(repo.id.clone()),
+            Some(repo.id.clone().into()),
             creation,
             Some(positional.into()),
             AgentLaunch::IssueDefault(agent),
@@ -388,7 +388,7 @@ pub(super) async fn add(
     }
     workspaces::add(
         ctx,
-        Some(repo.id.clone()),
+        Some(repo.id.clone().into()),
         creation,
         None,
         AgentLaunch::Add(agent),

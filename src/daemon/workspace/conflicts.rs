@@ -184,7 +184,7 @@ impl Manager {
         {
             return Ok(branch);
         }
-        let repo = self.repository(workspace.repository_id.as_str()).await?;
+        let repo = self.repository(&workspace.repository_id).await?;
         git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
     }
 }

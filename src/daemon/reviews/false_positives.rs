@@ -1,6 +1,7 @@
 //! A repository's false positives: claims its reviews raised that were
 //! resolved as wrong, kept in a file beside its local config so that every
 //! later review of the repository receives them and the user can edit them.
+use crate::client::repository_ids::RepositoryId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -50,7 +51,10 @@ impl std::fmt::Display for Unreadable {
 impl Manager {
     /// The false positives of the repository `repository_id`, newest first.
     /// An error reading them has the context [`Unreadable`].
-    pub(super) async fn false_positives(&self, repository_id: &str) -> Result<Vec<FalsePositive>> {
+    pub(super) async fn false_positives(
+        &self,
+        repository_id: &RepositoryId,
+    ) -> Result<Vec<FalsePositive>> {
         let Some(path) = self.false_positives_path(repository_id).await? else {
             return Ok(Vec::new());
         };

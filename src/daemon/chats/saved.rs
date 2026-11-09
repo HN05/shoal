@@ -3,6 +3,7 @@
 //! those whose agent exited. A stopped chat keeps its record, and with it its
 //! name, files, messages, workspaces and temporary directory, until a start
 //! restores it in a new process or it is removed.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
@@ -412,7 +413,7 @@ pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
 /// A stopped chat that runs again.
 struct Restored {
     id: SpaceId,
-    repository: Option<String>,
+    repository: Option<RepositoryId>,
     /// The workspace whose worktree it runs in.
     workspace: Option<SpaceId>,
     /// The process it runs as, or that hands it to a session it starts.
@@ -430,7 +431,7 @@ fn restore(
     owner: &std::path::Path,
     restored: &Restored,
 ) -> Result<Chat> {
-    let repository = restored.repository.as_deref();
+    let repository = restored.repository.as_ref();
     ensure_place_free(tx, repository, restored.workspace.as_ref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,

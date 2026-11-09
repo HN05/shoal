@@ -2,6 +2,7 @@
 //! each once a remote or the default branch has those commits too, the user
 //! deletes the rest on request, and a branch that moved, went away or belongs
 //! to a workspace again is forgotten.
+use crate::client::repository_ids::RepositoryId;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -19,7 +20,7 @@ use crate::{
 /// A remembered branch, at the commit removal left it on.
 #[derive(Debug, Clone)]
 struct Record {
-    repository_id: String,
+    repository_id: RepositoryId,
     branch: String,
     head: String,
     kept_at: UnixTime,
@@ -86,7 +87,7 @@ impl Manager {
     }
 
     /// Repositories with kept branches, in a stable order.
-    pub async fn kept_branch_repositories(&self) -> Result<Vec<String>> {
+    pub async fn kept_branch_repositories(&self) -> Result<Vec<RepositoryId>> {
         self.store
             .run(|db| {
                 let mut statement = db.prepare(
@@ -94,7 +95,7 @@ impl Manager {
                 )?;
                 let ids = statement
                     .query_map([], |row| row.get(0))?
-                    .collect::<rusqlite::Result<Vec<String>>>()?;
+                    .collect::<rusqlite::Result<Vec<RepositoryId>>>()?;
                 Ok(ids)
             })
             .await
@@ -105,7 +106,7 @@ impl Manager {
     /// fetched the default branch.
     pub async fn delete_kept_branches_kept_elsewhere(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         heads: &[git::RemoteHead],
     ) -> Result<()> {
         let repo = self.repository(repository_id).await?;
@@ -265,7 +266,7 @@ impl Manager {
             .await
     }
 
-    async fn kept_records(&self, repository_id: &str) -> Result<Vec<Record>> {
+    async fn kept_records(&self, repository_id: &RepositoryId) -> Result<Vec<Record>> {
         let repository_id = repository_id.to_owned();
         self.store
             .run(move |db| {
@@ -302,12 +303,12 @@ impl Manager {
     }
 
     /// The branches of the repository's workspaces.
-    async fn workspace_branches(&self, repository_id: &str) -> Result<Vec<String>> {
+    async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<Vec<String>> {
         Ok(self
             .list_workspaces()
             .await?
             .into_iter()
-            .filter(|workspace| workspace.repository_id == repository_id)
+            .filter(|workspace| workspace.repository_id == *repository_id)
             .filter_map(|workspace| workspace.branch)
             .collect())
     }

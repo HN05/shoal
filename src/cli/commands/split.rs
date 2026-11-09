@@ -2,6 +2,7 @@
 //! workspace's agent works on and receives the activity of, or a workspace
 //! at a commit, with no branch of its own. Neither gets an agent of its own;
 //! `shoal start` starts one.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
@@ -106,7 +107,7 @@ pub(super) async fn at_commit(
 async fn commit_owner(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
-    copied: Option<String>,
+    copied: Option<RepositoryId>,
 ) -> Result<(crate::repository::Selector, Option<SpaceSelector>)> {
     match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
         Ok(parent) => {

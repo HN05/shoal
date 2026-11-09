@@ -1,4 +1,5 @@
 //! Manual cleanup: what a request covers and what it removed, kept or emptied.
+use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
 
 use crate::model::CleanupReason;
@@ -56,7 +57,7 @@ pub struct Kept {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CacheCleanup {
     pub repository: String,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     #[serde(flatten)]
     pub emptying: Emptying,
 }

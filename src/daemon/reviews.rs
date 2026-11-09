@@ -1,6 +1,7 @@
 //! Local reviews of workspaces and PRs: queueing them, running each once in
 //! a detached checkout, and recording what the reviewer found and how the
 //! workspace's agent answered it.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
@@ -53,11 +54,11 @@ impl Default for Reviews {
 impl Reviews {
     /// Record that review `id` may have a checkout of `repository` until the
     /// returned value is dropped, once it is removed.
-    fn hold_checkout(&self, id: ReviewId, repository: &str) -> CheckoutHold<'_> {
+    fn hold_checkout(&self, id: ReviewId, repository: &RepositoryId) -> CheckoutHold<'_> {
         self.checkouts.lock().unwrap().insert(
             id,
             HeldCheckout {
-                repository: repository.to_owned(),
+                repository: repository.clone(),
                 kept: false,
             },
         );
@@ -66,19 +67,19 @@ impl Reviews {
 
     /// Whether a review's checkout of `repository` may exist that its run
     /// still removes, or, when `kept`, that only a restarted daemon removes.
-    fn holds_checkout_of(&self, repository: &str, kept: bool) -> bool {
+    fn holds_checkout_of(&self, repository: &RepositoryId, kept: bool) -> bool {
         self.checkouts
             .lock()
             .unwrap()
             .values()
-            .any(|held| held.repository == repository && held.kept == kept)
+            .any(|held| held.repository == *repository && held.kept == kept)
     }
 }
 
 /// A review's checkout that may exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HeldCheckout {
-    repository: String,
+    repository: RepositoryId,
     /// Whether its run ended without removing it.
     kept: bool,
 }
@@ -209,7 +210,7 @@ impl Manager {
             None => None,
         };
         self.store
-            .run(move |db| store::workspaces(db, repository.as_deref()))
+            .run(move |db| store::workspaces(db, repository.as_ref()))
             .await
     }
 
@@ -319,7 +320,7 @@ impl Manager {
     /// Refuse while a review of the repository is queued or running, or a
     /// review that ended, even with its workspace, still has a checkout, a
     /// worktree of the repository.
-    pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &str) -> Result<()> {
+    pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &RepositoryId) -> Result<()> {
         let id = repository_id.to_owned();
         let active = self.store.run(move |db| store::active_in(db, &id)).await?;
         ensure!(
@@ -337,7 +338,7 @@ impl Manager {
     /// Cancel the reviews of the repository's workspaces and wait until their
     /// runs have ended and removed their checkouts, which are worktrees of
     /// the repository its removal would otherwise refuse.
-    pub(crate) async fn stop_repository_reviews(&self, repository_id: &str) {
+    pub(crate) async fn stop_repository_reviews(&self, repository_id: &RepositoryId) {
         let id = repository_id.to_owned();
         let active = match self.store.run(move |db| store::active_in(db, &id)).await {
             Ok(active) => active,

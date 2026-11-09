@@ -1,6 +1,7 @@
 //! Resolve issue context before workspace creation and agent launch.
 use anyhow::{Context as _, Result, bail, ensure};
 
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{client, context::Context, ui},
@@ -23,7 +24,7 @@ pub(super) async fn current_repository(
     ctx: &Context,
     repos: Vec<Repository>,
     hint: &str,
-) -> Result<String> {
+) -> Result<RepositoryId> {
     if let Some(id) = current_repository_id(ctx, &repos).await? {
         return Ok(id);
     }
@@ -31,7 +32,8 @@ pub(super) async fn current_repository(
         ctx.interactive(),
         "no current registered repository; {hint}"
     );
-    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)
+    let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)?;
+    Ok(picked.into())
 }
 
 /// The ID of the registered repository of the current checkout or
@@ -39,7 +41,7 @@ pub(super) async fn current_repository(
 pub(super) async fn current_repository_id(
     ctx: &Context,
     repos: &[Repository],
-) -> Result<Option<String>> {
+) -> Result<Option<RepositoryId>> {
     let Some(root) = current_root().await? else {
         return Ok(None);
     };
@@ -77,7 +79,7 @@ pub(super) async fn repository_for(
     repos: &mut Vec<Repository>,
     url: &str,
     offer: bool,
-) -> Result<String> {
+) -> Result<RepositoryId> {
     let (forge, retry) = (
         ForgeRepo::from_issue_url(url)?,
         "shoal start <repository> --issue <url>",
@@ -115,7 +117,7 @@ pub(super) async fn registered_remote(
     repos: &mut Vec<Repository>,
     forge: ForgeRepo,
     retry: &str,
-) -> Result<String> {
+) -> Result<RepositoryId> {
     let error = match repository_with_remote(repos, forge, retry).await {
         Ok(repo) => return Ok(repo.id.clone()),
         Err(error) => error,
@@ -319,7 +321,7 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
     };
     if let Some(space) = own
         && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
-        && space.repository_id() == Some(repo.id.as_str())
+        && space.repository_id() == Some(&repo.id)
     {
         return Ok(match space {
             PresentSpace::Workspace(workspace) => {

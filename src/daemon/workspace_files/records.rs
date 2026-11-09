@@ -2,6 +2,7 @@
 //! workspace or chat, how it came, and the removed workspaces and removed chats
 //! whose files stay. A space is gone when neither a workspace nor a chat has
 //! its ID; its removal or end record says how long its files stay.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
@@ -339,7 +340,7 @@ fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
 }
 
 /// Forget every record of repository `repository_id`.
-pub(super) fn forget_repository(db: &Connection, repository_id: &str) -> Result<()> {
+pub(super) fn forget_repository(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     db.execute(
         "DELETE FROM workspace_files WHERE repository_id=?1",
         [repository_id],
@@ -351,7 +352,7 @@ pub(super) fn forget_repository(db: &Connection, repository_id: &str) -> Result<
 /// `destination`, in the transaction that moves the repository's directory.
 pub(crate) fn rebase(
     tx: &Transaction<'_>,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     source: &Path,
     destination: &Path,
 ) -> Result<()> {
@@ -381,7 +382,7 @@ pub(crate) fn outside_repositories(db: &Connection) -> Result<Vec<String>> {
 }
 
 /// The repositories whose earlier copies are still to be recorded.
-pub(super) fn earlier_pending(db: &Connection) -> Result<Vec<String>> {
+pub(super) fn earlier_pending(db: &Connection) -> Result<Vec<RepositoryId>> {
     Ok(db
         .prepare("SELECT repository_id FROM earlier_attached_files")?
         .query_map([], |row| row.get(0))?
@@ -389,7 +390,7 @@ pub(super) fn earlier_pending(db: &Connection) -> Result<Vec<String>> {
 }
 
 /// Whether a move of repository `repository_id`'s directory is unfinished.
-pub(super) fn moving(db: &Connection, repository_id: &str) -> Result<bool> {
+pub(super) fn moving(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     crate::daemon::store::exists(
         db,
         "SELECT 1 FROM repository_moves WHERE repository_id=?1",
@@ -398,7 +399,10 @@ pub(super) fn moving(db: &Connection, repository_id: &str) -> Result<bool> {
 }
 
 /// The workspaces of repository `repository_id`.
-pub(super) fn repository_workspaces(db: &Connection, repository_id: &str) -> Result<Vec<SpaceId>> {
+pub(super) fn repository_workspaces(
+    db: &Connection,
+    repository_id: &RepositoryId,
+) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM workspaces WHERE repository_id=?1")?
         .query_map([repository_id], |row| row.get(0))?
@@ -406,7 +410,7 @@ pub(super) fn repository_workspaces(db: &Connection, repository_id: &str) -> Res
 }
 
 /// Mark repository `repository_id`'s earlier copies recorded.
-pub(super) fn earlier_recorded(db: &Connection, repository_id: &str) -> Result<()> {
+pub(super) fn earlier_recorded(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     db.execute(
         "DELETE FROM earlier_attached_files WHERE repository_id=?1",
         [repository_id],

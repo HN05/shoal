@@ -1,5 +1,6 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 
 use super::Caller;
@@ -88,9 +89,9 @@ impl Manager {
     pub(in crate::daemon) async fn caller_repository(
         &self,
         caller: &Caller,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<RepositoryId>> {
         let space = self.space_by_id(&caller.space_id).await?;
-        Ok(space.repository_id().map(str::to_owned))
+        Ok(space.repository_id().cloned())
     }
 
     /// The spaces `target` finds among those `caller` may see: the ones its

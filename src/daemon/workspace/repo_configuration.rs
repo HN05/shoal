@@ -1,6 +1,7 @@
 //! The configuration layers of a repository's workspaces, and where its
 //! local config file lives.
 use super::Manager;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
@@ -187,7 +188,7 @@ impl Manager {
     /// config belongs.
     pub(crate) async fn false_positives_path(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
     ) -> Result<Option<PathBuf>> {
         let repository = self.repository(repository_id).await?;
         Ok(match &repository.workspaces_dir {
@@ -204,7 +205,7 @@ impl Manager {
     /// local config edits do.
     pub(crate) async fn false_positives_path_reserved(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
     ) -> Result<PathBuf> {
         let repository = self.repository(repository_id).await?;
         self.ensure_repository_available(&repository.id).await?;
@@ -232,7 +233,7 @@ impl Manager {
 
     async fn config_layers(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         (worktree_file, worktree_template_files): (RepoConfig, config::modes::Files),
     ) -> Result<ConfigLayers> {
         let repository = self.repository(repository_id).await?;
@@ -274,19 +275,18 @@ impl Manager {
 
     /// The repository's settings after every layer, with the file in its
     /// registered checkout.
-    pub(crate) async fn repository_settings(&self, selector: &str) -> Result<Effective> {
-        self.repository_settings_from(&self.config(), selector)
-            .await
+    pub(crate) async fn repository_settings(&self, id: &RepositoryId) -> Result<Effective> {
+        self.repository_settings_from(&self.config(), id).await
     }
 
     /// [`Self::repository_settings`] with the mode and rule files beside the
     /// global config, which a launch's mode may come from.
     pub(crate) async fn repository_settings_with_templates(
         &self,
-        selector: &str,
+        id: &RepositoryId,
     ) -> Result<Effective> {
         let layers = self
-            .config_layers_for(ConfigTarget::Repository(selector.to_owned().into()))
+            .config_layers_for(ConfigTarget::Repository(id.into()))
             .await?;
         self.config()
             .resolve_with_template_files(&layers, &self.paths)
@@ -297,10 +297,10 @@ impl Manager {
     pub(crate) async fn repository_settings_from(
         &self,
         config: &Config,
-        selector: &str,
+        id: &RepositoryId,
     ) -> Result<Effective> {
         let layers = self
-            .config_layers_for(ConfigTarget::Repository(selector.to_owned().into()))
+            .config_layers_for(ConfigTarget::Repository(id.into()))
             .await?;
         config.resolve(&layers)
     }

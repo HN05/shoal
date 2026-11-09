@@ -6,6 +6,7 @@
 //! start, and either stays with the forge for other runners, as do the jobs
 //! of a repository whose runner was turned off. A job admitted as the system
 //! shuts down waits in the queue again.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
     io::Write as _,
@@ -356,7 +357,7 @@ impl Manager {
 
     /// Take `repository_id`'s jobs out of the queue, as once its runner is
     /// turned off; the forge keeps them for other runners.
-    pub(crate) async fn forget_job_entries(&self, repository_id: &str) -> Result<()> {
+    pub(crate) async fn forget_job_entries(&self, repository_id: &RepositoryId) -> Result<()> {
         let id = repository_id.to_owned();
         self.store
             .run(move |db| {

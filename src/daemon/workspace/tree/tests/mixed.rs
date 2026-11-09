@@ -1,5 +1,6 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
@@ -19,7 +20,7 @@ use crate::{
 /// returned process, and a workspace `worker` with an agent below the chat.
 async fn mixed_tree(
     manager: &Manager,
-    repository_id: &str,
+    repository_id: &RepositoryId,
 ) -> (Workspace, Chat, Workspace, ProcessGroup) {
     let root = manager
         .create_workspace(repository_id, "root".into(), None, None, None)

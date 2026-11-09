@@ -1,4 +1,5 @@
 //! Resource pools: their configuration, leases and what they have free.
+use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, fmt, path::PathBuf, str::FromStr};
 
@@ -13,7 +14,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RepositoryView {
-    pub id: String,
+    pub id: RepositoryId,
     pub path: PathBuf,
 }
 
@@ -22,7 +23,7 @@ pub struct RepositoryView {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Scope {
     Global,
-    Repo(String),
+    Repo(RepositoryId),
 }
 
 impl fmt::Display for Scope {
@@ -40,7 +41,7 @@ impl FromStr for Scope {
     fn from_str(text: &str) -> Result<Self> {
         match (text, text.strip_prefix("repo/")) {
             ("global", _) => Ok(Self::Global),
-            (_, Some(id)) if !id.is_empty() => Ok(Self::Repo(id.into())),
+            (_, Some(id)) if !id.is_empty() => Ok(Self::Repo(id.to_owned().into())),
             _ => anyhow::bail!("invalid resource scope: {text}"),
         }
     }

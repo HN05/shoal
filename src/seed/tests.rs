@@ -48,7 +48,7 @@ async fn copy(source: &Path, destination: &Path) -> Result<()> {
 #[tokio::test]
 async fn snapshots_clone_natively_or_not_at_all() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     layout.claim().unwrap();
     fs::create_dir_all(layout.worktree().join("out")).unwrap();
     fs::write(layout.worktree().join("out/built"), "built").unwrap();
@@ -78,7 +78,7 @@ async fn snapshots_clone_natively_or_not_at_all() {
 #[tokio::test]
 async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     layout.claim().unwrap();
     let seed = layout.worktree();
     fs::create_dir_all(seed.join("src")).unwrap();
@@ -150,7 +150,7 @@ async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
 fn no_snapshot_before_the_first_build() {
     let root = tempfile::tempdir().unwrap();
     assert!(
-        Snapshot::open(&Layout::new(root.path(), "repo"))
+        Snapshot::open(&Layout::new(root.path(), &"repo".into()))
             .unwrap()
             .is_none()
     );
@@ -159,7 +159,7 @@ fn no_snapshot_before_the_first_build() {
 #[test]
 fn removal_keeps_what_shoal_did_not_put_beside_the_seed() {
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     layout.claim().unwrap();
     fs::create_dir_all(layout.snapshot().join(OUTPUTS)).unwrap();
     fs::write(layout.log(), "log").unwrap();
@@ -183,13 +183,13 @@ fn a_symlinked_seed_directory_is_left_alone() {
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir_all(elsewhere.join("snapshot")).unwrap();
     std::os::unix::fs::symlink(&elsewhere, root.path().join(".seed")).unwrap();
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     assert!(layout.remove_owned().is_err());
     assert!(layout.claim().is_err());
     assert!(elsewhere.join("snapshot").exists());
     // Another repository's seed directory is not this one's either.
     fs::remove_file(root.path().join(".seed")).unwrap();
-    Layout::new(root.path(), "other").claim().unwrap();
+    Layout::new(root.path(), &"other".into()).claim().unwrap();
     assert!(layout.claim().is_err() && layout.remove_owned().is_err());
 }
 
@@ -197,7 +197,7 @@ fn a_symlinked_seed_directory_is_left_alone() {
 async fn a_failed_clone_leaves_no_outputs_behind() {
     let root = tempfile::tempdir().unwrap();
     let copy = copier(root.path());
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     layout.claim().unwrap();
     for path in ["first", "second"] {
         fs::create_dir_all(layout.worktree().join(path)).unwrap();
@@ -225,7 +225,7 @@ async fn a_failed_clone_leaves_no_outputs_behind() {
 async fn outputs_never_pass_through_a_symlink() {
     let root = tempfile::tempdir().unwrap();
     let copy = copier(root.path());
-    let layout = Layout::new(root.path(), "repo");
+    let layout = Layout::new(root.path(), &"repo".into());
     layout.claim().unwrap();
     fs::create_dir_all(layout.worktree().join("ios/build")).unwrap();
     let paths = vec!["ios/build".to_owned()];

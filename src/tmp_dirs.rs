@@ -3,6 +3,7 @@
 //! repository in `root_dir`'s, named by its ID, which its processes receive
 //! as `TMPDIR`. The directory goes with its workspace or chat, so nothing in
 //! it is ever kept.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
     fs,
@@ -27,10 +28,15 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+    pub fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
+        Self::marked(workspaces_dir, repository_id.to_string())
+    }
+
+    /// The temporary directories in `directory`, marked as `owner`'s.
+    fn marked(directory: &Path, owner: String) -> Self {
         Self {
-            root: workspaces_dir.join(".tmp"),
-            owner: repository_id.to_owned(),
+            root: directory.join(".tmp"),
+            owner,
         }
     }
 
@@ -39,7 +45,7 @@ impl Layout {
     /// `state`, which no repository ID names: a daemon sharing `root_dir`
     /// neither uses nor sweeps them.
     pub fn outside_repositories(root_dir: &Path, state: &Path) -> Self {
-        Self::new(root_dir, &state.display().to_string())
+        Self::marked(root_dir, state.display().to_string())
     }
 
     /// The repository's temporary directories; registrations from before the

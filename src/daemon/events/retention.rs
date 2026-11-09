@@ -2,6 +2,7 @@
 //! gone for its repository's `cleanup.restore.retention_days` after its
 //! removal, as its checkpoints and attached files do. A removal record or
 //! a removed chat's unexpired files keep them longer.
+use crate::client::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
@@ -16,7 +17,7 @@ use crate::{
 /// A space that is gone, with its repository and when it went.
 struct Gone {
     id: SpaceId,
-    repository_id: Option<String>,
+    repository_id: Option<RepositoryId>,
     removed_at: UnixTime,
 }
 
@@ -36,7 +37,7 @@ impl Manager {
         let mut expired = Vec::new();
         for space in gone {
             if !retention.contains_key(&space.repository_id) {
-                let kept = self.retention(space.repository_id.as_deref()).await;
+                let kept = self.retention(space.repository_id.as_ref()).await;
                 retention.insert(space.repository_id.clone(), kept);
             }
             let kept = retention[&space.repository_id];
@@ -50,7 +51,7 @@ impl Manager {
     /// How long a removed space of `repository` keeps what it leaves:
     /// its settings' retention, or the global setting's for a chat without a
     /// repository or when the repository's cannot be read.
-    async fn retention(&self, repository: Option<&str>) -> Duration {
+    async fn retention(&self, repository: Option<&RepositoryId>) -> Duration {
         let settings = match repository {
             Some(id) => self.repository_settings(id).await,
             None => self.config().resolve(&Default::default()),

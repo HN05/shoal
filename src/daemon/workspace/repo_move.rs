@@ -7,6 +7,7 @@ use super::{
     registry,
     spotlight::{self, Layout},
 };
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::{log, store},
@@ -37,7 +38,7 @@ enum Running {
 
 /// A recorded repository directory move.
 struct Intent {
-    repository_id: String,
+    repository_id: RepositoryId,
     source: PathBuf,
     destination: PathBuf,
     /// The source directory's identity, which a rename carries to the
@@ -173,7 +174,7 @@ impl Manager {
 
     /// Finish or roll back every move a stopped daemon or failed attempt left.
     pub async fn finish_repository_moves(&self) -> Result<()> {
-        let pending: Vec<String> = self
+        let pending: Vec<RepositoryId> = self
             .store
             .run(|db| {
                 Ok(db
@@ -258,7 +259,7 @@ impl Manager {
 
     /// The processes that stopping the repository's commands and agents
     /// ends, when `running` has the caller stop them first.
-    async fn stopping_processes(&self, id: &str, running: Running) -> Result<Vec<u32>> {
+    async fn stopping_processes(&self, id: &RepositoryId, running: Running) -> Result<Vec<u32>> {
         if running == Running::Refused {
             return Ok(Vec::new());
         }
@@ -348,7 +349,7 @@ impl Manager {
 
     /// Reserve the destination in `root` and record the move, giving up the
     /// reservation when the move cannot be recorded.
-    async fn begin_move(&self, id: &str, root: &Path, source: &Path) -> Result<PathBuf> {
+    async fn begin_move(&self, id: &RepositoryId, root: &Path, source: &Path) -> Result<PathBuf> {
         let destination = self.reserve_destination(root, source).await?;
         if let Err(error) = self.record_move(id, source, &destination).await {
             // The reservation belongs exclusively to this attempt.
@@ -375,25 +376,30 @@ impl Manager {
         registry::reserve_directory(root, name, &self.repositories().await?, &workspaces)
     }
 
-    async fn repository_executions(&self, repository_id: &str) -> Result<Vec<Execution>> {
+    async fn repository_executions(&self, repository_id: &RepositoryId) -> Result<Vec<Execution>> {
         let id = repository_id.to_owned();
         self.store
             .run(move |db| store::repository_executions(db, &id))
             .await
     }
 
-    async fn repository_workspaces(&self, repository_id: &str) -> Result<Vec<Workspace>> {
+    async fn repository_workspaces(&self, repository_id: &RepositoryId) -> Result<Vec<Workspace>> {
         Ok(self
             .list_workspaces()
             .await?
             .into_iter()
-            .filter(|workspace| workspace.repository_id == repository_id)
+            .filter(|workspace| workspace.repository_id == *repository_id)
             .collect())
     }
 
     /// Reserve every workspace of the repository and record the intent, unless
     /// something started using the repository since it was checked.
-    async fn record_move(&self, id: &str, source: &Path, destination: &Path) -> Result<()> {
+    async fn record_move(
+        &self,
+        id: &RepositoryId,
+        source: &Path,
+        destination: &Path,
+    ) -> Result<()> {
         let id = id.to_owned();
         let source_id =
             real_directory_identity(source)?.context("repository directory is missing")?;
@@ -431,7 +437,12 @@ impl Manager {
     }
 
     /// Point every record inside the moved directory at the destination.
-    async fn switch_move(&self, id: &str, source: &Path, destination: &Path) -> Result<()> {
+    async fn switch_move(
+        &self,
+        id: &RepositoryId,
+        source: &Path,
+        destination: &Path,
+    ) -> Result<()> {
         let id = id.to_owned();
         let source = utf8(source)?;
         let destination = utf8(destination)?;
@@ -497,7 +508,7 @@ impl Manager {
     /// Roll back a move that did not complete, or finish one whose directory
     /// reached its destination. Only directories with their recorded identity
     /// are deleted. Callers hold the repository's Git gate.
-    async fn finish_repository_move(&self, id: &str) -> Result<()> {
+    async fn finish_repository_move(&self, id: &RepositoryId) -> Result<()> {
         let Some(intent) = self.move_intent(id).await? else {
             return Ok(());
         };
@@ -534,7 +545,7 @@ impl Manager {
     /// Repair Git's links between the checkout and its present worktrees,
     /// including the seed's, then verify each workspace still owns its
     /// worktree before recording its admin directory.
-    async fn reconnect_worktrees(&self, id: &str) -> Result<()> {
+    async fn reconnect_worktrees(&self, id: &RepositoryId) -> Result<()> {
         let repo = self.repository(id).await?;
         let mut present = Vec::new();
         for workspace in self.repository_workspaces(id).await? {
@@ -561,7 +572,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn move_intent(&self, id: &str) -> Result<Option<Intent>> {
+    async fn move_intent(&self, id: &RepositoryId) -> Result<Option<Intent>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -672,7 +683,7 @@ fn utf8(path: &Path) -> Result<String> {
 /// another lifecycle operation. Returns each workspace's state.
 fn movable_records(
     db: &rusqlite::Connection,
-    id: &str,
+    id: &RepositoryId,
     running: Running,
 ) -> Result<BTreeMap<SpaceId, WorkspaceState>> {
     ensure!(

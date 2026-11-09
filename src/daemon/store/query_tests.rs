@@ -203,8 +203,8 @@ fn repository_workspace_reads_search_migrated_index() -> Result<()> {
         "repository_id",
         "missing",
     )?;
-    assert!(!repository_has_workspaces(&db, "missing")?);
-    assert!(repository_has_workspaces(&db, "owner-0")?);
+    assert!(!repository_has_workspaces(&db, &"missing".into())?);
+    assert!(repository_has_workspaces(&db, &"owner-0".into())?);
     Ok(())
 }
 

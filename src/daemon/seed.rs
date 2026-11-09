@@ -1,6 +1,7 @@
 //! Keep each repository's seed build at its default branch's tip and start
 //! new workspaces from it. Seed failures never fail the operation that met
 //! them: a workspace without a seed still builds, only from scratch.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::BTreeMap, ffi::OsString, fs, io::Write as _, path::Path, process::Stdio,
     sync::Arc, time::Duration,
@@ -251,7 +252,7 @@ impl Manager {
     /// Stop the repository's seed build, if one runs, and keep new ones out
     /// until the returned guard drops. Take it before the Git gate, which a
     /// build takes while holding its own.
-    pub(super) async fn stop_seed_build(&self, repository_id: &str) -> SeedStop {
+    pub(super) async fn stop_seed_build(&self, repository_id: &RepositoryId) -> SeedStop {
         let slot = self.seeds.slot(repository_id);
         slot.cancel.send_replace(true);
         let guard = slot.gate.clone().lock_owned().await;
@@ -265,7 +266,7 @@ impl Manager {
     /// guard drops, or `None` while one runs.
     pub(super) fn pause_idle_seed(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
     ) -> Option<tokio::sync::OwnedMutexGuard<()>> {
         self.seeds
             .slot(repository_id)

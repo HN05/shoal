@@ -155,11 +155,12 @@ async fn continues_here(ctx: &Context, chat: &Chat) -> String {
     let repositories = crate::client::repositories::list(&ctx.paths)
         .await
         .unwrap_or_default();
-    let id = chat.repository_id.as_deref().unwrap_or_default();
-    let repository = repositories
-        .iter()
-        .find(|repository| repository.id == id)
-        .map_or(id, crate::repository::name);
+    let repository = chat.repository_id.as_ref().map_or("", |id| {
+        repositories
+            .iter()
+            .find(|repository| repository.id == *id)
+            .map_or(id.as_str(), crate::repository::name)
+    });
     crate::transfer::continue_chat(chat, repository)
         .unwrap_or_else(|| format!("chat {} ended here", chat.name))
 }

@@ -1,5 +1,6 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
 //! until they expire, which `shoal work restore` returns the workspace to.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -541,7 +542,7 @@ fn delete_expired_removals(db: &Connection) -> Result<()> {
 /// Delete the repository's checkpoints that expired, other than a
 /// workspace's starting checkpoint, or that neither a workspace nor a
 /// removal record owns.
-fn delete_expired(db: &Connection, repository_id: &str) -> Result<()> {
+fn delete_expired(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     db.execute(
         &format!(
             "DELETE FROM checkpoints WHERE repository_id=?1
@@ -555,7 +556,7 @@ fn delete_expired(db: &Connection, repository_id: &str) -> Result<()> {
 
 /// The commits the repository's checkpoints keep, read once so a pass over
 /// thousands of refs does not query the store for each.
-fn kept_commits(db: &Connection, repository_id: &str) -> Result<HashSet<String>> {
+fn kept_commits(db: &Connection, repository_id: &RepositoryId) -> Result<HashSet<String>> {
     db.prepare("SELECT json_extract(record, '$.commit') FROM checkpoints WHERE repository_id=?1")?
         .query_map([repository_id], |row| row.get(0))?
         .map(|commit| Ok(commit?))

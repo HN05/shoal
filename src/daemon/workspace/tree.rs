@@ -3,6 +3,7 @@
 //! works on it or coordinates its agent;
 //! `space_parents` records it. Every reader takes one walk up or one walk
 //! down that link, whatever each space's kind.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
@@ -308,7 +309,7 @@ pub(crate) fn agent_runs(db: &Connection, id: &SpaceId, agents: &TrackedAgents) 
 /// or is refused here.
 pub(crate) fn ensure_parent(
     db: &Connection,
-    repository_id: Option<&str>,
+    repository_id: Option<&RepositoryId>,
     space: &SpaceId,
     parent: &SpaceId,
 ) -> Result<()> {
@@ -329,7 +330,7 @@ pub(crate) fn ensure_parent(
 /// `repository_id` now: a workspace must be ready.
 pub(crate) fn ready_parent(
     db: &Connection,
-    repository_id: Option<&str>,
+    repository_id: Option<&RepositoryId>,
     parent: &SpaceId,
 ) -> Result<String> {
     let (name, state) = parent_in_repository(db, repository_id, parent)?;
@@ -347,10 +348,10 @@ pub(crate) fn ready_parent(
 /// chat without a repository, which takes children in any.
 pub(crate) fn parent_in_repository(
     db: &Connection,
-    repository_id: Option<&str>,
+    repository_id: Option<&RepositoryId>,
     parent: &SpaceId,
 ) -> Result<(String, Option<WorkspaceState>)> {
-    let recorded: Option<(Option<String>, String, Option<WorkspaceState>)> = db
+    let recorded: Option<(Option<RepositoryId>, String, Option<WorkspaceState>)> = db
         .query_row(
             "SELECT spaces.repository_id,spaces.name,workspaces.state FROM spaces
                 LEFT JOIN workspaces USING(id) WHERE spaces.id=?1",
@@ -362,7 +363,7 @@ pub(crate) fn parent_in_repository(
         bail!("parent space {parent} no longer exists");
     };
     ensure!(
-        repository.is_none() || repository.as_deref() == repository_id,
+        repository.is_none() || repository.as_ref() == repository_id,
         "{name} is in another repository, and only a chat without a repository takes \
          children in other repositories"
     );

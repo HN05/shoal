@@ -1,5 +1,6 @@
 //! The slots in use, counted from what the daemon already tracks, so a limit
 //! applies however an agent started.
+use crate::client::repository_ids::RepositoryId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
@@ -14,14 +15,14 @@ use crate::{
 
 /// One used slot.
 pub(crate) struct Slot {
-    pub repository: String,
+    pub repository: RepositoryId,
     pub activity: Activity,
 }
 
 /// What the store records toward used slots, read in one pass.
 struct PersistedSlots {
     /// Each workspace that is not done, by ID, with its repository ID.
-    open: HashMap<SpaceId, String>,
+    open: HashMap<SpaceId, RepositoryId>,
     /// Executions whose state is unknown, other than CI jobs' runners:
     /// agents that may still run.
     unknown: Vec<UnknownExecution>,
@@ -37,7 +38,7 @@ struct UnknownExecution {
 
 /// A starting queue entry.
 struct StartingEntry {
-    repository: String,
+    repository: RepositoryId,
     /// The workspace it starts in, once known.
     workspace: Option<SpaceId>,
     /// When its holder was last seen.

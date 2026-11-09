@@ -282,7 +282,7 @@ async fn pull_request(
             };
             let code = super::super::workspaces::add(
                 ctx,
-                Some(repo.id.clone()),
+                Some(repo.id.clone().into()),
                 creation,
                 None,
                 super::super::workspaces::AgentLaunch::Explicit(None),
@@ -343,7 +343,7 @@ async fn fork_pull_workspace(
             ..Default::default()
         },
         pr: Some(pull.url.clone()),
-        ..NewWorkspace::new(repo.id.as_str().into(), start)
+        ..NewWorkspace::new((&repo.id).into(), start)
     };
     let env = crate::env::without_secrets();
     let started = crate::client::operations::start_workspace(&ctx.paths, new, env).await?;

@@ -4,6 +4,7 @@
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
 //! has stopped syncing.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::questions::QuestionExt;
 use std::collections::HashSet;
@@ -84,7 +85,7 @@ impl Inbox {
             !existing.contains(&request.space_id)
                 && request
                     .repository_id
-                    .as_deref()
+                    .as_ref()
                     .is_some_and(|repository| filter.keeps_detached(repository))
         };
         let demos = crate::client::demos::running(&ctx.paths, None).await?;
@@ -163,18 +164,21 @@ impl Inbox {
 /// `workspaces`; a coordinating agent decides the others.
 /// The repository of the item's workspace or chat, or the one that owns a
 /// proposed issue whose workspace is gone.
-fn repository_of<'a>(workspaces: &'a [Workspace], chats: &'a [Chat], item: &'a Item) -> &'a str {
+fn repository_of<'a>(
+    workspaces: &'a [Workspace],
+    chats: &'a [Chat],
+    item: &'a Item,
+) -> Option<&'a RepositoryId> {
     let space = item.space_id();
     workspaces
         .iter()
         .find(|w| Some(&w.id) == space)
-        .map(|w| w.repository_id.as_str())
+        .map(|w| &w.repository_id)
         .or_else(|| {
             let chat = chats.iter().find(|chat| Some(&chat.id) == space);
-            chat.and_then(|chat| chat.repository_id.as_deref())
+            chat.and_then(|chat| chat.repository_id.as_ref())
         })
         .or_else(|| item.repository_id())
-        .unwrap_or("")
 }
 
 /// The item's note, after the workspace its chat runs in, if it is one.
@@ -268,7 +272,7 @@ pub(crate) trait ItemExt {
 
     /// The repository that owns a proposed issue, which outlives the
     /// workspace that proposed it, or an untracked worktree.
-    fn repository_id(&self) -> Option<&str>;
+    fn repository_id(&self) -> Option<&RepositoryId>;
 
     /// What the row names: its space, marked when a proposal outlived it,
     /// an untracked worktree's directory, or the repository whose sync
@@ -302,9 +306,9 @@ impl ItemExt for Item {
         }
     }
 
-    fn repository_id(&self) -> Option<&str> {
+    fn repository_id(&self) -> Option<&RepositoryId> {
         match self {
-            Self::Approval { request } => request.repository_id.as_deref(),
+            Self::Approval { request } => request.repository_id.as_ref(),
             Self::Untracked { worktree } => Some(&worktree.repository_id),
             Self::SyncFailed { sync } => Some(&sync.repository_id),
             _ => None,

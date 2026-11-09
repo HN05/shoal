@@ -2,6 +2,7 @@
 //! the `--permission` its agent started with and by the effective
 //! permissions of the space above it, up to a top-level space. They are computed at each check from current config, the
 //! recorded modes and the tree, so a config change reaches running agents.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result};
 
 use crate::{
@@ -20,7 +21,7 @@ impl Manager {
     pub(crate) async fn caller_permissions(
         &self,
         caller: &Caller,
-        repository: &str,
+        repository: &RepositoryId,
     ) -> Result<Permissions> {
         self.caller_permissions_from(&self.config(), caller, repository)
             .await
@@ -32,7 +33,7 @@ impl Manager {
         &self,
         config: &Config,
         caller: &Caller,
-        repository: &str,
+        repository: &RepositoryId,
     ) -> Result<Permissions> {
         let space = self.space_by_id(&caller.space_id).await?;
         let agent = recorded_agent(&space);
@@ -46,7 +47,7 @@ impl Manager {
     pub(crate) async fn space_permissions(
         &self,
         id: &SpaceId,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         let space = self.space_by_id(id).await?;
         let agent = recorded_agent(&space);
@@ -81,7 +82,7 @@ impl Manager {
         config: &Config,
         space: &PresentSpace,
         agent: Option<RecordedAgent<'_>>,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         let own = self
             .agent_permissions(config, space, agent, repository)
@@ -104,7 +105,7 @@ impl Manager {
         &self,
         config: &Config,
         id: &SpaceId,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<Option<Permissions>> {
         let mut effective: Option<Permissions> = None;
         for above in self.ancestors(id).await?.into_iter().rev() {
@@ -126,7 +127,7 @@ impl Manager {
         config: &Config,
         space: &PresentSpace,
         agent: Option<RecordedAgent<'_>>,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         let settings = self.mode_settings(config, space, repository).await?;
         let (mode, narrowing) = agent.unzip();
@@ -142,13 +143,13 @@ impl Manager {
         &self,
         config: &Config,
         space: &PresentSpace,
-        repository: Option<&str>,
+        repository: Option<&RepositoryId>,
     ) -> Result<crate::config::Effective> {
         match space {
             PresentSpace::Workspace(workspace) => {
                 self.workspace_settings_from(config, workspace).await
             }
-            PresentSpace::Chat(chat) => match chat.repository_id.as_deref().or(repository) {
+            PresentSpace::Chat(chat) => match chat.repository_id.as_ref().or(repository) {
                 Some(repository) => self.repository_settings_from(config, repository).await,
                 None => config.resolve(&Default::default()),
             },

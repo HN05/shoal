@@ -228,7 +228,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     // The repository's removal deletes what is left.
     remove(&manager, &workspace.id).await;
     manager
-        .remove_repository(workspace.repository_id.as_str())
+        .remove_repository(&workspace.repository_id)
         .await
         .unwrap();
 

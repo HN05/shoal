@@ -1,6 +1,7 @@
 //! Admission limits: the machine's and each repository's limits on agents
 //! and CI jobs, as configured and as measured load allows, and which waiting
 //! entries fit them beside the slots in use.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -25,7 +26,7 @@ pub(crate) struct Limits {
     pub global: Option<u32>,
     /// How many agents measured load lets start now, under dynamic admission.
     pub starts: Option<u32>,
-    pub repositories: HashMap<String, Option<u32>>,
+    pub repositories: HashMap<RepositoryId, Option<u32>>,
     /// The machine-wide limit free disk space sets while a fixed limit applies.
     pub disk: Option<u32>,
     pub jobs: JobLimits,
@@ -44,11 +45,11 @@ pub(crate) struct JobLimits {
 }
 
 impl Limits {
-    fn repository(&self, id: &str) -> Option<u32> {
+    fn repository(&self, id: &RepositoryId) -> Option<u32> {
         self.repositories.get(id).copied().flatten()
     }
 
-    pub(super) fn apply_to(&self, repository: &str) -> bool {
+    pub(super) fn apply_to(&self, repository: &RepositoryId) -> bool {
         self.global.is_some() || self.starts.is_some() || self.repository(repository).is_some()
     }
 }
@@ -104,7 +105,7 @@ impl Wake {
 #[derive(Clone)]
 pub(crate) struct Waiting {
     pub id: String,
-    pub repository: String,
+    pub repository: RepositoryId,
     pub work: Work,
 }
 
@@ -118,7 +119,7 @@ pub(crate) struct Waiting {
 /// own load and takes the pass's one start, as an agent does. An entry that
 /// waits or does not fit keeps its place and is passed over.
 pub(crate) fn admit(
-    occupied: &[String],
+    occupied: &[RepositoryId],
     waiting: &[Waiting],
     limits: &Limits,
     mut recovered: bool,
@@ -201,10 +202,10 @@ pub(crate) fn admit(
 /// Whether `limits` admit some job beside the `occupied` slots: one under
 /// any fixed limit, and under dynamic admission one that needs no more than
 /// whatever room is left, since a waiting job's cost may be that small.
-pub(crate) fn room_for_a_job(occupied: &[String], limits: &Limits) -> bool {
+pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool {
     let probe = [Waiting {
         id: String::new(),
-        repository: String::new(),
+        repository: String::new().into(),
         work: Work::Job {
             cost: capacity::JobCost {
                 cores: 0.0,
@@ -231,7 +232,7 @@ impl Manager {
     /// global one, which the machine limit already covers.
     pub(super) async fn agent_limits(
         &self,
-        repositories: Vec<String>,
+        repositories: Vec<RepositoryId>,
         slots: &[Slot],
         jobs: &[Activity],
     ) -> Result<Limits> {
@@ -298,7 +299,7 @@ impl Manager {
         let slots = self.occupied_slots(&HashSet::new()).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(Vec::new(), &slots, &jobs).await?;
-        let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
+        let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(room_for_a_job(&occupied, &limits))
     }
 

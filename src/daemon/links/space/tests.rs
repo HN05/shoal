@@ -75,7 +75,7 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
             .context_space(&acting_in(&master, repo))
             .await
             .unwrap();
-        assert_eq!(space.repository_id(), repo.id);
+        assert_eq!(*space.repository_id(), repo.id);
         assert!(!space.keeps_links());
         let permissions = manager.space_permissions(&master.id, Some(space.repository_id()));
         openings.push(permissions.await.unwrap().issue_open.value);
@@ -106,16 +106,13 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
         .await
         .unwrap();
     let proposal = store_issue_proposal(&manager, &space).await;
-    assert_eq!(
-        proposal.repository_id.as_deref(),
-        Some(repos[0].id.as_str())
-    );
+    assert_eq!(proposal.repository_id.as_ref(), Some(&repos[0].id));
     let found = manager
-        .find_link_space(&master.id, proposal.repository_id.as_deref())
+        .find_link_space(&master.id, proposal.repository_id.as_ref())
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(found.repository_id(), repos[0].id);
+    assert_eq!(*found.repository_id(), repos[0].id);
 
     // A chat of a repository acts only in its own.
     let (planning, _planning_process) = chat(&manager, "planning", Some(&repos[0])).await;

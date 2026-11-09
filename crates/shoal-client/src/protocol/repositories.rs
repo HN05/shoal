@@ -1,3 +1,4 @@
+use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
 
 /// Requests about registered repositories, their configuration and their branches.
@@ -65,17 +66,17 @@ pub enum RepositoryMethod {
     /// Where the tracked agents of the repository with this ID kept their
     /// configuration, also once it is removed; in pages.
     AgentEnvironments {
-        repository_id: String,
+        repository_id: RepositoryId,
     },
     /// Forget [`Self::AgentEnvironments`] once a removed repository's trust
     /// entries there are clean.
     ForgetAgentEnvironments {
-        repository_id: String,
+        repository_id: RepositoryId,
     },
     /// [`WorkspaceMethod::KeepAgentEnvironment`] for a chat in the repository's
     /// checkout, which belongs to no workspace.
     KeepRepositoryAgentEnvironment {
-        repository: String,
+        repository: RepositoryId,
         environment: std::collections::BTreeMap<String, String>,
     },
 }

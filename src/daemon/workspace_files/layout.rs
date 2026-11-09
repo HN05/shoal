@@ -2,6 +2,7 @@
 //! beside the workspaces, in a directory its agents are given as a working
 //! directory, so they read the files where any sandbox lets them. The chats
 //! without a repository keep theirs in `root_dir`, where they run.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
     io::ErrorKind,
@@ -30,10 +31,15 @@ pub(crate) struct Layout {
 }
 
 impl Layout {
-    pub(crate) fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+    pub(crate) fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
+        Self::marked(workspaces_dir, repository_id.to_string())
+    }
+
+    /// The attached files in `directory`, marked as `owner`'s.
+    fn marked(directory: &Path, owner: String) -> Self {
         Self {
-            root: workspaces_dir.join(".attachments"),
-            owner: repository_id.to_owned(),
+            root: directory.join(".attachments"),
+            owner,
         }
     }
 
@@ -50,7 +56,7 @@ impl Layout {
     /// `state`, which no repository ID names: a daemon sharing `root_dir`
     /// neither uses nor sweeps them.
     pub(crate) fn outside_repositories(root_dir: &Path, state: &Path) -> Self {
-        Self::new(root_dir, &state.display().to_string())
+        Self::marked(root_dir, state.display().to_string())
     }
 
     /// Copies of `files`, attached to `message` for the workspace

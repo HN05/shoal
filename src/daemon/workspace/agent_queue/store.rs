@@ -1,5 +1,6 @@
 //! The queue's rows: reading the waiting ones and entries, and recording
 //! launches and the restores waiting wrappers carry out.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
@@ -14,7 +15,7 @@ use crate::{
 /// A waiting row of the queue.
 pub(super) struct QueuedRow {
     pub id: String,
-    pub repository: String,
+    pub repository: RepositoryId,
     pub kind: QueueKind,
     pub execution: Option<String>,
     pub workspace: Option<SpaceId>,
@@ -51,7 +52,7 @@ pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
 /// A launch to record in the queue.
 pub(super) struct Launch {
     pub id: String,
-    pub repository: String,
+    pub repository: RepositoryId,
     pub request: QueueRequest,
     pub state: QueueState,
     /// The existing workspace the launch opens.

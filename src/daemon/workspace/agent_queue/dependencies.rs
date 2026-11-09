@@ -3,6 +3,7 @@
 //! opened its workspace, which then stands in for it, and every issue has
 //! closed or is done in a workspace of the repository that links it. It
 //! builds on the branch of the done dependency that contains the others.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashMap;
 
@@ -51,7 +52,7 @@ struct Done {
 /// A recorded dependency of a waiting launch in `repository`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Recorded {
-    repository: String,
+    repository: RepositoryId,
     kind: DependencyKind,
     target: String,
 }
@@ -60,7 +61,7 @@ struct Recorded {
 pub(super) fn record(
     db: &Connection,
     entry: &str,
-    repository: &str,
+    repository: &RepositoryId,
     after: &[Dependency],
 ) -> Result<()> {
     for dependency in after {
@@ -77,7 +78,11 @@ pub(super) fn record(
 }
 
 /// Refuse the workspaces and queued launches of `after` that `repository` lacks.
-fn ensure_work_exists(db: &Connection, repository: &str, after: &[Dependency]) -> Result<()> {
+fn ensure_work_exists(
+    db: &Connection,
+    repository: &RepositoryId,
+    after: &[Dependency],
+) -> Result<()> {
     for dependency in after {
         if let Dependency::Work(selector) = dependency {
             work(db, "", repository, selector)?;
@@ -92,7 +97,7 @@ fn ensure_work_exists(db: &Connection, repository: &str, after: &[Dependency]) -
 fn work(
     db: &Connection,
     entry: &str,
-    repository: &str,
+    repository: &RepositoryId,
     selector: &str,
 ) -> Result<(DependencyKind, String)> {
     let workspace: Option<SpaceId> = db
@@ -316,7 +321,11 @@ fn workspace_by_id(db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
 }
 
 /// The workspaces of `repository` that link the issue at `url`, by name.
-fn issue_workspaces(db: &Connection, repository: &str, url: &str) -> Result<Vec<Workspace>> {
+fn issue_workspaces(
+    db: &Connection,
+    repository: &RepositoryId,
+    url: &str,
+) -> Result<Vec<Workspace>> {
     Ok(db
         .prepare(&format!(
             "SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1

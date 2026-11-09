@@ -10,7 +10,7 @@ fn untracked_leaves_out_the_checkout_tracked_worktrees_and_the_verified_seed() {
         prunable: false,
         locked: false,
     };
-    let seed = crate::seed::Layout::new(&root, "repo-id");
+    let seed = crate::seed::Layout::new(&root, &"repo-id".into());
     let owned = OwnedWorktrees {
         tracked: HashSet::from([root.join("tracked")]),
         seed,

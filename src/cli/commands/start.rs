@@ -1,6 +1,7 @@
 //! `shoal start`: start an agent in a mode, which decides what the agent is
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 
@@ -298,8 +299,11 @@ async fn checked_repository(
     )?;
     let issue = issue.flatten();
     let parent = args.parent.as_ref();
-    let selector =
-        workspaces::check_target(ctx, repository.clone(), issue.as_deref(), parent).await?;
+    let named = repository
+        .clone()
+        .map(ui::repository_selector)
+        .transpose()?;
+    let selector = workspaces::check_target(ctx, named, issue.as_deref(), parent).await?;
     let named = Some(selector.value().to_owned());
     match repository.is_some() && repository == args.repository {
         true => args.repository = named,
@@ -378,7 +382,7 @@ async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
 /// The ID of the registered repository `--repo` or the positional argument
 /// names, else of the one an issue or item URL belongs to, else of the
 /// current checkout or workspace, without asking.
-async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
+async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<RepositoryId>> {
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let named = (args.repository_override.as_deref()).or(args.repository.as_deref());
     if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
@@ -417,11 +421,13 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
     };
     // A copy goes in the copied workspace's repository unless one is named,
     // which the daemon refuses when it is another.
+    let named = args
+        .repository_override
+        .map(ui::repository_selector)
+        .transpose()?;
     let repository = match (&copy, &args.repository) {
-        (Some(copy), None) => args
-            .repository_override
-            .or_else(|| Some(copy.repository.clone())),
-        _ => args.repository_override,
+        (Some(copy), None) => named.or_else(|| Some(copy.repository.clone().into())),
+        _ => named,
     };
     let input = AddInput {
         positional: args.repository,

@@ -1,6 +1,7 @@
 //! Issues and PRs a scoped caller proposed instead of opening them. The user
 //! approves a proposal, with any edits, and the daemon opens it; a decided
 //! proposal is no longer stored.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
@@ -247,7 +248,7 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
 
 /// The name and repository of the space `id`, a workspace or a chat, which
 /// may have none.
-fn space_record(db: &Connection, id: &SpaceId) -> Result<(String, Option<String>)> {
+fn space_record(db: &Connection, id: &SpaceId) -> Result<(String, Option<RepositoryId>)> {
     Ok(db.query_row(
         "SELECT name,repository_id FROM spaces WHERE id=?1",
         [id],
@@ -256,7 +257,10 @@ fn space_record(db: &Connection, id: &SpaceId) -> Result<(String, Option<String>
 }
 
 /// The issue proposals of a repository, oldest first.
-fn repository_proposals(db: &Connection, repository: &str) -> Result<Vec<ApprovalRequest>> {
+fn repository_proposals(
+    db: &Connection,
+    repository: &RepositoryId,
+) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{} WHERE repository_id=?1 AND target_key=?2 ORDER BY rowid",
         super::COLUMNS

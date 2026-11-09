@@ -5,6 +5,7 @@
 //! holding each file under its place in the list beside them. Files a
 //! restore hands over but its caller does not put in place stay listed
 //! there for the workspace's next removal record.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::HashSet,
     io::ErrorKind,
@@ -170,11 +171,11 @@ const LIST: &str = "files.json";
 /// The directory of one repository's kept session files.
 pub(super) struct Layout {
     root: PathBuf,
-    owner: String,
+    owner: RepositoryId,
 }
 
 impl Layout {
-    pub(super) fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+    pub(super) fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
             root: workspaces_dir.join(".sessions"),
             owner: repository_id.to_owned(),

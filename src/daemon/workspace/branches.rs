@@ -1,5 +1,6 @@
 //! Branch allocation, existing-branch workspaces and default-branch refreshes
 //! against workspace records. Adoption is explicit.
+use crate::client::repository_ids::RepositoryId;
 use crate::git::existing_branch::BranchExt;
 use std::path::Path;
 
@@ -182,7 +183,7 @@ impl Manager {
     }
 
     /// The branches every remote of the repository advertises now.
-    pub async fn remote_heads(&self, repository_id: &str) -> Result<Vec<git::RemoteHead>> {
+    pub async fn remote_heads(&self, repository_id: &RepositoryId) -> Result<Vec<git::RemoteHead>> {
         let repo = self.repository(repository_id).await?;
         let mut heads = Vec::new();
         for remote in git::remotes(&repo.path, git::run_isolated).await?.lines() {

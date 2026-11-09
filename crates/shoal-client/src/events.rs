@@ -1,4 +1,5 @@
 //! The workspace and chat event journal, as `shoal events` replays it.
+use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use std::{fmt, path::PathBuf, str::FromStr};
 
@@ -196,7 +197,7 @@ pub struct EventDetails {
     #[serde(default)]
     pub chat_id: Option<SpaceId>,
     /// Null for a chat without a repository.
-    pub repository_id: Option<String>,
+    pub repository_id: Option<RepositoryId>,
     pub name: String,
     /// Null for a chat.
     pub path: Option<PathBuf>,
@@ -445,7 +446,7 @@ pub struct FileEventDetails {
     /// Null for a workspace's file.
     pub chat_id: Option<SpaceId>,
     /// Null for the file of a chat without a repository.
-    pub repository_id: Option<String>,
+    pub repository_id: Option<RepositoryId>,
     /// The record as `shoal files` lists it.
     pub file: crate::files::AttachedFile,
 }

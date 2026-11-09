@@ -2,6 +2,7 @@
 //! attached files, so `shoal files` lists and deletes them too. The upgrade
 //! marks every repository; the cleanup sweep records each one's copies once
 //! no move of its directory is unfinished, which recovery finishes first.
+use crate::client::repository_ids::RepositoryId;
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};
@@ -28,7 +29,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn record_repository_earlier_files(&self, repository_id: &str) -> Result<()> {
+    async fn record_repository_earlier_files(&self, repository_id: &RepositoryId) -> Result<()> {
         let id = repository_id.to_owned();
         if self.store.run(move |db| records::moving(db, &id)).await? {
             return Ok(());
@@ -50,7 +51,11 @@ impl Manager {
 
     /// Record the earlier copies in each of the repository's workspaces.
     /// Callers hold the gate of its files.
-    async fn record_layout_earlier_files(&self, layout: Layout, repository_id: &str) -> Result<()> {
+    async fn record_layout_earlier_files(
+        &self,
+        layout: Layout,
+        repository_id: &RepositoryId,
+    ) -> Result<()> {
         let id = repository_id.to_owned();
         let workspaces = self
             .store

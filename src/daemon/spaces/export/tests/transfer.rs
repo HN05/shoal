@@ -128,7 +128,7 @@ async fn import_record(
     let packaged = packaged_workspace(&import.manifest);
     manager
         .import_workspace(
-            &repo.id.as_str().into(),
+            &(&repo.id).into(),
             import.bundle.as_ref().map(|bundle| bundle.path()),
             packaged.prerequisite.as_deref(),
             workspace,
@@ -241,7 +241,7 @@ async fn import_writes_nothing_while_the_repository_moves() {
     let packaged = packaged_workspace(&import.manifest);
     let imported = importing
         .import_workspace(
-            &target_repo.id.as_str().into(),
+            &(&target_repo.id).into(),
             import.bundle.as_ref().map(|bundle| bundle.path()),
             packaged.prerequisite.as_deref(),
             packaged.workspace.clone(),
@@ -284,7 +284,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     git(&target_repo.path, &["checkout", "-q", "main"]);
     let imported = importing
         .import_workspace(
-            &target_repo.id.as_str().into(),
+            &(&target_repo.id).into(),
             import.bundle.as_ref().map(|bundle| bundle.path()),
             packaged.prerequisite.as_deref(),
             packaged.workspace.clone(),

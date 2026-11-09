@@ -560,7 +560,11 @@ fn apps_read_forge_items_through_the_daemon() {
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let workspace = || ItemContext::Workspace("topic".parse().unwrap());
-    let checkout = || ItemContext::Checkout(fixture.repo.to_str().unwrap().into());
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let checkout = || ItemContext::Checkout(repository.clone().into());
     let pr_8 = || Selection {
         kind: Some(LinkKind::Pr),
         input: Some("8".into()),

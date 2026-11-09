@@ -3,6 +3,8 @@
 //! reviewer once, and records what it found.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
+use crate::client::repository_ids::RepositoryId;
+
 use anyhow::{Context, Result};
 use tokio::{sync::watch, task::JoinSet};
 
@@ -154,9 +156,7 @@ impl Manager {
             return Ok(Pass::Ended);
         }
         let files = self.run_files(id);
-        let checkout = self
-            .reviews
-            .hold_checkout(id, workspace.repository_id.as_str());
+        let checkout = self.reviews.hold_checkout(id, &workspace.repository_id);
         let ended = self
             .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
             .await;
@@ -187,13 +187,11 @@ impl Manager {
             .run(move |db| store::waits_for_recovery(db, id))
             .await?;
         let stop = cancel.clone();
-        let mut slot = self.agent_queue.request_oneshot(
-            workspace.repository_id.as_str(),
-            after_stop,
-            move || {
-                stop.send_replace(true);
-            },
-        );
+        let mut slot =
+            self.agent_queue
+                .request_oneshot(&workspace.repository_id, after_stop, move || {
+                    stop.send_replace(true);
+                });
         tokio::select! {
             () = slot.admitted() => Ok(Some(slot)),
             _ = cancelled.wait_for(|cancelled| *cancelled) => Ok(None),
@@ -271,7 +269,7 @@ impl Manager {
         head: &str,
         files: &Files,
     ) -> Result<()> {
-        let repository = self.repository(workspace.repository_id.as_str()).await?;
+        let repository = self.repository(&workspace.repository_id).await?;
         std::fs::create_dir_all(&files.directory)
             .with_context(|| format!("create {}", files.directory.display()))?;
         reviewer::write_schema(files)?;
@@ -494,6 +492,7 @@ impl Manager {
         // The run names it, as removing the workspace deletes the review.
         match std::fs::read_to_string(files.repository()) {
             Ok(repository) => {
+                let repository = RepositoryId::from(repository);
                 self.reviews.hold_checkout(id, &repository).keep();
                 if left_running {
                     self.agent_queue.hold_oneshot(&repository);

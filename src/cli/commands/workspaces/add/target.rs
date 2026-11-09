@@ -5,7 +5,6 @@ use crate::{
     cli::{
         commands::{issues, repositories},
         context::Context,
-        ui,
     },
     forge::IssueInput,
     model::Repository,
@@ -28,7 +27,7 @@ impl AddTarget {
 
 pub(super) async fn resolve_add_target(
     ctx: &Context,
-    repository: Option<String>,
+    repository: Option<crate::repository::Selector>,
     issue: Option<&str>,
 ) -> Result<AddTarget> {
     // Load on first use so explicit targets keep their original failure order.
@@ -37,13 +36,10 @@ pub(super) async fn resolve_add_target(
     // registered, so registering another is never offered there.
     let offer = !crate::env::is_scoped() && crate::env::in_chat().is_none();
     let selector = match repository {
-        Some(repo) if !offer => ui::repository_selector(repo)?,
-        Some(repo) => {
-            let selector = ui::repository_selector(repo)?;
-            repositories::offer_unregistered(ctx, &selector)
-                .await?
-                .map_or(selector, |repo| repo.id.into())
-        }
+        Some(selector) if !offer => selector,
+        Some(selector) => repositories::offer_unregistered(ctx, &selector)
+            .await?
+            .map_or(selector, |repo| repo.id.into()),
         None => {
             let repos = repositories.insert(crate::client::repositories::list(&ctx.paths).await?);
             match issue {

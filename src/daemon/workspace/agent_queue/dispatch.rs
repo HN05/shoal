@@ -1,6 +1,7 @@
 //! Dispatch: each pass ends abandoned starts and restores, queues the
 //! restores stopped agents request, then admits the waiting entries that fit
 //! and starts what the daemon starts itself.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     time::Duration,
@@ -142,7 +143,7 @@ impl Manager {
         let slots = self.occupied_slots(&dormant).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(repositories, &slots, &jobs).await?;
-        let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
+        let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(admit(&occupied, &work.entries, &limits, recovered))
     }
 

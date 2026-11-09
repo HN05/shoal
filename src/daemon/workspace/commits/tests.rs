@@ -1,3 +1,4 @@
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 use std::path::Path;
@@ -15,7 +16,7 @@ use crate::{
 
 async fn create(
     manager: &super::Manager,
-    repo: &str,
+    repo: &RepositoryId,
     parent: Option<&SpaceId>,
     start: CommitStart,
 ) -> anyhow::Result<Workspace> {
@@ -254,7 +255,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
         (None, true),
     ] {
         let mut request = WorkspaceMethod::CreateCommitWorkspace {
-            repository: repo.id.as_str().into(),
+            repository: (&repo.id).into(),
             parent: parent.clone().map(SpaceSelector::from),
             start: CommitStart::Revision(None),
             options: Default::default(),
@@ -381,7 +382,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     let url = "https://forge.example/team/repo/pulls/9".to_owned();
     let open = |commit: String| {
         manager.open_pull_head(
-            repo.id.as_str().into(),
+            (&repo.id).into(),
             url.clone(),
             crate::protocol::PullHead {
                 number: 9,
@@ -465,7 +466,7 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
         .unwrap();
     let create = |parent: Option<SpaceId>| {
         manager.create_commit_workspace(
-            repo.id.as_str().into(),
+            (&repo.id).into(),
             parent,
             CommitStart::Revision(None),
             Default::default(),
@@ -551,7 +552,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
         .unwrap();
     let open = |base: Option<&str>| {
         manager.open_pull_head(
-            repo.id.as_str().into(),
+            (&repo.id).into(),
             "https://forge.example/team/repo/pulls/5".into(),
             crate::protocol::PullHead {
                 number: 5,
@@ -608,7 +609,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         .unwrap();
     let opened = manager
         .open_pull_head(
-            repo.id.as_str().into(),
+            (&repo.id).into(),
             "https://forge.example/team/repo/pulls/6".into(),
             crate::protocol::PullHead {
                 number: 6,
@@ -684,7 +685,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
     );
     let open = |chat: Option<SpaceId>, confined: bool| {
         manager.open_pull_head(
-            repo.id.as_str().into(),
+            (&repo.id).into(),
             "https://forge.example/team/repo/pulls/4".into(),
             crate::protocol::PullHead {
                 number: 4,
@@ -811,7 +812,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
     let other = &repos[1];
     manager
         .create_commit_workspace(
-            other.id.as_str().into(),
+            (&other.id).into(),
             Some(chat.id.clone()),
             CommitStart::Revision(None),
             Default::default(),
@@ -820,7 +821,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
         .unwrap_err();
     manager
         .open_pull_head(
-            other.id.as_str().into(),
+            (&other.id).into(),
             "https://forge.example/team/other/pulls/3".into(),
             crate::protocol::PullHead {
                 number: 3,

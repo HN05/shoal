@@ -1,5 +1,6 @@
 //! The rows each view lists, and the picker ids that tell what a chosen row
 //! stands for.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
@@ -58,7 +59,7 @@ pub(super) enum Row {
     /// Automatic cleanup failing other than in a workspace.
     Cleanup,
     /// A repository whose default branch stopped syncing, by its ID.
-    SyncFailed(String),
+    SyncFailed(RepositoryId),
     Workspace(SpaceId),
     /// A notification, by the name its workspace had, if any.
     Notification(String),
@@ -145,7 +146,7 @@ impl Row {
             return Ok(Self::Cleanup);
         }
         if kind == "sync-failed" {
-            return Ok(Self::SyncFailed(rest.to_owned()));
+            return Ok(Self::SyncFailed(rest.to_owned().into()));
         }
         let (space, detail) = rest.split_once(':').unwrap_or((rest, ""));
         let space = SpaceId::from(space.to_owned());

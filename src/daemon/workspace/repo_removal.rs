@@ -7,6 +7,7 @@ use super::{
         real_directory_identity,
     },
 };
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{resources::Scope, store},
@@ -31,7 +32,7 @@ struct Progress {
 }
 
 impl Manager {
-    pub(crate) async fn ensure_repository_available(&self, id: &str) -> Result<()> {
+    pub(crate) async fn ensure_repository_available(&self, id: &RepositoryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -66,7 +67,7 @@ impl Manager {
     /// the removal, which refuses new work from then on.
     pub(crate) async fn remove_finished_contribution(
         &self,
-        id: &str,
+        id: &RepositoryId,
     ) -> Result<Option<RepositoryRemoval>> {
         let _registry = self.gates.lock_registry().await;
         let repo = self.repository(id).await?;
@@ -164,16 +165,16 @@ impl Manager {
     /// [`Self::keep_agent_environment`] for a chat agent of the repository.
     pub async fn keep_repository_agent_environment(
         &self,
-        selector: &str,
+        repository_id: &RepositoryId,
         environment: BTreeMap<String, String>,
     ) -> Result<()> {
-        let repository = self.repository(selector).await?;
+        let repository = self.repository(repository_id).await?;
         self.keep_environment(&repository.id, environment).await
     }
 
     async fn keep_environment(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         mut environment: BTreeMap<String, String>,
     ) -> Result<()> {
         environment.retain(|name, _| crate::env::AGENT_CONFIG_VARIABLES.contains(&name.as_str()));
@@ -187,7 +188,7 @@ impl Manager {
     /// Record `environment` for the repository once.
     async fn store_agent_environment(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         environment: &BTreeMap<String, String>,
     ) -> Result<()> {
         let (repository_id, environment) = (
@@ -207,7 +208,10 @@ impl Manager {
 
     /// What [`Self::keep_agent_environment`] kept for the repository with
     /// `id`, which may be removed already.
-    pub async fn agent_environments(&self, id: &str) -> Result<Vec<BTreeMap<String, String>>> {
+    pub async fn agent_environments(
+        &self,
+        id: &RepositoryId,
+    ) -> Result<Vec<BTreeMap<String, String>>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -223,7 +227,7 @@ impl Manager {
 
     /// Forget what [`Self::keep_agent_environment`] kept for the removed
     /// repository with `id`, which no agent can add to again.
-    pub async fn forget_agent_environments(&self, id: &str) -> Result<()> {
+    pub async fn forget_agent_environments(&self, id: &RepositoryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -240,7 +244,7 @@ impl Manager {
             .await
     }
 
-    async fn removal_progress(&self, id: &str) -> Result<Option<Progress>> {
+    async fn removal_progress(&self, id: &RepositoryId) -> Result<Option<Progress>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -404,7 +408,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn unregister_repository(&self, id: &str) -> Result<()> {
+    async fn unregister_repository(&self, id: &RepositoryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .write(move |tx| {

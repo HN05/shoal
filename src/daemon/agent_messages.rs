@@ -3,6 +3,7 @@
 //! messages through `shoal messages`, watches and agent hooks, and a delivered
 //! message is deleted. Files attached to a message outlive it, until their
 //! workspace is removed (see [`crate::daemon::workspace_files`]).
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
@@ -127,7 +128,7 @@ pub(crate) fn insert_delivered(
 /// moves the repository's directory.
 pub(crate) fn rebase_attachments(
     tx: &Transaction<'_>,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     source: &Path,
     destination: &Path,
 ) -> Result<()> {
@@ -307,7 +308,7 @@ impl Manager {
     /// only the workspaces below `below` when it names one.
     async fn workspace_recipients(
         &self,
-        repository: Option<&String>,
+        repository: Option<&RepositoryId>,
         below: Option<&SpaceId>,
     ) -> Result<Vec<(Workspace, bool)>> {
         let running = self.running_agent_workspaces().await;
@@ -337,7 +338,7 @@ impl Manager {
     /// `repository` when it names one.
     async fn chat_recipients(
         &self,
-        repository: Option<&String>,
+        repository: Option<&RepositoryId>,
         sender_chat: Option<&SpaceId>,
     ) -> Result<Vec<Chat>> {
         let mut chats = self.chats().await?;

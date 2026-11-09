@@ -6,6 +6,7 @@
 //! under pressure. A chat runs while its process lives; once its agent exits
 //! or Shoal saves it, the chat is stopped until it is restored, and it lasts
 //! until it is removed.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{path::Path, sync::Arc, time::Duration};
 
@@ -173,7 +174,7 @@ impl Manager {
     /// must take a chat of that repository, or at the top without one.
     async fn record_new_chat(
         &self,
-        repository: Option<String>,
+        repository: Option<RepositoryId>,
         workspace: Option<WorkspaceRef>,
         new: NewChat,
     ) -> Result<Chat> {
@@ -239,7 +240,7 @@ impl Manager {
     /// configured `root_dir`, which stays its own however `root_dir` changes
     /// later. A chat without one is recorded under the registry gate, so a
     /// root move, which holds it, finds the chat before clearing `root_dir`.
-    async fn reserve_chat_home(&self, repository: Option<String>) -> Result<ChatHome<'_>> {
+    async fn reserve_chat_home(&self, repository: Option<RepositoryId>) -> Result<ChatHome<'_>> {
         Ok(match repository {
             Some(id) => ChatHome {
                 repository: Some(self.reserve_repository_directory(&id).await?),
@@ -654,7 +655,7 @@ fn insert(
     parent: Option<(SpaceId, Removing)>,
 ) -> Result<Chat> {
     let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
-    ensure_place_free(tx, chat.repository_id.as_deref(), workspace)?;
+    ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
     store::ensure_name_available(tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
@@ -688,7 +689,7 @@ fn insert(
     // waited finds the chat below the parent or refuses it.
     if let Some((parent, removing)) = &parent {
         ensure!(!removing.reserved(parent), "{parent} is being removed");
-        workspace::ensure_parent(tx, chat.repository_id.as_deref(), &chat.id, parent)?;
+        workspace::ensure_parent(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
         workspace::set_parent(tx, &chat.id, Some(parent))?;
         chat.parent = workspace::parent(tx, &chat.id)?;
     }
@@ -721,7 +722,7 @@ pub(super) fn unique_id(process: &Identity) -> Result<Option<String>> {
 /// it is not while it is being removed.
 fn ensure_place_free(
     tx: &rusqlite::Transaction<'_>,
-    repository_id: Option<&str>,
+    repository_id: Option<&RepositoryId>,
     workspace: Option<&SpaceId>,
 ) -> Result<()> {
     if let Some(repository_id) = repository_id {
@@ -833,7 +834,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     )?
     .query_map([], |row| {
         let id: SpaceId = row.get(0)?;
-        let repository_id: Option<String> = row.get(1)?;
+        let repository_id: Option<RepositoryId> = row.get(1)?;
         let root_dir = row
             .get::<_, Option<String>>(16)?
             .map(std::path::PathBuf::from);

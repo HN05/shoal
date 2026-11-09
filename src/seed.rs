@@ -4,6 +4,7 @@
 //! A new workspace clones the snapshot and takes the seed's modification time
 //! for each file its commit left unchanged, so mtime-based build tools rebuild
 //! only what the branch changed.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::HashSet,
     fs,
@@ -29,11 +30,11 @@ const OUTPUTS: &str = "outputs";
 #[derive(Debug, Clone)]
 pub struct Layout {
     root: PathBuf,
-    owner: String,
+    owner: RepositoryId,
 }
 
 impl Layout {
-    pub fn new(workspaces_dir: &Path, repository_id: &str) -> Self {
+    pub fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
             root: workspaces_dir.join(".seed"),
             owner: repository_id.to_owned(),

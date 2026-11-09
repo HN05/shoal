@@ -83,7 +83,7 @@ pub enum Record {
 impl Record {
     pub fn key(&self) -> RecordKey {
         let (kind, id) = match self {
-            Self::Repository(record) => (RecordKind::Repository, record.id.clone()),
+            Self::Repository(record) => (RecordKind::Repository, record.id.to_string()),
             Self::Workspace(record) => (RecordKind::Workspace, record.workspace.id.to_string()),
             Self::Link(record) => (RecordKind::Link, record.id.clone()),
             Self::Sessions(record) => (RecordKind::Sessions, record.space_id.to_string()),

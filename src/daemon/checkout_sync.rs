@@ -4,6 +4,7 @@
 //! the checkout has; `shoal repo sync` and decisions that need the remote's
 //! state now sync through the same path. A sync that keeps failing shows in
 //! workspace status, then in the inbox with one notification.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -35,45 +36,45 @@ const FRESH_FOR: Duration = Duration::from_secs(10 * 60);
 /// before the next scheduled pass.
 #[derive(Default)]
 pub(crate) struct Syncs {
-    repositories: Mutex<HashMap<String, Health>>,
-    requested: Mutex<HashSet<String>>,
+    repositories: Mutex<HashMap<RepositoryId, Health>>,
+    requested: Mutex<HashSet<RepositoryId>>,
     wake: Notify,
 }
 
 impl Syncs {
-    fn lock(&self) -> MutexGuard<'_, HashMap<String, Health>> {
+    fn lock(&self) -> MutexGuard<'_, HashMap<RepositoryId, Health>> {
         self.repositories
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn fetched(&self, repository_id: &str, at: Instant) {
+    fn fetched(&self, repository_id: &RepositoryId, at: Instant) {
         self.lock()
-            .entry(repository_id.to_owned())
+            .entry(repository_id.clone())
             .or_default()
             .fetched(at);
     }
 
-    fn fetched_since(&self, repository_id: &str, since: Instant) -> bool {
+    fn fetched_since(&self, repository_id: &RepositoryId, since: Instant) -> bool {
         self.lock()
             .get(repository_id)
             .is_some_and(|health| health.fetched_since(since))
     }
 
-    fn record(&self, repository_id: &str, error: Option<&Error>) {
+    fn record(&self, repository_id: &RepositoryId, error: Option<&Error>) {
         self.lock()
-            .entry(repository_id.to_owned())
+            .entry(repository_id.clone())
             .or_default()
             .record(error, Instant::now(), UnixTime::now());
     }
 
     /// Forget the repositories no longer registered.
-    fn retain(&self, repository_ids: &[String]) {
+    fn retain(&self, repository_ids: &[RepositoryId]) {
         self.lock().retain(|id, _| repository_ids.contains(id));
     }
 
     /// The failures to tell the user about, each once.
-    fn unnotified(&self) -> Vec<(String, String)> {
+    fn unnotified(&self) -> Vec<(RepositoryId, String)> {
         let now = Instant::now();
         self.lock()
             .iter_mut()
@@ -82,15 +83,15 @@ impl Syncs {
     }
 
     /// Sync `repository_id` before the next scheduled pass.
-    pub(crate) fn request(&self, repository_id: &str) {
+    pub(crate) fn request(&self, repository_id: &RepositoryId) {
         self.requested
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(repository_id.to_owned());
+            .insert(repository_id.clone());
         self.wake.notify_one();
     }
 
-    fn take_requested(&self) -> Vec<String> {
+    fn take_requested(&self) -> Vec<RepositoryId> {
         self.requested
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -134,7 +135,7 @@ impl Manager {
     /// Fetch the default branch's remotes now, for a decision that needs what
     /// they have; a local default branch that cannot follow them does not
     /// fail it.
-    pub(crate) async fn fetch_default_branch(&self, repository_id: &str) -> Result<()> {
+    pub(crate) async fn fetch_default_branch(&self, repository_id: &RepositoryId) -> Result<()> {
         match self.sync(repository_id).await {
             Synced::Unfetched(error) => Err(error),
             Synced::Fetched(_) => Ok(()),
@@ -145,7 +146,7 @@ impl Manager {
     /// them unless they were. Stale refs may show changes the default branch
     /// no longer has, so after a failed fetch nothing that depends on it is
     /// decided.
-    pub(crate) async fn default_branch_fresh(&self, repository_id: &str) -> bool {
+    pub(crate) async fn default_branch_fresh(&self, repository_id: &RepositoryId) -> bool {
         let since = Instant::now().checked_sub(FRESH_FOR);
         if since.is_some_and(|since| self.syncs.fetched_since(repository_id, since)) {
             return true;
@@ -160,7 +161,7 @@ impl Manager {
     }
 
     /// How the background sync of the repository went, once it was tried.
-    pub(crate) fn checkout_sync(&self, repository_id: &str) -> Option<CheckoutSync> {
+    pub(crate) fn checkout_sync(&self, repository_id: &RepositoryId) -> Option<CheckoutSync> {
         self.syncs
             .lock()
             .get(repository_id)
@@ -183,7 +184,7 @@ impl Manager {
     }
 
     /// One sync, recorded for status and later decisions.
-    async fn sync(&self, repository_id: &str) -> Synced {
+    async fn sync(&self, repository_id: &RepositoryId) -> Synced {
         let synced = self.fetch_and_fast_forward(repository_id).await;
         self.syncs.record(repository_id, synced.error());
         synced
@@ -192,7 +193,7 @@ impl Manager {
     /// Fetch under the repository's fetch gate, then fast-forward under its
     /// Git gate, so commands that take only the Git gate never wait on the
     /// remote.
-    async fn fetch_and_fast_forward(&self, repository_id: &str) -> Synced {
+    async fn fetch_and_fast_forward(&self, repository_id: &RepositoryId) -> Synced {
         let started = Instant::now();
         let fetched = {
             let _fetch = self.gates.lock_fetch(repository_id).await;
@@ -213,16 +214,16 @@ impl Manager {
     }
 
     /// Fetch the repository's default-branch remotes; returns the default branch.
-    async fn fetch_repository(&self, repository_id: &str) -> Result<String> {
+    async fn fetch_repository(&self, repository_id: &RepositoryId) -> Result<String> {
         let repo = self.repository(repository_id).await?;
         self.fetch_default_remotes(&repo).await
     }
 
     /// Every registered repository, forgetting the syncs of those removed.
-    async fn registered_repository_ids(&self) -> Vec<String> {
+    async fn registered_repository_ids(&self) -> Vec<RepositoryId> {
         match self.repositories().await {
             Ok(repositories) => {
-                let ids: Vec<String> = repositories.into_iter().map(|repo| repo.id).collect();
+                let ids: Vec<RepositoryId> = repositories.into_iter().map(|repo| repo.id).collect();
                 self.syncs.retain(&ids);
                 ids
             }
@@ -235,7 +236,7 @@ impl Manager {
 
     /// A scheduled or requested sync: logged when it fails, and told to the
     /// user once it has failed long enough.
-    async fn sync_in_background(&self, repository_id: &str) {
+    async fn sync_in_background(&self, repository_id: &RepositoryId) {
         let _operation = self.gates.operation().await;
         if let Some(error) = self.sync(repository_id).await.error() {
             log!("sync of repository {repository_id}: {error:#}");
@@ -248,7 +249,7 @@ impl Manager {
         for (repository_id, error) in self.syncs.unnotified() {
             let (Some(sync), Ok(repo)) = (
                 self.checkout_sync(&repository_id),
-                self.repository(repository_id.as_str()).await,
+                self.repository(&repository_id).await,
             ) else {
                 continue;
             };
@@ -300,12 +301,12 @@ pub async fn run(manager: Arc<Manager>) {
 #[derive(Default)]
 struct Syncing {
     tasks: JoinSet<()>,
-    running: HashMap<task::Id, String>,
-    again: HashSet<String>,
+    running: HashMap<task::Id, RepositoryId>,
+    again: HashSet<RepositoryId>,
 }
 
 impl Syncing {
-    fn start(&mut self, manager: &Arc<Manager>, repository_ids: Vec<String>) {
+    fn start(&mut self, manager: &Arc<Manager>, repository_ids: Vec<RepositoryId>) {
         for repository_id in repository_ids {
             if self
                 .running

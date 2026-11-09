@@ -1,5 +1,6 @@
 //! Emptying a repository's shared tool caches, which only happens while
 //! nothing Shoal started can be using them.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
 pub(crate) use crate::client::cleanup::Emptying;
@@ -55,7 +56,7 @@ impl Manager {
 /// start in between.
 fn move_unless_running(
     tx: &rusqlite::Transaction<'_>,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     layout: &Layout,
     dry_run: bool,
 ) -> Result<Option<Vec<String>>> {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::repository_ids::RepositoryId;
 
 fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
     Limits {
@@ -6,7 +7,7 @@ fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
         starts: None,
         repositories: repositories
             .iter()
-            .map(|(id, limit)| (id.to_string(), *limit))
+            .map(|(id, limit)| ((*id).into(), *limit))
             .collect(),
         disk: None,
         jobs: JobLimits::default(),
@@ -18,7 +19,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
         .iter()
         .map(|(id, repository)| Waiting {
             id: id.to_string(),
-            repository: repository.to_string(),
+            repository: (*repository).into(),
             work: if id.starts_with('r') {
                 Work::Restore {
                     waiting: true,
@@ -38,7 +39,7 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
     let limits = limits(Some(3), &[("a", Some(1)), ("b", None)]);
     assert_eq!(admit(&["a".into()], &queue, &limits, false), ["b1", "b2"]);
     // A full machine admits nothing, whatever the repositories allow.
-    assert!(admit(&vec!["b".to_owned(); 3], &queue, &limits, false).is_empty());
+    assert!(admit(&vec![RepositoryId::from("b"); 3], &queue, &limits, false).is_empty());
     // Without any limit every entry starts.
     assert_eq!(admit(&[], &queue, &Limits::default(), false).len(), 4);
     // Low disk holds the machine below its fixed limit.
@@ -53,7 +54,7 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
         ..Limits::default()
     };
     assert_eq!(
-        admit(&vec!["b".to_owned(); 9], &queue, &dynamic, false),
+        admit(&vec![RepositoryId::from("b"); 9], &queue, &dynamic, false),
         ["a1"]
     );
 }
@@ -197,8 +198,8 @@ fn the_forge_is_read_while_any_room_is_left_for_a_job() {
 fn restores_take_back_their_own_slot_under_fixed_limits() {
     // Restores are named r…; each one's stopped agent holds a slot in `occupied`.
     let queue = waiting(&[("a1", "a"), ("ra", "a"), ("b1", "b")]);
-    let occupied = |repositories: &[&str]| -> Vec<String> {
-        repositories.iter().map(|id| id.to_string()).collect()
+    let occupied = |repositories: &[&str]| -> Vec<RepositoryId> {
+        repositories.iter().map(|id| (*id).into()).collect()
     };
     // The machine is full: the launch waits and the restore takes its slot back.
     let full = limits(Some(3), &[("a", Some(2))]);
@@ -233,7 +234,7 @@ fn restores_take_back_their_own_slot_under_fixed_limits() {
 #[test]
 fn restores_wait_for_healthy_readings_without_holding_back_later_entries() {
     let mut queue = waiting(&[("a1", "a"), ("ra", "a"), ("rb", "b"), ("b1", "b")]);
-    let occupied = vec!["a".to_owned(), "b".to_owned()];
+    let occupied = vec!["a".into(), "b".into()];
     let unlimited = Limits::default();
     // Without healthy readings the restores keep their place and the
     // launches around them start.
@@ -288,7 +289,7 @@ fn restores_between_turns_wait_only_for_an_update_and_a_free_slot() {
         wake: Wake::Update { due },
     };
     queue[0].work = update(true, false);
-    let occupied = vec!["b".to_owned()];
+    let occupied = vec!["b".into()];
     let unlimited = Limits::default();
     // Without an update the restore holds back nothing behind it.
     assert_eq!(admit(&occupied, &queue, &unlimited, true), ["a1", "rb"]);
@@ -299,7 +300,7 @@ fn restores_between_turns_wait_only_for_an_update_and_a_free_slot() {
     // Its agent holds no slot, so it needs a free one as a launch does.
     let full = limits(Some(2), &[]);
     assert_eq!(admit(&occupied, &queue, &full, false), ["ra"]);
-    assert!(admit(&vec!["b".to_owned(); 2], &queue, &full, false).is_empty());
+    assert!(admit(&vec![RepositoryId::from("b"); 2], &queue, &full, false).is_empty());
     // An agent not yet proven stopped is passed over.
     queue[0].work = update(false, true);
     assert_eq!(admit(&occupied, &queue, &unlimited, false), ["a1"]);

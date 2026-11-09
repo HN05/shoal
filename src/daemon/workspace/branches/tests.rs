@@ -1,3 +1,4 @@
+use crate::client::repository_ids::RepositoryId;
 use crate::git::existing_branch::BranchExt;
 use std::{fs, path::PathBuf, sync::Arc};
 
@@ -17,7 +18,7 @@ struct Fixture {
     root: tempfile::TempDir,
     repo: PathBuf,
     manager: Arc<Manager>,
-    repo_id: String,
+    repo_id: RepositoryId,
 }
 
 impl Fixture {
@@ -719,16 +720,16 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
     }
     for (repository, branch, existing, options) in [
         ("missing", None, None, none),
-        (&*f.repo_id, Some("bad..name"), None, none),
-        (&*f.repo_id, None, Some("absent"), none),
+        (&f.repo_id, Some("bad..name"), None, none),
+        (&f.repo_id, None, Some("absent"), none),
         (
-            &*f.repo_id,
+            &f.repo_id,
             None,
             Some("owned"),
             options(Some("main"), None, None),
         ),
         (
-            &*f.repo_id,
+            &f.repo_id,
             None,
             Some("topic"),
             NewWorktreeOptions {
@@ -736,23 +737,23 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
                 ..none
             },
         ),
-        (&*f.repo_id, None, None, options(Some("absent"), None, None)),
+        (&f.repo_id, None, None, options(Some("absent"), None, None)),
         (
-            &*f.repo_id,
+            &f.repo_id,
             Some("new"),
             None,
             options(None, Some("absent"), None),
         ),
         (
-            &*f.repo_id,
+            &f.repo_id,
             Some("new"),
             None,
             options(None, None, Some(&*f.repo)),
         ),
         // A path that no workspace can use is refused before the branch is known.
-        (&*f.repo_id, None, None, options(None, None, Some(&*f.repo))),
+        (&f.repo_id, None, None, options(None, None, Some(&*f.repo))),
         (
-            &*f.repo_id,
+            &f.repo_id,
             Some("owned"),
             None,
             options(None, None, Some(&*new_path)),

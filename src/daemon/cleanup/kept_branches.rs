@@ -1,5 +1,6 @@
 //! Deletion of branches that removal kept once a remote or the default branch
 //! has their commits too. Nothing is lost, so nobody is told.
+use crate::client::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::{Result, ensure};
@@ -17,7 +18,7 @@ const HEADS_INTERVAL: Duration = Duration::from_secs(10 * 60);
 #[derive(Default)]
 pub struct State {
     /// The branches each repository's remotes advertised, and when.
-    heads: HashMap<String, (Instant, Vec<RemoteHead>)>,
+    heads: HashMap<RepositoryId, (Instant, Vec<RemoteHead>)>,
 }
 
 impl State {
@@ -27,7 +28,7 @@ impl State {
     async fn advertised(
         &mut self,
         manager: &Manager,
-        repository_id: &str,
+        repository_id: &RepositoryId,
     ) -> Option<&[RemoteHead]> {
         let now = Instant::now();
         let stale = self
@@ -87,7 +88,7 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
 
 /// Whether the repository's checkout, where its kept branches' Git runs,
 /// answers, as [`Manager::sweep_skips`] tells.
-async fn checkout_answers(manager: &Manager, repository_id: &str) -> Result<bool> {
+async fn checkout_answers(manager: &Manager, repository_id: &RepositoryId) -> Result<bool> {
     let repo = manager.repository(repository_id).await?;
     Ok(!manager.sweep_skips(&repo.path).await)
 }

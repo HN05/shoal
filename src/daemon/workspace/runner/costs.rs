@@ -3,6 +3,7 @@
 //! repository, workflow and job name, and the cost a waiting or starting
 //! run of a job counts at in admission: the peaks of its recent runs, or
 //! without any the load of a job without history.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 
@@ -89,7 +90,11 @@ impl Manager {
     /// What a run of `job` in `repository_id` is expected to use: the most
     /// CPU and memory its recent runs reached, or without any runs the
     /// cost of a job without history.
-    pub(crate) async fn job_cost(&self, repository_id: &str, job: &QueuedJob) -> Result<JobCost> {
+    pub(crate) async fn job_cost(
+        &self,
+        repository_id: &RepositoryId,
+        job: &QueuedJob,
+    ) -> Result<JobCost> {
         let repository = repository_id.to_owned();
         let (workflow, name) = key(job);
         let peaks: (Option<f64>, Option<i64>) = self

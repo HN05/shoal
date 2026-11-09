@@ -1,5 +1,6 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, spotlight};
+use crate::client::repository_ids::RepositoryId;
 use crate::{
     daemon::store,
     git,
@@ -256,7 +257,10 @@ impl Manager {
 
     /// The repository `id`, reserving its directory under `root_dir` first
     /// when its registration predates it. Callers hold no Git gate.
-    pub(crate) async fn reserve_repository_directory(&self, id: &str) -> Result<Repository> {
+    pub(crate) async fn reserve_repository_directory(
+        &self,
+        id: &RepositoryId,
+    ) -> Result<Repository> {
         let repo = self.repository(id).await?;
         if repo.workspaces_dir.is_some() {
             return Ok(repo);

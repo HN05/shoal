@@ -39,7 +39,7 @@ async fn contribution(manager: &Arc<Manager>, root: &std::path::Path) -> Reposit
         })
         .await
         .unwrap();
-    manager.repository(repo.id.as_str()).await.unwrap()
+    manager.repository(&repo.id).await.unwrap()
 }
 
 async fn registered(manager: &Manager, repo: &Repository) -> bool {
@@ -99,7 +99,7 @@ async fn a_borrowed_contribution_stays_available() {
             db.execute(
                 "INSERT INTO repository_resource_leases(lease_id,repository_id,path)
                      VALUES ('lease',?1,?2)",
-                [id, path],
+                rusqlite::params![id, path],
             )?;
             Ok(())
         })
@@ -128,7 +128,7 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
     assert!(manager.begin_contribution_removal(&repo).await.unwrap());
     manager
         .start_chat(
-            repo.id.as_str().into(),
+            (&repo.id).into(),
             "chat-1".into(),
             "claude".into(),
             std::process::id(),

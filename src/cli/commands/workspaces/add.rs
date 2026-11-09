@@ -115,7 +115,7 @@ async fn ensure_narrowing_fits_chosen(
 
 pub(in crate::cli::commands) async fn add(
     ctx: &Context,
-    repository: Option<String>,
+    repository: Option<crate::repository::Selector>,
     creation: Creation,
     issue: Option<String>,
     agent: AgentLaunch,
@@ -188,7 +188,7 @@ pub(in crate::cli::commands) async fn add(
 /// starts, so its refusals come first.
 pub(in crate::cli::commands) async fn check_target(
     ctx: &Context,
-    repository: Option<String>,
+    repository: Option<crate::repository::Selector>,
     issue: Option<&str>,
     parent: Option<&SpaceSelector>,
 ) -> Result<crate::repository::Selector> {

@@ -1,4 +1,5 @@
 //! Effective permissions in a tree of chats and workspaces.
+use crate::client::repository_ids::RepositoryId;
 use crate::{
     client::space_ids::SpaceId,
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
@@ -83,10 +84,10 @@ async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() 
         .unwrap();
     let (master, _process) = chat(&manager, "master", "orchestrate", None, None).await;
     let (child, _child) = chat(&manager, "child", "chat", Some(&repo), Some(&master.id)).await;
-    let merge = |id: SpaceId, repository: Option<String>| {
+    let merge = |id: SpaceId, repository: Option<RepositoryId>| {
         let manager = manager.clone();
         async move {
-            let permissions = manager.space_permissions(&id, repository.as_deref());
+            let permissions = manager.space_permissions(&id, repository.as_ref());
             permissions.await.unwrap().merge
         }
     };

@@ -3,6 +3,7 @@
 //! the forge once the setting is off or the repository is removed. On a
 //! forge whose runners each take one job, registration only checks that the
 //! login may register them and keeps no runner.
+use crate::client::repository_ids::RepositoryId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -89,7 +90,7 @@ impl Manager {
     /// The runner `repository_id` registered, if any.
     pub(crate) async fn runner_registration(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
     ) -> Result<Option<Registration>> {
         let id = repository_id.to_owned();
         self.store
@@ -142,7 +143,7 @@ impl Manager {
     /// runner, never misses one registered meanwhile.
     async fn register_runner_unless_removed(&self, repository: &Repository) -> Result<()> {
         let _registry = self.gates.lock_registry().await;
-        if self.repository(repository.id.as_str()).await.is_err()
+        if self.repository(&repository.id).await.is_err()
             || self
                 .ensure_repository_available(&repository.id)
                 .await
@@ -176,7 +177,7 @@ impl Manager {
 
     async fn keep_registration(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         registration: Registration,
     ) -> Result<()> {
         let id = repository_id.to_owned();

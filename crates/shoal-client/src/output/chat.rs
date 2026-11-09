@@ -1,4 +1,5 @@
 //! What chat commands print.
+use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
@@ -8,8 +9,8 @@ use crate::output::outputs;
 pub struct BackgroundChat {
     pub chat: String,
     pub agent: String,
-    /// Its repository; none for a chat without one.
-    pub repository: Option<String>,
+    /// Its repository's ID; none for a chat without one.
+    pub repository: Option<RepositoryId>,
     /// Where it runs and how to reach it, as the host that runs it says.
     pub place: String,
 }

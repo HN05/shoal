@@ -1,5 +1,6 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
@@ -262,7 +263,7 @@ pub fn free_name(db: &Connection, base: &SpaceName) -> Result<SpaceName> {
 /// Names (including pending renames) are global; branches belong to one repository.
 pub fn ensure_name_and_branch_available(
     db: &Connection,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     name: &SpaceName,
     branch: Option<&str>,
     except_id: Option<&SpaceId>,
@@ -318,7 +319,7 @@ pub fn ensure_no_pending_move(db: &Connection, workspace_id: &SpaceId) -> Result
 }
 
 /// Refuse new users of a repository whose directory is moving.
-pub fn ensure_repository_not_moving(db: &Connection, repository_id: &str) -> Result<()> {
+pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     ensure!(
         !exists(
             db,
@@ -332,7 +333,7 @@ pub fn ensure_repository_not_moving(db: &Connection, repository_id: &str) -> Res
 
 const REPOSITORY_WORKSPACES_QUERY: &str = "SELECT 1 FROM workspaces WHERE repository_id=?1";
 
-pub fn repository_has_workspaces(db: &Connection, repository_id: &str) -> Result<bool> {
+pub fn repository_has_workspaces(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     exists(db, REPOSITORY_WORKSPACES_QUERY, [repository_id])
 }
 
@@ -351,7 +352,7 @@ pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
 }
 
 /// Whether any workspace of the repository has a tracked execution.
-pub fn repository_has_executions(db: &Connection, repository_id: &str) -> Result<bool> {
+pub fn repository_has_executions(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS(SELECT 1 FROM executions e JOIN workspaces w ON w.id=e.workspace_id WHERE w.repository_id=?1)",
         [repository_id],
@@ -397,7 +398,7 @@ pub(crate) fn json_column<T: DeserializeOwned>(
 }
 
 /// Whether the repository's removal has begun, which refuses new work in it.
-pub fn repository_removing(db: &Connection, repository_id: &str) -> Result<bool> {
+pub fn repository_removing(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     exists(
         db,
         "SELECT 1 FROM repository_removals WHERE repository_id=?1",
@@ -658,7 +659,10 @@ pub fn agent_executions(db: &mut Connection) -> Result<HashMap<SpaceId, AgentExe
 }
 
 /// The executions running in the workspaces of repository `repository_id`.
-pub fn repository_executions(db: &Connection, repository_id: &str) -> Result<Vec<Execution>> {
+pub fn repository_executions(
+    db: &Connection,
+    repository_id: &RepositoryId,
+) -> Result<Vec<Execution>> {
     Ok(db
         .prepare(&format!(
             "SELECT {EXECUTION_COLUMNS} FROM executions

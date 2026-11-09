@@ -1,5 +1,6 @@
 //! Issue and PR actions the daemon carries out for a workspace, so its
 //! scope rules apply and each change reaches the event journal.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result, bail};
@@ -46,10 +47,9 @@ impl Manager {
     ) -> Result<Item> {
         action.validate(kind)?;
         match context {
-            ItemContext::Checkout(selector) => {
+            ItemContext::Checkout(id) => {
                 let input = input.context(NOTHING_LINKED)?;
-                self.checkout_item_action(selector, kind, &input, action)
-                    .await
+                self.checkout_item_action(id, kind, &input, action).await
             }
             _ => {
                 let space = self.context_space(context).await?;
@@ -104,12 +104,12 @@ impl Manager {
     /// workspace watches.
     async fn checkout_item_action(
         &self,
-        selector: &str,
+        id: &RepositoryId,
         kind: ItemKind,
         input: &str,
         action: Action,
     ) -> Result<Item> {
-        let checkout = self.repository(selector).await?;
+        let checkout = self.repository(id).await?;
         let forge = self.checkout_forge(&checkout).await?;
         let (number, url) = forge.item(kind.into(), input)?;
         let account = if users_decision(&action) {
@@ -128,7 +128,7 @@ impl Manager {
 
     /// Sync the repository a merge just changed, without waiting for it, so
     /// conflict checks of its other workspaces see the merge.
-    fn sync_after_merge(&self, repository_id: &str, action: &Action, item: &Item) {
+    fn sync_after_merge(&self, repository_id: &RepositoryId, action: &Action, item: &Item) {
         let merging = matches!(action, Action::Merge { .. } | Action::AutoMerge { .. });
         if merging && item.state == ItemState::Merged {
             self.syncs.request(repository_id);

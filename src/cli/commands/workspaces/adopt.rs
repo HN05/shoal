@@ -1,4 +1,5 @@
 //! Adopting a worktree, or reclaiming a recorded one whose ownership is unverified.
+use crate::client::repository_ids::RepositoryId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
@@ -121,7 +122,7 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
 /// The registered repository whose checkout owns the worktree at `path`,
 /// otherwise the only one sharing its origin remote, otherwise one chosen
 /// interactively.
-async fn worktree_repository(ctx: &Context, path: &Path) -> Result<String> {
+async fn worktree_repository(ctx: &Context, path: &Path) -> Result<RepositoryId> {
     let mut repos = crate::client::repositories::list(&ctx.paths).await?;
     let common = git::common_dir(path)
         .await
@@ -160,5 +161,6 @@ async fn worktree_repository(ctx: &Context, path: &Path) -> Result<String> {
         "cannot infer the repository of {}; pass --repo <repository>",
         path.display()
     );
-    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)
+    let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)?;
+    Ok(picked.into())
 }

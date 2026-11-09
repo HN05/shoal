@@ -1,5 +1,6 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
 //! whose agent opened it, or the user when one opened it outside any.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::params;
@@ -105,7 +106,7 @@ impl Manager {
         };
         self.store
             .run(move |db| {
-                super::ready_parent(db, repository.as_deref(), &parent)?;
+                super::ready_parent(db, repository.as_ref(), &parent)?;
                 Ok(())
             })
             .await
@@ -163,7 +164,7 @@ fn assign(
     };
     if parent != current.as_ref() {
         if let Some(parent) = parent {
-            let repository: String = tx.query_row(
+            let repository: RepositoryId = tx.query_row(
                 "SELECT repository_id FROM workspaces WHERE id=?1",
                 [workspace],
                 |row| row.get(0),

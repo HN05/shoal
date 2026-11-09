@@ -102,7 +102,7 @@ async fn the_runner_follows_the_setting_and_goes_with_its_repository() {
 
     configure(&manager, &settings(&server.host, true)).await;
     manager.reconcile_runners().await.unwrap();
-    manager.remove_repository(repo.id.as_str()).await.unwrap();
+    manager.remove_repository(&repo.id).await.unwrap();
     assert_eq!(
         *changes.lock().unwrap(),
         [

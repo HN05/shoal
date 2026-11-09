@@ -46,12 +46,12 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
     let input = match link {
         Some(_) => links::AddInput {
             positional: Some(target),
-            repository: Some(repo.id),
+            repository: Some(repo.id.into()),
             issue: None,
         },
         None => links::AddInput {
-            positional: Some(repo.id),
-            repository: None,
+            positional: None,
+            repository: Some(repo.id.into()),
             issue: None,
         },
     };

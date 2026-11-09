@@ -1,6 +1,7 @@
 //! The labels pickers and lists show: aligned rows of workspaces, agent
 //! launches and repositories, with their status cells.
 use crate::cli::list_status::ListStatusExt;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{collections::HashSet, path::Path, time::Duration};
 
@@ -509,21 +510,20 @@ pub fn mark_label(mark: &ReviewMark) -> String {
 /// Repositories are `(id, name)` pairs.
 fn repository_column(workspaces: &[Workspace], repositories: &[(String, String)]) -> Vec<String> {
     repository_cells(
-        workspaces.iter().map(|w| w.repository_id.as_str()),
+        workspaces.iter().map(|w| Some(&w.repository_id)),
         repositories,
     )
 }
 
 /// The name of each repository ID, or empty cells when all name one.
 pub fn repository_cells<'a>(
-    ids: impl Iterator<Item = &'a str>,
+    ids: impl Iterator<Item = Option<&'a RepositoryId>>,
     repositories: &[(String, String)],
 ) -> Vec<String> {
     let names: Vec<&str> = ids
         .map(|repository| {
-            repositories
-                .iter()
-                .find(|(id, _)| id == repository)
+            repository
+                .and_then(|repository| repositories.iter().find(|(id, _)| repository == id))
                 .map_or("unknown repository", |(_, name)| name.as_str())
         })
         .collect();
@@ -653,7 +653,11 @@ async fn repository_entries(
     let shared = shared_names(&repos);
     let sources = distinguishing_sources(&repos, &shared, read).await;
     let labels = distinct_labels(&repos, &sources, &shared);
-    repos.into_iter().map(|repo| repo.id).zip(labels).collect()
+    repos
+        .into_iter()
+        .map(|repo| repo.id.into())
+        .zip(labels)
+        .collect()
 }
 
 /// Each repository's [`name_label`], followed by its source when that still

@@ -1,4 +1,5 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::Path;
 
@@ -58,7 +59,7 @@ impl Manager {
 /// it without one, and journal the change. Fails when nothing would change.
 fn change_base(
     tx: &rusqlite::Transaction<'_>,
-    repository_id: &str,
+    repository_id: &RepositoryId,
     id: &SpaceId,
     base: Option<&str>,
 ) -> Result<()> {
@@ -107,13 +108,17 @@ pub(crate) fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCau
 
 /// A workspace of the repository named by number, ID or name, else by
 /// branch.
-fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Result<SpaceId> {
+fn base_workspace(
+    db: &Connection,
+    repository_id: &RepositoryId,
+    selector: &str,
+) -> Result<SpaceId> {
     let named = match crate::daemon::spaces::selected(db, &SpaceSelector::parse(selector))? {
         Some((crate::model::SpaceKind::Workspace, id)) => {
             let repository = db.query_row(
                 "SELECT repository_id FROM workspaces WHERE id=?1",
                 [&id],
-                |row| row.get::<_, String>(0),
+                |row| row.get::<_, RepositoryId>(0),
             )?;
             Some((id, repository))
         }
@@ -121,7 +126,7 @@ fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Resul
     };
     if let Some((id, repository)) = named {
         ensure!(
-            repository == repository_id,
+            repository == *repository_id,
             "base workspace {selector} belongs to another repository"
         );
         // A stack builds on its base's branch.
@@ -177,7 +182,11 @@ pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String
 }
 
 /// The workspace in `repository_id` that owns `branch`.
-pub(super) fn owner(db: &Connection, repository_id: &str, branch: &str) -> Result<Option<SpaceId>> {
+pub(super) fn owner(
+    db: &Connection,
+    repository_id: &RepositoryId,
+    branch: &str,
+) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
             "SELECT id FROM workspaces WHERE repository_id=?1 AND branch=?2",

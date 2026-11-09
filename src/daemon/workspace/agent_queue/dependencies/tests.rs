@@ -255,7 +255,7 @@ async fn dependencies_name_existing_work_other_than_the_launch() {
     }
     assert!(manager.queue_entries().await.unwrap().is_empty());
     // The CLI checks them before any prompt.
-    let selector = crate::repository::Selector::from(repo.id.as_str());
+    let selector = crate::repository::Selector::from(&repo.id);
     manager
         .check_dependencies(&selector, vec![work("missing")])
         .await

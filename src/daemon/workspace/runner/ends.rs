@@ -5,6 +5,7 @@
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
 //! run there, and the forge's runner then stops it.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -29,7 +30,7 @@ use crate::{
 pub(crate) struct ClaimedJob {
     /// The ID its queue entry had.
     pub id: String,
-    pub repository_id: String,
+    pub repository_id: RepositoryId,
     pub workspace_id: SpaceId,
     /// The execution running the forge's runner, once it started.
     pub execution_id: Option<String>,
@@ -273,7 +274,7 @@ impl Manager {
     /// started yet has just started, so it keeps warming and holds back the
     /// next start until it runs.
     pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
-        let jobs: Vec<(String, Option<crate::time::UnixTime>, String)> = self
+        let jobs: Vec<(RepositoryId, Option<crate::time::UnixTime>, String)> = self
             .store
             .run(|db| {
                 Ok(db

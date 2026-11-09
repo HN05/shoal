@@ -1,6 +1,7 @@
 //! What the daemon keeps in memory about the agent queue: who holds starting
 //! entries, which stopped agents wait for their restore, which one-shot runs
 //! wait for or hold a slot, and what wakes the dispatcher.
+use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::{
@@ -37,7 +38,7 @@ struct OneShots {
 
 /// A one-shot run's request for a slot in `repository`.
 struct OneShot {
-    repository: String,
+    repository: RepositoryId,
     /// Whether protection stopped its earlier run, so it waits for healthy
     /// readings as a stopped agent's restore does.
     after_stop: bool,
@@ -59,7 +60,7 @@ pub(crate) enum OneShotStop {
 pub(crate) struct WaitingOneShot {
     /// Its queue ID, which no stored entry has.
     pub id: String,
-    pub repository: String,
+    pub repository: RepositoryId,
     pub after_stop: bool,
 }
 
@@ -144,7 +145,7 @@ impl AgentQueue {
     /// a run it stopped asks again `after_stop`.
     pub(crate) fn request_oneshot(
         &self,
-        repository: &str,
+        repository: &RepositoryId,
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotSlot<'_> {
@@ -155,7 +156,7 @@ impl AgentQueue {
         oneshots.runs.insert(
             number,
             OneShot {
-                repository: repository.to_owned(),
+                repository: repository.clone(),
                 after_stop,
                 admitted,
                 stop: Some(Box::new(stop)),
@@ -172,7 +173,7 @@ impl AgentQueue {
 
     /// Hold a slot in `repository` until the daemon restarts, for a run a
     /// stopped daemon left whose processes could not be proven stopped.
-    pub(crate) fn hold_oneshot(&self, repository: &str) {
+    pub(crate) fn hold_oneshot(&self, repository: &RepositoryId) {
         let slot = self.request_oneshot(repository, false, || {});
         if let Some(run) = self.oneshots.lock().unwrap().runs.get(&slot.number) {
             run.admitted.send_replace(Some(Instant::now()));
@@ -219,7 +220,7 @@ impl AgentQueue {
 
     /// The repository of each one-shot run holding a slot, with how long it
     /// has held it.
-    pub(crate) fn admitted_oneshots(&self) -> Vec<(String, std::time::Duration)> {
+    pub(crate) fn admitted_oneshots(&self) -> Vec<(RepositoryId, std::time::Duration)> {
         self.oneshots
             .lock()
             .unwrap()

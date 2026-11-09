@@ -1,4 +1,5 @@
 //! Which workspaces, chats and queued agents `shoal work` lists.
+use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
 /// The `shoal work` filters, with the repository resolved to its ID. No
 /// statuses keeps every status.
 pub(super) struct ListFilter {
-    repository: Option<String>,
+    repository: Option<RepositoryId>,
     statuses: Vec<ListStatus>,
 }
 
@@ -62,7 +63,7 @@ impl ListFilter {
     /// An item of `repository_id` without a workspace, such as an issue
     /// proposal that outlived it: kept by the repository filter, but never
     /// by a status filter, since it has no workspace status.
-    pub(super) fn keeps_detached(&self, repository_id: &str) -> bool {
+    pub(super) fn keeps_detached(&self, repository_id: &RepositoryId) -> bool {
         self.keeps_repository(repository_id) && self.statuses.is_empty()
     }
 
@@ -72,7 +73,7 @@ impl ListFilter {
         self.repository.is_none() && self.statuses.is_empty()
     }
 
-    fn keeps_repository(&self, repository_id: &str) -> bool {
+    fn keeps_repository(&self, repository_id: &RepositoryId) -> bool {
         self.repository
             .as_deref()
             .is_none_or(|id| id == repository_id)

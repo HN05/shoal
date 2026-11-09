@@ -1,5 +1,6 @@
 //! Approval requests: what a workspace's agent asks the user, or a coordinating
 //! agent, to allow.
+use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
@@ -262,7 +263,7 @@ pub struct ApprovalRequest {
     /// The repository that owns a proposed issue, which outlives the
     /// space that proposed it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository_id: Option<String>,
+    pub repository_id: Option<RepositoryId>,
     pub target: Target,
     pub name: String,
     pub specification: Specification,

@@ -1,3 +1,4 @@
+use crate::client::repository_ids::RepositoryId;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -19,13 +20,13 @@ struct Fixture {
     root: tempfile::TempDir,
     manager: Arc<Manager>,
     repo: PathBuf,
-    repo_id: String,
+    repo_id: RepositoryId,
     author: PathBuf,
 }
 
 /// Register a checkout named `name` under `root` whose `main` tracks its
 /// own `origin`; returns it, its ID and a clone that pushes to the origin.
-async fn checkout(root: &Path, manager: &Manager, name: &str) -> (PathBuf, String, PathBuf) {
+async fn checkout(root: &Path, manager: &Manager, name: &str) -> (PathBuf, RepositoryId, PathBuf) {
     let repo = repository(root, name);
     let origin = root.join(format!("{name}-origin.git"));
     let origin = origin.to_str().unwrap();

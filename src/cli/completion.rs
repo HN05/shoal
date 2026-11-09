@@ -638,7 +638,7 @@ fn repository_candidates(
         candidates.push(CompletionCandidate::new(target).help(Some(repo.source.clone().into())));
         if !current.is_empty() {
             for alternate in [
-                &repo.id,
+                &repo.id.to_string(),
                 &repo.source,
                 &repo.path.to_string_lossy().into_owned(),
             ] {

@@ -919,10 +919,10 @@ impl Manager {
             Some(repository) => Some(repository.clone()),
             None => (self.space_by_id(&request.space_id).await?)
                 .repository_id()
-                .map(str::to_owned),
+                .cloned(),
         };
         let permissions = self
-            .space_permissions(coordinator, repository.as_deref())
+            .space_permissions(coordinator, repository.as_ref())
             .await?;
         if let Some(withheld) = permissions.withheld(keys) {
             let id = request.number;

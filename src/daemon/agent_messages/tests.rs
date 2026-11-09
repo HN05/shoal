@@ -1,4 +1,5 @@
 use super::Delivery;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
@@ -305,7 +306,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         chats.push(chat);
     }
     let sender = chats[1].id.clone();
-    let send = |repository: Option<&String>, below: Option<SpaceId>| {
+    let send = |repository: Option<&RepositoryId>, below: Option<SpaceId>| {
         let (manager, sender) = (&manager, &sender);
         let repository = repository.cloned().map(Into::into);
         async move {

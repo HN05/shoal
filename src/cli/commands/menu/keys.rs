@@ -232,7 +232,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         }),
         Row::SyncFailed(repository) => Command::Repository(RepositoryCommand::Repo {
             command: Some(RepoCommand::Sync {
-                repository: Some(repository),
+                repository: Some(repository.into()),
             }),
         }),
         Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {

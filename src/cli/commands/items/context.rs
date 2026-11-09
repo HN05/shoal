@@ -100,7 +100,7 @@ async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_REPOSITORY}");
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)?;
-    Ok(ItemContext::Checkout(picked))
+    Ok(ItemContext::Checkout(picked.into()))
 }
 
 /// [`select_repo_context`] for `issue open`, which also takes the space to

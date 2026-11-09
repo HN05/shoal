@@ -2,6 +2,7 @@
 //! their own, created from a revision or a PR's head. Worktrunk only creates
 //! worktrees on a branch, so plain Git creates theirs; removal goes through
 //! Worktrunk like any workspace's.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 
@@ -136,7 +137,7 @@ impl Manager {
     /// setup; the seed clone still happens.
     pub(crate) async fn create_job_workspace(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         name: &str,
         commit: &str,
         reference: Option<&str>,
@@ -164,13 +165,13 @@ impl Manager {
     /// linked to it at `url`.
     async fn pull_workspace(
         &self,
-        repository_id: &str,
+        repository_id: &RepositoryId,
         url: &str,
         number: u64,
     ) -> Result<Option<Workspace>> {
         let made_for = Some(MadeFor::Pr(number));
         Ok(self.list_workspaces().await?.into_iter().find(|workspace| {
-            workspace.repository_id == repository_id
+            workspace.repository_id == *repository_id
                 && workspace.at.as_ref().is_some_and(|at| {
                     at.made_for == made_for || workspace.links.prs.iter().any(|pr| pr == url)
                 })
@@ -317,7 +318,7 @@ impl Manager {
         at: StartingCommit,
         files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
-        let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
+        let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
         let diff_ref = surviving_ref(&repo, removed.base_ref.as_deref()).await?;
         let workspace = self
             .record_commit_workspace(

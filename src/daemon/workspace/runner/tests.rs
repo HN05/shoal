@@ -1,3 +1,4 @@
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
@@ -51,7 +52,7 @@ pub(super) async fn launch(
 struct Fixture {
     _root: tempfile::TempDir,
     manager: Arc<Manager>,
-    repository: String,
+    repository: RepositoryId,
     head: String,
     server: Server,
 }

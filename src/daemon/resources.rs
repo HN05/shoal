@@ -1,4 +1,5 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
@@ -50,7 +51,7 @@ const LEASE_COLUMNS: &str = "id,workspace_id,scope,pool,name,resource,reason,cre
 fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
     Ok(ResourceLease {
         repository: row
-            .get::<_, Option<String>>("repository_id")?
+            .get::<_, Option<RepositoryId>>("repository_id")?
             .map(|id| {
                 Ok::<_, rusqlite::Error>(RepositoryView {
                     id,

@@ -1,5 +1,6 @@
 //! Daemon test fixtures: a [`Manager`] in a temporary state directory,
 //! beside the crate's own fixtures, which this module re-exports.
+use crate::client::repository_ids::RepositoryId;
 use std::{fs, path::Path, sync::Arc};
 
 pub(crate) use crate::test_support::*;
@@ -126,7 +127,7 @@ pub async fn configure(manager: &Manager, text: &str) {
 impl Manager {
     /// Move the repository's checkout to `path` and record it there, as an
     /// earlier version may have registered it.
-    pub async fn move_checkout(&self, id: &str, path: &Path) -> anyhow::Result<()> {
+    pub async fn move_checkout(&self, id: &RepositoryId, path: &Path) -> anyhow::Result<()> {
         let repo = self.repository(id).await?;
         fs::rename(&repo.path, path)?;
         let (id, path) = (repo.id, path.to_path_buf());
@@ -157,10 +158,10 @@ impl Manager {
     /// Write the repository's local config file, or remove it for `None`.
     pub async fn write_local_config(
         &self,
-        selector: &str,
+        id: &RepositoryId,
         toml: Option<String>,
     ) -> anyhow::Result<std::path::PathBuf> {
-        let path = self.local_config_path(selector).await?;
+        let path = self.local_config_path(id).await?;
         match toml {
             Some(text) => {
                 crate::config::repo::parse(&text)?;

@@ -1,6 +1,7 @@
 //! Opening an issue for a workspace or a chat, or from a registered
 //! checkout, in its repository or another one, or recording it for the
 //! user's approval where the repository asks for that.
+use crate::client::repository_ids::RepositoryId;
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use std::path::Path;
 
@@ -62,9 +63,9 @@ impl Manager {
                 self.open_chat_issue(context, issue, repository, link, caller)
                     .await
             }
-            ItemContext::Checkout(selector) => {
+            ItemContext::Checkout(id) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-                self.open_checkout_issue(selector, issue, repository).await
+                self.open_checkout_issue(id, issue, repository).await
             }
         }
     }
@@ -298,11 +299,11 @@ impl Manager {
     /// nothing is proposed.
     async fn open_checkout_issue(
         &self,
-        selector: &str,
+        id: &RepositoryId,
         issue: NewIssue,
         repository: Option<String>,
     ) -> Result<OpenOutcome> {
-        let checkout = self.repository(selector).await?;
+        let checkout = self.repository(id).await?;
         let settings = self.repository_settings(&checkout.id).await?;
         let (own, account) = self.checkout_forge_account(&checkout).await?;
         let destination = self.issue_destination(own, repository.as_deref()).await?;

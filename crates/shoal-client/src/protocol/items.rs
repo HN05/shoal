@@ -1,3 +1,4 @@
+use crate::repository_ids::RepositoryId;
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
@@ -272,11 +273,11 @@ pub enum ItemContext {
     /// checkout of `repository`, by its ID, which counts as its own.
     ChatIn {
         chat: SpaceSelector,
-        repository: String,
+        repository: RepositoryId,
     },
     /// The registered checkout of a repository, by its ID, for a request
     /// that needs only the repository.
-    Checkout(String),
+    Checkout(RepositoryId),
 }
 
 impl ItemMethod {

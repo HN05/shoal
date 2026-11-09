@@ -27,7 +27,7 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
             for name in ["worker", "reserved"] {
                 let error = ensure_name_and_branch_available(
                     &tx,
-                    repository_id,
+                    &repository_id.into(),
                     &name.into(),
                     Some("unused"),
                     except_id,
@@ -36,12 +36,29 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
                 assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
             }
         }
-        let error =
-            ensure_name_and_branch_available(&tx, "repo", &"free".into(), Some("topic"), except_id)
-                .unwrap_err();
+        let error = ensure_name_and_branch_available(
+            &tx,
+            &"repo".into(),
+            &"free".into(),
+            Some("topic"),
+            except_id,
+        )
+        .unwrap_err();
         assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
-        ensure_name_and_branch_available(&tx, "other", &"free".into(), Some("topic"), except_id)?;
-        ensure_name_and_branch_available(&tx, "repo", &"free".into(), Some("unused"), except_id)?;
+        ensure_name_and_branch_available(
+            &tx,
+            &"other".into(),
+            &"free".into(),
+            Some("topic"),
+            except_id,
+        )?;
+        ensure_name_and_branch_available(
+            &tx,
+            &"repo".into(),
+            &"free".into(),
+            Some("unused"),
+            except_id,
+        )?;
     }
     Ok(())
 }
@@ -53,13 +70,13 @@ fn rename_can_retain_its_own_name_and_branch() -> Result<()> {
     for (name, branch) in [("worker", "topic"), ("worker", "new"), ("new", "topic")] {
         ensure_name_and_branch_available(
             &tx,
-            "repo",
+            &"repo".into(),
             &name.into(),
             Some(branch),
             Some(&SpaceId::from("owner")),
         )?;
         assert!(
-            ensure_name_and_branch_available(&tx, "repo", &name.into(), Some(branch), None)
+            ensure_name_and_branch_available(&tx, &"repo".into(), &name.into(), Some(branch), None)
                 .is_err()
         );
     }

@@ -42,7 +42,7 @@ pub async fn start(
     request(
         daemon,
         ChatMethod::StartChat {
-            repository: home.repository_id().map(|id| id.to_owned().into()),
+            repository: home.repository_id().map(Into::into),
             workspace: home
                 .workspace()
                 .map(|workspace| SpaceSelector::id(&workspace.id)),
