@@ -1219,10 +1219,20 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "shoal-forge-derive",
  "shoal-subprocess",
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "shoal-forge-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

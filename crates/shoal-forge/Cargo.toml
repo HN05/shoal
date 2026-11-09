@@ -23,6 +23,7 @@ futures-util.workspace = true
 rusqlite = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
+shoal-forge-derive.workspace = true
 shoal-subprocess.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }
 uuid = { workspace = true, features = ["v4"] }

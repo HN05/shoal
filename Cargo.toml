@@ -19,6 +19,7 @@ serde_json = "1"
 shoal-client = { path = "crates/shoal-client" }
 shoal-config-derive = { path = "crates/shoal-config-derive" }
 shoal-forge = { path = "crates/shoal-forge" }
+shoal-forge-derive = { path = "crates/shoal-forge-derive" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
 tempfile = "3"
