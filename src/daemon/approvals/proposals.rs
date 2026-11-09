@@ -8,7 +8,8 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
 use super::{
-    ApprovalRequest, DecisionStatus, Specification, Target, by_key, current, record_row, retire,
+    ApprovalRequest, DecisionStatus, Specification, Target,
+    store::{COLUMNS, by_key, current, decode_record, list, record_row, retire},
 };
 pub(crate) use crate::client::approvals::{
     Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
@@ -264,10 +265,10 @@ fn repository_proposals(
 ) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{} WHERE repository_id=?1 AND target_key=?2 ORDER BY rowid",
-        super::COLUMNS
+        COLUMNS
     ))?
     .query_map(params![repository, Target::IssueOpen], record_row)?
-    .map(|row| super::decode_record(row?))
+    .map(|row| decode_record(row?))
     .collect()
 }
 
@@ -296,7 +297,7 @@ pub fn remove(tx: &Transaction<'_>, key: &str) -> Result<()> {
 /// Whether a push request of the workspace waits for the user, which keeps
 /// the workspace from unattended removal.
 pub fn push_pending(db: &Connection, workspace: &SpaceId) -> Result<bool> {
-    Ok(super::list(db, Some(workspace))?
+    Ok(list(db, Some(workspace))?
         .iter()
         .any(|r| r.target == Target::Push && r.active && r.status == DecisionStatus::Pending))
 }
