@@ -167,6 +167,11 @@ impl Backend for Bitbucket {
         "Bitbucket API request failed; private repositories need a token under [machine.forges.\"bitbucket.org\"]"
     }
 
+    /// An API token signs in with its account's email.
+    fn uses_account_email(&self) -> bool {
+        true
+    }
+
     /// An access token is a bearer token; an API token signs in with its email.
     fn authorization(&self, token: &str, email: Option<&str>) -> String {
         match email {

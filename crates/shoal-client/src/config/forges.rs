@@ -31,7 +31,8 @@ pub struct Forge {
     pub token: Option<Value>,
     /// The agent account's token for the host.
     pub agent_token: Option<Value>,
-    /// The account a Bitbucket API token belongs to.
+    /// The account a token belongs to, where the forge signs it in with
+    /// the account's email.
     pub email: Option<String>,
     pub agent_email: Option<String>,
 }
@@ -151,9 +152,10 @@ impl Forge {
             let Some(email) = email else { continue };
             let key = whose.email_key();
             ensure!(
-                kind == Some(ForgeKind::Bitbucket),
-                "{} is for Bitbucket API tokens; set it only on bitbucket.org or a host whose type is \"bitbucket\"",
-                setting(key)
+                kind.is_some_and(ForgeKind::uses_account_email),
+                "{} is for tokens that sign in with their account's email; set it only on a host whose type is {}",
+                setting(key),
+                type_names(ForgeKind::uses_account_email)
             );
             ensure!(
                 token.is_some(),
@@ -238,8 +240,24 @@ async fn token_output(command: &[String]) -> Result<String> {
 /// The setting that pins `host`'s type, for messages that ask for it.
 pub fn setting(host: &str) -> String {
     format!(
-        "set its type to \"github\", \"gitlab\", \"forgejo\" or \"bitbucket\" under [machine.forges.\"{host}\"] in the global config"
+        "set its type to {} under [machine.forges.\"{host}\"] in the global config",
+        type_names(|_| true)
     )
+}
+
+/// The quoted names of the forge types `selected` keeps, as a list ending
+/// in "or".
+fn type_names(selected: fn(ForgeKind) -> bool) -> String {
+    let names: Vec<_> = ForgeKind::ALL
+        .iter()
+        .filter(|kind| selected(**kind))
+        .map(|kind| format!("{:?}", kind.as_str()))
+        .collect();
+    match names.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        None => String::new(),
+    }
 }
 
 #[cfg(test)]

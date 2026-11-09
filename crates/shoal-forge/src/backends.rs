@@ -97,6 +97,12 @@ impl ForgeKind {
                 }
             })
     }
+
+    /// Whether a token for the forge signs in together with the email of
+    /// the account it belongs to.
+    pub fn uses_account_email(self) -> bool {
+        Backend::uses_account_email(&self)
+    }
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -188,6 +194,12 @@ pub(crate) trait Backend {
 
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
+
+    /// Whether a token signs in together with the email of the account it
+    /// belongs to.
+    fn uses_account_email(&self) -> bool {
+        false
+    }
 
     /// The Authorization header value that signs a request in with
     /// `token`, which belongs to `email` where the forge needs it.
