@@ -54,11 +54,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             wait,
             sequential,
             in_place,
+            narrowing,
         } => {
             let options = restart::Options {
                 wait,
                 sequential,
                 in_place,
+                narrowing: replacement(&narrowing),
             };
             restart::run(&ctx, targets, agent, options).await
         }

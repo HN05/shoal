@@ -170,27 +170,9 @@ async fn start_saved(
     chat::launch(ctx, repo, settings, topic, options).await
 }
 
-/// Refuse `narrowing` where it is wider than the permissions of the stopped
-/// `chat`'s mode, which a resume that replaces its narrowing keeps.
-pub(super) async fn ensure_fits(
-    ctx: &Context,
-    chat: &Chat,
-    narrowing: &PermissionsConfig,
-) -> Result<()> {
-    let repo = saved_repository(ctx, chat).await?;
-    let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
-    let mode = crate::config::permissions::SpaceMode {
-        name: &chat.mode,
-        kind: crate::model::SpaceKind::Chat,
-        repository: chat.repository_id.is_some(),
-    };
-    (narrowing.ensure_within_mode(&settings, mode))
-        .with_context(|| format!("the agent of chat {}", chat.name))
-}
-
-/// Where the stopped `chat` starts again: its registered repository, or the
+/// Where the `chat` starts again: its registered repository, or the
 /// `root_dir` a chat without one started in.
-async fn saved_repository(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
+pub(super) async fn saved_repository(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
     let Some(id) = &chat.repository_id else {
         let root_dir = match &chat.root_dir {
             Some(root_dir) => root_dir.clone(),

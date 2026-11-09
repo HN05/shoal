@@ -83,6 +83,16 @@ pub enum SessionsCommand {
         /// Restart each agent in the terminal it runs in.
         #[arg(long)]
         in_place: bool,
+        /// Replace the narrowing the restarted agents recorded, as KEY=VALUE
+        /// such as push=propose; repeatable. A value wider than an agent's
+        /// mode is refused before any agent restarts.
+        #[arg(
+            long = "permission",
+            value_name = "KEY=VALUE",
+            value_parser = permission_assignment,
+            conflicts_with = "in_place"
+        )]
+        narrowing: Vec<crate::config::permissions::PermissionsConfig>,
     },
     /// List the agent queue, or start, move or cancel an entry.
     ///

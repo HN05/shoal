@@ -1186,7 +1186,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 }
 
 mod chats;
-mod narrowing;
+pub(super) mod narrowing;
 pub(super) mod queue;
 mod targets;
 

@@ -1,6 +1,7 @@
-//! `shoal resume --permission`: a narrowing that replaces the one the
-//! restored agents and chats recorded. Each one's mode bounds it, which is
-//! checked for every selected space before any narrowing is replaced.
+//! `--permission` on `shoal resume` and `shoal restart`: a narrowing that
+//! replaces the one the restored or restarted agents and chats recorded.
+//! Each one's mode bounds it, which is checked for every selected space
+//! before any narrowing is replaced.
 use anyhow::{Context as _, Result};
 
 use super::targets::Selected;
@@ -10,7 +11,7 @@ use crate::{
     cli::context::Context,
     config::permissions::{PermissionsConfig, SpaceMode},
     execution::recovery::{LastSession, Record, Saved},
-    model::{SpaceKind, Workspace},
+    model::{Chat, SpaceKind, Workspace},
     protocol::ConfigTarget,
 };
 
@@ -36,11 +37,13 @@ pub(super) async fn replace(
         if let Some(execution) = execution {
             saved.retain_execution(execution, false);
         }
-        ensure_fits(ctx, &workspace, &saved, &narrowing).await?;
+        for mode in recorded_modes(&saved)? {
+            ensure_fits_workspace(ctx, &workspace, &mode, &narrowing).await?;
+        }
         stopped.push((workspace, saved));
     }
     for chat in &selected.chats {
-        super::chats::ensure_fits(ctx, chat, &narrowing).await?;
+        ensure_fits_chat(ctx, chat, &narrowing).await?;
     }
     for (workspace, saved) in stopped {
         for execution in (saved.agents.into_iter().chain(saved.sessions)).map(|(id, _)| id) {
@@ -54,12 +57,12 @@ pub(super) async fn replace(
     Ok(())
 }
 
-/// Refuse `narrowing` where it is wider than the permissions of the mode
-/// one of `workspace`'s agents and last sessions `saved` keeps recorded.
-async fn ensure_fits(
+/// Refuse `narrowing` where it is wider than the permissions of `mode`, the
+/// mode of an agent of `workspace`.
+pub(in crate::cli::commands) async fn ensure_fits_workspace(
     ctx: &Context,
     workspace: &Workspace,
-    saved: &Saved,
+    mode: &str,
     narrowing: &PermissionsConfig,
 ) -> Result<()> {
     let settings = crate::client::workspaces::settings(
@@ -67,16 +70,31 @@ async fn ensure_fits(
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
-    for mode in recorded_modes(saved)? {
-        let mode = SpaceMode {
-            name: &mode,
-            kind: SpaceKind::Workspace,
-            repository: true,
-        };
-        (narrowing.ensure_within_mode(&settings, mode))
-            .with_context(|| format!("the agent of {}", workspace.name))?;
-    }
-    Ok(())
+    let mode = SpaceMode {
+        name: mode,
+        kind: SpaceKind::Workspace,
+        repository: true,
+    };
+    (narrowing.ensure_within_mode(&settings, mode))
+        .with_context(|| format!("the agent of {}", workspace.name))
+}
+
+/// Refuse `narrowing` where it is wider than the permissions of `chat`'s
+/// mode, which a restore or restart keeps.
+pub(in crate::cli::commands) async fn ensure_fits_chat(
+    ctx: &Context,
+    chat: &Chat,
+    narrowing: &PermissionsConfig,
+) -> Result<()> {
+    let repo = super::chats::saved_repository(ctx, chat).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
+    let mode = SpaceMode {
+        name: &chat.mode,
+        kind: SpaceKind::Chat,
+        repository: chat.repository_id.is_some(),
+    };
+    (narrowing.ensure_within_mode(&settings, mode))
+        .with_context(|| format!("the agent of chat {}", chat.name))
 }
 
 /// The modes the agents and last sessions `saved` keeps started in; one

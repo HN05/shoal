@@ -12,8 +12,9 @@ use crate::client::output::agents::Restarted;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    cli::{args::SpaceTargets, context::Context},
+    cli::{args::SpaceTargets, commands::resume, context::Context},
     client::{agents, executions::STAGGER},
+    config::permissions::PermissionsConfig,
     execution::recovery,
     model::{PresentSpace, RunningAgent, Workspace},
     protocol::{ErrorCode, RemoteError},
@@ -43,6 +44,9 @@ pub(super) struct Options {
     pub sequential: bool,
     /// Restart each agent in its wrapper rather than a new one.
     pub in_place: bool,
+    /// The narrowing each restarted agent runs under instead of the one it
+    /// recorded.
+    pub narrowing: Option<PermissionsConfig>,
 }
 
 pub(super) async fn run(
@@ -76,6 +80,9 @@ pub(super) async fn run(
             },
         )?;
         return Ok(0);
+    }
+    if let Some(narrowing) = &options.narrowing {
+        ensure_narrowing_fits(ctx, &plan.restarts, narrowing).await?;
     }
     let mut progress = Progress::new(&plan.restarts, plan.skipped.len());
     for skipped in plan.skipped {
@@ -111,6 +118,33 @@ fn ensure_named(targets: &SpaceTargets) -> Result<()> {
     Ok(())
 }
 
+/// Refuse `narrowing` before any agent restarts where it is wider than the
+/// permissions of the mode of an agent `restarts` restarts, or where one
+/// joins a restart in progress, which keeps the narrowing it started with.
+async fn ensure_narrowing_fits(
+    ctx: &Context,
+    restarts: &[Restart],
+    narrowing: &PermissionsConfig,
+) -> Result<()> {
+    for restart in restarts {
+        ensure!(
+            restart.joins.is_none(),
+            "{} restarts already; restart it with --permission once it runs",
+            restart.space.name()
+        );
+        match &restart.space {
+            PresentSpace::Workspace(workspace) => {
+                let mode = (workspace.mode.as_deref()).unwrap_or(crate::config::modes::DEFAULT);
+                resume::narrowing::ensure_fits_workspace(ctx, workspace, mode, narrowing).await?;
+            }
+            PresentSpace::Chat(chat) => {
+                resume::narrowing::ensure_fits_chat(ctx, chat, narrowing).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn restart_all(
     ctx: &Context,
     progress: &mut Progress,
@@ -126,9 +160,9 @@ async fn restart_all(
 }
 
 impl Restart {
-    /// Restart the agent, in place when `in_place`, or join its restart, as
-    /// part of `run`, returning the place it runs in now.
-    async fn run(&self, ctx: &Context, run: &str, in_place: bool) -> Result<Option<Origin>> {
+    /// Restart the agent as `options` say, or join its restart, as part of
+    /// `run`, returning the place it runs in now.
+    async fn run(&self, ctx: &Context, run: &str, options: Options) -> Result<Option<Origin>> {
         let run = Some(run.to_owned());
         match &self.space {
             // The daemon names how to restore a chat whose restart failed.
@@ -138,12 +172,12 @@ impl Restart {
                     SpaceSelector::id(&chat.id),
                     self.joins.clone(),
                     run,
-                    None,
+                    options.narrowing,
                 )
                 .await
             }
             PresentSpace::Workspace(workspace) => {
-                self.restart_agent(ctx, workspace, run, in_place).await
+                self.restart_agent(ctx, workspace, run, options).await
             }
         }
     }
@@ -155,11 +189,13 @@ impl Restart {
         ctx: &Context,
         workspace: &Workspace,
         run: Option<String>,
-        in_place: bool,
+        options: Options,
     ) -> Result<Option<Origin>> {
         let execution = self.agent.execution.clone();
         let joins = self.joins.clone();
-        let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place, None).await;
+        let (in_place, narrowing) = (options.in_place, options.narrowing);
+        let restarted =
+            agents::restart(&ctx.paths, execution, joins, run, in_place, narrowing).await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself, as a
             // wrapper waiting for its restore does.
@@ -205,7 +241,7 @@ async fn restart_in_turn(
         } else {
             restarts.remove(0)
         };
-        let result = restart.run(ctx, run, options.in_place).await;
+        let result = restart.run(ctx, run, options).await;
         if result.is_ok() {
             previous = Some(Instant::now());
         }
@@ -237,7 +273,7 @@ async fn restart_together(
         {
             let restart = waiting.remove(index);
             running.push(async move {
-                let result = restart.run(ctx, run, options.in_place).await;
+                let result = restart.run(ctx, run, options).await;
                 (restart, result)
             });
         }
