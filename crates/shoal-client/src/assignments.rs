@@ -1,5 +1,6 @@
 //! A space's assignment: marking it done or ready for review, and
 //! forgetting the stopped work it leaves.
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
@@ -95,7 +96,7 @@ pub async fn clear_ready(
 pub async fn discard_stopped_work(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
 ) -> Result<Discarded> {
     let method = AssignmentMethod::DiscardStoppedWork {
         workspace,

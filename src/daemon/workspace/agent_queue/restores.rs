@@ -1,5 +1,6 @@
 //! Restores a stopped agent's waiting wrapper carries out: queuing one,
 //! waiting for its admission, and keeping, returning or removing its entry.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail};
 use rusqlite::{OptionalExtension, params};
@@ -17,7 +18,7 @@ impl Manager {
     /// that reattached while waiting keeps its place and waits again.
     pub(crate) async fn queue_restore(
         &self,
-        execution: &str,
+        execution: &ExecutionId,
         agent: &str,
         workspace_id: &SpaceId,
     ) -> Result<()> {
@@ -33,7 +34,7 @@ impl Manager {
 
     /// Wait until admission starts the queued restore of `execution`, whose
     /// agent waits with every process stopped, and return what admitted it.
-    pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<Grant> {
+    pub(crate) async fn await_restore_admission(&self, execution: &ExecutionId) -> Result<Grant> {
         let mut changed = self.store.watch_changes();
         let _waiter = self.agent_queue.wait_for_restore(execution);
         self.agent_queue.wake();
@@ -65,7 +66,7 @@ impl Manager {
     }
 
     /// Return `execution`'s revoked restore to its place in the queue.
-    pub(crate) async fn requeue_restore(&self, execution: &str) -> Result<()> {
+    pub(crate) async fn requeue_restore(&self, execution: &ExecutionId) -> Result<()> {
         let execution = execution.to_owned();
         self.store
             .run(move |db| {
@@ -80,7 +81,7 @@ impl Manager {
 
     /// Start the grace period of `execution`'s restore, whose wrapper lost
     /// its connection and may reattach.
-    pub(crate) async fn keep_restore_place(&self, execution: &str) {
+    pub(crate) async fn keep_restore_place(&self, execution: &ExecutionId) {
         let (execution, now) = (execution.to_owned(), UnixTime::now());
         let kept = self
             .store
@@ -99,7 +100,7 @@ impl Manager {
 
     /// Take `execution`'s restore out of the queue, once its agent registered
     /// again or the restore ended without it.
-    pub(crate) async fn remove_restore(&self, execution: &str) {
+    pub(crate) async fn remove_restore(&self, execution: &ExecutionId) {
         let execution = execution.to_owned();
         let removed = self
             .store

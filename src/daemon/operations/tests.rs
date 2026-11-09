@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
@@ -225,7 +226,10 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(acting.execution_id(), Some("ended"));
+    assert_eq!(
+        acting.execution_id().map(ExecutionId::as_str),
+        Some("ended")
+    );
     worker.exit(0);
     let theirs = manager
         .start_operation(setup(&other), None, None)

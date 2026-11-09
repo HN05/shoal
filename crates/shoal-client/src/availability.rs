@@ -1,6 +1,7 @@
 //! What a command needs of the workspace it acts on, so completion and
 //! pickers can say why a workspace would be refused instead of offering it
 //! as if it would work.
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -158,7 +159,9 @@ impl Availability {
 /// the caller's own execution, so the caller's workspace counts only with
 /// another execution, as its inspection lists them.
 async fn busy_workspaces(daemon: &impl Daemon, workspaces: &[Workspace]) -> HashSet<SpaceId> {
-    let own = std::env::var(crate::env::EXECUTION_ID).ok();
+    let own = std::env::var(crate::env::EXECUTION_ID)
+        .ok()
+        .map(ExecutionId::from);
     let mut busy = HashSet::new();
     for workspace in workspaces.iter().filter(|w| w.running) {
         let blocking = match &own {

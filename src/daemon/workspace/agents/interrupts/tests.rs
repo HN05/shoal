@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;
@@ -13,7 +14,7 @@ use crate::{
 };
 
 /// A tracked agent `name` in `workspace`.
-async fn agent(manager: &Manager, workspace: &Workspace, name: &str) -> String {
+async fn agent(manager: &Manager, workspace: &Workspace, name: &str) -> ExecutionId {
     let id = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await
@@ -117,7 +118,7 @@ async fn an_interrupt_names_an_agent_of_the_workspace() {
         .unwrap_err();
 }
 
-async fn workspace_with_agent(manager: &Manager, root: &std::path::Path) -> String {
+async fn workspace_with_agent(manager: &Manager, root: &std::path::Path) -> ExecutionId {
     let other = workspace(manager, root, "other").await;
     agent(manager, &other, "claude").await
 }

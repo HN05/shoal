@@ -1,3 +1,4 @@
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -45,7 +46,7 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
         #[serde(default, skip_serializing_if = "TurnEnd::is_empty")]
         turn_end: TurnEnd,
     },
@@ -66,7 +67,7 @@ pub enum AgentMethod {
     /// reports; `None` once the proxy succeeded or gave up.
     ReportProxyRetry {
         workspace: SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry: Option<crate::executions::ProxyRetry>,
     },
@@ -75,7 +76,7 @@ pub enum AgentMethod {
     /// reports so a retry of the agent's turn waits past it.
     ReportUpstreamReset {
         workspace: SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         resets_at: Option<crate::time::UnixTime>,
     },
@@ -84,7 +85,7 @@ pub enum AgentMethod {
     /// periodically, so a restarted daemon learns it too.
     ReportAttached {
         workspace: SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
         attached: bool,
     },
     /// Long-lived: answers once whether the workspace's agent is idle with
@@ -96,7 +97,7 @@ pub enum AgentMethod {
         workspace: SpaceSelector,
         due: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        hooked: Option<String>,
+        hooked: Option<ExecutionId>,
     },
     /// The agents connected in the workspace, with their turns and places.
     WorkspaceAgents {
@@ -106,7 +107,7 @@ pub enum AgentMethod {
     /// runs in the workspace, which leaves it idle.
     InterruptTurn {
         workspace: SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
     },
     /// The session of the workspace's agent that a fork starts from: the
     /// caller's own agent there, else its only one.

@@ -1,5 +1,6 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 
@@ -148,7 +149,7 @@ impl Manager {
         &self,
         caller: &Caller,
         workspace: &'a mut SpaceSelector,
-        execution: &str,
+        execution: &ExecutionId,
     ) -> Result<&'a mut SpaceSelector> {
         let workspace = self
             .workspace_below(
@@ -278,7 +279,7 @@ impl Manager {
     pub(in crate::daemon) async fn ensure_agent_below(
         &self,
         caller: &Caller,
-        execution: &str,
+        execution: &ExecutionId,
     ) -> Result<()> {
         let agents = self.running_agents().await?;
         let agents = self.visible_agents(Some(caller), agents).await?;

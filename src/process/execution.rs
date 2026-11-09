@@ -30,7 +30,7 @@ impl Processes {
         let mut owned: Vec<_> = scan
             .processes
             .iter()
-            .filter(|p| p.execution_id == execution.id)
+            .filter(|p| p.owner == execution.id)
             .map(|p| p.identity.clone())
             .collect();
         let (related, group_candidates) = process::related(
@@ -63,7 +63,7 @@ impl Processes {
     /// nor an agent hook waiting for the next update is one.
     pub fn runs_outside_group(execution: &Execution, scan: &process::Scan) -> bool {
         scan.processes.iter().any(|owned| {
-            owned.execution_id == execution.id
+            owned.owner == execution.id
                 && execution.wrapper.as_ref() != Some(&owned.identity)
                 && process::group_of(&owned.identity)
                     .is_some_and(|group| execution.group_id.is_none_or(|own| group != own))

@@ -1,6 +1,7 @@
 //! Daemon interruptions of stopped agents: a restart quarantines their
 //! executions, and startup reconciles them from their recovery records.
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -43,7 +44,7 @@ async fn store_reaches(manager: &Manager, mut reached: impl AsyncFnMut() -> bool
     .await;
 }
 
-fn record(manager: &Manager, workspace: &Workspace, id: &str) -> Option<Record> {
+fn record(manager: &Manager, workspace: &Workspace, id: &ExecutionId) -> Option<Record> {
     Record::load(&record_path(&manager.paths, &workspace.id, id)).unwrap()
 }
 
@@ -86,7 +87,7 @@ async fn interrupted(
     child: Option<&Identity>,
     stage: Option<Stage>,
 ) {
-    let (id, workspace_id) = (id.to_owned(), workspace.id.clone());
+    let (id, workspace_id) = (ExecutionId::from(id), workspace.id.clone());
     let (wrapper, child) = (wrapper.clone(), child.cloned());
     let group = child.as_ref().map(|child| child.pid);
     let saved = (id.clone(), workspace_id.clone());
@@ -145,7 +146,7 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
     );
     assert!(executions(&reopened, &workspace).await.is_empty());
     assert_eq!(
-        record(&reopened, &workspace, "paused")
+        record(&reopened, &workspace, &ExecutionId::from("paused"))
             .unwrap()
             .stop_reason
             .as_deref(),
@@ -194,7 +195,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     let wrapper = exited().await;
     interrupted(&manager, &workspace, "this-boot", &wrapper, None, None).await;
     for id in ["unrecorded", "kept", "this-boot"] {
-        fs::remove_file(record_path(&manager.paths, &workspace.id, id)).unwrap();
+        fs::remove_file(record_path(&manager.paths, &workspace.id, &id.into())).unwrap();
     }
     manager
         .store
@@ -210,7 +211,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     save_session(
         &manager.paths,
         &workspace.id,
-        "unrecorded",
+        &ExecutionId::from("unrecorded"),
         "rebooted-session",
     )
     .unwrap();
@@ -223,7 +224,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         .collect();
     assert_eq!(kept, ["this-boot"]);
     assert_eq!(
-        record(&reopened, &workspace, "rebooted")
+        record(&reopened, &workspace, &ExecutionId::from("rebooted"))
             .unwrap()
             .stop_reason
             .as_deref(),
@@ -281,7 +282,11 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     interrupted(&manager, &workspace, "legacy", &wrapper, None, None).await;
     interrupted(&manager, &workspace, "unreadable", &wrapper, None, None).await;
     fs::write(
-        record_path(&manager.paths, &workspace.id, "unreadable"),
+        record_path(
+            &manager.paths,
+            &workspace.id,
+            &ExecutionId::from("unreadable"),
+        ),
         "not json",
     )
     .unwrap();
@@ -325,7 +330,7 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     }
     let survivor = messages.iter().find(|m| m.contains("survivor")).unwrap();
     assert!(survivor.contains(&child.pid.to_string()), "{survivor}");
-    assert!(record(&reopened, &workspace, "survivor").is_some());
+    assert!(record(&reopened, &workspace, &ExecutionId::from("survivor")).is_some());
     reopened.store.shutdown().await;
     serving.abort();
 }
@@ -358,7 +363,7 @@ async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
         executions(&manager, &workspace).await.is_empty()
     })
     .await;
-    assert!(record(&manager, &workspace, "survivor").is_some());
+    assert!(record(&manager, &workspace, &ExecutionId::from("survivor")).is_some());
     reconciling.abort();
     serving.abort();
 }

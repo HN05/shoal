@@ -5,6 +5,7 @@
 //! `shoal resume` restores it. Survivors and incomplete evidence keep the
 //! execution, are checked again, and only they notify the user. Executions
 //! of an earlier boot need no evidence.
+use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
@@ -38,14 +39,14 @@ struct Interrupted {
 /// An unknown execution whose saved recovery record cannot be read.
 struct Unreadable {
     workspace: Workspace,
-    execution: String,
+    execution: ExecutionId,
     error: anyhow::Error,
 }
 
 /// A wrapper that was alive during reconciliation, so it may still reattach
 /// or report its exit.
 pub(crate) struct Waiting {
-    execution: String,
+    execution: ExecutionId,
     wrapper: process::Identity,
 }
 
@@ -278,7 +279,7 @@ impl Manager {
         .await;
     }
 
-    async fn execution_unknown(&self, id: &str) -> Result<bool> {
+    async fn execution_unknown(&self, id: &ExecutionId) -> Result<bool> {
         let id = id.to_owned();
         let execution = self
             .store

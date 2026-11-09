@@ -7,6 +7,7 @@
 //! closed question keeps its number until the space goes so that a late
 //! answer is refused. A question an agent asked in its conversation closes
 //! the same way when the user replies there.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
@@ -606,7 +607,7 @@ fn record(
 /// of a chat's agent, which no execution tracks.
 #[derive(Debug, Clone)]
 pub(crate) enum Turn {
-    Execution(String),
+    Execution(ExecutionId),
     Chat(SpaceId),
 }
 

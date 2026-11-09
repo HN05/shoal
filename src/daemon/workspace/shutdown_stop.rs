@@ -1,5 +1,6 @@
 //! Stopping tracked work before the system or the daemon shuts down, as
 //! `shoal stop --all` does, while the daemon and wrappers still run to save it.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -181,10 +182,10 @@ impl Manager {
 fn waits_for_resume(
     paths: &crate::paths::Paths,
     workspace: &Workspace,
-    queued: &HashSet<String>,
+    queued: &HashSet<ExecutionId>,
 ) -> Result<bool> {
     let saved = Saved::load(paths, &workspace.id)?;
-    let requested: HashSet<String> = if workspace.done {
+    let requested: HashSet<ExecutionId> = if workspace.done {
         HashSet::new()
     } else {
         recovery::restore_requests(paths, &workspace.id)?

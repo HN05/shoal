@@ -3,6 +3,7 @@
 //! agents with their sessions and the sessions' files; a workspace's also
 //! holds its removal record and a Git bundle of its checkpoint, and a chat's
 //! its name.
+use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use std::{
@@ -368,7 +369,8 @@ pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
 fn chat_session(chat: &Chat) -> LastSession {
     LastSession {
         narrowing: chat.narrowing,
-        execution: chat.id.to_string(),
+        // A chat's agent runs in no execution; its chat's ID keys it.
+        execution: ExecutionId::from(chat.id.to_string()),
         agent: chat.agent.clone(),
         session: chat.session.clone(),
         moved: false,
@@ -584,7 +586,7 @@ fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
 /// in a place of their own, marked as `copied` says, as executions of their
 /// own, since the original's may still run and each import is another copy.
 fn copied_sessions(sessions: Sessions, copied: Copied) -> Sessions {
-    let execution = || uuid::Uuid::new_v4().to_string();
+    let execution = ExecutionId::generate;
     let agents = sessions.agents.into_iter().map(|agent| {
         let record = agent.record.elsewhere();
         StoppedAgent {

@@ -3,6 +3,7 @@
 //! stopped it, and finishes normally when recovery is cancelled or a restart
 //! leaves the agent to a new wrapper. Failed ownership checks never authorize
 //! a replacement process.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, ensure};
@@ -67,7 +68,7 @@ impl Cancel {
 /// wrapper whose release reads what holds its restore back.
 pub(super) async fn pause(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
@@ -135,7 +136,7 @@ pub(super) async fn pause(
 /// neither.
 async fn restart(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
@@ -155,7 +156,7 @@ async fn restart(
 
 async fn restart_once_stopped(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
@@ -193,7 +194,7 @@ async fn restart_once_stopped(
 /// Finish the wrapper of a restarted agent, keeping its record, which a new
 /// wrapper restores once this one finished. A wrapper of any release
 /// finishes on the stop that cancels its restore.
-async fn hand_over(manager: &Manager, execution_id: &str) -> Result<Action> {
+async fn hand_over(manager: &Manager, execution_id: &ExecutionId) -> Result<Action> {
     manager.hand_over_restart(execution_id).await?;
     Ok(Action::Stop(Cancel::because(
         "the agent restarts in a new terminal",
@@ -203,7 +204,7 @@ async fn hand_over(manager: &Manager, execution_id: &str) -> Result<Action> {
 /// Resolves when the wrapper finishes or a stop cancels the restore it waits for.
 async fn interrupted(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
 ) -> Result<Action> {
@@ -226,7 +227,7 @@ async fn interrupted(
 /// shutdowns do, and takes `hold` back before the agent resumes.
 async fn admit_restore(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     moved: bool,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
@@ -263,7 +264,7 @@ const SURVIVOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// once what it waits for and a restart's requests what it waits for now.
 async fn await_stopped(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     stopped: Pause,
     notices: Option<&mut OwnedWriteHalf>,
@@ -296,7 +297,11 @@ async fn tell_restore_waits(notices: Option<&mut OwnedWriteHalf>, issue: String)
 
 /// A protection stop without automatic recovery still ends what the agent left
 /// running outside its process group, so `shoal resume` can restore it.
-pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, workspace_id: &SpaceId) {
+pub(super) async fn stop_survivors(
+    manager: &Manager,
+    execution_id: &ExecutionId,
+    workspace_id: &SpaceId,
+) {
     if !manager.agent_was_overloaded(execution_id).await {
         return;
     }
@@ -314,7 +319,11 @@ pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, worksp
 
 /// A completed execution no longer needs the restore record its protection
 /// stop left; removal is best effort.
-pub(super) fn discard_handoff(manager: &Manager, workspace_id: &SpaceId, execution_id: &str) {
+pub(super) fn discard_handoff(
+    manager: &Manager,
+    workspace_id: &SpaceId,
+    execution_id: &ExecutionId,
+) {
     let record = recovery::record_path(&manager.paths, workspace_id, execution_id);
     if let Err(error) = recovery::consume(&record) {
         log!("unused overload recovery handoff not removed: {error:#}");
@@ -322,7 +331,7 @@ pub(super) fn discard_handoff(manager: &Manager, workspace_id: &SpaceId, executi
 }
 
 /// How a stop, such as `shoal stop`, cancelled the restore.
-async fn requested_cancel(manager: &Manager, execution_id: &str) -> Cancel {
+async fn requested_cancel(manager: &Manager, execution_id: &ExecutionId) -> Cancel {
     Cancel::requested(manager.executions.stop_request(execution_id).await)
 }
 
@@ -341,7 +350,7 @@ async fn recovery_disabled(manager: &Manager) {
 
 async fn prepare_resume(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     grant: Grant,
     protection: &Protection,
@@ -359,7 +368,7 @@ async fn prepare_resume(
 /// cancelled its restore. `grant` is what admitted an automatic restore.
 async fn resume(
     manager: &Manager,
-    execution_id: &str,
+    execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     grant: Option<Grant>,
 ) -> Result<Action> {

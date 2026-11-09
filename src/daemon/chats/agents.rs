@@ -1,5 +1,6 @@
 //! What the daemon keeps of chats' agents while it runs: their restarts,
 //! which outlive the requests that asked for them, as a workspace agent's do.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
@@ -132,7 +133,7 @@ impl ChatAgents {
                     restart,
                     stopped: None,
                     restarted_from: Vec::new(),
-                    execution: chat.id.to_string(),
+                    execution: ExecutionId::from(chat.id.to_string()),
                     space_id: chat.id,
                 })
             })

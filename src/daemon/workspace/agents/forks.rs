@@ -3,6 +3,7 @@
 use anyhow::{Context as _, Result, bail};
 
 use super::super::Manager;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::recovery,
@@ -16,7 +17,7 @@ impl Manager {
     pub(crate) async fn agent_session(
         &self,
         selector: &SpaceSelector,
-        caller: Option<&str>,
+        caller: Option<&ExecutionId>,
     ) -> Result<AgentSession> {
         let workspace = self.workspace(selector).await?;
         let (execution, agent) = self.forked_agent(&workspace, caller).await?;
@@ -35,9 +36,9 @@ impl Manager {
     async fn forked_agent(
         &self,
         workspace: &Workspace,
-        caller: Option<&str>,
-    ) -> Result<(String, String)> {
-        let mut running: Vec<(String, String)> = self
+        caller: Option<&ExecutionId>,
+    ) -> Result<(ExecutionId, String)> {
+        let mut running: Vec<(ExecutionId, String)> = self
             .executions
             .with_agents(|agents| {
                 agents
@@ -48,10 +49,7 @@ impl Manager {
                     .collect()
             })
             .await;
-        if let Some(own) = running
-            .iter()
-            .position(|(id, _)| Some(id.as_str()) == caller)
-        {
+        if let Some(own) = running.iter().position(|(id, _)| Some(id) == caller) {
             return Ok(running.swap_remove(own));
         }
         match running.len() {

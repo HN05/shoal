@@ -2,6 +2,7 @@
 //! finishes with the agent's record, which the agent queue restores at once,
 //! in the slot the agent kept, and the restart follows the agent to the
 //! execution the new wrapper registers, which answers it once the agent runs.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
@@ -21,7 +22,7 @@ pub(crate) enum Renewal {
     /// The new wrapper has not registered the agent yet.
     Starting(Handover),
     /// The agent runs as this execution now.
-    Started(String),
+    Started(ExecutionId),
 }
 
 /// The restart of an agent whose wrapper finished, until a new one
@@ -37,7 +38,7 @@ pub(crate) struct Handover {
 
 /// The restarts that start their agent in a new wrapper, by the execution
 /// the agent ran as.
-pub(crate) type Renewals = HashMap<String, Renewal>;
+pub(crate) type Renewals = HashMap<ExecutionId, Renewal>;
 
 impl Agent {
     /// Hand its restart in progress, resumed, over to a new wrapper with
@@ -55,7 +56,7 @@ impl Agent {
 
 /// Whether a restart left the agent that ran as `id` to a new wrapper that
 /// has not registered it yet.
-pub(super) fn starting(renewals: &Renewals, id: &str) -> bool {
+pub(super) fn starting(renewals: &Renewals, id: &ExecutionId) -> bool {
     matches!(renewals.get(id), Some(Renewal::Starting(_)))
 }
 
@@ -101,7 +102,7 @@ pub(super) fn handed_over(renewals: &Renewals) -> impl Iterator<Item = RunningAg
 
 /// The execution the agent that ran as `id` runs as now, following the
 /// restarts that started it in new wrappers.
-pub(super) fn current(renewals: &Renewals, id: &str) -> String {
+pub(super) fn current(renewals: &Renewals, id: &ExecutionId) -> ExecutionId {
     let mut id = id;
     while let Some(Renewal::Started(next)) = renewals.get(id) {
         id = next;
@@ -111,10 +112,10 @@ pub(super) fn current(renewals: &Renewals, id: &str) -> String {
 
 /// The executions the agent of `id` ran as before restarts started it in
 /// new wrappers.
-pub(super) fn earlier(renewals: &Renewals, id: &str) -> Vec<String> {
-    let mut earlier: Vec<String> = renewals
+pub(super) fn earlier(renewals: &Renewals, id: &ExecutionId) -> Vec<ExecutionId> {
+    let mut earlier: Vec<ExecutionId> = renewals
         .keys()
-        .filter(|execution| *execution != id && current(renewals, execution) == id)
+        .filter(|execution| *execution != id && current(renewals, execution) == *id)
         .cloned()
         .collect();
     earlier.sort();
@@ -123,9 +124,9 @@ pub(super) fn earlier(renewals: &Renewals, id: &str) -> Vec<String> {
 
 /// Forget what leads to executions that ended without handing their agent
 /// over, which no request can reach anymore.
-pub(crate) fn forget_ended(renewals: &mut Renewals, agents: &HashMap<String, Agent>) {
+pub(crate) fn forget_ended(renewals: &mut Renewals, agents: &HashMap<ExecutionId, Agent>) {
     loop {
-        let known: HashSet<String> = renewals.keys().cloned().collect();
+        let known: HashSet<ExecutionId> = renewals.keys().cloned().collect();
         let before = renewals.len();
         renewals.retain(|_, renewal| match renewal {
             Renewal::Starting(_) => true,
@@ -145,7 +146,7 @@ impl Manager {
     pub(crate) async fn restart_in_new_wrapper(
         &self,
         workspace: &Workspace,
-        execution: &str,
+        execution: &ExecutionId,
         finished: bool,
     ) {
         if !finished {
@@ -187,7 +188,7 @@ impl Manager {
 
     /// Record that the queue entry `entry` starts the new wrapper of the
     /// agent that ran as `execution`; false when its restart was cancelled.
-    async fn follow_start(&self, execution: &str, entry: &str) -> bool {
+    async fn follow_start(&self, execution: &ExecutionId, entry: &str) -> bool {
         self.executions
             .with_restarts(|_, renewals| match renewals.get_mut(execution) {
                 Some(Renewal::Starting(handover)) => {
@@ -201,7 +202,7 @@ impl Manager {
 
     /// The agent of `id`, which the queue entry `entry` started, continues
     /// the restart whose start that entry is.
-    pub(crate) async fn continue_restart(&self, entry: &str, id: &str) {
+    pub(crate) async fn continue_restart(&self, entry: &str, id: &ExecutionId) {
         self.executions
             .with_restarts(|agents, renewals| {
                 let Some(agent) = agents.get_mut(id) else {
@@ -222,7 +223,7 @@ impl Manager {
 
     /// End the restart of the agent that ran as `execution` without
     /// starting it again, answering it with `reason`.
-    pub(crate) async fn fail_renewal(&self, execution: &str, reason: String) {
+    pub(crate) async fn fail_renewal(&self, execution: &ExecutionId, reason: String) {
         let ended = self
             .executions
             .with_restarts(|_, renewals| match renewals.remove(execution) {
@@ -263,7 +264,7 @@ impl Manager {
         let cancelled: Vec<Handover> = self
             .executions
             .with_restarts(|_, renewals| {
-                let ids: Vec<String> = renewals
+                let ids: Vec<ExecutionId> = renewals
                     .iter()
                     .filter(|(_, renewal)| {
                         matches!(renewal, Renewal::Starting(handover) if handover.workspace_id == *workspace_id)
@@ -307,7 +308,7 @@ impl Manager {
     /// start does. The restarts are read first, so a start recorded since
     /// is in the queue read after them.
     pub(crate) async fn fail_lost_renewals(&self) -> Result<()> {
-        let starting: Vec<(String, String)> = self
+        let starting: Vec<(ExecutionId, String)> = self
             .executions
             .with_restarts(|_, renewals| {
                 renewals

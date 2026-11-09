@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::{sync::Arc, time::Duration};
 
 use crate::client::space_names::SpaceSelector;
@@ -17,7 +18,7 @@ type Fixture = (
     tempfile::TempDir,
     Arc<Manager>,
     Workspace,
-    String,
+    ExecutionId,
     Workspace,
 );
 
@@ -214,7 +215,7 @@ async fn a_reply_during_the_turn_clears_its_mark() {
 #[tokio::test]
 async fn only_the_workspaces_own_agent_asks_in_its_chat() {
     let (_root, manager, _workspace, id, other) = agent().await;
-    for execution in [Some(id.as_str()), None] {
+    for execution in [Some(&id), None] {
         manager
             .mark_chat_question(&SpaceSelector::from(&other.name), execution)
             .await

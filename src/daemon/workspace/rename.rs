@@ -2,6 +2,7 @@
 mod intent;
 
 use super::Manager;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
@@ -16,7 +17,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         branch: &str,
-        caller_execution: Option<&str>,
+        caller_execution: Option<&ExecutionId>,
     ) -> Result<Workspace> {
         let (initial, _completion) = self.lock_pr_gate(selector).await?;
         let (repo, _git) = self.lock_repository(&initial.repository_id).await?;
@@ -111,14 +112,14 @@ impl Manager {
         &self,
         workspace: &Workspace,
         branch: &str,
-        caller_execution: Option<&str>,
+        caller_execution: Option<&ExecutionId>,
     ) -> Result<()> {
         let workspace = workspace.clone();
         let intent = RenameIntent {
             name: SpaceName::derive(SpaceKind::Workspace, branch),
             branch: branch.to_owned(),
         };
-        let caller_execution = caller_execution.map(str::to_owned);
+        let caller_execution = caller_execution.cloned();
         self.store
             .write(move |tx| {
                 store::require_ready(tx, &workspace.id)?;
@@ -153,7 +154,7 @@ impl Manager {
     async fn finish_pending_rename(
         &self,
         workspace: Workspace,
-        caller_execution: Option<&str>,
+        caller_execution: Option<&ExecutionId>,
     ) -> Result<Workspace> {
         if self.rename_intent(&workspace.id).await?.is_none() {
             return Ok(workspace);
@@ -179,10 +180,10 @@ impl Manager {
     async fn reserve_rename_repair(
         &self,
         id: &SpaceId,
-        caller_execution: Option<&str>,
+        caller_execution: Option<&ExecutionId>,
     ) -> Result<()> {
         let id = id.to_owned();
-        let caller_execution = caller_execution.map(str::to_owned);
+        let caller_execution = caller_execution.cloned();
         self.store
             .write(move |tx| {
                 ensure!(

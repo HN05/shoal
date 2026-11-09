@@ -1,5 +1,6 @@
 //! Durable lifecycle records, independent of notification delivery and read state.
 
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -271,15 +272,15 @@ fn record_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEve
         kind,
         EventKind::AgentStarted | EventKind::AgentStopped | EventKind::AgentExited
     ));
-    if kind != EventKind::AgentStarted && agent_ended(db, id, agent.execution_id.as_deref())? {
+    if kind != EventKind::AgentStarted && agent_ended(db, id, agent.execution_id.as_ref())? {
         return Ok(());
     }
     record_with(db, id, kind, "agent", agent)
 }
 
 /// Whether the space's newest agent event is the end of `execution`'s agent.
-fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&str>) -> Result<bool> {
-    let newest: Option<(EventKind, Option<String>)> = db
+fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -> Result<bool> {
+    let newest: Option<(EventKind, Option<ExecutionId>)> = db
         .query_row(
             "SELECT json_extract(record,'$.kind'),json_extract(record,'$.agent.execution_id')
              FROM workspace_events WHERE space_id=?1
@@ -295,7 +296,7 @@ fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&str>) -> Result
         )
         .optional()?;
     Ok(newest.is_some_and(|(kind, ended)| {
-        kind != EventKind::AgentStarted && ended.as_deref() == execution
+        kind != EventKind::AgentStarted && ended.as_ref() == execution
     }))
 }
 

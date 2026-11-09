@@ -1,5 +1,6 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
@@ -153,7 +154,7 @@ const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 
 /// The agent a request comes from.
 pub(crate) struct CallerAgent {
-    pub(crate) execution: String,
+    pub(crate) execution: ExecutionId,
     pub(crate) name: String,
     pub(crate) workspace_id: SpaceId,
 }
@@ -249,7 +250,7 @@ impl Manager {
         agent: &str,
         exit_code: Option<i32>,
         complete: bool,
-        overload: Option<(&str, &str)>,
+        overload: Option<(&ExecutionId, &str)>,
     ) {
         let message = if let Some((execution_id, reason)) = overload {
             let status = exit_code.map_or_else(
@@ -306,7 +307,7 @@ impl Manager {
         &self,
         workspace: &crate::model::Workspace,
         agent: &TrackedAgent,
-        execution: &str,
+        execution: &ExecutionId,
         exited: bool,
     ) {
         let kept = if exited {
@@ -325,7 +326,7 @@ impl Manager {
         &self,
         workspace: &crate::model::Workspace,
         agent: &TrackedAgent,
-        execution: &str,
+        execution: &ExecutionId,
     ) -> anyhow::Result<()> {
         use crate::execution::recovery::{self, LastSession};
         if self.completion(&workspace.id).await?.is_none() {
@@ -440,7 +441,7 @@ impl Manager {
     /// agent keeps its place in the newest-first overload order.
     pub(crate) async fn track_agent(
         &self,
-        id: &str,
+        id: &ExecutionId,
         tracked: &TrackedAgent,
         workspace_id: &SpaceId,
         workspace: &str,
@@ -473,7 +474,7 @@ impl Manager {
             attached: None,
         };
         connections
-            .with_agents(|agents| agents.insert(id.into(), agent))
+            .with_agents(|agents| agents.insert(id.clone(), agent))
             .await;
     }
 
@@ -481,7 +482,7 @@ impl Manager {
     /// execution `id` runs with its record, which outlives this daemon,
     /// unlike the tracked agent; the mode and narrowing become its
     /// workspace's.
-    async fn record_execution_agent(&self, id: &str, agent: &TrackedAgent) {
+    async fn record_execution_agent(&self, id: &ExecutionId, agent: &TrackedAgent) {
         let (execution, agent) = (id.to_owned(), agent.clone());
         let recorded = self
             .store
@@ -519,7 +520,7 @@ impl Manager {
     /// when `patience` passes without proof.
     pub(crate) async fn pause_agent_execution(
         &self,
-        id: &str,
+        id: &ExecutionId,
         workspace_id: &SpaceId,
         patience: Duration,
     ) -> anyhow::Result<Pause> {
@@ -527,7 +528,7 @@ impl Manager {
             .workspace_executions(workspace_id)
             .await?
             .into_iter()
-            .find(|execution| execution.id == id)
+            .find(|execution| execution.id == *id)
             .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
         if let Some(issue) =
             await_process_proof(patience, || self.stop_agent_survivors(&record)).await
@@ -552,7 +553,7 @@ impl Manager {
     /// nothing outlives it. An agent's turn is kept first, while that work
     /// still shows whether it was in flight. The completion scan that follows
     /// decides whether anything survived.
-    pub(crate) async fn stop_exited_processes(&self, id: &str) {
+    pub(crate) async fn stop_exited_processes(&self, id: &ExecutionId) {
         let query_id = id.to_owned();
         let stopped = async {
             let record = self
@@ -605,7 +606,7 @@ impl Manager {
 
     /// Tell the user why a protection-stopped agent's automatic restore waits
     /// beyond healthy readings, and a waiting `shoal restart` of it.
-    pub(crate) async fn notify_restore_waits(&self, id: &str, issue: &str) {
+    pub(crate) async fn notify_restore_waits(&self, id: &ExecutionId, issue: &str) {
         let Some((name, workspace)) = self
             .executions
             .with_agent(id, |agent| (agent.name.clone(), agent.workspace.clone()))
@@ -628,7 +629,7 @@ impl Manager {
     /// queue gate, so a shutdown that begins meanwhile finds it running.
     pub(crate) async fn resume_agent_execution(
         &self,
-        id: &str,
+        id: &ExecutionId,
         grant: Option<Grant>,
     ) -> anyhow::Result<bool> {
         let _gate = self.agent_queue.lock_admission().await;
@@ -690,7 +691,7 @@ impl Manager {
     /// while waiting for its automatic restore. A restart continues without
     /// the request that asked for it, which ended with the previous daemon,
     /// in a new wrapper.
-    pub(crate) async fn await_agent_restore(&self, id: &str, protection: Protection) {
+    pub(crate) async fn await_agent_restore(&self, id: &ExecutionId, protection: Protection) {
         self.executions
             .with_agent(id, |agent| {
                 if protection.is_restart() {
@@ -702,7 +703,7 @@ impl Manager {
             .await;
     }
 
-    pub(crate) async fn agent_overload(&self, id: &str) -> Option<Protection> {
+    pub(crate) async fn agent_overload(&self, id: &ExecutionId) -> Option<Protection> {
         self.executions
             .with_agent(id, |agent| agent.overload.clone())
             .await
@@ -710,7 +711,10 @@ impl Manager {
     }
 
     /// The guard a protection stop took for the execution's connection.
-    pub(crate) async fn take_update_hold(&self, id: &str) -> Option<OwnedRwLockReadGuard<()>> {
+    pub(crate) async fn take_update_hold(
+        &self,
+        id: &ExecutionId,
+    ) -> Option<OwnedRwLockReadGuard<()>> {
         self.executions
             .with_agent(id, |agent| agent.update_hold.take())
             .await
@@ -725,12 +729,12 @@ impl Manager {
         }
     }
 
-    pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
+    pub(crate) async fn agent_was_overloaded(&self, id: &ExecutionId) -> bool {
         self.agent_overload(id).await.is_some()
     }
 
     /// Queue the automatic restore of the protection-stopped agent `id`.
-    pub(crate) async fn queue_agent_restore(&self, id: &str) -> anyhow::Result<()> {
+    pub(crate) async fn queue_agent_restore(&self, id: &ExecutionId) -> anyhow::Result<()> {
         let (name, workspace_id) = self
             .executions
             .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
@@ -743,7 +747,7 @@ impl Manager {
     /// admission holds through the checks of its workspace.
     pub(crate) async fn admit_agent_restore(
         &self,
-        id: &str,
+        id: &ExecutionId,
         workspace_id: &SpaceId,
     ) -> anyhow::Result<Grant> {
         loop {
@@ -775,7 +779,7 @@ impl Manager {
     /// holds.
     pub(super) async fn confirm_restore(
         &self,
-        id: &str,
+        id: &ExecutionId,
         workspace_id: &SpaceId,
         grant: Grant,
     ) -> anyhow::Result<bool> {
@@ -795,7 +799,7 @@ impl Manager {
     /// proof its load may still show.
     pub(super) async fn agent_executions(
         &self,
-    ) -> std::collections::HashMap<String, (SpaceId, Activity)> {
+    ) -> std::collections::HashMap<ExecutionId, (SpaceId, Activity)> {
         let waiting = self.agent_queue.restore_waiters();
         self.executions
             .with_agents(|agents| {
@@ -838,14 +842,14 @@ impl Manager {
         if let Some(own) = self.execution_agent(&execution.id).await {
             return Some(own);
         }
-        self.execution_agent(execution.agent_execution.as_deref()?)
+        self.execution_agent(execution.agent_execution.as_ref()?)
             .await
     }
 
     /// The agent execution `id` runs: tracked while connected, else as its
     /// record names it, as when a command it ran reattaches first after a
     /// restart.
-    async fn execution_agent(&self, id: &str) -> Option<CallerAgent> {
+    async fn execution_agent(&self, id: &ExecutionId) -> Option<CallerAgent> {
         let tracked = self
             .executions
             .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
@@ -864,7 +868,7 @@ impl Manager {
 
     /// The agent and workspace the record of execution `id` names, if it
     /// ran one.
-    async fn recorded_agent(&self, id: &str) -> Option<(String, SpaceId)> {
+    async fn recorded_agent(&self, id: &ExecutionId) -> Option<(String, SpaceId)> {
         let execution = id.to_owned();
         let recorded = self
             .store
@@ -885,7 +889,7 @@ impl Manager {
     }
 
     /// The name of the connected agent that `execution` runs.
-    pub(crate) async fn agent_name(&self, execution: &str) -> Option<String> {
+    pub(crate) async fn agent_name(&self, execution: &ExecutionId) -> Option<String> {
         self.executions
             .with_agent(execution, |agent| agent.name.clone())
             .await
@@ -927,7 +931,7 @@ impl Manager {
             .store
             .run(move |db| running_executions(db, &id))
             .await?;
-        let connected: HashSet<String> = self
+        let connected: HashSet<ExecutionId> = self
             .executions
             .with_agents(|agents| {
                 running
@@ -992,7 +996,7 @@ impl Manager {
         &self,
         protection: &Protection,
         select: Select,
-        mut turns: HashMap<String, Turn>,
+        mut turns: HashMap<ExecutionId, Turn>,
     ) -> Vec<StoppedAgent> {
         let stopped: Vec<_> = self
             .executions
@@ -1007,7 +1011,7 @@ impl Manager {
                             started: agent.started,
                             attached: agent.attached == Some(true),
                         });
-                let selected: Vec<String> = match select {
+                let selected: Vec<ExecutionId> = match select {
                     Select::One => first_to_stop(running, &turns)
                         .into_iter()
                         .cloned()
@@ -1036,7 +1040,7 @@ impl Manager {
     /// terminated under pressure can still be resumed.
     fn protect(
         &self,
-        id: &str,
+        id: &ExecutionId,
         agent: &mut Agent,
         protection: &Protection,
         turn: Option<AgentState>,
@@ -1063,7 +1067,7 @@ impl Manager {
         agent.update_hold = self.gates.try_owned_operation();
         agent.stop.send(true).ok()?;
         Some(StoppedAgent {
-            id: id.into(),
+            id: id.clone(),
             name: agent.name.clone(),
             workspace: agent.workspace.clone(),
             workspace_id: agent.workspace_id.clone(),
@@ -1132,7 +1136,7 @@ enum Select {
 /// its reports reach `agents` before the state the turns come from, under the
 /// lock the caller holds. One that has not reported since it started counts
 /// as working too.
-fn still_idle(turns: &mut HashMap<String, Turn>, agents: &HashMap<String, Agent>) {
+fn still_idle(turns: &mut HashMap<ExecutionId, Turn>, agents: &HashMap<ExecutionId, Agent>) {
     for (id, turn) in turns.iter_mut() {
         let reported = agents.get(id).and_then(|agent| agent.turn);
         if turn.idle() && reported != Some(AgentState::Idle) {
@@ -1154,7 +1158,7 @@ fn running_executions(
 
 /// A running agent protection may stop.
 struct Running<'a> {
-    id: &'a String,
+    id: &'a ExecutionId,
     started: Instant,
     /// Whether a terminal shows it, so the user may be working with it.
     attached: bool,
@@ -1164,15 +1168,18 @@ struct Running<'a> {
 /// whose stop costs the least work.
 fn first_to_stop<'a>(
     running: impl Iterator<Item = Running<'a>>,
-    turns: &HashMap<String, Turn>,
-) -> Option<&'a String> {
+    turns: &HashMap<ExecutionId, Turn>,
+) -> Option<&'a ExecutionId> {
     let (attached, unattached): (Vec<_>, Vec<_>) = running.partition(|agent| agent.attached);
     least_work(unattached, turns).or_else(|| least_work(attached, turns))
 }
 
 /// Of `agents`, the one idle longest, otherwise the newest, which has the
 /// least progress to lose.
-fn least_work<'a>(agents: Vec<Running<'a>>, turns: &HashMap<String, Turn>) -> Option<&'a String> {
+fn least_work<'a>(
+    agents: Vec<Running<'a>>,
+    turns: &HashMap<ExecutionId, Turn>,
+) -> Option<&'a ExecutionId> {
     let (idle, working): (Vec<_>, Vec<_>) = agents
         .into_iter()
         .partition(|agent| turns.get(agent.id).is_some_and(Turn::idle));
@@ -1187,7 +1194,7 @@ fn least_work<'a>(agents: Vec<Running<'a>>, turns: &HashMap<String, Turn>) -> Op
 
 /// An agent asked to stop for protection.
 pub(crate) struct StoppedAgent {
-    id: String,
+    id: ExecutionId,
     pub name: String,
     pub workspace: String,
     workspace_id: SpaceId,

@@ -2,6 +2,7 @@
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
 //! `shoal work restore`.
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace_files::Attacher, model::CleanupReason, state::AgentState};
 
@@ -162,7 +163,7 @@ async fn stop_agent_in(
     manager: &Manager,
     workspace: &crate::model::Workspace,
     turn: AgentState,
-) -> String {
+) -> ExecutionId {
     let id = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await

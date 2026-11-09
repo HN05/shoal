@@ -1,5 +1,6 @@
 //! Where executions run in terminal hosts, as their wrappers report it, and
 //! the places Shoal created for workspaces, which it closes with them.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::sessions::OriginExt;
 use anyhow::Result;
@@ -23,7 +24,7 @@ pub(crate) struct ExecutionPlace {
 /// an agent that cannot take its place over never starts.
 pub(super) fn record_execution_place(
     tx: &rusqlite::Transaction<'_>,
-    execution: &str,
+    execution: &ExecutionId,
     workspace: &SpaceId,
     place: &ExecutionPlace,
 ) -> Result<()> {

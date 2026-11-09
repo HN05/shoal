@@ -7,7 +7,7 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
         reason: "free disk space is below 2 GiB".into(),
         resumes_when: "free disk space reaches 5 GiB".into(),
     };
-    let line = protection.manual_restore("worker", "id");
+    let line = protection.manual_restore("worker", &ExecutionId::from("id"));
     assert!(line.contains("free disk space is below 2 GiB"), "{line}");
     assert!(line.contains("free disk space reaches 5 GiB"), "{line}");
     assert!(
@@ -18,14 +18,14 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
         reason: Some("stopped by shoal stop".into()),
         removed: false,
     };
-    let line = stop.manual_restore("worker", "id");
+    let line = stop.manual_restore("worker", &ExecutionId::from("id"));
     assert!(line.contains("stopped by shoal stop"), "{line}");
     assert!(!line.contains("work restore"), "{line}");
     let removal = Halt::Pause {
         reason: Some("the workspace is being removed".into()),
         removed: true,
     };
-    let line = removal.manual_restore("worker", "id");
+    let line = removal.manual_restore("worker", &ExecutionId::from("id"));
     assert!(line.contains("shoal work restore worker"), "{line}");
 }
 

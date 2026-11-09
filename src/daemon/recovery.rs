@@ -1,4 +1,5 @@
 //! Explicit recovery: inspect first, mutate only requested and verified records.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::{Result, ensure};
 use std::collections::HashSet;
 
@@ -296,7 +297,7 @@ impl Manager {
         options: ReconcileOptions,
         report: &mut Report,
         scan: &mut process::Scan,
-        ids: &HashSet<String>,
+        ids: &HashSet<ExecutionId>,
     ) -> Result<ExecutionReport> {
         let connected = self.executions.is_connected(&execution.id).await;
         let mut processes = Processes::inspect(execution, &workspace.path, scan).await?;
@@ -344,7 +345,11 @@ impl Manager {
     /// Delete an execution record judged clearable, unless processes still use
     /// the workspace directory: even an explicit acknowledgement cannot ignore
     /// visible cwd users.
-    async fn clear_stopped_execution(&self, workspace: &Workspace, id: &str) -> Result<Clearance> {
+    async fn clear_stopped_execution(
+        &self,
+        workspace: &Workspace,
+        id: &ExecutionId,
+    ) -> Result<Clearance> {
         let users = if off_runtime::is_dir(&workspace.path).await? {
             crate::process::in_directory(&workspace.path).await?
         } else {
@@ -370,7 +375,7 @@ async fn stop_survivors(
     processes: Processes,
     report: &mut Report,
     scan: &mut process::Scan,
-    ids: &HashSet<String>,
+    ids: &HashSet<ExecutionId>,
 ) -> Result<Processes> {
     if processes.stop().await? {
         report.changes.push(format!(

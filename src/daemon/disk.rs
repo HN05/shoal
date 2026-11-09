@@ -4,6 +4,7 @@
 //! then emptying shared caches nothing is using, then deleting the results
 //! removed workspaces handed back, then stopping tracked executions when
 //! that cannot free enough space.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use std::{
@@ -489,7 +490,7 @@ async fn stop_executions(
 /// Workspaces with executions other than agents already stopped by protection.
 /// This inventory is advisory; stopping rechecks protection under its locks.
 async fn workspaces_with_unprotected_executions(manager: &Manager) -> Result<Vec<SpaceId>> {
-    let executions: Vec<(String, SpaceId)> = manager
+    let executions: Vec<(ExecutionId, SpaceId)> = manager
         .store
         .run(|db| {
             Ok(db

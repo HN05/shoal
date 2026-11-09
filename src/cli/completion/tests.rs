@@ -137,7 +137,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     ("w4", None, "retained"),
                 ]
                 .map(|(workspace, agent, session)| RunningAgent {
-                    execution: format!("{workspace}-execution"),
+                    execution: format!("{workspace}-execution").into(),
                     space_id: workspace.into(),
                     agent: agent.map(Into::into),
                     restorable: agent.is_some(),

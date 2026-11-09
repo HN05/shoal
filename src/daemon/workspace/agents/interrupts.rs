@@ -2,6 +2,7 @@
 //! it runs in, which ends its turn without the hook that ends its other
 //! turns, so the daemon records that turn's end and whether the agent still
 //! idles after it.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::{Result, ensure};
 
 use super::super::Manager;
@@ -29,7 +30,7 @@ impl Manager {
     pub(crate) async fn interrupt_turn(
         &self,
         selector: &SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
     ) -> Result<AgentStatus> {
         let workspace = self.workspace(selector).await?;
         let runs_here = self
@@ -47,7 +48,7 @@ impl Manager {
 
     /// Whether the agent of `execution` idles after an interrupt ended its
     /// last turn.
-    pub(crate) async fn turn_interrupted(&self, execution: &str) -> bool {
+    pub(crate) async fn turn_interrupted(&self, execution: &ExecutionId) -> bool {
         self.executions
             .with_agent(execution, |agent| agent.interrupted)
             .await

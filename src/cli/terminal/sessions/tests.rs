@@ -42,7 +42,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         narrowing: Default::default(),
         mode: None,
         model: Default::default(),
-        id: origin.id().to_owned(),
+        id: origin.id().to_owned().into(),
         workspace_id: "workspace".into(),
         state: crate::state::ExecutionState::Running,
         wrapper: None,

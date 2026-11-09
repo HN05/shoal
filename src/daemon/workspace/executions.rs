@@ -4,6 +4,7 @@ mod completion;
 mod reregistration;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_work::Stopper};
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
@@ -76,7 +77,7 @@ pub(super) enum StopPolicy {
 /// check and confirm that it did.
 #[derive(Debug)]
 pub struct UnprovenStop {
-    pub execution: String,
+    pub execution: ExecutionId,
 }
 
 impl std::fmt::Display for UnprovenStop {
@@ -252,12 +253,12 @@ enum Keep<'a> {
 
 /// The record a new execution persists at registration.
 struct ExecutionRecord {
-    id: String,
+    id: ExecutionId,
     workspace_id: SpaceId,
     kind: ExecutionKind,
-    parent_execution: Option<String>,
+    parent_execution: Option<ExecutionId>,
     /// The agent execution whose process tree registers it.
-    agent_execution: Option<String>,
+    agent_execution: Option<ExecutionId>,
     wrapper: Option<Identity>,
     scope_token: String,
     demo: Option<Launch>,
@@ -286,7 +287,7 @@ impl ProcessDirectories {
 }
 
 struct RegisteredExecution {
-    id: String,
+    id: ExecutionId,
     workspace: Workspace,
     scope_token: String,
     ports: Vec<PortReservation>,
@@ -303,7 +304,7 @@ pub(crate) trait ExecutionKindExt {
         self,
         tx: &Transaction<'_>,
         workspace_id: &SpaceId,
-        parent_execution: Option<&str>,
+        parent_execution: Option<&ExecutionId>,
     ) -> Result<()>;
 }
 
@@ -319,7 +320,7 @@ impl ExecutionKindExt for ExecutionKind {
         self,
         tx: &Transaction<'_>,
         workspace_id: &SpaceId,
-        parent_execution: Option<&str>,
+        parent_execution: Option<&ExecutionId>,
     ) -> Result<()> {
         // Quarantine may have left a moving workspace failed, which setup
         // would otherwise accept.
@@ -327,7 +328,7 @@ impl ExecutionKindExt for ExecutionKind {
         match self {
             Self::Command | Self::Merge | Self::Unmerge => store::require_ready(tx, workspace_id)?,
             Self::Setup => {
-                let blocking: Option<String> = tx.query_row(
+                let blocking: Option<ExecutionId> = tx.query_row(
                     "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
                     params![workspace_id, parent_execution],
                     |r| r.get(0),
@@ -462,7 +463,7 @@ impl Manager {
         workspace_id: &SpaceId,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
-        parents: (Option<&str>, Option<String>),
+        parents: (Option<&ExecutionId>, Option<ExecutionId>),
         demo: Option<Launch>,
         place: Option<ExecutionPlace>,
     ) -> Result<RegisteredExecution> {
@@ -477,7 +478,7 @@ impl Manager {
         self.touch(&workspace.id).await;
         let settings = self.workspace_settings(&workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
-        let id = Uuid::new_v4().to_string();
+        let id = ExecutionId::generate();
         let scope_token = Uuid::new_v4().to_string();
         let (parent_execution, agent_execution) = parents;
         let (ports, directories) = self
@@ -486,7 +487,7 @@ impl Manager {
                     id: id.clone(),
                     workspace_id: workspace.id.clone(),
                     kind,
-                    parent_execution: parent_execution.map(str::to_owned),
+                    parent_execution: parent_execution.cloned(),
                     agent_execution: agent_execution.clone(),
                     wrapper,
                     scope_token: scope_token.clone(),
@@ -556,7 +557,7 @@ impl Manager {
         let reattach_token = (kind == ExecutionKind::Command).then_some(scope_token);
         self.store
             .write(move |tx| {
-                kind.reserve(tx, &workspace_id, parent_execution.as_deref())?;
+                kind.reserve(tx, &workspace_id, parent_execution.as_ref())?;
                 tx.execute(
                     "INSERT INTO executions(id,workspace_id,state,wrapper,scope_token,agent_execution)
                         VALUES (?1,?2,?3,?4,?5,?6)",
@@ -722,7 +723,7 @@ impl Manager {
 
     pub async fn record_execution_child(
         &self,
-        id: String,
+        id: ExecutionId,
         child: Option<Identity>,
         group_id: u32,
     ) -> Result<()> {
@@ -757,7 +758,11 @@ impl Manager {
     /// and the worktree the next run starts in is still the recorded one.
     /// Unproven survivors keep the child's identity, so the next run cannot
     /// register over the evidence.
-    pub(crate) async fn release_exited_child(&self, id: &str, workspace: &Workspace) -> Result<()> {
+    pub(crate) async fn release_exited_child(
+        &self,
+        id: &ExecutionId,
+        workspace: &Workspace,
+    ) -> Result<()> {
         match self
             .pause_agent_execution(id, &workspace.id, timing::PROCESS_PROOF_TIMEOUT)
             .await?
@@ -776,7 +781,7 @@ impl Manager {
     /// wrapper remains alive until its completion acknowledgement.
     pub async fn finish_execution(
         &self,
-        id: String,
+        id: ExecutionId,
         kind: ExecutionKind,
         exit_code: Option<i32>,
     ) -> Result<bool> {
@@ -816,7 +821,7 @@ impl Manager {
 
     pub(super) async fn finish_execution_after_scan(
         &self,
-        id: String,
+        id: ExecutionId,
         kind: ExecutionKind,
         exit_code: Option<i32>,
         scan: Option<Result<process::Scan>>,
@@ -912,17 +917,18 @@ impl Manager {
     async fn authorize_reattachment(
         &self,
         request: &Reattach,
-    ) -> Result<(SpaceId, Option<String>)> {
+    ) -> Result<(SpaceId, Option<ExecutionId>)> {
         let request = request.clone();
         self.store
             .write(move |tx| {
                 let execution = store::find_execution(tx, &request.execution)?
                     .context("execution record is missing")?;
-                let (token, agent_execution): (Option<String>, Option<String>) = tx.query_row(
-                    "SELECT scope_token,agent_execution FROM executions WHERE id=?1",
-                    [&request.execution],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )?;
+                let (token, agent_execution): (Option<String>, Option<ExecutionId>) = tx
+                    .query_row(
+                        "SELECT scope_token,agent_execution FROM executions WHERE id=?1",
+                        [&request.execution],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )?;
                 ensure!(
                     token.as_deref() == Some(request.scope_token.as_str()),
                     "execution scope token does not match"
@@ -942,7 +948,7 @@ impl Manager {
 
     /// A reattaching wrapper still runs its command, so a stop the previous
     /// daemon saved but never delivered no longer describes the agent.
-    fn discard_undelivered_stop(&self, workspace: &Workspace, execution: &str) {
+    fn discard_undelivered_stop(&self, workspace: &Workspace, execution: &ExecutionId) {
         match crate::execution::recovery::discard_undelivered(&self.paths, &workspace.id, execution)
         {
             Ok(true) => log!(
@@ -958,7 +964,7 @@ impl Manager {
 
     /// Drop a wrapper's connection without recording completion, so its
     /// execution awaits reattachment.
-    pub(crate) async fn detach_execution(&self, id: &str) {
+    pub(crate) async fn detach_execution(&self, id: &ExecutionId) {
         if self.executions.disconnect(id).await {
             self.agent_queue.wake();
         }
@@ -966,7 +972,7 @@ impl Manager {
 
     async fn execution_completion_issue(
         &self,
-        id: &str,
+        id: &ExecutionId,
         scan: Option<Result<process::Scan>>,
     ) -> Result<Option<String>> {
         let scan = match scan {
@@ -1368,7 +1374,7 @@ impl Manager {
     }
 
     /// Delete an execution record whose processes the caller proved stopped.
-    pub(crate) async fn forget_execution(&self, id: &str) -> Result<()> {
+    pub(crate) async fn forget_execution(&self, id: &ExecutionId) -> Result<()> {
         self.keep_stopped_turn(id, None).await;
         let demo = self.delete_execution_record(id).await?;
         self.close_demo_session(demo).await;

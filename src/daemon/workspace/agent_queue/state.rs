@@ -1,6 +1,7 @@
 //! What the daemon keeps in memory about the agent queue: who holds starting
 //! entries, which stopped agents wait for their restore, which one-shot runs
 //! wait for or hold a slot, and what wakes the dispatcher.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -22,7 +23,7 @@ pub(crate) struct AgentQueue {
     holds: StdMutex<HashMap<String, usize>>,
     /// Executions whose stopped agent waits for its queued restore with
     /// every process stopped, with what admitted it once admission did.
-    restore_waiters: StdMutex<HashMap<String, Option<Grant>>>,
+    restore_waiters: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
     /// One-shot runs by request number, so the oldest comes first.
     oneshots: StdMutex<OneShots>,
     wake: Notify,
@@ -100,7 +101,7 @@ impl AgentQueue {
 
     /// Mark the stopped agent of `execution` as waiting for its restore
     /// while the returned waiter lives.
-    pub(crate) fn wait_for_restore(&self, execution: &str) -> RestoreWaiter<'_> {
+    pub(crate) fn wait_for_restore(&self, execution: &ExecutionId) -> RestoreWaiter<'_> {
         self.restore_waiters
             .lock()
             .unwrap()
@@ -112,7 +113,7 @@ impl AgentQueue {
     }
 
     /// The executions whose agent waits for its restore.
-    pub(crate) fn restore_waiters(&self) -> HashSet<String> {
+    pub(crate) fn restore_waiters(&self) -> HashSet<ExecutionId> {
         self.restore_waiters
             .lock()
             .unwrap()
@@ -123,14 +124,14 @@ impl AgentQueue {
 
     /// Record that `grant` admitted the restore of `execution`, if its agent
     /// still waits.
-    pub(crate) fn grant_restore(&self, execution: &str, grant: Grant) {
+    pub(crate) fn grant_restore(&self, execution: &ExecutionId, grant: Grant) {
         if let Some(granted) = self.restore_waiters.lock().unwrap().get_mut(execution) {
             *granted = Some(grant);
         }
     }
 
     /// What admitted the restore of `execution`, if admission did.
-    pub(crate) fn restore_grant(&self, execution: &str) -> Option<Grant> {
+    pub(crate) fn restore_grant(&self, execution: &ExecutionId) -> Option<Grant> {
         self.restore_waiters
             .lock()
             .unwrap()
@@ -324,7 +325,7 @@ impl Drop for OneShotSlot<'_> {
 /// Marks a restore's agent as waiting for admission while it lives.
 pub(crate) struct RestoreWaiter<'a> {
     queue: &'a AgentQueue,
-    execution: String,
+    execution: ExecutionId,
 }
 
 impl Drop for RestoreWaiter<'_> {

@@ -17,7 +17,7 @@ fn restart(name: &str) -> Restart {
     );
     Restart {
         agent: RunningAgent {
-            execution: format!("{name}-execution"),
+            execution: format!("{name}-execution").into(),
             space_id: workspace.id.clone(),
             agent: Some("claude".into()),
             restorable: true,

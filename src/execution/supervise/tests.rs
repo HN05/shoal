@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::*;
@@ -570,7 +571,7 @@ async fn terminal_child() {
 /// A plan for a command in a workspace at `root`.
 fn plan(root: &Path) -> ExecutionPlan {
     ExecutionPlan {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: ExecutionId::generate(),
         workspace: Workspace::new_record(
             "repo".into(),
             "worker".into(),

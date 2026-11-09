@@ -1,6 +1,7 @@
 //! Dispatch: each pass ends abandoned starts and restores, queues the
 //! restores stopped agents request, then admits the waiting entries that fit
 //! and starts what the daemon starts itself.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -37,10 +38,10 @@ struct WaitingWork {
     entries: Vec<Waiting>,
     /// Each restore a waiting wrapper carries out, by entry ID, with its
     /// execution and wake.
-    restores: HashMap<String, (String, Wake)>,
+    restores: HashMap<String, (ExecutionId, Wake)>,
     /// The executions of the stopped agents whose restore the daemon starts,
     /// which hold no slot until it is admitted.
-    stopped: HashSet<String>,
+    stopped: HashSet<ExecutionId>,
 }
 
 impl WaitingWork {
@@ -56,7 +57,7 @@ impl WaitingWork {
     fn admitted_restores<'a>(
         &'a self,
         admitted: &'a [String],
-    ) -> impl Iterator<Item = &'a (String, Wake)> {
+    ) -> impl Iterator<Item = &'a (ExecutionId, Wake)> {
         admitted.iter().filter_map(|id| self.restores.get(id))
     }
 
@@ -75,8 +76,8 @@ impl WaitingWork {
 /// slot. One whose processes may still run keeps its slot until they stop.
 fn dormant_restores(
     waiting: &[Waiting],
-    restores: &HashMap<String, (String, Wake)>,
-) -> HashSet<String> {
+    restores: &HashMap<String, (ExecutionId, Wake)>,
+) -> HashSet<ExecutionId> {
     waiting
         .iter()
         .filter(|entry| {
@@ -395,7 +396,7 @@ impl Manager {
                          WHERE kind=?1 AND env IS NULL AND seen_at<?2",
                     )?
                     .query_map(params![QueueKind::Restore, cutoff], |row| row.get(0))?
-                    .collect::<rusqlite::Result<Vec<String>>>()?;
+                    .collect::<rusqlite::Result<Vec<ExecutionId>>>()?;
                 for execution in stale.iter().filter(|id| !connected.contains(*id)) {
                     tx.execute("DELETE FROM agent_queue WHERE execution_id=?1", [execution])?;
                 }

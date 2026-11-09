@@ -1,4 +1,5 @@
 //! The daemon's answers to [`AgentMethod`] requests, and who may send them.
+use crate::client::execution_ids::ExecutionId;
 use std::sync::Arc;
 
 use anyhow::{Result, bail, ensure};
@@ -28,7 +29,7 @@ pub(super) async fn handle(
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
                 manager
-                    .wait_agent_wake(&workspace, due, hooked.as_deref())
+                    .wait_agent_wake(&workspace, due, hooked.as_ref())
                     .await?;
                 Ok(Body::Ok)
             }));
@@ -285,6 +286,6 @@ impl Scoped for AgentMethod {
 }
 
 /// The tracked execution a report comes from.
-fn execution(caller: Option<&Caller>) -> Option<String> {
-    caller.and_then(Caller::execution_id).map(str::to_owned)
+fn execution(caller: Option<&Caller>) -> Option<ExecutionId> {
+    caller.and_then(Caller::execution_id).cloned()
 }

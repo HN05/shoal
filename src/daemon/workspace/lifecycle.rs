@@ -1,5 +1,6 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, executions::StopPolicy, reservation::RemovalRules};
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::space_processes::WorktreeTies;
@@ -414,10 +415,10 @@ struct CleanupExecutions {
 impl CleanupExecutions {
     /// Whether `execution` is one of the idle restores, whose recovery record
     /// the removal record keeps.
-    fn idle_restore(&self, execution: &str) -> bool {
+    fn idle_restore(&self, execution: &ExecutionId) -> bool {
         self.idle
             .iter()
-            .any(|restore| restore.execution == execution)
+            .any(|restore| restore.execution == *execution)
     }
 }
 

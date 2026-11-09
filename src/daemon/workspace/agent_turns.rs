@@ -2,6 +2,7 @@
 //! its hooks last reported, where an idle agent that still runs work outside
 //! its process group counts as working, since that work may start its next
 //! turn.
+use crate::client::execution_ids::ExecutionId;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -43,8 +44,8 @@ impl Turn {
 }
 
 /// The turn each execution last reported, with the records of the idle ones.
-fn reported(db: &Connection) -> Result<(HashMap<String, Turn>, Vec<Execution>)> {
-    let turns: HashMap<String, Turn> = db
+fn reported(db: &Connection) -> Result<(HashMap<ExecutionId, Turn>, Vec<Execution>)> {
+    let turns: HashMap<ExecutionId, Turn> = db
         .prepare(
             "SELECT execution_id,state,since,prompt_cache_expires_at FROM space_agent_state
              WHERE execution_id IS NOT NULL",
@@ -70,12 +71,12 @@ fn reported(db: &Connection) -> Result<(HashMap<String, Turn>, Vec<Execution>)> 
 impl Manager {
     /// The turn each execution reported last, without the process scan
     /// that tells an idle one with work in flight.
-    pub(crate) async fn reported_turns(&self) -> Result<HashMap<String, Turn>> {
+    pub(crate) async fn reported_turns(&self) -> Result<HashMap<ExecutionId, Turn>> {
         Ok(self.store.run(|db| reported(db)).await?.0)
     }
 
     /// The turn of each execution that reported one.
-    pub(crate) async fn agent_turns(&self) -> Result<HashMap<String, Turn>> {
+    pub(crate) async fn agent_turns(&self) -> Result<HashMap<ExecutionId, Turn>> {
         let (mut turns, idle) = self.store.run(|db| reported(db)).await?;
         if idle.is_empty() {
             return Ok(turns);

@@ -1,6 +1,7 @@
 //! What wakes a queued restore: sustained healthy readings for an agent
 //! protection stopped mid-turn, an update for one stopped between turns,
 //! which has nothing to do until then, unless `shoal resume` asked for it.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
@@ -33,7 +34,7 @@ pub(crate) enum Grant {
 struct RestoreRow {
     id: String,
     workspace: SpaceId,
-    execution: String,
+    execution: ExecutionId,
 }
 
 /// Every restore entry of the queue that waits for an update when its
@@ -58,7 +59,7 @@ fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
 
 /// A restore of the workspace that waits in the queue.
 struct QueuedRestore {
-    execution: String,
+    execution: ExecutionId,
     /// Whether the daemon starts it, rather than a waiting wrapper.
     started_here: bool,
     /// Whether Shoal queued it on its own.
@@ -90,7 +91,10 @@ impl Manager {
     /// with every process, waits in the queue for an update, in its wrapper
     /// or for the daemon to start it, while none is recorded for it. Disk
     /// space may still hold back one that is, which has work all the same.
-    pub(crate) async fn idle_restores(&self, workspace_id: &SpaceId) -> Result<HashSet<String>> {
+    pub(crate) async fn idle_restores(
+        &self,
+        workspace_id: &SpaceId,
+    ) -> Result<HashSet<ExecutionId>> {
         let id = workspace_id.to_owned();
         let queued = self.store.run(move |db| queued_restores(db, &id)).await?;
         let waiters = self.agent_queue.restore_waiters();
@@ -145,7 +149,7 @@ impl Manager {
     pub(super) async fn restore_wake(
         &self,
         workspace_id: &SpaceId,
-        execution: &str,
+        execution: &ExecutionId,
         automatic: bool,
         waits: bool,
     ) -> Result<Wake> {
@@ -166,7 +170,7 @@ impl Manager {
     pub(super) async fn stopped_restore_work(
         &self,
         workspace_id: &SpaceId,
-        execution: &str,
+        execution: &ExecutionId,
         automatic: bool,
     ) -> Result<Work> {
         if !automatic || !self.restore_waits_for_update(workspace_id, execution) {
@@ -195,7 +199,7 @@ impl Manager {
     }
 
     /// Whether `shoal queue move` stopped the agent of `execution`.
-    async fn moved_in_queue(&self, execution: &str) -> bool {
+    async fn moved_in_queue(&self, execution: &ExecutionId) -> bool {
         self.agent_overload(execution)
             .await
             .is_some_and(|protection| protection.is_queue_move())
@@ -204,7 +208,11 @@ impl Manager {
     /// Whether the recovery record of `execution` says it stopped between
     /// turns, so its restore waits for an update. An unreadable record leaves
     /// the turn unknown, which counts as mid-turn.
-    pub(crate) fn restore_waits_for_update(&self, workspace_id: &SpaceId, execution: &str) -> bool {
+    pub(crate) fn restore_waits_for_update(
+        &self,
+        workspace_id: &SpaceId,
+        execution: &ExecutionId,
+    ) -> bool {
         let path = recovery::record_path(&self.paths, workspace_id, execution);
         recovery::Record::load(&path)
             .ok()

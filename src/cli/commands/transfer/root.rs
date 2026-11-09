@@ -1,6 +1,7 @@
 //! `shoal move root`: move every repository directory into a new `root_dir`.
 use super::super::resume::Stopped;
 use crate::cli::commands::resume::queue::QueuedExt;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Queued;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
@@ -155,7 +156,7 @@ async fn job_ended(ctx: &Context, workspace: &SpaceId) -> Result<()> {
 }
 
 /// The executions whose stopped work the workspace saves for `shoal resume`.
-fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<String>> {
+fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<ExecutionId>> {
     Ok(Saved::load(&ctx.paths, workspace)?
         .execution_ids()
         .into_iter()

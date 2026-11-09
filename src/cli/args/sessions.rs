@@ -1,4 +1,5 @@
 //! Arguments of commands for agent sessions and demos.
+use crate::client::execution_ids::ExecutionId;
 use std::ffi::OsString;
 
 use clap::Subcommand;
@@ -27,7 +28,7 @@ pub enum SessionsCommand {
         targets: SpaceTargets,
         /// Select a stopped execution when the workspace has several records.
         #[arg(long, conflicts_with = "all")]
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
         /// Forget the saved agents and commands instead of resuming them.
         #[arg(long)]
         discard: bool,

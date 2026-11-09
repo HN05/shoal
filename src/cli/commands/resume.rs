@@ -2,6 +2,7 @@
 //! It queues restores unless asked to start them now, and restores the
 //! stopped chats at once.
 use crate::client::assignments;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
@@ -37,7 +38,7 @@ use targets::Selected;
 pub async fn select(
     ctx: &Context,
     targets: SpaceTargets,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
     discard: bool,
     now: bool,
     focus: bool,
@@ -193,10 +194,14 @@ async fn resume_each(
 /// given, and restore the `selected` chats in a background place; the daemon
 /// refuses those this process or one below it did not stop, before any
 /// restore, and starts the workspaces' agents detached.
-async fn queue_below(ctx: &Context, selected: Selected, execution: Option<String>) -> Result<i32> {
+async fn queue_below(
+    ctx: &Context,
+    selected: Selected,
+    execution: Option<ExecutionId>,
+) -> Result<i32> {
     let mut stopped = Vec::new();
     for selector in selected.workspaces.unwrap_or_default() {
-        stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
+        stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
     }
     for chat in &selected.chats {
         crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
@@ -206,7 +211,8 @@ async fn queue_below(ctx: &Context, selected: Selected, execution: Option<String
 }
 
 /// Executions stopped so their workspaces could move, by workspace.
-pub(super) type Stopped = std::collections::BTreeMap<SpaceId, std::collections::BTreeSet<String>>;
+pub(super) type Stopped =
+    std::collections::BTreeMap<SpaceId, std::collections::BTreeSet<ExecutionId>>;
 
 /// Queue the restores of the agents among `stopped`; their workspaces'
 /// stopped commands go to them, and those of workspaces without one stay
@@ -233,7 +239,7 @@ pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Qu
 async fn stopped_agents(
     ctx: &Context,
     selector: SpaceSelector,
-    execution: Option<&str>,
+    execution: Option<&ExecutionId>,
 ) -> Result<(Workspace, Saved)> {
     let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
@@ -260,7 +266,7 @@ async fn stopped_agents(
 async fn queue_workspace(
     ctx: &Context,
     workspace: SpaceSelector,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
     queuing: Queuing,
 ) -> Result<i32> {
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
@@ -318,7 +324,7 @@ async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Workspace, Saved)]) -> 
 pub async fn start_entry(
     ctx: &Context,
     targets: SpaceTargets,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
     entry: String,
 ) -> Result<i32> {
     ensure!(
@@ -363,7 +369,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
         "resume",
         &workspace.id,
         "--execution",
-        execution,
+        execution.as_str(),
         "--focus",
         "--queue-entry",
         &entry.id,
@@ -404,7 +410,7 @@ fn background_workspace(targets: &SpaceTargets) -> Option<SpaceId> {
 pub async fn run(
     ctx: &Context,
     workspace: SpaceSelector,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
     discard: bool,
     here: bool,
 ) -> Result<i32> {
@@ -425,13 +431,13 @@ pub async fn run(
         return continue_last_session(ctx, &inspection.workspace, saved, here).await;
     }
     let recovery_id = execution
-        .as_deref()
-        .or_else(|| (saved.agents.len() == 1).then(|| saved.agents[0].0.as_str()));
+        .as_ref()
+        .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].0));
     reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
     inspection =
         crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
     let workspace = &inspection.workspace;
-    let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
+    let active = |id: &ExecutionId| inspection.executions.iter().any(|e| e.id == *id);
     if saved.agents.is_empty() {
         let _commands = claim_commands(&mut saved.commands);
         let report = report_commands(ctx, workspace, &saved.commands)?;
@@ -469,7 +475,7 @@ pub async fn run(
 async fn discard_work(
     ctx: &Context,
     workspace: SpaceSelector,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
 ) -> Result<i32> {
     let discarded = assignments::discard_stopped_work(&ctx.paths, workspace, execution).await?;
     let forgotten = DiscardedWork {
@@ -690,9 +696,9 @@ async fn launch(
 /// only one, or one picked on a terminal by its `label`.
 fn select_agent(
     ctx: &Context,
-    agents: &[(String, PathBuf)],
+    agents: &[(ExecutionId, PathBuf)],
     label: fn(&Path) -> String,
-) -> Result<(String, PathBuf)> {
+) -> Result<(ExecutionId, PathBuf)> {
     match agents {
         [agent] => Ok(agent.clone()),
         agents if ctx.interactive() => {
@@ -752,7 +758,7 @@ fn stop_time(path: &Path) -> String {
 async fn reconcile_stale_execution(
     ctx: &Context,
     inspection: &Inspection,
-    selected: Option<&str>,
+    selected: Option<&ExecutionId>,
 ) -> Result<()> {
     let Some(selected) = selected else {
         return Ok(());
@@ -760,7 +766,7 @@ async fn reconcile_stale_execution(
     let Some(execution) = inspection
         .executions
         .iter()
-        .find(|execution| execution.id == selected)
+        .find(|execution| execution.id == *selected)
     else {
         return Ok(());
     };
@@ -794,7 +800,7 @@ async fn reconcile_stale_execution(
         report
             .executions
             .iter()
-            .find(|execution| execution.id == selected)
+            .find(|execution| execution.id == *selected)
             .is_some_and(|execution| execution.cleared),
         "selected execution is still unresolved; stop what remains of it with shoal stop, then resume again"
     );
@@ -847,7 +853,7 @@ async fn run_all(
 /// already.
 async fn start_sessions(
     ctx: &Context,
-    sessions: Vec<(Workspace, String, PathBuf)>,
+    sessions: Vec<(Workspace, ExecutionId, PathBuf)>,
     single: bool,
     mut output: Resumed,
 ) -> Result<i32> {
@@ -908,7 +914,7 @@ async fn start_sessions(
                 "resume",
                 &workspace.name,
                 "--execution",
-                id,
+                id.as_str(),
                 "--focus",
             ];
             outln!("  {}", crate::shell::quote(&words));
@@ -939,7 +945,7 @@ enum Started {
 async fn start_session(
     ctx: &Context,
     workspace: &Workspace,
-    id: &str,
+    id: &ExecutionId,
     record: &Path,
     single: bool,
 ) -> Result<Started> {
@@ -952,7 +958,14 @@ async fn start_session(
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
-    let args = ["resume", &workspace.id, "--execution", id, "--focus"].map(OsString::from);
+    let args = [
+        "resume",
+        &workspace.id,
+        "--execution",
+        id.as_str(),
+        "--focus",
+    ]
+    .map(OsString::from);
     if let Some(places) = terminal::rerun_where_stopped(ctx, &settings, record, &args).await? {
         return Ok(Started::Elsewhere {
             reused: true,
@@ -1006,7 +1019,11 @@ async fn discard_each(
 
 /// Forget `workspace`'s stopped records each by itself, leaving agents a
 /// wrapper waits to restore, and return the executions forgotten.
-async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> Result<Vec<String>> {
+async fn discard_saved(
+    ctx: &Context,
+    workspace: &Workspace,
+    saved: &Saved,
+) -> Result<Vec<ExecutionId>> {
     let mut ids = Vec::new();
     for execution in saved.execution_ids() {
         let workspace = workspace.id.clone();

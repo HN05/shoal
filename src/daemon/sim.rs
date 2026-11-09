@@ -246,7 +246,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         // An exported scope has no execution, but its requests still need approval.
         let scoped = caller.is_some();
-        let execution_id = caller.and_then(|c| c.execution_id().map(str::to_owned));
+        let execution_id = caller.and_then(|c| c.execution_id().cloned());
         let mut audit = if request.clean {
             Some(
                 self.start_clean_request(&workspace, &request, execution_id)

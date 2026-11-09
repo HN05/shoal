@@ -1,5 +1,6 @@
 //! Tracked executions that outlive the process starting them, with their
 //! output in a log.
+use crate::client::execution_ids::ExecutionId;
 use std::{
     ffi::OsString,
     io::Write,
@@ -45,7 +46,7 @@ pub async fn launch_detached(
 /// command's process group; the CLI that spawned it returns after reading it.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DetachedLaunch {
-    pub execution_id: String,
+    pub execution_id: ExecutionId,
     pub pid: u32,
     pub log: PathBuf,
 }

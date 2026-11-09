@@ -1,4 +1,5 @@
 //! Durable terminal cleanup requests, committed before a demo record disappears.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, Transaction, params};
 
@@ -14,7 +15,7 @@ pub(super) struct Close {
 /// retries to this demo even if its host has since reused the session's name.
 pub(in crate::daemon::workspace) fn record_demo(
     tx: &Transaction<'_>,
-    execution: &str,
+    execution: &ExecutionId,
     hosts: &[crate::sessions::HostName],
 ) -> Result<Option<String>> {
     let Some(launch) = super::super::demos::execution_launch(tx, execution)? else {

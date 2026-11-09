@@ -13,6 +13,7 @@ use super::{
     *,
 };
 use crate::client::assignments::Done;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::time::UnixTime;
@@ -1153,7 +1154,7 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
         .unwrap();
     let due = async || {
         manager
-            .agent_wake_due(&workspace, Some("e1"), true, true)
+            .agent_wake_due(&workspace, Some(&ExecutionId::from("e1")), true, true)
             .await
             .unwrap()
     };

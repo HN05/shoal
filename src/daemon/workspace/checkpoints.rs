@@ -1,5 +1,6 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
 //! until they expire, which `shoal work restore` returns the workspace to.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
@@ -255,7 +256,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         checkpoint: &Checkpoint,
-        own_execution: Option<&str>,
+        own_execution: Option<&ExecutionId>,
     ) -> Result<Checkpoint> {
         self.ensure_rewindable(workspace, checkpoint, own_execution)
             .await?;
@@ -285,7 +286,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         checkpoint: &Checkpoint,
-        own_execution: Option<&str>,
+        own_execution: Option<&ExecutionId>,
     ) -> Result<()> {
         if let Some(execution) = self.other_execution(&workspace.id, own_execution).await? {
             bail!(
@@ -322,9 +323,9 @@ impl Manager {
     async fn other_execution(
         &self,
         workspace_id: &SpaceId,
-        own: Option<&str>,
-    ) -> Result<Option<String>> {
-        let (id, own) = (workspace_id.to_owned(), own.map(str::to_owned));
+        own: Option<&ExecutionId>,
+    ) -> Result<Option<ExecutionId>> {
+        let (id, own) = (workspace_id.to_owned(), own.cloned());
         self.store
             .run(move |db| {
                 Ok(db

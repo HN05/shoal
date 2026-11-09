@@ -5,6 +5,7 @@
 //! agent registers, or while waiting once what it restores is gone, as after
 //! `shoal resume --now` or a discard. A restart's restore starts at once, in
 //! the slot its agent kept.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
@@ -40,7 +41,7 @@ struct Restore {
     id: String,
     target: Target,
     agent: String,
-    execution: String,
+    execution: ExecutionId,
     env: String,
     /// Shoal queued it on its own rather than `shoal resume`, so an agent
     /// stopped between turns waits for an update.
@@ -52,7 +53,7 @@ struct Restore {
 impl Restore {
     fn new(
         target: Target,
-        execution: &str,
+        execution: &ExecutionId,
         agent: &str,
         env: &BTreeMap<String, String>,
         automatic: bool,
@@ -162,7 +163,7 @@ fn open_workspaces(db: &Connection) -> Result<Vec<Target>> {
 }
 
 /// The recorded executions, which have not ended.
-fn recorded_executions(db: &Connection) -> Result<HashSet<String>> {
+fn recorded_executions(db: &Connection) -> Result<HashSet<ExecutionId>> {
     Ok(db
         .prepare("SELECT id FROM executions")?
         .query_map([], |row| row.get(0))?
@@ -185,7 +186,7 @@ fn restoring_workspaces(db: &Connection) -> Result<HashSet<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-fn stopped_restores(db: &Connection) -> Result<HashSet<String>> {
+fn stopped_restores(db: &Connection) -> Result<HashSet<ExecutionId>> {
     Ok(db
         .prepare("SELECT execution_id FROM agent_queue WHERE kind=?1 AND env IS NOT NULL")?
         .query_map([QueueKind::Restore], |row| row.get(0))?
@@ -193,7 +194,7 @@ fn stopped_restores(db: &Connection) -> Result<HashSet<String>> {
 }
 
 /// Each waiting restore the daemon starts: its ID, workspace and execution.
-fn waiting_restores(db: &Connection) -> Result<Vec<(String, SpaceId, String)>> {
+fn waiting_restores(db: &Connection) -> Result<Vec<(String, SpaceId, ExecutionId)>> {
     Ok(db
         .prepare(
             "SELECT id,workspace_id,execution_id FROM agent_queue
@@ -207,7 +208,7 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(String, SpaceId, String)>> {
 
 /// The IDs of the `waiting` restores whose recovery record or last session
 /// is gone. A file whose existence cannot be read counts as kept.
-fn resolved_restores(paths: &Paths, waiting: Vec<(String, SpaceId, String)>) -> Vec<String> {
+fn resolved_restores(paths: &Paths, waiting: Vec<(String, SpaceId, ExecutionId)>) -> Vec<String> {
     waiting
         .into_iter()
         .filter(|(_, workspace, execution)| {
@@ -221,7 +222,11 @@ fn resolved_restores(paths: &Paths, waiting: Vec<(String, SpaceId, String)>) -> 
 
 /// The agent stopped as `execution` in `workspace_id`, from its recovery
 /// record or else its last session.
-fn stopped_agent(paths: &Paths, workspace_id: &SpaceId, execution: &str) -> Result<Option<String>> {
+fn stopped_agent(
+    paths: &Paths,
+    workspace_id: &SpaceId,
+    execution: &ExecutionId,
+) -> Result<Option<String>> {
     let record = recovery::Record::load(&recovery::record_path(paths, workspace_id, execution))?;
     if let Some(record) = record {
         return Ok(Some(record.agent));
@@ -259,7 +264,7 @@ impl Manager {
     pub async fn queue_stopped_restore(
         &self,
         workspace: &SpaceSelector,
-        execution: &str,
+        execution: &ExecutionId,
         env: BTreeMap<String, String>,
     ) -> Result<QueueEntry> {
         self.add_stopped_restore(workspace, execution, env, false)
@@ -271,7 +276,7 @@ impl Manager {
     pub async fn start_stopped_restore(
         &self,
         workspace: &SpaceSelector,
-        execution: &str,
+        execution: &ExecutionId,
         env: BTreeMap<String, String>,
     ) -> Result<QueueEntry> {
         self.add_stopped_restore(workspace, execution, env, true)
@@ -287,7 +292,7 @@ impl Manager {
     async fn add_stopped_restore(
         &self,
         workspace: &SpaceSelector,
-        execution: &str,
+        execution: &ExecutionId,
         env: BTreeMap<String, String>,
         now: bool,
     ) -> Result<QueueEntry> {
@@ -303,7 +308,7 @@ impl Manager {
     async fn record_stopped_restore(
         &self,
         workspace: Workspace,
-        execution: &str,
+        execution: &ExecutionId,
         env: BTreeMap<String, String>,
         now: bool,
     ) -> Result<QueueEntry> {
@@ -322,7 +327,7 @@ impl Manager {
             .queue_entries()
             .await?
             .into_iter()
-            .find(|entry| entry.execution.as_deref() == Some(execution))
+            .find(|entry| entry.execution.as_ref() == Some(execution))
             .context("the restore already left the agent queue")?;
         match now && entry.state == QueueState::Queued {
             true => self.start_waiting(entry).await,
@@ -337,7 +342,7 @@ impl Manager {
     pub(crate) async fn admit_stopped_restore(
         &self,
         workspace: &Workspace,
-        execution: &str,
+        execution: &ExecutionId,
         id: String,
     ) -> Result<Start> {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
@@ -369,7 +374,7 @@ impl Manager {
         &self,
         workspace: &crate::model::Workspace,
         agent: &str,
-        execution: &str,
+        execution: &ExecutionId,
         code: i32,
     ) -> bool {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
@@ -430,7 +435,7 @@ impl Manager {
     async fn queue_requested_restore(
         &self,
         workspace: &Target,
-        execution: &str,
+        execution: &ExecutionId,
         env: &BTreeMap<String, String>,
     ) -> Result<()> {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
@@ -506,7 +511,7 @@ impl Manager {
     /// the queue, unlike one a waiting wrapper restores.
     pub(in crate::daemon::workspace) async fn queued_stopped_restores(
         &self,
-    ) -> Result<HashSet<String>> {
+    ) -> Result<HashSet<ExecutionId>> {
         self.store.run(|db| stopped_restores(db)).await
     }
 

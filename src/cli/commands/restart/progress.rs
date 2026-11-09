@@ -1,6 +1,7 @@
 //! What a run tells the user: a numbered line for each selected agent as
 //! its restart ends or is skipped, what goes on when it is interrupted, and
 //! with `--json` the object that lists them.
+use crate::client::execution_ids::ExecutionId;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -25,7 +26,7 @@ pub(super) struct Progress {
     position: usize,
     total: usize,
     /// The space of each agent to restart, by execution.
-    spaces: HashMap<String, String>,
+    spaces: HashMap<ExecutionId, String>,
 }
 
 impl Progress {

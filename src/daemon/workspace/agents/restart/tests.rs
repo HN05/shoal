@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use std::time::Duration;
 
@@ -25,7 +26,13 @@ async fn workspace(root: &std::path::Path, manager: &Manager) -> Workspace {
         .unwrap()
 }
 
-async fn track(manager: &Manager, workspace: &Workspace, id: &str, name: &str, recover: bool) {
+async fn track(
+    manager: &Manager,
+    workspace: &Workspace,
+    id: &ExecutionId,
+    name: &str,
+    recover: bool,
+) {
     manager
         .track_agent(
             id,
@@ -209,7 +216,7 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     assert!(!refused.contains("already stopping"), "{refused}");
     assert!(!manager.restart_requested(&stopped.plan.id).await);
     manager
-        .restart_agent("unknown", None, true, None)
+        .restart_agent(&ExecutionId::from("unknown"), None, true, None)
         .await
         .unwrap_err();
 }
@@ -588,7 +595,7 @@ async fn hand_over(
     workspace: &Workspace,
     execution: &crate::daemon::workspace::StartedExecution,
 ) -> tokio::task::JoinHandle<anyhow::Result<Option<Origin>>> {
-    let id = execution.plan.id.as_str();
+    let id = &execution.plan.id;
     track(manager, workspace, id, "claude", true).await;
     let restarting = tokio::spawn({
         let (manager, id) = (manager.clone(), id.to_owned());

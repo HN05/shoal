@@ -408,7 +408,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
             EventItem::Event(event) => event.details.agent.map(|agent| {
                 (
                     event.details.kind,
-                    agent.execution_id.unwrap(),
+                    agent.execution_id.unwrap().to_string(),
                     agent.exit_code,
                 )
             }),

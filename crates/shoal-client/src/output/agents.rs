@@ -1,5 +1,6 @@
 //! What commands that act on running agents print: `shoal stop`, `shoal
 //! restart` and the turn commands.
+use crate::execution_ids::ExecutionId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -139,7 +140,7 @@ pub struct Delivery {
 pub struct DetachedSession {
     pub workspace: crate::model::Workspace,
     pub agent: String,
-    pub execution_id: String,
+    pub execution_id: ExecutionId,
     pub pid: u32,
     pub log: std::path::PathBuf,
     #[serde(flatten)]

@@ -1,6 +1,7 @@
 //! Telling of a failed turn Shoal does not retry: once per execution until
 //! its agent ends a turn normally, so a run of failed turns adds one
 //! notification rather than one each.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Connection;
@@ -49,7 +50,11 @@ impl Unretried {
 
 /// Drop the workspace's retry and note that `execution`'s failed turn went
 /// unretried, together. Whether the note is new.
-fn record(tx: &rusqlite::Transaction<'_>, workspace_id: &SpaceId, execution: &str) -> Result<bool> {
+fn record(
+    tx: &rusqlite::Transaction<'_>,
+    workspace_id: &SpaceId,
+    execution: &ExecutionId,
+) -> Result<bool> {
     cancel(tx, workspace_id)?;
     let noted = tx.execute(
         "INSERT OR IGNORE INTO execution_unretried_turns(execution_id) VALUES (?1)",
@@ -63,7 +68,7 @@ fn record(tx: &rusqlite::Transaction<'_>, workspace_id: &SpaceId, execution: &st
 /// through, so the next failed turn is told again.
 pub(in crate::daemon::workspace) fn follow_state(
     db: &Connection,
-    execution: Option<&str>,
+    execution: Option<&ExecutionId>,
     previous: Option<AgentState>,
     state: AgentState,
 ) -> Result<()> {
@@ -86,7 +91,7 @@ impl Manager {
     pub(super) async fn leave_failed_turn(
         &self,
         workspace: &Workspace,
-        execution: &str,
+        execution: &ExecutionId,
         agent: &str,
         failure: TurnFailure,
         reason: Unretried,

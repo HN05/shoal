@@ -1,6 +1,7 @@
 //! `shoal resume` without `--now`, or from a caller without a terminal:
 //! queue each stopped agent's restore, which the daemon starts as the agent
 //! limits allow, or at once with `--now`.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
 
 use super::{claim_commands, reconcile_stale_execution, report_commands};
@@ -101,7 +102,7 @@ fn summary(count: usize, starting: bool) -> String {
 pub(super) async fn queue(
     ctx: &Context,
     workspace: &Workspace,
-    execution: &str,
+    execution: &ExecutionId,
     now: bool,
 ) -> Result<QueueEntry> {
     let inspection =

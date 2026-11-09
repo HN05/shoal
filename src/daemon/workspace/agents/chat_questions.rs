@@ -2,6 +2,7 @@
 //! and the turn's final message reaches the user's questions too, until the
 //! user answers there or replies in the conversation. A workspace's agent
 //! marks the turn of the execution it runs, and a chat's agent the chat's.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context, Result, ensure};
 
 use super::Manager;
@@ -19,7 +20,7 @@ impl Manager {
     pub(crate) async fn mark_chat_question(
         &self,
         selector: &SpaceSelector,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
     ) -> Result<()> {
         let (turn, agent, settings) = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
@@ -42,7 +43,7 @@ impl Manager {
     async fn workspace_turn(
         &self,
         workspace: &Workspace,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
     ) -> Result<(Turn, String, crate::config::Effective)> {
         let refusal = || {
             format!(
@@ -77,7 +78,7 @@ impl Manager {
     pub(crate) async fn ask_marked_chat_question(
         &self,
         selector: &SpaceSelector,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
         final_message: Option<String>,
     ) {
         let asked = async {
@@ -99,7 +100,7 @@ impl Manager {
     pub(crate) async fn reply_in_chat(
         &self,
         selector: &SpaceSelector,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
     ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
         let turn = self.marked_turn(selector, execution).await?;
         self.close_chat_questions(selector, turn).await
@@ -110,7 +111,7 @@ impl Manager {
     async fn marked_turn(
         &self,
         selector: &SpaceSelector,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
     ) -> Result<Option<Turn>> {
         Ok(match self.space(selector).await? {
             PresentSpace::Chat(chat) => Some(Turn::Chat(chat.id)),

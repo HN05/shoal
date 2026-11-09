@@ -6,6 +6,7 @@
 //! start, and either stays with the forge for other runners, as do the jobs
 //! of a repository whose runner was turned off. A job admitted as the system
 //! shuts down waits in the queue again.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
@@ -276,7 +277,11 @@ impl Manager {
             .await
     }
 
-    pub(super) async fn record_job_execution(&self, id: &str, execution: String) -> Result<()> {
+    pub(super) async fn record_job_execution(
+        &self,
+        id: &str,
+        execution: ExecutionId,
+    ) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -325,7 +330,7 @@ impl Manager {
         workspace: &Workspace,
         log: PathBuf,
         command: JobCommand,
-    ) -> Result<String> {
+    ) -> Result<ExecutionId> {
         let env: Vec<(&str, String)> = command
             .env
             .iter()
@@ -351,7 +356,7 @@ impl Manager {
         workspace: &Workspace,
         _log: PathBuf,
         command: JobCommand,
-    ) -> Result<String> {
+    ) -> Result<ExecutionId> {
         super::tests::launch(self, workspace, command).await
     }
 

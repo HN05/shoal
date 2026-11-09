@@ -1,5 +1,6 @@
 //! The proxy a tracked agent's wrapper runs, the key its requests name,
 //! and the reports it sends the daemon.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use anyhow::Context;
@@ -54,7 +55,7 @@ impl Running {
         &mut self,
         paths: &crate::paths::Paths,
         workspace: &SpaceId,
-        execution: &str,
+        execution: &ExecutionId,
         ends_turns: bool,
     ) {
         if let Some(events) = self.events.take() {
@@ -181,7 +182,7 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
 pub async fn forget_reports(
     paths: &crate::paths::Paths,
     workspace: &SpaceId,
-    execution: &str,
+    execution: &ExecutionId,
 ) -> bool {
     use crate::protocol::AgentMethod;
     let retry = AgentMethod::ReportProxyRetry {
@@ -202,7 +203,7 @@ pub async fn forget_reports(
 pub(super) struct Reporter {
     pub(super) paths: crate::paths::Paths,
     pub(super) workspace: SpaceId,
-    pub(super) execution: String,
+    pub(super) execution: ExecutionId,
     /// Whether a failure stream ends the agent's turn.
     pub(super) ends_turns: bool,
     /// What the daemon last took, so nothing is cleared that was never

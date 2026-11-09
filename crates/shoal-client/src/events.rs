@@ -1,4 +1,5 @@
 //! The workspace and chat event journal, as `shoal events` replays it.
+use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use std::{fmt, path::PathBuf, str::FromStr};
@@ -345,7 +346,7 @@ pub struct AgentEvent {
     /// The agent's name, such as `claude`.
     pub name: String,
     /// The execution that runs it; null for a chat's agent.
-    pub execution_id: Option<String>,
+    pub execution_id: Option<ExecutionId>,
     /// The code an agent exited with; null when its wrapper disconnected
     /// without reporting one, and for a start or stop.
     pub exit_code: Option<i32>,

@@ -1,6 +1,7 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
 use crate::cli::commands::resume::queue::QueuedExt;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
@@ -233,7 +234,7 @@ impl ReopenedExt for Reopened {
     }
 
     async fn queue_agents(&mut self, ctx: &Context) {
-        let executions: BTreeSet<String> = self
+        let executions: BTreeSet<ExecutionId> = self
             .removed
             .agents
             .iter()

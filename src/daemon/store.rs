@@ -1,5 +1,6 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::refusal::{Reason, Refusal};
@@ -583,7 +584,7 @@ fn executions_query() -> String {
     format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE workspace_id=?1")
 }
 
-pub fn find_execution(db: &Connection, id: &str) -> Result<Option<Execution>> {
+pub fn find_execution(db: &Connection, id: &ExecutionId) -> Result<Option<Execution>> {
     Ok(db
         .query_row(
             &format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE id=?1"),
@@ -601,7 +602,7 @@ pub fn executions(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Executi
 }
 
 /// The agent execution `id` runs, when it runs one.
-pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
+pub fn execution_agent(db: &Connection, id: &ExecutionId) -> Result<Option<String>> {
     Ok(db
         .query_row("SELECT agent FROM executions WHERE id=?1", [id], |row| {
             row.get(0)

@@ -1,4 +1,5 @@
 //! What `shoal resume` and `shoal work restore` print.
+use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +20,7 @@ pub struct StoppedCommands {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResumedAgent {
     pub workspace: String,
-    pub execution: String,
+    pub execution: ExecutionId,
     /// Whether it started in the background rather than where it stopped.
     pub background: bool,
     /// Whether it continues its session.
@@ -39,7 +40,7 @@ pub struct Resumed {
 /// The executions and saved chats a discard forgot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscardedWork {
-    pub discarded: Vec<String>,
+    pub discarded: Vec<ExecutionId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chats: Vec<Chat>,
     pub failed: Vec<Failure>,

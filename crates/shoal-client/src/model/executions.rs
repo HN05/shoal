@@ -1,5 +1,6 @@
 //! Executions and the plans and places they run with.
 use super::{MergePlan, PortReservation, UnmergePlan, Workspace};
+use crate::execution_ids::ExecutionId;
 use crate::processes::Identity;
 use crate::space_ids::SpaceId;
 use crate::state::ExecutionState;
@@ -8,7 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Execution {
-    pub id: String,
+    pub id: ExecutionId,
     pub workspace_id: SpaceId,
     pub state: ExecutionState,
     pub wrapper: Option<Identity>,
@@ -41,7 +42,7 @@ pub struct Execution {
 /// Everything the execution wrapper needs to launch a tracked command.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {
-    pub id: String,
+    pub id: ExecutionId,
     pub workspace: Workspace,
     pub scope_token: String,
     /// Absolute setup command path when the execution runs configured setup.

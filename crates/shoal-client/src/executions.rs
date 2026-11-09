@@ -1,6 +1,7 @@
 //! Tracked executions: what they run, where their executable came from, the
 //! agents Shoal stopped or that exited with a session to resume, and the
 //! retries of their failed turns.
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
@@ -162,7 +163,7 @@ pub struct Stop {
 /// again for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedAgent {
-    pub execution: String,
+    pub execution: ExecutionId,
     pub record: Record,
     /// When its record was saved, which `shoal resume` shows as its stop
     /// time.
@@ -178,7 +179,7 @@ pub struct LastSession {
     /// The execution the agent ran as, which `--execution` selects. Its file
     /// is named after it; one saved without it gets a new ID.
     #[serde(default = "unnamed_execution")]
-    pub execution: String,
+    pub execution: ExecutionId,
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
@@ -223,8 +224,8 @@ pub struct LastSession {
 }
 
 /// The key of a last session saved without its execution.
-pub fn unnamed_execution() -> String {
-    uuid::Uuid::new_v4().to_string()
+pub fn unnamed_execution() -> ExecutionId {
+    ExecutionId::generate()
 }
 
 /// A record's place: an origin, or the bare pane ID records kept before
@@ -298,7 +299,7 @@ pub struct Discarded {
     pub workspace: String,
     /// The execution IDs of the forgotten stopped agents, last sessions and
     /// commands.
-    pub executions: Vec<String>,
+    pub executions: Vec<ExecutionId>,
 }
 
 /// Refuse a caller other than a merge execution the user authorized.

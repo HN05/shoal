@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::{
     collections::HashSet,
     pin::Pin,
@@ -15,7 +16,7 @@ type BoxedScan = Pin<Box<dyn Future<Output = Result<Scan>> + Send>>;
 /// `gate` before finishing.
 #[derive(Clone)]
 struct Stub {
-    covered: Arc<Mutex<Vec<HashSet<String>>>>,
+    covered: Arc<Mutex<Vec<HashSet<ExecutionId>>>>,
     gate: Arc<Semaphore>,
 }
 
@@ -29,7 +30,7 @@ impl Default for Stub {
 }
 
 impl Stub {
-    fn scan(&self) -> impl Fn(HashSet<String>) -> BoxedScan + Send + 'static {
+    fn scan(&self) -> impl Fn(HashSet<ExecutionId>) -> BoxedScan + Send + 'static {
         let stub = self.clone();
         move |ids| {
             let stub = stub.clone();
@@ -41,7 +42,7 @@ impl Stub {
         }
     }
 
-    fn covered(&self) -> Vec<HashSet<String>> {
+    fn covered(&self) -> Vec<HashSet<ExecutionId>> {
         self.covered.lock().unwrap().clone()
     }
 
@@ -53,8 +54,8 @@ impl Stub {
     }
 }
 
-fn ids(names: &[&str]) -> HashSet<String> {
-    names.iter().map(|name| (*name).to_owned()).collect()
+fn ids(names: &[&str]) -> HashSet<ExecutionId> {
+    names.iter().map(|name| ExecutionId::from(*name)).collect()
 }
 
 fn check(scans: &Arc<SharedScans>, stub: &Stub, names: &[&str]) -> JoinHandle<Result<Arc<Scan>>> {

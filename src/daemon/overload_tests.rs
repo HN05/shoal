@@ -1,6 +1,7 @@
 use super::notifications::NotificationKind;
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{
@@ -1224,7 +1225,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
     serving.abort();
 }
 
-async fn only_execution(manager: &Manager, workspace: &crate::model::Workspace) -> String {
+async fn only_execution(manager: &Manager, workspace: &crate::model::Workspace) -> ExecutionId {
     let mut executions = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await

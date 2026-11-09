@@ -1,4 +1,5 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::BTreeMap,
@@ -358,7 +359,7 @@ impl Recovery {
         &self,
         paths: &Paths,
         workspace_id: &SpaceId,
-        id: &str,
+        id: &ExecutionId,
         reason: Option<&str>,
         place: Option<Origin>,
         restorer: Restorer,
@@ -373,7 +374,7 @@ impl Recovery {
         &self,
         paths: &Paths,
         workspace_id: &SpaceId,
-        id: &str,
+        id: &ExecutionId,
         reason: Option<&str>,
         place: Option<Origin>,
         restorer: Restorer,
@@ -387,7 +388,7 @@ impl Recovery {
 fn save_restorable(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     mut record: Record,
     restorer: Restorer,
 ) -> Result<PathBuf> {
@@ -425,7 +426,7 @@ pub(crate) trait RecordExt: Sized {
 
     /// This record, saved at `path`, as the last session of execution `id`,
     /// which keeps its agent, session, place and stop.
-    fn into_last_session(self, id: String, path: &Path) -> LastSession;
+    fn into_last_session(self, id: ExecutionId, path: &Path) -> LastSession;
 
     /// Whether the agent stopped between turns, with no work in flight. One
     /// whose turn is unknown counts as interrupted mid-turn.
@@ -467,7 +468,7 @@ impl RecordExt for Record {
         }
     }
 
-    fn into_last_session(self, id: String, path: &Path) -> LastSession {
+    fn into_last_session(self, id: ExecutionId, path: &Path) -> LastSession {
         let stop = Stop::of(&self, path);
         LastSession {
             execution: id,
@@ -520,7 +521,7 @@ impl RecordExt for Record {
 pub(crate) fn save_record(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     agent: &super::TrackedAgent,
     reason: Option<&str>,
     turn: Option<AgentState>,
@@ -533,7 +534,7 @@ pub(crate) fn save_record(
 pub(crate) fn save_record_stopped_by(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     agent: &super::TrackedAgent,
     reason: Option<&str>,
     turn: Option<AgentState>,
@@ -553,7 +554,7 @@ pub(crate) fn save_record_stopped_by(
 pub(crate) fn save_turn(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     turn: AgentState,
 ) -> Result<()> {
     let Some(record) = Record::load(&record_path(paths, workspace_id, id))? else {
@@ -572,7 +573,7 @@ pub(crate) fn save_turn(
 fn write_record(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     mut record: Record,
 ) -> Result<PathBuf> {
     let directory = paths.workspace_state(workspace_id);
@@ -613,7 +614,7 @@ fn write_record(
 fn request_restore(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     env: &BTreeMap<String, String>,
 ) -> Result<()> {
     crate::fsutil::atomic::replace_atomically(
@@ -633,7 +634,7 @@ fn request_restore(
 pub(crate) fn restore_requests(
     paths: &Paths,
     workspace_id: &SpaceId,
-) -> Result<Vec<(String, BTreeMap<String, String>)>> {
+) -> Result<Vec<(ExecutionId, BTreeMap<String, String>)>> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -653,7 +654,7 @@ pub(crate) fn restore_requests(
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok());
         if let Some(env) = env {
-            requests.push((id.to_owned(), env));
+            requests.push((ExecutionId::from(id.to_owned()), env));
         }
     }
     requests.sort();
@@ -664,12 +665,12 @@ pub(crate) fn restore_requests(
 pub(crate) fn forget_restore_request(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
 ) -> Result<()> {
     consume(&request_path(paths, workspace_id, id))
 }
 
-fn request_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
+fn request_path(paths: &Paths, workspace_id: &SpaceId, id: &ExecutionId) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join(format!("{id}{REQUEST_SUFFIX}"))
@@ -737,7 +738,7 @@ pub(crate) fn save_stopped_agents(
 pub(crate) fn keep_as_last_session(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     path: &Path,
     stopped_by: Option<&SpaceId>,
 ) -> Result<()> {
@@ -756,7 +757,11 @@ pub(crate) fn keep_as_last_session(
 
 /// Remove a record whose stop never reached the agent, returning whether it
 /// did. A record the wrapper saved after stopping the agent is kept.
-pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &SpaceId, id: &str) -> Result<bool> {
+pub(crate) fn discard_undelivered(
+    paths: &Paths,
+    workspace_id: &SpaceId,
+    id: &ExecutionId,
+) -> Result<bool> {
     let path = record_path(paths, workspace_id, id);
     match Record::load(&path)? {
         Some(record) if record.stage == Some(Stage::Stopping) => {
@@ -772,7 +777,7 @@ pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &SpaceId, id: &st
 pub(crate) fn stopped_by(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
 ) -> Result<Option<SpaceId>> {
     if let Some(record) = Record::load(&record_path(paths, workspace_id, id))? {
         return Ok(record.stopped_by);
@@ -783,7 +788,7 @@ pub(crate) fn stopped_by(
 
 /// The file keeping the agent stopped as `id`: its recovery record, or else
 /// its last session.
-pub(crate) fn saved_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
+pub(crate) fn saved_path(paths: &Paths, workspace_id: &SpaceId, id: &ExecutionId) -> PathBuf {
     let record = record_path(paths, workspace_id, id);
     if record.exists() {
         return record;
@@ -803,7 +808,7 @@ pub(crate) fn saved_place(path: &Path) -> Option<Origin> {
     serde_json::from_slice::<Placed>(&bytes).ok()?.origin
 }
 
-pub(crate) fn record_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
+pub(crate) fn record_path(paths: &Paths, workspace_id: &SpaceId, id: &ExecutionId) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join(format!("{id}{AGENT_SUFFIX}"))
@@ -827,7 +832,7 @@ pub(crate) fn valid_session(session: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
-fn session_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
+fn session_path(paths: &Paths, workspace_id: &SpaceId, id: &ExecutionId) -> PathBuf {
     paths
         .workspace_state(workspace_id)
         .join(format!("{id}{SESSION_SUFFIX}"))
@@ -838,7 +843,7 @@ fn session_path(paths: &Paths, workspace_id: &SpaceId, id: &str) -> PathBuf {
 pub(crate) fn save_session(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     session: &str,
 ) -> Result<bool> {
     if reported_session(paths, workspace_id, id).as_deref() == Some(session) {
@@ -857,14 +862,22 @@ pub(crate) fn save_session(
 }
 
 /// The session the hooks of execution `id` last reported.
-pub(crate) fn reported_session(paths: &Paths, workspace_id: &SpaceId, id: &str) -> Option<String> {
+pub(crate) fn reported_session(
+    paths: &Paths,
+    workspace_id: &SpaceId,
+    id: &ExecutionId,
+) -> Option<String> {
     std::fs::read_to_string(session_path(paths, workspace_id, id))
         .ok()
         .filter(|session| valid_session(session))
 }
 
 /// Forget the session of an execution that has ended.
-pub(crate) fn forget_session(paths: &Paths, workspace_id: &SpaceId, id: &str) -> Result<()> {
+pub(crate) fn forget_session(
+    paths: &Paths,
+    workspace_id: &SpaceId,
+    id: &ExecutionId,
+) -> Result<()> {
     consume(&session_path(paths, workspace_id, id))
 }
 
@@ -873,7 +886,7 @@ pub(crate) trait LastSessionExt: Sized {
     /// This session where it is not available, which starts a new one.
     fn moved(self) -> Self;
 
-    fn path(paths: &Paths, workspace_id: &SpaceId, execution: &str) -> PathBuf;
+    fn path(paths: &Paths, workspace_id: &SpaceId, execution: &ExecutionId) -> PathBuf;
 
     /// Save execution `id` of `agent` as one of the workspace's last
     /// sessions.
@@ -881,7 +894,7 @@ pub(crate) trait LastSessionExt: Sized {
         paths: &Paths,
         workspace_id: &SpaceId,
         agent: &super::TrackedAgent,
-        id: &str,
+        id: &ExecutionId,
     ) -> Result<()>;
 
     /// Save this as one of the workspace's last sessions.
@@ -907,7 +920,7 @@ impl LastSessionExt for LastSession {
         }
     }
 
-    fn path(paths: &Paths, workspace_id: &SpaceId, execution: &str) -> PathBuf {
+    fn path(paths: &Paths, workspace_id: &SpaceId, execution: &ExecutionId) -> PathBuf {
         paths
             .workspace_state(workspace_id)
             .join(format!("{execution}{LAST_SESSION_SUFFIX}"))
@@ -917,7 +930,7 @@ impl LastSessionExt for LastSession {
         paths: &Paths,
         workspace_id: &SpaceId,
         agent: &super::TrackedAgent,
-        id: &str,
+        id: &ExecutionId,
     ) -> Result<()> {
         Self {
             execution: id.to_owned(),
@@ -958,7 +971,7 @@ impl LastSessionExt for LastSession {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .map(|last| {
                     Some(Self {
-                        execution: execution.to_owned(),
+                        execution: ExecutionId::from(execution.to_owned()),
                         ..last
                     })
                 })
@@ -1008,7 +1021,7 @@ pub(crate) struct CommandRecord {
 pub(super) fn save_command(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     argv: &[OsString],
 ) -> Result<PathBuf> {
     // A lossy record would report a different command than the one stopped.
@@ -1100,15 +1113,15 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
 #[derive(Debug, Default)]
 pub(crate) struct Saved {
     /// Agent recovery records by execution ID.
-    pub agents: Vec<(String, PathBuf)>,
+    pub agents: Vec<(ExecutionId, PathBuf)>,
     /// Last sessions by execution ID.
-    pub sessions: Vec<(String, PathBuf)>,
+    pub sessions: Vec<(ExecutionId, PathBuf)>,
     pub commands: Vec<SavedCommand>,
 }
 
 #[derive(Debug)]
 pub(crate) struct SavedCommand {
-    pub id: String,
+    pub id: ExecutionId,
     pub path: PathBuf,
     pub argv: Vec<String>,
 }
@@ -1128,14 +1141,16 @@ impl Saved {
                 continue;
             };
             if let Some(id) = name.strip_suffix(AGENT_SUFFIX) {
-                saved.agents.push((id.to_owned(), path));
+                saved.agents.push((ExecutionId::from(id.to_owned()), path));
             } else if let Some(id) = name.strip_suffix(LAST_SESSION_SUFFIX) {
-                saved.sessions.push((id.to_owned(), path));
+                saved
+                    .sessions
+                    .push((ExecutionId::from(id.to_owned()), path));
             } else if let Some(id) = name.strip_suffix(COMMAND_SUFFIX) {
                 let record: CommandRecord = serde_json::from_slice(&std::fs::read(&path)?)
                     .with_context(|| format!("read {}", path.display()))?;
                 saved.commands.push(SavedCommand {
-                    id: id.to_owned(),
+                    id: ExecutionId::from(id.to_owned()),
                     path,
                     argv: record.argv,
                 });
@@ -1150,8 +1165,8 @@ impl Saved {
     /// Keep only the record or last session of execution `id`; a selected
     /// agent keeps the workspace's commands too when `with_commands`, so it
     /// receives them.
-    pub fn retain_execution(&mut self, id: &str, with_commands: bool) {
-        let selected = |(agent, _): &(String, PathBuf)| agent == id;
+    pub fn retain_execution(&mut self, id: &ExecutionId, with_commands: bool) {
+        let selected = |(agent, _): &(ExecutionId, PathBuf)| agent == id;
         if self.agents.iter().chain(&self.sessions).any(selected) {
             self.agents.retain(selected);
             self.sessions.retain(selected);
@@ -1161,7 +1176,7 @@ impl Saved {
         } else {
             self.agents.clear();
             self.sessions.clear();
-            self.commands.retain(|command| command.id == id);
+            self.commands.retain(|command| command.id == *id);
         }
     }
 
@@ -1176,7 +1191,7 @@ impl Saved {
     }
 
     /// Keep only the records of the executions `keep` selects.
-    pub fn retain(&mut self, keep: impl Fn(&str) -> bool) {
+    pub fn retain(&mut self, keep: impl Fn(&ExecutionId) -> bool) {
         self.agents.retain(|(id, _)| keep(id));
         self.sessions.retain(|(id, _)| keep(id));
         self.commands.retain(|command| keep(&command.id));
@@ -1193,7 +1208,7 @@ impl Saved {
     }
 
     /// The executions of the saved agents, last sessions and commands.
-    pub fn execution_ids(&self) -> Vec<String> {
+    pub fn execution_ids(&self) -> Vec<ExecutionId> {
         self.agents
             .iter()
             .chain(&self.sessions)
@@ -1256,7 +1271,7 @@ pub fn pending(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
 pub(crate) fn pending_except(
     paths: &Paths,
     workspace_id: &SpaceId,
-    excepted: impl Fn(&str) -> bool,
+    excepted: impl Fn(&ExecutionId) -> bool,
 ) -> Result<bool> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
@@ -1270,7 +1285,7 @@ pub(crate) fn pending_except(
         let execution = name
             .strip_suffix(AGENT_SUFFIX)
             .or_else(|| name.strip_suffix(COMMAND_SUFFIX));
-        if execution.is_some_and(|execution| !excepted(execution)) {
+        if execution.is_some_and(|execution| !excepted(&ExecutionId::from(execution.to_owned()))) {
             return Ok(true);
         }
     }
@@ -1278,7 +1293,7 @@ pub(crate) fn pending_except(
 }
 
 /// The executions of stopped agents that wait for `shoal resume` in the workspace.
-pub fn agent_records(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<String>> {
+pub fn agent_records(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<ExecutionId>> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -1288,7 +1303,7 @@ pub fn agent_records(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<String
     for entry in entries {
         let name = entry?.file_name();
         if let Some(id) = name.to_string_lossy().strip_suffix(AGENT_SUFFIX) {
-            records.push(id.to_owned());
+            records.push(ExecutionId::from(id.to_owned()));
         }
     }
     Ok(records)

@@ -1,4 +1,5 @@
 //! Persist verified execution completion and setup readiness in one transaction.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 
@@ -8,7 +9,7 @@ use crate::state::{ExecutionState, WorkspaceState};
 impl Manager {
     pub(super) async fn record_execution_completion(
         &self,
-        id: &str,
+        id: &ExecutionId,
         kind: ExecutionKind,
         exit_code: Option<i32>,
         issue: Option<String>,
@@ -32,7 +33,7 @@ impl Manager {
             .await
     }
 
-    pub(super) async fn delete_execution_record(&self, id: &str) -> Result<Option<String>> {
+    pub(super) async fn delete_execution_record(&self, id: &ExecutionId) -> Result<Option<String>> {
         let id = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
         self.store
@@ -49,7 +50,7 @@ impl Manager {
 /// that owns this execution; verification failure never readies it.
 fn record_setup_result(
     tx: &Transaction<'_>,
-    id: &str,
+    id: &ExecutionId,
     exit_code: Option<i32>,
     issue: Option<&str>,
 ) -> Result<()> {
@@ -77,7 +78,7 @@ fn record_setup_result(
 
 /// Retain unverified executions for recovery; only verified completion deletes
 /// the record, together with any demo it owns.
-fn record_execution_end(tx: &Transaction<'_>, id: &str, complete: bool) -> Result<()> {
+fn record_execution_end(tx: &Transaction<'_>, id: &ExecutionId, complete: bool) -> Result<()> {
     if complete {
         tx.execute("DELETE FROM executions WHERE id=?1", [id])?;
     } else {

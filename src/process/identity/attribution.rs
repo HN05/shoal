@@ -6,6 +6,7 @@ use super::{
     marks::{Evidence, Marker, Marks, Observed, observe, observe_elevated},
     owners, platform,
 };
+use crate::client::execution_ids::ExecutionId;
 use crate::{client::space_ids::SpaceId, protocol::timing};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -14,15 +15,26 @@ use std::{
     time::Duration,
 };
 
+/// A live process and the owner its marker names: an execution, unless a
+/// scan for another marker says otherwise.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OwnedProcess {
-    pub execution_id: String,
+pub struct OwnedProcess<Owner = ExecutionId> {
+    pub owner: Owner,
     pub identity: Identity,
 }
-#[derive(Default)]
-pub struct Scan {
-    pub processes: Vec<OwnedProcess>,
+
+pub struct Scan<Owner = ExecutionId> {
+    pub processes: Vec<OwnedProcess<Owner>>,
     pub unreadable: Vec<Unattributed>,
+}
+
+impl<Owner> Default for Scan<Owner> {
+    fn default() -> Self {
+        Self {
+            processes: Vec::new(),
+            unreadable: Vec::new(),
+        }
+    }
 }
 
 /// A live process no environment or ancestor attributes.
@@ -45,14 +57,14 @@ impl Unattributed {
 }
 
 /// Live same-user processes carrying one of the execution markers `ids`.
-pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
+pub async fn scan(ids: HashSet<ExecutionId>) -> Result<Scan> {
     scan_marked(Marker::Execution, ids).await
 }
 
 /// Live same-user processes carrying the identity of chat `id`: its agent
 /// and what the agent started with its environment.
 pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {
-    let scan = scan_marked(Marker::Chat, HashSet::from([id.to_string()])).await?;
+    let scan = scan_marked(Marker::Chat, HashSet::from([id.clone()])).await?;
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
@@ -61,12 +73,11 @@ pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {
 /// exported environment, each paired with the workspace it carries.
 /// Unreadable environments cannot be attributed and are left out.
 pub async fn scan_workspaces(ids: HashSet<SpaceId>) -> Result<Vec<(SpaceId, Identity)>> {
-    let ids = ids.into_iter().map(String::from).collect();
     let scan = scan_marked(Marker::Workspace, ids).await?;
     Ok(scan
         .processes
         .into_iter()
-        .map(|p| (SpaceId::from(p.execution_id), p.identity))
+        .map(|p| (p.owner, p.identity))
         .collect())
 }
 
@@ -78,18 +89,30 @@ pub async fn scan_oneshot_runs(runs: HashSet<String>) -> Result<Vec<Identity>> {
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
+/// An owner a marker names by its text: an execution, a space or a one-shot
+/// run.
+pub(super) trait Marked:
+    Clone + Eq + std::hash::Hash + std::borrow::Borrow<str> + Send + Sync + 'static
+{
+}
+
+impl<Owner> Marked for Owner where
+    Owner: Clone + Eq + std::hash::Hash + std::borrow::Borrow<str> + Send + Sync + 'static
+{
+}
+
 /// Inventory processes whose environment sets `marker` to one of `ids`; each
 /// match records the value it carries.
-async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
+async fn scan_marked<Owner: Marked>(marker: Marker, ids: HashSet<Owner>) -> Result<Scan<Owner>> {
     scan_remembering(&owners::OWNERS, marker, ids).await
 }
 
 /// `scan_marked`, consulting and updating `owners`.
-pub(super) async fn scan_remembering(
+pub(super) async fn scan_remembering<Owner: Marked>(
     owners: &'static owners::Owners,
     marker: Marker,
-    ids: HashSet<String>,
-) -> Result<Scan> {
+    ids: HashSet<Owner>,
+) -> Result<Scan<Owner>> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
@@ -159,7 +182,7 @@ pub(super) fn list_processes() -> Result<Listing> {
 /// an environment without the execution's marker by then.
 pub async fn stays_unattributed(
     identity: &Identity,
-    execution: &str,
+    execution: &ExecutionId,
     deadline: std::time::Instant,
 ) -> Result<bool> {
     let identity = identity.clone();
@@ -216,7 +239,11 @@ impl<'a> Inventory<'a> {
 
     /// Collect the scan of the observed processes whose `marker` is one of
     /// `ids`, checking that owned processes still live.
-    pub(super) fn attribute(&self, marker: Marker, ids: &HashSet<String>) -> Result<Scan> {
+    pub(super) fn attribute<Owner: Marked>(
+        &self,
+        marker: Marker,
+        ids: &HashSet<Owner>,
+    ) -> Result<Scan<Owner>> {
         let mut scan = Scan::default();
         for (pid, evidence) in self.attribute_all() {
             let identity = &self.observed[&pid].lineage.identity;
@@ -231,11 +258,11 @@ impl<'a> Inventory<'a> {
                 }
             };
             if let owners::Told::Owner(marks) = &evidence.told
-                && let Some(id) = marks.get(marker).filter(|id| ids.contains(*id))
+                && let Some(id) = marks.get(marker).and_then(|id| ids.get(id))
                 && alive(identity)?
             {
                 scan.processes.push(OwnedProcess {
-                    execution_id: id.to_owned(),
+                    owner: id.clone(),
                     identity: identity.clone(),
                 });
             }

@@ -3,6 +3,7 @@
 //! lives only in memory: the proxy lives and dies with the wrapper, so a
 //! restart that forgets it loses nothing that still runs. The reset is kept
 //! with the turn retries it holds back.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 
@@ -15,7 +16,7 @@ impl Manager {
     pub async fn report_proxy_retry(
         &self,
         selector: &SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
         retry: Option<ProxyRetry>,
     ) -> Result<()> {
         self.workspace(selector).await?;
@@ -34,7 +35,7 @@ impl Manager {
     pub async fn report_upstream_reset(
         &self,
         selector: &SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
         resets_at: Option<crate::time::UnixTime>,
     ) -> Result<()> {
         self.workspace(selector).await?;
@@ -45,7 +46,7 @@ impl Manager {
     /// is gone, and, when `ended` reports the execution's end, its
     /// upstream's reset. A wrapper that only lost its connection may come
     /// back with its proxy, and the reset still holds for it.
-    pub(super) async fn forget_proxy_retry(&self, execution: &str, ended: bool) {
+    pub(super) async fn forget_proxy_retry(&self, execution: &ExecutionId, ended: bool) {
         self.proxy_retries.lock().unwrap().remove(execution);
         if !ended {
             return;

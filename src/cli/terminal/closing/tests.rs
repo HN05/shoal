@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::terminal::Closes;
 use crate::time::UnixTime;
@@ -345,7 +346,7 @@ async fn inspect(
         crate::execution::recovery::save_record(
             &paths,
             &SpaceId::from("workspace"),
-            "agent",
+            &ExecutionId::from("agent"),
             &crate::execution::TrackedAgent::named("codex"),
             None,
             None,

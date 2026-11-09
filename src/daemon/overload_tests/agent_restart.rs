@@ -1,6 +1,7 @@
 //! `shoal restart` stops an agent and starts the saved session again: in a
 //! new wrapper the agent queue starts, or in place in the same terminal.
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     model::{QueueEntry, QueueRequest},
@@ -8,7 +9,7 @@ use crate::{
 };
 
 /// The execution of the workspace's only agent.
-async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace) -> String {
+async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace) -> ExecutionId {
     let agents = manager.running_agents().await.unwrap();
     let [agent] = agents.as_slice() else {
         panic!("expected one agent: {agents:?}");

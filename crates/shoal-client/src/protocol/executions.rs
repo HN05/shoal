@@ -1,3 +1,4 @@
+use crate::execution_ids::ExecutionId;
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -59,7 +60,7 @@ pub enum ExecutionMethod {
     /// selected, which may have ended already, as it was asked. `run` names
     /// the `shoal restart` run that asks.
     RestartAgent {
-        execution: String,
+        execution: ExecutionId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         join: Option<crate::model::PendingRestart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

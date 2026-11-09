@@ -1,6 +1,7 @@
 //! Long-lived execution connections: the daemon side of the wrapper protocol.
 //! The wrapper reports its child and completion; the daemon relays stop and
 //! recovery controls and records the outcome.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use std::sync::Arc;
@@ -51,7 +52,7 @@ pub(super) struct ExecutionContext {
 
 /// An execution whose wrapper holds this connection.
 struct Connected {
-    id: String,
+    id: ExecutionId,
     kind: ExecutionKind,
     workspace: Workspace,
     agent: Option<TrackedAgent>,
@@ -378,7 +379,7 @@ async fn relay(
     } = execution;
     let reattach = *reattach;
     let stopping = Stopping {
-        execution_id: execution_id.as_str(),
+        execution_id,
         kind: *kind,
         agent: agent.is_some(),
         recover: *recover,
@@ -550,7 +551,7 @@ async fn relay(
 /// registers again from `place`, or the stop that refuses it.
 async fn register_again(
     manager: &Manager,
-    id: &str,
+    id: &ExecutionId,
     workspace_id: &SpaceId,
     place: Option<ExecutionPlace>,
 ) -> Control {
@@ -568,7 +569,7 @@ async fn register_again(
 /// What decides the control a stop sends to a connected execution.
 #[derive(Clone, Copy)]
 struct Stopping<'a> {
-    execution_id: &'a str,
+    execution_id: &'a ExecutionId,
     kind: ExecutionKind,
     /// The execution runs a tracked agent.
     agent: bool,
@@ -777,7 +778,7 @@ async fn finish(
                 complete,
                 overload_reason
                     .as_deref()
-                    .map(|reason| (execution_id.as_str(), reason)),
+                    .map(|reason| (&execution_id, reason)),
             )
             .await;
     }
@@ -808,7 +809,7 @@ async fn finish(
 }
 
 /// What a space's log records of the agent that execution `id` runs.
-fn agent_event(agent: &TrackedAgent, id: &str, exit_code: Option<i32>) -> AgentEvent {
+fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -> AgentEvent {
     AgentEvent {
         name: agent.name.clone(),
         execution_id: Some(id.to_owned()),

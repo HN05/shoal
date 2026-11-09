@@ -1,6 +1,7 @@
 //! A running execution's wrapper registers again after continuing from the
 //! installed binary: it gets a new plan and records what its registration
 //! records.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
@@ -29,7 +30,7 @@ impl Manager {
     /// ports and environment are read again, as for a new execution.
     pub(crate) async fn reregister_execution(
         &self,
-        id: &str,
+        id: &ExecutionId,
         workspace_id: &SpaceId,
         place: Option<ExecutionPlace>,
     ) -> Result<ExecutionPlan> {
@@ -76,7 +77,7 @@ impl Manager {
 /// transaction, as [`Manager::persist_execution`] does for a new one.
 fn register_again(
     tx: &rusqlite::Transaction<'_>,
-    id: &str,
+    id: &ExecutionId,
     workspace_id: &SpaceId,
     place: Option<ExecutionPlace>,
     repository: &Repository,

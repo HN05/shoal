@@ -1,6 +1,7 @@
 //! Exclusive claims on saved records, so only one `shoal resume` restores,
 //! reports or discards each.
 use super::{Saved, consume};
+use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
 
 pub(crate) struct RecoveryClaim(std::fs::File);
@@ -49,7 +50,10 @@ fn lock_current(file: std::fs::File, path: &std::path::Path) -> Result<Option<Re
 }
 
 /// Forget saved records, returning their execution IDs.
-pub(crate) fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<String>> {
+pub(crate) fn discard_saved(
+    saved: &Saved,
+    active: impl Fn(&ExecutionId) -> bool,
+) -> Result<Vec<ExecutionId>> {
     let mut claims = Vec::new();
     for (id, path) in &saved.agents {
         ensure!(

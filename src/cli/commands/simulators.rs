@@ -1,4 +1,5 @@
 //! CLI simulator requests, retry policy, and audit rendering.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
 
 use super::acquisition::{Finish, obtain};
@@ -165,7 +166,10 @@ fn render_history_entry(entry: &AuditEntry) {
             .apps_removed
             .map(|n| n.to_string())
             .unwrap_or_else(|| "unknown/not erased".into()),
-        request.execution_id.as_deref().unwrap_or("unscoped caller"),
+        request
+            .execution_id
+            .as_ref()
+            .map_or("unscoped caller", ExecutionId::as_str),
         request.request.reason.as_deref().unwrap_or("MISSING"),
         optional(request.error.as_deref(), |e| format!("\n  {e}"))
     );

@@ -1,5 +1,6 @@
 //! Whether a terminal shows each tracked agent, as its wrapper reports, so
 //! protection stops the agents the user is not working with first.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 
@@ -12,7 +13,7 @@ impl Manager {
     pub(crate) async fn report_attached(
         &self,
         selector: &SpaceSelector,
-        execution: &str,
+        execution: &ExecutionId,
         attached: bool,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;

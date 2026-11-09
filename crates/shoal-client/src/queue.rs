@@ -1,5 +1,6 @@
 //! The agent queue: admitting launches under `max_agents`, the entries
 //! waiting, and the hold that keeps a starting entry's slot.
+use crate::execution_ids::ExecutionId;
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Result;
@@ -67,7 +68,7 @@ pub async fn fail(daemon: &impl Daemon, entry: String, error: String) -> Result<
 pub async fn restore(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    execution: String,
+    execution: ExecutionId,
     env: BTreeMap<String, String>,
     now: bool,
 ) -> Result<QueueEntry> {

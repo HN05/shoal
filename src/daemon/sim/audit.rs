@@ -1,5 +1,6 @@
 //! Audit trail for clean-device requests. Persisted before any destructive
 //! simctl action and retained after the workspace is gone.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
@@ -86,7 +87,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         request: &SimRequest,
-        execution_id: Option<String>,
+        execution_id: Option<ExecutionId>,
     ) -> Result<CleanRequest> {
         uuid::Uuid::parse_str(&request.request_id)?;
         let id = request.request_id.clone();

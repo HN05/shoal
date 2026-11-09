@@ -1,3 +1,4 @@
+use crate::execution_ids::ExecutionId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -58,7 +59,7 @@ pub enum QueueMethod {
     /// `env` once admitted, or with `now` at once, regardless of the limits.
     QueueRestore {
         workspace: SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
         env: std::collections::BTreeMap<String, String>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         now: bool,

@@ -1,4 +1,5 @@
 //! Explicit recovery: what to repair, and what an inspection found.
+use crate::execution_ids::ExecutionId;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -36,7 +37,7 @@ states!(DirectoryState {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionReport {
-    pub id: String,
+    pub id: ExecutionId,
     pub state: ExecutionState,
     pub connected: bool,
     pub wrapper_alive: bool,

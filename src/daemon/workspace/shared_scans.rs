@@ -3,6 +3,7 @@
 //! checks made at the same time inventory the processes once rather than once
 //! each, and none reads a scan that started before it asked. Destructive
 //! operations verify ownership with their own scans instead.
+use crate::client::execution_ids::ExecutionId;
 use std::{
     collections::HashSet,
     future::Future,
@@ -34,21 +35,21 @@ struct State {
 }
 
 struct Batch {
-    ids: HashSet<String>,
+    ids: HashSet<ExecutionId>,
     done: watch::Sender<Option<Outcome>>,
 }
 
 impl SharedScans {
     /// Live same-user processes carrying one of the execution markers
     /// `ids`, among others, from a scan that started after this call.
-    pub(crate) async fn scan(&self, ids: HashSet<String>) -> Result<Arc<Scan>> {
+    pub(crate) async fn scan(&self, ids: HashSet<ExecutionId>) -> Result<Arc<Scan>> {
         self.scan_with(ids, process::scan).await
     }
 
     /// [`Self::scan`] that runs a scan it starts with `scan`.
-    async fn scan_with<F, Fut>(&self, ids: HashSet<String>, scan: F) -> Result<Arc<Scan>>
+    async fn scan_with<F, Fut>(&self, ids: HashSet<ExecutionId>, scan: F) -> Result<Arc<Scan>>
     where
-        F: Fn(HashSet<String>) -> Fut + Send + 'static,
+        F: Fn(HashSet<ExecutionId>) -> Fut + Send + 'static,
         Fut: Future<Output = Result<Scan>> + Send + 'static,
     {
         if ids.is_empty() {
@@ -65,9 +66,9 @@ impl SharedScans {
     }
 
     /// Add `ids` to the next scan and start a task to run it unless one runs.
-    fn join<F, Fut>(&self, ids: HashSet<String>, scan: F) -> watch::Receiver<Option<Outcome>>
+    fn join<F, Fut>(&self, ids: HashSet<ExecutionId>, scan: F) -> watch::Receiver<Option<Outcome>>
     where
-        F: Fn(HashSet<String>) -> Fut + Send + 'static,
+        F: Fn(HashSet<ExecutionId>) -> Fut + Send + 'static,
         Fut: Future<Output = Result<Scan>> + Send + 'static,
     {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
@@ -90,7 +91,7 @@ impl SharedScans {
 /// stops waiting.
 async fn run<F, Fut>(state: Arc<Mutex<State>>, scan: F)
 where
-    F: Fn(HashSet<String>) -> Fut,
+    F: Fn(HashSet<ExecutionId>) -> Fut,
     Fut: Future<Output = Result<Scan>>,
 {
     let _runner = Runner(state.clone());

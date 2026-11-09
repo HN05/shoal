@@ -5,6 +5,7 @@
 //! persisted, so it outlasts a daemon restart, and knows no agent: any
 //! report of a failed turn schedules one, or tells of a turn Shoal does not
 //! retry.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
@@ -101,7 +102,7 @@ fn spread() -> f64 {
 fn record_failure(
     tx: &Transaction<'_>,
     workspace_id: &SpaceId,
-    execution: &str,
+    execution: &ExecutionId,
     failure: TurnFailure,
     now: UnixTime,
     spread: f64,
@@ -118,7 +119,11 @@ fn record_failure(
 /// until, and hold its pending turn retry until past it, together, so a
 /// failure recorded at the same time sees one or the other; `None` forgets
 /// it. Whether a pending retry was held.
-fn record_reset(tx: &Transaction<'_>, execution: &str, reset: Option<UnixTime>) -> Result<bool> {
+fn record_reset(
+    tx: &Transaction<'_>,
+    execution: &ExecutionId,
+    reset: Option<UnixTime>,
+) -> Result<bool> {
     let Some(reset) = reset else {
         forget_upstream_reset(tx, execution)?;
         return Ok(false);
@@ -138,7 +143,7 @@ fn record_reset(tx: &Transaction<'_>, execution: &str, reset: Option<UnixTime>) 
 
 /// When the upstream of `execution`'s proxy last said it refuses requests
 /// until.
-fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<UnixTime>> {
+fn upstream_reset(db: &Connection, execution: &ExecutionId) -> Result<Option<UnixTime>> {
     Ok(db
         .query_row(
             "SELECT resets_at FROM execution_upstream_resets WHERE execution_id=?1",
@@ -149,7 +154,7 @@ fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<UnixTime>> 
 }
 
 /// Forget the reset `execution`'s proxy reported.
-fn forget_upstream_reset(db: &Connection, execution: &str) -> Result<()> {
+fn forget_upstream_reset(db: &Connection, execution: &ExecutionId) -> Result<()> {
     db.execute(
         "DELETE FROM execution_upstream_resets WHERE execution_id=?1",
         [execution],
@@ -159,7 +164,7 @@ fn forget_upstream_reset(db: &Connection, execution: &str) -> Result<()> {
 
 /// The persisted attempt whose execution and policy determine its successor.
 struct PreviousAttempt {
-    execution: String,
+    execution: ExecutionId,
     failure: TurnFailure,
     attempt: u32,
     due_at: UnixTime,
@@ -189,14 +194,14 @@ fn previous_attempt(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Pr
 /// Keep a pending attempt or advance a delivered one under the same policy.
 fn next_attempt(
     previous: Option<PreviousAttempt>,
-    execution: &str,
+    execution: &ExecutionId,
     failure: TurnFailure,
     now: UnixTime,
     spread: f64,
 ) -> (u32, UnixTime) {
     let limited = |failure| failure == TurnFailure::RateLimited;
     let previous = previous.filter(|previous| {
-        previous.execution == execution && limited(previous.failure) == limited(failure)
+        previous.execution == *execution && limited(previous.failure) == limited(failure)
     });
     match previous {
         Some(previous) if !previous.delivered => (previous.attempt, previous.due_at),
@@ -212,7 +217,7 @@ fn next_attempt(
 fn save_retry(
     db: &Connection,
     workspace_id: &SpaceId,
-    execution: &str,
+    execution: &ExecutionId,
     failure: TurnFailure,
     attempt: u32,
     due_at: UnixTime,
@@ -371,7 +376,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         failure: TurnFailure,
-        execution: &str,
+        execution: &ExecutionId,
     ) {
         if let Err(error) = self.schedule_turn_retry(selector, failure, execution).await {
             log!("turn retry for {selector}: {error:#}");
@@ -382,7 +387,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         failure: TurnFailure,
-        execution: &str,
+        execution: &ExecutionId,
     ) -> Result<()> {
         let Some(agent) = self.agent_name(execution).await else {
             return Ok(());
@@ -407,7 +412,7 @@ impl Manager {
     /// it; `None` forgets it.
     pub(super) async fn record_upstream_reset(
         &self,
-        execution: String,
+        execution: ExecutionId,
         reset: Option<UnixTime>,
     ) -> Result<()> {
         if self

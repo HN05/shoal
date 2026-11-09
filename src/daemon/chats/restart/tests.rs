@@ -69,7 +69,11 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
     assert_eq!(stopper, coordinator);
     let agents = manager.running_chat_agents().await.unwrap();
-    assert!(agents.iter().all(|agent| agent.execution != chat.id));
+    assert!(
+        agents
+            .iter()
+            .all(|agent| agent.execution.as_str() != chat.id.as_str())
+    );
 }
 
 /// A chat a coordinator stopped is the user's to resume once its restored
@@ -249,6 +253,8 @@ async fn a_chat_whose_settings_cannot_be_read_does_not_fail_the_listing() {
     std::fs::write(repo.path.join(".shoal.toml"), "agents = [").unwrap();
 
     let agents = manager.running_chat_agents().await.unwrap();
-    let listed = agents.iter().find(|agent| agent.execution == chat.id);
+    let listed = agents
+        .iter()
+        .find(|agent| agent.execution.as_str() == chat.id.as_str());
     assert!(listed.is_some_and(|agent| !agent.restorable), "{agents:?}");
 }

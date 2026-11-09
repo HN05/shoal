@@ -1,4 +1,5 @@
 use crate::client::assignments::Done;
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -58,7 +59,7 @@ async fn agent(config: &str) -> Running {
 async fn another_agent(
     manager: &Manager,
     name: &str,
-) -> (Workspace, String, tokio::sync::watch::Receiver<bool>) {
+) -> (Workspace, ExecutionId, tokio::sync::watch::Receiver<bool>) {
     let repo = manager.repositories().await.unwrap().remove(0);
     let workspace = manager
         .create_workspace(&repo.id, name.into(), None, None, None)
@@ -90,7 +91,7 @@ type Running = (
     tempfile::TempDir,
     std::sync::Arc<Manager>,
     Workspace,
-    String,
+    ExecutionId,
     tokio::sync::watch::Receiver<bool>,
 );
 
@@ -442,7 +443,7 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
 }
 
 /// The reset `execution`'s proxy reported, as the daemon keeps it.
-async fn stored_reset(manager: &Manager, execution: &str) -> Option<UnixTime> {
+async fn stored_reset(manager: &Manager, execution: &ExecutionId) -> Option<UnixTime> {
     let execution = execution.to_owned();
     manager
         .store

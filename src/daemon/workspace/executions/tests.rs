@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{install_test_script, manager, repository};
 use crate::daemon::workspace::agents::ProtectionExt;
@@ -162,7 +163,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
     fs::write(workspace.path.join("hook-release"), "").unwrap();
     let started = bounded(starting).await.unwrap().unwrap();
     assert!(*started.stop.borrow());
-    assert_eq!(Some(started.plan.id.as_str()), caller.execution_id());
+    assert_eq!(Some(&started.plan.id), caller.execution_id());
     assert_eq!(started.plan.scope_token, token);
     assert!(
         manager
@@ -626,7 +627,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     };
     for request in [
         Reattach {
-            execution: Uuid::new_v4().to_string(),
+            execution: ExecutionId::generate(),
             ..request.clone()
         },
         Reattach {
@@ -653,7 +654,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     assert_eq!(reattached.workspace.id, workspace.id);
     assert!(manager.executions.is_connected(&id).await);
     let caller = manager.caller(&token).await.unwrap().unwrap();
-    assert_eq!(caller.execution_id(), Some(id.as_str()));
+    assert_eq!(caller.execution_id(), Some(&id));
     assert_eq!(caller.kind(), Some(ExecutionKind::Command));
     assert!(manager.executions.with_agent(&id, |_| ()).await.is_some());
     let inspection = manager

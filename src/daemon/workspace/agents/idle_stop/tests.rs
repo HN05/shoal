@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
@@ -312,7 +313,7 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
 
 /// The sweep's choice to stop `execution` as idle in a held done workspace
 /// when it had started `turns_started` turns.
-fn chosen_held(execution: &str, turns_started: u64) -> HashMap<String, Chosen> {
+fn chosen_held(execution: &ExecutionId, turns_started: u64) -> HashMap<ExecutionId, Chosen> {
     let stop = Chosen {
         protection: Protection::idle_held(),
         turns_started,

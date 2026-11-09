@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::{execution_ids::ExecutionId, space_ids::SpaceId, space_names::SpaceSelector},
     daemon::workspace::Manager,
     model::{AgentStatus, Workspace},
     time::UnixTime,
@@ -28,7 +28,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         due: bool,
-        hooked: Option<&str>,
+        hooked: Option<&ExecutionId>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so a change in between still wakes.
@@ -139,7 +139,7 @@ impl Manager {
     pub(super) async fn agent_wake_due(
         &self,
         workspace: &Workspace,
-        hooked: Option<&str>,
+        hooked: Option<&ExecutionId>,
         messages_due: bool,
         arming: bool,
     ) -> Result<bool> {
@@ -167,7 +167,12 @@ impl Manager {
     /// [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait. A turn
     /// that ran that long without a delivery leaves no wait behind it either,
     /// so the hook starting as it ends gets the delay too.
-    async fn hook_cannot_wake(&self, id: &SpaceId, execution: &str, idle: &AgentStatus) -> bool {
+    async fn hook_cannot_wake(
+        &self,
+        id: &SpaceId,
+        execution: &ExecutionId,
+        idle: &AgentStatus,
+    ) -> bool {
         self.turn_interrupted(execution).await
             || (idled_for(idle, UNWATCHED_WAKE_DELAY)
                 && self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))

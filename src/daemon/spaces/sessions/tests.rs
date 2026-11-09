@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::LastSessionExt;
 use std::time::Duration;
 
@@ -20,7 +21,7 @@ async fn agent(
     workspace: &Workspace,
     name: &str,
     session: &str,
-) -> Result<String> {
+) -> Result<ExecutionId> {
     let id = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await?

@@ -4,6 +4,7 @@ use super::marks::{
 };
 use super::platform::parent;
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::processes::UniqueId;
 use std::collections::HashMap;
 
@@ -129,7 +130,12 @@ async fn children_of_an_orphaned_group_member_are_owned_with_a_live_leader() -> 
     while parent(member).and_then(parent) == Some(identity.pid) {
         tokio::task::yield_now().await;
     }
-    let (owned, _) = related(Some(&identity), Some(identity.pid), Some("execution")).await?;
+    let (owned, _) = related(
+        Some(&identity),
+        Some(identity.pid),
+        Some(&ExecutionId::from("execution")),
+    )
+    .await?;
     signal(&child, libc::SIGKILL)?;
     leader.stdin.take().context("stdin")?.shutdown().await?;
     assert!(owned.contains(&child));
@@ -181,8 +187,12 @@ async fn an_exited_commands_background_job_is_owned_through_its_lineage() -> Res
     }
     command.stdin.take().context("stdin")?.shutdown().await?;
     command.wait().await?;
-    let (owned, candidates) =
-        related(Some(&identity), Some(identity.pid), Some("execution")).await?;
+    let (owned, candidates) = related(
+        Some(&identity),
+        Some(identity.pid),
+        Some(&ExecutionId::from("execution")),
+    )
+    .await?;
     signal(&job, libc::SIGKILL)?;
     assert!(owned.contains(&job));
     assert!(!candidates.contains(&job));
@@ -232,12 +242,18 @@ fn inventory<const N: usize>(
 
 fn describe(attribution: Attribution) -> String {
     match attribution {
-        Attribution::Owned(marks) => format!("owned by {}", marks.execution.unwrap_or_default()),
+        Attribution::Owned(marks) => format!(
+            "owned by {}",
+            marks.execution.map(String::from).unwrap_or_default()
+        ),
         Attribution::Foreign => "foreign".into(),
         Attribution::Remembered(owners::Evidence {
             told: owners::Told::Owner(marks),
             ..
-        }) => format!("owned by {}", marks.execution.unwrap_or_default()),
+        }) => format!(
+            "owned by {}",
+            marks.execution.map(String::from).unwrap_or_default()
+        ),
         Attribution::Remembered(_) => "foreign".into(),
         Attribution::Unknown(head) => format!("unknown under {}", head.pid),
     }
@@ -430,7 +446,7 @@ fn a_live_parent_is_judged_by_its_reading_not_its_remembered_owner() -> Result<(
 /// daemon remembers who owned it from an inventory made while they lived.
 #[tokio::test]
 async fn a_job_stays_owned_after_its_shell_and_agent_exit() -> Result<()> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = ExecutionId::generate();
     let mut agent = tokio::process::Command::new(std::env::current_exe()?)
         .args([
             "--exact",
@@ -542,7 +558,7 @@ fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Resul
     assert_eq!(resolve(starter(marked("execution"))), "owned by execution");
     // The setuid program is never reported itself.
     let scan = starter(marked("execution"))
-        .attribute(Marker::Execution, &HashSet::from(["execution".into()]))?;
+        .attribute(Marker::Execution, &HashSet::from(["execution".to_owned()]))?;
     assert!(scan.unreadable.is_empty());
     assert!(
         scan.processes
@@ -583,7 +599,7 @@ async fn an_adopted_job_with_a_hidden_environment_is_unreadable() -> Result<()> 
     let scan = scan_remembering(
         owners,
         Marker::Execution,
-        HashSet::from(["unrelated-execution".into()]),
+        HashSet::from(["unrelated-execution".to_owned()]),
     )
     .await;
     signal(&job, libc::SIGKILL)?;
@@ -844,7 +860,7 @@ async fn settled_empty_environment_is_readable_and_has_no_execution_marker() {
 
 #[tokio::test]
 async fn discovers_marked_processes_and_rejects_changed_identity() {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = ExecutionId::generate();
     let mut child = crate::test_support::spawn_marked_child(
         crate::test_support::marked_child().env(crate::env::EXECUTION_ID, &id),
     );
@@ -854,7 +870,7 @@ async fn discovers_marked_processes_and_rejects_changed_identity() {
         inventory
             .processes
             .iter()
-            .any(|p| p.identity == identity && p.execution_id == id)
+            .any(|p| p.identity == identity && p.owner == id)
     );
 
     let changed = Identity {

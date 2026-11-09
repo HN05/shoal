@@ -1,6 +1,7 @@
 //! `shoal queue move` of a running agent: its wrapper stops it as after a
 //! protection stop and restores it in the same terminal once the agent queue
 //! starts its restore, which needs only a free slot.
+use crate::client::execution_ids::ExecutionId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, bail, ensure};
 
@@ -10,7 +11,7 @@ use crate::{execution::recovery, model::Workspace, protocol::Protection};
 impl Manager {
     /// The execution of the one agent running in `workspace`, refusing one
     /// that cannot restore in place, as `shoal restart` does.
-    pub(crate) async fn movable_agent(&self, workspace: &Workspace) -> Result<String> {
+    pub(crate) async fn movable_agent(&self, workspace: &Workspace) -> Result<ExecutionId> {
         let name = &workspace.name;
         let agents: Vec<_> = self
             .running_agents()
@@ -37,13 +38,13 @@ impl Manager {
     /// Stop the agent of `id` for its restore to wait in the agent queue,
     /// saving its record first, so a wrapper that dies stopping it leaves
     /// it for `shoal resume`.
-    pub(crate) async fn stop_for_queue_move(&self, id: &str) -> Result<()> {
+    pub(crate) async fn stop_for_queue_move(&self, id: &ExecutionId) -> Result<()> {
         self.executions
             .with_agents(|agents| self.stop_moved(id, agents.get_mut(id)))
             .await
     }
 
-    fn stop_moved(&self, id: &str, agent: Option<&mut Agent>) -> Result<()> {
+    fn stop_moved(&self, id: &ExecutionId, agent: Option<&mut Agent>) -> Result<()> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         ensure!(
             agent.recover,

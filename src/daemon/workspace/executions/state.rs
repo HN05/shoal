@@ -8,6 +8,7 @@
 //! requests. Agents, renewals and stop requests are reached only through
 //! closures, which cannot await another lock, or through [`Connections`],
 //! which already holds the first.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -55,19 +56,19 @@ impl std::fmt::Display for Completing {
 #[derive(Default)]
 pub(crate) struct Executions {
     /// Connected executions and the channel that asks their wrapper to stop.
-    connections: Mutex<HashMap<String, watch::Sender<bool>>>,
-    agents: Mutex<HashMap<String, Agent>>,
+    connections: Mutex<HashMap<ExecutionId, watch::Sender<bool>>>,
+    agents: Mutex<HashMap<ExecutionId, Agent>>,
     /// Restarts that start their agent in a new wrapper, by the execution
     /// the agent ran as, taken only with the agents lock held.
     renewals: StdMutex<Renewals>,
     /// Why the daemon asked connected executions to stop.
-    stop_requests: Mutex<HashMap<String, StopRequest>>,
+    stop_requests: Mutex<HashMap<ExecutionId, StopRequest>>,
     /// Connected executions whose wrapper stops instead of reattaching when
     /// the daemon shuts down.
-    unattachable: StdMutex<HashSet<String>>,
+    unattachable: StdMutex<HashSet<ExecutionId>>,
     /// Connected executions whose wrapper reported its exit, by the
     /// completion step the daemon is on.
-    completing: StdMutex<HashMap<String, Completing>>,
+    completing: StdMutex<HashMap<ExecutionId, Completing>>,
     /// Recent demo launches whose execution ended before their command ran,
     /// for the start waiting on each.
     unrun_demo_launches: StdMutex<VecDeque<String>>,
@@ -90,13 +91,13 @@ impl Executions {
         }
     }
 
-    pub(crate) async fn is_connected(&self, id: &str) -> bool {
+    pub(crate) async fn is_connected(&self, id: &ExecutionId) -> bool {
         self.connections().await.is_connected(id)
     }
 
     /// Every execution with a connection, including one whose wrapper is
     /// going.
-    pub(crate) async fn connection_ids(&self) -> HashSet<String> {
+    pub(crate) async fn connection_ids(&self) -> HashSet<ExecutionId> {
         self.connections.lock().await.keys().cloned().collect()
     }
 
@@ -106,7 +107,7 @@ impl Executions {
 
     /// Drop the connection of `id` and what the daemon kept for it, returning
     /// whether it ran an agent.
-    pub(crate) async fn disconnect(&self, id: &str) -> bool {
+    pub(crate) async fn disconnect(&self, id: &ExecutionId) -> bool {
         self.connections().await.disconnect(id).await
     }
 
@@ -134,14 +135,14 @@ impl Executions {
     }
 
     /// Why the daemon asked a connected execution to stop, if it did.
-    pub(crate) async fn stop_request(&self, id: &str) -> Option<StopRequest> {
+    pub(crate) async fn stop_request(&self, id: &ExecutionId) -> Option<StopRequest> {
         self.stop_requests.lock().await.get(id).cloned()
     }
 
     /// Run `f` on the tracked agent of `id`, if there is one.
     pub(crate) async fn with_agent<R>(
         &self,
-        id: &str,
+        id: &ExecutionId,
         f: impl FnOnce(&mut Agent) -> R,
     ) -> Option<R> {
         self.agents.lock().await.get_mut(id).map(f)
@@ -150,7 +151,7 @@ impl Executions {
     /// Run `f` on every tracked agent, by execution.
     pub(crate) async fn with_agents<R>(
         &self,
-        f: impl FnOnce(&mut HashMap<String, Agent>) -> R,
+        f: impl FnOnce(&mut HashMap<ExecutionId, Agent>) -> R,
     ) -> R {
         f(&mut *self.agents.lock().await)
     }
@@ -159,7 +160,7 @@ impl Executions {
     /// agent in a new wrapper.
     pub(crate) async fn with_restarts<R>(
         &self,
-        f: impl FnOnce(&mut HashMap<String, Agent>, &mut Renewals) -> R,
+        f: impl FnOnce(&mut HashMap<ExecutionId, Agent>, &mut Renewals) -> R,
     ) -> R {
         let mut agents = self.agents.lock().await;
         let mut renewals = self.renewals.lock().unwrap_or_else(PoisonError::into_inner);
@@ -167,7 +168,7 @@ impl Executions {
     }
 
     /// Record that a restart would stop this connected execution.
-    pub(crate) fn mark_unattachable(&self, id: &str) {
+    pub(crate) fn mark_unattachable(&self, id: &ExecutionId) {
         self.unattachable
             .lock()
             .expect("unattachable executions lock")
@@ -185,7 +186,7 @@ impl Executions {
     }
 
     /// Record the completion step a connected execution is on.
-    pub(crate) fn set_completing(&self, id: &str, step: Completing) {
+    pub(crate) fn set_completing(&self, id: &ExecutionId, step: Completing) {
         self.completing
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -194,7 +195,7 @@ impl Executions {
 
     /// The completion step of a connected execution whose wrapper reported
     /// its exit.
-    pub(crate) fn completing(&self, id: &str) -> Option<Completing> {
+    pub(crate) fn completing(&self, id: &ExecutionId) -> Option<Completing> {
         self.completing
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -256,7 +257,7 @@ impl Executions {
 /// The connections lock, held while registering or stopping executions.
 pub(crate) struct Connections<'a> {
     executions: &'a Executions,
-    senders: MutexGuard<'a, HashMap<String, watch::Sender<bool>>>,
+    senders: MutexGuard<'a, HashMap<ExecutionId, watch::Sender<bool>>>,
 }
 
 impl Connections<'_> {
@@ -270,14 +271,14 @@ impl Connections<'_> {
     }
 
     /// Whether the wrapper of `id` is connected and listening.
-    pub(crate) fn is_connected(&self, id: &str) -> bool {
+    pub(crate) fn is_connected(&self, id: &ExecutionId) -> bool {
         self.senders
             .get(id)
             .is_some_and(|sender| !sender.is_closed())
     }
 
     /// The channel that stops the wrapper of `id`.
-    pub(crate) fn stop_channel(&self, id: &str) -> Option<&watch::Sender<bool>> {
+    pub(crate) fn stop_channel(&self, id: &ExecutionId) -> Option<&watch::Sender<bool>> {
         self.senders.get(id)
     }
 
@@ -285,11 +286,11 @@ impl Connections<'_> {
     /// scope token act for the execution.
     pub(crate) async fn connect(
         &mut self,
-        id: &str,
+        id: &ExecutionId,
         kind: ExecutionKind,
         workspace_id: &SpaceId,
         scope_token: String,
-        agent_execution: Option<String>,
+        agent_execution: Option<ExecutionId>,
         stopped: bool,
     ) -> watch::Receiver<bool> {
         let (sender, stop) = watch::channel(stopped);
@@ -316,7 +317,7 @@ impl Connections<'_> {
     /// whether the wrapper was asked.
     pub(crate) async fn stop(
         &self,
-        id: &str,
+        id: &ExecutionId,
         request: &StopRequest,
         spare_protected: bool,
     ) -> Result<bool> {
@@ -350,7 +351,7 @@ impl Connections<'_> {
     /// Run `f` on every tracked agent, by execution.
     pub(crate) async fn with_agents<R>(
         &self,
-        f: impl FnOnce(&mut HashMap<String, Agent>) -> R,
+        f: impl FnOnce(&mut HashMap<ExecutionId, Agent>) -> R,
     ) -> R {
         self.executions.with_agents(f).await
     }
@@ -359,14 +360,14 @@ impl Connections<'_> {
     /// agent in a new wrapper.
     pub(crate) async fn with_restarts<R>(
         &self,
-        f: impl FnOnce(&mut HashMap<String, Agent>, &mut Renewals) -> R,
+        f: impl FnOnce(&mut HashMap<ExecutionId, Agent>, &mut Renewals) -> R,
     ) -> R {
         self.executions.with_restarts(f).await
     }
 
     /// Drop the connection of `id`, then, without the lock, what the daemon
     /// kept for it, returning whether it ran an agent.
-    pub(crate) async fn disconnect(mut self, id: &str) -> bool {
+    pub(crate) async fn disconnect(mut self, id: &ExecutionId) -> bool {
         self.senders.remove(id);
         let executions = self.executions;
         drop(self);

@@ -1,6 +1,7 @@
 //! What a stop saved for `shoal resume`: keeping stopped agents as last
 //! sessions after `shoal stop`, and forgetting them, which the daemon does so
 //! it can confine coordinating agents to the workspaces below theirs.
+use crate::client::execution_ids::ExecutionId;
 pub use crate::client::executions::Discarded;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
@@ -15,17 +16,17 @@ pub(super) struct Stopper<'a> {
     /// The ID of the process's workspace.
     pub(super) workspace: &'a SpaceId,
     /// The executions the stop ended.
-    pub(super) executions: Vec<String>,
+    pub(super) executions: Vec<ExecutionId>,
 }
 
 impl Manager {
     /// The executions of workspace `id` that nothing stopped yet. An agent
     /// that already saved its recovery record was stopped before, such as
     /// one whose wrapper waits to restore it after a protection stop.
-    pub(super) async fn unstopped_executions(&self, id: &SpaceId) -> Result<Vec<String>> {
+    pub(super) async fn unstopped_executions(&self, id: &SpaceId) -> Result<Vec<ExecutionId>> {
         let executions = self.workspace_executions(id).await?;
         let stopped_before =
-            |execution: &str| recovery::record_path(&self.paths, id, execution).exists();
+            |execution: &ExecutionId| recovery::record_path(&self.paths, id, execution).exists();
         Ok(executions
             .into_iter()
             .map(|execution| execution.id)
@@ -79,7 +80,7 @@ impl Manager {
     pub async fn discard_stopped_work(
         &self,
         selector: &SpaceSelector,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
     ) -> Result<Discarded> {
         let workspace = self.workspace(selector).await?;
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
@@ -91,7 +92,7 @@ impl Manager {
             "no stopped agents or commands for this workspace"
         );
         let executions = self.workspace_executions(&workspace.id).await?;
-        let active = |id: &str| executions.iter().any(|e| e.id == id);
+        let active = |id: &ExecutionId| executions.iter().any(|e| e.id == *id);
         let executions = recovery::discard_saved(&saved, active)?;
         // The saved sessions are files, so no stored change announces it.
         self.signals.agent_changed();

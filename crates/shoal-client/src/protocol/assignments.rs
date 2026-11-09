@@ -1,3 +1,4 @@
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,6 @@ pub enum AssignmentMethod {
     /// or else its last session.
     DiscardStoppedWork {
         workspace: SpaceSelector,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
     },
 }

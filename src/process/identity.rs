@@ -4,6 +4,7 @@
 //! explicit execution marker, ancestor PIDs, scoped ancestors' state
 //! directories and the working directories of a space's untracked processes
 //! leave this module.
+use crate::client::execution_ids::ExecutionId;
 pub(crate) use crate::client::processes::Identity;
 use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
@@ -341,7 +342,7 @@ pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Resul
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
-    execution: Option<&str>,
+    execution: Option<&ExecutionId>,
 ) -> Result<(Vec<Identity>, Vec<Identity>)> {
     let Some(group) = group else {
         return Ok((vec![], vec![]));
@@ -370,7 +371,7 @@ pub async fn related(
     let Some(root) = child.and_then(Identity::lineage_root) else {
         return Ok((vec![], identities));
     };
-    let execution = execution.map(str::to_owned);
+    let execution = execution.cloned();
     let lineage = tokio::task::spawn_blocking(move || descended_from(root, &rows, execution))
         .await
         .context("process lineage worker failed")??;
@@ -427,7 +428,7 @@ fn descendants(mut pids: HashSet<u32>, rows: &[(u32, u32, u32)]) -> HashSet<u32>
 fn descended_from(
     root: u64,
     rows: &[(u32, u32, u32)],
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
 ) -> Result<Vec<Identity>> {
     let mut lineages = Vec::new();
     for (pid, _, _) in rows {

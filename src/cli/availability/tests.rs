@@ -110,7 +110,7 @@ fn agent_places_set_stopped_agents_apart() {
         |name: &str| crate::sessions::Origin::created(crate::sessions::HostName::Zmx, name.into());
     let (running, stopped, gone) = (place("running"), place("stopped"), place("gone"));
     let agent = |workspace: &str, origin: Option<&Origin>, name: Option<&str>| RunningAgent {
-        execution: format!("{workspace}-execution"),
+        execution: format!("{workspace}-execution").into(),
         space_id: workspace.into(),
         agent: name.map(Into::into),
         restorable: true,

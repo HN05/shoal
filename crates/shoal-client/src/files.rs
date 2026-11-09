@@ -1,4 +1,5 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
@@ -43,7 +44,7 @@ pub enum Attacher {
         /// The agent, named as `--agent` names it.
         agent: String,
         /// The execution that ran the agent, which a restart replaces.
-        execution: String,
+        execution: ExecutionId,
         /// The session the agent reported, which outlives a resume; none
         /// before its first report.
         #[serde(default, skip_serializing_if = "Option::is_none")]

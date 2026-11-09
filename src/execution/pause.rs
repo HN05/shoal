@@ -1,5 +1,6 @@
 //! An agent the daemon paused: why it stopped, its saved recovery record, and
 //! the wait for the daemon to restore it.
+use crate::client::execution_ids::ExecutionId;
 use std::{ffi::OsString, io::Write, path::PathBuf};
 
 use anyhow::Result;
@@ -316,7 +317,7 @@ impl Halt {
     }
 
     /// The line for an agent that does not restore itself.
-    fn manual_restore(&self, workspace: &str, execution: &str) -> String {
+    fn manual_restore(&self, workspace: &str, execution: &ExecutionId) -> String {
         let condition = match self {
             Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
             Self::Pause { .. } | Self::Ended { .. } | Self::Shutdown { .. } => String::new(),
@@ -335,7 +336,7 @@ impl Halt {
 
 /// How to restore the agent by hand: resume it, once its workspace is
 /// restored when it was `removed`.
-fn restore_steps(workspace: &str, execution: &str, removed: bool) -> String {
+fn restore_steps(workspace: &str, execution: &ExecutionId, removed: bool) -> String {
     let resume = format!("shoal resume {workspace} --execution {execution}");
     if removed {
         format!("restore with shoal work restore {workspace}, then {resume}")

@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::RecordExt;
 use std::{fs, sync::Arc};
@@ -203,7 +204,11 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         )
         .await
         .unwrap();
-    let path = recovery::record_path(&f.manager.paths, &f.workspace.id, "saved");
+    let path = recovery::record_path(
+        &f.manager.paths,
+        &f.workspace.id,
+        &ExecutionId::from("saved"),
+    );
     fs::create_dir_all(f.manager.paths.workspace_state(&f.workspace.id)).unwrap();
     let record = r#"{"agent":"claude","stage":"stopped","session":"kept-session","stop_reason":"memory pressure"}"#;
     fs::write(&path, record).unwrap();
@@ -212,7 +217,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         .manager
         .queue_stopped_restore(
             &SpaceSelector::id(&f.workspace.id),
-            "saved",
+            &ExecutionId::from("saved"),
             Default::default(),
         )
         .await
@@ -265,7 +270,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         recovery::Record::load(&recovery::record_path(
             &f.manager.paths,
             &workspace.id,
-            "saved"
+            &ExecutionId::from("saved")
         ))
         .unwrap(),
         Some(saved)
@@ -277,7 +282,11 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
 async fn saved_agents_do_not_hide_active_commands_from_merged_cleanup() {
     let f = Fixture::new().await;
     f.squash_merge();
-    let path = recovery::record_path(&f.manager.paths, &f.workspace.id, "saved");
+    let path = recovery::record_path(
+        &f.manager.paths,
+        &f.workspace.id,
+        &ExecutionId::from("saved"),
+    );
     fs::create_dir_all(f.manager.paths.workspace_state(&f.workspace.id)).unwrap();
     fs::write(path, r#"{"agent":"claude","stage":"stopped"}"#).unwrap();
     let id = f.workspace.id.clone();

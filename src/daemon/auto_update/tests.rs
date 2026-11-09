@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::execution_ids::ExecutionId;
 
 #[tokio::test]
 async fn restart_waits_for_background_work_and_executions_that_cannot_reattach() {
@@ -24,6 +25,8 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
         }).await.unwrap();
     assert!(quiesce(&manager).is_some());
     // Connected setup and merges stop with the daemon.
-    manager.executions.mark_unattachable("setup");
+    manager
+        .executions
+        .mark_unattachable(&ExecutionId::from("setup"));
     assert!(quiesce(&manager).is_none());
 }

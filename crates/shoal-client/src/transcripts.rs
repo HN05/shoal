@@ -6,6 +6,7 @@
 mod claude;
 mod codex;
 
+use crate::execution_ids::ExecutionId;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -30,7 +31,7 @@ pub struct ReportedSession {
     pub session: String,
     /// The execution the agent ran as, in a workspace.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<String>,
+    pub execution: Option<ExecutionId>,
     /// Whether the agent runs in this session now.
     pub current: bool,
 }

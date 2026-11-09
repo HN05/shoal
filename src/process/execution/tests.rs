@@ -201,9 +201,9 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
         agent: None,
         stopped: None,
     };
-    let marked = |execution_id: &str| process::Scan {
+    let marked = |execution: &str| process::Scan {
         processes: vec![process::OwnedProcess {
-            execution_id: execution_id.into(),
+            owner: execution.into(),
             identity: identity.clone(),
         }],
         ..Default::default()
@@ -227,7 +227,7 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
     let hook_identity = process::capture(hook.id().unwrap()).unwrap().unwrap();
     let waiting = process::Scan {
         processes: vec![process::OwnedProcess {
-            execution_id: "agent".into(),
+            owner: "agent".into(),
             identity: hook_identity,
         }],
         ..Default::default()

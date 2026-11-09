@@ -1,4 +1,5 @@
 use crate::client::assignments::Done;
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::{Attacher, FileSource};
@@ -155,7 +156,7 @@ async fn an_agents_files_name_its_kind_and_session() {
     assert_eq!(manager.attacher(Some(&nested), None).await, attacher);
     // A reattaching command keeps the agent it runs under.
     let id = nested.execution_id().unwrap().to_owned();
-    let recorded: Option<String> = manager
+    let recorded: Option<ExecutionId> = manager
         .store
         .run(move |db| {
             Ok(db.query_row(
@@ -221,7 +222,7 @@ async fn results_name_the_agent_that_handed_them_back() {
         result.attached_by,
         Some(Attacher::Agent {
             agent: "codex".into(),
-            execution: caller.execution_id().unwrap().into(),
+            execution: caller.execution_id().unwrap().clone(),
             session: None,
         })
     );

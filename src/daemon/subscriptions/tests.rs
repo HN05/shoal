@@ -651,7 +651,7 @@ mod streams {
             &daemon.manager.paths,
             &workspace.id,
             &crate::execution::TrackedAgent::named("claude"),
-            "execution",
+            &crate::client::execution_ids::ExecutionId::from("execution"),
         )
         .unwrap();
         let mut subscription = subscribe(daemon.connector(), &[Topic::Workspaces]).await;

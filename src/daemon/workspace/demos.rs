@@ -1,6 +1,7 @@
 //! Demos the daemon records with the executions that run them, so a demo
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
 
@@ -51,7 +52,10 @@ impl Manager {
 
     /// The launch of the demo `execution` runs, while its command has not
     /// started; read before the execution finishes, which deletes it.
-    pub(crate) async fn unrun_demo_launch(&self, execution: &str) -> Result<Option<String>> {
+    pub(crate) async fn unrun_demo_launch(
+        &self,
+        execution: &ExecutionId,
+    ) -> Result<Option<String>> {
         let execution = execution.to_owned();
         self.store
             .run(move |db| {
@@ -82,7 +86,7 @@ impl Manager {
             crate::demos::validate_name(name)?;
         }
         let workspace = self.workspace(selector).await?.id;
-        let executions: Vec<String> = self
+        let executions: Vec<ExecutionId> = self
             .demos(Some(&SpaceSelector::id(&workspace)))
             .await?
             .into_iter()
@@ -129,7 +133,7 @@ impl Manager {
     /// Ask the connected wrappers among `executions` to stop, returning the
     /// rest. Native scans run after the connection map is released, as a
     /// workspace stop runs them.
-    async fn request_demo_stops(&self, executions: Vec<String>) -> Vec<String> {
+    async fn request_demo_stops(&self, executions: Vec<ExecutionId>) -> Vec<ExecutionId> {
         let request = StopRequest {
             reason: "stopped by shoal demo stop".into(),
             save: Save::Nothing,
@@ -148,7 +152,7 @@ impl Manager {
 }
 
 /// Resolve a demo's place before deleting the execution cascades its record.
-pub(super) fn execution_launch(db: &Connection, execution: &str) -> Result<Option<Launch>> {
+pub(super) fn execution_launch(db: &Connection, execution: &ExecutionId) -> Result<Option<Launch>> {
     let record: Option<String> = db
         .query_row(
             "SELECT record FROM demos WHERE execution_id=?1",
@@ -166,7 +170,7 @@ pub(super) fn execution_launch(db: &Connection, execution: &str) -> Result<Optio
 /// name still recorded belongs to a demo that runs or is stopping.
 pub(super) fn record(
     tx: &Transaction<'_>,
-    execution: &str,
+    execution: &ExecutionId,
     workspace: &SpaceId,
     launch: &Launch,
 ) -> Result<()> {
@@ -204,7 +208,7 @@ fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
         Ok((
             row.get::<_, SpaceId>(0)?,
             row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
+            row.get::<_, ExecutionId>(2)?,
             row.get(3)?,
             row.get::<_, String>(4)?,
             row.get::<_, bool>(5)?,
@@ -228,7 +232,7 @@ fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
 
 /// Note in the transaction registering an execution's child that its demo,
 /// if it runs one, has started its command.
-pub(super) fn mark_run(tx: &Transaction<'_>, execution: &str) -> Result<()> {
+pub(super) fn mark_run(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<()> {
     tx.execute(
         "UPDATE demos SET has_run=1 WHERE execution_id=?1",
         [execution],

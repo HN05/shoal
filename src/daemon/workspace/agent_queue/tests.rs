@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::{
     collections::{BTreeMap, HashSet},
     time::Duration,
@@ -325,7 +326,11 @@ async fn each_agent_execution_uses_its_own_slot() {
         .await
         .unwrap();
     // A resume record of the same execution is the same agent.
-    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, "first");
+    let record = crate::execution::recovery::record_path(
+        &manager.paths,
+        &workspace.id,
+        &ExecutionId::from("first"),
+    );
     std::fs::create_dir_all(record.parent().unwrap()).unwrap();
     std::fs::write(&record, "{\"agent\":\"claude\"}").unwrap();
     assert_eq!(
@@ -419,7 +424,7 @@ async fn low_disk_holds_fixed_limits() {
 pub(super) async fn connected_agent(
     manager: &Manager,
     workspace: &crate::model::Workspace,
-) -> (String, tokio::sync::watch::Receiver<bool>) {
+) -> (ExecutionId, tokio::sync::watch::Receiver<bool>) {
     let started = manager
         .begin_execution(
             &workspace.id,
@@ -501,7 +506,7 @@ pub(super) async fn create(
 pub(super) async fn stopped_agents(
     manager: &Manager,
     workspaces: &[&crate::model::Workspace],
-) -> Vec<(String, tokio::sync::watch::Receiver<bool>)> {
+) -> Vec<(ExecutionId, tokio::sync::watch::Receiver<bool>)> {
     let mut agents = Vec::new();
     for workspace in workspaces {
         agents.push(connected_agent(manager, workspace).await);
@@ -520,7 +525,7 @@ pub(super) async fn stopped_agents(
 /// The restore of `execution` waiting for admission, once its waiter counts.
 pub(super) async fn await_restore(
     manager: &std::sync::Arc<Manager>,
-    execution: &str,
+    execution: &ExecutionId,
 ) -> tokio::task::JoinHandle<Result<Grant>> {
     let waiting = {
         let (manager, execution) = (manager.clone(), execution.to_owned());
@@ -555,7 +560,7 @@ pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueSta
 }
 
 /// Forget a stopped agent as `shoal resume --discard` does once its wrapper ended.
-async fn discard(manager: &Manager, workspace: &crate::model::Workspace, execution: &str) {
+async fn discard(manager: &Manager, workspace: &crate::model::Workspace, execution: &ExecutionId) {
     // No marked process belongs to the agent. A host scan would also count
     // every same-user process whose environment it cannot read, such as
     // ssh-agent on Linux, as a survivor and keep the slot.
@@ -621,8 +626,9 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
     );
     // The restored agent registers and takes over the slot it kept. Its group
     // must not exist, or discarding it later finds survivors and keeps the slot.
-    let register =
-        |execution: &str| manager.record_execution_child(execution.to_owned(), None, ABSENT_GROUP);
+    let register = |execution: &ExecutionId| {
+        manager.record_execution_child(execution.to_owned(), None, ABSENT_GROUP)
+    };
     register(&agents[0].0).await.unwrap();
     publish_recovery(&manager);
     manager.dispatch_queue().await.unwrap();

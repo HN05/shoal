@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::{sync::Arc, time::Duration};
 
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
@@ -89,7 +90,7 @@ impl Running {
         recovery::save_record(
             &manager.paths,
             &workspace.id,
-            "earlier",
+            &ExecutionId::from("earlier"),
             &crate::execution::TrackedAgent::named("claude"),
             None,
             None,
@@ -98,7 +99,7 @@ impl Running {
         manager
             .queue_stopped_restore(
                 &SpaceSelector::id(&workspace.id),
-                "earlier",
+                &ExecutionId::from("earlier"),
                 Default::default(),
             )
             .await

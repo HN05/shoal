@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;
@@ -16,7 +17,7 @@ async fn agent(
     workspace: &Workspace,
     name: &str,
     session: Option<&str>,
-) -> String {
+) -> ExecutionId {
     let id = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await
@@ -39,7 +40,7 @@ async fn agent(
     id
 }
 
-async fn refused(manager: &Manager, workspace: &Workspace, caller: Option<&str>) -> bool {
+async fn refused(manager: &Manager, workspace: &Workspace, caller: Option<&ExecutionId>) -> bool {
     manager
         .agent_session(&SpaceSelector::from(&workspace.name), caller)
         .await
@@ -79,7 +80,7 @@ async fn a_fork_starts_from_the_callers_agent_or_the_only_one() {
     let own = agent(&manager, &workspace, "happy claude", Some("s2")).await;
     assert!(refused(&manager, &workspace, None).await);
     // A caller outside the workspace's agents chooses none of them.
-    assert!(refused(&manager, &workspace, Some("elsewhere")).await);
+    assert!(refused(&manager, &workspace, Some(&ExecutionId::from("elsewhere"))).await);
     assert_eq!(
         manager
             .agent_session(&SpaceSelector::from(&workspace.name), Some(&own))

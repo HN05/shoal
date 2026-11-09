@@ -1255,7 +1255,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         let token = started.plan.scope_token.as_str();
         let caller = f.manager.caller(token).await.unwrap().unwrap();
         assert_eq!(caller.kind(), Some(kind));
-        assert_eq!(caller.execution_id(), Some(started.plan.id.as_str()));
+        assert_eq!(caller.execution_id(), Some(&started.plan.id));
         assert_eq!(caller.space_id, workspace.id);
 
         for (mut method, allowed) in [

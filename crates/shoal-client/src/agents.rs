@@ -1,5 +1,6 @@
 //! The agents running in a space: the state and turns their hooks report,
 //! the user's interrupts, and the sessions they run.
+use crate::execution_ids::ExecutionId;
 use anyhow::Result;
 
 use crate::space_names::SpaceSelector;
@@ -80,7 +81,7 @@ pub async fn report_wake_end(
 pub async fn interrupt_turn(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    execution: String,
+    execution: ExecutionId,
 ) -> Result<AgentStatus> {
     request(
         daemon,
@@ -103,7 +104,7 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 /// runs in a terminal host.
 pub async fn restart(
     daemon: &impl Daemon,
-    execution: String,
+    execution: ExecutionId,
     join: Option<PendingRestart>,
     run: Option<String>,
     in_place: bool,

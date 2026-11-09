@@ -1,6 +1,7 @@
 //! Cooperative caller scope. The daemon validates every scoped request,
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -23,11 +24,11 @@ pub struct Caller {
 
 #[derive(Debug, Clone)]
 pub struct ScopedExecution {
-    pub id: String,
+    pub id: ExecutionId,
     pub kind: ExecutionKind,
     /// The agent execution whose process tree registered this one, as a
     /// command an agent runs with `shoal run`.
-    pub agent_execution: Option<String>,
+    pub agent_execution: Option<ExecutionId>,
 }
 
 /// Resolve `token` and confine `method` to the spaces the caller's scope
@@ -128,10 +129,8 @@ impl Scoped for Operation {
 }
 
 impl Caller {
-    pub fn execution_id(&self) -> Option<&str> {
-        self.execution
-            .as_ref()
-            .map(|execution| execution.id.as_str())
+    pub fn execution_id(&self) -> Option<&ExecutionId> {
+        self.execution.as_ref().map(|execution| &execution.id)
     }
 
     pub fn kind(&self) -> Option<ExecutionKind> {

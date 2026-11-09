@@ -1,5 +1,6 @@
 //! The queue's rows: reading the waiting ones and entries, and recording
 //! launches and the restores waiting wrappers carry out.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
@@ -17,7 +18,7 @@ pub(super) struct QueuedRow {
     pub id: String,
     pub repository: RepositoryId,
     pub kind: QueueKind,
-    pub execution: Option<String>,
+    pub execution: Option<ExecutionId>,
     pub workspace: Option<SpaceId>,
     /// Whether the daemon starts it, rather than a waiting wrapper.
     pub started_here: bool,
@@ -110,7 +111,7 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
 /// The restore of a stopped agent whose wrapper waits for it.
 pub(super) struct WaitingRestore {
     pub workspace: crate::model::Workspace,
-    pub execution: String,
+    pub execution: ExecutionId,
     pub agent: String,
 }
 

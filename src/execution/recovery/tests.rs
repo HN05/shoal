@@ -14,7 +14,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
     let path = save_record(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &crate::execution::TrackedAgent::named("codex"),
         Some("critical memory pressure"),
         None,
@@ -46,7 +46,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
         .save(
             &paths,
             &SpaceId::from("workspace"),
-            "execution",
+            &ExecutionId::from("execution"),
             None,
             Some(herdr_pane("w1:p2")),
             Restorer::User,
@@ -55,7 +55,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
     save_record(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &crate::execution::TrackedAgent::named("codex"),
         None,
         None,
@@ -75,25 +75,50 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
 fn only_a_daemon_saved_stop_counts_as_undelivered() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
-    let path = record_path(&paths, &SpaceId::from("workspace"), "execution");
+    let path = record_path(
+        &paths,
+        &SpaceId::from("workspace"),
+        &ExecutionId::from("execution"),
+    );
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     // A record from before stages may be the wrapper's own.
     std::fs::write(&path, r#"{"agent":"codex"}"#).unwrap();
-    assert!(!discard_undelivered(&paths, &SpaceId::from("workspace"), "execution").unwrap());
+    assert!(
+        !discard_undelivered(
+            &paths,
+            &SpaceId::from("workspace"),
+            &ExecutionId::from("execution")
+        )
+        .unwrap()
+    );
     assert!(path.is_file());
     std::fs::remove_file(&path).unwrap();
     save_record(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &crate::execution::TrackedAgent::named("codex"),
         None,
         None,
     )
     .unwrap();
-    assert!(discard_undelivered(&paths, &SpaceId::from("workspace"), "execution").unwrap());
+    assert!(
+        discard_undelivered(
+            &paths,
+            &SpaceId::from("workspace"),
+            &ExecutionId::from("execution")
+        )
+        .unwrap()
+    );
     assert!(!path.exists());
-    assert!(!discard_undelivered(&paths, &SpaceId::from("workspace"), "execution").unwrap());
+    assert!(
+        !discard_undelivered(
+            &paths,
+            &SpaceId::from("workspace"),
+            &ExecutionId::from("execution")
+        )
+        .unwrap()
+    );
 }
 
 #[test]
@@ -117,7 +142,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
         .save(
             &paths,
             &SpaceId::from("removed"),
-            "execution",
+            &ExecutionId::from("execution"),
             None,
             None,
             Restorer::Wrapper(wrapper),
@@ -126,7 +151,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     save_command(
         &paths,
         &SpaceId::from("removed"),
-        "command",
+        &ExecutionId::from("command"),
         &[OsString::from("true")],
     )
     .unwrap();
@@ -166,7 +191,7 @@ fn only_agents_outside_a_waiting_wrapper_receive_the_stopped_commands() {
     let wrapper = identity::capture(std::process::id())
         .unwrap()
         .expect("this process has an identity");
-    let save = |execution, restorer| {
+    let save = |execution: &ExecutionId, restorer| {
         recovery
             .save(
                 &paths,
@@ -178,12 +203,12 @@ fn only_agents_outside_a_waiting_wrapper_receive_the_stopped_commands() {
             )
             .unwrap()
     };
-    save("waiting", Restorer::Wrapper(wrapper));
+    save(&ExecutionId::from("waiting"), Restorer::Wrapper(wrapper));
     let saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
     assert!(waits_in_wrapper(&saved.agents[0].1));
     assert!(!saved.restores_outside_wrappers());
 
-    save("stopped", Restorer::User);
+    save(&ExecutionId::from("stopped"), Restorer::User);
     let mut saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
     assert!(saved.restores_outside_wrappers());
     saved.retain_unattended();
@@ -197,7 +222,15 @@ fn commands_with_arguments_that_are_not_utf8_are_not_recorded() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let argv = [OsString::from("cat"), OsString::from_vec(vec![0xff])];
-    assert!(save_command(&paths, &SpaceId::from("workspace"), "execution", &argv).is_err());
+    assert!(
+        save_command(
+            &paths,
+            &SpaceId::from("workspace"),
+            &ExecutionId::from("execution"),
+            &argv
+        )
+        .is_err()
+    );
     assert!(!pending(&paths, &SpaceId::from("workspace")).unwrap());
 }
 
@@ -208,7 +241,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_turn(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         AgentState::Idle,
     )
     .unwrap();
@@ -217,7 +250,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_record(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &crate::execution::TrackedAgent::named("codex"),
         None,
         None,
@@ -226,14 +259,14 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_turn(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         AgentState::Working,
     )
     .unwrap();
     save_turn(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         AgentState::Idle,
     )
     .unwrap();
@@ -251,7 +284,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
         .save(
             &paths,
             &SpaceId::from("workspace"),
-            "execution",
+            &ExecutionId::from("execution"),
             None,
             None,
             Restorer::User,
@@ -281,7 +314,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
         .save(
             &paths,
             &SpaceId::from("workspace"),
-            "execution",
+            &ExecutionId::from("execution"),
             Some("its terminal closed"),
             None,
             Restorer::Queue(env.clone()),
@@ -289,7 +322,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
         .unwrap();
     assert_eq!(
         restore_requests(&paths, &SpaceId::from("workspace")).unwrap(),
-        [("execution".to_owned(), env)]
+        [(ExecutionId::from("execution"), env)]
     );
     // The request is no stopped work of its own.
     assert_eq!(
@@ -297,7 +330,12 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
         ["execution"]
     );
 
-    forget_restore_request(&paths, &SpaceId::from("workspace"), "execution").unwrap();
+    forget_restore_request(
+        &paths,
+        &SpaceId::from("workspace"),
+        &ExecutionId::from("execution"),
+    )
+    .unwrap();
     assert!(
         restore_requests(&paths, &SpaceId::from("workspace"))
             .unwrap()
@@ -305,7 +343,12 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
     );
     let record = Record::load(&record).unwrap().expect("the record stays");
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
-    forget_restore_request(&paths, &SpaceId::from("workspace"), "execution").unwrap();
+    forget_restore_request(
+        &paths,
+        &SpaceId::from("workspace"),
+        &ExecutionId::from("execution"),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -323,7 +366,7 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
         &paths,
         &SpaceId::from("workspace"),
         &crate::execution::TrackedAgent::named("claude code"),
-        "execution",
+        &ExecutionId::from("execution"),
     )
     .unwrap();
     let mut saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
@@ -344,12 +387,16 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
             ("codex".into(), Some("earlier".into()))
         ]
     );
-    saved.retain_execution("execution", false);
+    saved.retain_execution(&ExecutionId::from("execution"), false);
     assert_eq!(
         saved.sessions,
         [(
             "execution".into(),
-            LastSession::path(&paths, &SpaceId::from("workspace"), "execution")
+            LastSession::path(
+                &paths,
+                &SpaceId::from("workspace"),
+                &ExecutionId::from("execution")
+            )
         )]
     );
     LastSession::forget_all(&paths, &SpaceId::from("workspace")).unwrap();
@@ -367,7 +414,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     let record = write_record(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         Record {
             session: Some("stopped".into()),
             ..Record::new(
@@ -387,7 +434,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     keep_as_last_session(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &record,
         None,
     )
@@ -413,10 +460,18 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             }),
         }]
     );
-    let kept = LastSession::path(&paths, &SpaceId::from("workspace"), "execution");
+    let kept = LastSession::path(
+        &paths,
+        &SpaceId::from("workspace"),
+        &ExecutionId::from("execution"),
+    );
     assert_eq!(saved_place(&kept), Some(herdr_pane("w1:p2")));
     assert_eq!(
-        saved_path(&paths, &SpaceId::from("workspace"), "execution"),
+        saved_path(
+            &paths,
+            &SpaceId::from("workspace"),
+            &ExecutionId::from("execution")
+        ),
         kept
     );
 }
@@ -447,7 +502,7 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
     let path = save_record(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &crate::execution::TrackedAgent::named("claude"),
         Some("critical memory pressure"),
         None,
@@ -524,7 +579,7 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
     let path = save_record_stopped_by(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &crate::execution::TrackedAgent::named("codex"),
         Some("restart"),
         None,
@@ -546,24 +601,34 @@ fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
         .save(
             &paths,
             &SpaceId::from("workspace"),
-            "execution",
+            &ExecutionId::from("execution"),
             None,
             None,
             Restorer::User,
         )
         .unwrap();
-    let stopper = stopped_by(&paths, &SpaceId::from("workspace"), "execution").unwrap();
+    let stopper = stopped_by(
+        &paths,
+        &SpaceId::from("workspace"),
+        &ExecutionId::from("execution"),
+    )
+    .unwrap();
     assert_eq!(stopper.as_deref(), Some("parent"));
     // A stop that names no stopper keeps the one the record names.
     keep_as_last_session(
         &paths,
         &SpaceId::from("workspace"),
-        "execution",
+        &ExecutionId::from("execution"),
         &path,
         None,
     )
     .unwrap();
     assert!(!path.exists());
-    let stopper = stopped_by(&paths, &SpaceId::from("workspace"), "execution").unwrap();
+    let stopper = stopped_by(
+        &paths,
+        &SpaceId::from("workspace"),
+        &ExecutionId::from("execution"),
+    )
+    .unwrap();
     assert_eq!(stopper.as_deref(), Some("parent"));
 }

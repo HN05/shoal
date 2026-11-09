@@ -1,5 +1,6 @@
 //! The execution wrapper's messages: reattachment, execution events and
 //! the daemon's controls.
+use crate::execution_ids::ExecutionId;
 use crate::processes::Identity;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +14,7 @@ pub const RESTORE_WAITS: u32 = 174;
 /// understands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reattach {
-    pub execution: String,
+    pub execution: ExecutionId,
     pub wrapper: Identity,
     pub child: Option<Identity>,
     pub group_id: u32,

@@ -2,6 +2,7 @@
 //! even in a done workspace and whatever the overload recovery policy says.
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace_files::Attacher, state::AgentState};
 
@@ -10,7 +11,7 @@ use crate::{daemon::workspace_files::Attacher, state::AgentState};
 async fn idle_in_held_done_workspace(
     manager: &Manager,
     workspace: &crate::model::Workspace,
-) -> String {
+) -> ExecutionId {
     let id = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await

@@ -1,4 +1,5 @@
 //! The agent launch queue and the work its entries wait for.
+use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use crate::space_names::{SpaceName, SpaceSelector};
@@ -36,7 +37,7 @@ pub struct QueueEntry {
     pub workspace_id: Option<SpaceId>,
     /// The stopped execution a restore restores.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<String>,
+    pub execution: Option<ExecutionId>,
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opens: Option<SpaceId>,

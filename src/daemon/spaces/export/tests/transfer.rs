@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use std::{fs, path::Path, sync::Arc};
 
@@ -165,11 +166,17 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
     let status = git(&workspace.path, &["status", "--porcelain"]);
-    recovery::save_session(&exporting.paths, &workspace.id, "stopped-agent", "s1").unwrap();
+    recovery::save_session(
+        &exporting.paths,
+        &workspace.id,
+        &ExecutionId::from("stopped-agent"),
+        "s1",
+    )
+    .unwrap();
     recovery::save_record(
         &exporting.paths,
         &workspace.id,
-        "stopped-agent",
+        &ExecutionId::from("stopped-agent"),
         &crate::execution::TrackedAgent::named("claude"),
         Some("overload"),
         None,
@@ -437,11 +444,17 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
         )
         .await
         .unwrap();
-    recovery::save_session(&manager.paths, &workspace.id, "stopped-agent", "s1").unwrap();
+    recovery::save_session(
+        &manager.paths,
+        &workspace.id,
+        &ExecutionId::from("stopped-agent"),
+        "s1",
+    )
+    .unwrap();
     recovery::save_record(
         &manager.paths,
         &workspace.id,
-        "stopped-agent",
+        &ExecutionId::from("stopped-agent"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
         None,

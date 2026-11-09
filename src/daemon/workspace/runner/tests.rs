@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
@@ -34,7 +35,7 @@ pub(super) async fn launch(
     manager: &Manager,
     workspace: &Workspace,
     command: JobCommand,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<ExecutionId> {
     let started = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await?;

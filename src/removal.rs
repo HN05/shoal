@@ -1,4 +1,5 @@
 //! Inspecting what removing a workspace would discard.
+use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
 
 pub(crate) use crate::client::removal::{
@@ -14,7 +15,7 @@ mod tests;
 /// then, so it keeps the workspace from no cleanup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct IdleRestore {
-    pub execution: String,
+    pub execution: ExecutionId,
     /// The wrapper waiting to restore the agent, which may use the
     /// workspace directory; none when the daemon starts the restore.
     pub wrapper: Option<u32>,

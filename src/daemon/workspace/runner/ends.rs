@@ -5,6 +5,7 @@
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
 //! run there, and the forge's runner then stops it.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::collections::HashSet;
@@ -33,7 +34,7 @@ pub(crate) struct ClaimedJob {
     pub repository_id: RepositoryId,
     pub workspace_id: SpaceId,
     /// The execution running the forge's runner, once it started.
-    pub execution_id: Option<String>,
+    pub execution_id: Option<ExecutionId>,
     /// When that execution started.
     pub launched_at: Option<crate::time::UnixTime>,
     pub job: QueuedJob,
@@ -232,13 +233,13 @@ impl Manager {
     /// marker or in its process group. Verified survivors are stopped and
     /// checked again on the next pass; a launch whose identity was never
     /// recorded proves nothing and keeps the job.
-    async fn job_execution_runs(&self, workspace_id: &SpaceId, id: &str) -> Result<bool> {
+    async fn job_execution_runs(&self, workspace_id: &SpaceId, id: &ExecutionId) -> Result<bool> {
         let workspace = self.workspace_by_id(workspace_id).await?;
         let execution = self
             .workspace_executions(workspace_id)
             .await?
             .into_iter()
-            .find(|execution| execution.id == id);
+            .find(|execution| execution.id == *id);
         let Some(execution) = execution else {
             return Ok(false);
         };
@@ -260,7 +261,7 @@ impl Manager {
 
     /// Whether the daemon still records the execution `id`, running or
     /// awaiting reattachment.
-    async fn execution_recorded(&self, id: &str) -> Result<bool> {
+    async fn execution_recorded(&self, id: &ExecutionId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

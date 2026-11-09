@@ -1,6 +1,7 @@
 //! What a process's own environment says about its owner: the markers of
 //! Shoal's identity it carries, read once the environment has settled.
 use super::{Identity, Image, Lineage, alive, lineage, platform};
+use crate::client::execution_ids::ExecutionId;
 use crate::protocol::timing;
 use anyhow::Result;
 use std::time::Duration;
@@ -14,7 +15,7 @@ pub(super) struct Observed {
 /// The markers of Shoal's identity an environment carries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct Marks {
-    pub(super) execution: Option<String>,
+    pub(super) execution: Option<ExecutionId>,
     pub(super) workspace: Option<String>,
     pub(super) chat: Option<String>,
     /// The run directory of a one-shot agent run.
@@ -43,7 +44,7 @@ impl Marks {
                 .map(str::to_owned)
         };
         Self {
-            execution: value(crate::env::EXECUTION_ID),
+            execution: value(crate::env::EXECUTION_ID).map(ExecutionId::from),
             workspace: value(crate::env::WORKSPACE_ID),
             chat: value(crate::env::CHAT),
             oneshot: value(crate::env::ONESHOT_RUN),
@@ -53,7 +54,7 @@ impl Marks {
 
     pub(super) fn get(&self, marker: Marker) -> Option<&str> {
         match marker {
-            Marker::Execution => self.execution.as_deref(),
+            Marker::Execution => self.execution.as_ref().map(ExecutionId::as_str),
             Marker::Workspace => self.workspace.as_deref(),
             // A workspace's process a chat started belongs to the workspace.
             Marker::Chat => self.chat.as_deref().filter(|_| !self.of_workspace()),
@@ -230,14 +231,14 @@ pub fn owned_by_workspace(identity: &Identity, wrappers: &[Identity]) -> Result<
 /// no longer belongs to the execution, nor do its descendants.
 pub(super) fn left_execution(
     identity: &Identity,
-    execution: &str,
+    execution: &ExecutionId,
     deadline: std::time::Instant,
 ) -> Result<bool> {
     Ok(observe(identity.pid, deadline)?.is_some_and(|observed| {
         observed.lineage.identity == *identity
             && match &observed.evidence {
                 Evidence::Unmarked => true,
-                Evidence::Marked(marks) => marks.get(Marker::Execution) != Some(execution),
+                Evidence::Marked(marks) => marks.get(Marker::Execution) != Some(execution.as_str()),
                 _ => false,
             }
     }))

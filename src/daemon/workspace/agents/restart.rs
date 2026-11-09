@@ -2,6 +2,7 @@
 //! starts again at once and outside the agent queue, since the agent keeps its
 //! slot: in a new wrapper, which the agent queue starts once the old one
 //! finished, or in place, where the old wrapper starts it.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, anyhow, ensure};
@@ -69,7 +70,7 @@ impl Manager {
     /// runs when given.
     pub(crate) async fn restart_agent(
         &self,
-        execution: &str,
+        execution: &ExecutionId,
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
@@ -87,7 +88,7 @@ impl Manager {
     /// matches whichever is in progress.
     pub(crate) async fn join_restart(
         &self,
-        execution: &str,
+        execution: &ExecutionId,
         of_run: Option<String>,
         run: Option<String>,
     ) -> Result<Option<Origin>> {
@@ -118,7 +119,7 @@ impl Manager {
     /// the agent ran as before such a restart.
     async fn request_restart(
         &self,
-        id: &str,
+        id: &ExecutionId,
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
@@ -142,7 +143,7 @@ impl Manager {
     /// an agent the restart leaves stopped.
     fn stop_for_restart(
         &self,
-        id: &str,
+        id: &ExecutionId,
         agent: Option<&mut Agent>,
         run: Option<String>,
         in_place: bool,
@@ -190,7 +191,7 @@ impl Manager {
 
     /// Whether a restart of `id` has not resumed its agent yet; after the
     /// resume, a record left behind belongs to the wrapper that restores it.
-    pub(crate) async fn restart_before_resume(&self, id: &str) -> bool {
+    pub(crate) async fn restart_before_resume(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_agent(id, |agent| {
                 agent
@@ -206,7 +207,7 @@ impl Manager {
     /// Keep the turn state the agent of `id` reported.
     pub(crate) async fn record_agent_turn(
         &self,
-        id: &str,
+        id: &ExecutionId,
         state: AgentState,
         interrupted: Option<bool>,
     ) {
@@ -225,7 +226,7 @@ impl Manager {
     /// stop of it came first, under the lock a stop takes, so a stop that
     /// read the agent idle before cannot follow. Whether it is marked; an
     /// execution that runs no tracked agent has nothing to stop.
-    pub(crate) async fn claim_woken_turn(&self, id: &str) -> bool {
+    pub(crate) async fn claim_woken_turn(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_agent(id, |agent| {
                 let running = agent.running();
@@ -239,7 +240,7 @@ impl Manager {
     }
 
     /// Whether `shoal restart` is restarting the agent of `id`.
-    pub(crate) async fn restart_requested(&self, id: &str) -> bool {
+    pub(crate) async fn restart_requested(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_agent(id, |agent| agent.restarts.current.is_some())
             .await
@@ -248,7 +249,7 @@ impl Manager {
 
     /// Whether the restart of `id` was asked to start the agent again in its
     /// wrapper.
-    pub(crate) async fn restart_in_place(&self, id: &str) -> bool {
+    pub(crate) async fn restart_in_place(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_agent(id, |agent| {
                 agent
@@ -265,7 +266,7 @@ impl Manager {
     /// wrapper, which starts the agent once this one finished. The restart
     /// is kept apart from the agent from now on, while the execution is
     /// still recorded, so something always shows the agent to a stop.
-    pub(crate) async fn hand_over_restart(&self, id: &str) -> Result<()> {
+    pub(crate) async fn hand_over_restart(&self, id: &ExecutionId) -> Result<()> {
         self.executions
             .with_restarts(|agents, renewals| {
                 let renewal = agents.get_mut(id).and_then(Agent::hand_over);
@@ -277,7 +278,7 @@ impl Manager {
     }
 
     /// Whether a new wrapper starts the agent of `id` again for its restart.
-    pub(crate) async fn restart_continues_elsewhere(&self, id: &str) -> bool {
+    pub(crate) async fn restart_continues_elsewhere(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_restarts(|_, renewals| renewal::starting(renewals, id))
             .await
@@ -286,7 +287,7 @@ impl Manager {
     /// The wrapper of `id` started its child: once a restart resumed the
     /// agent, that child is the restarted agent, which runs in the
     /// wrapper's place.
-    pub(crate) async fn agent_started(&self, id: &str) {
+    pub(crate) async fn agent_started(&self, id: &ExecutionId) {
         if !self.restart_resumed(id).await {
             return;
         }
@@ -295,7 +296,7 @@ impl Manager {
     }
 
     /// Whether a restart of `id` resumed its agent.
-    async fn restart_resumed(&self, id: &str) -> bool {
+    async fn restart_resumed(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_agent(id, |agent| {
                 agent
@@ -311,7 +312,7 @@ impl Manager {
     /// The place the wrapper of `id` registered in a terminal host; none
     /// when it runs outside one or its record cannot be read, which only
     /// leaves the place out of the restart's report.
-    async fn execution_place(&self, id: &str) -> Option<Origin> {
+    async fn execution_place(&self, id: &ExecutionId) -> Option<Origin> {
         let id = id.to_owned();
         match self
             .store
@@ -327,7 +328,7 @@ impl Manager {
     }
 
     /// The restart of `id` ends without the agent running again.
-    pub(crate) async fn fail_restart(&self, id: &str, reason: String) {
+    pub(crate) async fn fail_restart(&self, id: &ExecutionId, reason: String) {
         self.answer_restart(id, |_| true, Err(reason)).await;
     }
 
@@ -335,7 +336,7 @@ impl Manager {
     /// because of `issue`, which may last until the user ends them. Its
     /// requests are answered with that now, and later ones at once, while the
     /// restart continues.
-    pub(crate) async fn restart_waits(&self, id: &str, issue: &str) {
+    pub(crate) async fn restart_waits(&self, id: &ExecutionId, issue: &str) {
         let answered = self
             .executions
             .with_agent(id, |agent| {
@@ -360,7 +361,7 @@ impl Manager {
     /// Answer the restart of `id` with `outcome` if `ends` says it ended.
     async fn answer_restart(
         &self,
-        id: &str,
+        id: &ExecutionId,
         ends: impl FnOnce(&Restart) -> bool,
         outcome: Outcome,
     ) {

@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use tokio::{io::BufReader, net::UnixStream};
@@ -76,7 +77,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     recovery::save_record(
         &manager.paths,
         &workspace.id,
-        "earlier",
+        &ExecutionId::from("earlier"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
         None,
@@ -85,7 +86,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     manager
         .queue_stopped_restore(
             &SpaceSelector::id(&workspace.id),
-            "earlier",
+            &ExecutionId::from("earlier"),
             Default::default(),
         )
         .await
@@ -202,7 +203,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     recovery::save_record(
         &paths,
         &open.id,
-        "requested",
+        &ExecutionId::from("requested"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
         None,
@@ -222,14 +223,14 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     recovery::save_record(
         &paths,
         &open.id,
-        "unattended",
+        &ExecutionId::from("unattended"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
         None,
     )
     .unwrap();
     assert!(waits_for_resume(&paths, &open, &none).unwrap());
-    let queued = HashSet::from(["unattended".to_owned()]);
+    let queued = HashSet::from([ExecutionId::from("unattended")]);
     assert!(!waits_for_resume(&paths, &open, &queued).unwrap());
 }
 

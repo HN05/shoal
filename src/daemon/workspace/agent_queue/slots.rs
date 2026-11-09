@@ -1,5 +1,6 @@
 //! The slots in use, counted from what the daemon already tracks, so a limit
 //! applies however an agent started.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use std::collections::{HashMap, HashSet};
 
@@ -32,7 +33,7 @@ struct PersistedSlots {
 
 /// An execution in the unknown state.
 struct UnknownExecution {
-    id: String,
+    id: ExecutionId,
     workspace: SpaceId,
 }
 
@@ -44,7 +45,7 @@ struct StartingEntry {
     /// When its holder was last seen.
     seen_at: Option<UnixTime>,
     /// The execution a restore resumes; a launch has none.
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
 }
 
 /// Read the workspaces, executions and queue entries that slots are counted from.
@@ -97,7 +98,7 @@ impl Manager {
     /// each admitted one-shot run until it ends. An
     /// admitted restore starts in its agent's slot, and one of a last
     /// session, which holds none, as a launch.
-    pub(super) async fn occupied_slots(&self, dormant: &HashSet<String>) -> Result<Vec<Slot>> {
+    pub(super) async fn occupied_slots(&self, dormant: &HashSet<ExecutionId>) -> Result<Vec<Slot>> {
         let mut agents = self.agent_executions().await;
         let PersistedSlots {
             open,

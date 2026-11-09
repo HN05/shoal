@@ -1,5 +1,6 @@
 //! The turn state agents report from their hooks: a status signal for
 //! integrations that never notifies, completes, or changes cleanup.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
@@ -86,7 +87,7 @@ impl StoppedTurn {
     }
 }
 
-fn reported_by(db: &Connection, id: &str) -> Result<Option<StoppedTurn>> {
+fn reported_by(db: &Connection, id: &ExecutionId) -> Result<Option<StoppedTurn>> {
     let reported: Option<(SpaceId, AgentState)> = db
         .query_row(
             "SELECT space_id,state FROM space_agent_state WHERE execution_id=?1",
@@ -109,7 +110,7 @@ impl Manager {
     /// saved, before the state goes with the execution's record, judged by
     /// `scan` when its processes were scanned. A failure leaves the turn
     /// unknown, as in records saved before turns were kept.
-    pub(crate) async fn keep_stopped_turn(&self, id: &str, scan: Option<&Scan>) {
+    pub(crate) async fn keep_stopped_turn(&self, id: &ExecutionId, scan: Option<&Scan>) {
         let query = id.to_owned();
         let kept = async {
             let reported = self.store.run(move |db| reported_by(db, &query)).await?;
@@ -132,7 +133,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         state: AgentState,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
         session: Option<String>,
     ) -> Result<AgentStatus> {
         self.record_agent_state(selector, state, execution, session, TurnEnding::default())
@@ -145,18 +146,18 @@ impl Manager {
     pub async fn end_agent_turn(
         &self,
         selector: &SpaceSelector,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
         session: Option<String>,
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
             prompt_cache: Some(
-                self.prompt_cache(selector, execution.as_deref(), &turn_end)
+                self.prompt_cache(selector, execution.as_ref(), &turn_end)
                     .await,
             ),
             ..TurnEnding::ended()
         };
-        self.ask_marked_chat_question(selector, execution.as_deref(), turn_end.final_message)
+        self.ask_marked_chat_question(selector, execution.as_ref(), turn_end.final_message)
             .await;
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
             .await
@@ -168,7 +169,7 @@ impl Manager {
     pub(crate) async fn start_woken_turn(
         &self,
         selector: &SpaceSelector,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
     ) -> Result<bool> {
         if let Some(id) = &execution
             && !self.claim_woken_turn(id).await
@@ -192,7 +193,7 @@ impl Manager {
     pub(crate) async fn end_interrupted_turn(
         &self,
         selector: &SpaceSelector,
-        execution: String,
+        execution: ExecutionId,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
             interrupted: true,
@@ -213,7 +214,7 @@ impl Manager {
     async fn prompt_cache(
         &self,
         selector: &SpaceSelector,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
         turn_end: &TurnEnd,
     ) -> Duration {
         let reported = turn_end.prompt_cache_secs.map(Duration::from_secs);
@@ -229,7 +230,7 @@ impl Manager {
     async fn agent_tool(
         &self,
         selector: &SpaceSelector,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
     ) -> Option<crate::ai::Tool> {
         let space = self.space(selector).await.ok()?;
         let agent = match (&space, execution) {
@@ -247,7 +248,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         state: AgentState,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
         session: Option<String>,
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
@@ -257,7 +258,7 @@ impl Manager {
                 .await;
         }
         if let Some(session) = session {
-            self.record_agent_session(&space, execution.as_deref(), session)
+            self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
         }
         let now = UnixTime::now();
@@ -286,7 +287,7 @@ impl Manager {
     async fn record_agent_session(
         &self,
         space: &PresentSpace,
-        execution: Option<&str>,
+        execution: Option<&ExecutionId>,
         session: String,
     ) -> Result<()> {
         ensure!(
@@ -313,7 +314,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         failure: TurnFailure,
-        execution: Option<String>,
+        execution: Option<ExecutionId>,
         session: Option<String>,
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
@@ -323,7 +324,7 @@ impl Manager {
         let ending = TurnEnding {
             failed: true,
             prompt_cache: Some(
-                self.prompt_cache(selector, execution.as_deref(), &turn_end)
+                self.prompt_cache(selector, execution.as_ref(), &turn_end)
                     .await,
             ),
             ..TurnEnding::ended()
@@ -375,7 +376,7 @@ fn unrecorded(state: AgentState, now: UnixTime) -> AgentStatus {
 struct Report {
     space: SpaceId,
     state: AgentState,
-    execution: Option<String>,
+    execution: Option<ExecutionId>,
     /// When it arrived.
     at: UnixTime,
     prompt_cache_expires_at: Option<UnixTime>,
@@ -394,7 +395,7 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     let changed = write_state(tx, report)?;
     super::turn_retry::follow_state(tx, &report.space, report.state)?;
     if !report.failed {
-        let execution = report.execution.as_deref();
+        let execution = report.execution.as_ref();
         super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;
     }
     let status = get(tx, &report.space)?.expect("agent state was just recorded");

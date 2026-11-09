@@ -1,4 +1,5 @@
 //! Running agents, their reported state and sessions.
+use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
 use crate::state::AgentState;
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,7 @@ pub struct AgentStatus {
 /// A connected agent, or an execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunningAgent {
-    pub execution: String,
+    pub execution: ExecutionId,
     /// The workspace it runs in, or the chat it is the agent of.
     pub space_id: SpaceId,
     /// `None` for an execution whose wrapper is gone, which may have run an agent.
@@ -48,14 +49,14 @@ pub struct RunningAgent {
     /// The executions it ran as before restarts started it in new wrappers,
     /// while this daemon runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub restarted_from: Vec<String>,
+    pub restarted_from: Vec<ExecutionId>,
 }
 
 impl RunningAgent {
     /// Whether it runs as `execution`, or ran as it before a restart
     /// started it in a new wrapper.
-    pub fn ran_as(&self, execution: &str) -> bool {
-        self.execution == execution || self.restarted_from.iter().any(|id| id == execution)
+    pub fn ran_as(&self, execution: &ExecutionId) -> bool {
+        self.execution == *execution || self.restarted_from.contains(execution)
     }
 }
 

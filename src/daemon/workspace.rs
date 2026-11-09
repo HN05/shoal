@@ -1,5 +1,6 @@
 //! `Manager`, the daemon's shared state, with its configuration and the
 //! workspace records it reads.
+use crate::client::execution_ids::ExecutionId;
 use crate::config_file::ConfigExt;
 mod adoption;
 pub(crate) mod agent_queue;
@@ -155,7 +156,8 @@ pub struct Manager {
     /// One-shot agent runs whose processes may still be running.
     pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
-    proxy_retries: std::sync::Mutex<std::collections::HashMap<String, proxy_retries::ProxyRetry>>,
+    proxy_retries:
+        std::sync::Mutex<std::collections::HashMap<ExecutionId, proxy_retries::ProxyRetry>>,
     /// The config files of worktrees the current format rejects, which the
     /// daemon ignores.
     rejected_configs: repo_configuration::RejectedConfigs,

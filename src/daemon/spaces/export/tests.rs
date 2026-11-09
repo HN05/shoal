@@ -103,7 +103,10 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     assert!(import.bundle.is_none());
     let sessions = import.manifest.sessions.as_ref().unwrap();
     assert_eq!(sessions.reported().collect::<Vec<_>>(), [("claude", "s1")]);
-    assert_eq!(sessions.last_sessions[0].execution, chat.id);
+    assert_eq!(
+        sessions.last_sessions[0].execution.as_str(),
+        chat.id.as_str()
+    );
 }
 
 #[tokio::test]
