@@ -23928,10 +23928,13 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
 }
 
 #[test]
-fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
-    for github in [true, false] {
-        restack_on_merge(github, &[(1, "lower", "main")], "lower");
-    }
+fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them_on_github() {
+    restack_on_merge(true, &[(1, "lower", "main")], "lower");
+}
+
+#[test]
+fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them_on_forgejo() {
+    restack_on_merge(false, &[(1, "lower", "main")], "lower");
 }
 
 #[test]
