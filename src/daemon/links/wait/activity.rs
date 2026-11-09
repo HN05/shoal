@@ -14,7 +14,7 @@ use crate::{
     daemon::{links::space::require_ready_space, workspace::Manager},
     forge::{
         items::{item::ItemState, link::Selection},
-        updates::{Edited, Snapshot, Update},
+        updates::{Edited, Snapshot, Update, WatchRecord},
     },
     time::UnixTime,
 };
@@ -116,11 +116,7 @@ fn record_observations(
     let observed_at = poll.observed_at;
     require_ready_space(tx, id)?;
     let followed = recorded_urls(tx, id, poll, agents)?;
-    // A watch of an explicit item reports all of its activity.
-    let concluding = match poll.selection.input {
-        Some(_) => Vec::new(),
-        None => concluding_prs(tx, id)?,
-    };
+    let reporting = Reporting::of(tx, id, &poll.selection)?;
     let mut updates = Vec::new();
     for (url, snapshot) in observations {
         if followed
@@ -130,14 +126,44 @@ fn record_observations(
             continue;
         }
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();
-        updates.extend(if concluding.contains(&url) {
-            record.observe_conclusion(snapshot, &url, observed_at)
-        } else {
-            record.observe(snapshot, &url, observed_at)
-        });
+        updates.extend(reporting.observe(&mut record, snapshot, &url, observed_at));
         save_cursor_record(tx, id, &url, &record)?;
     }
     Ok(updates)
+}
+
+/// What a watch reports of the items it observes: all of their activity,
+/// except of the related PRs it follows only to learn how they end.
+struct Reporting {
+    concluding: Vec<String>,
+}
+
+impl Reporting {
+    /// What a watch of `selection` in the space `id` reports; a watch of an
+    /// explicit item reports all of its activity.
+    fn of(db: &rusqlite::Connection, id: &SpaceId, selection: &Selection) -> Result<Self> {
+        let concluding = match selection.input {
+            Some(_) => Vec::new(),
+            None => concluding_prs(db, id)?,
+        };
+        Ok(Self { concluding })
+    }
+
+    /// The updates `record` reports for `snapshot` of the item at `url`,
+    /// seen by a poll that started at `observed_at`.
+    fn observe(
+        &self,
+        record: &mut WatchRecord,
+        snapshot: Snapshot,
+        url: &str,
+        observed_at: UnixTime,
+    ) -> Vec<Update> {
+        if self.concluding.iter().any(|concluding| concluding == url) {
+            record.observe_conclusion(snapshot, url, observed_at)
+        } else {
+            record.observe(snapshot, url, observed_at)
+        }
+    }
 }
 
 /// The URLs whose observations a watch of `poll`'s selection records on the

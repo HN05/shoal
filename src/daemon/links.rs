@@ -329,35 +329,52 @@ fn remove(
     for (kind, url) in &removed {
         events::record_link(db, id, EventKind::Unlinked, relation, *kind, url)?;
     }
-    forget_unfollowed(db, id, &removed)?;
+    forget_unfollowed(db, id, relation, &removed)?;
     Ok(removed.len())
 }
 
-/// Drop the replay cursors of the runs and PRs among `removed` that no link
-/// follows any more, so linking one again watches it afresh.
-fn forget_unfollowed(db: &Connection, id: &SpaceId, removed: &[(LinkKind, String)]) -> Result<()> {
+/// Drop the replay cursors of the items among `removed`, whose `dropped`
+/// links are going, that no other link follows, so linking one again
+/// watches it afresh.
+fn forget_unfollowed(
+    db: &Connection,
+    id: &SpaceId,
+    dropped: Relation,
+    removed: &[(LinkKind, String)],
+) -> Result<()> {
     let mut unfollowed = Vec::new();
     for (kind, url) in removed {
-        if !still_followed(db, id, *kind, url)? {
+        if !followed_beside(db, id, *kind, url, dropped)? {
             unfollowed.push(url.clone());
         }
     }
     forget_activity(db, id, &unfollowed)
 }
 
-/// Whether a link of the space still follows the item at `url`, keeping its
-/// replay cursor: any link of a run, and an assigned or related link of a
-/// PR. An opened or related issue has no cursor of its own.
-fn still_followed(db: &Connection, id: &SpaceId, kind: LinkKind, url: &str) -> Result<bool> {
-    Ok(match kind {
-        LinkKind::Issue => true,
-        LinkKind::Pr => {
-            let assigned = wait::linked_items(db, id, Some(ItemKind::Pr))?;
-            assigned.iter().any(|(assigned, _)| assigned == url)
-                || linked_as(db, id, url, Some(Relation::Related))?
-        }
-        LinkKind::Ci => linked_as(db, id, url, None)?,
-    })
+/// Whether a link of the space other than its `dropped` one follows the
+/// item at `url`, keeping its replay cursor: any link of a run, the
+/// assignment or a related link of a PR, the assignment of an issue.
+fn followed_beside(
+    db: &Connection,
+    id: &SpaceId,
+    kind: LinkKind,
+    url: &str,
+    dropped: Relation,
+) -> Result<bool> {
+    let assigned = match kind.item().filter(|_| dropped != Relation::Assigned) {
+        Some(kind) => wait::linked_items(db, id, Some(kind))?
+            .iter()
+            .any(|(assigned, _)| assigned == url),
+        None => false,
+    };
+    Ok(assigned
+        || match kind {
+            LinkKind::Issue => false,
+            LinkKind::Pr => {
+                dropped != Relation::Related && linked_as(db, id, url, Some(Relation::Related))?
+            }
+            LinkKind::Ci => linked_as(db, id, url, None)?,
+        })
 }
 
 /// Whether the space links the item at `url` under `relation`, or under any
@@ -371,22 +388,19 @@ fn linked_as(db: &Connection, id: &SpaceId, url: &str, relation: Option<Relation
     )?)
 }
 
-/// Drop what assigned items kept while linked, their replay cursors, except
-/// those of PRs a related link still follows, and review marks, and journal
-/// each as unlinked.
+/// Drop what assigned items kept while linked, their replay cursors unless
+/// another link follows them, and review marks, and journal each as
+/// unlinked.
 pub(crate) fn forget_assigned(
     db: &Connection,
     id: &SpaceId,
     kind: ItemKind,
     urls: &[String],
 ) -> Result<()> {
-    let mut unfollowed = Vec::new();
-    for url in urls {
-        if kind == ItemKind::Issue || !linked_as(db, id, url, Some(Relation::Related))? {
-            unfollowed.push(url.clone());
-        }
-    }
-    forget_activity(db, id, &unfollowed)?;
+    let items: Vec<_> = (urls.iter())
+        .map(|url| (kind.into(), url.clone()))
+        .collect();
+    forget_unfollowed(db, id, Relation::Assigned, &items)?;
     review::forget(db, id, urls)?;
     for url in urls {
         events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
