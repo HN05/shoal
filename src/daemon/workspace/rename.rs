@@ -34,10 +34,6 @@ impl Manager {
             .await?;
         let current = workspace.require_branch("renaming a branch")?.to_owned();
         self.verify_rename_source(&workspace, &repo.path).await?;
-        ensure!(
-            self.pr_registration(&workspace.id).await?.is_none(),
-            "cannot rename a workspace while a PR watch or acknowledgement is recorded"
-        );
         git::check_branch_name(Some(&repo.path), branch).await?;
         ensure!(
             !git::worktrunk::is_reserved_branch_name(branch),

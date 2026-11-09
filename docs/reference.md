@@ -624,8 +624,7 @@ rename does not choose a suffix. The default branch, branches checked out
 elsewhere, and Worktrunk-reserved names are refused. Scoped callers may rename
 their own workspace when no other execution is recorded; unscoped renames
 require no recorded executions. The caller keeps its original environment, and
-new commands receive the renamed identity. Existing PR watches and acknowledgements
-block renaming because their recorded remote head remains the original branch.
+new commands receive the renamed identity. PR watches and acknowledgements stay.
 An interrupted rename leaves the workspace failed until `shoal branch rename` runs
 again: it first finishes the interrupted rename when Git completed it, or cancels it
 when the branch is unchanged, then renames to the branch given. Confirmed-deleted

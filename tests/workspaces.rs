@@ -653,10 +653,8 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     );
     fixture.ok(&["acquire", "port", "web", "--workspace", "original"]);
     fixture.ok(&["acquire", "resource", "lock", "--workspace", "original"]);
+    // A PR registration names no branch, so it stays through the rename.
     fixture.acknowledge("original");
-    let blocked = fixture.rename("original", "blocked");
-    assert_eq!(blocked["type"], "error");
-    fixture.request(serde_json::json!({"set_pr":{"space":"original","clear":true}}));
     fixture.ok(&["done", "original"]);
     let before = fixture.ok(&["work", "status", "original"]);
     let response = fixture.rename("original", "feature/topic");
