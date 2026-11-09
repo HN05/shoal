@@ -95,12 +95,9 @@ impl Manager {
 pub(crate) fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceKind>> {
     use rusqlite::OptionalExtension as _;
     Ok(db
-        .query_row(
-            "SELECT 'workspace' FROM workspaces WHERE id=?1
-                UNION ALL SELECT 'chat' FROM chats WHERE id=?1",
-            [id],
-            |row| row.get(0),
-        )
+        .query_row("SELECT kind FROM spaces WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
         .optional()?)
 }
 

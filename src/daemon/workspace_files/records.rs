@@ -124,14 +124,10 @@ pub(crate) fn record(
             "INSERT INTO workspace_files
                 (space_id,space,parent_id,repository_id,root_dir,source,name,title,path,bytes,
                     created_at,attached_by)
-                SELECT id,name,parent,repository_id,root_dir,?2,?3,?4,?5,?6,unixepoch(),?7
-                FROM (SELECT id,name,(SELECT parent_id FROM space_parents WHERE space_id=?1)
-                            AS parent,repository_id,NULL AS root_dir
-                        FROM workspaces WHERE id=?1
-                    UNION ALL SELECT id,name,(SELECT parent_id FROM space_parents WHERE space_id=?1),
-                            repository_id,root_dir
-                        FROM chats WHERE id=?1)
-                WHERE true
+                SELECT spaces.id,spaces.name,
+                    (SELECT parent_id FROM space_parents WHERE space_id=?1),
+                    spaces.repository_id,chats.root_dir,?2,?3,?4,?5,?6,unixepoch(),?7
+                FROM spaces LEFT JOIN chats USING(id) WHERE spaces.id=?1
                 ON CONFLICT(path) DO UPDATE SET title=COALESCE(excluded.title,title)",
             params![
                 space_id,

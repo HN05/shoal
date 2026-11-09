@@ -111,10 +111,7 @@ async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<()> {
 /// without a repository.
 fn recorded_ids(db: &mut Connection, repository_id: Option<&str>) -> Result<BTreeSet<SpaceId>> {
     Ok(db
-        .prepare(
-            "SELECT id FROM workspaces WHERE repository_id IS ?1
-             UNION SELECT id FROM chats WHERE repository_id IS ?1",
-        )?
+        .prepare("SELECT id FROM spaces WHERE repository_id IS ?1")?
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

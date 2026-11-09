@@ -17,11 +17,6 @@ use crate::{
     state::{ChatRestore, WorkspaceState},
 };
 
-/// Every space as `id, repository_id, name, kind, branch`; a chat has no
-/// branch, and may have no repository.
-const SPACES: &str = "(SELECT id,repository_id,name,'workspace' AS kind,branch FROM workspaces
-    UNION ALL SELECT id,repository_id,name,'chat' AS kind,NULL AS branch FROM chats)";
-
 /// Each space a removal of another takes first, as `space_id, parent_id`:
 /// the spaces below it, and the chats in a workspace's worktree, which are
 /// not below it but cannot outlive it.
@@ -82,7 +77,7 @@ impl Manager {
                 Ok(db
                     .prepare(&format!(
                         "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM taken
-                            JOIN {SPACES} AS spaces USING(id)
+                            JOIN spaces USING(id)
                             WHERE depth > 0 ORDER BY depth, spaces.id",
                         taken()
                     ))?
@@ -102,7 +97,7 @@ impl Manager {
                     .prepare(&format!(
                         "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch
                             FROM {TAKEN_FIRST} AS first
-                            JOIN {SPACES} AS spaces ON spaces.id=first.space_id
+                            JOIN spaces ON spaces.id=first.space_id
                             WHERE first.parent_id=?1 ORDER BY spaces.kind, spaces.name"
                     ))?
                     .query_map([id], space_ref)?
@@ -119,7 +114,7 @@ impl Manager {
                 Ok(db
                     .prepare(&format!(
                         "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM up
-                            JOIN {SPACES} AS spaces USING(id) WHERE depth > 0 ORDER BY depth",
+                            JOIN spaces USING(id) WHERE depth > 0 ORDER BY depth",
                         up("true")
                     ))?
                     .query_map([id], space_ref)?
@@ -357,10 +352,8 @@ pub(crate) fn parent_in_repository(
 ) -> Result<(String, Option<WorkspaceState>)> {
     let recorded: Option<(Option<String>, String, Option<WorkspaceState>)> = db
         .query_row(
-            &format!(
-                "SELECT spaces.repository_id,spaces.name,workspaces.state FROM {SPACES} AS spaces
-                    LEFT JOIN workspaces USING(id) WHERE spaces.id=?1"
-            ),
+            "SELECT spaces.repository_id,spaces.name,workspaces.state FROM spaces
+                LEFT JOIN workspaces USING(id) WHERE spaces.id=?1",
             [parent],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
@@ -424,11 +417,11 @@ fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
 /// The spaces directly below the space `id`, by name.
 pub(crate) fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
     Ok(db
-        .prepare(&format!(
+        .prepare(
             "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
-                JOIN {SPACES} AS spaces ON spaces.id=space_parents.space_id
-                WHERE space_parents.parent_id=?1 ORDER BY spaces.name"
-        ))?
+                JOIN spaces ON spaces.id=space_parents.space_id
+                WHERE space_parents.parent_id=?1 ORDER BY spaces.name",
+        )?
         .query_map([id], space_ref)?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -437,11 +430,9 @@ pub(crate) fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
 pub(crate) fn parent(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
     Ok(db
         .query_row(
-            &format!(
-                "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
-                    JOIN {SPACES} AS spaces ON spaces.id=space_parents.parent_id
-                    WHERE space_parents.space_id=?1"
-            ),
+            "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
+                JOIN spaces ON spaces.id=space_parents.parent_id
+                WHERE space_parents.space_id=?1",
             [id],
             space_ref,
         )
@@ -457,7 +448,7 @@ pub(crate) fn delegated(
     Ok(db
         .prepare(&format!(
             "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM down
-                JOIN {SPACES} AS spaces USING(id) WHERE depth > 0 ORDER BY depth, name",
+                JOIN spaces USING(id) WHERE depth > 0 ORDER BY depth, name",
             down(&format!("NOT {}", has_agent("space_parents.space_id")))
         ))?
         .query_map(params![id, agents.parameter()], space_ref)?
@@ -577,11 +568,9 @@ fn coordinator(
     agents: &TrackedAgents,
 ) -> Result<Option<SpaceId>> {
     let id: Option<SpaceId> = db
-        .query_row(
-            &format!("SELECT id FROM {SPACES} WHERE name=?1"),
-            [name],
-            |row| row.get(0),
-        )
+        .query_row("SELECT id FROM spaces WHERE name=?1", [name], |row| {
+            row.get(0)
+        })
         .optional()?;
     let Some(id) = id else {
         return Ok(None);

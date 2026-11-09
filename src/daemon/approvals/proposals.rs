@@ -249,8 +249,7 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
 /// may have none.
 fn space_record(db: &Connection, id: &SpaceId) -> Result<(String, Option<String>)> {
     Ok(db.query_row(
-        "SELECT name,repository_id FROM workspaces WHERE id=?1
-            UNION ALL SELECT name,repository_id FROM chats WHERE id=?1",
+        "SELECT name,repository_id FROM spaces WHERE id=?1",
         [id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?)

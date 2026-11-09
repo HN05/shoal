@@ -57,7 +57,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let ids = db
-                    .prepare("SELECT id FROM workspaces UNION ALL SELECT id FROM chats")?
+                    .prepare("SELECT id FROM spaces")?
                     .query_map([], |row| row.get::<_, SpaceId>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut links = Vec::new();

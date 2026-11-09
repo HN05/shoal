@@ -167,9 +167,8 @@ fn in_use(db: &Connection, id: &str) -> Result<bool> {
 fn recorded_use(db: &Connection, id: &str) -> Result<bool> {
     store::exists(
         db,
-        "SELECT 1 FROM workspaces WHERE repository_id=?1
+        "SELECT 1 FROM spaces WHERE repository_id=?1
         UNION ALL SELECT 1 FROM agent_queue WHERE repository_id=?1
-        UNION ALL SELECT 1 FROM chats WHERE repository_id=?1
         UNION ALL SELECT 1 FROM access_requests WHERE repository_id=?1 AND active=1
         UNION ALL SELECT 1 FROM kept_branches WHERE repository_id=?1
         UNION ALL SELECT 1 FROM checkpoints

@@ -11,11 +11,11 @@ use crate::refusal::{Reason, Refusal};
 
 /// The number of the space `id`, a workspace or a chat.
 pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<u32> {
-    Ok(db.query_row(
-        "SELECT number FROM workspaces WHERE id=?1 UNION ALL SELECT number FROM chats WHERE id=?1",
-        [id],
-        |row| row.get(0),
-    )?)
+    Ok(
+        db.query_row("SELECT number FROM spaces WHERE id=?1", [id], |row| {
+            row.get(0)
+        })?,
+    )
 }
 
 /// The next number of the space `id`.

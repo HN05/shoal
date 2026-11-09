@@ -95,9 +95,7 @@ pub(crate) fn selected(
     };
     Ok(db
         .query_row(
-            "SELECT 'workspace', id FROM workspaces WHERE id=?1 OR name=?2 OR number=?3
-                UNION ALL SELECT 'chat', id FROM chats WHERE id=?1 OR name=?2 OR number=?3
-                LIMIT 1",
+            "SELECT kind, id FROM spaces WHERE id=?1 OR name=?2 OR number=?3 LIMIT 1",
             params![id, name, number],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )

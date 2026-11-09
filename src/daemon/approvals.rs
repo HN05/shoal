@@ -100,9 +100,8 @@ macro_rules! select {
     ($($filter:literal)?) => {
         concat!(
             "SELECT id,record,active,space_number,number,
-                workspace_id IS NULL AND NOT EXISTS (SELECT 1 FROM workspaces
-                        WHERE workspaces.number=access_requests.space_number
-                    UNION ALL SELECT 1 FROM chats WHERE chats.number=access_requests.space_number)
+                workspace_id IS NULL AND NOT EXISTS (SELECT 1 FROM spaces
+                    WHERE spaces.number=access_requests.space_number)
             FROM access_requests "$(, $filter)?
         )
     };
