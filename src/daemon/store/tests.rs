@@ -777,8 +777,9 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
     db.execute_batch(
         r#"INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
              VALUES ('chat','repo','talk','claude',1,'b',1);
-         INSERT INTO notifications(id,created_at,workspace,kind,message)
-             VALUES (1,1,'123','alert','a'),(2,1,'','alert','b'),(3,1,'worker','alert','c');
+         INSERT INTO notifications(id,created_at,workspace,workspace_id,kind,message)
+             VALUES (1,1,'123','workspace','alert','a'),(2,1,'',NULL,'alert','b'),
+                 (3,1,'worker','workspace','alert','c'),(4,1,'13','chat','alert','d');
          INSERT INTO workspace_files(id,space_id,space,repository_id,source,name,path,bytes,created_at)
              VALUES (1,'workspace','4','repo','result','4','/f/4',1,1),
                  (2,'chat','5','repo','result','5','/f/5',1,1);
@@ -787,9 +788,11 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
          INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
              VALUES ('empty','workspace','hold','h1','{"space":""}',0,1),
                  ('digits','workspace','hold','h2','{"space":"8"}',0,2),
-                 ('valid','workspace','hold','h3','{"space":"worker"}',0,3);
+                 ('valid','workspace','hold','h3','{"space":"worker"}',0,3),
+                 ('chat','workspace','hold','h4','{"space_id":"chat","space":"14"}',0,4);
          INSERT INTO workspace_events(record)
              VALUES ('{"kind":"test","name":"9"}'),
+                 ('{"kind":"test","chat_id":"chat","name":"15"}'),
                  ('{"kind":"test","chat":{"name":"10"}}'),
                  ('{"kind":"test","file":{"chat":"11","name":"12"}}');"#,
     )?;
@@ -808,7 +811,7 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
     };
     assert_eq!(
         column("SELECT workspace FROM notifications ORDER BY id")?,
-        names(&[Some("workspace-123"), None, Some("worker")])
+        names(&[Some("workspace-123"), None, Some("worker"), Some("chat-13")])
     );
     assert_eq!(
         column("SELECT space FROM workspace_files ORDER BY id")?,
@@ -820,7 +823,7 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
     );
     assert_eq!(
         column("SELECT json_extract(record,'$.space') FROM access_requests ORDER BY number")?,
-        names(&[None, Some("workspace-8"), Some("worker")])
+        names(&[None, Some("workspace-8"), Some("worker"), Some("chat-14")])
     );
     assert_eq!(
         column(
@@ -828,7 +831,12 @@ fn migration_renames_the_names_records_copied() -> Result<()> {
                 json_extract(record,'$.file.chat') || ' ' || json_extract(record,'$.file.name'))
             FROM workspace_events WHERE json_extract(record,'$.kind')='test' ORDER BY id"
         )?,
-        names(&[Some("workspace-9"), Some("chat-10"), Some("chat-11 12")])
+        names(&[
+            Some("workspace-9"),
+            Some("chat-15"),
+            Some("chat-10"),
+            Some("chat-11 12")
+        ])
     );
     Ok(())
 }

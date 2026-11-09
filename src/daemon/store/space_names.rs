@@ -62,92 +62,96 @@ fn invalid_names(db: &Connection, table: &str, key: &str) -> Result<Vec<(String,
         .collect())
 }
 
-/// How a copy of a space's name that is empty, or no valid name, reads
-/// once rewritten.
-#[derive(Clone, Copy)]
-enum Rewrite {
-    /// The name a space of this kind derives from it.
-    Derive(SpaceKind),
-    /// No name for an empty copy, which says none was known; otherwise as
-    /// [`Rewrite::Derive`].
-    ClearEmpty(SpaceKind),
+/// Whether an empty copy of a space's name goes, which says no name was
+/// known, rather than becoming the name it derives.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Empty {
+    Derive,
+    Clear,
 }
 
-impl Rewrite {
-    /// The copy `name` becomes; none when it goes.
-    fn of(self, name: &str) -> Option<SpaceName> {
-        match self {
-            Self::ClearEmpty(_) if name.is_empty() => None,
-            Self::Derive(kind) | Self::ClearEmpty(kind) => Some(SpaceName::derive(kind, name)),
-        }
-    }
-}
+/// What follows a space's ID in SQL to test that the ID is a chat's,
+/// running or ended.
+const CHAT_ID: &str = "IN (SELECT id FROM chats UNION ALL SELECT chat_id FROM ended_chats)";
 
 /// Rewrite the copies of space names that records keep beside the spaces,
 /// as [`rename_invalid_names`] renamed the spaces, so every copy reads as a
-/// [`SpaceName`]: those of notifications, attached files, simulator clean
-/// requests, approval requests and journal events.
+/// [`SpaceName`], taking a chat's kind where the copy names a chat: those
+/// of notifications, attached files, simulator clean requests, approval
+/// requests and journal events.
 pub(super) fn rename_invalid_copies(db: &Connection) -> Result<()> {
+    let notifications_chat = format!("workspace_id {CHAT_ID}");
     rename_column(
         db,
         "notifications",
         "workspace",
-        Rewrite::ClearEmpty(SpaceKind::Workspace),
+        &notifications_chat,
+        Empty::Clear,
     )?;
-    for (chat, kind) in [(false, SpaceKind::Workspace), (true, SpaceKind::Chat)] {
-        let files = format!(
-            "(SELECT * FROM workspace_files WHERE (space_id IN (SELECT id FROM chats)
-                OR space_id IN (SELECT chat_id FROM ended_chats))={})",
-            u8::from(chat)
-        );
-        for (id, name) in invalid_copies(db, &files, "id", "space")? {
-            let name = SpaceName::derive(kind, &name);
-            db.execute(
-                "UPDATE workspace_files SET space=?2 WHERE id=?1",
-                params![id, name],
-            )?;
-        }
-    }
-    let workspace = Rewrite::Derive(SpaceKind::Workspace);
+    let files_chat = format!("space_id {CHAT_ID}");
+    rename_column(db, "workspace_files", "space", &files_chat, Empty::Derive)?;
+    let simulator = "$.workspace_name";
     rename_in_records(
         db,
         "simulator_clean_requests",
-        "$.workspace_name",
-        workspace,
+        simulator,
+        "0",
+        Empty::Derive,
     )?;
-    let space = Rewrite::ClearEmpty(SpaceKind::Workspace);
-    rename_in_records(db, "access_requests", "$.space", space)?;
-    for (path, kind) in [
-        ("$.name", SpaceKind::Workspace),
-        ("$.chat.name", SpaceKind::Chat),
-        ("$.file.workspace", SpaceKind::Workspace),
-        ("$.file.chat", SpaceKind::Chat),
+    let requests_chat = format!("json_extract(record,'$.space_id') {CHAT_ID}");
+    rename_in_records(
+        db,
+        "access_requests",
+        "$.space",
+        &requests_chat,
+        Empty::Clear,
+    )?;
+    for (path, chat) in [
+        ("$.name", "json_extract(record,'$.chat_id') IS NOT NULL"),
+        ("$.chat.name", "1"),
+        ("$.file.workspace", "0"),
+        ("$.file.chat", "1"),
     ] {
-        rename_in_records(db, "workspace_events", path, Rewrite::Derive(kind))?;
+        rename_in_records(db, "workspace_events", path, chat, Empty::Derive)?;
     }
     Ok(())
 }
 
-/// Rewrite each copy in `column` of `table` that is no valid space name.
-fn rename_column(db: &Connection, table: &str, column: &str, rewrite: Rewrite) -> Result<()> {
-    for (id, name) in invalid_copies(db, table, "rowid", column)? {
+/// Rewrite each copy in `column` of `table` that is no valid space name,
+/// where `chat` says whether the row's copy names a chat.
+fn rename_column(
+    db: &Connection,
+    table: &str,
+    column: &str,
+    chat: &str,
+    empty: Empty,
+) -> Result<()> {
+    let rows = format!("SELECT rowid,{column},COALESCE({chat},0) FROM {table}");
+    for (id, name) in invalid_copies(db, &rows, empty)? {
         db.execute(
             &format!("UPDATE {table} SET {column}=?2 WHERE rowid=?1"),
-            params![id, rewrite.of(&name)],
+            params![id, name],
         )?;
     }
     Ok(())
 }
 
 /// Rewrite each copy at `path` in the JSON `record` of `table` that is no
-/// valid space name; a copy that goes leaves the record without it.
-fn rename_in_records(db: &Connection, table: &str, path: &str, rewrite: Rewrite) -> Result<()> {
-    let records = format!(
-        "(SELECT rowid AS key, json_extract(record,'{path}') AS copy FROM {table}
-            WHERE json_valid(record) AND json_type(record,'{path}')='text')"
+/// valid space name, as [`rename_column`] does; a copy that goes leaves the
+/// record without it.
+fn rename_in_records(
+    db: &Connection,
+    table: &str,
+    path: &str,
+    chat: &str,
+    empty: Empty,
+) -> Result<()> {
+    let rows = format!(
+        "SELECT rowid,json_extract(record,'{path}'),COALESCE({chat},0) FROM {table}
+            WHERE json_valid(record) AND json_type(record,'{path}')='text'"
     );
-    for (key, name) in invalid_copies(db, &records, "key", "copy")? {
-        match rewrite.of(&name) {
+    for (key, name) in invalid_copies(db, &rows, empty)? {
+        match name {
             Some(name) => db.execute(
                 &format!("UPDATE {table} SET record=json_set(record,'{path}',?2) WHERE rowid=?1"),
                 params![key, name],
@@ -161,22 +165,34 @@ fn rename_in_records(db: &Connection, table: &str, path: &str, rewrite: Rewrite)
     Ok(())
 }
 
-/// The rows of `rows`, a table or subquery, by `key`, whose `column` holds
-/// a name that is no valid space name.
+/// The copies `rows` selects, each a key, a name and whether it names a
+/// chat, that are no valid space name, by key with what each becomes: the
+/// name it derives for its kind, or none for an empty copy that `empty`
+/// clears.
 fn invalid_copies(
     db: &Connection,
     rows: &str,
-    key: &str,
-    column: &str,
-) -> Result<Vec<(i64, String)>> {
+    empty: Empty,
+) -> Result<Vec<(i64, Option<SpaceName>)>> {
     let copies = db
-        .prepare(&format!(
-            "SELECT {key},{column} FROM {rows} WHERE {column} IS NOT NULL"
-        ))?
-        .query_map([], |row| Ok((row.get(0)?, row.get::<_, String>(1)?)))?
-        .collect::<rusqlite::Result<Vec<(i64, String)>>>()?;
+        .prepare(rows)?
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get::<_, Option<String>>(1)?, row.get(2)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(i64, Option<String>, bool)>>>()?;
     Ok(copies
         .into_iter()
-        .filter(|(_, name)| SpaceName::parse(name).is_err())
+        .filter_map(|(key, name, chat)| Some((key, name?, chat)))
+        .filter(|(_, name, _)| SpaceName::parse(name).is_err())
+        .map(|(key, name, chat)| {
+            let kind = if chat {
+                SpaceKind::Chat
+            } else {
+                SpaceKind::Workspace
+            };
+            let rewritten = (empty == Empty::Derive || !name.is_empty())
+                .then(|| SpaceName::derive(kind, &name));
+            (key, rewritten)
+        })
         .collect())
 }
