@@ -5,11 +5,13 @@ use std::{fmt, str::FromStr};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
+use crate::space_ids::SpaceNumber;
+
 /// A question or approval request by its space's number and its own. Both
 /// kinds share one sequence per space, so a number names one item.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemNumber {
-    pub space: u32,
+    pub space: SpaceNumber,
     pub item: u32,
 }
 
@@ -40,7 +42,7 @@ impl FromStr for ItemNumber {
                 .with_context(|| format!("invalid number {text}: expected SPACE.ITEM, such as 3.2"))
         };
         Ok(Self {
-            space: part(space)?,
+            space: SpaceNumber::new(part(space)?),
             item: part(item)?,
         })
     }
@@ -86,7 +88,7 @@ impl<'de> Deserialize<'de> for ItemNumber {
         #[derive(Deserialize)]
         struct Numbers {
             #[serde(default)]
-            space_number: u32,
+            space_number: SpaceNumber,
             #[serde(default)]
             item: u32,
         }

@@ -43,16 +43,31 @@ async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
         .run(|db| {
             spaces(db)?;
             let first = next(db, &SpaceId::from("first"))?;
-            assert_eq!(first, ItemNumber { space: 1, item: 1 });
+            assert_eq!(
+                first,
+                ItemNumber {
+                    space: 1.into(),
+                    item: 1
+                }
+            );
             question(db, "first", first)?;
             let second = next(db, &SpaceId::from("first"))?;
-            assert_eq!(second, ItemNumber { space: 1, item: 2 });
+            assert_eq!(
+                second,
+                ItemNumber {
+                    space: 1.into(),
+                    item: 2
+                }
+            );
             request(db, "web", second)?;
             assert_eq!(next(db, &SpaceId::from("first"))?.item, 3);
             // Another space counts from 1 on its own.
             assert_eq!(
                 next(db, &SpaceId::from("chat"))?,
-                ItemNumber { space: 2, item: 1 }
+                ItemNumber {
+                    space: 2.into(),
+                    item: 1
+                }
             );
             // A deleted item frees its number for the next.
             db.execute("DELETE FROM questions", [])?;
@@ -69,15 +84,24 @@ async fn a_number_of_the_other_kind_names_the_right_command() -> Result<()> {
         .store
         .run(|db| {
             spaces(db)?;
-            let asked = ItemNumber { space: 1, item: 1 };
-            let requested = ItemNumber { space: 1, item: 2 };
+            let asked = ItemNumber {
+                space: 1.into(),
+                item: 1,
+            };
+            let requested = ItemNumber {
+                space: 1.into(),
+                item: 2,
+            };
             question(db, "first", asked)?;
             request(db, "web", requested)?;
             let refusal =
                 |kind, number| -> Result<String> { Ok(unknown(db, kind, number)?.to_string()) };
             assert!(refusal(ItemKind::Approval, asked)?.contains("shoal questions"));
             assert!(refusal(ItemKind::Question, requested)?.contains("shoal approvals"));
-            let absent = ItemNumber { space: 1, item: 3 };
+            let absent = ItemNumber {
+                space: 1.into(),
+                item: 3,
+            };
             assert!(refusal(ItemKind::Question, absent)?.starts_with("unknown"));
             Ok(())
         })

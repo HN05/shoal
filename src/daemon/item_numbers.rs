@@ -2,7 +2,7 @@
 //! Both kinds share one sequence per space, so `3.2` names one item: a new
 //! one takes the smallest number no item of its space holds, and a number
 //! names the other kind's item only as a refusal that says so.
-use crate::client::space_ids::SpaceId;
+use crate::client::space_ids::{SpaceId, SpaceNumber};
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
@@ -10,7 +10,7 @@ pub(crate) use crate::client::item_numbers::{ItemKind, ItemNumber};
 use crate::refusal::{Reason, Refusal};
 
 /// The number of the space `id`, a workspace or a chat.
-pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<u32> {
+pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber> {
     Ok(
         db.query_row("SELECT number FROM spaces WHERE id=?1", [id], |row| {
             row.get(0)
@@ -29,7 +29,7 @@ pub(crate) fn next(db: &Connection, id: &SpaceId) -> Result<ItemNumber> {
 
 /// The smallest item number no question or approval request of the space
 /// numbered `space` holds.
-pub(crate) fn free(db: &Connection, space: u32) -> Result<u32> {
+pub(crate) fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
     Ok(db.query_row(
         "WITH held(number) AS (
             SELECT number FROM questions WHERE space_number=?1

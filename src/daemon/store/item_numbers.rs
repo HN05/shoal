@@ -1,7 +1,7 @@
 //! Number the recorded questions and approval requests within their space,
 //! where both kinds now share one sequence, and name them that way in the
 //! notifications that told the user about them.
-use crate::client::space_ids::SpaceId;
+use crate::client::space_ids::{SpaceId, SpaceNumber};
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -65,7 +65,7 @@ fn separate_kinds(db: &Connection) -> Result<()> {
             ORDER BY rowid",
         )?
         .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+            Ok((row.get::<_, String>(0)?, row.get::<_, SpaceNumber>(1)?))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (key, space) in colliding {
@@ -132,7 +132,7 @@ struct Notification {
     message: String,
     subject: Option<String>,
     space_id: Option<SpaceId>,
-    space_number: Option<u32>,
+    space_number: Option<SpaceNumber>,
 }
 
 /// Rewrite the notifications about questions and requests to name their

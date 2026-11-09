@@ -41,8 +41,13 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
     let spaces = Spaces {
         workspaces: vec![workspace],
         chats: vec![
-            chat("c1", 1, "talk", None),
-            chat("c2", 2, "saved", Some(crate::state::ChatRestore::Resume)),
+            chat("c1", 1.into(), "talk", None),
+            chat(
+                "c2",
+                2.into(),
+                "saved",
+                Some(crate::state::ChatRestore::Resume),
+            ),
         ],
     };
     let found = |selector: &str| {

@@ -3,7 +3,13 @@ use super::*;
 #[test]
 fn numbers_name_the_space_then_the_item() {
     let number: ItemNumber = "3.12".parse().unwrap();
-    assert_eq!(number, ItemNumber { space: 3, item: 12 });
+    assert_eq!(
+        number,
+        ItemNumber {
+            space: 3.into(),
+            item: 12
+        }
+    );
     assert_eq!(number.to_string(), "3.12");
 }
 
@@ -16,7 +22,10 @@ fn a_bare_number_is_refused_with_the_full_form() {
 
 #[test]
 fn records_carry_both_numbers_and_their_text() {
-    let number = ItemNumber { space: 3, item: 2 };
+    let number = ItemNumber {
+        space: 3.into(),
+        item: 2,
+    };
     let json = serde_json::to_value(number).unwrap();
     assert_eq!(
         json,
@@ -27,7 +36,10 @@ fn records_carry_both_numbers_and_their_text() {
 
 #[test]
 fn the_other_kind_names_its_command() {
-    let number = ItemNumber { space: 3, item: 2 };
+    let number = ItemNumber {
+        space: 3.into(),
+        item: 2,
+    };
     let approval = ItemKind::Approval.misdirected(number);
     assert!(approval.contains("shoal approvals 3.2"), "{approval}");
     let question = ItemKind::Question.misdirected(number);

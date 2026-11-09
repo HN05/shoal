@@ -69,7 +69,10 @@ fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
 
 /// Item `item` of the space numbered `space`.
 fn item(space: u32, item: u32) -> ItemNumber {
-    ItemNumber { space, item }
+    ItemNumber {
+        space: space.into(),
+        item,
+    }
 }
 
 fn sample(owner: &SpaceId, target: Target) -> ApprovalRequest {

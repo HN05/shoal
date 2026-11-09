@@ -2,7 +2,10 @@ use super::*;
 
 fn question(status: QuestionStatus) -> Question {
     Question {
-        number: ItemNumber { space: 2, item: 3 },
+        number: ItemNumber {
+            space: 2.into(),
+            item: 3,
+        },
         space_id: "w1".into(),
         space: "cache".into(),
         created_at: crate::time::UnixTime::from_seconds(1),

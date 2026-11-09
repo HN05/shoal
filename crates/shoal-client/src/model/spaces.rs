@@ -1,7 +1,7 @@
 //! Spaces of either kind: the spaces a caller sees and references to them.
 use super::{Chat, SpaceLinks, Workspace};
 use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
+use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::{SpaceName, SpaceSelector};
 use serde::{Deserialize, Serialize};
 
@@ -66,7 +66,7 @@ impl PresentSpace {
         }
     }
 
-    pub fn number(&self) -> u32 {
+    pub fn number(&self) -> SpaceNumber {
         match self {
             Self::Workspace(workspace) => workspace.number,
             Self::Chat(chat) => chat.number,

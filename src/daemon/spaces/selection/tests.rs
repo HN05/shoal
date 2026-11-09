@@ -28,7 +28,7 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
         )
         .await
         .unwrap();
-    let number = |n: u32| SpaceSelector::Number(n);
+    let number = SpaceSelector::Number;
 
     let selected = manager.workspace(&number(worker.number)).await.unwrap();
     assert_eq!(selected.id, worker.id);
@@ -46,7 +46,7 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
             .contains(&format!("{} (talk)", chat.number))
     );
     assert!(manager.chat(&"worker".into()).await.is_err());
-    let missing = manager.space(&number(99)).await.unwrap_err();
+    let missing = manager.space(&number(99.into())).await.unwrap_err();
     assert!(missing.to_string().contains("no space 99"), "{missing}");
 }
 

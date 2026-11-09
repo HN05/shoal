@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::space_ids::SpaceNumber;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -28,7 +29,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 }
 
 /// Item `item` of the space numbered `space`.
-fn item(space: u32, item: u32) -> ItemNumber {
+fn item(space: SpaceNumber, item: u32) -> ItemNumber {
     ItemNumber { space, item }
 }
 
@@ -496,7 +497,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             },
             QuestionMethod::WithdrawQuestion {
                 space: SpaceSelector::parse(target),
-                number: item(1, 1),
+                number: item(1.into(), 1),
                 shown: None,
             },
         ] {
@@ -518,11 +519,13 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
     ));
     for mut method in [
         QuestionMethod::AnswerQuestion {
-            number: item(1, 1),
+            number: item(1.into(), 1),
             answer: "yes".into(),
             shown: None,
         },
-        QuestionMethod::ShowQuestion { number: item(1, 1) },
+        QuestionMethod::ShowQuestion {
+            number: item(1.into(), 1),
+        },
     ] {
         assert!(
             scope::authorize(&manager, Some(&"scope".into()), &mut method)

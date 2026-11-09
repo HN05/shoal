@@ -2,7 +2,12 @@ use super::*;
 
 #[test]
 fn notifications_name_the_number_each_form_gave() {
-    let number = |old| (old == 5).then_some(ItemNumber { space: 3, item: 2 });
+    let number = |old| {
+        (old == 5).then_some(ItemNumber {
+            space: 3.into(),
+            item: 2,
+        })
+    };
     assert_eq!(
         renumbered(
             "approval 5: open issue \"x\"; approve with shoal approvals --approve 5",
@@ -36,7 +41,7 @@ fn notifications_name_the_number_each_form_gave() {
             "withdrew question 1 (no answer needed): Which?",
             QUESTION_FORMS,
             |old| Some(ItemNumber {
-                space: 1,
+                space: 1.into(),
                 item: u32::try_from(old).ok()?
             })
         )

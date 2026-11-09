@@ -71,7 +71,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
     let chat = Chat {
         narrowing: Default::default(),
         mode: "plan".into(),
-        number: 1,
+        number: 1.into(),
         id: "c1".into(),
         repository_id: Some("r1".into()),
         name: "plan-cache".into(),

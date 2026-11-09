@@ -16,7 +16,7 @@ fn spaces() -> Spaces {
     let chat = |id: &str, name: &str, restore| Chat {
         narrowing: Default::default(),
         mode: "chat".into(),
-        number: 1,
+        number: 1.into(),
         id: id.into(),
         repository_id: Some("repo".into()),
         name: name.into(),

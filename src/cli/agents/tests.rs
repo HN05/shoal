@@ -46,7 +46,7 @@ fn chat(
     Chat {
         narrowing: Default::default(),
         mode: mode.into(),
-        number: 1,
+        number: 1.into(),
         id: "chat-id".into(),
         repository_id: repository_id.map(Into::into),
         name: "talk".into(),

@@ -4,7 +4,7 @@ use crate::{forge::items::link::ItemKind, state::WorkspaceState};
 
 fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) -> Workspace {
     Workspace {
-        number: 1,
+        number: 1.into(),
         ..Workspace::new_record(
             repository.into(),
             name.into(),
@@ -307,7 +307,7 @@ fn workspace_rows_align_status_and_titles() {
     workspaces[10].done = true;
     workspaces[10].agent_state = agent(AgentState::Waiting);
     for (number, workspace) in (1..).zip(&mut workspaces) {
-        workspace.number = number;
+        workspace.number = number.into();
     }
     assert_eq!(
         workspace_rows(

@@ -1,7 +1,7 @@
 //! How spaces are named and selected: a space's name, which is never all
 //! digits, since a number alone selects a space by its number, and the
 //! selector a command names a space with.
-use crate::space_ids::SpaceId;
+use crate::space_ids::{SpaceId, SpaceNumber};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
@@ -184,7 +184,7 @@ impl PartialEq<SpaceName> for String {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum SpaceSelector {
-    Number(u32),
+    Number(SpaceNumber),
     IdOrName(String),
     Id(SpaceId),
 }
@@ -225,7 +225,7 @@ impl SpaceSelector {
     }
 
     /// Whether it selects the space with this ID, name and number.
-    pub fn selects(&self, id: &SpaceId, name: &str, number: u32) -> bool {
+    pub fn selects(&self, id: &SpaceId, name: &str, number: SpaceNumber) -> bool {
         match self {
             Self::Number(selected) => *selected == number,
             _ => self.names(id, name),

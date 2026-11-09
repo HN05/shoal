@@ -1,7 +1,7 @@
 //! Workspace records and the commit, copy or branch they start from.
 use super::{AgentStatus, QueuedJob, ReviewMark, SpaceLinks, SpaceRef, WorkspaceHold};
 use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
+use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use crate::state::{AgentState, WorkspaceState};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ pub struct Workspace {
     /// Unique among the spaces that exist, workspaces and chats; freed when
     /// it goes.
     #[serde(default)]
-    pub number: u32,
+    pub number: SpaceNumber,
     pub repository_id: RepositoryId,
     pub name: SpaceName,
     /// What its agent calls the work, which its tabs show.
@@ -197,7 +197,7 @@ impl Workspace {
         Self {
             narrowing: Default::default(),
             id: SpaceId::generate(),
-            number: 0,
+            number: SpaceNumber::default(),
             repository_id,
             name,
             title: None,

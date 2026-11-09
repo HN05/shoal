@@ -1111,7 +1111,7 @@ fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questi
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(requests, [("grant".into(), 1, 1), ("land".into(), 2, 2)]);
     // Both kinds now share their space's numbers.
-    assert_eq!(crate::daemon::item_numbers::free(&db, 1)?, 3);
+    assert_eq!(crate::daemon::item_numbers::free(&db, 1.into())?, 3);
     Ok(())
 }
 

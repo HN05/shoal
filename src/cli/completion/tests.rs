@@ -184,7 +184,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             Body::Chats(vec![Chat {
                 narrowing: Default::default(),
                 mode: "chat".into(),
-                number: 1,
+                number: 1.into(),
                 id: "c1".into(),
                 repository_id: Some("repo".into()),
                 name: "chat".into(),
@@ -265,7 +265,7 @@ fn resume_completes_resumable_spaces() {
     let chat = |name: &str, restore| Chat {
         narrowing: Default::default(),
         mode: "chat".into(),
-        number: 1,
+        number: 1.into(),
         id: name.into(),
         repository_id: Some("repo".into()),
         name: name.into(),

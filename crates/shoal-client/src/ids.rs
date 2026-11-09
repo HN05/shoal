@@ -155,3 +155,88 @@ macro_rules! text_id {
 }
 
 pub(crate) use text_id;
+
+/// Defines `$name` as a number that counts things of one kind, held as the
+/// unsigned integer `$inner` and stored as SQLite's integer.
+macro_rules! number {
+    ($(#[$meta:meta])* $name:ident($inner:ty)) => {
+        $(#[$meta])*
+        #[derive(
+            Debug,
+            Clone,
+            Copy,
+            Default,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            serde::Serialize,
+            serde::Deserialize,
+        )]
+        #[serde(transparent)]
+        pub struct $name($inner);
+
+        impl $name {
+            pub const fn new(number: $inner) -> Self {
+                Self(number)
+            }
+
+            pub const fn get(self) -> $inner {
+                self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = std::num::ParseIntError;
+
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                value.parse().map(Self)
+            }
+        }
+
+        /// Numbers tests write as literals.
+        #[cfg(any(test, feature = "test-support"))]
+        impl From<$inner> for $name {
+            fn from(number: $inner) -> Self {
+                Self(number)
+            }
+        }
+
+        #[cfg(any(test, feature = "test-support"))]
+        impl PartialEq<$inner> for $name {
+            fn eq(&self, other: &$inner) -> bool {
+                self.0 == *other
+            }
+        }
+
+        #[cfg(feature = "rusqlite")]
+        impl rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                i64::try_from(self.0)
+                    .map(rusqlite::types::ToSqlOutput::from)
+                    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(error.into()))
+            }
+        }
+
+        #[cfg(feature = "rusqlite")]
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(
+                value: rusqlite::types::ValueRef<'_>,
+            ) -> rusqlite::types::FromSqlResult<Self> {
+                let number = value.as_i64()?;
+                <$inner>::try_from(number)
+                    .map(Self)
+                    .map_err(|_| rusqlite::types::FromSqlError::OutOfRange(number))
+            }
+        }
+    };
+}
+
+pub(crate) use number;

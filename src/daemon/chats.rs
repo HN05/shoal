@@ -8,7 +8,7 @@
 //! until it is removed.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
+use crate::client::space_ids::{SpaceId, SpaceNumber};
 use std::{path::Path, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -203,7 +203,7 @@ impl Manager {
         }
         let chat = Chat {
             id: SpaceId::generate(),
-            number: 0,
+            number: SpaceNumber::default(),
             repository_id: (home.repository.as_ref()).map(|repository| repository.id.clone()),
             name,
             agent,

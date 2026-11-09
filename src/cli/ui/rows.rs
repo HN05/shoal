@@ -2,7 +2,7 @@
 //! launches and repositories, with their status cells.
 use crate::cli::list_status::ListStatusExt;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::space_ids::{SpaceId, SpaceNumber};
 use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;
@@ -396,7 +396,7 @@ pub fn with_mode(
 }
 
 /// A space's number, as the first cell of its row.
-fn number_cell(number: u32) -> Cell {
+fn number_cell(number: SpaceNumber) -> Cell {
     (number.to_string(), Some(Style::Muted))
 }
 

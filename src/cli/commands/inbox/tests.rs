@@ -34,7 +34,10 @@ fn a_question_notes_its_recommendation_and_files() {
         path: format!("/files/{name}").into(),
     };
     let question = crate::client::questions::Question {
-        number: crate::client::item_numbers::ItemNumber { space: 2, item: 3 },
+        number: crate::client::item_numbers::ItemNumber {
+            space: 2.into(),
+            item: 3,
+        },
         space_id: "w1".into(),
         space: "cache".into(),
         created_at: UnixTime::from_seconds(0),

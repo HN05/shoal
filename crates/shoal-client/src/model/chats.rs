@@ -3,7 +3,7 @@ use super::{
     AgentStatus, Completion, Repository, ReviewMark, SpaceLinks, SpaceRef, Workspace, WorkspaceRef,
 };
 use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
+use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ pub struct Chat {
     /// Unique among the spaces that exist, workspaces and chats; freed when
     /// it goes.
     #[serde(default)]
-    pub number: u32,
+    pub number: SpaceNumber,
     /// The repository it belongs to; none for a chat that manages the
     /// spaces of every repository.
     pub repository_id: Option<RepositoryId>,

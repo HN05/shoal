@@ -6,7 +6,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
     Workspace {
         narrowing: Default::default(),
         mode: None,
-        number: 1,
+        number: 1.into(),
         holds: Vec::new(),
         review: Vec::new(),
         latest_review: None,
@@ -46,7 +46,7 @@ fn explicit_numbers_names_and_ids_win_and_misses_do_not_fall_back() {
     let workspaces = [
         workspace("own", Path::new("/unused")),
         Workspace {
-            number: 2,
+            number: 2.into(),
             ..workspace("explicit", Path::new("/elsewhere"))
         },
     ];
