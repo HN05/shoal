@@ -1291,7 +1291,7 @@ impl<'a> ClaimedChange<'a> {
 pub(crate) fn change_permission(
     paths: &Paths,
     workspace_id: &SpaceId,
-    id: &str,
+    id: &ExecutionId,
     change: &PermissionChange,
 ) -> Result<()> {
     let mut saved = Saved::load(paths, workspace_id)?;

@@ -50,5 +50,5 @@ pub enum AssignmentMethod {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedAgent {
     pub workspace: SpaceSelector,
-    pub execution: String,
+    pub execution: ExecutionId,
 }

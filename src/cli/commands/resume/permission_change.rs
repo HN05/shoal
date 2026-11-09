@@ -6,6 +6,7 @@
 use anyhow::{Context as _, Result, ensure};
 
 use super::targets::Selected;
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
@@ -24,7 +25,7 @@ use crate::{
 pub(super) async fn check(
     ctx: &Context,
     selected: &Selected,
-    execution: Option<&str>,
+    execution: Option<&ExecutionId>,
     change: &PermissionChange,
 ) -> Result<()> {
     let selectors = (selected.workspaces.as_deref())
@@ -51,7 +52,7 @@ pub(super) async fn check(
 async fn saved_agents(
     ctx: &Context,
     selector: &SpaceSelector,
-    execution: Option<&str>,
+    execution: Option<&ExecutionId>,
 ) -> Result<(Workspace, Saved)> {
     let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
@@ -87,12 +88,12 @@ pub(super) async fn apply(
 pub(super) async fn apply_one(
     ctx: &Context,
     workspace: &Workspace,
-    execution: &str,
+    execution: &ExecutionId,
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agent = SavedAgent {
         workspace: SpaceSelector::id(&workspace.id),
-        execution: execution.to_owned(),
+        execution: execution.clone(),
     };
     request(ctx, vec![agent], Vec::new(), change).await
 }

@@ -76,7 +76,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
         return Ok(code);
     }
     if let Some(change) = change {
-        permission_change::check(ctx, &selected, execution.as_deref(), change).await?;
+        permission_change::check(ctx, &selected, execution.as_ref(), change).await?;
     }
     if scoped && !discard {
         return queue_below(ctx, selected, execution, change).await;

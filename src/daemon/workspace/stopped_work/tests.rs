@@ -1,3 +1,4 @@
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
@@ -25,11 +26,17 @@ async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
             .unwrap();
         agents.push(SavedAgent {
             workspace: SpaceSelector::id(&workspace.id),
-            execution: format!("{name}-agent"),
+            execution: ExecutionId::from(format!("{name}-agent")),
         });
         if name == "stopped" {
             let agent = TrackedAgent::named("claude");
-            LastSession::save(&manager.paths, &workspace.id, &agent, "stopped-agent").unwrap();
+            LastSession::save(
+                &manager.paths,
+                &workspace.id,
+                &agent,
+                &ExecutionId::from("stopped-agent"),
+            )
+            .unwrap();
             stopped_id = Some(workspace.id);
         } else {
             running_id = Some(workspace.id);

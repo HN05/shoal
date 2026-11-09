@@ -859,7 +859,8 @@ impl Manager {
             !connections.is_connected(&request.execution),
             "execution is already connected"
         );
-        let (workspace_id, agent_execution, narrowing) = self.authorize_reattachment(request).await?;
+        let (workspace_id, agent_execution, narrowing) =
+            self.authorize_reattachment(request).await?;
         let workspace = self.workspace_by_id(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.

@@ -92,7 +92,7 @@ impl Manager {
     /// [`Manager::ensure_change_held`] refuses it.
     async fn ensure_restart_held(
         &self,
-        execution: &str,
+        execution: &ExecutionId,
         change: &PermissionChange,
         giver: Option<&SpaceId>,
     ) -> Result<()> {

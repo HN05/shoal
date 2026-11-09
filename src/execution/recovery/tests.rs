@@ -646,8 +646,16 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
         .unwrap(),
         ..crate::execution::TrackedAgent::named("claude")
     };
-    save_record(&paths, &workspace, "stopped", &agent, Some("asked"), None).unwrap();
-    LastSession::save(&paths, &workspace, &agent, "last").unwrap();
+    save_record(
+        &paths,
+        &workspace,
+        &ExecutionId::from("stopped"),
+        &agent,
+        Some("asked"),
+        None,
+    )
+    .unwrap();
+    LastSession::save(&paths, &workspace, &agent, &ExecutionId::from("last")).unwrap();
     let change = crate::config::permissions::PermissionChange {
         set: crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
             .unwrap(),
@@ -660,9 +668,13 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     ])
     .unwrap();
     change_permissions(&[Saved::load(&paths, &workspace).unwrap()], &change).unwrap();
-    let record = Record::load(&record_path(&paths, &workspace, "stopped"))
-        .unwrap()
-        .unwrap();
+    let record = Record::load(&record_path(
+        &paths,
+        &workspace,
+        &ExecutionId::from("stopped"),
+    ))
+    .unwrap()
+    .unwrap();
     assert_eq!(
         (record.narrowing, record.stop_reason.as_deref()),
         (replacement, Some("asked"))
@@ -678,8 +690,8 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     // A record a restore claimed is refused, and none changes, in any
     // workspace.
     let other = SpaceId::from("other");
-    LastSession::save(&paths, &other, &agent, "other-last").unwrap();
-    let record = record_path(&paths, &workspace, "stopped");
+    LastSession::save(&paths, &other, &agent, &ExecutionId::from("other-last")).unwrap();
+    let record = record_path(&paths, &workspace, &ExecutionId::from("stopped"));
     let _restoring = claim(&record).unwrap();
     let saved = [&other, &workspace].map(|id| Saved::load(&paths, id).unwrap());
     assert!(change_permissions(&saved, &change).is_err());

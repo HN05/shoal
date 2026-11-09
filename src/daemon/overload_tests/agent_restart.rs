@@ -308,7 +308,11 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
         .unwrap();
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move { manager.restart_agent(&execution, None, false, None).await }
+        async move {
+            manager
+                .restart_agent(&execution, None, false, None, None)
+                .await
+        }
     });
     bounded(launched).await.unwrap().unwrap();
     let restore = starting_restore(&manager, &execution).await;
