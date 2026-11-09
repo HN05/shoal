@@ -209,6 +209,9 @@ and manual recovery persists across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded, except that a done
 assignment needs no agent, so a done workspace's agent is restored neither
 automatically nor by `shoal resume --all`, only by resuming that workspace.
+Resuming it says the work is not finished, so the restored agent's start in a
+new wrapper withdraws the completion, and a protection stop restores it again;
+Shoal's restores in the waiting wrapper and restarts keep it.
 An idle agent of a done workspace whose cleanup is held could run until the
 workspace goes, so the cleanup sweep stops it as protection stops an agent
 between turns, and an update restores it although the assignment is done,

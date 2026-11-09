@@ -62,6 +62,27 @@ impl Manager {
         Ok(completion)
     }
 
+    /// The agent `execution_id` started again from its saved session in a
+    /// new wrapper, as `shoal resume` starts it, so it works on the
+    /// assignment again: withdraw the completion, so a protection stop
+    /// restores it. A restart's agent keeps it.
+    pub(crate) async fn reopen_for_resumed_agent(&self, workspace_id: &str, execution_id: &str) {
+        if self.restart_resumed(execution_id).await {
+            return;
+        }
+        match self.completion(workspace_id).await {
+            Ok(Some(_)) => {}
+            Ok(None) => return,
+            Err(error) => {
+                crate::daemon::log!("completion of the resumed agent not read: {error:#}");
+                return;
+            }
+        }
+        if let Err(error) = self.undo_done(&SpaceSelector::id(workspace_id)).await {
+            crate::daemon::log!("completion of the resumed agent not withdrawn: {error:#}");
+        }
+    }
+
     /// Record `done` at the workspace's HEAD. Copies of the files it hands
     /// back are attached by `attacher`, and the workspace's attached files
     /// keep them after its removal.

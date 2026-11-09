@@ -1072,6 +1072,104 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     serving.abort();
 }
 
+/// An agent that went back to work after `shoal done` and was stopped is
+/// resumed by hand; the resume withdraws the completion, so the next stop
+/// restores it.
+#[tokio::test]
+async fn resuming_a_done_workspaces_agent_lets_a_later_stop_restore_it() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = only_execution(&manager, &workspace).await;
+    manager
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    bounded(launched).await.unwrap().unwrap();
+    fs::remove_file(workspace.path.join("started")).unwrap();
+    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
+    let mut command = child_command(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::resumed_agent_child",
+    );
+    command.env("SHOAL_TEST_RECORD", &record);
+    let resumed = run_child(command);
+    wait_started(&manager, &workspace).await;
+    wait_withdrawn(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    publish_recovery(&manager);
+    bounded(resumed).await.unwrap().unwrap();
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    serving.abort();
+}
+
+/// The start of the restored agent withdraws the completion after its
+/// process group is recorded.
+async fn wait_withdrawn(manager: &Manager, workspace: &crate::model::Workspace) {
+    bounded(async {
+        while manager.completion(&workspace.id).await.unwrap().is_some() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+}
+
+async fn only_execution(manager: &Manager, workspace: &crate::model::Workspace) -> String {
+    let mut executions = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .executions;
+    assert_eq!(executions.len(), 1);
+    executions.remove(0).id
+}
+
+/// The agent saved at `SHOAL_TEST_RECORD`, restored in a new wrapper as
+/// `shoal resume` restores it.
+#[tokio::test]
+#[ignore = "isolated restoring wrapper launched by overload tests"]
+async fn resumed_agent_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::current_dir().unwrap();
+    let paths = crate::paths::Paths::for_test(root);
+    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let record = std::env::var_os("SHOAL_TEST_RECORD").unwrap();
+    let script = "trap 'exit 0' TERM; touch started; while :; do sleep 1; done";
+    let code = crate::execution::run_recovery(
+        &paths,
+        id,
+        vec!["sh".into(), "-c".into(), script.into()],
+        crate::execution::TrackedAgent::named("fixture"),
+        vec![record.into()],
+    )
+    .await
+    .unwrap_or_else(|error| {
+        eprintln!("shoal: {error:#}");
+        1
+    });
+    std::process::exit(code);
+}
+
 #[tokio::test]
 async fn finishing_the_assignment_cancels_a_waiting_restore() {
     let (_root, manager, workspace, serving) = fixture().await;

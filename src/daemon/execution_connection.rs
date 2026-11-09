@@ -420,7 +420,7 @@ async fn relay(
             } => {
                 awaiting_started = false;
                 *started = true;
-                *resuming = false;
+                let resumed_here = std::mem::take(resuming);
                 let _operation = match unattachable.take() {
                     Some(operation) => operation,
                     None => manager.gates.owned_operation().await,
@@ -431,6 +431,8 @@ async fn relay(
                 if let Some(tracked) = agent {
                     if !restored {
                         manager.forget_last_sessions(&workspace.id);
+                    } else if !resumed_here {
+                        (manager.reopen_for_resumed_agent(&workspace.id, execution_id)).await;
                     }
                     manager.agent_started(execution_id).await;
                     let started = agent_event(tracked, execution_id, None);
