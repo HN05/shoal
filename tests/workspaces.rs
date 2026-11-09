@@ -657,6 +657,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     fixture.acknowledge("original");
     fixture.ok(&["done", "original"]);
     let before = fixture.ok(&["work", "status", "original"]);
+    assert!(before["pr_cleanup"]["head"].is_string(), "{before}");
     let response = fixture.rename("original", "feature/topic");
     assert_eq!(response["type"], "workspace", "{response}");
     let renamed = &response["data"];
