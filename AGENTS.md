@@ -250,8 +250,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   then each key the `--permission` given to its agent sets takes that value as
   given; it is recorded beside each `mode` column, kept by restores and
   restarts, and changed per key by their own `--permission`. A scoped process
-  gives only values its own space holds, which the daemon checks wherever such
-  a process brings one in. One daemon
+  gives only values its own space holds, including the value a key it drops
+  with `KEY=mode` falls back to, which the daemon checks wherever such a
+  process brings one in. One daemon
   operation computes them at each check from current config, the recorded
   modes and given values and the tree; a scoped check reads the acting caller's space's
   through it, never a repository's settings, and a chat without a repository

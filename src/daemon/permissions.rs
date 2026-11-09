@@ -87,17 +87,42 @@ impl Manager {
         (self.ensure_caller_holds(giver, given, Some(&repository))).await
     }
 
-    /// Refuse `change` to the permissions of the running `chat`'s agent
-    /// where the scoped process of the space `giver` does not hold what it
-    /// gives.
+    /// Refuse `change` to the permissions of `space`'s agent where the
+    /// scoped process of the space `giver` does not hold a value it sets,
+    /// or the value a key it drops falls back to: the space's without what
+    /// its agent was given.
+    pub(crate) async fn ensure_change_held(
+        &self,
+        giver: Option<&SpaceId>,
+        space: &PresentSpace,
+        change: &PermissionChange,
+        repository: Option<&str>,
+    ) -> Result<()> {
+        let Some(giver) = giver else {
+            return Ok(());
+        };
+        let held = self.space_permissions(giver, repository).await?;
+        let mode = recorded_agent(space).map(|(mode, _)| (mode, PermissionsConfig::default()));
+        let fallback =
+            (self.permissions_below_parent(&self.config(), space, mode, repository)).await?;
+        change.ensure_held(&fallback, &held)
+    }
+
+    /// [`Self::ensure_change_held`] for the running `chat` a restart
+    /// restarts; for a chat no longer running, only for the values `change`
+    /// sets.
     pub(crate) async fn ensure_chat_restart_held(
         &self,
         giver: Option<&SpaceId>,
         chat: Option<&Chat>,
         change: &PermissionChange,
     ) -> Result<()> {
-        let repository = chat.and_then(|chat| chat.repository_id.as_deref());
-        (self.ensure_caller_holds(giver, &change.set, repository)).await
+        let Some(chat) = chat else {
+            return (self.ensure_caller_holds(giver, &change.set, None)).await;
+        };
+        let repository = chat.repository_id.clone();
+        let space = PresentSpace::Chat(chat.clone());
+        (self.ensure_change_held(giver, &space, change, repository.as_deref())).await
     }
 
     /// Refuse an agent of `workspace` the scoped process of the space

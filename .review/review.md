@@ -239,8 +239,8 @@ instead of the PR delivery guidance below.
   `[permissions]`), each no wider than its parent's, then each key the `--permission` given to
   its agent at start, resume or restart sets, as given, computed at each check
   through one daemon operation; flag a check that reads a repository's `[permissions]` directly.
-  A scoped process gives only values its own space holds, which the daemon checks wherever such
-  a process brings a value in; flag a path that records one unchecked. This is cooperative, not a
+  A scoped process gives only values its own space holds, including the value a `KEY=mode` drop
+  falls back to, which the daemon checks wherever such a process brings a value in; flag a path that records one unchecked. This is cooperative, not a
   security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

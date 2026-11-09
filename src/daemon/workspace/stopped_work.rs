@@ -133,7 +133,8 @@ impl Manager {
     }
 
     /// The saved chat `selector` names, refusing one that is not saved and
-    /// `change` where `giver` does not hold what it gives.
+    /// `change` where `giver` does not hold what it gives, as
+    /// [`Manager::ensure_change_held`] refuses it.
     async fn changeable_chat(
         &self,
         selector: &SpaceSelector,
@@ -142,16 +143,16 @@ impl Manager {
     ) -> Result<crate::model::Chat> {
         let chat = self.chat(selector).await?;
         ensure!(chat.restore.is_some(), "chat {} is not stopped", chat.name);
-        let repository = chat.repository_id.as_deref();
-        self.ensure_caller_holds(giver, &change.set, repository)
-            .await?;
+        let repository = chat.repository_id.clone();
+        let space = crate::model::PresentSpace::Chat(chat.clone());
+        (self.ensure_change_held(giver, &space, change, repository.as_deref())).await?;
         Ok(chat)
     }
 
     /// What the stopped `agent` saved, refusing one that saved nothing, one
     /// its waiting wrapper restores, which keeps the permissions that
     /// wrapper launched it with, and `change` where `giver` does not hold
-    /// what it gives.
+    /// what it gives, as [`Manager::ensure_change_held`] refuses it.
     async fn changeable(
         &self,
         agent: &SavedAgent,
@@ -159,9 +160,9 @@ impl Manager {
         giver: Option<&SpaceId>,
     ) -> Result<Saved> {
         let (workspace, execution) = (self.workspace(&agent.workspace).await?, &agent.execution);
-        let repository = Some(workspace.repository_id.as_str());
-        self.ensure_caller_holds(giver, &change.set, repository)
-            .await?;
+        let repository = Some(workspace.repository_id.clone());
+        let space = crate::model::PresentSpace::Workspace(workspace.clone());
+        (self.ensure_change_held(giver, &space, change, repository.as_deref())).await?;
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
         saved.retain_execution(execution, false);
         ensure!(

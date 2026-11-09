@@ -148,6 +148,21 @@ fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
 }
 
 #[test]
+fn a_dropped_key_gives_the_value_it_falls_back_to() {
+    let settings = settings("", "");
+    let chat = resolve(&settings, mode("chat")).unwrap();
+    let worker = resolve(&settings, mode("worker")).unwrap();
+    let drop_merge = PermissionChange::assigned("merge=mode").unwrap();
+    // A chat's mode merges directly, which a worker does not hold.
+    let refused = drop_merge.ensure_held(&chat, &worker).unwrap_err();
+    assert!(format!("{refused:#}").contains("merge=direct"));
+    assert!(drop_merge.ensure_held(&worker, &worker).is_ok());
+    assert!(drop_merge.ensure_held(&chat, &chat).is_ok());
+    let set_merge = PermissionChange::assigned("merge=direct").unwrap();
+    assert!(set_merge.ensure_held(&worker, &worker).is_err());
+}
+
+#[test]
 fn a_permission_change_keeps_the_keys_it_does_not_name() {
     let given =
         PermissionsConfig::assigned(&["push=propose".to_owned(), "merge=propose".to_owned()])

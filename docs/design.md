@@ -2516,7 +2516,10 @@ check capped it at the parent's, applies as given since: the records name no
 giver to check it against, and none was ever wider than its mode. `shoal resume` and `shoal restart` take `--permission` too and change
 the given values per key, `KEY=mode` dropping one, so a parent changes what a
 child may do without ending its session or restating the rest; the mode stays,
-since changing it would change the agent's rules mid-session. The change goes
+since changing it would change the agent's rules mid-session. A dropped key
+falls back to the space's value without one, which the giver must hold as it
+holds a value it sets, so a drop cannot hand a child what a space between them
+was given. The change goes
 into the record a restore reads, so a restore here, in the background or from
 the queue runs with it alike. A wrapper that restores its own agent, after an
 in-place restart or a protection stop, keeps the push rules it launched with,

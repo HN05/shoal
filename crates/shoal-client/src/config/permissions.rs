@@ -178,6 +178,13 @@ impl PermissionsConfig {
             .fold(*self, |beyond, &key| beyond.without(key))
     }
 
+    /// These permissions with only the values they set for `keys`.
+    fn only(self, keys: &[PermissionKey]) -> Self {
+        (PermissionKey::ALL.iter())
+            .filter(|key| !keys.contains(key))
+            .fold(self, |only, &key| only.without(key))
+    }
+
     /// These permissions without the value they set for `key`.
     fn without(mut self, key: PermissionKey) -> Self {
         match key {
@@ -241,6 +248,18 @@ impl PermissionChange {
             combined.set.merge(change.set, Merge::SameLevel);
         }
         combined
+    }
+
+    /// Refuse a key this change sets wider than `held`, a scoped giver's
+    /// own permissions, or drops to a wider value of `fallback`, those the
+    /// agent has without what it was given.
+    pub fn ensure_held(&self, fallback: &Permissions, held: &Permissions) -> Result<()> {
+        self.set.ensure_held(held)?;
+        (fallback.values().only(&self.dropped).ensure_held(held)).with_context(|| {
+            format!(
+                "--permission KEY={MODE_VALUE} drops a key to the value its space has without one"
+            )
+        })
     }
 
     /// The permissions `given`, an agent was given, after this change.
@@ -372,6 +391,18 @@ impl Permissions {
             merge: self.merge.below(parent.merge),
             push: self.push.below(parent.push),
             api_writes: self.api_writes.below(parent.api_writes),
+        }
+    }
+
+    /// The value of each key.
+    pub fn values(&self) -> PermissionsConfig {
+        PermissionsConfig {
+            issue_open: Some(self.issue_open.value),
+            pr_open: Some(self.pr_open.value),
+            issue_other_repositories: Some(self.issue_other_repositories.value),
+            merge: Some(self.merge.value),
+            push: Some(self.push.value),
+            api_writes: Some(self.api_writes.value),
         }
     }
 

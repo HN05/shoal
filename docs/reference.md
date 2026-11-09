@@ -2401,7 +2401,8 @@ before anything is created. Shoal records the given permissions with the
 agent's mode, on its execution, queue entry, workspace or chat, and a restore
 or restart keeps them; `shoal resume` and `shoal restart` take `--permission`
 too, which sets the keys it names, `KEY=mode` dropping one, and keeps the
-rest. Nothing changes them while the agent runs. `shoal work status --json`
+rest. A dropped key takes the value its space has without one, which a space's
+agent must hold too. Nothing changes them while the agent runs. `shoal work status --json`
 gives the recorded ones as `narrowing`, beside the effective `permissions`,
 where a given key's `from` is `given`.
 

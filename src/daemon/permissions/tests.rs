@@ -249,3 +249,38 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let restarted = manager.ensure_chat_restart_held(None, Some(&talk), &change);
     restarted.await.unwrap();
 }
+
+#[tokio::test]
+async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let parent = workspace(&manager, &repo, "parent", &top.id, Some("worker")).await;
+    let child = workspace(&manager, &repo, "child", &parent.id, Some("worker")).await;
+    // The user gave the chat less push than the spaces below it.
+    give(&manager, "chats", &top.id, &["push=propose"]).await;
+    give(&manager, "workspaces", &parent.id, &["push=direct"]).await;
+    give(&manager, "workspaces", &child.id, &["push=propose"]).await;
+    let child = manager.workspace_by_id(&child.id).await.unwrap();
+    let space = crate::model::PresentSpace::Workspace(child);
+    let dropped = |assignment: &str| {
+        crate::config::permissions::PermissionChange::assigned(assignment).unwrap()
+    };
+    let check = |giver: Option<SpaceId>, change| {
+        let (manager, space, repository) = (manager.clone(), space.clone(), repo.id.clone());
+        async move {
+            let held =
+                manager.ensure_change_held(giver.as_ref(), &space, &change, Some(&repository));
+            held.await
+        }
+    };
+    // Without its push, the child would push directly, as its parent does,
+    // which the chat does not hold.
+    let refused = check(Some(top.id.clone()), dropped("push=mode")).await;
+    assert!(format!("{:#}", refused.unwrap_err()).contains("push=direct"));
+    // A key the chat holds as much of drops, and the user drops any.
+    check(Some(top.id.clone()), dropped("merge=mode"))
+        .await
+        .unwrap();
+    check(None, dropped("push=mode")).await.unwrap();
+}
