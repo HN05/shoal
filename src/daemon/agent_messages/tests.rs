@@ -446,11 +446,14 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     // Its queued agent has not read the messages that fill its queue, and
     // it comes first, so the spaces after it show the broadcast goes on.
     let full = create("full").await.unwrap();
+    // Queued without the check that claude is on PATH, which CI lacks.
     for workspace in [&queued, &full] {
-        manager
-            .queue_agent(&SpaceSelector::id(&workspace.id), "claude".into(), None)
-            .await
-            .unwrap();
+        let launch = crate::protocol::operations::QueuedLaunch {
+            agent: "claude".into(),
+            ..Default::default()
+        };
+        let request = crate::start_plan::queued_agent_request(workspace, launch).unwrap();
+        manager.queue_add(request).await.unwrap();
     }
     for n in 0..super::MAX_UNREAD {
         manager
