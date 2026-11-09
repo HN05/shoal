@@ -336,7 +336,10 @@ mod streams {
         let Record::Approval(shown) = *record else {
             unreachable!();
         };
-        assert_eq!((shown.number, &*shown.space), (proposal.number, "planning"));
+        assert_eq!(
+            (shown.number, shown.space_name()),
+            (proposal.number, "planning")
+        );
     }
 
     #[tokio::test]

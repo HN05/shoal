@@ -1,5 +1,6 @@
 //! Manual cleanup: what a request covers and what it removed, kept or emptied.
 use crate::repository_ids::RepositoryId;
+use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::model::CleanupReason;
@@ -43,13 +44,13 @@ pub struct Selection {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Retained {
-    pub space: String,
+    pub space: SpaceName,
     pub error: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Kept {
-    pub space: String,
+    pub space: SpaceName,
     pub reason: CleanupReason,
 }
 

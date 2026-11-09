@@ -1,6 +1,7 @@
 //! What `shoal resume` and `shoal work restore` print.
 use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
+use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
 /// A workspace's stopped commands, which Shoal reports rather than reruns.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoppedCommands {
-    pub workspace: String,
+    pub workspace: SpaceName,
     /// Each command's arguments.
     pub commands: Vec<Vec<String>>,
 }
@@ -19,7 +20,7 @@ pub struct StoppedCommands {
 /// A stopped agent a resume started.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResumedAgent {
-    pub workspace: String,
+    pub workspace: SpaceName,
     pub execution: ExecutionId,
     /// Whether it started in the background rather than where it stopped.
     pub background: bool,
@@ -72,7 +73,7 @@ pub struct Reopened {
 /// A saved chat a resume restored in the background.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoredChat {
-    pub chat: String,
+    pub chat: SpaceName,
     pub agent: crate::agent::Agent,
     /// Its repository's ID; none for a chat without one.
     pub repository: Option<RepositoryId>,

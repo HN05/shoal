@@ -662,7 +662,7 @@ pub(super) async fn launch(
         .await?;
         handoff.wait().await?;
         return Ok(Started::Background(BackgroundChat {
-            chat: name.into(),
+            chat: name,
             agent: agent.clone(),
             repository: repo.registered().map(|repo| repo.id.clone()),
             place: note,

@@ -5,6 +5,7 @@
 //! its name.
 use crate::client::agent::AgentSessionId;
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_names::SpaceName;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use std::{
@@ -193,7 +194,7 @@ pub(crate) trait ManifestExt: Sized {
     async fn of(repo: &Repository, source: Source) -> Result<Self>;
 
     /// The space's name.
-    fn name(&self) -> &str;
+    fn name(&self) -> &SpaceName;
 
     /// The agents to import on `machine`, without their sessions on
     /// another. Each agent with a session keeps it as `keep_sessions` says,
@@ -228,7 +229,7 @@ impl ManifestExt for Manifest {
                     last_sessions: vec![chat_session(&chat)],
                 };
                 let packaged = PackagedChat {
-                    name: chat.name.into(),
+                    name: chat.name,
                     agent: chat.agent,
                     links: chat.links,
                     mode: chat.mode,
@@ -246,7 +247,7 @@ impl ManifestExt for Manifest {
         })
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &SpaceName {
         match &self.space {
             Space::Workspace(packaged) => &packaged.workspace.name,
             Space::Chat(packaged) => &packaged.name,

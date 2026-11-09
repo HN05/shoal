@@ -921,7 +921,7 @@ async fn start_sessions(
             Ok(Started::InWrapper) => {
                 in_wrappers += 1;
                 output.agents.push(ResumedAgent {
-                    workspace: workspace.name.to_string(),
+                    workspace: workspace.name.clone(),
                     execution: id.clone(),
                     background: false,
                     reused: true,
@@ -939,7 +939,7 @@ async fn start_sessions(
             listed.push((workspace, id));
         }
         output.agents.push(ResumedAgent {
-            workspace: workspace.name.to_string(),
+            workspace: workspace.name.clone(),
             execution: id.clone(),
             background: started.is_some(),
             reused,
@@ -1160,7 +1160,7 @@ fn report_commands(
     commands: &[SavedCommand],
 ) -> Result<StoppedCommands> {
     let report = StoppedCommands {
-        workspace: workspace.name.to_string(),
+        workspace: workspace.name.clone(),
         commands: commands
             .iter()
             .map(|command| command.argv.clone())

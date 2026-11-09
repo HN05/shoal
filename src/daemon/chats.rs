@@ -312,7 +312,7 @@ impl Manager {
                 }
                 Ok(RenamedChat {
                     chat: renamed,
-                    previous_name: old.name.into(),
+                    previous_name: old.name,
                 })
             })
             .await
@@ -635,7 +635,7 @@ pub struct NewChat {
 fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.to_string(),
+        name: workspace.name.clone(),
         branch: workspace.branch.clone(),
     }
 }

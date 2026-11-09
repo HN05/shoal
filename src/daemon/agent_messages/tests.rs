@@ -328,12 +328,12 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         (reached.workspaces, reached.chats),
         (
             vec![
-                "child".to_owned(),
-                "outside".to_owned(),
-                "parent".to_owned(),
-                "sibling".to_owned()
+                "child".into(),
+                "outside".into(),
+                "parent".into(),
+                "sibling".into()
             ],
-            vec!["other".to_owned(), "planning".to_owned()]
+            vec!["other".into(), "planning".into()]
         )
     );
     let reached = send(Some(&parent.repository_id), None).await.now;
@@ -358,7 +358,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     let reached = send(None, Some(parent.id.clone())).await;
     assert_eq!(
         (reached.now.workspaces, reached.now.chats),
-        (vec!["child".to_owned()], vec![])
+        (vec!["child".into()], vec![])
     );
     assert!(send(None, Some(child.id.clone())).await.is_empty());
     // A workspace process names only its own repository, or none.

@@ -36,7 +36,7 @@ fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
             .map(|demo| {
                 [
                     (demo.launch.name.clone(), None),
-                    (demo.workspace.clone(), None),
+                    (demo.workspace.to_string(), None),
                 ]
             })
             .collect(),

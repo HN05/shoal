@@ -30,7 +30,7 @@ fn space(workspace: &Workspace) -> SpaceRef {
 fn reference(workspace: &Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.to_string(),
+        name: workspace.name.clone(),
         branch: workspace.branch.clone(),
     }
 }
@@ -127,7 +127,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .iter()
         .filter_map(|item| match item {
             EventItem::Event(event) if event.details.kind == EventKind::Removed => {
-                Some((event.details.name.clone(), event.details.cause))
+                Some((event.details.name.to_string(), event.details.cause))
             }
             _ => None,
         })

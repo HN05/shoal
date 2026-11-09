@@ -11,7 +11,7 @@ use crate::{
 fn reference(workspace: &crate::model::Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.to_string(),
+        name: workspace.name.clone(),
         branch: workspace.branch.clone(),
     }
 }

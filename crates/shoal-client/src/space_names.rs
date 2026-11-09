@@ -69,6 +69,12 @@ impl SpaceName {
     }
 }
 
+/// `names` joined by `separator`, as a message lists them.
+pub fn join(names: &[SpaceName], separator: &str) -> String {
+    let names: Vec<&str> = names.iter().map(SpaceName::as_str).collect();
+    names.join(separator)
+}
+
 fn all_digits(value: &str) -> bool {
     !value.is_empty() && value.bytes().all(|c| c.is_ascii_digit())
 }

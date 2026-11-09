@@ -1,4 +1,5 @@
 //! Why automatic cleanup keeps a workspace.
+use crate::space_names::SpaceName;
 use crate::state::WorkspaceState;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +27,7 @@ pub enum CleanupReason {
     /// An ancestor finished its assignment with cleanup, which takes this
     /// workspace too.
     AncestorCompleted {
-        workspace: String,
+        workspace: SpaceName,
     },
     Completed {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]

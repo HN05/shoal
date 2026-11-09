@@ -1,5 +1,6 @@
 //! The user's notifications: what the daemon recorded for the user to read.
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::{io::BufReader, net::UnixStream};
@@ -94,7 +95,7 @@ pub struct Notification {
     pub id: i64,
     pub created_at: crate::time::UnixTime,
     /// Workspace name when the event happened; kept after removal.
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceName>,
     pub kind: NotificationKind,
     pub message: String,
     pub read: bool,

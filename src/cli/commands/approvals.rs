@@ -401,8 +401,8 @@ fn describe(request: &ApprovalRequest) -> String {
 /// The space that made the request, by name, marked once removed.
 pub(in crate::cli) fn space_label(request: &ApprovalRequest) -> String {
     match request.space_removed {
-        true => format!("{} (removed)", request.space),
-        false => request.space.clone(),
+        true => format!("{} (removed)", request.space_name()),
+        false => request.space_name().to_owned(),
     }
 }
 

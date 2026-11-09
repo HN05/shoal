@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use std::fmt;
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
@@ -289,11 +289,11 @@ pub fn check(
     }
     ensure!(!request.reason.trim().is_empty(), ReasonRequired);
     crate::validate::reason("approval", Some(&request.reason))?;
-    request.space = tx.query_row(
+    request.space = Some(tx.query_row(
         "SELECT name FROM workspaces WHERE id=?1",
         [&request.space_id],
         |r| r.get(0),
-    )?;
+    )?);
     request.key = uuid::Uuid::new_v4().to_string();
     request.number = item_numbers::next(tx, &request.space_id)?;
     tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number) VALUES (?1,?2,?3,?4,?5,?6,?7)",
@@ -344,10 +344,6 @@ pub(crate) trait ApprovalRequestExt {
 
     /// The agent message naming a decision and what the requesting agent does next.
     fn decision_message(&self) -> String;
-
-    /// The name of the space that made it, which storing the request
-    /// records; none before.
-    fn space_name(&self) -> Option<SpaceName>;
 }
 
 impl ApprovalRequestExt for ApprovalRequest {
@@ -363,7 +359,7 @@ impl ApprovalRequestExt for ApprovalRequest {
             number: ItemNumber::default(),
             key: String::new(),
             space_id: owner.clone(),
-            space: String::new(),
+            space: None,
             space_removed: false,
             repository_id: None,
             target,
@@ -424,10 +420,6 @@ impl ApprovalRequestExt for ApprovalRequest {
             self.subject(),
             self.status
         )
-    }
-
-    fn space_name(&self) -> Option<SpaceName> {
-        SpaceName::parse(&self.space).ok()
     }
 }
 
@@ -779,13 +771,13 @@ impl Manager {
         let message = request.withdrawal_notification();
         if let Some(decider) = &request.decider
             && self
-                .tell_agent(decider, format!("{}: {message}", request.space))
+                .tell_agent(decider, format!("{}: {message}", request.space_name()))
                 .await
         {
             return;
         }
         self.notify(
-            request.space_name().as_ref(),
+            request.space.as_ref(),
             NotificationKind::ApprovalWithdrawn,
             message,
         )
@@ -1138,7 +1130,7 @@ impl Manager {
     async fn announce_approval(&self, request: &ApprovalRequest) {
         let about = format!(
             "{}: approval {}: {}: {}",
-            request.space,
+            request.space_name(),
             request.number,
             request.subject(),
             request.reason
@@ -1216,7 +1208,7 @@ impl Manager {
 
     async fn ask_user(&self, request: &ApprovalRequest) {
         let about = About {
-            name: request.space_name(),
+            name: request.space.clone(),
             id: Some(request.space_id.clone()),
             subject: Some(request.key.clone()),
         };

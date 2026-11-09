@@ -31,9 +31,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
         None => BTreeMap::new(),
     };
     let listing = Listing {
-        workspace: workspace
-            .as_ref()
-            .map(|workspace| workspace.name.to_string()),
+        workspace: workspace.as_ref().map(|workspace| workspace.name.clone()),
         running: running(ctx, workspace.as_ref()).await?,
         configured,
     };
@@ -59,7 +57,7 @@ fn listing_rows(listing: &Listing, palette: Palette) -> Vec<String> {
         .map(|demo| {
             [
                 (demo.launch.name.clone(), Some(Style::Heading)),
-                (demo.workspace.clone(), None),
+                (demo.workspace.to_string(), None),
                 ("Running".into(), Some(Style::Success)),
                 (preset(demo.launch.preset), Some(Style::Muted)),
             ]
@@ -75,7 +73,10 @@ fn listing_rows(listing: &Listing, palette: Palette) -> Vec<String> {
         }
         rows.push([
             (name.clone(), Some(Style::Heading)),
-            (listing.workspace.clone().unwrap_or_default(), None),
+            (
+                listing.workspace.as_deref().unwrap_or_default().to_owned(),
+                None,
+            ),
             ("Not running".into(), Some(Style::Muted)),
             (preset(demo.preset), Some(Style::Muted)),
         ]);

@@ -45,6 +45,9 @@ pub(in crate::cli::commands) async fn remove(
 pub(in crate::cli::commands) fn message(removed: &str, chat: &RemovedChat) -> String {
     match chat.children.as_slice() {
         [] => removed.to_owned(),
-        children => format!("{removed}; also removed {}", children.join(", ")),
+        children => format!(
+            "{removed}; also removed {}",
+            crate::client::space_names::join(children, ", ")
+        ),
     }
 }

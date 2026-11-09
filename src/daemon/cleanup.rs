@@ -20,7 +20,7 @@ use tokio::time::{Instant, sleep};
 pub(crate) use crate::client::cleanup::{
     CacheCleanup, Kept, ManualCleanup, Pick, Retained, Selection,
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::{
         caches::Emptying, events::EventCause, file_access, log, spaces::removal_notices::Cleanup,
@@ -406,20 +406,20 @@ pub(super) async fn candidate(
 trait ManualCleanupExt {
     /// A dry run lists why it keeps each space, and a request naming spaces
     /// says why it kept those.
-    fn keep(&mut self, space: String, reason: CleanupReason, named: bool);
+    fn keep(&mut self, space: SpaceName, reason: CleanupReason, named: bool);
 
     /// Record that removing the space `space` failed with `error`.
-    fn retain(&mut self, space: String, error: &anyhow::Error);
+    fn retain(&mut self, space: SpaceName, error: &anyhow::Error);
 }
 
 impl ManualCleanupExt for ManualCleanup {
-    fn keep(&mut self, space: String, reason: CleanupReason, named: bool) {
+    fn keep(&mut self, space: SpaceName, reason: CleanupReason, named: bool) {
         if self.dry_run || named {
             self.kept.push(Kept { space, reason });
         }
     }
 
-    fn retain(&mut self, space: String, error: &anyhow::Error) {
+    fn retain(&mut self, space: SpaceName, error: &anyhow::Error) {
         self.retained.push(Retained {
             space,
             error: format!("{error:#}"),
@@ -585,22 +585,18 @@ async fn remove_on_request(
         }
         if workspace.state != WorkspaceState::Ready {
             let state = workspace.state;
-            report.keep(
-                workspace.name.into(),
-                CleanupReason::NotReady { state },
-                named,
-            );
+            report.keep(workspace.name, CleanupReason::NotReady { state }, named);
             continue;
         }
         let snapshot = match requested_candidacy(manager, &workspace).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
-                report.keep(workspace.name.into(), reason, named);
+                report.keep(workspace.name, reason, named);
                 continue;
             }
             Err(error) => {
                 log!("manual cleanup skipped {}: {error:#}", workspace.name);
-                report.retain(workspace.name.into(), &error);
+                report.retain(workspace.name, &error);
                 continue;
             }
         };
@@ -621,7 +617,7 @@ async fn remove_on_request(
                     .record_retained(&workspace.id, EventCause::Manual, &error)
                     .await?;
                 log!("manual cleanup retained {}: {error:#}", workspace.name);
-                report.retain(workspace.name.into(), &error);
+                report.retain(workspace.name, &error);
             }
         }
     }
@@ -643,12 +639,12 @@ async fn remove_chats_on_request(
         let snapshot = match manager.requested_chat_candidacy(&chat).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
-                report.keep(chat.name.into(), reason, named);
+                report.keep(chat.name, reason, named);
                 continue;
             }
             Err(error) => {
                 log!("manual cleanup skipped chat {}: {error:#}", chat.name);
-                report.retain(chat.name.into(), &error);
+                report.retain(chat.name, &error);
                 continue;
             }
         };
@@ -663,7 +659,7 @@ async fn remove_chats_on_request(
             }
             Err(error) => {
                 log!("manual cleanup retained chat {}: {error:#}", chat.name);
-                report.retain(chat.name.into(), &error);
+                report.retain(chat.name, &error);
             }
         }
     }

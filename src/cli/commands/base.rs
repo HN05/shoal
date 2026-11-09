@@ -108,6 +108,6 @@ pub(super) fn describe_space(space: &SpaceRef) -> String {
 pub(super) fn describe(workspace: &WorkspaceRef) -> String {
     match &workspace.branch {
         Some(branch) if *branch != workspace.name => format!("{} ({branch})", workspace.name),
-        _ => workspace.name.clone(),
+        _ => workspace.name.to_string(),
     }
 }

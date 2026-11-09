@@ -3,6 +3,7 @@
 //! retries of their failed turns.
 use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
@@ -296,7 +297,7 @@ pub struct ProxyRetry {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Discarded {
     /// The workspace's name.
-    pub workspace: String,
+    pub workspace: SpaceName,
     /// The execution IDs of the forgotten stopped agents, last sessions and
     /// commands.
     pub executions: Vec<ExecutionId>,

@@ -184,7 +184,7 @@ impl Output {
         let name = exported.manifest.name();
         let (exported_space, opens) = match exported.manifest.copy {
             Some(_) => (format!("a copy of {name}"), "as a new space"),
-            None => (name.to_owned(), "on another machine"),
+            None => (name.to_string(), "on another machine"),
         };
         let Self::File { path } = &self else {
             let mut file = std::fs::File::open(self.file())?;
@@ -295,7 +295,7 @@ pub(super) enum Checked {
 }
 
 impl Checked {
-    fn name(&self) -> &str {
+    fn name(&self) -> &crate::client::space_names::SpaceName {
         match self {
             Self::Workspace(check) => &check.workspace.name,
             Self::Chat(chat) => &chat.name,
@@ -497,7 +497,7 @@ pub(super) struct PlannedExport {
 }
 
 impl PlannedExport {
-    pub(super) fn name(&self) -> &str {
+    pub(super) fn name(&self) -> &crate::client::space_names::SpaceName {
         self.check.name()
     }
 

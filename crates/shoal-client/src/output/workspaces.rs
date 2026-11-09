@@ -1,4 +1,5 @@
 //! What workspace commands print.
+use crate::space_names::SpaceName;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use crate::{
 pub struct Removed {
     /// The workspace's name, which a removal of several reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceName>,
     #[serde(flatten)]
     pub removal: RemovalResult,
     pub holds: Vec<WorkspaceHold>,

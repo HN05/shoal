@@ -106,7 +106,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
     let mut manifest = Manifest {
         remote_url: None,
         space: Space::Chat(PackagedChat {
-            name: chat.name.to_string(),
+            name: chat.name.clone(),
             agent: chat.agent.clone(),
             links: chat.links.clone(),
             mode: chat.mode.clone(),

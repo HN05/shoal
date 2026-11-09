@@ -4,6 +4,7 @@
 //! its ID; its removal or end record says how long its files stay.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -61,7 +62,7 @@ pub(crate) fn ids_at(db: &Connection, paths: &[PathBuf]) -> Result<String> {
 }
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
-    let space: String = row.get(1)?;
+    let space: SpaceName = row.get(1)?;
     let (workspace, chat) = match row.get(10)? {
         true => (None, Some(space)),
         false => (Some(space), None),

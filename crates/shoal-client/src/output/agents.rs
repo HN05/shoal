@@ -1,6 +1,7 @@
 //! What commands that act on running agents print: `shoal stop`, `shoal
 //! restart` and the turn commands.
 use crate::execution_ids::ExecutionId;
+use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
 /// execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Agent {
-    pub workspace: String,
+    pub workspace: SpaceName,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<crate::agent::Agent>,
 }
@@ -40,7 +41,7 @@ pub struct WorkspaceStopped {
 /// The workspaces whose agents and commands a stop stopped, by name.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoppedWorkspaces {
-    pub stopped: Vec<String>,
+    pub stopped: Vec<SpaceName>,
     pub failed: Vec<Failure>,
     /// The agent launches waiting to start in them that the stop removed
     /// from the agent queue.
@@ -55,7 +56,7 @@ pub struct StoppedWorkspaces {
 /// A CI job's workspace and the run the forge was asked to cancel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CancelledRun {
-    pub workspace: String,
+    pub workspace: SpaceName,
     pub run: String,
 }
 
@@ -91,14 +92,14 @@ pub struct Restarted {
     pub interrupted: bool,
     /// The spaces whose restart goes on without an interrupted run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pending: Vec<String>,
+    pub pending: Vec<SpaceName>,
 }
 
 /// An agent a restart restarted, by the name of its space, a workspace or a
 /// chat, and its own when known.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestartedAgent {
-    pub space: String,
+    pub space: SpaceName,
     pub agent: Option<crate::agent::Agent>,
     /// Where it runs now, when its wrapper runs in a terminal host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -108,7 +109,7 @@ pub struct RestartedAgent {
 /// An agent a restart leaves out, by its space's name, and why.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skipped {
-    pub space: String,
+    pub space: SpaceName,
     pub agent: Option<crate::agent::Agent>,
     pub reason: String,
 }

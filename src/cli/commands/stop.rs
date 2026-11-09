@@ -10,7 +10,7 @@ use futures_util::future::join_all;
 use crate::client::output::agents::{
     CancelledRun, StoppedProcesses, StoppedWorkspaces, WorkspaceStopped,
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{args::SpaceTargets, commands::queued_agents, context::Context, output::Style, ui},
     client::processes::{Selection, Stopped},
@@ -356,7 +356,7 @@ async fn stop_each(
     let mut resumable = Vec::new();
     let mut removed = Vec::new();
     for (workspace, result) in workspaces.iter().zip(results) {
-        let name = workspace.name.as_str();
+        let name = &workspace.name;
         match result {
             Ok((
                 _,
@@ -368,7 +368,7 @@ async fn stop_each(
                 ctx,
                 &cancelled_run_message(name, &run),
                 Outcome::Cancelled(CancelledRun {
-                    workspace: name.to_owned(),
+                    workspace: name.clone(),
                     run,
                 }),
             ),
@@ -381,9 +381,9 @@ async fn stop_each(
                     message = format!("{message}. {}", removed_launches(cancelled.len()));
                 }
                 removed.extend(cancelled);
-                report.done(ctx, &message, Outcome::Stopped(name.to_owned()));
+                report.done(ctx, &message, Outcome::Stopped(name.clone()));
                 if has_saved_work(ctx, workspace) {
-                    resumable.push(name);
+                    resumable.push(name.as_str());
                 }
             }
             Err(error) => report.failed(ctx, name, &error),
@@ -413,7 +413,7 @@ async fn stop_each(
 
 /// What stopping one of several workspaces did.
 enum Outcome {
-    Stopped(String),
+    Stopped(SpaceName),
     /// A CI job's workspace, whose run the forge was asked to cancel.
     Cancelled(CancelledRun),
 }

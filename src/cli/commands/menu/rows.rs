@@ -240,7 +240,14 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
     Ok(notifications
         .iter()
         .map(|notification| {
-            Row::Notification(notification.workspace.clone().unwrap_or_default()).id()
+            Row::Notification(
+                notification
+                    .workspace
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            )
+            .id()
         })
         .zip(labels)
         .collect())
@@ -256,7 +263,7 @@ fn notification_labels(notifications: &[Notification]) -> Vec<String> {
             [
                 (notification.created_at.local_ago(now), Some(Style::Muted)),
                 (
-                    notification.workspace.clone().unwrap_or_else(|| "-".into()),
+                    notification.workspace.as_deref().unwrap_or("-").to_owned(),
                     Some(Style::Heading),
                 ),
                 (

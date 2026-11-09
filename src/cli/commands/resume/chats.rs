@@ -106,7 +106,7 @@ fn restored(chat: &Chat, started: Started) -> RestoredChat {
             place: Some(started.place),
         },
         Started::Exited(_) => RestoredChat {
-            chat: chat.name.to_string(),
+            chat: chat.name.clone(),
             agent: chat.agent.clone(),
             repository: chat.repository_id.clone(),
             place: None,

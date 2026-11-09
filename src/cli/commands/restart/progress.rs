@@ -2,6 +2,7 @@
 //! its restart ends or is skipped, what goes on when it is interrupted, and
 //! with `--json` the object that lists them.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_names::{self, SpaceName};
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -26,7 +27,7 @@ pub(super) struct Progress {
     position: usize,
     total: usize,
     /// The space of each agent to restart, by execution.
-    spaces: HashMap<ExecutionId, String>,
+    spaces: HashMap<ExecutionId, SpaceName>,
 }
 
 impl Progress {
@@ -41,7 +42,7 @@ impl Progress {
                 .iter()
                 .map(|restart| {
                     let execution = restart.agent.execution.clone();
-                    (execution, restart.space.name().to_string())
+                    (execution, restart.space.name().clone())
                 })
                 .collect(),
         }
@@ -83,7 +84,7 @@ impl Progress {
                     place.as_ref(),
                 ),
                 RestartedAgent {
-                    space: name.to_string(),
+                    space: name.clone(),
                     agent: restart.agent.agent.clone(),
                     place,
                 },
@@ -107,7 +108,7 @@ impl Progress {
         agents: &[RunningAgent],
         agent: Option<&crate::agent::Agent>,
     ) -> Result<i32> {
-        let pending: Vec<String> = agents
+        let pending: Vec<SpaceName> = agents
             .iter()
             .filter(|agent| agent.restart.is_some())
             .filter_map(|agent| self.space_of(agent))
@@ -120,7 +121,7 @@ impl Progress {
     }
 
     /// The space of `agent`, selected as the execution it runs or ran as.
-    fn space_of(&self, agent: &RunningAgent) -> Option<String> {
+    fn space_of(&self, agent: &RunningAgent) -> Option<SpaceName> {
         std::iter::once(&agent.execution)
             .chain(&agent.restarted_from)
             .find_map(|execution| self.spaces.get(execution).cloned())
@@ -133,7 +134,7 @@ impl Progress {
 
     /// Print the JSON object, of a run `interrupted` with the restarts of
     /// `pending` going on without it.
-    fn report(self, ctx: &Context, interrupted: bool, pending: Vec<String>) -> Result<i32> {
+    fn report(self, ctx: &Context, interrupted: bool, pending: Vec<SpaceName>) -> Result<i32> {
         let skipped = self.skipped;
         self.report.finish(ctx, "", |restarted, failed| Restarted {
             restarted,
@@ -163,7 +164,7 @@ fn restarted(
     }
 }
 
-fn interruption(pending: &[String], agent: Option<&crate::agent::Agent>) -> String {
+fn interruption(pending: &[SpaceName], agent: Option<&crate::agent::Agent>) -> String {
     if pending.is_empty() {
         return "Interrupted".into();
     }
@@ -172,8 +173,8 @@ fn interruption(pending: &[String], agent: Option<&crate::agent::Agent>) -> Stri
         .unwrap_or_default();
     format!(
         "Interrupted; the restarts of {} go on, and shoal restart {}{filter} reports on them",
-        pending.join(", "),
-        pending.join(" ")
+        space_names::join(pending, ", "),
+        space_names::join(pending, " ")
     )
 }
 

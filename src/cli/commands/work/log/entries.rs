@@ -122,7 +122,7 @@ fn renamed(event: &EventDetails) -> String {
         Some(title) => title.clone().unwrap_or_default(),
         None => match event.branch.as_deref() {
             Some(branch) if branch != event.name => format!("{}, branch {branch}", event.name),
-            _ => event.name.clone(),
+            _ => event.name.to_string(),
         },
     }
 }

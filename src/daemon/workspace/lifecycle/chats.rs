@@ -6,7 +6,7 @@ use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::{Removal, Retention};
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     client::output::chat::RemovedChat,
     daemon::{
@@ -97,7 +97,7 @@ impl Manager {
         Ok(
             if let Some(ancestor) = self.completed_ancestor(&chat.id).await? {
                 Some(CleanupReason::AncestorCompleted {
-                    workspace: ancestor.name().to_owned(),
+                    workspace: ancestor.name().clone(),
                 })
             } else if self.pr_registration(&chat.id).await?.is_some() {
                 Some(CleanupReason::PrWatch)
@@ -199,7 +199,7 @@ impl Manager {
         &self,
         chat: &Chat,
         removal: Removal<'_>,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SpaceName>> {
         // Reserved under the lock a restore holds, and checked again, so no
         // restore runs it while the spaces below it go.
         let reservation = {

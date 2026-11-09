@@ -207,7 +207,7 @@ pub struct RemovalResult {
     /// The workspaces below it the removal took first, each after those
     /// below it.
     #[serde(default)]
-    pub children: Vec<String>,
+    pub children: Vec<crate::space_names::SpaceName>,
 }
 
 impl Serialize for RemovalResult {
@@ -221,7 +221,7 @@ impl Serialize for RemovalResult {
             branch_deleted: bool,
             branch_outcome: &'a BranchOutcome,
             hook_error: &'a Option<String>,
-            children: &'a [String],
+            children: &'a [crate::space_names::SpaceName],
         }
         Response {
             removed: self.removed,

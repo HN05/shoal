@@ -4,6 +4,7 @@
 //! approval requests, messages and notifications, each named by a
 //! [`RecordKey`].
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -207,7 +208,7 @@ pub struct Message {
     /// The workspace's ID, for a message to its agent.
     pub workspace_id: Option<SpaceId>,
     /// The workspace's name.
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceName>,
     /// Empty when the message is only its attachments.
     pub text: String,
     /// Shoal's copies of the attached files.

@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 
 use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{Removals, Removed};
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{self, SpaceName, SpaceSelector};
 use crate::{
     cli::{
         commands::{chat::removal as chats, queued_agents},
@@ -121,9 +121,9 @@ async fn remove_each(
     spaces: &Spaces,
 ) -> Result<i32> {
     let mut removed_chats = ui::Report::new("remove");
-    let mut taken: Vec<String> = Vec::new();
+    let mut taken: Vec<SpaceName> = Vec::new();
     for chat in chats {
-        if taken.iter().any(|taken| chat.name == *taken) {
+        if taken.contains(&chat.name) {
             continue;
         }
         match chats::remove(ctx, chat, spaces).await {
@@ -139,7 +139,7 @@ async fn remove_each(
     let mut report = ui::Report::new("remove");
     for check in checks {
         let name = &check.workspace.name;
-        if taken.iter().any(|taken| *name == *taken) {
+        if taken.contains(name) {
             continue;
         }
         match remove_checked(ctx, &check).await {
@@ -179,9 +179,9 @@ async fn remove_checked(ctx: &Context, check: &RemovalCheck) -> Result<RemovalRe
 
 /// What JSON reports for a removal: its result and the holds of the
 /// workspace, which a removal of several names.
-fn removed(removal: RemovalResult, check: &RemovalCheck, name: Option<&str>) -> Removed {
+fn removed(removal: RemovalResult, check: &RemovalCheck, name: Option<&SpaceName>) -> Removed {
     Removed {
-        workspace: name.map(str::to_owned),
+        workspace: name.cloned(),
         removal,
         holds: check.workspace.holds.clone(),
     }
@@ -311,7 +311,10 @@ fn removal_message(removed: &str, result: &RemovalResult) -> String {
         _ => removed.into(),
     };
     if !result.children.is_empty() {
-        message.push_str(&format!("; also removed {}", result.children.join(", ")));
+        message.push_str(&format!(
+            "; also removed {}",
+            space_names::join(&result.children, ", ")
+        ));
     }
     message
 }

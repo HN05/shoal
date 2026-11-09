@@ -12,7 +12,7 @@ use super::{
     Manager,
     executions::{Save, StopPolicy, StopRequest},
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     demos::{Launch, Progress, Running},
     model::{Execution, PresentSpace},
@@ -207,7 +207,7 @@ fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
     let rows = statement.query_map([workspace], |row| {
         Ok((
             row.get::<_, SpaceId>(0)?,
-            row.get::<_, String>(1)?,
+            row.get::<_, SpaceName>(1)?,
             row.get::<_, ExecutionId>(2)?,
             row.get(3)?,
             row.get::<_, String>(4)?,

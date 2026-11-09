@@ -2,7 +2,7 @@
 use super::{Manager, executions::StopPolicy, reservation::RemovalRules};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::space_processes::WorktreeTies;
 use crate::refusal::{Reason, Refusal};
 use crate::{
@@ -957,7 +957,7 @@ impl Manager {
         let workspace = self.workspace_by_id(id).await?;
         if let Some(ancestor) = self.completed_ancestor(&workspace.id).await? {
             return Ok(Some(CleanupReason::AncestorCompleted {
-                workspace: ancestor.name().to_owned(),
+                workspace: ancestor.name().clone(),
             }));
         }
         if self.pr_registration(id).await?.is_some() {
@@ -1614,7 +1614,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SpaceName>> {
         let children = self.taken_first(&workspace.id).await?;
         self.remove_children(&workspace.name, children, removal)
             .await
@@ -1631,7 +1631,7 @@ impl Manager {
         parent: &str,
         children: Vec<SpaceRef>,
         removal: Removal<'_>,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SpaceName>> {
         ensure_confirmed(parent, &children, removal)?;
         let mut removed = Vec::new();
         for child in children {
@@ -1654,7 +1654,7 @@ impl Manager {
                 let cleanup = crate::daemon::spaces::removal_notices::Cleanup::Parent(parent);
                 self.announce_removal(&child, cleanup, &Ok(())).await?;
             }
-            removed.push(child.name.into());
+            removed.push(child.name);
         }
         Ok(removed)
     }

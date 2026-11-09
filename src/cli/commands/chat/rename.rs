@@ -60,7 +60,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     let labels = terminal::Labels {
         new: chat.name.to_string(),
-        expected: previous_name.clone(),
+        expected: previous_name.to_string(),
     };
     let places = std::slice::from_ref(place);
     terminal::relabel_space(&settings, places, async |_| labels.clone()).await;

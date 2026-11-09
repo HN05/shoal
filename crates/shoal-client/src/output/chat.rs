@@ -1,5 +1,6 @@
 //! What chat commands print.
 use crate::repository_ids::RepositoryId;
+use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
@@ -7,7 +8,7 @@ use crate::output::outputs;
 /// A chat started in a background place.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackgroundChat {
-    pub chat: String,
+    pub chat: SpaceName,
     pub agent: crate::agent::Agent,
     /// Its repository's ID; none for a chat without one.
     pub repository: Option<RepositoryId>,
@@ -21,7 +22,7 @@ pub struct RemovedChat {
     pub chat: crate::model::Chat,
     /// The spaces below it removed first, each after those below it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<String>,
+    pub children: Vec<SpaceName>,
 }
 
 outputs!(BackgroundChat, RemovedChat);

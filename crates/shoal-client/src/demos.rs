@@ -4,6 +4,7 @@
 //! repository always supplies the command.
 use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
@@ -94,7 +95,7 @@ pub struct Launch {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Running {
     pub workspace_id: SpaceId,
-    pub workspace: String,
+    pub workspace: SpaceName,
     pub execution_id: ExecutionId,
     pub started_at: crate::time::UnixTime,
     /// The demo's command has started; a start reports the demo only then.

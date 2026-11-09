@@ -995,7 +995,7 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
         .unwrap();
     let named = Some(WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.to_string(),
+        name: workspace.name.clone(),
         branch: workspace.branch.clone(),
     });
     assert_eq!(

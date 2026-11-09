@@ -1,4 +1,5 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
+use crate::space_names::SpaceName;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -68,7 +69,7 @@ pub struct PackagedWorkspace {
 /// continuing its agent's session, linked to what it was linked to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackagedChat {
-    pub name: String,
+    pub name: SpaceName,
     pub agent: crate::agent::Agent,
     /// Read as none from a package an earlier release wrote.
     #[serde(default)]

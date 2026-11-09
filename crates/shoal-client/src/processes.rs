@@ -1,6 +1,7 @@
 //! Processes as Shoal records them: their identity, the untracked processes of
 //! a space a stop takes, and the leftovers still running after what started
 //! them exited.
+use crate::space_names::SpaceName;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -53,7 +54,7 @@ pub enum Selection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stopped {
     /// The name of the workspace or chat.
-    pub space: String,
+    pub space: SpaceName,
     /// How many processes it stopped.
     pub processes: usize,
 }

@@ -2,6 +2,7 @@
 use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
@@ -209,7 +210,7 @@ pub struct EvictedDevice {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CleanRequest {
     pub workspace_id: SpaceId,
-    pub workspace_name: String,
+    pub workspace_name: SpaceName,
     pub repository_id: RepositoryId,
     pub execution_id: Option<ExecutionId>,
     pub requested_at: crate::time::UnixTime,

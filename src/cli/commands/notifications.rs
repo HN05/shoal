@@ -170,7 +170,7 @@ fn cells(notification: &Notification, now: crate::time::UnixTime) -> [ui::Cell; 
     [
         (notification.created_at.local_ago(now), Some(Style::Muted)),
         (
-            notification.workspace.clone().unwrap_or_else(|| "-".into()),
+            notification.workspace.as_deref().unwrap_or("-").to_owned(),
             Some(Style::Heading),
         ),
         (notification.message.clone(), None),

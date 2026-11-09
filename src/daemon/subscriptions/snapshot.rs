@@ -1,6 +1,7 @@
 //! The records a subscription covers, as they are now: those of the topics
 //! it asked for that its caller may read.
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;
@@ -117,7 +118,7 @@ struct Visible {
     workspaces: Vec<Workspace>,
     /// Each workspace's name by ID, for the topics that filter or name
     /// records by workspace.
-    names: HashMap<SpaceId, String>,
+    names: HashMap<SpaceId, SpaceName>,
 }
 
 impl Visible {
@@ -129,7 +130,7 @@ impl Visible {
             let workspaces = manager.list_workspaces_within(root).await?;
             let names = workspaces
                 .iter()
-                .map(|workspace| (workspace.id.clone(), workspace.name.to_string()))
+                .map(|workspace| (workspace.id.clone(), workspace.name.clone()))
                 .collect();
             return Ok(Self { workspaces, names });
         }
@@ -343,7 +344,7 @@ async fn messages(
 }
 
 /// A message queued for the agent of the workspace with this ID and name.
-fn agent_message(message: AgentMessage, workspace_id: SpaceId, workspace: String) -> Message {
+fn agent_message(message: AgentMessage, workspace_id: SpaceId, workspace: SpaceName) -> Message {
     Message {
         id: format!("agent/{}", message.id),
         recipient: MessageRecipient::Agent,

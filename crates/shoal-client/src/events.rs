@@ -2,6 +2,7 @@
 use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::{fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result};
@@ -199,7 +200,7 @@ pub struct EventDetails {
     pub chat_id: Option<SpaceId>,
     /// Null for a chat without a repository.
     pub repository_id: Option<RepositoryId>,
-    pub name: String,
+    pub name: SpaceName,
     /// Null for a chat.
     pub path: Option<PathBuf>,
     /// Observed branch for branch changes; null for a detached HEAD.

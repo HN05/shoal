@@ -126,5 +126,5 @@ impl<'a> ChatHome<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenamedChat {
     pub chat: Chat,
-    pub previous_name: String,
+    pub previous_name: SpaceName,
 }

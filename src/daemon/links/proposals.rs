@@ -920,7 +920,8 @@ fn finding(request: &ApprovalRequest) -> Result<Finding> {
         .context("only an issue proposal can be a duplicate")?;
     let mut text = format!(
         "Space {} proposed this as a separate issue, which was marked as a duplicate.\n\n### {}\n",
-        request.space, proposed.issue.title
+        request.space_name(),
+        proposed.issue.title
     );
     if !proposed.issue.body.trim().is_empty() {
         text.push('\n');

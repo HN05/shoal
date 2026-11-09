@@ -29,7 +29,7 @@ impl CompletedAncestor {
         }
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &crate::client::space_names::SpaceName {
         match self {
             Self::Workspace(workspace) => &workspace.name,
             Self::Chat(chat) => &chat.name,

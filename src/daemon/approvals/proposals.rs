@@ -3,6 +3,7 @@
 //! proposal is no longer stored.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceName;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
@@ -217,7 +218,7 @@ pub fn propose_push(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Re
 }
 
 fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<ApprovalRequest> {
-    (request.space, _) = space_record(tx, &request.space_id)?;
+    request.space = Some(space_record(tx, &request.space_id)?.0);
     request.key = uuid::Uuid::new_v4().to_string();
     request.number = item_numbers::next(tx, &request.space_id)?;
     // A repository-owned request names no workspace row, so it stays when
@@ -248,7 +249,7 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
 
 /// The name and repository of the space `id`, a workspace or a chat, which
 /// may have none.
-fn space_record(db: &Connection, id: &SpaceId) -> Result<(String, Option<RepositoryId>)> {
+fn space_record(db: &Connection, id: &SpaceId) -> Result<(SpaceName, Option<RepositoryId>)> {
     Ok(db.query_row(
         "SELECT name,repository_id FROM spaces WHERE id=?1",
         [id],

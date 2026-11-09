@@ -1,7 +1,7 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
@@ -239,7 +239,7 @@ async fn removing_a_chat_without_a_repository_removes_its_children_in_every_repo
         .remove_chat(&SpaceSelector::id(&master.id), None)
         .await
         .unwrap();
-    let mut children: Vec<_> = removed.children.iter().map(String::as_str).collect();
+    let mut children: Vec<_> = removed.children.iter().map(SpaceName::as_str).collect();
     children.sort_unstable();
     assert_eq!(children, ["first", "second"]);
     assert!(manager.chat_by_id(&master.id).await.unwrap().is_none());

@@ -2,7 +2,6 @@
 //! approval: whether one is held, recording it, and pushing what the user
 //! approved in an operation whose end decides the request, opening the PR a
 //! proposal held back with it.
-use crate::daemon::approvals::ApprovalRequestExt;
 use crate::daemon::approvals::proposals::ProposalExt;
 use std::collections::BTreeMap;
 
@@ -266,7 +265,7 @@ impl Manager {
                 request.subject()
             );
             self.notify(
-                request.space_name().as_ref(),
+                request.space.as_ref(),
                 NotificationKind::PushFailed,
                 message,
             )

@@ -184,7 +184,7 @@ impl std::fmt::Display for MadeFor {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceRef {
     pub id: SpaceId,
-    pub name: String,
+    pub name: SpaceName,
     pub branch: Option<String>,
 }
 

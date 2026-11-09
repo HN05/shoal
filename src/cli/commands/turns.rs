@@ -9,7 +9,7 @@ use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{agents, context::Context, terminal, ui},
     config::Effective,
@@ -180,7 +180,7 @@ fn name(agent: Option<&crate::agent::Agent>) -> &str {
 /// its execution and the place it runs in.
 #[derive(Debug)]
 struct Target {
-    workspace: String,
+    workspace: SpaceName,
     agent: Option<crate::agent::Agent>,
     workspace_id: SpaceId,
     execution: ExecutionId,
@@ -198,7 +198,7 @@ impl Target {
             )
         })?;
         Ok(Self {
-            workspace: workspace.name.to_string(),
+            workspace: workspace.name.clone(),
             agent: agent.agent,
             workspace_id: workspace.id.clone(),
             execution: agent.execution,

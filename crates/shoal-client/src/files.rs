@@ -1,6 +1,7 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
 use crate::execution_ids::ExecutionId;
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -174,11 +175,11 @@ pub struct AttachedFile {
     /// The name of the workspace it is attached to: when it was attached, or
     /// the last one once the workspace is removed. None for a chat's file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceName>,
     /// The name of the chat it is attached to, as [`Self::workspace`] names
     /// a workspace's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chat: Option<String>,
+    pub chat: Option<SpaceName>,
     pub source: FileSource,
     /// The attached file's name.
     pub name: String,

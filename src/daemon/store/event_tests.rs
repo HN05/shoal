@@ -516,7 +516,7 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                 EventKind::ChildCreated | EventKind::ChildRemoved => {
                     event.child.map(|child| child.name.to_string())
                 }
-                EventKind::Renamed => event.title.flatten().or(Some(event.name)),
+                EventKind::Renamed => event.title.flatten().or(Some(event.name.into())),
                 EventKind::QuestionAsked | EventKind::QuestionAnswered => event
                     .question
                     .map(|question| format!("{} {:?}", question.number, question.answer)),

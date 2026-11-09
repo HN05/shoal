@@ -1,4 +1,5 @@
 //! What `shoal demo` prints.
+use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
@@ -11,7 +12,7 @@ use crate::{
 /// Configured and running demos, as `shoal demo ls --json` prints them.
 #[derive(Serialize, Deserialize)]
 pub struct Listing {
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceName>,
     pub configured: BTreeMap<String, Demo>,
     pub running: Vec<Running>,
 }

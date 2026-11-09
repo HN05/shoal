@@ -173,7 +173,7 @@ impl Target {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &crate::client::space_names::SpaceName {
         match self {
             Self::Workspace(inspection) => &inspection.workspace.name,
             Self::Chat(chat) => &chat.name,

@@ -2,6 +2,7 @@
 //! agent, to allow.
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
+use crate::space_names::SpaceName;
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use anyhow::{Result, bail, ensure};
@@ -255,8 +256,10 @@ pub struct ApprovalRequest {
     pub key: String,
     /// The space that made the request, a workspace or a chat.
     pub space_id: SpaceId,
+    /// The space's name, which the daemon records with the request; none
+    /// before it does, and in a record made before requests kept it.
     #[serde(default)]
-    pub space: String,
+    pub space: Option<SpaceName>,
     /// Whether the space is gone, which a proposed issue outlives.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub space_removed: bool,
@@ -500,6 +503,11 @@ impl ProposalDecision {
 }
 
 impl ApprovalRequest {
+    /// The name of the space that made it; empty when the record has none.
+    pub fn space_name(&self) -> &str {
+        self.space.as_deref().unwrap_or_default()
+    }
+
     /// What the user is asked to decide: the access and how long it lasts,
     /// the branch and commit to merge, the issue or PR to open, or the hold
     /// to place.

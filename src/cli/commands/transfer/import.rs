@@ -238,7 +238,9 @@ impl Package {
             narrowing: chat::Narrowing::Recorded(packaged.narrowing),
             agent: Some(packaged.agent.name().parse()?),
             place,
-            name: Some(crate::client::chats::free_name(&ctx.paths, packaged.name.clone()).await?),
+            name: Some(
+                crate::client::chats::free_name(&ctx.paths, packaged.name.to_string()).await?,
+            ),
             model: Default::default(),
             args: Vec::new(),
             session,

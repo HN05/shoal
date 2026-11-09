@@ -889,7 +889,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .attached_files(&SpaceSelector::from(&renamed.name))
         .await
         .unwrap();
-    assert_eq!(files[0].workspace, Some(renamed.name.to_string()));
+    assert_eq!(files[0].workspace, Some(renamed.name.clone()));
 }
 
 #[tokio::test]

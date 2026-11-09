@@ -1034,7 +1034,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
         .map(|notification| notification.workspace)
         .collect();
-    assert_eq!(failures, [Some("parent".to_owned())]);
+    assert_eq!(failures, [Some("parent".into())]);
     assert!(parent.path.exists());
     assert!(child.path.exists());
 }
