@@ -2538,8 +2538,7 @@ decision as a message. A proposal is routed like any request, to the nearest
 space above with an agent and up to the user. Publishing to a forge other people see is the review
 the setting asks for, so a space above approves one only where its own
 permission for it is `direct`: it may then publish the item itself, so
-reviewing a child's is within what it may do, and a child never has more than
-it does. A parent without that permission may deny it, with a reason or as a
+reviewing a child's is within what it may do. A parent without that permission may deny it, with a reason or as a
 duplicate, or pass it up; a duplicate only adds a finding to an existing issue
 or proposal, which opens nothing. Approval carries data: the decider may replace the title and body, and the daemon then opens the item as the agent account through the same path
 `issue open` and `pr open` use, recording and linking it. Denial may carry a reason,

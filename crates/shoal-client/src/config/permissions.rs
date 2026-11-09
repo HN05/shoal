@@ -1,8 +1,8 @@
 //! `[permissions]` and `[modes.NAME.permissions]`: what a scoped agent may do
 //! at once, after approval, or not at all. Each value is ordered from the
-//! narrowest to the widest, `deny` < `propose` < `direct`, so a space below
-//! another never gets more than its parent, unless a `--permission` given to
-//! its agent sets the key, which applies as given.
+//! narrowest to the widest, `deny` < `propose` < `direct`. A space has its
+//! mode's, each no wider than its parent's, then each key a `--permission`
+//! given to its agent sets, as given.
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
@@ -273,7 +273,7 @@ states!(
         Mode => "mode",
         /// The `--permission` given to its agent when it started, resumed or
         /// restarted.
-        Narrowing => "narrowing",
+        Given => "given",
         /// The space above it, whose permission is narrower.
         Parent => "parent",
     }
@@ -300,7 +300,7 @@ impl<T: Ord + Copy> Permission<T> {
         match value {
             Some(value) => Self {
                 value,
-                from: PermissionSource::Narrowing,
+                from: PermissionSource::Given,
             },
             None => self,
         }
@@ -330,7 +330,7 @@ impl<T: std::fmt::Display> Permission<T> {
 fn cite(key: &str, value: &dyn std::fmt::Display, from: PermissionSource) -> String {
     let from = match from {
         PermissionSource::Mode => "its agent's mode",
-        PermissionSource::Narrowing => "the --permission given to its agent",
+        PermissionSource::Given => "the --permission given to its agent",
         PermissionSource::Parent => "the space above it",
     };
     format!("the space's {key} permission is \"{value}\", from {from}")

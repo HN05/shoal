@@ -19728,7 +19728,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
         let permission = &status["permissions"][key];
         assert_eq!(
             (permission["value"].as_str(), permission["from"].as_str()),
-            (Some(value), Some("narrowing")),
+            (Some(value), Some("given")),
             "{status}"
         );
     }

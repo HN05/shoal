@@ -2381,7 +2381,7 @@ below them; only the hold on an agent's plain `git push` follows the `push`
 permission it launched with, which a restart renews. A check uses the
 permissions of the space that acts, so a parent acting on a space below it
 acts under its own. `shoal work status` lists a space's permissions, each with
-`mode`, `narrowing` or `parent` for where it comes from; `--json` gives them
+`mode`, `given` or `parent` for where it comes from; `--json` gives them
 as `permissions`, each key with its `value` and `from`.
 
 `shoal start --permission KEY=VALUE`, repeatable, gives the new agent a
@@ -2403,7 +2403,7 @@ or restart keeps them; `shoal resume` and `shoal restart` take `--permission`
 too, which sets the keys it names, `KEY=mode` dropping one, and keeps the
 rest. Nothing changes them while the agent runs. `shoal work status --json`
 gives the recorded ones as `narrowing`, beside the effective `permissions`,
-where a given key's `from` is `narrowing`.
+where a given key's `from` is `given`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,

@@ -76,7 +76,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
         return Ok(code);
     }
     if let Some(change) = change {
-        narrowing::check(ctx, &selected, execution.as_deref(), change).await?;
+        permission_change::check(ctx, &selected, execution.as_deref(), change).await?;
     }
     if scoped && !discard {
         return queue_below(ctx, selected, execution, change).await;
@@ -208,7 +208,7 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    narrowing::apply(ctx, &stopped, change).await?;
+    permission_change::apply(ctx, &stopped, change).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
     match queuing {
         Queuing::Here { now: true } => {
@@ -243,7 +243,7 @@ async fn queue_below(
     for chat in &selected.chats {
         crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
     }
-    narrowing::apply(ctx, &stopped, change).await?;
+    permission_change::apply(ctx, &stopped, change).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
     queue::queue_all(ctx, stopped, chats, failed, false).await
 }
@@ -332,7 +332,7 @@ async fn queue_workspace(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    narrowing::apply(ctx, &stopped, change).await?;
+    permission_change::apply(ctx, &stopped, change).await?;
     queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
 }
 
@@ -498,7 +498,7 @@ pub async fn run(
         !active(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
-    narrowing::apply_one(ctx, workspace, &selected_id, change).await?;
+    permission_change::apply_one(ctx, workspace, &selected_id, change).await?;
     if !here {
         let session = (workspace.clone(), selected_id, selected);
         return start_sessions(ctx, vec![session], true, Resumed::default()).await;
@@ -549,7 +549,7 @@ async fn continue_last_session(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let (id, path) = select_agent(ctx, &saved.sessions, session_label)?;
-    narrowing::apply_one(ctx, workspace, &id, change).await?;
+    permission_change::apply_one(ctx, workspace, &id, change).await?;
     if !here {
         let session = (workspace.clone(), id, path);
         return start_sessions(ctx, vec![session], true, Resumed::default()).await;
@@ -1199,7 +1199,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 }
 
 mod chats;
-pub(super) mod narrowing;
+pub(super) mod permission_change;
 pub(super) mod queue;
 mod targets;
 

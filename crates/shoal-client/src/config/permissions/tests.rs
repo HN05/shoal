@@ -137,7 +137,7 @@ fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
     // A wider value than the mode's applies, even below a narrower parent.
     let given = worker.below(&worker).given(&wider);
     assert_eq!(given.merge.value, Opening::Direct);
-    assert_eq!(given.merge.from, PermissionSource::Narrowing);
+    assert_eq!(given.merge.from, PermissionSource::Given);
     assert_eq!(given.push, worker.push);
     let narrower = PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap();
     assert_eq!(chat.given(&narrower).push.value, Pushes::Propose);

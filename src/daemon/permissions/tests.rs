@@ -181,12 +181,12 @@ async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
     };
     let chat = of(top.id.clone()).await;
     assert_eq!(chat.merge.value, Opening::Propose);
-    assert_eq!(chat.merge.from, PermissionSource::Narrowing);
+    assert_eq!(chat.merge.from, PermissionSource::Given);
     let below = of(worker.id.clone()).await;
     assert_eq!(below.push.value, Pushes::Propose);
-    assert_eq!(below.push.from, PermissionSource::Narrowing);
+    assert_eq!(below.push.from, PermissionSource::Given);
     assert_eq!(below.merge.value, Opening::Direct);
-    assert_eq!(below.merge.from, PermissionSource::Narrowing);
+    assert_eq!(below.merge.from, PermissionSource::Given);
     let split = of(split.id.clone()).await;
     assert_eq!(split.push.value, Pushes::Propose);
     assert_eq!(split.push.from, PermissionSource::Parent);
