@@ -10,7 +10,7 @@ use crate::{
         args::WorkspaceScope,
         context::Context,
         output::Palette,
-        ui::{self, KeyBindings, WidthLimit},
+        ui::{self, Key, KeyBindings, WidthLimit},
     },
     client::files::AttachedFile,
 };
@@ -26,12 +26,12 @@ enum FileAction {
     Delete,
 }
 
-const BINDINGS: &[(&str, &str, FileAction)] = &[
-    ("enter", "print", FileAction::Print),
-    ("ctrl-y", "print path", FileAction::PrintPath),
-    ("ctrl-o", "open", FileAction::Open),
-    ("ctrl-a", "add", FileAction::Add),
-    ("ctrl-d", "delete", FileAction::Delete),
+const BINDINGS: &[(Key, &str, FileAction)] = &[
+    (Key::Enter, "print", FileAction::Print),
+    (Key::Ctrl('y'), "print path", FileAction::PrintPath),
+    (Key::Ctrl('o'), "open", FileAction::Open),
+    (Key::Ctrl('a'), "add", FileAction::Add),
+    (Key::Ctrl('d'), "delete", FileAction::Delete),
 ];
 
 /// Pick one of the space's `files`, or the add row, and act on it.

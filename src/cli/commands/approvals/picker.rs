@@ -65,8 +65,8 @@ pub(in crate::cli::commands) async fn decide_row(
 /// without leaving the list.
 fn choose(ctx: &Context, space: Option<&str>, requests: Vec<ApprovalRequest>) -> Result<String> {
     let keys = [
-        decision_key(ctx, "ctrl-a", "approve", Decision::Approve)?,
-        decision_key(ctx, "ctrl-d", "deny", Decision::Deny)?,
+        decision_key(ctx, ui::Key::Ctrl('a'), "approve", Decision::Approve)?,
+        decision_key(ctx, ui::Key::Ctrl('d'), "deny", Decision::Deny)?,
     ];
     let reload = internal::shell_command(&ctx.paths, Worker::ApprovalRows { space })?;
     ui::pick_in_place(
@@ -82,7 +82,7 @@ fn choose(ctx: &Context, space: Option<&str>, requests: Vec<ApprovalRequest>) ->
 /// `key`, which makes `decision` through the decision worker.
 fn decision_key<'a>(
     ctx: &Context,
-    key: &'a str,
+    key: ui::Key,
     label: &'a str,
     decision: Decision,
 ) -> Result<ui::InPlaceKey<'a>> {

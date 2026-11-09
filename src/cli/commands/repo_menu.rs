@@ -10,7 +10,7 @@ use crate::cli::{
         repository::{RepoCommand, RepositoryCommand},
     },
     context::Context,
-    ui::{self, KeyBindings},
+    ui::{self, Key, KeyBindings},
 };
 
 const REGISTER_ENTRY: &str = "register-repository";
@@ -25,13 +25,13 @@ enum RepoMenuAction {
     Delete,
 }
 
-const BINDINGS: &[(&str, &str, RepoMenuAction)] = &[
-    ("enter", "add workspace", RepoMenuAction::AddWorkspace),
-    ("ctrl-a", "register", RepoMenuAction::Register),
-    ("ctrl-r", "rename", RepoMenuAction::Rename),
-    ("ctrl-o", "config", RepoMenuAction::Config),
-    ("ctrl-s", "set up", RepoMenuAction::Setup),
-    ("ctrl-d", "delete", RepoMenuAction::Delete),
+const BINDINGS: &[(Key, &str, RepoMenuAction)] = &[
+    (Key::Enter, "add workspace", RepoMenuAction::AddWorkspace),
+    (Key::Ctrl('a'), "register", RepoMenuAction::Register),
+    (Key::Ctrl('r'), "rename", RepoMenuAction::Rename),
+    (Key::Ctrl('o'), "config", RepoMenuAction::Config),
+    (Key::Ctrl('s'), "set up", RepoMenuAction::Setup),
+    (Key::Ctrl('d'), "delete", RepoMenuAction::Delete),
 ];
 
 pub(super) async fn choose(ctx: &Context) -> Result<Command> {

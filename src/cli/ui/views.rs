@@ -1,41 +1,68 @@
 //! View descriptions, initial picker bindings and in-place transitions.
 use anyhow::{Context as _, Result};
 
-use super::{Entries, Picked, picker::entry_id, picker::fzf_output};
+use super::{Entries, Key, Picked, picker::entry_id, picker::fzf_output, picker_width, wrapped};
 use crate::cli::context::Context;
 
 /// The presentation and available actions of one picker view.
 pub struct PickerView<'a> {
     pub prompt: &'a str,
     pub header: String,
-    /// The keys this view binds, in header order, `enter` included.
-    pub keys: Vec<&'a str>,
+    /// The keys this view binds, in header order, Enter included.
+    pub keys: Vec<Key>,
 }
 
-impl PickerView<'_> {
-    fn unbound<'a>(&self, keys: &'a [&'a str]) -> Vec<&'a str> {
+impl<'a> PickerView<'a> {
+    /// A view that binds `keys`, each with what it does, in header order,
+    /// Enter included, and whose header names Tab after Enter when it
+    /// `switches` to another view. The header wraps to the picker's width,
+    /// as fzf cuts a line that is wider.
+    pub fn new(prompt: &'a str, keys: &[(Key, &str)], switches: bool) -> Self {
+        Self {
+            prompt,
+            header: wrapped(&hints(keys, switches), "   ", picker_width()),
+            keys: keys.iter().map(|(key, _)| *key).collect(),
+        }
+    }
+
+    /// The names of `keys` this view does not bind.
+    fn unbound(&self, keys: &[Key]) -> Vec<String> {
         keys.iter()
-            .copied()
             .filter(|key| !self.keys.contains(key))
+            .map(|key| key.name())
             .collect()
     }
 
     /// Switch to this view and reload its rows. The command goes last so
     /// its shell text can contain any character.
-    pub fn transition(&self, keys: &[&str], reload: &str) -> String {
+    pub fn transition(&self, keys: &[Key], reload: &str) -> String {
         let mut actions = Vec::new();
         let unbound = self.unbound(keys);
         if !unbound.is_empty() {
             actions.push(format!("unbind({})", unbound.join(",")));
         }
         actions.extend([
-            format!("rebind({})", self.keys.join(",")),
+            format!("rebind({})", names(&self.keys).join(",")),
             format!("change-prompt({})", self.prompt),
             format!("change-header({})", self.header),
             format!("reload:{reload}"),
         ]);
         actions.join("+")
     }
+}
+
+/// The header's hint for each of `keys`, with Tab's after Enter's when the
+/// view `switches`.
+fn hints(keys: &[(Key, &str)], switches: bool) -> Vec<String> {
+    let mut hints: Vec<_> = keys.iter().map(|(key, label)| key.hint(label)).collect();
+    if switches {
+        hints.insert(hints.len().min(1), "tab: next view".into());
+    }
+    hints
+}
+
+fn names(keys: &[Key]) -> Vec<String> {
+    keys.iter().map(|key| key.name()).collect()
 }
 
 /// The next available view after the one the picker currently shows.
@@ -57,8 +84,8 @@ fn view_after<'a, T>(views: &'a [T], shown: &str, prompt: impl Fn(&T) -> &str) -
 /// another view by running `next`.
 pub struct ViewPicker<'a> {
     pub view: PickerView<'a>,
-    /// Every key a view binds, by fzf name, `enter` included.
-    pub keys: &'a [&'a str],
+    /// Every key a view binds, Enter included.
+    pub keys: &'a [Key],
     /// The command whose output, fzf actions, shows the next view.
     pub next: Option<String>,
     /// The search the picker starts with.
@@ -68,7 +95,7 @@ pub struct ViewPicker<'a> {
 impl ViewPicker<'_> {
     fn arguments(&self) -> Vec<String> {
         let mut args = vec!["--header".into(), self.view.header.clone()];
-        for key in self.keys {
+        for key in names(self.keys) {
             args.extend(["--bind".into(), format!("{key}:print({key})+accept")]);
         }
         let unbound = self.view.unbound(self.keys);
@@ -95,11 +122,14 @@ pub fn pick_in_views(
     ctx: &Context,
     entries: Entries,
     picker: ViewPicker<'_>,
-) -> Result<Picked<String>> {
+) -> Result<Picked<Key>> {
     let output = fzf_output(ctx, picker.view.prompt, &entries, &picker.arguments())?;
-    let (key, selected) = output.split_once('\n').context("picker omitted action")?;
+    let (reported, selected) = output.split_once('\n').context("picker omitted action")?;
+    let key = (picker.keys.iter().copied())
+        .find(|key| key.reported_as(reported))
+        .context("unknown picker action")?;
     Ok(Picked {
-        action: key.to_owned(),
+        action: key,
         id: entry_id(selected),
     })
 }

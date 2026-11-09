@@ -23,9 +23,9 @@ fn initial_and_reloaded_views_disable_the_same_unavailable_actions() {
         view: PickerView {
             prompt: "notifications> ",
             header: "enter: cd\nctrl-o: status".into(),
-            keys: vec!["enter", "ctrl-o"],
+            keys: vec![Key::Enter, Key::Ctrl('o')],
         },
-        keys: &["enter", "ctrl-d", "ctrl-o"],
+        keys: &[Key::Enter, Key::Ctrl('d'), Key::Ctrl('o')],
         next: Some("shoal internal menu-next".into()),
         query: Some("'current".into()),
     };
@@ -63,9 +63,9 @@ fn a_single_view_with_every_action_needs_no_unbinding_or_tab() {
         view: PickerView {
             prompt: "work> ",
             header: "enter: cd".into(),
-            keys: vec!["enter"],
+            keys: vec![Key::Enter],
         },
-        keys: &["enter"],
+        keys: &[Key::Enter],
         next: None,
         query: None,
     };
@@ -82,4 +82,14 @@ fn a_single_view_with_every_action_needs_no_unbinding_or_tab() {
         picker.view.transition(picker.keys, "reload rows"),
         "rebind(enter)+change-prompt(work> )+change-header(enter: cd)+reload:reload rows"
     );
+}
+
+#[test]
+fn headers_name_tab_after_enter_only_when_the_view_switches() {
+    let keys = [(Key::Enter, "cd"), (Key::Ctrl('o'), "status")];
+    assert_eq!(
+        hints(&keys, true),
+        ["enter: cd", "tab: next view", "ctrl-o: status"]
+    );
+    assert_eq!(hints(&keys, false), ["enter: cd", "ctrl-o: status"]);
 }

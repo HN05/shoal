@@ -13,7 +13,7 @@ fn enclosed_arguments_pick_delimiters_they_do_not_close() {
 #[test]
 fn in_place_keys_show_the_outcome_above_the_hints_then_reload() {
     let key = InPlaceKey {
-        key: "ctrl-a",
+        key: Key::Ctrl('a'),
         label: "approve",
         command: "'/bin/shoal (dev)' decide".into(),
     };

@@ -12,6 +12,10 @@
 //!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]), or
 //!   whose keys act on an entry without leaving it ([`pick_in_place`]);
 //!   [`can_pick`] tells whether one can run, for choices with a usual answer.
+//! - [`keys`]: the keys pickers bind ([`Key`]), which only this module
+//!   spells as fzf names.
+//! - [`linked`]: one of the issues and PRs a space links, to view or open in
+//!   the browser ([`pick_linked`]).
 //! - [`modes`]: the mode a start takes, named or picked among the modes
 //!   of the kind of space it starts in ([`ModeChoice`]).
 //! - [`views`]: choosing a row across views ([`pick_in_views`]), reading
@@ -33,6 +37,8 @@
 //! instead, and are refused naming what the prompt asks for, or the option a
 //! caller names with [`require_argument`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
+mod keys;
+mod linked;
 mod modes;
 mod picker;
 mod place;
@@ -42,6 +48,8 @@ mod several;
 mod views;
 mod workspaces;
 
+pub use keys::Key;
+pub use linked::pick_linked;
 pub use modes::{ModeChoice, ModeFit};
 pub use picker::*;
 pub use place::{Place, pick_place};

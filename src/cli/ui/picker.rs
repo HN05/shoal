@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::{current_directory, require_interactive};
+use super::{Key, current_directory, require_interactive};
 use crate::{cli::context::Context, tools::Tool};
 
 /// `(id, label)` pairs; the id is returned, only the label is shown.
@@ -18,15 +18,15 @@ pub struct Picked<T> {
     pub id: String,
 }
 
-/// `(key, label, action)` bindings, including `enter` for the default action.
-pub struct KeyBindings<'a, T>(pub &'a [(&'a str, &'a str, T)]);
+/// `(key, label, action)` bindings, including Enter for the default action.
+pub struct KeyBindings<'a, T>(pub &'a [(Key, &'a str, T)]);
 
 impl<T: Clone> KeyBindings<'_, T> {
     fn keys(&self) -> String {
         self.0
             .iter()
-            .map(|(key, _, _)| *key)
-            .filter(|key| *key != "enter")
+            .filter(|(key, _, _)| *key != Key::Enter)
+            .map(|(key, _, _)| key.name())
             .collect::<Vec<_>>()
             .join(",")
     }
@@ -34,16 +34,15 @@ impl<T: Clone> KeyBindings<'_, T> {
     fn header(&self) -> String {
         self.0
             .iter()
-            .map(|(key, label, _)| format!("{key}: {label}"))
+            .map(|(key, label, _)| key.hint(label))
             .collect::<Vec<_>>()
             .join("   ")
     }
 
-    fn action(&self, key: &str) -> Result<T> {
-        let key = if key.is_empty() { "enter" } else { key };
+    fn action(&self, reported: &str) -> Result<T> {
         self.0
             .iter()
-            .find(|(bound, _, _)| *bound == key)
+            .find(|(key, _, _)| key.reported_as(reported))
             .map(|(_, _, action)| action.clone())
             .context("unknown picker action")
     }
@@ -82,7 +81,7 @@ pub fn pick_with_keys<T: Clone>(
 
 /// A key that acts on the highlighted entry without leaving the picker.
 pub struct InPlaceKey<'a> {
-    pub key: &'a str,
+    pub key: Key,
     pub label: &'a str,
     /// Shell text that, given the entry's id as its last argument, acts on
     /// it and prints the outcome.
@@ -100,7 +99,7 @@ impl InPlaceKey<'_> {
             crate::shell::quote(&[hints])
         );
         let header = enclosed("transform-header", &header)?;
-        Ok(format!("{}:{header}+reload:{reload}", self.key))
+        Ok(format!("{}:{header}+reload:{reload}", self.key.name()))
     }
 }
 
@@ -115,8 +114,8 @@ pub fn pick_in_place(
     keys: &[InPlaceKey<'_>],
     reload: &str,
 ) -> Result<String> {
-    let hints = std::iter::once(format!("enter: {enter}"))
-        .chain(keys.iter().map(|key| format!("{}: {}", key.key, key.label)))
+    let hints = std::iter::once(Key::Enter.hint(enter))
+        .chain(keys.iter().map(|key| key.key.hint(key.label)))
         .collect::<Vec<_>>()
         .join("   ");
     let mut args = vec!["--header".into(), hints.clone()];
