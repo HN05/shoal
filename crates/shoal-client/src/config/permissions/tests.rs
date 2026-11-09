@@ -155,7 +155,7 @@ fn a_dropped_key_gives_the_value_it_falls_back_to() {
     let drop_merge = PermissionChange::assigned("merge=mode").unwrap();
     // A chat's mode merges directly, which a worker does not hold.
     let refused = drop_merge.ensure_held(&chat, &worker).unwrap_err();
-    assert!(format!("{refused:#}").contains("merge=direct"));
+    assert!(format!("{refused:#}").contains("merge=mode would give merge=direct"));
     assert!(drop_merge.ensure_held(&worker, &worker).is_ok());
     assert!(drop_merge.ensure_held(&chat, &chat).is_ok());
     let set_merge = PermissionChange::assigned("merge=direct").unwrap();

@@ -277,7 +277,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     // Without its push, the child would push directly, as its parent does,
     // which the chat does not hold.
     let refused = check(Some(top.id.clone()), dropped("push=mode")).await;
-    assert!(format!("{:#}", refused.unwrap_err()).contains("push=direct"));
+    assert!(format!("{:#}", refused.unwrap_err()).contains("push=mode would give push=direct"));
     // A key the chat holds as much of drops, and the user drops any.
     check(Some(top.id.clone()), dropped("merge=mode"))
         .await

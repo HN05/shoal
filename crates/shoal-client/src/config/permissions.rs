@@ -255,11 +255,16 @@ impl PermissionChange {
     /// agent has without what it was given.
     pub fn ensure_held(&self, fallback: &Permissions, held: &Permissions) -> Result<()> {
         self.set.ensure_held(held)?;
-        (fallback.values().only(&self.dropped).ensure_held(held)).with_context(|| {
-            format!(
-                "--permission KEY={MODE_VALUE} drops a key to the value its space has without one"
-            )
-        })
+        for &key in &self.dropped {
+            if fallback.values().only(&[key]).ensure_held(held).is_err() {
+                let ((value, _), (holds, from)) = (fallback.get(key), held.get(key));
+                bail!(
+                    "--permission {key}={MODE_VALUE} would give {key}={value}, which the giver does not hold: {}; a space gives only what it holds",
+                    cite(key.as_str(), &holds, from)
+                );
+            }
+        }
+        Ok(())
     }
 
     /// The permissions `given`, an agent was given, after this change.
