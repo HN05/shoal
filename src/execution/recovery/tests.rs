@@ -650,10 +650,7 @@ fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
     let replacement =
         crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
             .unwrap();
-    Saved::load(&paths, &workspace)
-        .unwrap()
-        .replace_narrowing(replacement)
-        .unwrap();
+    replace_narrowings(&[Saved::load(&paths, &workspace).unwrap()], replacement).unwrap();
     let record = Record::load(&record_path(&paths, &workspace, "stopped"))
         .unwrap()
         .unwrap();
@@ -669,11 +666,16 @@ fn a_replaced_narrowing_reaches_each_saved_agent_and_keeps_the_rest() {
         [("last", replacement)]
     );
 
-    // A record a restore claimed is refused, and none changes.
+    // A record a restore claimed is refused, and none changes, in any
+    // workspace.
+    let other = SpaceId::from("other");
+    LastSession::save(&paths, &other, &agent, "other-last").unwrap();
     let record = record_path(&paths, &workspace, "stopped");
     let _restoring = claim(&record).unwrap();
-    let saved = Saved::load(&paths, &workspace).unwrap();
-    assert!(saved.replace_narrowing(Default::default()).is_err());
+    let saved = [&other, &workspace].map(|id| Saved::load(&paths, id).unwrap());
+    assert!(replace_narrowings(&saved, Default::default()).is_err());
     let last = LastSession::all(&paths, &workspace).unwrap();
     assert_eq!(last[0].narrowing, replacement);
+    let other_last = LastSession::all(&paths, &other).unwrap();
+    assert_eq!(other_last[0].narrowing, agent.narrowing);
 }

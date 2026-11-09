@@ -1228,35 +1228,38 @@ impl Saved {
     pub fn restores_outside_wrappers(&self) -> bool {
         (self.agents.iter().chain(&self.sessions)).any(|(_, path)| !waits_in_wrapper(path))
     }
+}
 
-    /// Give each saved agent and last session `narrowing` in place of the
-    /// one it recorded, which its restore runs under, holding the claim a
-    /// restore takes on each, so one a restore holds is refused before any
-    /// changes.
-    pub fn replace_narrowing(
-        &self,
-        narrowing: crate::config::permissions::PermissionsConfig,
-    ) -> Result<()> {
-        let paths = self.agents.iter().chain(&self.sessions);
-        let _claims = (paths.map(|(_, path)| claim(path))).collect::<Result<Vec<_>>>()?;
-        for (_, path) in &self.agents {
-            if let Some(record) = Record::load(path)? {
-                rewrite(
-                    path,
-                    &Record {
-                        narrowing,
-                        ..record
-                    },
-                )?;
-            }
+/// Give each agent and last session the `saved` lists keep `narrowing` in
+/// place of the one it recorded, which its restore runs under, holding the
+/// claim a restore takes on each of them, so one a restore holds is refused
+/// before any changes.
+pub fn replace_narrowings(
+    saved: &[Saved],
+    narrowing: crate::config::permissions::PermissionsConfig,
+) -> Result<()> {
+    let agents = || saved.iter().flat_map(|saved| &saved.agents);
+    let sessions = || saved.iter().flat_map(|saved| &saved.sessions);
+    let _claims = (agents().chain(sessions()))
+        .map(|(_, path)| claim(path))
+        .collect::<Result<Vec<_>>>()?;
+    for (_, path) in agents() {
+        if let Some(record) = Record::load(path)? {
+            rewrite(
+                path,
+                &Record {
+                    narrowing,
+                    ..record
+                },
+            )?;
         }
-        for (_, path) in &self.sessions {
-            if let Some(last) = LastSession::load(path)? {
-                rewrite(path, &LastSession { narrowing, ..last })?;
-            }
-        }
-        Ok(())
     }
+    for (_, path) in sessions() {
+        if let Some(last) = LastSession::load(path)? {
+            rewrite(path, &LastSession { narrowing, ..last })?;
+        }
+    }
+    Ok(())
 }
 
 /// Give the saved agent or last session of execution `id` of the workspace
@@ -1269,7 +1272,7 @@ pub(crate) fn replace_narrowing(
 ) -> Result<()> {
     let mut saved = Saved::load(paths, workspace_id)?;
     saved.retain_execution(id, false);
-    saved.replace_narrowing(narrowing)
+    replace_narrowings(&[saved], narrowing)
 }
 
 /// Save `saved` again at `path`, where a stopped agent's file is.

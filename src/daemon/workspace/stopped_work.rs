@@ -114,10 +114,7 @@ impl Manager {
         for agent in agents {
             replaced.push(self.replaceable(agent).await?);
         }
-        for saved in replaced {
-            saved.replace_narrowing(narrowing)?;
-        }
-        Ok(())
+        recovery::replace_narrowings(&replaced, narrowing)
     }
 
     /// What the stopped `agent` saved, refusing one that saved nothing and
