@@ -328,16 +328,22 @@ pub(crate) fn linked_items(
     Ok(items)
 }
 
-/// Whether the workspace watches a PR that no poll has seen merged or
-/// closed, so its activity is still to come.
+/// Whether the workspace watches a PR, assigned or related, that no poll
+/// has seen merged or closed, so its activity is still to come.
 pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
-    Ok(!open_prs(db, id)?.is_empty())
+    Ok(!open_prs(db, id)?.is_empty() || !unconcluded(db, id, concluding_prs(db, id)?)?.is_empty())
 }
 
-/// The PRs the workspace watches that no poll has seen merged or closed.
+/// The assigned PRs that no poll has seen merged or closed.
 pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+    let assigned = linked_items(db, id, Some(ItemKind::Pr))?;
+    unconcluded(db, id, assigned.into_iter().map(|(url, _)| url).collect())
+}
+
+/// The `urls` that no poll has seen merged or closed.
+fn unconcluded(db: &rusqlite::Connection, id: &SpaceId, urls: Vec<String>) -> Result<Vec<String>> {
     let mut open = Vec::new();
-    for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
+    for url in urls {
         if observed_item(db, id, &url)?.is_none_or(|snapshot| !snapshot.concluded()) {
             open.push(url);
         }
