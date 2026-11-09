@@ -249,3 +249,18 @@ async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
     // Anything else is still an unregistered repository.
     assert_eq!(item(refusal("missing").await), None);
 }
+
+#[tokio::test]
+async fn an_id_selects_only_the_repository_with_that_id() {
+    let repositories = [
+        repository("registered", "/tmp/registered", None),
+        repository("other", "/tmp/other", Some("registered-name")),
+    ];
+    let selected = select(&repositories, Selector::Id("registered".into())).await;
+    assert_eq!(selected.unwrap().id, "registered");
+    // A name is never read as an ID, nor an ID as a name or path.
+    for text in ["registered-name", "/tmp/other"] {
+        let missing = select(&repositories, Selector::Id(text.into())).await;
+        assert!(missing.is_err());
+    }
+}

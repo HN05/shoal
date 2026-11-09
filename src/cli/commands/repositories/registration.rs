@@ -59,12 +59,14 @@ pub(in crate::cli::commands) async fn offer_registration(
 }
 
 /// Offer to register an explicit checkout or URL that matches no registered
-/// repository, so the command can continue with the new registration.
+/// repository, so the command can continue with the new registration. An
+/// ID names a registered repository, so it is never offered.
 pub(in crate::cli::commands) async fn offer_unregistered(
     ctx: &Context,
     selector: &repository::Selector,
 ) -> Result<Option<Repository>> {
-    if !ctx.interactive() || !repository::registrable(selector.source()?) {
+    let id = matches!(selector, repository::Selector::Id(_));
+    if !ctx.interactive() || id || !repository::registrable(selector.source()?) {
         return Ok(None);
     }
     let repos = crate::client::repositories::list(&ctx.paths).await?;

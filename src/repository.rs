@@ -63,6 +63,12 @@ pub async fn select(
     selector: impl Into<Selector>,
 ) -> Result<&Repository> {
     let selector = selector.into();
+    if let Selector::Id(id) = &selector {
+        return repositories
+            .iter()
+            .find(|repo| repo.id == *id)
+            .with_context(|| format!("no registered repository has the ID {id}"));
+    }
     let value = selector.value();
     if let Some(repo) = repositories
         .iter()

@@ -1,16 +1,23 @@
 //! Repository selectors and the names and identity a source path or URL
 //! gives a repository.
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::forge::repo::remote_url::{RemoteUrl, source_name};
+use crate::repository_ids::RepositoryId;
 
-/// Preserve the caller's argument alongside a path resolved in its directory.
+/// What names a repository: the ID of a registered one, which selects it
+/// alone, or the caller's argument, kept alongside a path resolved in its
+/// directory, which may be an ID, name, path or source. The argument
+/// serializes as before, and an ID as `{"id": ...}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
 pub enum Selector {
+    #[serde(rename = "id")]
+    Id(RepositoryId),
+    #[serde(untagged)]
     Value(String),
+    #[serde(untagged)]
     Path {
         value: String,
         path: std::path::PathBuf,
@@ -20,12 +27,15 @@ pub enum Selector {
 impl Selector {
     pub fn value(&self) -> &str {
         match self {
+            Self::Id(id) => id,
             Self::Value(value) | Self::Path { value, .. } => value,
         }
     }
 
+    /// The path or URL a registration of the selected repository reads.
     pub fn source(&self) -> Result<&str> {
         match self {
+            Self::Id(id) => bail!("repository ID {id} is not a path or URL to register"),
             Self::Value(value) => Ok(value),
             Self::Path { path, .. } => path.to_str().context("repository path is not UTF-8"),
         }
@@ -36,9 +46,21 @@ impl Selector {
             Self::Value(value) if Path::new(value).is_absolute() => {
                 std::fs::canonicalize(value).ok()
             }
-            Self::Value(_) => None,
+            Self::Id(_) | Self::Value(_) => None,
             Self::Path { path, .. } => Some(path.clone()),
         }
+    }
+}
+
+impl From<RepositoryId> for Selector {
+    fn from(id: RepositoryId) -> Self {
+        Self::Id(id)
+    }
+}
+
+impl From<&RepositoryId> for Selector {
+    fn from(id: &RepositoryId) -> Self {
+        Self::Id(id.clone())
     }
 }
 
@@ -111,3 +133,6 @@ pub fn url_key(url: &str) -> String {
         .map(|remote| remote.registration_key())
         .unwrap_or_else(|| url.to_owned())
 }
+
+#[cfg(test)]
+mod tests;
