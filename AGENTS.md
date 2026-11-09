@@ -150,7 +150,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   ready mark are refused until a finished review covers HEAD with every finding resolved.
   Scope is cooperative, not a boundary against hostile same-user processes.
   A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare
-  string; code reads its text only where it sends, stores or compares it.
+  string; code reads its text with `expose` only where it sends it.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
   removals), never fail the operation for one, collapse repeated polled events

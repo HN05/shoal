@@ -1,7 +1,8 @@
 //! A scope token: the secret the daemon issues a space's agent, commands
 //! and workers, which grants that space's scope to whoever presents it. Its
 //! `Debug` redacts it, so a log line or error context that prints a struct
-//! holding one never shows it; sending or comparing its value reads it with
+//! holding one never shows it. Tokens compare and store as themselves, and
+//! only sending one, as in an environment variable, reads its text with
 //! [`ScopeToken::expose`].
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +17,7 @@ impl ScopeToken {
         Self(uuid::Uuid::new_v4().to_string())
     }
 
-    /// The token's text, for the places that send or compare it.
+    /// The token's text, for the places that send it.
     pub fn expose(&self) -> &str {
         &self.0
     }
