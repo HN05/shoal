@@ -13,6 +13,7 @@ use crate::{
     },
     git,
     model::Repository,
+    refusal::{Reason, Refusal},
 };
 
 /// Local checkouts use origin; clones retain their original source URL even
@@ -67,7 +68,11 @@ pub async fn select(
         return repositories
             .iter()
             .find(|repo| repo.id == *id)
-            .with_context(|| format!("no registered repository has the ID {id}"));
+            .ok_or_else(|| {
+                let message =
+                    format!("no registered repository has the ID {id}; see shoal repo ls");
+                Refusal::new(Reason::NotFound, message).into()
+            });
     }
     let value = selector.value();
     if let Some(repo) = repositories

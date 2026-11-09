@@ -261,6 +261,7 @@ async fn an_id_selects_only_the_repository_with_that_id() {
     // A name is never read as an ID, nor an ID as a name or path.
     for text in ["registered-name", "/tmp/other"] {
         let missing = select(&repositories, Selector::Id(text.into())).await;
-        assert!(missing.is_err());
+        let reason = crate::refusal::Reason::of(&missing.unwrap_err());
+        assert_eq!(reason, Some(crate::refusal::Reason::NotFound));
     }
 }
