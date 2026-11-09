@@ -325,8 +325,8 @@ instead of the PR delivery guidance below.
   never change derived workspace names or directories. Adapter outcomes preserve
   unfamiliar strings without treating them as confirmed branch deletion.
 - Workspace rename preserves the recorded path and ownership while changing the
-  checked-out branch and derived name. Existing PR watches block rename because
-  their remote head remains the original branch. Reserve intent before changing Git;
+  checked-out branch and derived name; PR watches and acknowledgements name no
+  branch and stay. Reserve intent before changing Git;
   no execution other than the scoped caller may be recorded.
   explicit repair reconciles interrupted intent without replaying the mutation.
 - `pr open` pushes to the branch's push remote and opens the PR in `origin`'s
