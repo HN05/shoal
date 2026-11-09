@@ -16,6 +16,7 @@ pub mod connection;
 pub mod demos;
 pub mod env;
 pub mod events;
+pub mod execution_ids;
 pub mod executions;
 pub mod files;
 pub mod forge_reads;
