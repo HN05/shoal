@@ -11,8 +11,8 @@ use tokio::sync::oneshot;
 use super::{Agent, Manager};
 use crate::daemon::log;
 use crate::{
-    daemon::store, execution::recovery, model::RunningAgent, protocol::Protection,
-    sessions::Origin, state::AgentState,
+    config::permissions::PermissionsConfig, daemon::store, execution::recovery,
+    model::RunningAgent, protocol::Protection, sessions::Origin, state::AgentState,
 };
 
 mod renewal;
@@ -67,16 +67,18 @@ impl Manager {
     /// returning once it runs again, with the place of the wrapper that runs
     /// it when that runs in a terminal host. `run` names the `shoal restart`
     /// run that asks for it, which the process of the space `stopped_by`
-    /// runs when given.
+    /// runs when given. A new wrapper starts the agent under `narrowing`
+    /// when given, instead of the one it recorded.
     pub(crate) async fn restart_agent(
         &self,
         execution: &ExecutionId,
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
+        narrowing: Option<PermissionsConfig>,
     ) -> Result<Option<Origin>> {
         let answer = self
-            .request_restart(execution, run, in_place, stopped_by)
+            .request_restart(execution, run, in_place, stopped_by, narrowing)
             .await?;
         restarted(answer).await
     }
@@ -123,24 +125,30 @@ impl Manager {
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
+        narrowing: Option<PermissionsConfig>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
+        ensure!(
+            !(in_place && narrowing.is_some()),
+            "--permission restarts an agent in a new wrapper, which starts it under the new narrowing; leave out --in-place"
+        );
         self.executions
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);
                 if let Some(Renewal::Starting(handover)) = renewals.get_mut(&id) {
-                    return Ok(handover.answer(run));
+                    return handover.answer_replacing(run, narrowing);
                 }
                 let agent = agents.get_mut(&id);
-                self.stop_for_restart(&id, agent, run, in_place, stopped_by)
+                self.stop_for_restart(&id, agent, run, in_place, stopped_by, narrowing)
             })
             .await
     }
 
     /// Save the handoff of `agent`, the agent of `id`, then stop it for a
-    /// restart, `in_place` or in a new wrapper, or join the restart already
-    /// in progress as it was asked. The handoff names the space
-    /// `stopped_by`, whose process asked for the restart, so it may resume
-    /// an agent the restart leaves stopped.
+    /// restart, `in_place` or in a new wrapper, which starts it under
+    /// `narrowing` when given, or join the restart already in progress as
+    /// it was asked. The handoff names the space `stopped_by`, whose process
+    /// asked for the restart, so it may resume an agent the restart leaves
+    /// stopped.
     fn stop_for_restart(
         &self,
         id: &ExecutionId,
@@ -148,6 +156,7 @@ impl Manager {
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
+        narrowing: Option<PermissionsConfig>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
@@ -158,6 +167,7 @@ impl Manager {
             return Ok(answer);
         }
         if let Some(restart) = &mut agent.restarts.current {
+            restart.ensure_replaces(&agent.name, narrowing)?;
             return Ok(restart.answer(run));
         }
         ensure!(
@@ -178,7 +188,7 @@ impl Manager {
             stopped_by,
         )
         .context("save the agent's recovery record")?;
-        let mut restart = Restart::unanswered(run, in_place);
+        let mut restart = Restart::unanswered(run, in_place).replacing(narrowing);
         let answer = restart.answer(None);
         agent.restarts.current = Some(restart);
         if agent.stop.send(true).is_err() {
@@ -263,14 +273,21 @@ impl Manager {
     }
 
     /// Leave the restart of `id`, whose agent's processes stopped, to a new
-    /// wrapper, which starts the agent once this one finished. The restart
-    /// is kept apart from the agent from now on, while the execution is
-    /// still recorded, so something always shows the agent to a stop.
+    /// wrapper, which starts the agent once this one finished, under the
+    /// narrowing the restart replaces the recorded one with, which its
+    /// wrapper's record takes now. The restart is kept apart from the agent
+    /// from now on, while the execution is still recorded, so something
+    /// always shows the agent to a stop.
     pub(crate) async fn hand_over_restart(&self, id: &ExecutionId) -> Result<()> {
         self.executions
             .with_restarts(|agents, renewals| {
-                let renewal = agents.get_mut(id).and_then(Agent::hand_over);
-                let renewal = renewal.context("the restart was cancelled")?;
+                let agent = agents.get_mut(id).context("the restart was cancelled")?;
+                let restart = agent.restarts.current.as_ref();
+                if let Some(narrowing) = restart.and_then(Restart::narrowing) {
+                    recovery::replace_narrowing(&self.paths, &agent.workspace_id, id, narrowing)
+                        .context("give the restarted agent its narrowing")?;
+                }
+                let renewal = agent.hand_over().context("the restart was cancelled")?;
                 renewals.insert(id.to_owned(), renewal);
                 Ok(())
             })

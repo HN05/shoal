@@ -11,6 +11,7 @@ use tokio::sync::oneshot;
 
 use super::{Agent, Manager, Restarts};
 use crate::{
+    config::permissions::PermissionsConfig,
     daemon::workspace::agent_queue::Start,
     model::{RunningAgent, Workspace},
     sessions::Origin,
@@ -61,6 +62,20 @@ pub(super) fn starting(renewals: &Renewals, id: &ExecutionId) -> bool {
 }
 
 impl Handover {
+    /// Answer one more request, of `run`, for the restart in progress,
+    /// refusing one under another `narrowing` than it starts the agent
+    /// under.
+    pub(super) fn answer_replacing(
+        &mut self,
+        run: Option<String>,
+        narrowing: Option<PermissionsConfig>,
+    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
+        if let Some(restart) = &self.restarts.current {
+            restart.ensure_replaces(&self.name, narrowing)?;
+        }
+        Ok(self.answer(run))
+    }
+
     /// Answer one more request, of `run`, for the restart in progress.
     pub(super) fn answer(
         &mut self,

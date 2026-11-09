@@ -3,11 +3,11 @@
 //! did, by the run that asked for it.
 use std::collections::HashMap;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
 use super::RestartWaits;
-use crate::{model::PendingRestart, sessions::Origin};
+use crate::{config::permissions::PermissionsConfig, model::PendingRestart, sessions::Origin};
 
 /// How a restart ended: the place of the wrapper that runs the agent again,
 /// when it runs in a terminal host, or why it does not run again.
@@ -26,6 +26,9 @@ pub(crate) struct Restart {
     /// The wrapper starts the agent again itself rather than finishing for
     /// a new wrapper to start it.
     in_place: bool,
+    /// The narrowing the restarted agent runs under instead of the one it
+    /// recorded.
+    narrowing: Option<PermissionsConfig>,
     /// The stopped agent was resumed, in its wrapper or a new one, so that
     /// wrapper's next start is the restarted agent rather than the first one.
     pub(super) resumed: bool,
@@ -44,9 +47,37 @@ impl Restart {
             run,
             joined: Vec::new(),
             in_place,
+            narrowing: None,
             resumed: false,
             waits: None,
         }
+    }
+
+    /// This restart, with the restarted agent running under `narrowing`
+    /// when given instead of the one it recorded.
+    pub(crate) fn replacing(self, narrowing: Option<PermissionsConfig>) -> Self {
+        Self { narrowing, ..self }
+    }
+
+    /// The narrowing the restarted agent runs under instead of the one it
+    /// recorded, if any.
+    pub(crate) fn narrowing(&self) -> Option<PermissionsConfig> {
+        self.narrowing
+    }
+
+    /// Refuse a request for a restart under `narrowing` that this one, in
+    /// progress for the agent `name`, does not replace the recorded one
+    /// with; a request without one takes this restart as it is.
+    pub(crate) fn ensure_replaces(
+        &self,
+        name: &str,
+        narrowing: Option<PermissionsConfig>,
+    ) -> Result<()> {
+        ensure!(
+            narrowing.is_none() || narrowing == self.narrowing,
+            "{name} restarts already under another narrowing; restart it again once it runs"
+        );
+        Ok(())
     }
 
     /// Answer one more request, of `run`: at once while the restart waits

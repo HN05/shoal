@@ -24,7 +24,7 @@ async fn a_restart_saves_a_chat_and_restores_it_as_shoal_resume_does() {
         .unwrap();
 
     manager
-        .restart_chat(&chat.id, run("a"), None)
+        .restart_chat(&chat.id, run("a"), None, None)
         .await
         .unwrap();
 
@@ -54,7 +54,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
 
     let coordinator = Some(SpaceId::from("coordinator"));
-    let error = (manager.restart_chat(&chat.id, run("a"), coordinator.clone()))
+    let error = (manager.restart_chat(&chat.id, run("a"), coordinator.clone(), None))
         .await
         .unwrap_err();
 
@@ -88,7 +88,7 @@ async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
     let coordinator = Some(SpaceId::from("coordinator"));
-    let restart = manager.restart_chat(&chat.id, run("a"), coordinator);
+    let restart = manager.restart_chat(&chat.id, run("a"), coordinator, None);
     assert!(restart.await.is_err());
     process.wait().unwrap();
     let restored = ProcessGroup::spawn(unmarked("sleep").arg("600"));
@@ -116,7 +116,7 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
     let coordinator = Some(SpaceId::from("coordinator"));
-    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.clone());
+    let restart = manager.restart_chat(&chat.id, run("a"), coordinator.clone(), None);
     assert!(restart.await.is_err());
     process.wait().unwrap();
     let fail_restore = |stopped_by: Option<SpaceId>| {
@@ -157,7 +157,7 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
         let (manager, id) = (manager.clone(), chat.id.clone());
         async move {
             let coordinator = Some(SpaceId::from("coordinator"));
-            manager.restart_chat(&id, run("a"), coordinator).await
+            manager.restart_chat(&id, run("a"), coordinator, None).await
         }
     });
     while !RESUMED.lock().unwrap().contains(&chat.id) {
@@ -212,7 +212,7 @@ async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
     assert!(!agents[0].restorable);
     assert!(
         manager
-            .restart_chat(&chat.id, run("a"), None)
+            .restart_chat(&chat.id, run("a"), None, None)
             .await
             .is_err()
     );
@@ -232,7 +232,7 @@ async fn a_daemon_update_waits_for_a_chat_restart() {
     HELD.lock().unwrap().push(chat.name.to_string());
     let restart = tokio::spawn({
         let (manager, id) = (manager.clone(), chat.id.clone());
-        async move { manager.restart_chat(&id, run("a"), None).await }
+        async move { manager.restart_chat(&id, run("a"), None, None).await }
     });
     while !RESUMED.lock().unwrap().contains(&chat.id) {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;

@@ -10,6 +10,7 @@ use anyhow::{Result, anyhow};
 
 use super::restores::resume;
 use crate::{
+    config::permissions::PermissionsConfig,
     daemon::{
         log,
         workspace::{Manager, restarted},
@@ -20,20 +21,22 @@ use crate::{
 
 impl Manager {
     /// Restart the agent of the running chat `id` for the `shoal restart`
-    /// `run`, which the process of the space `stopped_by` asks for, or join
-    /// the restart in progress, returning the place it runs in again.
+    /// `run`, which the process of the space `stopped_by` asks for, under
+    /// `narrowing` when given instead of the one it recorded, or join the
+    /// restart in progress, returning the place it runs in again.
     pub(crate) async fn restart_chat(
         self: &Arc<Self>,
         id: &SpaceId,
         run: Option<String>,
         stopped_by: Option<SpaceId>,
+        narrowing: Option<PermissionsConfig>,
     ) -> Result<Option<Origin>> {
         let chat = self.running_chat_by_id(id).await?;
         let resumes = match &chat {
             Some(chat) => self.chat_resumes(chat).await?,
             None => false,
         };
-        let requested = (self.chat_agents).request(id, chat.as_ref(), resumes, run)?;
+        let requested = (self.chat_agents).request(id, chat.as_ref(), resumes, run, narrowing)?;
         if let Some(chat) = requested.starts {
             self.chat_agents.set_stopper(&chat.id, stopped_by.clone());
             // A daemon update waits for the restart: the next daemon would
@@ -42,7 +45,7 @@ impl Manager {
             let operation = self.gates.owned_operation().await;
             let manager = self.clone();
             tokio::spawn(async move {
-                manager.run_chat_restart(chat, stopped_by).await;
+                manager.run_chat_restart(chat, stopped_by, narrowing).await;
                 drop(operation);
             });
         }
@@ -104,25 +107,33 @@ impl Manager {
         Ok(launch.arguments.resume_args(Some(session)).is_some())
     }
 
-    /// Restart `chat` for the process of the space `stopped_by` and answer
-    /// the requests for it with how that ended.
-    async fn run_chat_restart(&self, chat: Chat, stopped_by: Option<SpaceId>) {
-        let outcome = self.save_and_restore(&chat, stopped_by.as_ref()).await;
+    /// Restart `chat` for the process of the space `stopped_by`, under
+    /// `narrowing` when given, and answer the requests for it with how that
+    /// ended.
+    async fn run_chat_restart(
+        &self,
+        chat: Chat,
+        stopped_by: Option<SpaceId>,
+        narrowing: Option<PermissionsConfig>,
+    ) {
+        let outcome = (self.save_and_restore(&chat, stopped_by.as_ref(), narrowing)).await;
         let outcome = outcome.map_err(|error| format!("{error:#}"));
         self.chat_agents.finish(&chat.id, &outcome);
     }
 
     /// Save `chat` and stop its agent for the process of the space
-    /// `stopped_by`, then restore it, returning the place it runs in again.
-    /// A chat whose restore fails stays stopped for `shoal resume`, the
-    /// stopper's to resume.
+    /// `stopped_by`, then restore it, under `narrowing` when given, returning
+    /// the place it runs in again. A chat whose restore fails stays stopped
+    /// for `shoal resume`, the stopper's to resume, under the narrowing it
+    /// recorded.
     async fn save_and_restore(
         &self,
         chat: &Chat,
         stopped_by: Option<&SpaceId>,
+        narrowing: Option<PermissionsConfig>,
     ) -> Result<Option<Origin>> {
         self.save_chat(&chat.id, stopped_by).await?;
-        let restored = resume(&self.paths, chat)
+        let restored = resume(&self.paths, chat, narrowing)
             .await
             .map_err(|error| format!("{error:#}"));
         restored

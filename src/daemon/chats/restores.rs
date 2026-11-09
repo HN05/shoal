@@ -40,7 +40,7 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
         .map(|chat| {
             let manager = manager.clone();
             tokio::spawn(async move {
-                match resume(&manager.paths, &chat).await {
+                match resume(&manager.paths, &chat, None).await {
                     Ok(Ok(())) => {}
                     // Its own failures reach the user from it.
                     Ok(Err(error)) => log!("chat {}: shoal resume failed: {error}", chat.id),
@@ -99,16 +99,26 @@ fn claim_automatic(tx: &rusqlite::Transaction<'_>, owner: &std::path::Path) -> R
 }
 
 /// Run `shoal resume` for `chat` detached from the daemon, as it would run
-/// from where the chat ran, and wait for it to open the chat's place.
-/// Returns how it ended, with the error output of one that failed; an error
-/// is one to run it.
+/// from where the chat ran, under `narrowing` when given, and wait for it to
+/// open the chat's place. Returns how it ended, with the error output of one
+/// that failed; an error is one to run it.
 #[cfg(not(test))]
-pub(super) async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<Result<(), String>> {
+pub(super) async fn resume(
+    paths: &crate::paths::Paths,
+    chat: &Chat,
+    narrowing: Option<crate::config::permissions::PermissionsConfig>,
+) -> Result<Result<(), String>> {
     use anyhow::Context as _;
     use std::process::Stdio;
 
     let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend(["resume".into(), chat.id.clone().into()]);
+    for assignment in narrowing
+        .iter()
+        .flat_map(|narrowing| narrowing.assignments())
+    {
+        argv.extend(["--permission".into(), assignment.into()]);
+    }
     let env = crate::terminal::detached_start_environment(chat.origin.as_ref());
     let mut command = tokio::process::Command::new(&argv[0]);
     command
@@ -139,6 +149,7 @@ pub(super) async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<R
 pub(super) async fn resume(
     _paths: &crate::paths::Paths,
     chat: &Chat,
+    _narrowing: Option<crate::config::permissions::PermissionsConfig>,
 ) -> Result<Result<(), String>> {
     tests::RESUMED.lock().unwrap().push(chat.id.clone());
     anyhow::ensure!(

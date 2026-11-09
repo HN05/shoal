@@ -138,6 +138,7 @@ impl Restart {
                     SpaceSelector::id(&chat.id),
                     self.joins.clone(),
                     run,
+                    None,
                 )
                 .await
             }
@@ -158,7 +159,7 @@ impl Restart {
     ) -> Result<Option<Origin>> {
         let execution = self.agent.execution.clone();
         let joins = self.joins.clone();
-        let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place).await;
+        let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place, None).await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself, as a
             // wrapper waiting for its restore does.

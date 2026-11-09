@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use crate::space_names::SpaceSelector;
 use crate::{
+    config::permissions::PermissionsConfig,
     connection::{Daemon, request},
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
     protocol::{AgentMethod, ChatMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
@@ -99,15 +100,17 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 }
 
 /// Restart the agent of `execution` in a new wrapper, or `in_place`, as
-/// part of the restart `run`, or join the restart `join` already pending.
-/// Returns the place of the wrapper that runs the agent again, when that
-/// runs in a terminal host.
+/// part of the restart `run`, or join the restart `join` already pending,
+/// under `narrowing` when given instead of the one it recorded. Returns the
+/// place of the wrapper that runs the agent again, when that runs in a
+/// terminal host.
 pub async fn restart(
     daemon: &impl Daemon,
     execution: ExecutionId,
     join: Option<PendingRestart>,
     run: Option<String>,
     in_place: bool,
+    narrowing: Option<PermissionsConfig>,
 ) -> Result<Option<Origin>> {
     request(
         daemon,
@@ -116,6 +119,7 @@ pub async fn restart(
             join,
             run,
             in_place,
+            narrowing,
         },
     )
     .await
@@ -128,15 +132,23 @@ pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 }
 
 /// Restart the agent of the running chat `chat` in a background place, as
-/// part of the restart `run`, or join the restart `join` already pending.
-/// Returns the place the chat runs in again, when it runs in a terminal host.
+/// part of the restart `run`, or join the restart `join` already pending,
+/// under `narrowing` when given instead of the one it recorded. Returns the
+/// place the chat runs in again, when it runs in a terminal host.
 pub async fn restart_chat(
     daemon: &impl Daemon,
     chat: SpaceSelector,
     join: Option<PendingRestart>,
     run: Option<String>,
+    narrowing: Option<PermissionsConfig>,
 ) -> Result<Option<Origin>> {
-    request(daemon, ChatMethod::RestartChat { chat, join, run }).await
+    let method = ChatMethod::RestartChat {
+        chat,
+        join,
+        run,
+        narrowing,
+    };
+    request(daemon, method).await
 }
 
 /// The agents connected in `workspace`.

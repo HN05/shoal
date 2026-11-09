@@ -124,12 +124,15 @@ pub enum ChatMethod {
     /// runs in once it runs again.
     /// With `join`, only wait for that restart the run selected, which may
     /// have ended already. `run` names the `shoal restart` run that asks.
+    /// `narrowing` replaces the one the chat recorded.
     RestartChat {
         chat: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         join: Option<crate::model::PendingRestart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         run: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        narrowing: Option<crate::config::permissions::PermissionsConfig>,
     },
     /// `root_dir`, where a chat without a repository runs, prepared as
     /// registering a repository prepares it.

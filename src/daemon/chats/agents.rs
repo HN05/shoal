@@ -11,6 +11,7 @@ use anyhow::{Context as _, Result, ensure};
 use tokio::sync::oneshot;
 
 use crate::{
+    config::permissions::PermissionsConfig,
     daemon::workspace::{Outcome, Restart, Restarts},
     model::{Chat, RunningAgent},
     sessions::Origin,
@@ -40,15 +41,16 @@ pub(super) struct Requested {
 
 impl ChatAgents {
     /// Ask for a restart of the chat `id`, running as `chat` unless it is
-    /// stopped, for `run`: join the restart in progress, answer at once when
-    /// another command of `run` restarted it already, or start one when its
-    /// agent `resumes` its session.
+    /// stopped, for `run`, under `narrowing` when given: join the restart in
+    /// progress, answer at once when another command of `run` restarted it
+    /// already, or start one when its agent `resumes` its session.
     pub(super) fn request(
         &self,
         id: &SpaceId,
         chat: Option<&Chat>,
         resumes: bool,
         run: Option<String>,
+        narrowing: Option<PermissionsConfig>,
     ) -> Result<Requested> {
         let mut agents = self.lock();
         if let Some(agent) = agents.get_mut(id) {
@@ -61,6 +63,7 @@ impl ChatAgents {
                 });
             }
             if let Some(restart) = &mut agent.restarts.current {
+                restart.ensure_replaces(chat.map_or(id, |chat| chat.name.as_str()), narrowing)?;
                 return Ok(Requested {
                     answer: restart.answer(run),
                     starts: None,
@@ -74,7 +77,7 @@ impl ChatAgents {
             chat.name
         );
         let agent = agents.entry(chat.id.clone()).or_default();
-        let mut restart = Restart::unanswered(run, false);
+        let mut restart = Restart::unanswered(run, false).replacing(narrowing);
         let answer = restart.answer(None);
         agent.restarts.current = Some(restart);
         Ok(Requested {

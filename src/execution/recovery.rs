@@ -1256,6 +1256,19 @@ impl Saved {
     }
 }
 
+/// Give the saved agent or last session of execution `id` of the workspace
+/// `workspace_id` `narrowing` in place of the one it recorded.
+pub(crate) fn replace_narrowing(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    narrowing: crate::config::permissions::PermissionsConfig,
+) -> Result<()> {
+    let mut saved = Saved::load(paths, workspace_id)?;
+    saved.retain_execution(id, false);
+    saved.replace_narrowing(narrowing)
+}
+
 /// Save `saved` again at `path`, where a stopped agent's file is.
 fn rewrite(path: &Path, saved: &impl Serialize) -> Result<()> {
     crate::fsutil::replace_atomically(

@@ -112,13 +112,18 @@ pub(super) async fn handle(
             let agents = manager.running_chat_agents().await?;
             Body::RunningAgents(manager.visible_agents(caller, agents).await?)
         }
-        ChatMethod::RestartChat { chat, join, run } => {
+        ChatMethod::RestartChat {
+            chat,
+            join,
+            run,
+            narrowing,
+        } => {
             let id = restarted_chat(manager, chat).await?;
             Body::RestartedPlace(match join {
                 Some(joined) => manager.join_chat_restart(&id, joined.run, run).await?,
                 None => {
                     let stopped_by = caller.map(|caller| caller.space_id.clone());
-                    manager.restart_chat(&id, run, stopped_by).await?
+                    (manager.restart_chat(&id, run, stopped_by, narrowing)).await?
                 }
             })
         }

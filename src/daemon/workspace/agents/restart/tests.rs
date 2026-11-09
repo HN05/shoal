@@ -200,7 +200,7 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     assert!(*stopped.stop.borrow());
 
     manager
-        .restart_agent(&custom.plan.id, None, true, None)
+        .restart_agent(&custom.plan.id, None, true, None, None)
         .await
         .unwrap_err();
     assert!(!*custom.stop.borrow());
@@ -208,7 +208,7 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     assert!(!recovery::record_path(&manager.paths, &workspace.id, &custom.plan.id).exists());
     // The agent waits for its restore, which is no stop in progress.
     let refused = manager
-        .restart_agent(&stopped.plan.id, None, true, None)
+        .restart_agent(&stopped.plan.id, None, true, None, None)
         .await
         .unwrap_err()
         .to_string();
@@ -216,7 +216,7 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     assert!(!refused.contains("already stopping"), "{refused}");
     assert!(!manager.restart_requested(&stopped.plan.id).await);
     manager
-        .restart_agent(&ExecutionId::from("unknown"), None, true, None)
+        .restart_agent(&ExecutionId::from("unknown"), None, true, None, None)
         .await
         .unwrap_err();
 }
@@ -248,7 +248,7 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     let restarting = tokio::spawn({
         let manager = manager.clone();
         let id = id.clone();
-        async move { manager.restart_agent(&id, None, true, None).await }
+        async move { manager.restart_agent(&id, None, true, None, None).await }
     });
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
@@ -280,7 +280,7 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     let restarting = tokio::spawn({
         let manager = manager.clone();
         let id = id.clone();
-        async move { manager.restart_agent(&id, None, true, None).await }
+        async move { manager.restart_agent(&id, None, true, None, None).await }
     });
     stop.wait_for(|stopping| *stopping).await.unwrap();
     manager.fail_restart(&id, "cancelled".into()).await;
@@ -301,7 +301,7 @@ async fn a_restart_waiting_for_processes_answers_at_once_and_still_resumes() {
     let restarting = tokio::spawn({
         let manager = manager.clone();
         let id = id.clone();
-        async move { manager.restart_agent(&id, None, true, None).await }
+        async move { manager.restart_agent(&id, None, true, None, None).await }
     });
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
@@ -333,7 +333,7 @@ async fn a_second_request_joins_the_restart_in_progress() {
         let id = id.clone();
         async move {
             manager
-                .restart_agent(&id, Some("first".into()), true, None)
+                .restart_agent(&id, Some("first".into()), true, None, None)
                 .await
         }
     });
@@ -342,7 +342,7 @@ async fn a_second_request_joins_the_restart_in_progress() {
     // Registered before the agent starts again, which answers it; the
     // restart keeps the run that asked for it first.
     let second = manager
-        .request_restart(&id, Some("second".into()), true, None)
+        .request_restart(&id, Some("second".into()), true, None, None)
         .await
         .unwrap();
     let listed = manager.running_agents().await.unwrap();
@@ -385,7 +385,7 @@ async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_
     let restarting = tokio::spawn({
         let manager = manager.clone();
         let id = id.clone();
-        async move { manager.restart_agent(&id, None, true, None).await }
+        async move { manager.restart_agent(&id, None, true, None, None).await }
     });
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
@@ -395,7 +395,7 @@ async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_
     manager.restart_waits(&id, "PID 8 survives").await;
 
     let error = manager
-        .restart_agent(&id, None, true, None)
+        .restart_agent(&id, None, true, None, None)
         .await
         .unwrap_err();
     assert!(error.downcast_ref::<RestartWaits>().is_some());
@@ -416,7 +416,7 @@ async fn a_late_join_answers_as_the_restart_ended() {
     manager.join_restart(&id, None, None).await.unwrap_err();
 
     let failed = manager
-        .request_restart(&id, None, true, None)
+        .request_restart(&id, None, true, None, None)
         .await
         .unwrap();
     manager
@@ -439,7 +439,7 @@ async fn a_late_join_of_a_cancelled_restart_fails() {
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let cancelled = manager
-        .request_restart(&id, None, true, None)
+        .request_restart(&id, None, true, None, None)
         .await
         .unwrap();
     manager
@@ -462,7 +462,7 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let restarted = manager
-        .request_restart(&id, Some("run".into()), true, None)
+        .request_restart(&id, Some("run".into()), true, None, None)
         .await
         .unwrap();
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
@@ -472,7 +472,7 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
     // A later request of the same run, such as from another command that
     // continues it, finds the agent restarted and does not stop it.
     manager
-        .restart_agent(&id, Some("run".into()), true, None)
+        .restart_agent(&id, Some("run".into()), true, None, None)
         .await
         .unwrap();
     assert!(!manager.restart_requested(&id).await);
@@ -480,19 +480,19 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
     // Another run restarts it again, and a late request of the first run
     // neither joins that restart nor, once it ended, starts another.
     let again = manager
-        .request_restart(&id, Some("other".into()), true, None)
+        .request_restart(&id, Some("other".into()), true, None, None)
         .await
         .unwrap();
     assert!(manager.restart_requested(&id).await);
     manager
-        .restart_agent(&id, Some("run".into()), true, None)
+        .restart_agent(&id, Some("run".into()), true, None, None)
         .await
         .unwrap();
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
     manager.agent_started(&id).await;
     again.await.unwrap().unwrap();
     manager
-        .restart_agent(&id, Some("run".into()), true, None)
+        .restart_agent(&id, Some("run".into()), true, None, None)
         .await
         .unwrap();
     assert!(!manager.restart_requested(&id).await);
@@ -510,7 +510,7 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let first = manager
-        .request_restart(&id, Some("first".into()), true, None)
+        .request_restart(&id, Some("first".into()), true, None, None)
         .await
         .unwrap();
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
@@ -518,7 +518,7 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     first.await.unwrap().unwrap();
     // Another command restarts the agent for its own run.
     let second = manager
-        .request_restart(&id, Some("second".into()), true, None)
+        .request_restart(&id, Some("second".into()), true, None, None)
         .await
         .unwrap();
 
@@ -560,7 +560,7 @@ async fn a_join_counts_the_restart_for_the_run_that_continues() {
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let restarted = manager
-        .request_restart(&id, Some("b".into()), true, None)
+        .request_restart(&id, Some("b".into()), true, None, None)
         .await
         .unwrap();
     // A run continuing as `a` joins the restart `b` asked for, before or
@@ -599,7 +599,7 @@ async fn hand_over(
     track(manager, workspace, id, "claude", true).await;
     let restarting = tokio::spawn({
         let (manager, id) = (manager.clone(), id.to_owned());
-        async move { manager.restart_agent(&id, None, false, None).await }
+        async move { manager.restart_agent(&id, None, false, None, None).await }
     });
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
@@ -681,5 +681,58 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
 
     for id in [&before, &after] {
         assert!(recovery::record_path(&manager.paths, &workspace.id, id).is_file());
+    }
+}
+
+#[tokio::test]
+async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_restart() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let narrowing = |assignment: &str| {
+        Some(crate::config::permissions::PermissionsConfig::assigned(&[assignment.into()]).unwrap())
+    };
+    // The wrapper that restarts its agent in place keeps the narrowing it
+    // launched it with.
+    assert!(
+        manager
+            .request_restart(&id, None, true, None, narrowing("push=propose"))
+            .await
+            .is_err()
+    );
+    assert!(!manager.restart_requested(&id).await);
+
+    let _first = manager
+        .request_restart(
+            &id,
+            Some("first".into()),
+            false,
+            None,
+            narrowing("push=propose"),
+        )
+        .await
+        .unwrap();
+    // Another run joins it under the same narrowing, or without one, but
+    // not under another.
+    let other = manager
+        .request_restart(
+            &id,
+            Some("other".into()),
+            false,
+            None,
+            narrowing("push=deny"),
+        )
+        .await;
+    assert!(other.is_err());
+    for same in [None, narrowing("push=propose")] {
+        manager
+            .request_restart(&id, Some("same".into()), false, None, same)
+            .await
+            .unwrap();
     }
 }
