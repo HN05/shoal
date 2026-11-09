@@ -53,11 +53,13 @@ pub(super) async fn handle(
         ChatMethod::RestoreChat {
             chat,
             pid,
+            narrowing,
             origin,
             hands_over,
         } => {
             let id = manager.chat(&chat).await?.id;
-            Body::Chat(manager.restore_chat(&id, pid, origin, hands_over).await?)
+            let restored = manager.restore_chat(&id, pid, narrowing, origin, hands_over);
+            Body::Chat(restored.await?)
         }
         ChatMethod::CheckChatRestore { .. } => Body::Ok,
         ChatMethod::SaveChat { chat, pid, error } => {

@@ -93,7 +93,7 @@ async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
     process.wait().unwrap();
     let restored = ProcessGroup::spawn(unmarked("sleep").arg("600"));
     manager
-        .restore_chat(&chat.id, restored.id(), None, false)
+        .restore_chat(&chat.id, restored.id(), Default::default(), None, false)
         .await
         .unwrap();
 
@@ -125,7 +125,10 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
         async move {
             let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
             let pid = restoring.id();
-            manager.restore_chat(id, pid, None, false).await.unwrap();
+            manager
+                .restore_chat(id, pid, Default::default(), None, false)
+                .await
+                .unwrap();
             (manager.return_to_saved(id, pid, "failed", stopped_by.as_ref()))
                 .await
                 .unwrap();
@@ -164,7 +167,7 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
     let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
     let pid = restoring.id();
     manager
-        .restore_chat(&chat.id, pid, None, false)
+        .restore_chat(&chat.id, pid, Default::default(), None, false)
         .await
         .unwrap();
 

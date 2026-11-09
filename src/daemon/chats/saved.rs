@@ -16,9 +16,10 @@ use super::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    config::permissions::PermissionsConfig,
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
-        log,
+        log, store,
         workspace::Manager,
     },
     model::{Chat, Repository},
@@ -125,15 +126,16 @@ impl Manager {
         processes::stop_owned(id, &recorded, stopped, &wrappers, record).await
     }
 
-    /// Run the stopped chat `id` again as process `pid`, at `origin` in a
-    /// terminal host when it runs in one, or when `hands_over`, in a session
-    /// `pid` starts and [`Self::move_chat`] names, as
-    /// [`Self::start_chat`] records a new chat. It keeps its ID, name,
-    /// agent and start time.
+    /// Run the stopped chat `id` again as process `pid` under `narrowing`,
+    /// which replaces the one it recorded, at `origin` in a terminal host
+    /// when it runs in one, or when `hands_over`, in a session `pid` starts
+    /// and [`Self::move_chat`] names, as [`Self::start_chat`] records a new
+    /// chat. It keeps its ID, name, agent and start time.
     pub async fn restore_chat(
         &self,
         id: &SpaceId,
         pid: u32,
+        narrowing: PermissionsConfig,
         origin: Option<Origin>,
         hands_over: bool,
     ) -> Result<Chat> {
@@ -144,7 +146,8 @@ impl Manager {
             "chat {} is being removed",
             saved.name
         );
-        self.run_again(&saved, pid, origin, hands_over).await
+        self.run_again(&saved, pid, narrowing, origin, hands_over)
+            .await
     }
 
     /// [`Self::restore_chat`] for the `saved` chat, once a save under way
@@ -153,6 +156,7 @@ impl Manager {
         &self,
         saved: &Chat,
         pid: u32,
+        narrowing: PermissionsConfig,
         origin: Option<Origin>,
         hands_over: bool,
     ) -> Result<Chat> {
@@ -183,6 +187,7 @@ impl Manager {
                 .as_ref()
                 .map(|workspace| workspace.id.clone()),
             process,
+            narrowing,
             origin,
             hands_over,
         };
@@ -418,6 +423,8 @@ struct Restored {
     workspace: Option<SpaceId>,
     /// The process it runs as, or that hands it to a session it starts.
     process: Identity,
+    /// The `--permission` narrowing it runs under.
+    narrowing: PermissionsConfig,
     origin: Option<Origin>,
     hands_over: bool,
 }
@@ -435,7 +442,7 @@ fn restore(
     ensure_place_free(tx, repository, restored.workspace.as_ref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
-            unique_id=?6,stopped_by=NULL
+            unique_id=?6,stopped_by=NULL,narrowing=?7
          WHERE id=?1 AND restore IS NOT NULL",
         params![
             restored.id,
@@ -447,7 +454,8 @@ fn restore(
                 .map(serde_json::to_string)
                 .transpose()?,
             restored.hands_over,
-            super::unique_id(&restored.process)?
+            super::unique_id(&restored.process)?,
+            store::narrowing_column(&restored.narrowing)?
         ],
     )?;
     ensure!(updated == 1, "the chat is no longer stopped");

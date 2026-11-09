@@ -1016,13 +1016,25 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
     std::fs::rename(&workspace.path, &moved).unwrap();
     assert!(
         manager
-            .restore_chat(&chat.id, std::process::id(), None, false)
+            .restore_chat(
+                &chat.id,
+                std::process::id(),
+                Default::default(),
+                None,
+                false
+            )
             .await
             .is_err()
     );
     std::fs::rename(&moved, &workspace.path).unwrap();
     let restored = manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(
+            &chat.id,
+            std::process::id(),
+            Default::default(),
+            None,
+            false,
+        )
         .await
         .unwrap();
     assert_eq!((restored.restore, restored.workspace), (None, named));

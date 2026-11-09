@@ -42,10 +42,16 @@ pub enum ChatMethod {
         parent: Option<SpaceSelector>,
     },
     /// Run the stopped chat `chat`, by ID, again as process `pid`, as
-    /// [`Self::StartChat`] records a new one.
+    /// [`Self::StartChat`] records a new one, under `narrowing`, which
+    /// replaces the one it recorded.
     RestoreChat {
         chat: SpaceSelector,
         pid: u32,
+        #[serde(
+            default,
+            skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+        )]
+        narrowing: crate::config::permissions::PermissionsConfig,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<crate::sessions::Origin>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]

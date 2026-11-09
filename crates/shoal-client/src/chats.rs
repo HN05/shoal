@@ -152,16 +152,18 @@ pub async fn record(
     restores: Option<&SpaceId>,
 ) -> Result<Chat> {
     match restores {
-        Some(restored) => restore(daemon, restored, origin, hands_over).await,
+        Some(restored) => restore(daemon, restored, chat.narrowing, origin, hands_over).await,
         None => start(daemon, home, chat, origin, hands_over).await,
     }
 }
 
-/// Run the stopped chat `chat`, by ID, again in this process, as [`start`]
-/// records a new chat.
+/// Run the stopped chat `chat`, by ID, again in this process under
+/// `narrowing`, which replaces the one it recorded, as [`start`] records a
+/// new chat.
 pub async fn restore(
     daemon: &impl Daemon,
     chat: &SpaceId,
+    narrowing: crate::config::permissions::PermissionsConfig,
     origin: Option<Origin>,
     hands_over: bool,
 ) -> Result<Chat> {
@@ -170,6 +172,7 @@ pub async fn restore(
         ChatMethod::RestoreChat {
             chat: SpaceSelector::id(chat),
             pid: std::process::id(),
+            narrowing,
             origin,
             hands_over,
         },

@@ -96,17 +96,22 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
         "kept"
     );
 
+    // The restore runs under the narrowing it was given, which replaces
+    // the recorded one.
+    let narrowing =
+        crate::config::permissions::PermissionsConfig::assigned(&["push=propose".into()]).unwrap();
     let restored = manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(&chat.id, std::process::id(), narrowing, None, false)
         .await
         .unwrap();
     assert_eq!(
         (
             restored.id.as_str(),
             restored.name.as_str(),
-            restored.restore
+            restored.restore,
+            restored.narrowing
         ),
-        (chat.id.as_str(), "talk", None)
+        (chat.id.as_str(), "talk", None, narrowing)
     );
     assert_eq!(restored.tmp_dir.as_deref(), Some(tmp_dir.as_path()));
     assert_eq!(manager.chats().await.unwrap(), [restored]);
@@ -116,7 +121,13 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
     );
     assert!(
         manager
-            .restore_chat(&chat.id, std::process::id(), None, false)
+            .restore_chat(
+                &chat.id,
+                std::process::id(),
+                Default::default(),
+                None,
+                false
+            )
             .await
             .is_err()
     );
@@ -202,7 +213,13 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
 
     assert!(
         manager
-            .restore_chat(&chat.id, std::process::id(), None, false)
+            .restore_chat(
+                &chat.id,
+                std::process::id(),
+                Default::default(),
+                None,
+                false
+            )
             .await
             .is_err()
     );
@@ -224,7 +241,7 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
     let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
     let restoring_pid = restoring.id();
     manager
-        .restore_chat(&chat.id, restoring_pid, None, false)
+        .restore_chat(&chat.id, restoring_pid, Default::default(), None, false)
         .await
         .unwrap();
 
@@ -248,7 +265,13 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
     );
     // Another process cannot return it.
     manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(
+            &chat.id,
+            std::process::id(),
+            Default::default(),
+            None,
+            false,
+        )
         .await
         .unwrap();
     assert!(
@@ -361,7 +384,13 @@ async fn a_survivor_in_the_chats_process_group_holds_it_saved() {
     leader.wait().unwrap();
 
     let error = manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(
+            &chat.id,
+            std::process::id(),
+            Default::default(),
+            None,
+            false,
+        )
         .await
         .unwrap_err();
     assert!(error.to_string().contains(&child.to_string()), "{error:#}");
@@ -518,7 +547,13 @@ async fn a_restore_during_a_shutdown_leaves_the_chat_saved() {
     manager.agent_queue.suspend(true).await;
 
     manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(
+            &chat.id,
+            std::process::id(),
+            Default::default(),
+            None,
+            false,
+        )
         .await
         .unwrap_err();
 
@@ -813,7 +848,13 @@ async fn a_chat_a_removal_holds_is_not_restored() {
     let reservation = manager.chat_removals.reserve(&chat.id).unwrap();
     assert!(manager.chat_removals.reserve(&chat.id).is_err());
     manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(
+            &chat.id,
+            std::process::id(),
+            Default::default(),
+            None,
+            false,
+        )
         .await
         .unwrap_err();
     assert!(
@@ -828,7 +869,13 @@ async fn a_chat_a_removal_holds_is_not_restored() {
     // Once the removal gives up, the chat runs again.
     drop(reservation);
     let restored = manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
+        .restore_chat(
+            &chat.id,
+            std::process::id(),
+            Default::default(),
+            None,
+            false,
+        )
         .await
         .unwrap();
     assert!(restored.restore.is_none());
