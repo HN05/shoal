@@ -35,10 +35,13 @@ pub enum AssignmentMethod {
         workspace: SpaceSelector,
         execution: Option<ExecutionId>,
     },
-    /// Make `change` to the permissions each of the stopped `agents` was
-    /// given, which its restore runs under, once none of them is refused.
+    /// Make `change` to the permissions each of the stopped `agents` and
+    /// saved `chats` was given, which its restore runs under, once none of
+    /// them is refused.
     ChangeStoppedPermissions {
         agents: Vec<SavedAgent>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        chats: Vec<SpaceSelector>,
         change: crate::config::permissions::PermissionChange,
     },
 }

@@ -24,9 +24,13 @@ pub(super) async fn handle(
             workspace,
             execution,
         } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
-        AssignmentMethod::ChangeStoppedPermissions { agents, change } => {
+        AssignmentMethod::ChangeStoppedPermissions {
+            agents,
+            chats,
+            change,
+        } => {
             let giver = caller.map(|caller| &caller.space_id);
-            (manager.change_stopped_permissions(&agents, &change, giver)).await?;
+            (manager.change_stopped_permissions(&agents, &chats, &change, giver)).await?;
             Body::Ok
         }
         AssignmentMethod::MarkReady { space, selection } => {
@@ -70,10 +74,13 @@ impl Scoped for AssignmentMethod {
                     )
                     .await?,
             ),
-            // Every agent is checked before the handler replaces any.
-            AssignmentMethod::ChangeStoppedPermissions { agents, .. } => {
+            // Every agent and chat is checked before the handler changes any.
+            AssignmentMethod::ChangeStoppedPermissions { agents, chats, .. } => {
                 for agent in agents {
                     (manager.stopped_below(caller, &mut agent.workspace, &agent.execution)).await?;
+                }
+                for chat in chats {
+                    manager.stopped_chat_below(caller, chat).await?;
                 }
                 None
             }

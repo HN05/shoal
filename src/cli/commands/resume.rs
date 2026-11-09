@@ -90,6 +90,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
             queue_workspace(ctx, workspace.clone(), execution, queuing, change).await
         }
         ([chat], Some([])) if focus && execution.is_none() => {
+            permission_change::apply(ctx, &[], std::slice::from_ref(chat), change).await?;
             chats::restore_here(ctx, chat, change).await
         }
         _ => {
@@ -208,7 +209,7 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, change).await?;
+    permission_change::apply(ctx, &stopped, &selected.chats, change).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
     match queuing {
         Queuing::Here { now: true } => {
@@ -243,7 +244,7 @@ async fn queue_below(
     for chat in &selected.chats {
         crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
     }
-    permission_change::apply(ctx, &stopped, change).await?;
+    permission_change::apply(ctx, &stopped, &selected.chats, change).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
     queue::queue_all(ctx, stopped, chats, failed, false).await
 }
@@ -332,7 +333,7 @@ async fn queue_workspace(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, change).await?;
+    permission_change::apply(ctx, &stopped, &[], change).await?;
     queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
 }
 

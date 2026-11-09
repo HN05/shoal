@@ -11,7 +11,7 @@ use crate::{
     cli::context::Context,
     config::permissions::PermissionChange,
     execution::recovery::{Saved, waits_in_wrapper},
-    model::Workspace,
+    model::{Chat, Workspace},
     protocol::SavedAgent,
 };
 
@@ -64,11 +64,13 @@ async fn saved_agents(
 }
 
 /// Have the daemon make `change`, when given, to the permissions each agent
-/// and last session the `stopped` workspaces keep was given, as their
-/// restores begin; it changes none when it refuses one.
+/// and last session the `stopped` workspaces keep and each of the stopped
+/// `chats` was given, as their restores begin, so one whose restore fails
+/// keeps it too; it changes none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
     stopped: &[(Workspace, Saved)],
+    chats: &[Chat],
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agents = stopped.iter().flat_map(|(workspace, saved)| {
@@ -77,7 +79,8 @@ pub(super) async fn apply(
             execution: execution.clone(),
         })
     });
-    request(ctx, agents.collect(), change).await
+    let chats = chats.iter().map(|chat| SpaceSelector::id(&chat.id));
+    request(ctx, agents.collect(), chats.collect(), change).await
 }
 
 /// [`apply`] for the agent or last session `execution` of `workspace`.
@@ -91,19 +94,23 @@ pub(super) async fn apply_one(
         workspace: SpaceSelector::id(&workspace.id),
         execution: execution.to_owned(),
     };
-    request(ctx, vec![agent], change).await
+    request(ctx, vec![agent], Vec::new(), change).await
 }
 
-/// Have the daemon make `change`, when given, for the stopped `agents`.
+/// Have the daemon make `change`, when given, for the stopped `agents` and
+/// `chats`.
 async fn request(
     ctx: &Context,
     agents: Vec<SavedAgent>,
+    chats: Vec<SpaceSelector>,
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     match change {
-        Some(change) if !agents.is_empty() => {
+        Some(change) if !(agents.is_empty() && chats.is_empty()) => {
             let change = change.clone();
-            crate::client::assignments::change_stopped_permissions(&ctx.paths, agents, change).await
+            let paths = &ctx.paths;
+            crate::client::assignments::change_stopped_permissions(paths, agents, chats, change)
+                .await
         }
         _ => Ok(()),
     }

@@ -103,13 +103,14 @@ impl Manager {
         })
     }
 
-    /// Make `change` to the permissions each of the stopped `agents` was
-    /// given, which its restore runs under, once none of them is refused,
-    /// for the scoped process of the space `giver`, which gives only what it
-    /// holds, or for the user.
+    /// Make `change` to the permissions each of the stopped `agents` and
+    /// saved `chats` was given, which its restore runs under, once none of
+    /// them is refused, for the scoped process of the space `giver`, which
+    /// gives only what it holds, or for the user.
     pub async fn change_stopped_permissions(
         &self,
         agents: &[SavedAgent],
+        chats: &[SpaceSelector],
         change: &crate::config::permissions::PermissionChange,
         giver: Option<&SpaceId>,
     ) -> Result<()> {
@@ -117,7 +118,31 @@ impl Manager {
         for agent in agents {
             changed.push(self.changeable(agent, change, giver).await?);
         }
-        recovery::change_permissions(&changed, change)
+        let mut saved = Vec::new();
+        for chat in chats {
+            saved.push(self.changeable_chat(chat, change, giver).await?);
+        }
+        recovery::change_permissions(&changed, change)?;
+        for chat in saved {
+            (self.give_saved_chat(&chat.id, change.applied_to(chat.narrowing))).await?;
+        }
+        Ok(())
+    }
+
+    /// The saved chat `selector` names, refusing one that is not saved and
+    /// `change` where `giver` does not hold what it gives.
+    async fn changeable_chat(
+        &self,
+        selector: &SpaceSelector,
+        change: &crate::config::permissions::PermissionChange,
+        giver: Option<&SpaceId>,
+    ) -> Result<crate::model::Chat> {
+        let chat = self.chat(selector).await?;
+        ensure!(chat.restore.is_some(), "chat {} is not stopped", chat.name);
+        let repository = chat.repository_id.as_deref();
+        self.ensure_caller_holds(giver, &change.set, repository)
+            .await?;
+        Ok(chat)
     }
 
     /// What the stopped `agent` saved, refusing one that saved nothing, one

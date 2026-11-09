@@ -156,7 +156,7 @@ impl Manager {
 
     /// Give the saved chat `id`'s agent the permissions `given`, which its
     /// restore runs under.
-    async fn give_saved_chat(
+    pub(crate) async fn give_saved_chat(
         &self,
         id: &str,
         given: crate::config::permissions::PermissionsConfig,
