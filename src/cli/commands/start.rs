@@ -7,8 +7,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{
     chat,
-    links::{self, AddInput},
-    workspaces,
+    workspaces::{self, link::AddInput},
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -469,7 +468,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         parent,
         fork,
     };
-    links::add(ctx, input, creation, agent, args.args, options).await
+    workspaces::link::add(ctx, input, creation, agent, args.args, options).await
 }
 
 /// Refuse a copy beside a PR or branch link, which would open that branch

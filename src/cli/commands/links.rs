@@ -1,31 +1,24 @@
-//! Pasted links and item selectors share repository and workspace workflows.
-use std::ffi::OsString;
+//! Link relations: selecting a space's issues, PRs and CI runs, linking,
+//! unlinking and watching them, and marking them ready.
+use anyhow::{Result, bail, ensure};
 
-use anyhow::{Context as _, Result, bail, ensure};
-
-use super::workspaces::{self, AgentLaunch};
+use super::workspaces;
 use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agent::Agent,
     cli::{
         args::items::{ItemArgs, RelationArgs},
         client,
         context::Context,
         ui,
     },
-    forge::{
-        IssueInput, PullRequest,
-        items::{
-            link::{ItemKind, Link, LinkKind, LinkTarget, Selection, is_item_link},
-            list::Search,
-        },
+    forge::items::{
+        link::{ItemKind, LinkKind, Selection},
+        list::Search,
     },
-    git,
-    model::{ReadyMarks, Relation, Repository, ReviewMark},
-    protocol::{ItemContext, PullHead},
-    start_plan::Creation,
+    model::{ReadyMarks, Relation, ReviewMark},
+    protocol::ItemContext,
 };
 
 /// The space and the items selected in it, with the kind of a bare number
@@ -271,202 +264,4 @@ pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-pub(super) struct AddInput {
-    pub positional: Option<String>,
-    pub repository: Option<crate::repository::Selector>,
-    pub issue: Option<String>,
-}
-
-pub(super) async fn add(
-    ctx: &Context,
-    input: AddInput,
-    mut creation: Creation,
-    agent: Option<Agent>,
-    args: Vec<OsString>,
-    options: workspaces::AddOptions,
-) -> Result<i32> {
-    let Some(positional) = input.positional.as_deref() else {
-        return workspaces::add(
-            ctx,
-            input.repository,
-            creation,
-            input.issue,
-            AgentLaunch::Add(agent),
-            args,
-            options,
-        )
-        .await;
-    };
-    let number = IssueInput::parse(positional) == IssueInput::Number
-        && creation.branch.is_none()
-        && creation.existing.is_none()
-        && input.issue.is_none();
-    let pasted = is_item_link(positional);
-    if !number && !pasted {
-        ensure!(
-            input.repository.is_none(),
-            "a positional repository cannot be combined with --repo"
-        );
-        return workspaces::add(
-            ctx,
-            input.positional.map(ui::repository_selector).transpose()?,
-            creation,
-            input.issue,
-            AgentLaunch::Add(agent),
-            args,
-            options,
-        )
-        .await;
-    }
-    ensure!(
-        creation.branch.is_none() && creation.existing.is_none() && input.issue.is_none(),
-        "an item or branch link cannot be combined with a branch, --existing or --issue"
-    );
-    let link = pasted.then(|| Link::parse(positional)).transpose()?;
-    let target = link.as_ref().map(|link| &link.target);
-    let issue = matches!(target, None | Some(LinkTarget::Issue));
-    if issue && input.repository.is_some() {
-        // Resolve like --issue, which offers to register an unknown repository.
-        return workspaces::add(
-            ctx,
-            input.repository,
-            creation,
-            Some(positional.into()),
-            AgentLaunch::IssueDefault(agent),
-            args,
-            options,
-        )
-        .await;
-    }
-    let mut repos = crate::client::repositories::list(&ctx.paths).await?;
-    let repository = match input.repository {
-        Some(repository) => repository,
-        None => match &link {
-            Some(link) => super::issues::registered_remote(
-                ctx,
-                &mut repos,
-                link.repository.clone(),
-                "shoal start <link> --repo <repository>",
-            )
-            .await?
-            .into(),
-            None => {
-                super::issues::current_repository(ctx, repos.clone(), super::issues::REPO_OR_URL)
-                    .await?
-                    .into()
-            }
-        },
-    };
-    let repo = crate::repository::select(&repos, &repository).await?;
-    if issue {
-        return workspaces::add(
-            ctx,
-            Some(repo.id.clone().into()),
-            creation,
-            Some(positional.into()),
-            AgentLaunch::IssueDefault(agent),
-            args,
-            options,
-        )
-        .await;
-    }
-    ensure_link_in(repo, link.as_ref()).await?;
-    match target.unwrap() {
-        LinkTarget::Pr => {
-            let context = super::issues::read_context(ctx, repo).await?;
-            let pull = client::pull_request(&ctx.paths, context, positional.to_owned()).await?;
-            pull_creation(ctx, repo, pull, &mut creation).await?;
-        }
-        LinkTarget::Branch(branch) => {
-            git::check_branch_name(None, branch).await?;
-            creation.existing = Some(git::remote_ref("origin", branch));
-        }
-        LinkTarget::Run => bail!("a CI run names no work; use an issue, PR or branch link"),
-        LinkTarget::Issue => unreachable!(),
-    }
-    workspaces::add(
-        ctx,
-        Some(repo.id.clone().into()),
-        creation,
-        None,
-        AgentLaunch::Add(agent),
-        args,
-        options,
-    )
-    .await
-}
-
-/// Refuse a link that is not of `repo`, the repository of its checkout's
-/// origin.
-async fn ensure_link_in(repo: &Repository, link: Option<&Link>) -> Result<()> {
-    let remote = crate::repository::remote_url_from_path(&repo.path)
-        .await?
-        .context("forge lookup needs an origin remote")?;
-    ensure!(
-        link.is_some_and(|link| link.repository.is_remote(&remote)),
-        "link belongs to a different repository"
-    );
-    Ok(())
-}
-
-/// Reopen the workspace that owns the PR's head branch, or open the pushed
-/// branch compared against the PR's base; either way the PR is linked.
-pub(super) async fn pull_creation(
-    ctx: &Context,
-    repo: &Repository,
-    pull: PullRequest,
-    creation: &mut Creation,
-) -> Result<()> {
-    if pull.fork {
-        ensure!(
-            creation.path.is_none() && creation.git_profile.is_none() && creation.base.is_none(),
-            "PR #{} comes from a fork and opens at its head in a workspace Shoal places; --path, --git-profile and --base apply to a branch",
-            pull.number
-        );
-        creation.pull_head = Some(fork_head(repo, &pull).await?);
-        creation.pr = Some(pull.url);
-        return Ok(());
-    }
-    let owned = crate::client::workspaces::list(&ctx.paths)
-        .await?
-        .iter()
-        .any(|workspace| {
-            workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&pull.head)
-        });
-    if owned {
-        creation.existing = Some(pull.head);
-    } else {
-        if creation.base.is_none() {
-            creation.base =
-                Some(super::review::fetch_pull_branch(&repo.path, "base", &pull.base).await?);
-        }
-        creation.existing = Some(git::remote_ref("origin", &pull.head));
-    }
-    creation.pr = Some(pull.url);
-    Ok(())
-}
-
-/// The head of `pull`, a PR from a fork in `repo`, which only the ref the
-/// forge serves it under reaches, with its base branch fetched for its
-/// workspace's diff to compare with.
-pub(super) async fn fork_head(repo: &Repository, pull: &PullRequest) -> Result<PullHead> {
-    let reference = pull.head_ref.clone().with_context(|| {
-        format!(
-            "PR #{} comes from a fork, and its forge serves no ref for a fork's head, so Shoal cannot open it",
-            pull.number
-        )
-    })?;
-    let commit = pull
-        .head_commit
-        .clone()
-        .with_context(|| format!("PR #{} reports no head commit", pull.number))?;
-    let base = super::review::fetch_pull_branch(&repo.path, "base", &pull.base).await?;
-    Ok(PullHead {
-        number: pull.number,
-        reference,
-        commit,
-        base: Some(base),
-    })
 }

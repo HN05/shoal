@@ -3,7 +3,10 @@
 //! Shoal removes once nothing of it is left.
 use anyhow::Result;
 
-use super::{links, workspaces::AddOptions};
+use super::workspaces::{
+    AddOptions,
+    link::{self, AddInput},
+};
 use crate::{
     agent::Agent,
     agents,
@@ -44,12 +47,12 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
     };
     let repo = register(ctx, source).await?;
     let input = match link {
-        Some(_) => links::AddInput {
+        Some(_) => AddInput {
             positional: Some(target),
             repository: Some(repo.id.into()),
             issue: None,
         },
-        None => links::AddInput {
+        None => AddInput {
             positional: None,
             repository: Some(repo.id.into()),
             issue: None,
@@ -59,7 +62,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         branch,
         ..Default::default()
     };
-    links::add(ctx, input, creation, agent, args, options).await
+    link::add(ctx, input, creation, agent, args, options).await
 }
 
 /// Refuse an unavailable agent before registration, which may fork and clone.

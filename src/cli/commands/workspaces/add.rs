@@ -3,6 +3,7 @@ mod agent;
 mod detached;
 mod finish;
 mod handoff;
+pub(in crate::cli::commands) mod link;
 mod mode;
 mod place;
 mod plan;

@@ -6,7 +6,7 @@ use super::target::AddTarget;
 use crate::{
     cli::{
         client::{self},
-        commands::{issues, links},
+        commands::issues,
         context::Context,
         ui,
     },
@@ -66,7 +66,7 @@ pub(super) async fn pick_add_source(
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls.await?)?;
             let pull = client::pull_request(&ctx.paths, context, number).await?;
             let repo = target.repository(ctx).await?;
-            links::pull_creation(ctx, repo, pull, creation).await?;
+            super::link::pull_creation(ctx, repo, pull, creation).await?;
         }
     }
     Ok(None)

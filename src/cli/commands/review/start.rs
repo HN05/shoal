@@ -332,7 +332,7 @@ async fn fork_pull_workspace(
 ) -> Result<SpaceId> {
     let start = WorkspaceStart::PullHead {
         url: pull.url.clone(),
-        head: super::super::links::fork_head(repo, pull).await?,
+        head: super::super::workspaces::link::fork_head(repo, pull).await?,
     };
     let new = NewWorkspace {
         parent: crate::cli::ui::current_chat(&None)
