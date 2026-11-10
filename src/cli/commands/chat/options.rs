@@ -100,7 +100,8 @@ impl Options {
 
     /// `start` with these options, as [`Options::taken_from`] takes them
     /// again, except that a background place is written as beside this
-    /// terminal, which an agent's start takes for one.
+    /// terminal, which an agent's start takes for one, and a fork without a
+    /// session as none.
     pub(super) fn into_start(self, start: StartArgs) -> StartArgs {
         let Self {
             agent,
@@ -116,6 +117,9 @@ impl Options {
             narrowing,
         } = self;
         let (permissions, recorded_narrowing) = narrowing.written();
+        // A fork without a session, as a copy imported with new sessions
+        // asks, starts a new session, as `--fork-session` alone cannot say.
+        let fork_session = fork && session.is_some();
         StartArgs {
             agent,
             here: place == ChatPlace::Here,
@@ -123,7 +127,7 @@ impl Options {
             model: ModelArgs { model, effort },
             args,
             session,
-            fork_session: fork,
+            fork_session,
             restore,
             handoff,
             parent,
