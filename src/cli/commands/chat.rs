@@ -25,4 +25,4 @@ pub(super) use start::{
     Subject, hosting_workspace, root_dir, settings, start, start_in_workspace,
     start_outside_repositories,
 };
-pub(super) use topic::Topic;
+pub(super) use topic::{Relaunch, Topic};

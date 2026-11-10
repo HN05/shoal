@@ -69,8 +69,6 @@ async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> R
 /// without asking, assigned the issue, and reopened in a new tab by the
 /// issue's URL.
 pub(super) fn on(topic: Topic, repo: &Repository, issue: &Issue) -> Topic {
-    let mut relaunch = topic.relaunch;
-    relaunch.extend(["--issue".into(), issue.url.clone().into()]);
     Topic {
         name: format!(
             "{}-{}-{}",
@@ -78,7 +76,7 @@ pub(super) fn on(topic: Topic, repo: &Repository, issue: &Issue) -> Topic {
             topic.mode,
             issue.number
         ),
-        relaunch,
+        relaunch: topic.relaunch.on_issue(&issue.url),
         asks_name: false,
         subject: Some(issue.subject()),
         links: vec![(

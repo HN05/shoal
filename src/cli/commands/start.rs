@@ -560,7 +560,7 @@ fn named_repository(
 /// Start the agent in a chat in a repository's checkout, or with `--in` in
 /// a workspace's worktree.
 async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    let options = chat_options(&mut args);
+    let options = chat::Options::taken_from(&mut args);
     let (repository, issue) = chat_target(
         args.repository,
         args.repository_override,
@@ -589,7 +589,7 @@ async fn outside_repositories(
 ) -> Result<i32> {
     ensure_no_repository(&args, &mode)?;
     let topic = chat::Topic::outside_repositories(&mode);
-    chat::start_outside_repositories(ctx, topic, chat_options(&mut args)).await
+    chat::start_outside_repositories(ctx, topic, chat::Options::taken_from(&mut args)).await
 }
 
 /// Refuse a repository or issue `args` names for `mode`, which starts a chat
@@ -606,26 +606,6 @@ fn ensure_no_repository(args: &StartArgs, mode: &modes::ModeName) -> Result<()> 
         );
     }
     Ok(())
-}
-
-/// How `args` start a chat, taken from them.
-fn chat_options(args: &mut StartArgs) -> chat::Options {
-    chat::Options {
-        agent: args.agent.take(),
-        place: chat::ChatPlace::here(args.here),
-        name: args.name.take(),
-        model: std::mem::take(&mut args.model).into(),
-        args: std::mem::take(&mut args.args),
-        session: args.session.take(),
-        fork: args.fork_session,
-        restore: args.restore.take(),
-        handoff: args.handoff.take(),
-        parent: args.parent.take(),
-        narrowing: match args.recorded_narrowing.take() {
-            Some(recorded) => chat::Narrowing::Recorded(recorded),
-            None => chat::Narrowing::Requested(given(&args.permissions)),
-        },
-    }
 }
 
 /// The repository and issue a chat starts on, from the positional argument,

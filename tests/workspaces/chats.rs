@@ -700,8 +700,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(
         calls[1][chat..],
         [
-            "start", "--chat", "--mode", "chat", id, "--here", "--name", CHAT_NAME, "--agent",
-            "claude", "--", "--model", "fast"
+            "start", id, "--mode", "chat", "--chat", "--here", "--agent", "claude", "--name",
+            CHAT_NAME, "--", "--model", "fast"
         ]
     );
     let started = journal(&fixture)
@@ -1751,8 +1751,8 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     assert_eq!(
         worker[chat..],
         [
-            "start", "--chat", "--mode", "chat", id, "--here", "--name", CHAT_NAME, "--agent",
-            "codex", "--", "--search"
+            "start", id, "--mode", "chat", "--chat", "--here", "--agent", "codex", "--name",
+            CHAT_NAME, "--", "--search"
         ]
     );
     // The chat registers only once the tab runs it, so nothing is recorded

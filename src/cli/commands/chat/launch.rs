@@ -1,7 +1,7 @@
 //! Launching a chat's agent: with the session it continues or forks, in a
 //! background place, beside the caller, or here in place of this process.
+use crate::client::agent::AgentSessionId;
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
-    ChatPlace, Narrowing, Options, Topic,
+    ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
     handoff,
     rename::ask_name,
@@ -20,7 +20,7 @@ use super::{
 use crate::client::output::chat::BackgroundChat;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
-    agent::{Agent, ModelChoice},
+    agent::Agent,
     cli::{
         agents::{self, ChatRepository},
         commands::configured,
@@ -71,23 +71,9 @@ pub(in crate::cli::commands) async fn launch(
     topic: Topic,
     options: Options,
 ) -> Result<Started> {
-    let Options {
-        agent,
-        place,
-        name: requested,
-        model,
-        args,
-        session,
-        fork,
-        restore,
-        // Received with the caller's options.
-        handoff: _,
-        parent,
-        narrowing,
-    } = options;
-    let agent = chat_agent(ctx, &settings, agent)?;
-    check_model(&settings, &agent, &model)?;
-    let topic = match &restore {
+    let agent = chat_agent(ctx, &settings, options.agent.clone())?;
+    check_model(&settings, &agent, &options.model)?;
+    let topic = match &options.restore {
         Some(chat) if topic.linked_issue.is_none() => with_saved_issue(
             topic,
             &crate::client::chats::recorded(&ctx.paths).await?,
@@ -95,12 +81,12 @@ pub(in crate::cli::commands) async fn launch(
         ),
         _ => topic,
     };
-    let asks_name = topic.asks_name && requested.is_none();
-    let name = initial_name(ctx, &topic, requested).await?;
+    let asks_name = topic.asks_name && options.name.is_none();
+    let name = initial_name(ctx, &topic, options.name.clone()).await?;
     let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
     let session_args = SessionArgs {
-        session: session.as_ref(),
-        fork,
+        session: options.session.as_ref(),
+        fork: options.fork,
         directory: topic.home(&repo).path(),
     };
     let resumed = session_args.of(&settings, &agent)?;
@@ -110,16 +96,16 @@ pub(in crate::cli::commands) async fn launch(
     let launch = agents::ChatLaunch {
         name,
         mode: topic.mode.clone(),
-        narrowing: narrowing.value(),
-        parent: parent.clone(),
+        narrowing: options.narrowing.value(),
+        parent: options.parent.clone(),
         instructions: brief.system,
         opening: brief.first_message,
-        model: crate::agents::resolve_model(&settings, &agent, model.clone()),
+        model: crate::agents::resolve_model(&settings, &agent, options.model.clone()),
         repository: repo,
         workspace: topic.workspace.clone(),
         settings,
-        args: [resumed.clone(), args.clone()].concat(),
-        restores: restore.clone(),
+        args: [resumed.clone(), options.args.clone()].concat(),
+        restores: options.restore.clone(),
         links: topic.links.clone(),
     };
     if let Some(code) = agents::start_chat(ctx, &agent, &launch).await? {
@@ -138,16 +124,10 @@ pub(in crate::cli::commands) async fn launch(
         topic: &topic,
         name,
         agent: &agent,
-        model: &model,
-        args: &args,
-        session: session.as_ref(),
-        fork,
-        restore: restore.as_ref(),
-        parent: parent.as_ref(),
-        narrowing,
+        options: &options,
     };
     let home = topic.home(&repo);
-    if place == ChatPlace::Background {
+    if options.place == ChatPlace::Background {
         // Opening the place does not start the chat, so the start waits for
         // its report. A scoped starter's scope token, with which the place
         // records the chat, may end with the starter, so it goes along.
@@ -177,7 +157,9 @@ pub(in crate::cli::commands) async fn launch(
     } else {
         name
     };
-    if place == ChatPlace::Beside && start_beside(ctx, &settings, &repo, beside(&name)).await? {
+    if options.place == ChatPlace::Beside
+        && start_beside(ctx, &settings, &repo, beside(&name)).await?
+    {
         return Ok(Started::Exited(0));
     }
     agents::trust_chat(ctx, &settings, &agent, repo.registered(), home).await;
@@ -185,8 +167,8 @@ pub(in crate::cli::commands) async fn launch(
         name: &name,
         agent: &agent,
         mode: &topic.mode,
-        narrowing: narrowing.value(),
-        parent: parent.as_ref(),
+        narrowing: options.narrowing.value(),
+        parent: options.parent.as_ref(),
     };
     let chat = crate::client::chats::record(
         &ctx.paths,
@@ -194,7 +176,7 @@ pub(in crate::cli::commands) async fn launch(
         new,
         crate::terminal::current_place().await,
         false,
-        restore.as_ref(),
+        options.restore.as_ref(),
     )
     .await?;
     if crate::env::shown_chat() {
@@ -212,7 +194,7 @@ pub(in crate::cli::commands) async fn launch(
         &agent,
         instructions,
         opening,
-        [resumed, args].concat(),
+        [resumed, options.args].concat(),
     )?;
     terminal::label_current(&ctx.paths, crate::terminal::Owner::Chat(&chat.id)).await?;
     let token = crate::client::chats::scope(&ctx.paths, &chat).await?;
@@ -285,63 +267,26 @@ async fn initial_name(
     }
 }
 
-/// A chat to start in a new place: its topic, name, agent, requested model,
-/// forwarded arguments, the session it continues or forks and the stopped
-/// chat it restores.
+/// A chat to start in a new place: its topic, name and agent, and the
+/// options its start was given.
 struct Beside<'a> {
     topic: &'a Topic,
     name: &'a SpaceName,
     agent: &'a Agent,
-    model: &'a ModelChoice,
-    args: &'a [OsString],
-    session: Option<&'a AgentSessionId>,
-    fork: bool,
-    restore: Option<&'a SpaceId>,
-    parent: Option<&'a SpaceSelector>,
-    narrowing: Narrowing,
+    options: &'a Options,
 }
 
 impl Beside<'_> {
     /// The `shoal` arguments that start this chat in place where it opens,
     /// reporting to the `handoff` of the starter that waits on it.
     fn relaunch(&self, handoff: Option<&Path>) -> Vec<OsString> {
-        let mut chat = self.topic.relaunch.clone();
-        chat.extend([
-            "--here".into(),
-            "--name".into(),
-            self.name.as_str().into(),
-            "--agent".into(),
-            self.agent.name().into(),
-        ]);
-        for (flag, value) in [
-            ("--model", &self.model.model),
-            ("--effort", &self.model.effort),
-        ] {
-            if let Some(value) = value {
-                chat.extend([flag.into(), value.into()]);
-            }
-        }
-        if let Some(session) = self.session {
-            chat.extend(["--session".into(), session.as_str().into()]);
-            if self.fork {
-                chat.push("--fork-session".into());
-            }
-        }
-        if let Some(restore) = self.restore {
-            chat.extend(["--restore".into(), restore.as_str().into()]);
-        }
-        chat.extend(self.narrowing.args());
-        if let Some(parent) = self.parent {
-            chat.extend(["--parent".into(), parent.to_string().into()]);
-        }
-        if let Some(handoff) = handoff {
-            chat.extend(["--handoff".into(), handoff.into()]);
-        }
-        if !self.args.is_empty() {
-            chat.push("--".into());
-            chat.extend_from_slice(self.args);
-        }
-        chat
+        self.topic.relaunch.command_line(Options {
+            agent: Some(self.agent.clone()),
+            place: ChatPlace::Here,
+            name: Some(self.name.clone()),
+            handoff: handoff.map(Path::to_owned),
+            ..self.options.clone()
+        })
     }
 }
 

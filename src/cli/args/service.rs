@@ -7,7 +7,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ModelArgs},
+    cli::args::{AgentParser, ModelArgs, command_line::CommandLine},
 };
 
 #[derive(Debug, Subcommand)]
@@ -101,6 +101,33 @@ pub struct ConfigSetupArgs {
     pub args: Vec<OsString>,
 }
 
+impl ConfigSetupArgs {
+    /// The `shoal` arguments that parse to these.
+    pub(in crate::cli) fn command_line(&self) -> Vec<OsString> {
+        let Self {
+            here,
+            agent,
+            model: ModelArgs { model, effort },
+            name,
+            session,
+            restore,
+            handoff,
+            args,
+        } = self;
+        let mut line = CommandLine::of::<Self>(&["config", "setup"]);
+        line.switch("here", *here);
+        line.values("agent", agent.as_ref().map(Agent::name));
+        line.values("model", model);
+        line.values("effort", effort);
+        line.values("name", name.as_ref().map(|name| name.as_str()));
+        line.values("session", session.as_ref().map(|session| session.as_str()));
+        line.values("restore", restore.as_ref().map(|restore| restore.as_str()));
+        line.values("handoff", handoff);
+        line.trailing("args", args);
+        line.into_args()
+    }
+}
+
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum DaemonCommand {
@@ -125,3 +152,6 @@ pub enum DaemonCommand {
         managed: bool,
     },
 }
+
+#[cfg(test)]
+mod tests;

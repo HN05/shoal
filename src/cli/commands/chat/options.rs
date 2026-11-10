@@ -1,6 +1,6 @@
 //! How the command line starts a chat: its agent, place, name, model,
-//! session, parent and the permissions given to its agent, checked before
-//! any picker opens.
+//! session, parent and the permissions given to its agent, as its arguments
+//! give them and give them again, checked before any picker opens.
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::{Result, ensure};
@@ -10,11 +10,18 @@ use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use crate::{
     agent::{Agent, ModelChoice},
-    cli::context::Context,
-    config::Effective,
+    cli::{
+        args::{ModelArgs, create::StartArgs, service::ConfigSetupArgs},
+        context::Context,
+    },
+    config::{
+        Effective,
+        permissions::{PermissionChange, PermissionsConfig},
+    },
 };
 
 /// How the command line starts a chat.
+#[derive(Debug, Clone, PartialEq)]
 pub(in crate::cli::commands) struct Options {
     /// Agent to start; defaults to `agent.default`, otherwise a picker.
     pub agent: Option<Agent>,
@@ -68,6 +75,90 @@ impl ChatPlace {
 }
 
 impl Options {
+    /// How `args` start a chat, taken from them.
+    pub fn taken_from(args: &mut StartArgs) -> Self {
+        Self {
+            agent: args.agent.take(),
+            place: ChatPlace::here(args.here),
+            name: args.name.take(),
+            model: std::mem::take(&mut args.model).into(),
+            args: std::mem::take(&mut args.args),
+            session: args.session.take(),
+            fork: args.fork_session,
+            restore: args.restore.take(),
+            handoff: args.handoff.take(),
+            parent: args.parent.take(),
+            narrowing: match args.recorded_narrowing.take() {
+                Some(recorded) => Narrowing::Recorded(recorded),
+                None => Narrowing::Requested(PermissionChange::combined(&args.permissions).set),
+            },
+        }
+    }
+
+    /// `start` with these options, as [`Options::taken_from`] takes them
+    /// again, except that a background place is written as beside this
+    /// terminal, which an agent's start takes for one.
+    pub(super) fn into_start(self, start: StartArgs) -> StartArgs {
+        let Self {
+            agent,
+            place,
+            name,
+            model: ModelChoice { model, effort },
+            args,
+            session,
+            fork,
+            restore,
+            handoff,
+            parent,
+            narrowing,
+        } = self;
+        let (permissions, recorded_narrowing) = narrowing.written();
+        StartArgs {
+            agent,
+            here: place == ChatPlace::Here,
+            name,
+            model: ModelArgs { model, effort },
+            args,
+            session,
+            fork_session: fork,
+            restore,
+            handoff,
+            parent,
+            permissions,
+            recorded_narrowing,
+            ..start
+        }
+    }
+
+    /// `shoal config setup` with these options, which takes neither a
+    /// fork, a parent nor permissions: its chat starts on no fork, below no
+    /// named space, with its mode's permissions.
+    pub(super) fn into_config_setup(self) -> ConfigSetupArgs {
+        let Self {
+            agent,
+            place,
+            name,
+            model: ModelChoice { model, effort },
+            args,
+            session,
+            fork: _,
+            restore,
+            handoff,
+            parent: _,
+            narrowing: _,
+        } = self;
+        ConfigSetupArgs {
+            here: place == ChatPlace::Here,
+            agent,
+            model: ModelArgs { model, effort },
+            name,
+            session,
+            restore,
+            handoff,
+            args,
+        }
+    }
+
     /// These options as an agent's start takes them: its chat goes below
     /// its own space, in a background place rather than beside it or here,
     /// so its processes are not the agent's. Only that place runs it here,
@@ -125,37 +216,32 @@ impl Options {
 }
 
 /// The permissions given to a chat's agent, by where they came from.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(in crate::cli::commands) enum Narrowing {
     /// The `--permission` its starter asked for, which a scoped starter
     /// must hold.
-    Requested(crate::config::permissions::PermissionsConfig),
+    Requested(PermissionsConfig),
     /// The permissions a restored or imported chat was given, with what a
     /// resume's `--permission` changed, which the resume checked and the
     /// daemon checks again for what differs from the chat's.
-    Recorded(crate::config::permissions::PermissionsConfig),
+    Recorded(PermissionsConfig),
 }
 
 impl Narrowing {
-    pub(super) fn value(self) -> crate::config::permissions::PermissionsConfig {
+    pub(super) fn value(self) -> PermissionsConfig {
         match self {
             Self::Requested(narrowing) | Self::Recorded(narrowing) => narrowing,
         }
     }
 
-    /// The `shoal start` arguments that give this narrowing again.
-    pub(super) fn args(self) -> Vec<OsString> {
+    /// The `--permission` changes and the `--recorded-narrowing` of
+    /// `shoal start` that give this narrowing again; an empty recorded one
+    /// gives the same permissions as none.
+    fn written(self) -> (Vec<PermissionChange>, Option<PermissionsConfig>) {
         match self {
-            Self::Requested(narrowing) => (narrowing.assignments().into_iter())
-                .flat_map(|assignment| ["--permission".into(), assignment.into()])
-                .collect(),
-            Self::Recorded(narrowing) if narrowing.is_empty() => Vec::new(),
-            Self::Recorded(narrowing) => vec![
-                "--recorded-narrowing".into(),
-                serde_json::to_string(&narrowing)
-                    .expect("a narrowing serializes")
-                    .into(),
-            ],
+            Self::Requested(narrowing) => (narrowing.changes(), None),
+            Self::Recorded(narrowing) if narrowing.is_empty() => (Vec::new(), None),
+            Self::Recorded(narrowing) => (Vec::new(), Some(narrowing)),
         }
     }
 }

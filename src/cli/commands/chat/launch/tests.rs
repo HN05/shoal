@@ -1,13 +1,17 @@
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use clap::Parser as _;
 use std::ffi::OsString;
 
+use super::super::{Narrowing, Relaunch};
 use super::*;
+use crate::agent::ModelChoice;
+use crate::cli::args::create::{CreateCommand, StartArgs};
+use crate::config::permissions::PermissionsConfig;
 use crate::model::{Repository, SpaceLinks, Workspace};
 
-#[test]
-fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
-    let repo = Repository {
+fn repository() -> Repository {
+    Repository {
         id: "repo".into(),
         path: "/repos/shoal".into(),
         source: "/repos/shoal".into(),
@@ -15,71 +19,72 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         name: Some("shoal".into()),
         workspaces_dir: None,
         contribution: false,
+    }
+}
+
+/// The `shoal start` arguments `line` parses to.
+fn parsed_start(line: Vec<OsString>) -> StartArgs {
+    let line = std::iter::once(OsString::from("shoal")).chain(line);
+    let cli = crate::cli::Cli::try_parse_from(line).unwrap();
+    let Some(crate::cli::Command::Create(CreateCommand::Start(start))) = cli.command else {
+        panic!("expected start");
     };
+    *start
+}
+
+/// Options a start beside this terminal was given.
+fn options(narrowing: Narrowing) -> Options {
+    Options {
+        agent: None,
+        place: ChatPlace::Beside,
+        name: None,
+        model: ModelChoice {
+            model: None,
+            effort: Some("high".into()),
+        },
+        args: vec!["--search".into()],
+        session: Some("s1".into()),
+        fork: true,
+        restore: Some(SpaceId::from("c1")),
+        handoff: None,
+        parent: Some(SpaceSelector::parse("7")),
+        narrowing,
+    }
+}
+
+#[test]
+fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent() {
+    let repo = repository();
     let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
     let agent: Agent = "codex".parse().unwrap();
-    let model = ModelChoice {
-        model: None,
-        effort: Some("high".into()),
-    };
-    let args = [OsString::from("--search")];
-    let beside = Beside {
-        narrowing: Narrowing::Requested(Default::default()),
-        topic: &topic,
-        name: &"named".into(),
-        agent: &agent,
-        model: &model,
-        args: &args,
-        session: None,
-        fork: false,
-        restore: None,
-        parent: None,
-    };
-    assert_eq!(
-        beside.relaunch(None),
-        [
-            "start", "--chat", "--mode", "chat", "repo", "--here", "--name", "named", "--agent",
-            "codex", "--effort", "high", "--", "--search",
-        ]
-        .map(OsString::from)
-    );
-    // A chat continuing a session takes it to the place it opens, as a
-    // restore takes the saved chat, and so does a scoped start its handoff.
-    // A chat below a named parent goes there too.
-    let resumed = Beside {
-        session: Some(&"s1".into()),
-        restore: Some(&SpaceId::from("c1")),
-        parent: Some(&SpaceSelector::parse("7")),
-        ..beside
-    };
-    assert_eq!(
-        resumed.relaunch(Some(Path::new("/tmp/shoal-chat.1"))),
-        [
-            "start",
-            "--chat",
-            "--mode",
-            "chat",
-            "repo",
-            "--here",
-            "--name",
-            "named",
-            "--agent",
-            "codex",
-            "--effort",
-            "high",
-            "--session",
-            "s1",
-            "--restore",
-            "c1",
-            "--parent",
-            "7",
-            "--handoff",
-            "/tmp/shoal-chat.1",
-            "--",
-            "--search",
-        ]
-        .map(OsString::from)
-    );
+    let requested = PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap();
+    for narrowing in [
+        Narrowing::Requested(requested),
+        Narrowing::Recorded(requested),
+    ] {
+        let options = options(narrowing);
+        let beside = Beside {
+            topic: &topic,
+            name: &"named".into(),
+            agent: &agent,
+            options: &options,
+        };
+        let handoff = Path::new("/tmp/shoal-chat.1");
+        let mut start = parsed_start(beside.relaunch(Some(handoff)));
+        assert!(start.chat);
+        assert_eq!(start.mode, Some(crate::config::modes::ModeName::CHAT));
+        assert_eq!(start.repository.as_deref(), Some("repo"));
+        assert_eq!(
+            Options::taken_from(&mut start),
+            Options {
+                agent: Some(agent.clone()),
+                place: ChatPlace::Here,
+                name: Some("named".into()),
+                handoff: Some(handoff.to_owned()),
+                ..options
+            }
+        );
+    }
 }
 
 #[test]
@@ -95,45 +100,33 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
     let topic = Topic::workspace(workspace.clone(), &"plan".into());
     assert_eq!(topic.name, "worker-chat");
     let agent: Agent = "claude".parse().unwrap();
-    let beside = Beside {
-        narrowing: Narrowing::Requested(Default::default()),
-        topic: &topic,
-        name: &"worker-chat".into(),
-        agent: &agent,
-        model: &ModelChoice::default(),
-        args: &[],
+    let options = Options {
+        agent: None,
+        place: ChatPlace::Beside,
+        name: None,
+        model: ModelChoice::default(),
+        args: Vec::new(),
         session: None,
         fork: false,
         restore: None,
+        handoff: None,
         parent: None,
+        narrowing: Narrowing::Requested(Default::default()),
     };
+    let beside = Beside {
+        topic: &topic,
+        name: &"worker-chat".into(),
+        agent: &agent,
+        options: &options,
+    };
+    let start = parsed_start(beside.relaunch(None));
     assert_eq!(
-        beside.relaunch(None),
-        [
-            "start",
-            "--chat",
-            "--mode",
-            "plan",
-            "--in",
-            "worker-id",
-            "--here",
-            "--name",
-            "worker-chat",
-            "--agent",
-            "claude",
-        ]
-        .map(OsString::from)
+        start.in_workspace,
+        Some(Some(SpaceSelector::parse("worker-id")))
     );
+    assert_eq!((start.mode, start.repository), (Some("plan".into()), None));
 
-    let repo = Repository {
-        id: "repo".into(),
-        path: "/repos/shoal".into(),
-        source: "/repos/shoal".into(),
-        last_used: 0,
-        name: Some("shoal".into()),
-        workspaces_dir: None,
-        contribution: false,
-    };
+    let repo = repository();
     let repo = ChatRepository::Registered(repo);
     assert_eq!(topic.home(&repo).path(), Path::new("/work/worker"));
     let settings = crate::config::Config::default()
@@ -167,16 +160,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
 
 #[test]
 fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
-    use clap::Parser;
-    let repo = Repository {
-        id: "repo".into(),
-        path: "/repos/shoal".into(),
-        source: "/repos/shoal".into(),
-        last_used: 0,
-        name: Some("shoal".into()),
-        workspaces_dir: None,
-        contribution: false,
-    };
+    let repo = repository();
     let url = "https://forge.example/team/repo/issues/7";
     let links: SpaceLinks = serde_json::from_value(serde_json::json!({
         "issue": url, "issue_title": "Decide", "prs": [],
@@ -184,53 +168,37 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     .unwrap();
     let agent: Agent = "claude".parse().unwrap();
     let topic = Topic::imported(&repo, &"plan".into(), &links);
+    let options = Options {
+        agent: None,
+        place: ChatPlace::Beside,
+        name: None,
+        model: ModelChoice::default(),
+        args: Vec::new(),
+        session: Some("s1".into()),
+        fork: false,
+        restore: None,
+        handoff: None,
+        parent: None,
+        narrowing: Narrowing::Recorded(Default::default()),
+    };
     let beside = Beside {
-        narrowing: Narrowing::Requested(Default::default()),
         topic: &topic,
         name: &"shoal-plan-7".into(),
         agent: &agent,
-        model: &ModelChoice::default(),
-        args: &[],
-        session: Some(&"s1".into()),
-        fork: false,
-        restore: None,
-        parent: None,
+        options: &options,
     };
     // The process the import starts in a new tab takes the issue as given.
-    let relaunch = beside.relaunch(None);
-    let cli =
-        crate::cli::Cli::try_parse_from(std::iter::once("shoal".into()).chain(relaunch)).unwrap();
-    let Some(crate::cli::Command::Create(crate::cli::args::create::CreateCommand::Start(start))) =
-        cli.command
-    else {
-        panic!("expected start");
-    };
+    let start = parsed_start(beside.relaunch(None));
     assert_eq!(start.issue, None);
     let issue =
         templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title).unwrap();
     assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
-    assert_eq!(start.session, Some("s1".into()));
-    assert!(!start.fork_session);
-    // A copy's chat starts from a fork of the session there too.
-    let fork = Beside {
-        fork: true,
-        ..beside
-    };
-    let cli =
-        crate::cli::Cli::try_parse_from(std::iter::once("shoal".into()).chain(fork.relaunch(None)))
-            .unwrap();
-    let Some(crate::cli::Command::Create(crate::cli::args::create::CreateCommand::Start(start))) =
-        cli.command
+    let Relaunch::Start(unlinked) =
+        Topic::imported(&repo, &"plan".into(), &SpaceLinks::default()).relaunch
     else {
-        panic!("expected start");
+        panic!("expected a start");
     };
-    assert_eq!(start.session, Some("s1".into()));
-    assert!(start.fork_session);
-    let unlinked = Topic::imported(&repo, &"plan".into(), &SpaceLinks::default());
-    assert_eq!(
-        unlinked.relaunch,
-        Topic::repository(&repo, &"plan".into()).relaunch
-    );
+    assert_eq!(unlinked.linked_issue, None);
 }
 
 #[test]
@@ -247,4 +215,38 @@ fn a_chat_whose_agent_cannot_fork_starts_a_new_session() {
     assert!(!forked.of(&settings, &claude).unwrap().is_empty());
     let opencode: Agent = "opencode".parse().unwrap();
     assert!(forked.of(&settings, &opencode).unwrap().is_empty());
+}
+
+#[test]
+fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
+    let topic = crate::cli::commands::config_setup::topic(Path::new("/config/config.toml"));
+    let agent: Agent = "claude".parse().unwrap();
+    let options = Options {
+        fork: false,
+        parent: None,
+        narrowing: Narrowing::Requested(Default::default()),
+        ..options(Narrowing::Requested(Default::default()))
+    };
+    let beside = Beside {
+        topic: &topic,
+        name: &"setup".into(),
+        agent: &agent,
+        options: &options,
+    };
+    let line = std::iter::once(OsString::from("shoal")).chain(beside.relaunch(None));
+    let cli = crate::cli::Cli::try_parse_from(line).unwrap();
+    let Some(crate::cli::Command::Service(crate::cli::args::service::ServiceCommand::Config {
+        command: crate::cli::args::service::ConfigCommand::Setup(setup),
+    })) = cli.command
+    else {
+        panic!("expected config setup");
+    };
+    assert!(setup.here);
+    assert_eq!(setup.agent, Some(agent));
+    assert_eq!(setup.name, Some("setup".into()));
+    assert_eq!(
+        (setup.session, setup.restore),
+        (options.session, options.restore)
+    );
+    assert_eq!(setup.args, options.args);
 }

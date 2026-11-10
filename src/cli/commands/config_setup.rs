@@ -75,7 +75,7 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
 /// or restored by the same command.
 pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
     chat::Topic {
-        relaunch: vec!["config".into(), "setup".into()],
+        relaunch: chat::Relaunch::ConfigSetup,
         name: modes::ModeName::SETUP.into(),
         asks_name: false,
         mode: modes::ModeName::SETUP,

@@ -3,9 +3,10 @@
 //! place.
 use std::ffi::OsString;
 
-use crate::client::space_ids::SpaceId;
+use super::Options;
+use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
 use crate::{
-    cli::agents::ChatRepository,
+    cli::{agents::ChatRepository, args::create::StartArgs},
     config::templates,
     model::{Chat, ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
     repository,
@@ -13,9 +14,8 @@ use crate::{
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
 pub(in crate::cli::commands) struct Topic {
-    /// The `shoal` command that starts the same chat again, without the
-    /// agent, name, `--here` or forwarded arguments.
-    pub relaunch: Vec<OsString>,
+    /// The command that starts the same chat again in a new place.
+    pub relaunch: Relaunch,
     /// The chat's default name, suffixed `-2`, `-3`, ... while another holds it.
     pub name: String,
     /// Whether an interactive start without `--name` asks for the name.
@@ -41,7 +41,7 @@ impl Topic {
         mode: &crate::config::modes::ModeName,
     ) -> Self {
         Self {
-            relaunch: [start_args(mode), vec![repo.id.clone().into()]].concat(),
+            relaunch: Relaunch::start(mode, in_checkout(repo)),
             name: format!("{}-chat", repository::name(repo)),
             asks_name: true,
             mode: mode.clone(),
@@ -57,7 +57,7 @@ impl Topic {
         mode: &crate::config::modes::ModeName,
     ) -> Self {
         Self {
-            relaunch: start_args(mode),
+            relaunch: Relaunch::start(mode, StartArgs::default()),
             name: mode.to_string(),
             asks_name: true,
             mode: mode.clone(),
@@ -73,9 +73,12 @@ impl Topic {
         workspace: Workspace,
         mode: &crate::config::modes::ModeName,
     ) -> Self {
-        let place = vec!["--in".into(), workspace.id.clone().into()];
+        let place = StartArgs {
+            in_workspace: Some(Some(SpaceSelector::id(&workspace.id))),
+            ..Default::default()
+        };
         Self {
-            relaunch: [start_args(mode), place].concat(),
+            relaunch: Relaunch::start(mode, place),
             name: format!("{}-chat", workspace.name),
             asks_name: true,
             mode: mode.clone(),
@@ -95,16 +98,14 @@ impl Topic {
         mode: &crate::config::modes::ModeName,
         links: &SpaceLinks,
     ) -> Self {
-        let mut topic = Self::repository(repo, mode);
-        if let Some(url) = &links.issue {
-            topic.relaunch.extend(["--linked-issue".into(), url.into()]);
-        }
-        if let Some(title) = links.issue.as_ref().and(links.issue_title.as_ref()) {
-            topic
-                .relaunch
-                .extend(["--linked-issue-title".into(), title.into()]);
-        }
+        let topic = Self::repository(repo, mode);
+        let linked = StartArgs {
+            linked_issue: links.issue.clone(),
+            linked_issue_title: links.issue.as_ref().and(links.issue_title.clone()),
+            ..in_checkout(repo)
+        };
         Self {
+            relaunch: Relaunch::start(mode, linked),
             links: links.relations(),
             linked_issue: templates::IssueFields::linked(links),
             ..topic
@@ -128,11 +129,52 @@ pub(super) fn with_saved_issue(topic: Topic, chats: &[Chat], restore: &SpaceId) 
     }
 }
 
-/// The `shoal` arguments that start a chat in `mode`.
-fn start_args(mode: &crate::config::modes::ModeName) -> Vec<OsString> {
-    ["start", "--chat", "--mode", mode.as_str()]
-        .map(OsString::from)
-        .to_vec()
+/// The `shoal start` arguments of a chat in the checkout of `repo`.
+fn in_checkout(repo: &Repository) -> StartArgs {
+    StartArgs {
+        repository: Some(repo.id.to_string()),
+        ..Default::default()
+    }
+}
+
+/// The command that starts a chat about a topic again in a new place, with
+/// the options its start was given.
+#[derive(Debug, Clone)]
+pub(in crate::cli::commands) enum Relaunch {
+    /// `shoal start` with these arguments.
+    Start(Box<StartArgs>),
+    /// `shoal config setup`.
+    ConfigSetup,
+}
+
+impl Relaunch {
+    /// `shoal start` of a chat in `mode` with `args`.
+    fn start(mode: &crate::config::modes::ModeName, args: StartArgs) -> Self {
+        Self::Start(Box::new(StartArgs {
+            chat: true,
+            mode: Some(mode.clone()),
+            ..args
+        }))
+    }
+
+    /// The same command, starting its chat on the issue at `url`.
+    pub(super) fn on_issue(self, url: &str) -> Self {
+        match self {
+            Self::Start(start) => Self::Start(Box::new(StartArgs {
+                issue: Some(Some(url.to_owned())),
+                ..*start
+            })),
+            Self::ConfigSetup => Self::ConfigSetup,
+        }
+    }
+
+    /// The `shoal` arguments of the command, started with `options`.
+    pub(super) fn command_line(&self, options: Options) -> Vec<OsString> {
+        match self {
+            Self::Start(start) => options.into_start((**start).clone()).command_line(),
+            Self::ConfigSetup => options.into_config_setup().command_line(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -8,7 +8,9 @@ use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ModelArgs, item_reference, permission_assignment},
+    cli::args::{
+        AgentParser, ModelArgs, command_line::CommandLine, item_reference, permission_assignment,
+    },
 };
 
 #[derive(Debug, Subcommand)]
@@ -60,7 +62,7 @@ pub enum CreateCommand {
 }
 
 // Arguments of `shoal start`.
-#[derive(Debug, Default, Args)]
+#[derive(Debug, Default, Clone, Args)]
 pub struct StartArgs {
     /// The mode the agent starts in; on a terminal, a picker, which an issue
     /// labelled [issue] planned_label or plan_label answers with worker or
@@ -189,9 +191,105 @@ pub struct StartArgs {
     pub args: Vec<OsString>,
 }
 
+impl StartArgs {
+    /// The `shoal` arguments that parse to these, without
+    /// `checked_repository`, which no argument gives.
+    pub(in crate::cli) fn command_line(&self) -> Vec<OsString> {
+        let Self {
+            mode,
+            permissions,
+            recorded_narrowing,
+            chat,
+            worktree,
+            in_workspace,
+            parent,
+            here,
+            focus,
+            repository,
+            repository_override,
+            checked_repository: _,
+            branch,
+            existing,
+            issue,
+            path,
+            base,
+            git_profile,
+            agent,
+            fork,
+            now,
+            after,
+            name,
+            copy: CopyArgs { copy, checkpoint },
+            creation:
+                CreationArgs {
+                    skip_setup,
+                    disposable,
+                },
+            model: ModelArgs { model, effort },
+            session,
+            fork_session,
+            restore,
+            linked_issue,
+            linked_issue_title,
+            handoff,
+            args,
+        } = self;
+        let mut line = CommandLine::of::<Self>(&["start"]);
+        line.positional("repository", repository.as_ref());
+        line.positional("branch", branch.as_ref());
+        line.values("mode", mode.as_ref().map(|mode| mode.as_str()));
+        line.values(
+            "permissions",
+            permissions.iter().flat_map(|change| change.assignments()),
+        );
+        line.values("recorded_narrowing", recorded_narrowing.map(written));
+        line.switch("chat", *chat);
+        line.switch("worktree", *worktree);
+        line.optional("in_workspace", selected(in_workspace));
+        line.values("parent", parent.as_ref().map(ToString::to_string));
+        line.switch("here", *here);
+        line.switch("focus", *focus);
+        line.values("repository_override", repository_override);
+        line.values("existing", existing);
+        line.optional("issue", issue.as_ref().map(Option::as_ref));
+        line.values("path", path);
+        line.values("base", base);
+        line.values("git_profile", git_profile);
+        line.values("agent", agent.as_ref().map(Agent::name));
+        line.switch("fork", *fork);
+        line.switch("now", *now);
+        line.values("after", after);
+        line.values("name", name.as_ref().map(|name| name.as_str()));
+        line.optional("copy", selected(copy));
+        line.values("checkpoint", checkpoint.map(|number| number.to_string()));
+        line.switch("skip_setup", *skip_setup);
+        line.switch("disposable", *disposable);
+        line.values("model", model);
+        line.values("effort", effort);
+        line.values("session", session.as_ref().map(|session| session.as_str()));
+        line.switch("fork_session", *fork_session);
+        line.values("restore", restore.as_ref().map(|restore| restore.as_str()));
+        line.values("linked_issue", linked_issue);
+        line.values("linked_issue_title", linked_issue_title);
+        line.values("handoff", handoff);
+        line.trailing("args", args);
+        line.into_args()
+    }
+}
+
+/// The text of a flag's optional space, as `--in` and `--copy` take it.
+fn selected(space: &Option<Option<SpaceSelector>>) -> Option<Option<String>> {
+    (space.as_ref()).map(|space| space.as_ref().map(ToString::to_string))
+}
+
+/// A recorded narrowing written as the JSON [`recorded`] reads.
+fn written(narrowing: crate::config::permissions::PermissionsConfig) -> String {
+    serde_json::to_string(&narrowing).expect("a narrowing serializes")
+}
+
 // The workspace a new one copies. A doc comment here would replace the
 // description of every command that flattens it.
-#[derive(Debug, Default, Args)]
+#[derive(Debug, Default, Clone, Args)]
 pub struct CopyArgs {
     /// Start from a copy of this workspace's current files, uncommitted and
     /// untracked ones included; without a value, the current workspace, else
@@ -214,7 +312,7 @@ impl CopyArgs {
 
 // What a new workspace leaves out. A doc comment here would replace the
 // description of every command that flattens it.
-#[derive(Debug, Default, Args)]
+#[derive(Debug, Default, Clone, Args)]
 pub struct CreationArgs {
     /// Skip setup.command, hooks.pre_setup, setup.copy_ignored, hooks.post_setup
     /// and the removal hooks; `shoal work setup` runs the setup later.
@@ -266,3 +364,6 @@ pub struct ContributeArgs {
 fn recorded(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
+
+#[cfg(test)]
+mod tests;
