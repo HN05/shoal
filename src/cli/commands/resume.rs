@@ -1,22 +1,21 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 //! It queues restores unless asked to start them now, and restores the
 //! stopped chats at once.
-use crate::client::assignments;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{DiscardedWork, Queued, Resumed, StoppedCommands};
+use crate::client::output::resume::{Queued, Resumed, StoppedCommands};
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::waits_in_wrapper;
 use crate::{
-    cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
+    cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal},
     client::recovery::ReconcileOptions,
     config::permissions::PermissionChange,
     execution::recovery::{
         Copied, LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
         consume,
     },
-    model::{Chat, Inspection, Workspace},
+    model::{Inspection, Workspace},
     protocol::ConfigTarget,
     state::ExecutionState,
 };
@@ -175,7 +174,7 @@ async fn resume_each(
         return report_nothing(ctx, discard || queuing == Queuing::Here { now: true });
     }
     if discard {
-        return discard_each(ctx, &stopped, &selected.chats).await;
+        return discard::discard_each(ctx, &stopped, &selected.chats).await;
     }
     if let Queuing::Daemon { .. } = queuing {
         queue::ensure_daemon_starts(ctx, &stopped).await?;
@@ -210,7 +209,7 @@ pub async fn run(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     if discard {
-        return discard_work(ctx, workspace, execution).await;
+        return discard::discard_work(ctx, workspace, execution).await;
     }
     let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
@@ -265,28 +264,6 @@ pub async fn run(
     }
     let session = recorded.into_last_session(selected_id, &selected);
     restore(ctx, workspace, session, selected, saved.commands).await
-}
-
-/// Forget the workspace's stopped work and last sessions, only
-/// `execution`'s when given.
-async fn discard_work(
-    ctx: &Context,
-    workspace: SpaceSelector,
-    execution: Option<ExecutionId>,
-) -> Result<i32> {
-    let discarded = assignments::discard_stopped_work(&ctx.paths, workspace, execution).await?;
-    let forgotten = DiscardedWork {
-        discarded: discarded.executions,
-        chats: Vec::new(),
-        failed: Vec::new(),
-    };
-    ctx.show(&forgotten, |_| {
-        outln!(
-            "Discarded stopped agents and commands for {}",
-            discarded.workspace
-        )
-    })?;
-    Ok(0)
 }
 
 /// Continue one of the workspace's last sessions that `saved` keeps, the
@@ -548,62 +525,6 @@ async fn reconcile_stale_execution(
     Ok(())
 }
 
-/// Remove the stopped `chats` and forget every workspace's stopped agents and
-/// commands, going on after one fails.
-async fn discard_each(
-    ctx: &Context,
-    stopped: &[(Workspace, Saved)],
-    chats: &[Chat],
-) -> Result<i32> {
-    let (chats, mut failed) = chats::discard_each(ctx, chats).await;
-    let mut ids = Vec::new();
-    let mut names = Vec::new();
-    for (workspace, saved) in stopped {
-        match discard_saved(ctx, workspace, saved).await {
-            Ok(executions) => {
-                ids.extend(executions);
-                names.push(workspace.name.as_str());
-            }
-            Err(error) => failed.push(ui::failure(ctx, "discard", &workspace.name, &error)),
-        }
-    }
-    let discarded = DiscardedWork {
-        discarded: ids,
-        chats,
-        failed,
-    };
-    ctx.show(&discarded, |_| {
-        if !names.is_empty() {
-            outln!(
-                "Discarded stopped agents and commands for {}",
-                names.join(", ")
-            );
-        }
-    })?;
-    Ok(if discarded.failed.is_empty() { 0 } else { 1 })
-}
-
-/// Forget `workspace`'s stopped records each by itself, leaving agents a
-/// wrapper waits to restore, and return the executions forgotten.
-async fn discard_saved(
-    ctx: &Context,
-    workspace: &Workspace,
-    saved: &Saved,
-) -> Result<Vec<ExecutionId>> {
-    let mut ids = Vec::new();
-    for execution in saved.execution_ids() {
-        let workspace = workspace.id.clone();
-        let discarded = assignments::discard_stopped_work(
-            &ctx.paths,
-            SpaceSelector::id(&workspace),
-            Some(execution),
-        )
-        .await?;
-        ids.extend(discarded.executions);
-    }
-    Ok(ids)
-}
-
 /// The stopped work and last sessions of the workspaces `selectors` name,
 /// as [`saved_work`] keeps them for `discard`, refusing one with nothing to
 /// resume.
@@ -717,6 +638,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 }
 
 mod chats;
+mod discard;
 pub(super) mod permission_change;
 mod picker;
 pub(super) mod queue;
