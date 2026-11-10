@@ -1,43 +1,29 @@
-#[path = "workspaces/terminal_sessions.rs"]
-mod terminal_sessions;
-
-#[path = "workspaces/rex.rs"]
+mod herdr_default;
+mod master;
+mod restarts;
 mod rex;
-
-#[path = "workspaces/tmux.rs"]
+mod terminal_sessions;
 mod tmux;
-
-#[path = "workspaces/zellij.rs"]
+mod upgrades;
 mod zellij;
 
-#[path = "workspaces/herdr_default.rs"]
-mod herdr_default;
-
-#[path = "workspaces/upgrades.rs"]
-mod upgrades;
-
-#[path = "workspaces/restarts.rs"]
-mod restarts;
-
-#[path = "workspaces/master.rs"]
-mod master;
-
-#[path = "support/prompt.rs"]
+#[path = "../support/prompt.rs"]
 mod prompt;
-#[path = "support/pty.rs"]
+#[path = "../support/pty.rs"]
 mod pty;
 
-#[path = "support/daemon.rs"]
+#[path = "../support/daemon.rs"]
 mod daemon_fixture;
 use daemon_fixture::{CommandGroup, DaemonGuard, Detached};
 
-#[path = "support/git.rs"]
+#[path = "../support/git.rs"]
 mod git_fixture;
 use git_fixture::{git, init_repo};
 
-#[path = "support/ports.rs"]
+#[path = "../support/ports.rs"]
 mod ports;
 
+#[path = "../support/mod.rs"]
 mod support;
 
 use support::{
@@ -124,7 +110,7 @@ impl Fixture {
         .unwrap();
         if fake_sim {
             let script = root.path().join("bin/xcrun");
-            install_test_script(&script, include_str!("fixtures/simctl.py"));
+            install_test_script(&script, include_str!("../fixtures/simctl.py"));
         }
         // Forge requests reach only the scripted forge, which answers none
         // until a test scripts it.
@@ -133,7 +119,7 @@ impl Fixture {
         fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
         install_test_script(
             root.path().join("forge.py"),
-            include_str!("fixtures/forge.py"),
+            include_str!("../fixtures/forge.py"),
         );
         std::os::unix::fs::symlink(root.path().join("forge.py"), root.path().join("bin/curl"))
             .unwrap();
@@ -17510,7 +17496,7 @@ fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
 fn install_fake_happy(fixture: &Fixture) -> PathBuf {
     let bin = fixture.root.path().join("bin");
     let script = bin.join("happy");
-    install_test_script_with_mode(&script, include_str!("fixtures/happy.py"), 0o700);
+    install_test_script_with_mode(&script, include_str!("../fixtures/happy.py"), 0o700);
     // Happy starts these itself; launches need them on PATH.
     for agent in ["claude", "codex"] {
         let path = bin.join(agent);
@@ -17840,7 +17826,7 @@ impl FakeHappyServer {
     fn start(fixture: &Fixture) -> Self {
         use std::io::BufRead;
         let script = fixture.root.path().join("happy_server.py");
-        fs::write(&script, include_str!("fixtures/happy_server.py")).unwrap();
+        fs::write(&script, include_str!("../fixtures/happy_server.py")).unwrap();
         let record = fixture.root.path().join("happy-server.json");
         let mut child = Command::new("python3")
             .arg(&script)
@@ -21850,10 +21836,10 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
 /// these lines and ends with the space rules.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
 const SPACE_RULES: &str =
-    include_str!("../crates/shoal-client/src/config/templates/space_rules.md");
+    include_str!("../../crates/shoal-client/src/config/templates/space_rules.md");
 /// The built-in `work` rule, which the built-in modes list right after the
 /// guidance.
-const WORK_RULE: &str = include_str!("../crates/shoal-client/src/config/rules/work.md");
+const WORK_RULE: &str = include_str!("../../crates/shoal-client/src/config/rules/work.md");
 
 /// Where the guidance that starts at `start` in `text` ends, with the
 /// built-in `work` rule when it follows.
@@ -29916,7 +29902,7 @@ fn failed_demo_handoffs_only_close_the_original_known_session(after: &str) -> an
         let home = fixture.root.path();
         install_test_script(
             home.join("bin/zmx"),
-            include_str!("fixtures/zmx_handoff.py"),
+            include_str!("../fixtures/zmx_handoff.py"),
         );
         let output = fixture
             .command()
