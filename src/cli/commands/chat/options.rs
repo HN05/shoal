@@ -1,7 +1,10 @@
 //! How the command line starts a chat: its agent, place, name, model,
 //! session, parent and the permissions given to its agent, as its arguments
 //! give them and give them again, checked before any picker opens.
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Result, ensure};
 
@@ -127,6 +130,24 @@ impl Options {
             permissions,
             recorded_narrowing,
             ..start
+        }
+    }
+
+    /// These options as the start in the place where a chat opens takes
+    /// them: run there by `agent` under `name`, reporting to the `handoff`
+    /// of the starter that waits on it.
+    pub(super) fn in_new_place(
+        &self,
+        agent: &Agent,
+        name: &SpaceName,
+        handoff: Option<&Path>,
+    ) -> Self {
+        Self {
+            agent: Some(agent.clone()),
+            place: ChatPlace::Here,
+            name: Some(name.clone()),
+            handoff: handoff.map(Path::to_owned),
+            ..self.clone()
         }
     }
 

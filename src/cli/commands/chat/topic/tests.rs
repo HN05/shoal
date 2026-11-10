@@ -1,6 +1,191 @@
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
+use clap::Parser as _;
+use std::{ffi::OsString, path::Path};
 
 use super::*;
+use crate::{
+    agent::{Agent, ModelChoice},
+    cli::{
+        args::create::{CreateCommand, StartArgs},
+        commands::chat::{ChatPlace, Narrowing},
+    },
+    config::permissions::PermissionsConfig,
+};
+
+fn repository() -> Repository {
+    Repository {
+        id: "repo".into(),
+        path: "/repos/shoal".into(),
+        source: "/repos/shoal".into(),
+        last_used: 0,
+        name: Some("shoal".into()),
+        workspaces_dir: None,
+        contribution: false,
+    }
+}
+
+/// The `shoal start` arguments `line` parses to.
+fn parsed_start(line: Vec<OsString>) -> StartArgs {
+    let line = std::iter::once(OsString::from("shoal")).chain(line);
+    let cli = crate::cli::Cli::try_parse_from(line).unwrap();
+    let Some(crate::cli::Command::Create(CreateCommand::Start(start))) = cli.command else {
+        panic!("expected start");
+    };
+    *start
+}
+
+/// Options a start beside this terminal was given.
+fn options(narrowing: Narrowing) -> Options {
+    Options {
+        agent: None,
+        place: ChatPlace::Beside,
+        name: None,
+        model: ModelChoice {
+            model: None,
+            effort: Some("high".into()),
+        },
+        args: vec!["--search".into()],
+        session: Some("s1".into()),
+        fork: true,
+        restore: Some(SpaceId::from("c1")),
+        handoff: None,
+        parent: Some(SpaceSelector::parse("7")),
+        narrowing,
+    }
+}
+
+#[test]
+fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent() {
+    let repo = repository();
+    let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
+    let agent: Agent = "codex".parse().unwrap();
+    let requested = PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap();
+    for narrowing in [
+        Narrowing::Requested(requested),
+        Narrowing::Recorded(requested),
+    ] {
+        let options = options(narrowing);
+        let handoff = Path::new("/tmp/shoal-chat.1");
+        let named = options.in_new_place(&agent, &"named".into(), Some(handoff));
+        let mut start = parsed_start(topic.relaunch.command_line(named));
+        assert!(start.chat);
+        assert_eq!(start.mode, Some(crate::config::modes::ModeName::CHAT));
+        assert_eq!(start.repository.as_deref(), Some("repo"));
+        assert_eq!(
+            Options::taken_from(&mut start),
+            Options {
+                agent: Some(agent.clone()),
+                place: ChatPlace::Here,
+                name: Some("named".into()),
+                handoff: Some(handoff.to_owned()),
+                ..options
+            }
+        );
+    }
+}
+
+#[test]
+fn a_chat_in_a_workspace_reopens_there() {
+    let mut workspace = Workspace::new_record(
+        "repo".into(),
+        "worker".into(),
+        "/work/worker".into(),
+        Some("feature".into()),
+        crate::state::WorkspaceState::Ready,
+    );
+    workspace.id = "worker-id".into();
+    let topic = Topic::workspace(workspace.clone(), &"plan".into());
+    assert_eq!(topic.name, "worker-chat");
+    let agent: Agent = "claude".parse().unwrap();
+    let options = Options {
+        agent: None,
+        place: ChatPlace::Beside,
+        name: None,
+        model: ModelChoice::default(),
+        args: Vec::new(),
+        session: None,
+        fork: false,
+        restore: None,
+        handoff: None,
+        parent: None,
+        narrowing: Narrowing::Requested(Default::default()),
+    };
+    let named = options.in_new_place(&agent, &"worker-chat".into(), None);
+    let start = parsed_start(topic.relaunch.command_line(named));
+    assert_eq!(
+        start.in_workspace,
+        Some(Some(SpaceSelector::parse("worker-id")))
+    );
+    assert_eq!((start.mode, start.repository), (Some("plan".into()), None));
+}
+
+#[test]
+fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
+    let repo = repository();
+    let url = "https://forge.example/team/repo/issues/7";
+    let links: SpaceLinks = serde_json::from_value(serde_json::json!({
+        "issue": url, "issue_title": "Decide", "prs": [],
+    }))
+    .unwrap();
+    let agent: Agent = "claude".parse().unwrap();
+    let topic = Topic::imported(&repo, &"plan".into(), &links);
+    let options = Options {
+        agent: None,
+        place: ChatPlace::Beside,
+        name: None,
+        model: ModelChoice::default(),
+        args: Vec::new(),
+        session: Some("s1".into()),
+        fork: false,
+        restore: None,
+        handoff: None,
+        parent: None,
+        narrowing: Narrowing::Recorded(Default::default()),
+    };
+    let named = options.in_new_place(&agent, &"shoal-plan-7".into(), None);
+    // The process the import starts in a new tab takes the issue as given.
+    let start = parsed_start(topic.relaunch.command_line(named));
+    assert_eq!(start.issue, None);
+    let issue =
+        templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title).unwrap();
+    assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
+    let Relaunch::Start(unlinked) =
+        Topic::imported(&repo, &"plan".into(), &SpaceLinks::default()).relaunch
+    else {
+        panic!("expected a start");
+    };
+    assert_eq!(unlinked.linked_issue, None);
+}
+
+#[test]
+fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
+    let topic = crate::cli::commands::config_setup::topic(Path::new("/config/config.toml"));
+    let agent: Agent = "claude".parse().unwrap();
+    let options = Options {
+        fork: false,
+        parent: None,
+        narrowing: Narrowing::Requested(Default::default()),
+        ..options(Narrowing::Requested(Default::default()))
+    };
+    let named = options.in_new_place(&agent, &"setup".into(), None);
+    let line = std::iter::once(OsString::from("shoal")).chain(topic.relaunch.command_line(named));
+    let cli = crate::cli::Cli::try_parse_from(line).unwrap();
+    let Some(crate::cli::Command::Service(crate::cli::args::service::ServiceCommand::Config {
+        command: crate::cli::args::service::ConfigCommand::Setup(setup),
+    })) = cli.command
+    else {
+        panic!("expected config setup");
+    };
+    assert!(setup.here);
+    assert_eq!(setup.agent, Some(agent));
+    assert_eq!(setup.name, Some("setup".into()));
+    assert_eq!(
+        (setup.session, setup.restore),
+        (options.session, options.restore)
+    );
+    assert_eq!(setup.args, options.args);
+}
 
 #[test]
 fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
