@@ -2802,7 +2802,9 @@ directory as another working directory; `--here` and `--agent` work as for
 `repo setup`.
 
 Only the user runs `repo setup` and `config setup`, since both change the
-user's own config. Both start their agent at once regardless of the limits.
+user's own config. Both start their agent at once regardless of the limits,
+in a tab that takes focus whatever `terminal.focus` says; without a terminal or
+with `--json`, they start it detached.
 
 ### Contributions
 

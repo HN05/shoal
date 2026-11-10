@@ -53,15 +53,7 @@ pub(super) async fn start(
         return Ok(0);
     };
     let local_config = local_config(ctx, selector).await?;
-    // The user waits for this agent, so it skips the queue.
-    let add = workspaces::AddOptions {
-        here: options.here,
-        now: true,
-        model: options.model,
-        mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),
-        prompt: Some(subject(repository::name(&repo), &local_config)),
-        ..Default::default()
-    };
+    let prompt = subject(repository::name(&repo), &local_config);
     workspaces::add(
         ctx,
         Some(repo.id.clone().into()),
@@ -69,9 +61,30 @@ pub(super) async fn start(
         None,
         workspaces::AgentLaunch::Explicit(Some(agent)),
         options.args,
-        add,
+        add_options(options.here, options.model, prompt, ctx.interactive()),
     )
     .await
+}
+
+/// How the setup agent starts on `prompt`: the user waits for it, so it
+/// skips the queue and, from an `interactive` call, takes a focused tab
+/// whatever the `focus` setting says. A call without a terminal starts it
+/// detached, with nothing to focus.
+fn add_options(
+    here: bool,
+    model: ModelChoice,
+    prompt: String,
+    interactive: bool,
+) -> workspaces::AddOptions {
+    workspaces::AddOptions {
+        here,
+        focus: interactive,
+        now: true,
+        model,
+        mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),
+        prompt: Some(prompt),
+        ..Default::default()
+    }
 }
 
 /// The repository's local config file, in a directory that exists and is

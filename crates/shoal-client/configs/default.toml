@@ -188,7 +188,8 @@ enabled = false
 [terminal]
 # `shoal start` focuses workspace shells and agents waiting for a prompt, and
 # starts agents with input in the background: a background Herdr tab, or a
-# detached zmx session outside Herdr. Set to always (true) or never (false) focus.
+# detached zmx session outside Herdr. Set to always (true) or never (false) focus;
+# `repo setup` and `config setup` focus their agent whatever this says.
 # focus = true
 # Close the Herdr tab or zmx session Shoal opened for a workspace once the
 # workspace is removed, or once `done` keeps it and the agent finishes its turn.
