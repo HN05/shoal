@@ -211,20 +211,25 @@ def orphan_adopter():
     if not sys.platform.startswith("linux"):
         return 1
     if _adopter is None:
-        # The kernel hands the shell's children to their adopter before the
-        # shell's exit reaches this process.
-        orphan = int(subprocess.run(["sh", "-c", "sleep 60 >/dev/null 2>&1 & echo $!"],
-                                    cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                    text=True, check=True).stdout)
-        try:
-            # The parent is the fourth field of stat(5).
-            _adopter = int(linux_stat_fields(orphan)[1])
-        finally:
-            try:
-                os.kill(orphan, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        _adopter = probe_adopter()
     return _adopter
+
+
+def probe_adopter():
+    """The new parent of a process orphaned now, on Linux."""
+    # The kernel hands the shell's children to their adopter before the
+    # shell's exit reaches this process.
+    orphan = int(subprocess.run(["sh", "-c", "sleep 60 >/dev/null 2>&1 & echo $!"],
+                                cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                text=True, check=True).stdout)
+    try:
+        # The parent is the fourth field of stat(5).
+        return int(linux_stat_fields(orphan)[1])
+    finally:
+        try:
+            os.kill(orphan, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def detached_in(directories):
