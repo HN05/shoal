@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::resume::Stopped;
+use super::resume::queue::Stopped;
 use crate::client::output::resume::{Queued, Reopened};
 use crate::client::recovery;
 use crate::client::space_names::SpaceSelector;
@@ -245,7 +245,7 @@ impl ReopenedExt for Reopened {
             return;
         }
         let stopped = Stopped::from([(self.workspace.id.clone(), executions)]);
-        match super::resume::queue_stopped(ctx, &stopped).await {
+        match super::resume::queue::queue_stopped(ctx, &stopped).await {
             Ok(queued) => self.queued = Some(queued),
             Err(error) => eprintln!(
                 "warning: cannot queue the stopped agents; shoal resume {} restores them: {error:#}",

@@ -1,5 +1,5 @@
 //! `shoal move root`: move every repository directory into a new `root_dir`.
-use super::super::resume::Stopped;
+use super::super::resume::queue::Stopped;
 use crate::cli::commands::resume::queue::QueuedExt;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Queued;
@@ -228,7 +228,7 @@ async fn resume_stopped(ctx: &Context, stopped: &Stopped) -> Option<Queued> {
     if stopped.is_empty() {
         return None;
     }
-    match super::super::resume::queue_stopped(ctx, stopped).await {
+    match super::super::resume::queue::queue_stopped(ctx, stopped).await {
         Ok(queued) => Some(queued),
         Err(error) => {
             eprintln!("warning: cannot resume the stopped agents; run shoal resume: {error:#}");

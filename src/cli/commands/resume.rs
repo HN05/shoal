@@ -25,6 +25,7 @@ use crate::{
     state::{ExecutionState, QueueState},
 };
 use anyhow::{Context as _, Result, ensure};
+use queue::Queuing;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -79,7 +80,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
         permission_change::check(ctx, &selected, execution.as_ref(), change).await?;
     }
     if scoped && !discard {
-        return queue_below(ctx, selected, execution, change).await;
+        return queue::queue_below(ctx, selected, execution, change).await;
     }
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
@@ -87,7 +88,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
             run(ctx, workspace.clone(), execution, discard, focus, change).await
         }
         ([], Some([workspace])) => {
-            queue_workspace(ctx, workspace.clone(), execution, queuing, change).await
+            queue::queue_workspace(ctx, workspace.clone(), execution, queuing, change).await
         }
         ([chat], Some([])) if focus && execution.is_none() => {
             permission_change::apply(ctx, &[], std::slice::from_ref(chat), change).await?;
@@ -103,29 +104,6 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
                 "--focus restores the agent of one workspace or chat"
             );
             resume_each(ctx, selected, discard, queuing, change).await
-        }
-    }
-}
-
-/// How a resume starts the restores it does not run in this terminal.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Queuing {
-    /// Queued as the limits allow, except a workspace's last session, or
-    /// for `now` started by this process where each stopped or in the
-    /// background.
-    Here { now: bool },
-    /// Queued for the daemon to start, which a noninteractive process
-    /// needs, at once regardless of the limits for `now`.
-    Daemon { now: bool },
-}
-
-impl Queuing {
-    /// How a process with `ctx` starts restores: a noninteractive one has no
-    /// terminal to start them beside.
-    fn of(ctx: &Context, now: bool) -> Self {
-        match ctx.interactive() {
-            true => Self::Here { now },
-            false => Self::Daemon { now },
         }
     }
 }
@@ -207,7 +185,7 @@ async fn resume_each(
         return discard_each(ctx, &stopped, &selected.chats).await;
     }
     if let Queuing::Daemon { .. } = queuing {
-        ensure_daemon_starts(ctx, &stopped).await?;
+        queue::ensure_daemon_starts(ctx, &stopped).await?;
     }
     permission_change::apply(ctx, &stopped, &selected.chats, change).await?;
     let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
@@ -223,141 +201,6 @@ async fn resume_each(
         Queuing::Here { now: false } => queue::queue_all(ctx, stopped, chats, failed, false).await,
         Queuing::Daemon { now } => queue::queue_all(ctx, stopped, chats, failed, now).await,
     }
-}
-
-/// Queue the restores of the stopped agents and last sessions of the
-/// `selected` workspaces below this process's, only `execution`'s when
-/// given, and restore the `selected` chats in a background place, under
-/// `change` when given; the daemon refuses those this process or one
-/// below it did not stop, before any restore, and starts the workspaces'
-/// agents detached.
-async fn queue_below(
-    ctx: &Context,
-    selected: Selected,
-    execution: Option<ExecutionId>,
-    change: Option<&PermissionChange>,
-) -> Result<i32> {
-    let mut stopped = Vec::new();
-    for selector in selected.workspaces.unwrap_or_default() {
-        stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
-    }
-    for chat in &selected.chats {
-        crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
-    }
-    permission_change::apply(ctx, &stopped, &selected.chats, change).await?;
-    let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
-    queue::queue_all(ctx, stopped, chats, failed, false).await
-}
-
-/// Executions stopped so their workspaces could move, by workspace.
-pub(super) type Stopped =
-    std::collections::BTreeMap<SpaceId, std::collections::BTreeSet<ExecutionId>>;
-
-/// Queue the restores of the agents among `stopped`; their workspaces'
-/// stopped commands go to them, and those of workspaces without one stay
-/// for `shoal resume`.
-pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Queued> {
-    let mut queued = Vec::new();
-    for (workspace, executions) in stopped {
-        let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
-                .await?
-                .workspace;
-        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-        saved.retain(|id| executions.contains(id));
-        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
-            queued.push((workspace, saved));
-        }
-    }
-    Ok(queue::queue_each(ctx, queued, false).await)
-}
-
-/// The stopped agents and last sessions of the workspace `selector` names,
-/// only `execution`'s when given, refusing one without any. Its stopped
-/// commands go to the restored agents.
-async fn stopped_agents(
-    ctx: &Context,
-    selector: SpaceSelector,
-    execution: Option<&ExecutionId>,
-) -> Result<(Workspace, Saved)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-        .await?
-        .workspace;
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-    if let Some(execution) = execution {
-        saved.retain_execution(execution, true);
-    }
-    saved.retain_unattended();
-    saved.commands.clear();
-    ensure!(
-        !(saved.agents.is_empty() && saved.sessions.is_empty()),
-        "{} has no stopped agent to resume",
-        workspace.name
-    );
-    Ok((workspace, saved))
-}
-
-/// Queue the restores of `workspace`'s stopped agents, only `execution`'s
-/// when given, to start as `queuing` says, making `change` when given.
-/// Without stopped agents, a last session continues at once, as resuming
-/// the workspace by itself does not wait for a slot it never held: where it
-/// stopped or in the background, or for a noninteractive process through
-/// the queue, started now.
-async fn queue_workspace(
-    ctx: &Context,
-    workspace: SpaceSelector,
-    execution: Option<ExecutionId>,
-    queuing: Queuing,
-    change: Option<&PermissionChange>,
-) -> Result<i32> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-        .await?
-        .workspace;
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-    if let Some(execution) = &execution {
-        saved.retain_execution(execution, true);
-    }
-    ensure!(
-        !saved.is_empty(),
-        "no stopped agents or commands for this workspace"
-    );
-    let last_session = saved.agents.is_empty() && !saved.sessions.is_empty();
-    let now = match queuing {
-        Queuing::Here { .. } if last_session => {
-            return continue_last_session(ctx, &workspace, saved, false, change).await;
-        }
-        Queuing::Here { .. } => false,
-        Queuing::Daemon { now } => now || last_session,
-    };
-    let stopped = vec![(workspace, saved)];
-    if matches!(queuing, Queuing::Daemon { .. }) {
-        ensure_daemon_starts(ctx, &stopped).await?;
-    }
-    permission_change::apply(ctx, &stopped, &[], change).await?;
-    queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
-}
-
-/// Refuse, before any is queued, the restores of `stopped` agents that the
-/// daemon would start from the background when no host can take them there;
-/// a waiting wrapper restores its agent where it stopped.
-async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<()> {
-    for (workspace, saved) in stopped {
-        if !saved.restores_outside_wrappers() {
-            continue;
-        }
-        let settings = crate::client::workspaces::settings(
-            &ctx.paths,
-            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
-        )
-        .await?;
-        terminal::ensure_background(&settings).with_context(|| {
-            format!(
-                "cannot restore the agents of {} in the background; pass --focus to restore one here",
-                workspace.name
-            )
-        })?;
-    }
-    Ok(())
 }
 
 /// Restore the stopped agent `execution` of the one workspace `targets`
