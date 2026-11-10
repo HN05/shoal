@@ -37,7 +37,8 @@ pub(super) async fn run(ctx: &Context, operation: String) -> Result<i32> {
 }
 
 /// The host of a credential request over HTTPS, with its port when it
-/// names one; none for any other protocol.
+/// names one other than HTTPS's default, as `[machine.forges]` names it;
+/// none for any other protocol.
 fn https_host(request: &str) -> Option<&str> {
     let attribute = |name: &str| {
         request
@@ -47,6 +48,7 @@ fn https_host(request: &str) -> Option<&str> {
     (attribute("protocol")? == "https")
         .then(|| attribute("host"))
         .flatten()
+        .map(|host| host.strip_suffix(":443").unwrap_or(host))
         .filter(|host| !host.is_empty())
 }
 
