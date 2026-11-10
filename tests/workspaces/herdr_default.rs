@@ -1,6 +1,8 @@
 //! Herdr as the default host: launches from a terminal no host serves open
 //! tabs in the Herdr workspace `[herdr] workspace_name` names, against the
 //! fake `herdr`.
+use super::herdr::{herdr_calls, herdr_changes, install_fake_herdr};
+use super::zmx::zmx_calls;
 use super::*;
 
 /// The repository's name, which the default workspace name takes: its

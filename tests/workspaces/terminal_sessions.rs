@@ -1,3 +1,5 @@
+use super::herdr::{herdr_call, herdr_worker_command, install_fake_herdr};
+use super::zmx::{created_zmx_session, zmx_calls};
 use super::*;
 
 #[test]
