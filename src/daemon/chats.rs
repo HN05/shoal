@@ -617,7 +617,7 @@ impl Manager {
 pub struct NewChat {
     pub name: SpaceName,
     pub agent: crate::agent::Agent,
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub pid: u32,

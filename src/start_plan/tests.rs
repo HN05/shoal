@@ -89,7 +89,7 @@ fn a_plan_queued_by_an_earlier_version_reads_and_writes_back_unchanged() {
         Some("claude")
     );
     assert_eq!(plan.args, ["Take the child part"]);
-    assert_eq!(plan.mode.as_deref(), Some("plan"));
+    assert_eq!(plan.mode.as_ref().map(|mode| mode.as_str()), Some("plan"));
     assert_eq!(serde_json::to_string(&plan).unwrap(), queued);
 }
 

@@ -17,7 +17,7 @@ pub(super) async fn choose_add_mode(
     ctx: &Context,
     settings: &AddSettings<'_>,
     choice: Option<ModeChoice>,
-) -> Result<Option<String>> {
+) -> Result<Option<crate::config::modes::ModeName>> {
     match choice {
         None => Ok(None),
         Some(ModeChoice::Named(mode)) => Ok(Some(mode)),

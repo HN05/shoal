@@ -9,7 +9,7 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    config::modes::{self, Mode},
+    config::modes::{self, Mode, ModeName},
     model::SpaceKind,
 };
 
@@ -17,7 +17,7 @@ use crate::{
 /// start has checked the arguments it was given.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModeChoice {
-    Named(String),
+    Named(ModeName),
     /// A mode picked on the terminal; `forced` is the kind of space the
     /// command line asks for whatever the mode's.
     Pick {
@@ -52,7 +52,7 @@ impl ModeChoice {
         ctx: &Context,
         modes: &BTreeMap<String, Mode>,
         fit: ModeFit,
-    ) -> Result<String> {
+    ) -> Result<ModeName> {
         let forced = match self {
             Self::Named(name) => {
                 modes::get(modes, &name)?;
@@ -62,10 +62,10 @@ impl ModeChoice {
         };
         let entries = mode_entries(modes, fit, forced, Palette::picker());
         match entries.as_slice() {
-            [(only, _)] => Ok(only.clone()),
+            [(only, _)] => Ok(only.as_str().into()),
             _ => {
                 ensure!(!entries.is_empty(), "no mode starts this kind of space");
-                pick(ctx, "Mode> ", entries)
+                pick(ctx, "Mode> ", entries).map(ModeName::from)
             }
         }
     }
@@ -82,8 +82,8 @@ fn mode_entries(
     palette: Palette,
 ) -> Entries {
     let usual = match forced.or(fit.kind) {
-        Some(SpaceKind::Chat) => modes::CHAT,
-        _ => modes::DEFAULT,
+        Some(SpaceKind::Chat) => ModeName::CHAT,
+        _ => ModeName::DEFAULT,
     };
     let mut modes: Vec<_> = (modes.iter())
         .map(|(name, mode)| (name, forced.unwrap_or(mode.kind), mode.repository))
@@ -92,7 +92,7 @@ fn mode_entries(
                 && fit.repository.is_none_or(|fit| fit == *repository)
         })
         .collect();
-    modes.sort_by_key(|(name, _, _)| name.as_str() != usual);
+    modes.sort_by_key(|(name, _, _)| usual != name.as_str());
     let rows = modes
         .iter()
         .map(|(name, kind, repository)| {

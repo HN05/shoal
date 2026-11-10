@@ -149,7 +149,11 @@ pub enum Place<'a> {
 impl Place<'_> {
     /// The mode `name` of an agent here, as [`modes::resolve`] finds it for
     /// this kind of space.
-    fn mode<'a>(self, settings: &'a Settings, name: &str) -> Result<Cow<'a, modes::Mode>> {
+    fn mode<'a>(
+        self,
+        settings: &'a Settings,
+        name: &modes::ModeName,
+    ) -> Result<Cow<'a, modes::Mode>> {
         let (kind, repository) = match self {
             Self::Workspace { .. } => (SpaceKind::Workspace, true),
             Self::Chat { repo, .. } => (SpaceKind::Chat, repo.is_some()),
@@ -214,7 +218,7 @@ pub struct Brief {
 /// What an agent in `mode` at `place` is told, starting on `subject`.
 pub fn brief(
     settings: &Settings,
-    mode: &str,
+    mode: &modes::ModeName,
     place: Place<'_>,
     subject: Option<&Subject>,
 ) -> Result<Brief> {
@@ -238,7 +242,7 @@ pub fn brief(
 /// it again.
 pub fn system(
     settings: &Settings,
-    mode: &str,
+    mode: &modes::ModeName,
     place: Place<'_>,
     issue: Option<&IssueFields>,
 ) -> Result<String> {
@@ -249,7 +253,7 @@ pub fn system(
 /// `fields` filled in.
 fn system_text(
     settings: &Settings,
-    mode: &str,
+    mode: &modes::ModeName,
     place: Place<'_>,
     fields: &Fields,
 ) -> Result<String> {

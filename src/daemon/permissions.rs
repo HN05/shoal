@@ -119,7 +119,7 @@ impl Manager {
         &self,
         giver: Option<&SpaceId>,
         workspace: &SpaceSelector,
-        mode: &str,
+        mode: &crate::config::modes::ModeName,
         given: &PermissionsConfig,
     ) -> Result<()> {
         if giver.is_none() {
@@ -129,7 +129,7 @@ impl Manager {
         let change = PermissionChange::between(&recorded.narrowing, given);
         let repository = recorded.repository_id.clone();
         let space = PresentSpace::Workspace(Workspace {
-            mode: Some(mode.to_owned()),
+            mode: Some(mode.clone()),
             ..recorded
         });
         (self.ensure_change_held(giver, &space, &change, Some(&repository))).await
@@ -156,7 +156,7 @@ impl Manager {
     pub(crate) async fn launch_permissions(
         &self,
         workspace: Workspace,
-        mode: &str,
+        mode: &crate::config::modes::ModeName,
         narrowing: PermissionsConfig,
     ) -> Result<Permissions> {
         let repository = workspace.repository_id.clone();
@@ -254,7 +254,7 @@ type RecordedAgent<'a> = (SpaceMode<'a>, PermissionsConfig);
 /// workspace that has had no agent.
 fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
     match space {
-        PresentSpace::Workspace(workspace) => workspace.mode.as_deref().map(|name| {
+        PresentSpace::Workspace(workspace) => workspace.mode.as_ref().map(|name| {
             let mode = SpaceMode {
                 name,
                 kind: SpaceKind::Workspace,

@@ -579,9 +579,15 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
         )
         .await;
     let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
-    assert_eq!(recorded.mode.as_deref(), Some("plan"));
+    assert_eq!(
+        recorded.mode.as_ref().map(|mode| mode.as_str()),
+        Some("plan")
+    );
     let executions = manager.workspace_executions(&workspace.id).await.unwrap();
-    assert_eq!(executions[0].mode.as_deref(), Some("plan"));
+    assert_eq!(
+        executions[0].mode.as_ref().map(|mode| mode.as_str()),
+        Some("plan")
+    );
     // The session a restore continues keeps the mode.
     let tracked = manager
         .executions

@@ -26,7 +26,7 @@ pub struct Execution {
     pub model: crate::agent::ModelChoice,
     /// The mode its agent started in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gave its agent, which apply as
     /// given whatever its mode's.
     #[serde(

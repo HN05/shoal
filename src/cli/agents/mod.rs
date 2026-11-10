@@ -69,7 +69,7 @@ pub(in crate::cli) struct Launch {
     /// The model and effort it runs with.
     pub model: ModelChoice,
     /// The mode it starts in.
-    pub mode: String,
+    pub mode: modes::ModeName,
     /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// Recovery records of stopped agents this one replaces, consumed once
@@ -123,7 +123,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// The name the chat is recorded under.
     pub name: crate::client::space_names::SpaceName,
     /// The mode its agent starts in.
-    pub mode: String,
+    pub mode: modes::ModeName,
     /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below.
@@ -171,16 +171,19 @@ pub(in crate::cli) async fn link_chat(
 pub(in crate::cli) enum Opening {
     /// A new session, starting on `subject` when it has one.
     New {
-        mode: String,
+        mode: modes::ModeName,
         subject: Option<templates::Subject>,
     },
     /// A session in `mode` told `message` as it is, such as one that
     /// replaces a stopped session.
-    Told { mode: String, message: String },
+    Told {
+        mode: modes::ModeName,
+        message: String,
+    },
 }
 
 impl Opening {
-    fn mode(&self) -> &str {
+    fn mode(&self) -> &modes::ModeName {
         match self {
             Self::New { mode, .. } | Self::Told { mode, .. } => mode,
         }
@@ -189,7 +192,7 @@ impl Opening {
     /// A new session of the default mode, on `subject` when given.
     pub fn worker(subject: Option<templates::Subject>) -> Self {
         Self::New {
-            mode: modes::DEFAULT.to_owned(),
+            mode: modes::ModeName::DEFAULT,
             subject,
         }
     }
@@ -300,7 +303,7 @@ pub(super) async fn launch_agent(
         args,
         fork,
         model,
-        mode: opening.mode().to_owned(),
+        mode: opening.mode().clone(),
         narrowing: options.narrowing,
         replaces: options.replaces,
     };
@@ -618,7 +621,7 @@ pub(in crate::cli) fn chat_dir_args(
 /// The directory of the global config beside `home` when `chat` sets it up,
 /// as a setup chat without a repository does.
 fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
-    let sets_up_global = chat.mode == modes::SETUP && chat.repository_id.is_none();
+    let sets_up_global = chat.mode == modes::ModeName::SETUP && chat.repository_id.is_none();
     sets_up_global
         .then(|| launch_config_dir(&Config::path_for_home(home)))
         .flatten()

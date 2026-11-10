@@ -470,7 +470,7 @@ impl Permissions {
 /// `kind` with or without a repository.
 #[derive(Debug, Clone, Copy)]
 pub struct SpaceMode<'a> {
-    pub name: &'a str,
+    pub name: &'a crate::config::modes::ModeName,
     pub kind: SpaceKind,
     pub repository: bool,
 }

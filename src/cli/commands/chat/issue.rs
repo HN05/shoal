@@ -36,14 +36,14 @@ pub(super) async fn chosen(
     ctx: &Context,
     repo: &Repository,
     labels: &config::Issue,
-    mode: &str,
+    mode: &crate::config::modes::ModeName,
     input: Option<String>,
 ) -> Result<Issue> {
     let input = match input {
         Some(input) => input,
         None => {
             ensure!(
-                mode == config::modes::PLAN,
+                *mode == config::modes::ModeName::PLAN,
                 "--issue needs a number or URL outside plan mode"
             );
             labelled(ctx, repo, labels).await?

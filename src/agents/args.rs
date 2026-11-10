@@ -49,7 +49,7 @@ pub(crate) fn restored_instruction_args(
     settings: &Effective,
     name: &Agent,
     workspace: &Workspace,
-    mode: &str,
+    mode: &crate::config::modes::ModeName,
 ) -> Vec<OsString> {
     let place = templates::Place::Workspace {
         workspace,
@@ -59,9 +59,9 @@ pub(crate) fn restored_instruction_args(
     let system = templates::system(settings, mode, place, issue.as_ref()).or_else(|error| {
         eprintln!(
             "warning: the restored agent is told the rules of mode {} instead: {error:#}",
-            modes::DEFAULT
+            modes::ModeName::DEFAULT
         );
-        templates::system(settings, modes::DEFAULT, place, issue.as_ref())
+        templates::system(settings, &modes::ModeName::DEFAULT, place, issue.as_ref())
     });
     match system {
         Ok(system) => (settings.launch(name).arguments)

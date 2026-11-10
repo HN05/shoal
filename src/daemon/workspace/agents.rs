@@ -165,7 +165,7 @@ pub(crate) struct Agent {
     /// The model and effort it runs with, which its recovery records keep.
     model: ModelChoice,
     /// The mode it started in, which its recovery records keep.
-    mode: String,
+    mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its recovery
     /// records keep.
     narrowing: crate::config::permissions::PermissionsConfig,

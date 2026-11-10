@@ -50,8 +50,7 @@ impl Manager {
         let agent = crate::execution::TrackedAgent {
             name,
             model: execution.model.clone(),
-            mode: (execution.mode.clone())
-                .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
+            mode: (execution.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT),
             narrowing: execution.narrowing,
         };
         let workspace = self.workspace_by_id(&execution.workspace_id).await?;

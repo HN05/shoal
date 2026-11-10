@@ -269,7 +269,9 @@ fn detached_round_trips_literal_arguments_and_globals() {
                 model,
                 agent.map(|agent| agent.model.clone()).unwrap_or_default()
             );
-            let expected = agent.map_or(crate::config::modes::DEFAULT, |agent| &agent.mode);
+            let expected = agent.map_or(crate::config::modes::ModeName::DEFAULT, |agent| {
+                agent.mode.clone()
+            });
             assert_eq!(mode, expected);
             assert!(narrowing.is_empty());
             assert_eq!(parsed_command, command);

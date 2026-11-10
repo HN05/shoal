@@ -53,7 +53,7 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
 
 /// Refuse the flags `args` sets that the kind of space `mode`, or the
 /// other flags, start in cannot use, before anything is asked or created.
-fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&str>) -> Result<()> {
+fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&modes::ModeName>) -> Result<()> {
     let (unfit, hint) = match kind {
         SpaceKind::Chat => (workspace_flags(args), "pass --worktree for a workspace"),
         SpaceKind::Workspace => (
@@ -115,7 +115,7 @@ enum Start {
     /// A chat in a repository.
     Chat(ModeChoice),
     /// A chat without a repository, in the mode named or picked here.
-    Outside(String),
+    Outside(modes::ModeName),
 }
 
 /// Where the start goes and its mode: the mode `--mode` names, else on a
@@ -130,8 +130,8 @@ async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
             modes::ensure_startable(mode)?;
             Some(mode.clone())
         }
-        None if !ui::can_pick(ctx) => Some(default_mode(args).to_owned()),
-        None if args.issue == Some(None) => Some(modes::PLAN.to_owned()),
+        None if !ui::can_pick(ctx) => Some(default_mode(args)),
+        None if args.issue == Some(None) => Some(modes::ModeName::PLAN),
         None => None,
     };
     if let Some(mode) = named {
@@ -152,7 +152,7 @@ async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
 
 /// Where a start in `mode` goes, by its [`shape`], refusing the flags
 /// that kind of space cannot use.
-async fn shaped(ctx: &Context, args: &StartArgs, mode: String) -> Result<Start> {
+async fn shaped(ctx: &Context, args: &StartArgs, mode: modes::ModeName) -> Result<Start> {
     let (kind, repository) = shape(ctx, args, &mode).await?;
     ensure_fits(args, kind, Some(&mode))?;
     Ok(match (kind, repository) {
@@ -170,7 +170,7 @@ async fn issue_mode(
     args: &StartArgs,
     selector: crate::repository::Selector,
     settings: &Effective,
-) -> Result<Option<String>> {
+) -> Result<Option<modes::ModeName>> {
     let Some(input) = named_issue(args) else {
         return Ok(None);
     };
@@ -182,21 +182,19 @@ async fn issue_mode(
     let context = super::issues::read_context(ctx, repo).await?;
     let issue = super::issues::load(ctx, context, input).await?;
     let mode = labelled_mode(&settings.issue, &issue.labels);
-    Ok(mode
-        .filter(|mode| modes::get(&settings.modes, mode).is_ok())
-        .map(str::to_owned))
+    Ok(mode.filter(|mode| modes::get(&settings.modes, mode).is_ok()))
 }
 
 /// The mode for an issue labelled `labels`: the worker once `[issue]
 /// planned_label` says its plan is settled, else the plan mode while
 /// `plan_label` says it needs one.
-fn labelled_mode(config: &config::Issue, labels: &[String]) -> Option<&'static str> {
+fn labelled_mode(config: &config::Issue, labels: &[String]) -> Option<modes::ModeName> {
     let labelled =
         |label: &Option<String>| label.as_ref().is_some_and(|label| labels.contains(label));
     if labelled(&config.planned_label) {
-        Some(modes::DEFAULT)
+        Some(modes::ModeName::DEFAULT)
     } else if labelled(&config.plan_label) {
-        Some(modes::PLAN)
+        Some(modes::ModeName::PLAN)
     } else {
         None
     }
@@ -258,7 +256,7 @@ fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
 /// picked among the modes in a repository when it names one, else among
 /// them all, by the current repository's settings or else the global
 /// config's.
-async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<String> {
+async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeName> {
     let names_repository = [&args.repository, &args.repository_override]
         .iter()
         .any(|named| named.is_some())
@@ -320,10 +318,10 @@ async fn checked_repository(
 
 /// The mode without `--mode`: chat for a start that asks for a chat, whose
 /// agent the worker mode would not tell it is one, else the worker.
-fn default_mode(args: &StartArgs) -> &'static str {
+fn default_mode(args: &StartArgs) -> modes::ModeName {
     match args.chat || args.in_workspace.is_some() {
-        true => modes::CHAT,
-        false => modes::DEFAULT,
+        true => modes::ModeName::CHAT,
+        false => modes::ModeName::DEFAULT,
     }
 }
 
@@ -334,12 +332,16 @@ fn default_mode(args: &StartArgs) -> &'static str {
 /// workspace, and a chat in a workspace's worktree belongs to its
 /// repository, so neither asks the daemon; a chat's start checks a mode
 /// found nowhere here itself once it has the repository.
-async fn shape(ctx: &Context, args: &StartArgs, mode: &str) -> Result<(SpaceKind, bool)> {
+async fn shape(
+    ctx: &Context,
+    args: &StartArgs,
+    mode: &modes::ModeName,
+) -> Result<(SpaceKind, bool)> {
     if args.in_workspace.is_some() {
         return Ok((SpaceKind::Chat, true));
     }
     let asks_chat = args.chat;
-    if mode == modes::DEFAULT && !asks_chat {
+    if *mode == modes::ModeName::DEFAULT && !asks_chat {
         return Ok((SpaceKind::Workspace, true));
     }
     let settings = mode_settings(ctx, args).await?;
@@ -581,7 +583,11 @@ async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result
 
 /// Start the agent in a chat without a repository, in `root_dir`; it starts
 /// on no repository or issue.
-async fn outside_repositories(ctx: &Context, mut args: StartArgs, mode: String) -> Result<i32> {
+async fn outside_repositories(
+    ctx: &Context,
+    mut args: StartArgs,
+    mode: modes::ModeName,
+) -> Result<i32> {
     ensure_no_repository(&args, &mode)?;
     let topic = chat::Topic::outside_repositories(&mode);
     chat::start_outside_repositories(ctx, topic, chat_options(&mut args)).await
@@ -589,7 +595,7 @@ async fn outside_repositories(ctx: &Context, mut args: StartArgs, mode: String) 
 
 /// Refuse a repository or issue `args` names for `mode`, which starts a chat
 /// without a repository.
-fn ensure_no_repository(args: &StartArgs, mode: &str) -> Result<()> {
+fn ensure_no_repository(args: &StartArgs, mode: &modes::ModeName) -> Result<()> {
     let names = [
         ("<repository>", args.repository.is_some()),
         ("--repo", args.repository_override.is_some()),

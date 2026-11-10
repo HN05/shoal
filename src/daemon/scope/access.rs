@@ -322,7 +322,7 @@ impl Manager {
             "workspace processes can start agents only in the workspaces split from theirs";
         ensure!(!request.now, NOT_NOW);
         let given = request.narrowing;
-        let mode = (request.mode.clone()).unwrap_or_else(|| crate::config::modes::DEFAULT.into());
+        let mode = (request.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
         let target = request.workspace.as_mut().context(REFUSAL)?;
         let target = self.workspace_below(caller, target, REFUSAL).await?;
         let giver = Some(&caller.space_id);

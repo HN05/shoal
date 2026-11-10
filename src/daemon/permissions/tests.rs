@@ -23,7 +23,7 @@ async fn a_space_never_has_more_than_the_space_above_it() {
     let (temp, manager) = manager().await;
     let repo = register(&temp, &manager, "repo").await;
     let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker")).await;
+    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
     let split = workspace(&manager, &repo, "split", &worker.id, None).await;
     let of = |id: SpaceId| {
         let manager = manager.clone();
@@ -121,7 +121,8 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
     let launch = |mode: &'static str| {
         let (manager, child) = (manager.clone(), child.clone());
         async move {
-            let permissions = manager.launch_permissions(child, mode, Default::default());
+            let mode = mode.into();
+            let permissions = manager.launch_permissions(child, &mode, Default::default());
             permissions.await.unwrap().push
         }
     };
@@ -165,7 +166,7 @@ async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
     let (temp, manager) = manager().await;
     let repo = register(&temp, &manager, "repo").await;
     let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker")).await;
+    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
     let split = workspace(&manager, &repo, "split", &worker.id, None).await;
     give(&manager, "chats", &top.id, &["merge=propose"]).await;
     // Wider than the worker mode's merge and the chat's above it.
@@ -198,7 +199,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let repo = register(&temp, &manager, "repo").await;
     let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None)).await;
     let worker = worker.unwrap();
-    let child = workspace(&manager, &repo, "child", &worker.id, Some("worker")).await;
+    let child = workspace(&manager, &repo, "child", &worker.id, Some("worker".into())).await;
     let (talk, _process) = chat(&manager, "talk", "chat", Some(&repo), Some(&worker.id)).await;
     // The user gave both a merge the worker does not hold.
     give(&manager, "workspaces", &child.id, &["merge=direct"]).await;
@@ -212,7 +213,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
 
     // What the space recorded comes back, with what the giver holds.
     let recorded = assigned(&["merge=direct", "push=propose"]);
-    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &recorded);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &WORKER, &recorded);
     registered.await.unwrap();
     manager
         .ensure_restore_held(giver, &talk, &recorded)
@@ -220,7 +221,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         .unwrap();
     // A value the giver does not hold, recorded nowhere, is refused.
     let wider = assigned(&["merge=direct", "api_writes=direct"]);
-    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &wider);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &WORKER, &wider);
     assert!(registered.await.is_err());
     assert!(
         manager
@@ -236,7 +237,7 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let restarted = manager.ensure_chat_restart_held(giver, Some(&talk), &change);
     assert!(restarted.await.is_err());
     // The user gives any.
-    let registered = manager.ensure_workspace_agent_held(None, &child, "worker", &wider);
+    let registered = manager.ensure_workspace_agent_held(None, &child, &WORKER, &wider);
     registered.await.unwrap();
     manager
         .ensure_restore_held(None, &talk, &wider)
@@ -251,8 +252,8 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     let (temp, manager) = manager().await;
     let repo = register(&temp, &manager, "repo").await;
     let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let parent = workspace(&manager, &repo, "parent", &top.id, Some("worker")).await;
-    let child = workspace(&manager, &repo, "child", &parent.id, Some("worker")).await;
+    let parent = workspace(&manager, &repo, "parent", &top.id, Some("worker".into())).await;
+    let child = workspace(&manager, &repo, "child", &parent.id, Some("worker".into())).await;
     // The user gave the chat less push than the spaces below it.
     give(&manager, "chats", &top.id, &["push=propose"]).await;
     give(&manager, "workspaces", &parent.id, &["push=direct"]).await;
@@ -287,7 +288,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let none = crate::config::permissions::PermissionsConfig::default();
     let (giver, child) = (Some(&top.id), SpaceSelector::id(space.id()));
-    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &none);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &WORKER, &none);
     assert!(registered.await.is_err());
     assert!(
         manager
@@ -296,7 +297,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
             .is_err()
     );
     let recorded = talk.narrowing;
-    let registered = manager.ensure_workspace_agent_held(giver, &child, "worker", &recorded);
+    let registered = manager.ensure_workspace_agent_held(giver, &child, &WORKER, &recorded);
     registered.await.unwrap();
     manager
         .ensure_restore_held(giver, &talk, &recorded)
@@ -308,11 +309,15 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
-    let quiet = workspace(&manager, &repo, "quiet", &parent.id, Some("review")).await;
+    let quiet = workspace(&manager, &repo, "quiet", &parent.id, Some("review".into())).await;
     give(&manager, "workspaces", &quiet.id, &["push=deny"]).await;
     let quiet = SpaceSelector::id(&quiet.id);
-    let registered = manager.ensure_workspace_agent_held(giver, &quiet, "review", &none);
+    let review = "review".into();
+    let registered = manager.ensure_workspace_agent_held(giver, &quiet, &review, &none);
     registered.await.unwrap();
-    let registered = manager.ensure_workspace_agent_held(giver, &quiet, "worker", &none);
+    let registered = manager.ensure_workspace_agent_held(giver, &quiet, &WORKER, &none);
     assert!(registered.await.is_err());
 }
+
+/// The mode the workspaces here record.
+static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::DEFAULT;

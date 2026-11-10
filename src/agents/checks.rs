@@ -102,11 +102,8 @@ pub(crate) fn check_model(settings: &Effective, name: &Agent, model: &ModelChoic
 /// off or missing, a fork it cannot start from, or a model its launch
 /// cannot pass on.
 pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Result<()> {
-    let mode = launch
-        .mode
-        .as_deref()
-        .unwrap_or(crate::config::modes::DEFAULT);
-    crate::config::modes::resolve(&settings.modes, mode, SpaceKind::Workspace, true)?;
+    let mode = (launch.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
+    crate::config::modes::resolve(&settings.modes, &mode, SpaceKind::Workspace, true)?;
     let agent = &launch.agent;
     ensure_available(agent, settings)?;
     if launch.fork.is_some() {

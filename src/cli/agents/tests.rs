@@ -38,7 +38,11 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     assert!(!installed("undefined"));
 }
 
-fn chat(mode: &str, repository_id: Option<&str>, tmp_dir: Option<std::path::PathBuf>) -> Chat {
+fn chat(
+    mode: impl Into<crate::config::modes::ModeName>,
+    repository_id: Option<&str>,
+    tmp_dir: Option<std::path::PathBuf>,
+) -> Chat {
     Chat {
         narrowing: Default::default(),
         mode: mode.into(),
@@ -95,7 +99,7 @@ fn a_setup_chat_without_a_repository_may_write_the_global_config() {
         .unwrap();
     let home = tempfile::tempdir().unwrap();
     let tmp = OsString::from(fs::canonicalize("/tmp").unwrap());
-    let setup = chat(crate::config::modes::SETUP, None, None);
+    let setup = chat(crate::config::modes::ModeName::SETUP, None, None);
     let args = chat_dir_args(&defaults, &"codex".into(), home.path(), &setup);
     let file = crate::config::Config::path_for_home(home.path());
     let config_dir = fs::canonicalize(file.parent().unwrap()).unwrap();
@@ -108,7 +112,7 @@ fn a_setup_chat_without_a_repository_may_write_the_global_config() {
             config_dir.into()
         ]
     );
-    let other = chat(crate::config::modes::ORCHESTRATE, None, None);
+    let other = chat(crate::config::modes::ModeName::ORCHESTRATE, None, None);
     let args = chat_dir_args(&defaults, &"codex".into(), home.path(), &other);
     assert_eq!(args, [OsString::from("--add-dir"), tmp]);
 }

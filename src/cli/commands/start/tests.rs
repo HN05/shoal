@@ -13,7 +13,7 @@ fn start(args: &[&str]) -> StartArgs {
 
 #[test]
 fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
-    let chat = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Chat, Some("plan"));
+    let chat = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Chat, Some(&"plan".into()));
     chat(&["repo", "--issue", "7", "--name", "talk"]).unwrap();
     for (args, flag) in [
         (&["repo", "topic"][..], "<branch>"),
@@ -29,7 +29,8 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
             "{error}"
         );
     }
-    let workspace = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Workspace, Some("worker"));
+    let workspace =
+        |args: &[&str]| ensure_fits(&start(args), SpaceKind::Workspace, Some(&"worker".into()));
     workspace(&["repo", "topic", "--base", "main"]).unwrap();
     let error = workspace(&["repo", "--name", "talk"])
         .unwrap_err()
@@ -153,10 +154,16 @@ fn an_issues_labels_name_its_mode() {
         let labels: Vec<String> = labels.iter().map(|label| (*label).into()).collect();
         labelled_mode(&config, &labels)
     };
-    assert_eq!(mode(&["type/bug", "planned"]), Some(modes::DEFAULT));
-    assert_eq!(mode(&["needs-plan"]), Some(modes::PLAN));
+    assert_eq!(
+        mode(&["type/bug", "planned"]),
+        Some(modes::ModeName::DEFAULT)
+    );
+    assert_eq!(mode(&["needs-plan"]), Some(modes::ModeName::PLAN));
     // A settled plan wins over a stale label asking for one.
-    assert_eq!(mode(&["needs-plan", "planned"]), Some(modes::DEFAULT));
+    assert_eq!(
+        mode(&["needs-plan", "planned"]),
+        Some(modes::ModeName::DEFAULT)
+    );
     assert_eq!(mode(&["type/bug"]), None);
     let unset = config::Issue {
         plan_label: None,

@@ -34,10 +34,10 @@ fn the_facts_tell_each_launch_how_it_receives_updates() {
     let settings = settings("");
     let repo = repository();
     for delivery in [Delivery::Pushed, Delivery::Watched] {
-        let workspace = brief(&settings, "worker", worker(delivery), None).unwrap();
+        let workspace = brief(&settings, &"worker".into(), worker(delivery), None).unwrap();
         let chat = brief(
             &settings,
-            "chat",
+            &"chat".into(),
             chat(ChatHome::Checkout(&repo), delivery),
             None,
         );
@@ -53,14 +53,14 @@ fn the_facts_tell_each_launch_how_it_receives_updates() {
 fn rules_follow_the_guidance_and_instructions_follow_the_subject() {
     let plain = settings("");
     let place = worker(Delivery::Watched);
-    let guidance = brief(&plain, "worker", place, None).unwrap();
+    let guidance = brief(&plain, &"worker".into(), place, None).unwrap();
     assert!(
         guidance
             .system
             .starts_with("You are working in Shoal workspace topic")
     );
     assert_eq!(guidance.first_message, None);
-    let started = brief(&plain, "worker", place, Some(&issue())).unwrap();
+    let started = brief(&plain, &"worker".into(), place, Some(&issue())).unwrap();
     assert_eq!(started.system, guidance.system);
     // The subject is never rendered; the instructions are.
     let instructions = plain.modes["worker"].instructions.trim_end();
@@ -73,7 +73,7 @@ fn rules_follow_the_guidance_and_instructions_follow_the_subject() {
         "[rules.worker]\ntext = 'Babysit {branch}.'\n\
          [modes.worker]\ninstructions = 'Then tell #{issue.number}.'\n",
     );
-    let started = brief(&added, "worker", place, Some(&issue())).unwrap();
+    let started = brief(&added, &"worker".into(), place, Some(&issue())).unwrap();
     assert_eq!(
         started.system,
         format!("{}\n\nBabysit topic.", guidance.system)
@@ -82,7 +82,7 @@ fn rules_follow_the_guidance_and_instructions_follow_the_subject() {
         started.first_message,
         Some(format!("{subject}\n\n{instructions}\n\nThen tell #7."))
     );
-    let error = brief(&plain, "triage", place, None).unwrap_err();
+    let error = brief(&plain, &"triage".into(), place, None).unwrap_err();
     assert!(error.to_string().contains("no mode triage"), "{error}");
 }
 
@@ -121,7 +121,7 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
         "[rules.worker]\ntext = 'Babysit {branch}.'\n\
          [rules.chat]\ntext = 'Answer in {repo}.'\n",
     );
-    let worker = brief(&settings, "worker", worker(Delivery::Pushed), None).unwrap();
+    let worker = brief(&settings, &"worker".into(), worker(Delivery::Pushed), None).unwrap();
     assert_layers(&worker.system, "workspace topic", "\n\nBabysit topic.");
     let repo = repository();
     let workspace = workspace();
@@ -130,9 +130,9 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
         (ChatHome::Workspace(&workspace), "worktree at /work/topic"),
     ] {
         let place = chat(home, Delivery::Pushed);
-        let chat = brief(&settings, "chat", place, None).unwrap();
+        let chat = brief(&settings, &"chat".into(), place, None).unwrap();
         assert_layers(&chat.system, place_text, "\n\nAnswer in shoal.");
-        let plan = brief(&settings, "plan", place, Some(&issue())).unwrap();
+        let plan = brief(&settings, &"plan".into(), place, Some(&issue())).unwrap();
         assert_eq!(plan.system, chat.system);
         let first = plan.first_message.unwrap();
         assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
@@ -144,7 +144,7 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
 fn built_in_modes_carry_the_work_rule_until_a_mode_leaves_it_out() {
     let place = worker(Delivery::Watched);
     let system = |config: &str| {
-        brief(&settings(config), "worker", place, None)
+        brief(&settings(config), &"worker".into(), place, None)
             .unwrap()
             .system
     };
@@ -163,7 +163,7 @@ fn a_chat_mode_without_the_chat_rule_still_gets_the_facts_and_space_rules() {
     );
     let repo = repository();
     let place = chat(ChatHome::Checkout(&repo), Delivery::Pushed);
-    let triage = brief(&settings, "triage", place, None).unwrap();
+    let triage = brief(&settings, &"triage".into(), place, None).unwrap();
     assert_layers(&triage.system, "checkout at /repo", "\n\nLabel it.");
 }
 
@@ -180,11 +180,11 @@ fn setup_takes_its_base_modes_rules_and_its_own_instructions() {
         delivery: Delivery::Pushed,
     };
     for (place, base) in [(worker(Delivery::Pushed), "worker"), (root, "orchestrate")] {
-        let setup = brief(&settings, modes::SETUP, place, Some(&subject)).unwrap();
-        let based = brief(&settings, base, place, None).unwrap();
+        let setup = brief(&settings, &modes::ModeName::SETUP, place, Some(&subject)).unwrap();
+        let based = brief(&settings, &base.into(), place, None).unwrap();
         assert_eq!(setup.system, based.system);
         assert_eq!(
-            system(&settings, modes::SETUP, place, None).unwrap(),
+            system(&settings, &modes::ModeName::SETUP, place, None).unwrap(),
             based.system
         );
         let first = setup.first_message.unwrap();
@@ -193,7 +193,15 @@ fn setup_takes_its_base_modes_rules_and_its_own_instructions() {
     }
     let repo = repository();
     let in_checkout = chat(ChatHome::Checkout(&repo), Delivery::Pushed);
-    assert!(brief(&settings, modes::SETUP, in_checkout, Some(&subject)).is_err());
+    assert!(
+        brief(
+            &settings,
+            &modes::ModeName::SETUP,
+            in_checkout,
+            Some(&subject)
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -203,7 +211,7 @@ fn a_chat_without_a_repository_is_told_it_runs_in_root_dir() {
         home: ChatHome::Root(std::path::Path::new("/home/me/shoal")),
         delivery: Delivery::Pushed,
     };
-    let chat = brief(&settings(""), "chat", place, None).unwrap();
+    let chat = brief(&settings(""), &"chat".into(), place, None).unwrap();
     assert!(
         chat.system.contains("directory at /home/me/shoal"),
         "{}",
@@ -215,7 +223,7 @@ fn a_chat_without_a_repository_is_told_it_runs_in_root_dir() {
 fn plan_instructions_swap_only_configured_labels() {
     let place = worker(Delivery::Watched);
     let first = |config: &str| {
-        brief(&settings(config), "plan", place, Some(&issue()))
+        brief(&settings(config), &"plan".into(), place, Some(&issue()))
             .unwrap()
             .first_message
             .unwrap()
@@ -260,7 +268,7 @@ fn restored_rules_name_the_issue_the_space_links() {
         workspace: &linked,
         delivery: Delivery::Watched,
     };
-    let system = system(&settings, "worker", place, issue.as_ref()).unwrap();
+    let system = system(&settings, &"worker".into(), place, issue.as_ref()).unwrap();
     assert_layers(
         &system,
         "workspace topic",

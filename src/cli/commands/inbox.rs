@@ -417,8 +417,8 @@ impl ItemExt for Item {
 
 /// The kind `label` of an item about `workspace`, with its mode.
 fn workspace_kind(workspace: &Workspace, label: &str, style: Style) -> Cell {
-    let usual = crate::config::modes::DEFAULT;
-    let label = ui::with_mode(label, workspace.mode.as_deref(), usual);
+    let usual = crate::config::modes::ModeName::DEFAULT;
+    let label = ui::with_mode(label, workspace.mode.as_ref(), &usual);
     (label, Some(style))
 }
 

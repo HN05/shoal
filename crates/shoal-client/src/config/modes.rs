@@ -27,21 +27,8 @@ use crate::{
 mod name;
 pub use name::ModeName;
 
-/// The mode `shoal start` uses without `--mode`.
-pub const DEFAULT: &str = "worker";
-/// The mode a chat starts in without `--mode`.
-pub const CHAT: &str = "chat";
-/// The mode whose `--issue` without a value offers the issues that need a
-/// plan.
-pub const PLAN: &str = "plan";
 /// The rule a local review's style comes from, after its fixed instructions.
 pub const REVIEW_RULE: &str = "review";
-/// The mode of a chat without a repository that manages every space.
-pub const ORCHESTRATE: &str = "orchestrate";
-/// The mode in which an agent writes Shoal's config, which `shoal repo
-/// setup` and `shoal config setup` start. It takes the rules of its
-/// [`setup_base`] with instructions of its own.
-pub const SETUP: &str = "setup";
 /// What a setup agent is told after its subject.
 const SETUP_INSTRUCTIONS: &str = include_str!("modes/setup.md");
 /// The practices of Shoal's built-in modes, which a user's own modes may
@@ -95,26 +82,26 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     };
     BTreeMap::from([
         (
-            DEFAULT.to_owned(),
+            ModeName::DEFAULT.into(),
             mode(
                 SpaceKind::Workspace,
                 "worker",
                 include_str!("modes/worker.md"),
             ),
         ),
-        (CHAT.to_owned(), mode(SpaceKind::Chat, "chat", "")),
+        (ModeName::CHAT.into(), mode(SpaceKind::Chat, "chat", "")),
         (
-            PLAN.to_owned(),
+            ModeName::PLAN.into(),
             mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md")),
         ),
         (
-            ORCHESTRATE.to_owned(),
+            ModeName::ORCHESTRATE.into(),
             ModeConfig {
                 repository: Some(false),
                 rules: vec![
                     WORK_RULE.to_owned(),
                     "chat".to_owned(),
-                    ORCHESTRATE.to_owned(),
+                    "orchestrate".to_owned(),
                 ],
                 ..mode(SpaceKind::Chat, "chat", "")
             },
@@ -137,7 +124,7 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
             rule(crate::config::templates::review_base()),
         ),
         (
-            ORCHESTRATE.to_owned(),
+            "orchestrate".to_owned(),
             rule(include_str!("rules/orchestrate.md")),
         ),
     ])
@@ -148,12 +135,16 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
 pub fn validate(config: &RepoConfig) -> Result<()> {
     for name in config.modes.keys() {
         crate::validate::name("mode", name)?;
-        ensure_configurable(name)?;
+        ensure_configurable(&name.as_str().into())?;
     }
-    let default_kind = config.modes.get(DEFAULT).and_then(|mode| mode.kind);
+    let default = ModeName::DEFAULT;
+    let default_kind = config
+        .modes
+        .get(default.as_str())
+        .and_then(|mode| mode.kind);
     ensure!(
         default_kind.is_none_or(|kind| kind == SpaceKind::Workspace),
-        "modes.{DEFAULT}.kind must be workspace: shoal start without --mode starts a \
+        "modes.{default}.kind must be workspace: shoal start without --mode starts a \
          workspace; define another mode for chats"
     );
     for name in config.rules.keys() {
@@ -163,28 +154,28 @@ pub fn validate(config: &RepoConfig) -> Result<()> {
 }
 
 /// Refuse config for mode `name` when Shoal alone defines it.
-fn ensure_configurable(name: &str) -> Result<()> {
+fn ensure_configurable(name: &ModeName) -> Result<()> {
     ensure!(
-        name != SETUP,
-        "mode {SETUP} is built in, and config cannot change it; give your own mode \
+        *name != ModeName::SETUP,
+        "mode {name} is built in, and config cannot change it; give your own mode \
          another name to keep it"
     );
     Ok(())
 }
 
 /// Refuse a start in mode `name` that only its own commands make.
-pub fn ensure_startable(name: &str) -> Result<()> {
+pub fn ensure_startable(name: &ModeName) -> Result<()> {
     ensure!(
-        name != SETUP,
-        "mode {SETUP} starts only with shoal repo setup or shoal config setup"
+        *name != ModeName::SETUP,
+        "mode {name} starts only with shoal repo setup or shoal config setup"
     );
     Ok(())
 }
 
 /// The mode `name` of `modes`, refused when no config defines it.
-pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &str) -> Result<&'a Mode> {
+pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &ModeName) -> Result<&'a Mode> {
     modes
-        .get(name)
+        .get(name.as_str())
         .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
 }
 
@@ -193,14 +184,14 @@ pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &str) -> Result<&'a Mode
 /// instructions, else the mode `modes` defines.
 pub fn resolve<'a>(
     modes: &'a BTreeMap<String, Mode>,
-    name: &str,
+    name: &ModeName,
     kind: SpaceKind,
     repository: bool,
 ) -> Result<Cow<'a, Mode>> {
-    if name != SETUP {
+    if *name != ModeName::SETUP {
         return get(modes, name).map(Cow::Borrowed);
     }
-    let base = get(modes, setup_base(kind, repository)?)?;
+    let base = get(modes, &setup_base(kind, repository)?)?;
     Ok(Cow::Owned(Mode {
         instructions: SETUP_INSTRUCTIONS.to_owned(),
         ..base.clone()
@@ -211,13 +202,14 @@ pub fn resolve<'a>(
 /// `kind` takes: the worker's for a repository's workspace, the
 /// orchestrator's for a chat without a repository, which sets up the
 /// global config.
-pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<&'static str> {
+pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<ModeName> {
     match (kind, repository) {
-        (SpaceKind::Workspace, _) => Ok(DEFAULT),
-        (SpaceKind::Chat, false) => Ok(ORCHESTRATE),
-        (SpaceKind::Chat, true) => {
-            bail!("mode {SETUP} runs in a workspace or in a chat without a repository")
-        }
+        (SpaceKind::Workspace, _) => Ok(ModeName::DEFAULT),
+        (SpaceKind::Chat, false) => Ok(ModeName::ORCHESTRATE),
+        (SpaceKind::Chat, true) => bail!(
+            "mode {} runs in a workspace or in a chat without a repository",
+            ModeName::SETUP
+        ),
     }
 }
 
@@ -229,24 +221,24 @@ pub fn permission_layers(
     modes: &BTreeMap<String, Mode>,
     mode: SpaceMode,
 ) -> Result<(PermissionsConfig, PermissionsConfig)> {
-    let name = match mode.name {
-        SETUP => setup_base(mode.kind, mode.repository)?,
-        name => name,
+    let name = match *mode.name == ModeName::SETUP {
+        true => setup_base(mode.kind, mode.repository)?,
+        false => mode.name.clone(),
     };
     // A mode only a Markdown file names, which the daemon's settings leave
     // out, configures no permissions.
-    let configured = modes.get(name).map(|mode| mode.permissions);
-    Ok((configured.unwrap_or_default(), built_in_permissions(name)))
+    let configured = modes.get(name.as_str()).map(|mode| mode.permissions);
+    Ok((configured.unwrap_or_default(), built_in_permissions(&name)))
 }
 
 /// The permissions Shoal's mode `name` has where config sets none: a
 /// worker's are the keys' defaults, and the modes that coordinate decide
 /// their children's merges and issues elsewhere; a mode Shoal does not ship
 /// has none.
-fn built_in_permissions(name: &str) -> PermissionsConfig {
-    match name {
-        CHAT | PLAN | ORCHESTRATE => PermissionsConfig::COORDINATING,
-        _ => PermissionsConfig::default(),
+fn built_in_permissions(name: &ModeName) -> PermissionsConfig {
+    match [ModeName::CHAT, ModeName::PLAN, ModeName::ORCHESTRATE].contains(name) {
+        true => PermissionsConfig::COORDINATING,
+        false => PermissionsConfig::default(),
     }
 }
 
@@ -276,7 +268,7 @@ pub type Files = BTreeMap<String, PathBuf>;
 pub fn fill(config: &mut RepoConfig, directories: &[PathBuf]) -> Result<Files> {
     let mut files = Files::new();
     for (name, path) in markdown_files(directories, MODES_DIR)? {
-        ensure_configurable(&name).with_context(|| path.display().to_string())?;
+        ensure_configurable(&name.as_str().into()).with_context(|| path.display().to_string())?;
         let mode = config.modes.entry(name.clone()).or_default();
         if mode.instructions.is_none() {
             mode.instructions = Some(read(&path)?);

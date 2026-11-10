@@ -8,8 +8,8 @@ use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 /// The mode of a chat recorded without one.
-pub fn chat_mode() -> String {
-    "chat".to_owned()
+pub fn chat_mode() -> crate::config::modes::ModeName {
+    crate::config::modes::ModeName::CHAT
 }
 
 /// An agent the user talks with in a repository's registered checkout, or
@@ -29,7 +29,7 @@ pub struct Chat {
     pub agent: crate::agent::Agent,
     /// The mode its agent started in, which its restores keep.
     #[serde(default = "chat_mode")]
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The permissions `--permission` gave its agent, which apply as
     /// given whatever its mode's.
     #[serde(

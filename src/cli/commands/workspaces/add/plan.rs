@@ -100,7 +100,11 @@ pub(super) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
 
 /// Start `plan`'s agent in `mode` with the narrowing `options` gives,
 /// below the space it names, from a fork of the session it names.
-pub(super) fn start_as(plan: &mut AddPlan, options: &AddOptions, mode: Option<String>) {
+pub(super) fn start_as(
+    plan: &mut AddPlan,
+    options: &AddOptions,
+    mode: Option<crate::config::modes::ModeName>,
+) {
     plan.mode = mode;
     plan.narrowing = options.narrowing;
     plan.prompt.clone_from(&options.prompt);

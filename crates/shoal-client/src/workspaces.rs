@@ -286,7 +286,7 @@ pub async fn close_owned_place(
 pub async fn launch_permissions(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    mode: String,
+    mode: crate::config::modes::ModeName,
     narrowing: crate::config::permissions::PermissionsConfig,
 ) -> Result<crate::config::permissions::Permissions> {
     let method = WorkspaceMethod::LaunchPermissions {

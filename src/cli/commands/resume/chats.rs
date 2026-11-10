@@ -146,7 +146,9 @@ async fn start_saved(
             &chat.mode,
         ),
         (None, ChatRepository::Registered(repo)) => chat::Topic::repository(repo, &chat.mode),
-        (None, ChatRepository::Outside(_)) if chat.mode == crate::config::modes::SETUP => {
+        (None, ChatRepository::Outside(_))
+            if chat.mode == crate::config::modes::ModeName::SETUP =>
+        {
             super::super::config_setup::topic(&crate::config::Config::path(&ctx.paths))
         }
         (None, ChatRepository::Outside(_)) => chat::Topic::outside_repositories(&chat.mode),

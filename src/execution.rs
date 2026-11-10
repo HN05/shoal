@@ -41,7 +41,7 @@ pub(crate) use terminal::{reset_input_modes, run_in_terminal};
 pub struct TrackedAgent {
     pub name: crate::agent::Agent,
     pub model: crate::agent::ModelChoice,
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
 }
@@ -54,7 +54,7 @@ impl TrackedAgent {
             narrowing: Default::default(),
             name: name.into(),
             model: Default::default(),
-            mode: crate::config::modes::DEFAULT.to_owned(),
+            mode: crate::config::modes::ModeName::DEFAULT,
         }
     }
 }

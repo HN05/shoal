@@ -18,7 +18,7 @@ fn a_chat_on_an_issue_is_named_after_it_and_its_mode_without_asking() {
         details: String::new(),
         labels: Vec::new(),
     };
-    let topic = on(Topic::repository(&repo, "plan"), &repo, &issue);
+    let topic = on(Topic::repository(&repo, &"plan".into()), &repo, &issue);
     assert_eq!(topic.mode, "plan");
     assert_eq!(topic.subject.unwrap().issue.unwrap().number, 1211);
     assert_eq!(topic.name, "shoal-plan-1211");

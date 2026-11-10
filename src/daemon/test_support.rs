@@ -48,7 +48,7 @@ pub async fn indexed_manager() -> (tempfile::TempDir, Arc<Manager>) {
 pub async fn chat(
     manager: &Manager,
     name: &str,
-    mode: &str,
+    mode: impl Into<crate::config::modes::ModeName>,
     repository: Option<&crate::model::Repository>,
     parent: Option<&SpaceId>,
 ) -> (crate::model::Chat, ProcessGroup) {
@@ -75,7 +75,7 @@ pub async fn workspace_below(
     repository: &crate::model::Repository,
     name: &str,
     parent: &SpaceId,
-    mode: Option<&str>,
+    mode: Option<crate::config::modes::ModeName>,
 ) -> crate::model::Workspace {
     let new = crate::daemon::workspace::NewWorkspace {
         parent: Some(parent.clone()),
@@ -85,7 +85,7 @@ pub async fn workspace_below(
         .create_workspace_with(&repository.id, name.into(), None, new)
         .await
         .unwrap();
-    let (id, mode) = (workspace.id.clone(), mode.map(str::to_owned));
+    let id = workspace.id.clone();
     manager
         .store
         .run(move |db| {
@@ -107,9 +107,9 @@ pub async fn working_below(
     repository: &crate::model::Repository,
     name: &str,
     parent: &SpaceId,
-    mode: &str,
+    mode: impl Into<crate::config::modes::ModeName>,
 ) -> crate::model::Workspace {
-    let workspace = workspace_below(manager, repository, name, parent, Some(mode)).await;
+    let workspace = workspace_below(manager, repository, name, parent, Some(mode.into())).await;
     let selector = crate::client::space_names::SpaceSelector::id(&workspace.id);
     let working = crate::state::AgentState::Working;
     (manager.set_agent_state(&selector, working, None, None))

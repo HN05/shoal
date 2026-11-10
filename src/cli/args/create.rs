@@ -66,7 +66,7 @@ pub struct StartArgs {
     /// plan when the arguments ask for neither kind of space; else chat with
     /// --chat or --in, else worker.
     #[arg(short = 'm', long)]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// Set a permission of the agent, as KEY=VALUE such as push=propose or
     /// merge=direct, whatever its mode or the space above allows;
     /// repeatable. A space's agent gives only what it holds itself.

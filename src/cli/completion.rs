@@ -24,6 +24,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::leases,
+    config::modes::ModeName,
     config::{
         Config,
         named_commands::{self, Commands},
@@ -59,7 +60,7 @@ struct Settings {
     /// Agents pickers offer, installed or not.
     agents: Vec<Agent>,
     /// The modes `shoal start` takes.
-    modes: Vec<String>,
+    modes: Vec<ModeName>,
 }
 
 /// Live values an argument can be completed with.
@@ -227,8 +228,11 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     (typed.settings().modes.iter())
-                        .filter(|mode| mode.starts_with(current.to_string_lossy().as_ref()))
-                        .map(CompletionCandidate::new)
+                        .filter(|mode| {
+                            mode.as_str()
+                                .starts_with(current.to_string_lossy().as_ref())
+                        })
+                        .map(|mode| CompletionCandidate::new(mode.as_str()))
                         .collect::<Vec<_>>()
                 }))
             } else if (name == "start" || (parent == "review" && name == "run"))
@@ -334,7 +338,9 @@ impl Typed {
                     .iter()
                     .filter_map(|provider| provider.name.parse().ok())
                     .collect(),
-                modes: crate::config::modes::built_in_modes().into_keys().collect(),
+                modes: (crate::config::modes::built_in_modes().into_keys())
+                    .map(ModeName::from)
+                    .collect(),
             };
         };
         // Modes and rules may be defined only by the files beside it.
@@ -684,8 +690,14 @@ fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
         commands.extend(settings.launchers.clone());
     }
     let modes = match &resolved {
-        Ok(settings) => settings.modes.keys().cloned().collect(),
-        Err(_) => crate::config::modes::built_in_modes().into_keys().collect(),
+        Ok(settings) => settings
+            .modes
+            .keys()
+            .map(|name| name.as_str().into())
+            .collect(),
+        Err(_) => (crate::config::modes::built_in_modes().into_keys())
+            .map(ModeName::from)
+            .collect(),
     };
     let agents = resolved.map_or_else(
         |_| {

@@ -20,7 +20,7 @@ pub struct QueueEntry {
     /// The mode a launch's agent starts in; none for a restore, which keeps
     /// its agent's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gave a launch's agent, which apply as
     /// given whatever its mode's.
     #[serde(
@@ -126,7 +126,7 @@ pub struct QueueRequest {
     pub agent: crate::agent::Agent,
     /// The mode the agent starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gave the agent, which apply as
     /// given whatever its mode's.
     #[serde(

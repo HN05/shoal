@@ -58,7 +58,7 @@ pub(super) async fn start(
         here: options.here,
         now: true,
         model: options.model,
-        mode: Some(ModeChoice::Named(modes::SETUP.to_owned())),
+        mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),
         prompt: Some(subject(repository::name(&repo), &local_config)),
         ..Default::default()
     };

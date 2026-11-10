@@ -262,7 +262,7 @@ fn work(command: WorkCommand) -> Command {
 /// “+ Add workspace” starts a worker in a new workspace.
 fn add() -> Command {
     Command::Create(CreateCommand::Start(Box::new(StartArgs {
-        mode: Some(crate::config::modes::DEFAULT.to_owned()),
+        mode: Some(crate::config::modes::ModeName::DEFAULT),
         ..Default::default()
     })))
 }

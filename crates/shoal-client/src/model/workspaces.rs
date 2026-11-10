@@ -21,7 +21,7 @@ pub struct Workspace {
     pub title: Option<String>,
     /// The mode its latest agent started in; none before it had one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gave its latest agent, which apply as
     /// given whatever its mode's.
     #[serde(

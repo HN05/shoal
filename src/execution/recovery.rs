@@ -37,7 +37,7 @@ pub(crate) struct Recovery {
     /// The model and effort the agent runs with, which its restore keeps.
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its restore keeps.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub command: Vec<OsString>,
@@ -206,7 +206,7 @@ impl RestoreCommand<'_> {
 pub(crate) struct Restored<'a> {
     pub agent: &'a Agent,
     pub model: &'a ModelChoice,
-    pub mode: &'a str,
+    pub mode: &'a crate::config::modes::ModeName,
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub session: Option<&'a str>,
 }

@@ -14,7 +14,7 @@ fn settings(global: &str, repository: &str) -> Effective {
     Config::from_toml(global).unwrap().resolve(&layers).unwrap()
 }
 
-fn mode(name: &str) -> Option<SpaceMode<'_>> {
+fn mode(name: &crate::config::modes::ModeName) -> Option<SpaceMode<'_>> {
     Some(SpaceMode {
         name,
         kind: SpaceKind::Chat,
@@ -29,7 +29,7 @@ fn a_mode_permission_in_any_layer_wins_over_permissions_in_any_layer() {
         "[modes.chat.permissions]\nmerge = 'propose'\n",
         "[permissions]\nmerge = 'direct'\npush = 'propose'\n",
     );
-    let chat = resolve(&settings, mode("chat")).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
     assert_eq!(chat.merge.value, Opening::Propose);
     // A key the mode leaves to [permissions] comes from it.
     assert_eq!(chat.push.value, Pushes::Propose);
@@ -38,19 +38,19 @@ fn a_mode_permission_in_any_layer_wins_over_permissions_in_any_layer() {
 #[test]
 fn permissions_win_over_a_built_in_mode_default() {
     let settings = settings("", "[permissions]\nmerge = 'propose'\n");
-    let chat = resolve(&settings, mode("chat")).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
     assert_eq!(chat.merge.value, Opening::Propose);
     let settings = self::settings("", "");
-    let chat = resolve(&settings, mode("chat")).unwrap();
-    let worker = resolve(&settings, mode("worker")).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     assert!(chat.merge.value > worker.merge.value);
 }
 
 #[test]
 fn a_mode_of_the_user_and_a_space_without_one_have_the_key_defaults() {
     let settings = settings("[modes.triage]\nkind = 'chat'\n", "");
-    let triage = resolve(&settings, mode("triage")).unwrap();
-    let worker = resolve(&settings, mode("worker")).unwrap();
+    let triage = resolve(&settings, mode(&"triage".into())).unwrap();
+    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     assert_eq!(triage, worker);
     assert_eq!(resolve(&settings, None).unwrap(), worker);
 }
@@ -59,12 +59,12 @@ fn a_mode_of_the_user_and_a_space_without_one_have_the_key_defaults() {
 fn a_setup_mode_has_the_permissions_of_its_base() {
     let settings = settings("[modes.orchestrate.permissions]\npush = 'deny'\n", "");
     let global = SpaceMode {
-        name: modes::SETUP,
+        name: &modes::ModeName::SETUP,
         kind: SpaceKind::Chat,
         repository: false,
     };
     let orchestrate = SpaceMode {
-        name: modes::ORCHESTRATE,
+        name: &modes::ModeName::ORCHESTRATE,
         ..global
     };
     assert_eq!(
@@ -77,7 +77,7 @@ fn a_setup_mode_has_the_permissions_of_its_base() {
 fn a_mode_no_toml_layer_defines_has_permissions_and_the_key_defaults() {
     // Such as one only a Markdown file beside the global config names.
     let settings = settings("", "[permissions]\npush = 'propose'\n");
-    let undefined = resolve(&settings, mode("markdown-only")).unwrap();
+    let undefined = resolve(&settings, mode(&"markdown-only".into())).unwrap();
     assert_eq!(undefined, resolve(&settings, None).unwrap());
     assert_eq!(undefined.push.value, Pushes::Propose);
 }
@@ -85,8 +85,8 @@ fn a_mode_no_toml_layer_defines_has_permissions_and_the_key_defaults() {
 #[test]
 fn a_space_below_another_takes_the_narrower_permission_from_its_parent() {
     let settings = settings("", "");
-    let chat = resolve(&settings, mode("chat")).unwrap();
-    let worker = resolve(&settings, mode("worker")).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     let below = chat.below(&worker);
     assert_eq!(below.merge.value, worker.merge.value);
     assert_eq!(below.merge.from, PermissionSource::Parent);
@@ -100,8 +100,8 @@ fn a_space_below_another_takes_the_narrower_permission_from_its_parent() {
 #[test]
 fn only_direct_permissions_are_held_for_a_decision() {
     let settings = settings("", "");
-    let chat = resolve(&settings, mode("chat")).unwrap();
-    let worker = resolve(&settings, mode("worker")).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     use PermissionKey::{ApiWrites, Merge, Push};
     assert!(chat.withheld(&[Merge, Push]).is_none());
     assert!(worker.withheld(&[Push]).is_none());
@@ -131,8 +131,8 @@ fn a_narrowing_takes_known_keys_and_values_and_round_trips() {
 #[test]
 fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
     let settings = settings("", "");
-    let worker = resolve(&settings, mode("worker")).unwrap();
-    let chat = resolve(&settings, mode("chat")).unwrap();
+    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
     let wider = PermissionsConfig::assigned(&["merge=direct".to_owned()]).unwrap();
     // A wider value than the mode's applies, even below a narrower parent.
     let given = worker.below(&worker).given(&wider);
@@ -150,8 +150,8 @@ fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
 #[test]
 fn a_dropped_key_gives_the_value_it_falls_back_to() {
     let settings = settings("", "");
-    let chat = resolve(&settings, mode("chat")).unwrap();
-    let worker = resolve(&settings, mode("worker")).unwrap();
+    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     let drop_merge = PermissionChange::assigned("merge=mode").unwrap();
     // A chat's mode merges directly, which a worker does not hold.
     let refused = drop_merge.ensure_held(&chat, &worker).unwrap_err();

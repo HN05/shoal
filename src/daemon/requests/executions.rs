@@ -41,7 +41,7 @@ pub(super) async fn handle(
                 agent: agent.map(|name| crate::execution::TrackedAgent {
                     name,
                     model,
-                    mode: mode.unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
+                    mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
                     narrowing,
                 }),
                 recover,

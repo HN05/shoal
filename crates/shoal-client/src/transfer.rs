@@ -75,7 +75,7 @@ pub struct PackagedChat {
     /// The mode it ran in; a package an earlier release wrote ran in the
     /// chat mode.
     #[serde(default = "crate::model::chat_mode")]
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it ran with; none from a package an
     /// earlier release wrote.
     #[serde(

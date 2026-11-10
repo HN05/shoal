@@ -100,7 +100,7 @@ async fn built_in_restore_child() {
             &settings,
             &agent.into(),
             &workspace,
-            "worker",
+            &"worker".into(),
         );
         assert!(!rules.is_empty());
         let expected: Vec<std::ffi::OsString> = restore
@@ -148,7 +148,7 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     let triage = crate::execution::recovery::Restored {
-        mode: "triage",
+        mode: &"triage".into(),
         ..restored("claude", Some("s1"))
     };
     let recovery = Recovery::resolve(&manager.paths, &workspace, triage, None, None)
@@ -191,7 +191,7 @@ async fn built_in_restore_child() {
     ] {
         let agent = crate::agent::Agent::from(agent);
         let restored = crate::execution::recovery::Restored {
-            mode: "worker",
+            mode: &WORKER,
             narrowing: Default::default(),
             agent: &agent,
             model: &model,
@@ -287,7 +287,7 @@ async fn built_in_restore_child() {
         crate::agent::Agent::from("custom"),
     );
     let with_model = |agent| crate::execution::recovery::Restored {
-        mode: "worker",
+        mode: &WORKER,
         narrowing: Default::default(),
         agent,
         model: &model,
@@ -1456,6 +1456,9 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
     serving.abort();
 }
 
+/// The mode the restores here recorded.
+static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::DEFAULT;
+
 /// The restore of `agent` with the tool's own model and effort, from
 /// `session` when given.
 fn restored<'a>(agent: &str, session: Option<&'a str>) -> crate::execution::recovery::Restored<'a> {
@@ -1465,7 +1468,7 @@ fn restored<'a>(agent: &str, session: Option<&'a str>) -> crate::execution::reco
         effort: None,
     };
     crate::execution::recovery::Restored {
-        mode: "worker",
+        mode: &WORKER,
         narrowing: Default::default(),
         agent,
         model: &OWN,

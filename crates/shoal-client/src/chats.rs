@@ -22,7 +22,7 @@ use crate::{
 pub struct NewChat<'a> {
     pub name: &'a SpaceName,
     pub agent: &'a crate::agent::Agent,
-    pub mode: &'a str,
+    pub mode: &'a crate::config::modes::ModeName,
     /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below; a scoped caller's daemon puts it below the

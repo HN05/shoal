@@ -56,9 +56,9 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
 pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
     chat::Topic {
         relaunch: vec!["config".into(), "setup".into()],
-        name: modes::SETUP.to_owned(),
+        name: modes::ModeName::SETUP.into(),
         asks_name: false,
-        mode: modes::SETUP.to_owned(),
+        mode: modes::ModeName::SETUP,
         subject: Some(Subject::told(subject(config))),
         linked_issue: None,
         links: Vec::new(),

@@ -200,7 +200,7 @@ pub struct QueuedLaunch {
     pub prompt: Option<String>,
     /// The mode it starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     #[serde(
         default,

@@ -124,7 +124,7 @@ pub struct Record {
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
     #[serde(default = "default_mode")]
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its restore
     /// keeps.
     #[serde(
@@ -145,8 +145,8 @@ pub struct Copied {
 }
 
 /// The mode of an agent recorded before modes existed.
-fn default_mode() -> String {
-    crate::config::modes::DEFAULT.to_owned()
+fn default_mode() -> crate::config::modes::ModeName {
+    crate::config::modes::ModeName::DEFAULT
 }
 
 /// Why and when Shoal stopped an agent, which its restore tells it.
@@ -213,7 +213,7 @@ pub struct LastSession {
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
     #[serde(default = "default_mode")]
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its restore
     /// keeps.
     #[serde(

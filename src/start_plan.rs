@@ -115,7 +115,7 @@ pub(crate) struct AddPlan {
     pub prompt: Option<String>,
     /// The mode the agent starts in; the default mode when `None`.
     #[serde(default)]
-    pub mode: Option<String>,
+    pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     #[serde(
         default,

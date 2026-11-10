@@ -15,7 +15,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         workspaces_dir: None,
         contribution: false,
     };
-    let topic = Topic::repository(&repo, crate::config::modes::CHAT);
+    let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
     let agent: Agent = "codex".parse().unwrap();
     let model = ModelChoice {
         model: None,
@@ -91,7 +91,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         crate::state::WorkspaceState::Ready,
     );
     workspace.id = "worker-id".into();
-    let topic = Topic::workspace(workspace.clone(), "plan");
+    let topic = Topic::workspace(workspace.clone(), &"plan".into());
     assert_eq!(topic.name, "worker-chat");
     let agent: Agent = "claude".parse().unwrap();
     let beside = Beside {
@@ -157,7 +157,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         commit: "0123456789abcdef".into(),
         made_for: None,
     });
-    let at_commit = Topic::workspace(workspace, crate::config::modes::CHAT);
+    let at_commit = Topic::workspace(workspace, &crate::config::modes::ModeName::CHAT);
     let told = brief(&settings, &agent, &repo, &at_commit, false)
         .unwrap()
         .system;
@@ -202,14 +202,14 @@ fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
     .unwrap();
     let chats = [chat];
     let restored = with_saved_issue(
-        Topic::repository(&repo, "plan"),
+        Topic::repository(&repo, &"plan".into()),
         &chats,
         &SpaceId::from("c"),
     );
     let issue = restored.linked_issue.unwrap();
     assert_eq!((issue.number, issue.url.as_str()), (7, url));
     let other = with_saved_issue(
-        Topic::repository(&repo, "plan"),
+        Topic::repository(&repo, &"plan".into()),
         &chats,
         &SpaceId::from("d"),
     );
@@ -234,7 +234,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     }))
     .unwrap();
     let agent: Agent = "claude".parse().unwrap();
-    let topic = Topic::imported(&repo, "plan", &links);
+    let topic = Topic::imported(&repo, &"plan".into(), &links);
     let beside = Beside {
         narrowing: Narrowing::Requested(Default::default()),
         topic: &topic,
@@ -277,8 +277,11 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     };
     assert_eq!(start.session.as_deref(), Some("s1"));
     assert!(start.fork_session);
-    let unlinked = Topic::imported(&repo, "plan", &SpaceLinks::default());
-    assert_eq!(unlinked.relaunch, Topic::repository(&repo, "plan").relaunch);
+    let unlinked = Topic::imported(&repo, &"plan".into(), &SpaceLinks::default());
+    assert_eq!(
+        unlinked.relaunch,
+        Topic::repository(&repo, &"plan".into()).relaunch
+    );
 }
 
 #[test]

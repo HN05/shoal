@@ -61,8 +61,10 @@ fn a_restored_agent_whose_mode_is_gone_gets_the_default_rules() {
         "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
     }))
     .unwrap();
-    let told = |mode| restored_instruction_args(&settings, &"claude".into(), &workspace, mode);
-    let kept = told(modes::DEFAULT);
+    let told = |mode: &modes::ModeName| {
+        restored_instruction_args(&settings, &"claude".into(), &workspace, mode)
+    };
+    let kept = told(&modes::ModeName::DEFAULT);
     assert!(!kept.is_empty());
-    assert_eq!(told("removed"), kept);
+    assert_eq!(told(&"removed".into()), kept);
 }

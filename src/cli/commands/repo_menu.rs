@@ -49,7 +49,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         RepoMenuAction::AddWorkspace => {
             Command::Create(CreateCommand::Start(Box::new(StartArgs {
                 repository: Some(picked.id),
-                mode: Some(crate::config::modes::DEFAULT.to_owned()),
+                mode: Some(crate::config::modes::ModeName::DEFAULT),
                 ..Default::default()
             })))
         }

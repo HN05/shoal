@@ -491,10 +491,13 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
         rows,
         ["◐ 4  repo-plan-7  in worker  process running, plan mode  claude"]
     );
-    assert_eq!(with_mode("running", Some("worker"), "worker"), "running");
-    assert_eq!(with_mode("running", None, "worker"), "running");
     assert_eq!(
-        with_mode("running", Some("chat"), "worker"),
+        with_mode("running", Some(&"worker".into()), &"worker".into()),
+        "running"
+    );
+    assert_eq!(with_mode("running", None, &"worker".into()), "running");
+    assert_eq!(
+        with_mode("running", Some(&"chat".into()), &"worker".into()),
         "running, chat mode"
     );
 }

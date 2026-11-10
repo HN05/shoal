@@ -166,6 +166,6 @@ fn running_record(execution: &Execution, session: Option<String>) -> Option<Reco
         mode: execution
             .mode
             .clone()
-            .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
+            .unwrap_or(crate::config::modes::ModeName::DEFAULT),
     })
 }

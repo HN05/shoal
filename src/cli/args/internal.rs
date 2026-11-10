@@ -152,8 +152,8 @@ pub enum InternalCommand {
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
         /// The mode the agent started in.
-        #[arg(long, default_value = crate::config::modes::DEFAULT)]
-        mode: String,
+        #[arg(long, default_value_t = crate::config::modes::ModeName::DEFAULT)]
+        mode: crate::config::modes::ModeName,
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
         narrowing: crate::config::permissions::PermissionsConfig,
@@ -201,8 +201,8 @@ pub enum InternalCommand {
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
         /// The mode the agent started in.
-        #[arg(long, default_value = crate::config::modes::DEFAULT)]
-        mode: String,
+        #[arg(long, default_value_t = crate::config::modes::ModeName::DEFAULT)]
+        mode: crate::config::modes::ModeName,
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
         narrowing: crate::config::permissions::PermissionsConfig,
@@ -240,8 +240,8 @@ pub enum InternalCommand {
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
         /// The mode the agent started in.
-        #[arg(long, default_value = crate::config::modes::DEFAULT)]
-        mode: String,
+        #[arg(long, default_value_t = crate::config::modes::ModeName::DEFAULT)]
+        mode: crate::config::modes::ModeName,
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
         narrowing: crate::config::permissions::PermissionsConfig,

@@ -21,7 +21,7 @@ pub enum ChatMethod {
         agent: crate::agent::Agent,
         /// The mode its agent starts in; `chat` when omitted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        mode: Option<String>,
+        mode: Option<crate::config::modes::ModeName>,
         /// The permissions `--permission` gives the agent, whatever the mode's.
         #[serde(
             default,

@@ -142,7 +142,7 @@ pub enum WorkspaceMethod {
     /// `narrowing` in the workspace, which its launch's push rules follow.
     LaunchPermissions {
         workspace: SpaceSelector,
-        mode: String,
+        mode: crate::config::modes::ModeName,
         #[serde(
             default,
             skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"

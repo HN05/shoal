@@ -104,7 +104,7 @@ fn a_mode_naming_an_undefined_rule_is_refused() {
 #[test]
 fn only_a_chat_mode_may_have_no_repository() {
     let settings = stack("", "", "").resolve().unwrap();
-    let orchestrate = &settings.modes[modes::ORCHESTRATE];
+    let orchestrate = &settings.modes[modes::ModeName::ORCHESTRATE.as_str()];
     assert!(!orchestrate.repository);
     assert_eq!(orchestrate.kind, crate::model::SpaceKind::Chat);
     modes::check(&settings.modes, &settings.rules).unwrap();

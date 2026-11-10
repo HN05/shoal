@@ -368,7 +368,7 @@ pub(super) struct Topic {
     /// Whether an interactive start without `--name` asks for the name.
     pub asks_name: bool,
     /// The mode the agent starts in.
-    pub mode: String,
+    pub mode: crate::config::modes::ModeName,
     /// What the agent starts on, or `None` to wait for the user.
     pub subject: Option<templates::Subject>,
     /// The issue the chat is linked to, whose fields the rules of a chat
@@ -383,12 +383,12 @@ pub(super) struct Topic {
 
 impl Topic {
     /// A chat in `mode` in the checkout of `repo`.
-    pub(super) fn repository(repo: &Repository, mode: &str) -> Self {
+    pub(super) fn repository(repo: &Repository, mode: &crate::config::modes::ModeName) -> Self {
         Self {
             relaunch: [start_args(mode), vec![repo.id.clone().into()]].concat(),
             name: format!("{}-chat", repository::name(repo)),
             asks_name: true,
-            mode: mode.to_owned(),
+            mode: mode.clone(),
             subject: None,
             linked_issue: None,
             links: Vec::new(),
@@ -397,12 +397,12 @@ impl Topic {
     }
 
     /// A chat in `mode` without a repository, in `root_dir`.
-    pub(super) fn outside_repositories(mode: &str) -> Self {
+    pub(super) fn outside_repositories(mode: &crate::config::modes::ModeName) -> Self {
         Self {
             relaunch: start_args(mode),
-            name: mode.to_owned(),
+            name: mode.to_string(),
             asks_name: true,
-            mode: mode.to_owned(),
+            mode: mode.clone(),
             subject: None,
             linked_issue: None,
             links: Vec::new(),
@@ -411,13 +411,13 @@ impl Topic {
     }
 
     /// A chat in `mode` in the worktree of `workspace`.
-    pub(super) fn workspace(workspace: Workspace, mode: &str) -> Self {
+    pub(super) fn workspace(workspace: Workspace, mode: &crate::config::modes::ModeName) -> Self {
         let place = vec!["--in".into(), workspace.id.clone().into()];
         Self {
             relaunch: [start_args(mode), place].concat(),
             name: format!("{}-chat", workspace.name),
             asks_name: true,
-            mode: mode.to_owned(),
+            mode: mode.clone(),
             subject: None,
             linked_issue: None,
             links: Vec::new(),
@@ -429,7 +429,11 @@ impl Topic {
     /// from another machine. One linked to an issue reopens in a new tab
     /// with the issue's fields, for its rules, without asking the forge,
     /// which may have closed it.
-    pub(super) fn imported(repo: &Repository, mode: &str, links: &SpaceLinks) -> Self {
+    pub(super) fn imported(
+        repo: &Repository,
+        mode: &crate::config::modes::ModeName,
+        links: &SpaceLinks,
+    ) -> Self {
         let mut topic = Self::repository(repo, mode);
         if let Some(url) = &links.issue {
             topic.relaunch.extend(["--linked-issue".into(), url.into()]);
@@ -464,8 +468,8 @@ fn with_saved_issue(topic: Topic, chats: &[Chat], restore: &SpaceId) -> Topic {
 }
 
 /// The `shoal` arguments that start a chat in `mode`.
-fn start_args(mode: &str) -> Vec<OsString> {
-    ["start", "--chat", "--mode", mode]
+fn start_args(mode: &crate::config::modes::ModeName) -> Vec<OsString> {
+    ["start", "--chat", "--mode", mode.as_str()]
         .map(OsString::from)
         .to_vec()
 }

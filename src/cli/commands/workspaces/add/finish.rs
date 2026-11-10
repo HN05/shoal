@@ -174,7 +174,7 @@ pub(super) async fn add_planned(
         return report_queued_in(ctx, &workspace, &entry);
     }
     let opening = agents::Opening::New {
-        mode: mode.unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
+        mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
         subject,
     };
     let here = HereLaunch {
@@ -199,7 +199,7 @@ fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
     (mode, narrowing): (
-        &Option<String>,
+        &Option<crate::config::modes::ModeName>,
         crate::config::permissions::PermissionsConfig,
     ),
     (prompt, args, fork): (&Option<String>, &[OsString], &Option<String>),

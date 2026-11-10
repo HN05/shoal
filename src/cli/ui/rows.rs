@@ -54,8 +54,8 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
 /// `waiting, review 17 finished: 1 blocker`.
 fn workspace_status_cell(workspace: &Workspace, status: ListStatus) -> Cell {
     let (label, style) = status_cell(status);
-    let usual = crate::config::modes::DEFAULT;
-    let label = with_mode(&label, workspace.mode.as_deref(), usual);
+    let usual = crate::config::modes::ModeName::DEFAULT;
+    let label = with_mode(&label, workspace.mode.as_ref(), &usual);
     match &workspace.latest_review {
         Some(review) => (
             format!("{label}, review {} {}", review.id, review.status),
@@ -384,7 +384,11 @@ pub(super) fn rows_with_status(
 
 /// A space's status `label` with its `mode`, which rows leave out when it
 /// is the kind's `usual` mode or none.
-pub fn with_mode(label: &str, mode: Option<&str>, usual: &str) -> String {
+pub fn with_mode(
+    label: &str,
+    mode: Option<&crate::config::modes::ModeName>,
+    usual: &crate::config::modes::ModeName,
+) -> String {
     match mode.filter(|mode| *mode != usual) {
         Some(mode) => format!("{label}, {mode} mode"),
         None => label.to_owned(),
@@ -408,8 +412,8 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
     let status = ListStatus::of_entry(entry);
     let label = with_mode(
         status.label(),
-        entry.mode.as_deref(),
-        crate::config::modes::DEFAULT,
+        entry.mode.as_ref(),
+        &crate::config::modes::ModeName::DEFAULT,
     );
     let mut text = match entry.position {
         Some(position) => format!("{label}, position {position}"),
