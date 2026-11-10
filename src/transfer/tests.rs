@@ -68,6 +68,28 @@ fn an_earlier_package_of_an_all_digit_workspace_imports_under_its_derived_name()
 }
 
 #[test]
+fn an_earlier_package_of_an_all_digit_chat_imports_under_its_derived_name() {
+    let manifest = Manifest {
+        remote_url: None,
+        space: Space::Chat(PackagedChat {
+            name: "plan-cache".into(),
+            agent: "claude".into(),
+            links: Default::default(),
+            mode: "chat".into(),
+            narrowing: Default::default(),
+        }),
+        sessions: None,
+        session_files: Vec::new(),
+        copy: None,
+    };
+    let mut value = serde_json::to_value(&manifest).unwrap();
+    value["name"] = "123".into();
+    let bytes = format!("{}\n{value}\n", header(3)).into_bytes();
+    let import = Import::read(&mut &bytes[..]).unwrap();
+    assert_eq!(import.manifest.name(), "chat-123");
+}
+
+#[test]
 fn a_chat_package_names_its_kind_and_continues_its_session() {
     let chat = Chat {
         narrowing: Default::default(),

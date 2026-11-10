@@ -501,7 +501,7 @@ impl Import {
         {
             manifest.insert("kind".into(), "workspace".into());
         }
-        rename_invalid_workspace(&mut manifest);
+        rename_invalid_space(&mut manifest);
         let mut manifest: Manifest =
             serde_json::from_value(manifest).context("read the export's manifest")?;
         if version == 1 {
@@ -620,20 +620,22 @@ fn moved_agent(agent: StoppedAgent) -> StoppedAgent {
     }
 }
 
-/// Give the workspace of a package an earlier Shoal wrote the name its
-/// derivation gives now, when its own breaks the space name rule, as an
+/// Give the workspace or chat of a package an earlier Shoal wrote the name
+/// its derivation gives now, when its own breaks the space name rule, as an
 /// all-digit one does.
-fn rename_invalid_workspace(manifest: &mut serde_json::Value) {
+fn rename_invalid_space(manifest: &mut serde_json::Value) {
     use crate::{client::space_names::SpaceName, model::SpaceKind};
-    let Some(name) = manifest.pointer_mut("/workspace/name") else {
+    let (path, kind) = match manifest.get("kind").and_then(|kind| kind.as_str()) {
+        Some("chat") => ("/name", SpaceKind::Chat),
+        _ => ("/workspace/name", SpaceKind::Workspace),
+    };
+    let Some(name) = manifest.pointer_mut(path) else {
         return;
     };
     if let Some(text) = name.as_str()
         && SpaceName::parse(text).is_err()
     {
-        *name = SpaceName::derive(SpaceKind::Workspace, text)
-            .as_str()
-            .into();
+        *name = SpaceName::derive(kind, text).as_str().into();
     }
 }
 
