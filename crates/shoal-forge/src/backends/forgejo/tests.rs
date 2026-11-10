@@ -119,11 +119,3 @@ fn a_limit_without_a_page_reads_the_first_page() {
         assert_eq!(Forgejo.raw_read(endpoint.into()), read);
     }
 }
-
-#[test]
-fn draft_prefixes_ignore_case_and_need_the_whole_marker() {
-    assert_eq!(draft_prefix("WIP: x"), Some(4));
-    assert_eq!(draft_prefix("[wip] x"), Some(5));
-    assert_eq!(draft_prefix("Wipe x"), None);
-    assert_eq!(draft_prefix("Ü"), None);
-}

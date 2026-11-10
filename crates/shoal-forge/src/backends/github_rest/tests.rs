@@ -1,4 +1,5 @@
 use super::*;
+use crate::backends::{forgejo::Forgejo, github::GitHub};
 
 #[test]
 fn statuses_report_failed_running_and_waiting_checks() {
@@ -8,24 +9,24 @@ fn statuses_report_failed_running_and_waiting_checks() {
         {"context": "ci / docs", "status": "pending"},
         {"context": "ci / lint", "status": "pending", "description": "Blocked by required conditions"}
     ]});
-    let listed = commit_statuses(&forgejo, Dialect::Forgejo).unwrap();
+    let listed = commit_statuses(&forgejo, &Forgejo).unwrap();
     assert_eq!(listed[0].2, "/t/r/actions/runs/1/jobs/0");
     assert_eq!(
         states(listed),
         [JobState::Failed, JobState::Running, JobState::Waiting]
     );
     let none = json!({"total_count": 0, "statuses": null});
-    assert!(commit_statuses(&none, Dialect::Forgejo).unwrap().is_empty());
+    assert!(commit_statuses(&none, &Forgejo).unwrap().is_empty());
     // Only Forgejo Actions tells a waiting job by its description.
     let github = json!({"total_count": 2, "statuses": [
         {"context": "deploy", "state": "failure", "target_url": "https://ci.example/1"},
         {"context": "docs", "state": "pending", "description": "Waiting to run"}
     ]});
     assert_eq!(
-        states(commit_statuses(&github, Dialect::GitHub).unwrap()),
+        states(commit_statuses(&github, &GitHub).unwrap()),
         [JobState::Failed, JobState::Running]
     );
-    assert!(commit_statuses(&github, Dialect::Forgejo).is_err());
+    assert!(commit_statuses(&github, &Forgejo).is_err());
 }
 
 #[test]
@@ -43,40 +44,33 @@ fn dependencies_keep_open_issues() {
 #[test]
 fn forgejo_keeps_inline_comments_and_their_reactions_with_issue_comments() {
     let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
-    let endpoint = |repo, subject, dialect| reactions_endpoint(repo, 4, subject, dialect);
+    let endpoint = |repo, subject, forge| reactions_endpoint(repo, 4, subject, forge);
     assert_eq!(
-        endpoint(&github, Subject::Item, Dialect::GitHub),
+        endpoint(&github, Subject::Item, &GitHub),
         "repos/team/repo/issues/4/reactions"
     );
     assert_eq!(
-        endpoint(
-            &github,
-            Subject::Comment(CommentId::new(9)),
-            Dialect::GitHub
-        ),
+        endpoint(&github, Subject::Comment(CommentId::new(9)), &GitHub),
         "repos/team/repo/issues/comments/9/reactions"
     );
     assert_eq!(
-        endpoint(
-            &github,
-            Subject::ReviewComment(CommentId::new(9)),
-            Dialect::GitHub
-        ),
+        endpoint(&github, Subject::ReviewComment(CommentId::new(9)), &GitHub),
         "repos/team/repo/pulls/comments/9/reactions"
     );
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     assert!(
-        endpoint(
+        reactions_endpoint(
             &forgejo,
+            4,
             Subject::ReviewComment(CommentId::new(9)),
-            Dialect::Forgejo
+            &Forgejo
         )
         .ends_with("issues/comments/9/reactions")
     );
     // Comment edits go to the same comments.
-    let edit = |subject, dialect| edit_comment(&github, subject, "Why?", dialect).unwrap();
+    let edit = |subject, forge| edit_comment(&github, subject, "Why?", forge).unwrap();
     assert_eq!(
-        edit(Subject::ReviewComment(CommentId::new(9)), Dialect::GitHub),
+        edit(Subject::ReviewComment(CommentId::new(9)), &GitHub),
         Request::new(
             HttpMethod::Patch,
             "repos/team/repo/pulls/comments/9".into(),
@@ -84,10 +78,17 @@ fn forgejo_keeps_inline_comments_and_their_reactions_with_issue_comments() {
         )
     );
     assert_eq!(
-        edit(Subject::ReviewComment(CommentId::new(9)), Dialect::Forgejo).endpoint,
+        edit_comment(
+            &github,
+            Subject::ReviewComment(CommentId::new(9)),
+            "Why?",
+            &Forgejo
+        )
+        .unwrap()
+        .endpoint,
         "repos/team/repo/issues/comments/9"
     );
-    assert!(edit_comment(&github, Subject::Item, "Why?", Dialect::GitHub).is_err());
+    assert!(edit_comment(&github, Subject::Item, "Why?", &GitHub).is_err());
     let reaction = json!({"id": 2, "content": "eyes", "user": {"login": "ann"}});
     let listed = listed_reaction(&reaction).unwrap();
     assert_eq!(

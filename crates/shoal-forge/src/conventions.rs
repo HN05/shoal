@@ -2,6 +2,7 @@
 //! requires, a label scheme on the forge, and the forge's description
 //! templates. Shoal checks them where agents open and mark items, so the
 //! repository's conventions reach agents at the moment they apply.
+pub(crate) mod draft;
 pub mod labels;
 
 use std::path::Path;

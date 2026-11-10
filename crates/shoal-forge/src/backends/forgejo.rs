@@ -17,7 +17,7 @@ mod view;
 
 use super::{
     Backend, LoginHint,
-    github_rest::{self, Dialect},
+    github_rest::{self, GitHubShapes},
     image, link, rest, served_at,
 };
 use crate::{
@@ -35,7 +35,7 @@ use crate::{
         run_view::{RunFilter, RunJob},
         runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
     },
-    conventions::{Lookup, shared_lookups},
+    conventions::{Lookup, draft::DraftMarker, shared_lookups},
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
@@ -66,8 +66,12 @@ use crate::{
 /// Why an older Forgejo, or Gitea, runs no jobs on Shoal's runner.
 const RUNNER_RELEASE: &str = "that needs Forgejo 15 or later";
 
-/// Forgejo treats a PR whose title starts with one of these as a draft.
-pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
+/// Forgejo treats a PR whose title starts with one of these prefixes as a
+/// draft.
+const DRAFT: DraftMarker = DraftMarker {
+    prefixes: &["WIP:", "[WIP]"],
+    marker: "WIP:",
+};
 
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
@@ -229,7 +233,7 @@ impl Backend for Forgejo {
         number: u64,
         value: &Value,
     ) -> Result<Current> {
-        github_rest::current(repo, kind, number, value, Dialect::Forgejo)
+        github_rest::current(repo, kind, number, value, self)
     }
 
     fn numbers_items_together(&self) -> bool {
@@ -283,7 +287,7 @@ impl Backend for Forgejo {
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        github_rest::edit(repo, current, edit, Dialect::Forgejo)
+        github_rest::edit(repo, current, edit, self)
     }
 
     fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {
@@ -423,7 +427,7 @@ impl Backend for Forgejo {
     /// Forgejo keeps draft state in the title.
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
         let title = if pull.draft {
-            draft_title(&pull.title, true)
+            DRAFT.draft_title(&pull.title, true)
         } else {
             pull.title.clone()
         };
@@ -596,12 +600,7 @@ impl Backend for Forgejo {
         number: u64,
         subject: Subject,
     ) -> Result<String> {
-        Ok(github_rest::reactions_endpoint(
-            repo,
-            number,
-            subject,
-            Dialect::Forgejo,
-        ))
+        Ok(github_rest::reactions_endpoint(repo, number, subject, self))
     }
 
     /// Forgejo lists a comment's reactions all at once, ignoring pages.
@@ -657,10 +656,7 @@ impl Backend for Forgejo {
         head: &str,
     ) -> Result<Vec<CiCheck>> {
         let endpoint = repo.repo_endpoint(&format!("commits/{head}/status?limit=50"));
-        github_rest::commit_statuses(
-            &repo.send(account, &Request::get(endpoint)).await?,
-            Dialect::Forgejo,
-        )
+        github_rest::commit_statuses(&repo.send(account, &Request::get(endpoint)).await?, self)
     }
 
     fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
@@ -963,7 +959,7 @@ impl Backend for Forgejo {
         subject: Subject,
         body: &str,
     ) -> Result<Request> {
-        github_rest::edit_comment(repo, subject, body, Dialect::Forgejo)
+        github_rest::edit_comment(repo, subject, body, self)
     }
 
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
@@ -984,6 +980,46 @@ impl Backend for Forgejo {
 
     fn exclusive_label(&self, _name: &str, label: &Value) -> bool {
         label["exclusive"].as_bool().unwrap_or(false)
+    }
+}
+
+impl GitHubShapes for Forgejo {
+    /// Forgejo keeps draft state in the title.
+    fn draft_marker(&self) -> Option<&DraftMarker> {
+        Some(&DRAFT)
+    }
+
+    /// Forgejo reports a draft as not mergeable, whatever its conflicts.
+    fn conflict(&self, mergeable: bool, draft: bool) -> bool {
+        !mergeable && !draft
+    }
+
+    /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
+    /// head and keeps the branch name only as the head's label.
+    fn head_branch(&self, number: PullNumber, pull: &Value) -> Result<String> {
+        let head = github_rest::head_ref(pull)?;
+        if head == format!("refs/pull/{number}/head") {
+            return text(&pull["head"]["label"]).context("PR has no head branch");
+        }
+        Ok(head)
+    }
+
+    /// Forgejo clears a milestone with ID 0.
+    fn cleared_milestone(&self) -> Value {
+        0.into()
+    }
+
+    fn status_field(&self) -> &'static str {
+        "status"
+    }
+
+    fn status_waits(&self, status: &Value) -> bool {
+        actions::status_waits(status)
+    }
+
+    /// Forgejo keeps a PR's inline comments among its issue comments.
+    fn review_comment_path(&self, id: CommentId) -> String {
+        format!("issues/comments/{id}")
     }
 }
 
@@ -1138,26 +1174,6 @@ fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
             })
         })
         .collect()
-}
-
-/// The length of a Forgejo draft prefix at the start of `title`.
-pub(crate) fn draft_prefix(title: &str) -> Option<usize> {
-    DRAFT_PREFIXES.iter().find_map(|prefix| {
-        title
-            .get(..prefix.len())
-            .filter(|start| start.eq_ignore_ascii_case(prefix))
-            .map(|_| prefix.len())
-    })
-}
-
-/// The title with Forgejo's draft prefix added or removed.
-pub(crate) fn draft_title(title: &str, draft: bool) -> String {
-    let bare = draft_prefix(title).map_or(title, |len| title[len..].trim_start());
-    if draft {
-        format!("WIP: {bare}")
-    } else {
-        bare.to_owned()
-    }
 }
 
 /// The issue list endpoint that runs `search` for items of `kind`.

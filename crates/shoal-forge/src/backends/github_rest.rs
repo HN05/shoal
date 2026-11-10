@@ -1,16 +1,14 @@
-//! GitHub's REST shapes, which Forgejo and Gitea serve too; [`Dialect`]
-//! names the forge where they differ.
+//! GitHub's REST shapes, which Forgejo and Gitea serve too; each forge
+//! implements [`GitHubShapes`] for what it serves its own way.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
-use super::{
-    LoginHint,
-    forgejo::{actions, draft_prefix, draft_title},
-};
+use super::LoginHint;
 use crate::{
     ForgeRepo,
     account::Account,
     ci::{CiCheck, JobState, check},
+    conventions::draft::DraftMarker,
     items::{
         action::{Edit, MilestoneChange},
         create::{Head, NewPull},
@@ -26,13 +24,37 @@ use crate::{
     transport::api::{HttpMethod, Request, encode},
 };
 
-/// Which forge serves GitHub's REST shapes.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Dialect {
-    GitHub,
-    /// Keeps draft state in the title, and a PR's ref as the head of a PR
-    /// whose branch is deleted.
-    Forgejo,
+/// What a forge serving GitHub's REST shapes serves its own way. The
+/// defaults are GitHub's where only some forges differ.
+pub(crate) trait GitHubShapes {
+    /// The title prefix that keeps a PR's draft state, where the forge keeps
+    /// it in the title rather than in the PR's `draft` field.
+    fn draft_marker(&self) -> Option<&DraftMarker>;
+
+    /// Whether a PR the forge reports as `mergeable` or not, and as a
+    /// `draft` or not, conflicts with its base.
+    fn conflict(&self, mergeable: bool, _draft: bool) -> bool {
+        !mergeable
+    }
+
+    /// The head branch of PR `number`, read from `pull`.
+    fn head_branch(&self, _number: PullNumber, pull: &Value) -> Result<String> {
+        head_ref(pull)
+    }
+
+    /// The milestone field's value that clears a milestone.
+    fn cleared_milestone(&self) -> Value;
+
+    /// The field of a commit status that holds its state.
+    fn status_field(&self) -> &'static str;
+
+    /// Whether a pending commit status waits to run rather than runs.
+    fn status_waits(&self, _status: &Value) -> bool {
+        false
+    }
+
+    /// The path of the PR's inline comment `id` in the repository.
+    fn review_comment_path(&self, id: CommentId) -> String;
 }
 
 /// An issue or PR as its REST item reports it, for item views; its
@@ -111,13 +133,13 @@ pub(crate) fn comments(comments: &[Value]) -> Vec<Comment> {
         .collect()
 }
 
-/// An item in GitHub's REST shape, read as `dialect` serves it.
+/// An item in GitHub's REST shape, read as `forge` serves it.
 pub(crate) fn current(
     repo: &ForgeRepo,
     kind: ItemKind,
     number: u64,
     value: &Value,
-    dialect: Dialect,
+    forge: &impl GitHubShapes,
 ) -> Result<Current> {
     if kind == ItemKind::Issue {
         ensure!(
@@ -144,20 +166,18 @@ pub(crate) fn current(
     let pr = match kind {
         ItemKind::Issue => None,
         ItemKind::Pr => Some(PrSummary {
-            head: head_branch(PullNumber::new(number), value, dialect)?,
+            head: forge.head_branch(PullNumber::new(number), value)?,
             base: text(&value["base"]["ref"]).context("PR has no base branch")?,
-            draft: if dialect == Dialect::Forgejo {
-                draft_prefix(&title).is_some()
-            } else {
-                value["draft"].as_bool().unwrap_or_default()
+            draft: match forge.draft_marker() {
+                Some(marker) => marker.prefix_len(&title).is_some(),
+                None => value["draft"].as_bool().unwrap_or_default(),
             },
         }),
     };
-    // Forgejo reports a draft as not mergeable, whatever its conflicts.
     let conflict = pr
         .as_ref()
         .zip(value["mergeable"].as_bool())
-        .map(|(pr, mergeable)| !mergeable && !(pr.draft && dialect == Dialect::Forgejo));
+        .map(|(pr, mergeable)| forge.conflict(mergeable, pr.draft));
     Ok(Current {
         item: Item {
             kind,
@@ -226,35 +246,30 @@ async fn comparison_count(
         .context("the forge did not report how far the head is behind")
 }
 
-/// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
-/// head and keeps the branch name only as the head's label.
-fn head_branch(number: PullNumber, value: &Value, dialect: Dialect) -> Result<String> {
-    let head = text(&value["head"]["ref"]).context("PR has no head branch")?;
-    if dialect == Dialect::Forgejo && head == format!("refs/pull/{number}/head") {
-        return text(&value["head"]["label"]).context("PR has no head branch");
-    }
-    Ok(head)
+/// The ref a PR reports as its head.
+pub(crate) fn head_ref(pull: &Value) -> Result<String> {
+    text(&pull["head"]["ref"]).context("PR has no head branch")
 }
 
-/// The requests that change `current` as `edit` says, except GitHub's draft
-/// state, which only its GraphQL API changes.
+/// The requests that change `current` as `edit` says, except draft state
+/// a forge keeps outside the title, which only GitHub's GraphQL API changes.
 pub(crate) fn edit(
     repo: &ForgeRepo,
     current: &Current,
     edit: &Edit,
-    dialect: Dialect,
+    forge: &impl GitHubShapes,
 ) -> Result<Vec<Request>> {
     let item = &current.item;
     let mut requests = Vec::new();
     let mut fields = serde_json::Map::new();
     let mut title = edit.title.clone();
     let draft = draft_change(current, edit);
-    // Forgejo keeps draft state in the title, so a new title carries it too.
-    if let (Some(pr), Dialect::Forgejo) = (&item.pr, dialect)
+    // Where the title keeps draft state, a new title carries it too.
+    if let (Some(pr), Some(marker)) = (&item.pr, forge.draft_marker())
         && (title.is_some() || draft.is_some())
     {
         let current = title.as_deref().unwrap_or(&item.title);
-        title = Some(draft_title(current, draft.unwrap_or(pr.draft)));
+        title = Some(marker.draft_title(current, draft.unwrap_or(pr.draft)));
     }
     if let Some(title) = title {
         fields.insert("title".into(), title.into());
@@ -265,7 +280,7 @@ pub(crate) fn edit(
     if let Some(base) = &edit.base {
         fields.insert("base".into(), base.clone().into());
     }
-    let assignment = assignment_fields(current, edit, dialect)?;
+    let assignment = assignment_fields(current, edit, forge)?;
     // Only the issue endpoint changes a PR's assignees and milestone.
     let issue_fields = match item.kind {
         ItemKind::Issue => {
@@ -327,25 +342,24 @@ pub(crate) fn edit(
 }
 
 /// The issue fields that replace the item's assignees and milestone as
-/// `edit` says. Forgejo clears a milestone with ID 0.
+/// `edit` says.
 fn assignment_fields(
     current: &Current,
     edit: &Edit,
-    dialect: Dialect,
+    forge: &impl GitHubShapes,
 ) -> Result<serde_json::Map<String, Value>> {
     let mut fields = serde_json::Map::new();
     if edit.assigns() {
         let assignees = edit.assignees_after(&current.item.assignees);
         fields.insert("assignees".into(), assignees.into());
     }
-    let milestone = match (&edit.milestone, dialect) {
-        (None, _) => return Ok(fields),
-        (Some(MilestoneChange::Set(title)), _) => current
+    let milestone = match &edit.milestone {
+        None => return Ok(fields),
+        Some(MilestoneChange::Set(title)) => current
             .milestone_id
             .with_context(|| format!("milestone {title} was not looked up"))?
             .into(),
-        (Some(MilestoneChange::Clear), Dialect::GitHub) => Value::Null,
-        (Some(MilestoneChange::Clear), Dialect::Forgejo) => 0.into(),
+        Some(MilestoneChange::Clear) => forge.cleared_milestone(),
     };
     fields.insert("milestone".into(), milestone);
     Ok(fields)
@@ -479,7 +493,7 @@ fn open_urls(issues: &[Value]) -> Result<Vec<String>> {
 }
 
 /// The latest status of each context in a commit's combined status.
-pub(crate) fn commit_statuses(combined: &Value, dialect: Dialect) -> Result<Vec<CiCheck>> {
+pub(crate) fn commit_statuses(combined: &Value, forge: &impl GitHubShapes) -> Result<Vec<CiCheck>> {
     let statuses = match &combined["statuses"] {
         Value::Null => &[][..],
         statuses => statuses.as_array().context("invalid commit statuses")?,
@@ -488,17 +502,11 @@ pub(crate) fn commit_statuses(combined: &Value, dialect: Dialect) -> Result<Vec<
         combined["total_count"].as_u64() == Some(statuses.len() as u64),
         "the forge returned a partial page of commit statuses"
     );
-    let field = match dialect {
-        Dialect::GitHub => "state",
-        Dialect::Forgejo => "status",
-    };
     statuses
         .iter()
         .map(|status| {
-            let state = match status[field].as_str() {
-                Some("pending") if dialect == Dialect::Forgejo && actions::status_waits(status) => {
-                    JobState::Waiting
-                }
+            let state = match status[forge.status_field()].as_str() {
+                Some("pending") if forge.status_waits(status) => JobState::Waiting,
                 Some("pending") => JobState::Running,
                 Some("failure" | "error") => JobState::Failed,
                 Some("success" | "warning" | "skipped") => JobState::Finished,
@@ -517,9 +525,9 @@ pub(crate) fn reactions_endpoint(
     repo: &ForgeRepo,
     number: u64,
     subject: Subject,
-    dialect: Dialect,
+    forge: &impl GitHubShapes,
 ) -> String {
-    let endpoint = match comment_path(subject, dialect) {
+    let endpoint = match comment_path(subject, forge) {
         Some(comment) => format!("{comment}/reactions"),
         None => format!("issues/{number}/reactions"),
     };
@@ -531,9 +539,9 @@ pub(crate) fn edit_comment(
     repo: &ForgeRepo,
     subject: Subject,
     body: &str,
-    dialect: Dialect,
+    forge: &impl GitHubShapes,
 ) -> Result<Request> {
-    let comment = comment_path(subject, dialect).context("only a comment can be edited")?;
+    let comment = comment_path(subject, forge).context("only a comment can be edited")?;
     Ok(Request::new(
         HttpMethod::Patch,
         repo.repo_endpoint(&comment),
@@ -542,14 +550,12 @@ pub(crate) fn edit_comment(
 }
 
 /// The path of the comment `subject` in the repository; none for the item
-/// itself. Forgejo keeps a PR's inline comments among its issue comments.
-fn comment_path(subject: Subject, dialect: Dialect) -> Option<String> {
-    match (subject, dialect) {
-        (Subject::Item, _) => None,
-        (Subject::Comment(id), _) | (Subject::ReviewComment(id), Dialect::Forgejo) => {
-            Some(format!("issues/comments/{id}"))
-        }
-        (Subject::ReviewComment(id), Dialect::GitHub) => Some(format!("pulls/comments/{id}")),
+/// itself.
+fn comment_path(subject: Subject, forge: &impl GitHubShapes) -> Option<String> {
+    match subject {
+        Subject::Item => None,
+        Subject::Comment(id) => Some(format!("issues/comments/{id}")),
+        Subject::ReviewComment(id) => Some(forge.review_comment_path(id)),
     }
 }
 

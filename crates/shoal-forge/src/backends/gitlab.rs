@@ -17,7 +17,7 @@ use crate::{
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
-    conventions::Lookup,
+    conventions::{Lookup, draft::DraftMarker},
     items::{
         action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
         attach::{Attachment, Holder},
@@ -307,7 +307,7 @@ impl Backend for GitLab {
             let draft = edit.draft.unwrap_or(pr.draft);
             if title.is_some() || draft != pr.draft {
                 let current = title.as_deref().unwrap_or(&item.title);
-                title = Some(draft_title(current, draft));
+                title = Some(DRAFT.draft_title(current, draft));
             }
         }
         if let Some(title) = title {
@@ -534,7 +534,7 @@ impl Backend for GitLab {
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
         let title = if pull.draft {
-            draft_title(&pull.title, true)
+            DRAFT.draft_title(&pull.title, true)
         } else {
             pull.title.clone()
         };
@@ -1153,7 +1153,10 @@ async fn item_notes(
 const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];
 
 /// Title prefixes that make a merge request a draft, including the former `WIP:`.
-const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
+const DRAFT: DraftMarker = DraftMarker {
+    prefixes: &["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"],
+    marker: "Draft:",
+};
 
 /// GitLab merges with the project's merge method, optionally squashing, now
 /// or once the pipeline succeeds when `when_pipeline_succeeds`.
@@ -1174,24 +1177,6 @@ fn merge_request(
         body["merge_when_pipeline_succeeds"] = json!(true);
     }
     Ok(Request::new(HttpMethod::Put, endpoint, Some(body)))
-}
-
-/// The title with GitLab's draft prefix added or removed.
-pub(crate) fn draft_title(title: &str, draft: bool) -> String {
-    let bare = DRAFT_PREFIXES
-        .iter()
-        .find_map(|prefix| {
-            title
-                .get(..prefix.len())
-                .filter(|start| start.eq_ignore_ascii_case(prefix))
-                .map(|_| title[prefix.len()..].trim_start())
-        })
-        .unwrap_or(title);
-    if draft {
-        format!("Draft: {bare}")
-    } else {
-        bare.to_owned()
-    }
 }
 
 /// The IDs of the users `names`, which `current` records.

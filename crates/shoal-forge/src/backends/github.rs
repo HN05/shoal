@@ -13,7 +13,7 @@ mod view;
 
 use super::{
     Backend, LoginHint,
-    github_rest::{self, Dialect},
+    github_rest::{self, GitHubShapes},
     image, link, rest,
 };
 use crate::{
@@ -30,7 +30,7 @@ use crate::{
         run_view::{JOBS_PAGE, RunFilter, RunJob},
         runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, WaitingJob},
     },
-    conventions::{Lookup, shared_lookups},
+    conventions::{Lookup, draft::DraftMarker, shared_lookups},
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
@@ -186,7 +186,7 @@ impl Backend for GitHub {
         number: u64,
         value: &Value,
     ) -> Result<Current> {
-        github_rest::current(repo, kind, number, value, Dialect::GitHub)
+        github_rest::current(repo, kind, number, value, self)
     }
 
     fn numbers_items_together(&self) -> bool {
@@ -228,7 +228,7 @@ impl Backend for GitHub {
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        let mut requests = github_rest::edit(repo, current, edit, Dialect::GitHub)?;
+        let mut requests = github_rest::edit(repo, current, edit, self)?;
         if let Some(draft) = github_rest::draft_change(current, edit) {
             requests.push(draft_request(current, draft)?);
         }
@@ -571,12 +571,7 @@ impl Backend for GitHub {
         number: u64,
         subject: Subject,
     ) -> Result<String> {
-        Ok(github_rest::reactions_endpoint(
-            repo,
-            number,
-            subject,
-            Dialect::GitHub,
-        ))
+        Ok(github_rest::reactions_endpoint(repo, number, subject, self))
     }
 
     fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
@@ -610,7 +605,7 @@ impl Backend for GitHub {
     ) -> Result<Vec<CiCheck>> {
         let (runs, statuses) = activity::commit_checks(repo, account, head).await?;
         let mut checks = actions::checks(&runs)?;
-        checks.extend(github_rest::commit_statuses(&statuses, Dialect::GitHub)?);
+        checks.extend(github_rest::commit_statuses(&statuses, self)?);
         Ok(checks)
     }
 
@@ -881,7 +876,7 @@ impl Backend for GitHub {
         subject: Subject,
         body: &str,
     ) -> Result<Request> {
-        github_rest::edit_comment(repo, subject, body, Dialect::GitHub)
+        github_rest::edit_comment(repo, subject, body, self)
     }
 
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
@@ -896,6 +891,25 @@ impl Backend for GitHub {
     /// GitHub's issue edits take a milestone's number.
     fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
         Some((text(&listed["title"])?, listed["number"].as_u64()?))
+    }
+}
+
+impl GitHubShapes for GitHub {
+    /// GitHub keeps draft state in the PR's `draft` field.
+    fn draft_marker(&self) -> Option<&DraftMarker> {
+        None
+    }
+
+    fn cleared_milestone(&self) -> Value {
+        Value::Null
+    }
+
+    fn status_field(&self) -> &'static str {
+        "state"
+    }
+
+    fn review_comment_path(&self, id: CommentId) -> String {
+        format!("pulls/comments/{id}")
     }
 }
 
