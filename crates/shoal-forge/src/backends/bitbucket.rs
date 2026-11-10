@@ -832,9 +832,7 @@ async fn view_details(
     kind: ItemKind,
     number: u64,
 ) -> Result<Details> {
-    let value = repo
-        .send(account, &Request::get(repo.item_endpoint(kind, number)))
-        .await?;
+    let value = repo.read_value(account, kind, number).await?;
     let current = repo.current(kind, number, &value)?;
     let author = match kind {
         ItemKind::Issue => &value["reporter"],
@@ -929,12 +927,7 @@ impl RestReads for Bitbucket {
         account: &Account,
         number: PullNumber,
     ) -> Result<Vec<(String, Verdict)>> {
-        let pull = repo
-            .send(
-                account,
-                &Request::get(repo.item_endpoint(ItemKind::Pr, number.get())),
-            )
-            .await?;
+        let pull = repo.read_value(account, ItemKind::Pr, number.get()).await?;
         verdicts(&pull)
     }
 }

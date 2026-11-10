@@ -660,10 +660,19 @@ impl ForgeRepo {
     }
 
     pub async fn read(&self, account: &Account, kind: ItemKind, number: u64) -> Result<Current> {
-        let value = self
-            .send(account, &Request::get(self.item_endpoint(kind, number)))
-            .await?;
+        let value = self.read_value(account, kind, number).await?;
         self.current(kind, number, &value)
+    }
+
+    /// The item as the forge reports it, for the fields `Current` leaves out.
+    pub(crate) async fn read_value(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<serde_json::Value> {
+        self.send(account, &Request::get(self.item_endpoint(kind, number)))
+            .await
     }
 
     /// Whether `number` names an issue or a PR. Only forges that number both
@@ -673,12 +682,7 @@ impl ForgeRepo {
             self.kind.numbers_items_together(),
             "this forge numbers issues and PRs separately; put issue or pr before #{number}"
         );
-        let value = self
-            .send(
-                account,
-                &Request::get(self.item_endpoint(ItemKind::Issue, number)),
-            )
-            .await?;
+        let value = self.read_value(account, ItemKind::Issue, number).await?;
         crate::items::item::issue_read_kind(number, &value)
     }
 

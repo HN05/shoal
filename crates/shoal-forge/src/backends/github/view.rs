@@ -10,7 +10,6 @@ use crate::{
     items::{action::MergeMethod, link::ItemKind},
     numbers::{CommentId, PullNumber},
     review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},
-    transport::api::Request,
 };
 
 pub(crate) async fn details(
@@ -20,8 +19,7 @@ pub(crate) async fn details(
     number: u64,
     comments: bool,
 ) -> Result<Details> {
-    let read = Request::get(repo.item_endpoint(kind, number));
-    let item = repo.send(account, &read);
+    let item = repo.read_value(account, kind, number);
     let discussion = async {
         if !comments {
             return Ok(None);

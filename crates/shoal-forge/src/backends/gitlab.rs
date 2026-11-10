@@ -1018,9 +1018,7 @@ async fn view_details(
     kind: ItemKind,
     number: u64,
 ) -> Result<Details> {
-    let value = repo
-        .send(account, &Request::get(repo.item_endpoint(kind, number)))
-        .await?;
+    let value = repo.read_value(account, kind, number).await?;
     let current = repo.current(kind, number, &value)?;
     let open = current.item.state == ItemState::Open;
     let pr = current.item.pr.map(|pr| PrDetails {

@@ -28,12 +28,7 @@ pub(crate) async fn failed_check_log(
     name: &str,
 ) -> Result<CheckLog> {
     let (number, _) = repo.pull(url)?;
-    let pull = repo
-        .send(
-            account,
-            &Request::get(repo.item_endpoint(ItemKind::Pr, number.get())),
-        )
-        .await?;
+    let pull = repo.read_value(account, ItemKind::Pr, number.get()).await?;
     let head = pull["head"]["sha"]
         .as_str()
         .context("PR has no head commit")?;

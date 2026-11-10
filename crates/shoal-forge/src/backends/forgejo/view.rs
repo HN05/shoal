@@ -21,9 +21,7 @@ pub(crate) async fn details(
     kind: ItemKind,
     number: u64,
 ) -> Result<Details> {
-    let item = repo
-        .send(account, &Request::get(repo.item_endpoint(kind, number)))
-        .await?;
+    let item = repo.read_value(account, kind, number).await?;
     let mut details = github_rest::details(&item, kind, number, repo.owner())?;
     let open = details.state == "open";
     if let Some(pr) = details.pr.as_mut().filter(|_| open) {
