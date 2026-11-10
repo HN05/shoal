@@ -79,6 +79,22 @@ fn a_chat_in_a_workspace_names_the_workspace() {
 }
 
 #[test]
+fn a_chat_item_shows_its_mode_in_its_own_column() {
+    let chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
+        "id": "c", "repository_id": "r1", "name": "repo-plan-7", "agent": "claude",
+        "mode": "plan", "pid": 1, "started_at": 0,
+    }))
+    .unwrap();
+    let inbox = Inbox {
+        items: vec![Item::ChatDone { chat: chat.clone() }],
+        workspaces: Vec::new(),
+        chats: vec![chat],
+    };
+    let rows = inbox.rows(&[], Palette::stdout(true), None);
+    assert_eq!(rows, ["finished  repo-plan-7  plan"]);
+}
+
+#[test]
 fn a_running_chat_whose_agent_needs_input_is_listed() {
     let chat = |id: &str, state: &str, restore: Option<&str>| -> crate::model::Chat {
         serde_json::from_value(serde_json::json!({

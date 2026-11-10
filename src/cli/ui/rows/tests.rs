@@ -45,9 +45,10 @@ fn queue_status_names_the_work_a_launch_waits_for() {
     );
     entry.waiting_for.clear();
     entry.mode = Some("review".into());
+    let plain = Palette::stdout(true);
     assert_eq!(
-        queue_status_cell(&entry).0,
-        "queued, review mode, position 2"
+        queue_rows(&[entry], &[], plain),
+        ["○ ui  review  queued, position 2"]
     );
 }
 
@@ -485,20 +486,30 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
         "workspace": {"id": "w", "name": "worker", "branch": "worker"},
     }))
     .unwrap();
+    let mut worker = workspace("a", "worker", "worker", WorkspaceState::Ready);
+    worker.mode = Some("worker".into());
+    let mut orchestrate = workspace("a", "orchestrate", "orchestrate", WorkspaceState::Ready);
+    orchestrate.mode = Some("orchestrate".into());
     let plain = Palette::stdout(true);
-    let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(
+        &[worker.clone(), orchestrate],
+        &[chat],
+        &HashSet::new(),
+        plain,
+        None,
+    );
     assert_eq!(
         rows,
-        ["◐ 4  repo-plan-7  in worker  process running, plan mode  claude"]
+        [
+            "○ 1  worker                               inactive",
+            "○ 1  orchestrate             orchestrate  inactive",
+            "◐ 4  repo-plan-7  in worker  plan         process running  claude",
+        ]
     );
+    // A column no row has a mode for is left out.
     assert_eq!(
-        with_mode("running", Some(&"worker".into()), &"worker".into()),
-        "running"
-    );
-    assert_eq!(with_mode("running", None, &"worker".into()), "running");
-    assert_eq!(
-        with_mode("running", Some(&"chat".into()), &"worker".into()),
-        "running, chat mode"
+        workspace_tree_rows(&[worker], &[], &HashSet::new(), plain, None),
+        ["○ 1  worker  inactive"]
     );
 }
 

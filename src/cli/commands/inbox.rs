@@ -129,8 +129,9 @@ impl Inbox {
     }
 
     /// One aligned row per item: its kind, workspace, the workspace's
-    /// repository when the rows span several, what it is about, cut to fit
-    /// `width`, and a note, which names the workspace a chat runs in.
+    /// repository when the rows span several, its mode, what it is about,
+    /// cut to fit `width`, and a note, which names the workspace a chat runs
+    /// in.
     pub(in crate::cli) fn rows(
         &self,
         repositories: &[(String, String)],
@@ -138,7 +139,7 @@ impl Inbox {
         width: Option<usize>,
     ) -> Vec<String> {
         let repository = |item| repository_of(&self.workspaces, &self.chats, item);
-        let cells: Vec<[Cell; 5]> = self
+        let cells: Vec<[Cell; 6]> = self
             .items
             .iter()
             .zip(ui::repository_cells(
@@ -150,12 +151,13 @@ impl Inbox {
                     item.kind(),
                     (item.name(repositories), None),
                     (repository, None),
+                    item.mode(),
                     (item.text(), None),
                     (note(&self.chats, item), Some(Style::Muted)),
                 ]
             })
             .collect();
-        let limit = width.map(|width| WidthLimit { column: 3, width });
+        let limit = width.map(|width| WidthLimit { column: 4, width });
         ui::aligned_to(cells, palette, limit)
     }
 }
@@ -283,6 +285,9 @@ pub(crate) trait ItemExt {
     /// What kind of item it is, with a question's or request's number.
     fn kind(&self) -> Cell;
 
+    /// The mode of the workspace or chat it reports on.
+    fn mode(&self) -> Cell;
+
     /// What the item asks or reports: the question, the access requested
     /// and why, the failure, or the marked item with the issue's title.
     fn text(&self) -> String;
@@ -352,18 +357,12 @@ impl ItemExt for Item {
             Self::Approval { request } => {
                 return (format!("approval {}", request.number), Some(Style::Warning));
             }
-            Self::NeedsInput { workspace } => {
-                return workspace_kind(workspace, "needs input", Style::Warning);
+            Self::NeedsInput { .. } | Self::ChatNeedsInput { .. } => {
+                ("needs input", Style::Warning)
             }
-            Self::Failed { workspace } => return workspace_kind(workspace, "failed", Style::Error),
-            Self::Ready { workspace, .. } => {
-                return workspace_kind(workspace, "ready", Style::Success);
-            }
-            Self::ChatNeedsInput { chat } => {
-                return chat_kind(chat, "needs input", Style::Warning);
-            }
-            Self::ChatReady { chat, .. } => return chat_kind(chat, "ready", Style::Success),
-            Self::ChatDone { chat } => return chat_kind(chat, "finished", Style::Success),
+            Self::Failed { .. } => ("failed", Style::Error),
+            Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
+            Self::ChatDone { .. } => ("finished", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
@@ -405,6 +404,18 @@ impl ItemExt for Item {
         }
     }
 
+    fn mode(&self) -> Cell {
+        match self {
+            Self::NeedsInput { workspace }
+            | Self::Failed { workspace }
+            | Self::Ready { workspace, .. } => ui::workspace_mode_cell(workspace),
+            Self::ChatNeedsInput { chat }
+            | Self::ChatReady { chat, .. }
+            | Self::ChatDone { chat } => ui::chat_mode_cell(chat),
+            _ => (String::new(), None),
+        }
+    }
+
     fn note(&self) -> String {
         match self {
             Self::Question { question } => question_note(question),
@@ -413,19 +424,6 @@ impl ItemExt for Item {
             _ => String::new(),
         }
     }
-}
-
-/// The kind `label` of an item about `workspace`, with its mode.
-fn workspace_kind(workspace: &Workspace, label: &str, style: Style) -> Cell {
-    let usual = crate::config::modes::ModeName::DEFAULT;
-    let label = ui::with_mode(label, workspace.mode.as_ref(), &usual);
-    (label, Some(style))
-}
-
-/// The kind `label` of an item about `chat`, with its mode.
-fn chat_kind(chat: &Chat, label: &str, style: Style) -> Cell {
-    let label = ui::with_mode(label, Some(&chat.mode), &crate::model::chat_mode());
-    (label, Some(style))
 }
 
 /// The question's recommendation and the names of the files sent with it.

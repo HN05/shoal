@@ -2294,8 +2294,9 @@ planned_label` takes `worker` and one labelled `plan_label` takes `plan`
 instead of the picker. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
-and `shoal work`, `shoal work status`, `shoal inbox`, the queue and the menu name a
-mode other than `worker` for a workspace or `chat` for a chat. The built-in [`work` rule](../crates/shoal-client/src/config/rules/work.md)
+`shoal work status` names it, and the rows of `shoal work`, `shoal inbox`, the
+queue and the menu name a mode other than `worker` for a workspace or `chat`
+for a chat in a column of its own. The built-in [`work` rule](../crates/shoal-client/src/config/rules/work.md)
 holds the practices of Shoal's workflow. A user's own modes may list it or
 leave it out, and a `rules/work.md` or `[rules.work]` replaces or extends it as
 for any rule. `review` holds the style of a [local review](#local-reviews), and

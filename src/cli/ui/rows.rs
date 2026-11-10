@@ -16,6 +16,7 @@ use crate::{
         output::{Palette, Style},
     },
     client::progress::Progress,
+    config::modes::ModeName,
     forge::items::link,
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind, QueueState},
@@ -54,8 +55,6 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
 /// `waiting, review 17 finished: 1 blocker`.
 fn workspace_status_cell(workspace: &Workspace, status: ListStatus) -> Cell {
     let (label, style) = status_cell(status);
-    let usual = crate::config::modes::ModeName::DEFAULT;
-    let label = with_mode(&label, workspace.mode.as_ref(), &usual);
     match &workspace.latest_review {
         Some(review) => (
             format!("{label}, review {} {}", review.id, review.status),
@@ -103,8 +102,8 @@ pub fn usage_label(usage: &WorkspaceUsage) -> String {
 
 /// One aligned row per workspace: a status marker, the number, the name,
 /// the repository when the rows span several (`(id, name)` pairs), the
-/// status, what its processes use, its progress, and its agent's status
-/// line, else the linked issue's title when known.
+/// mode, the status, what its processes use, its progress, and its agent's
+/// status line, else the linked issue's title when known.
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
@@ -208,7 +207,7 @@ impl<'a> SpaceTree<'a> {
     }
 
     /// The row of `space` at `depth`, then those of the spaces below it.
-    fn push(&self, rows: &mut Vec<(String, [Cell; 7])>, space: Listed<'a>, depth: usize) {
+    fn push(&self, rows: &mut Vec<(String, [Cell; 8])>, space: Listed<'a>, depth: usize) {
         rows.push(match space {
             Listed::Workspace(workspace) => {
                 tree_workspace_row(workspace, depth, self.stopped, self.palette)
@@ -237,7 +236,7 @@ fn tree_workspace_row(
     depth: usize,
     stopped: &HashSet<SpaceId>,
     palette: Palette,
-) -> (String, [Cell; 7]) {
+) -> (String, [Cell; 8]) {
     let name = indented(&workspace.name, depth);
     let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
     (
@@ -246,6 +245,7 @@ fn tree_workspace_row(
             number_cell(workspace.number),
             (name, Some(Style::Heading)),
             (String::new(), None),
+            workspace_mode_cell(workspace),
             workspace_status_cell(workspace, status),
             usage_cell(workspace),
             progress_cell(workspace.progress.as_ref()),
@@ -309,12 +309,11 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
 }
 
 /// A chat's row: its status marker, number and name, the workspace it
-/// runs in, its status with its mode, its progress, and its agent's status
+/// runs in, its mode, its status, its progress, and its agent's status
 /// line, else its agent.
-fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 7]) {
+fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 8]) {
     let status = ListStatus::of_chat(chat);
     let place = chat.workspace.as_ref();
-    let label = with_mode(status.label(), Some(&chat.mode), &crate::model::chat_mode());
     (
         status.marker(palette),
         [
@@ -324,7 +323,8 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 7]) 
                 place.map_or_else(String::new, |workspace| format!("in {}", workspace.name)),
                 None,
             ),
-            (label, Some(status.style())),
+            chat_mode_cell(chat),
+            status_cell(status),
             (String::new(), None),
             progress_cell(chat.progress.as_ref()),
             (
@@ -353,7 +353,7 @@ pub(super) fn rows_with_status(
         .into_iter()
         .map(|(status, cell)| (status.marker(palette), cell))
         .unzip();
-    let cells: Vec<[Cell; 7]> = workspaces
+    let cells: Vec<[Cell; 8]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
         .zip(statuses)
@@ -362,6 +362,7 @@ pub(super) fn rows_with_status(
                 number_cell(w.number),
                 (w.name.to_string(), Some(Style::Heading)),
                 (repository, None),
+                workspace_mode_cell(w),
                 status,
                 usage_cell(w),
                 progress_cell(w.progress.as_ref()),
@@ -382,17 +383,21 @@ pub(super) fn rows_with_status(
         .collect()
 }
 
-/// A space's status `label` with its `mode`, which rows leave out when it
-/// is the kind's `usual` mode or none.
-pub fn with_mode(
-    label: &str,
-    mode: Option<&crate::config::modes::ModeName>,
-    usual: &crate::config::modes::ModeName,
-) -> String {
-    match mode.filter(|mode| *mode != usual) {
-        Some(mode) => format!("{label}, {mode} mode"),
-        None => label.to_owned(),
-    }
+/// A space's `mode`, which rows leave out when it is the kind's `usual`
+/// mode or none.
+pub fn mode_cell(mode: Option<&ModeName>, usual: &ModeName) -> Cell {
+    let shown = mode.filter(|mode| *mode != usual);
+    (shown.map(ToString::to_string).unwrap_or_default(), None)
+}
+
+/// A workspace's mode, left out for `worker`.
+pub fn workspace_mode_cell(workspace: &Workspace) -> Cell {
+    mode_cell(workspace.mode.as_ref(), &ModeName::DEFAULT)
+}
+
+/// A chat's mode, left out for `chat`.
+pub fn chat_mode_cell(chat: &Chat) -> Cell {
+    mode_cell(Some(&chat.mode), &crate::model::chat_mode())
 }
 
 /// A space's number, as the first cell of its row.
@@ -403,18 +408,14 @@ fn number_cell(number: SpaceNumber) -> Cell {
 /// Rows of `width` with a state marker before their cells cut the title.
 fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
     width.map(|width| WidthLimit {
-        column: 6,
+        column: 7,
         width: width.saturating_sub(2),
     })
 }
 
 fn queue_status_cell(entry: &QueueEntry) -> Cell {
     let status = ListStatus::of_entry(entry);
-    let label = with_mode(
-        status.label(),
-        entry.mode.as_ref(),
-        &crate::config::modes::ModeName::DEFAULT,
-    );
+    let label = status.label().to_owned();
     let mut text = match entry.position {
         Some(position) => format!("{label}, position {position}"),
         None => label,
@@ -455,7 +456,7 @@ pub fn job_subject(queued: &crate::model::QueuedJob) -> String {
 }
 
 /// One aligned row per agent queue entry: its workspace name, its repository
-/// when the entries span several, its place, and what it starts.
+/// when the entries span several, its mode, its place, and what it starts.
 pub fn queue_rows(
     entries: &[QueueEntry],
     repositories: &[Repository],
@@ -471,7 +472,7 @@ pub fn queue_rows(
         })
         .collect();
     let several = names.iter().collect::<HashSet<_>>().len() > 1;
-    let cells: Vec<[Cell; 4]> = entries
+    let cells: Vec<[Cell; 5]> = entries
         .iter()
         .zip(names)
         .map(|(entry, repository)| {
@@ -485,6 +486,7 @@ pub fn queue_rows(
                     },
                     None,
                 ),
+                mode_cell(entry.mode.as_ref(), &ModeName::DEFAULT),
                 queue_status_cell(entry),
                 (queue_subject(entry), None),
             ]
