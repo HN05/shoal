@@ -166,10 +166,7 @@ async fn resume_each(
     queuing: Queuing,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let stopped = match &selected.workspaces {
-        None => stopped_work(ctx, discard).await?,
-        Some(workspaces) => stopped_in(ctx, workspaces, discard).await?,
-    };
+    let stopped = selected.stopped(ctx, discard).await?;
     if stopped.is_empty() && selected.chats.is_empty() {
         return report_nothing(ctx, discard || queuing == Queuing::Here { now: true });
     }
@@ -523,58 +520,6 @@ async fn reconcile_stale_execution(
         "selected execution is still unresolved; stop what remains of it with shoal stop, then resume again"
     );
     Ok(())
-}
-
-/// The stopped work and last sessions of the workspaces `selectors` name,
-/// as [`saved_work`] keeps them for `discard`, refusing one with nothing to
-/// resume.
-async fn stopped_in(
-    ctx: &Context,
-    selectors: &[SpaceSelector],
-    discard: bool,
-) -> Result<Vec<(Workspace, Saved)>> {
-    let mut stopped = Vec::new();
-    for selector in selectors {
-        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-            .await?
-            .workspace;
-        let saved = saved_work(ctx, &workspace, discard)?;
-        ensure!(
-            !saved.is_empty(),
-            "{} has no stopped agents or commands to resume",
-            workspace.name
-        );
-        stopped.push((workspace, saved));
-    }
-    Ok(stopped)
-}
-
-/// The workspaces with stopped work or last sessions, as [`saved_work`]
-/// keeps them for `discard`. A done assignment needs no agent, so its
-/// workspace is included only to `discard`.
-async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
-    let mut stopped = Vec::new();
-    for workspace in crate::client::workspaces::list(&ctx.paths).await? {
-        if workspace.done && !discard {
-            continue;
-        }
-        let saved = saved_work(ctx, &workspace, discard)?;
-        if !saved.is_empty() {
-            stopped.push((workspace, saved));
-        }
-    }
-    Ok(stopped)
-}
-
-/// `workspace`'s stopped work and last sessions: with the agents waiting in
-/// their wrappers, which a resume starts there, except to `discard`, which
-/// leaves them to their wrappers.
-fn saved_work(ctx: &Context, workspace: &Workspace, discard: bool) -> Result<Saved> {
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-    if discard {
-        saved.retain_unattended();
-    }
-    Ok(saved)
 }
 
 /// Only one resume reports a command; another holding its lock skips it.

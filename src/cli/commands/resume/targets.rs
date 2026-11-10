@@ -1,11 +1,12 @@
 //! What `shoal resume` acts on: workspaces with stopped work and the chats
 //! Shoal saved, which share one namespace of names.
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
-    model::{Chat, PresentSpace, Spaces},
+    execution::recovery::Saved,
+    model::{Chat, PresentSpace, Spaces, Workspace},
 };
 
 /// The space a `shoal resume` target names.
@@ -61,6 +62,15 @@ impl Selected {
         }
     }
 
+    /// The stopped work and last sessions of the selected workspaces, or of
+    /// every workspace with any, as [`saved_work`] keeps them for `discard`.
+    pub async fn stopped(&self, ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
+        match &self.workspaces {
+            None => stopped_work(ctx, discard).await,
+            Some(workspaces) => stopped_in(ctx, workspaces, discard).await,
+        }
+    }
+
     /// The spaces `selectors` name among `spaces`, each once.
     fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Result<Self> {
         let mut selected = Self {
@@ -104,6 +114,58 @@ fn saved_chats(spaces: &Spaces) -> Vec<Chat> {
         .filter(|chat| chat.restore.is_some())
         .cloned()
         .collect()
+}
+
+/// The stopped work and last sessions of the workspaces `selectors` name,
+/// as [`saved_work`] keeps them for `discard`, refusing one with nothing to
+/// resume.
+async fn stopped_in(
+    ctx: &Context,
+    selectors: &[SpaceSelector],
+    discard: bool,
+) -> Result<Vec<(Workspace, Saved)>> {
+    let mut stopped = Vec::new();
+    for selector in selectors {
+        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
+            .await?
+            .workspace;
+        let saved = saved_work(ctx, &workspace, discard)?;
+        ensure!(
+            !saved.is_empty(),
+            "{} has no stopped agents or commands to resume",
+            workspace.name
+        );
+        stopped.push((workspace, saved));
+    }
+    Ok(stopped)
+}
+
+/// The workspaces with stopped work or last sessions, as [`saved_work`]
+/// keeps them for `discard`. A done assignment needs no agent, so its
+/// workspace is included only to `discard`.
+async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
+    let mut stopped = Vec::new();
+    for workspace in crate::client::workspaces::list(&ctx.paths).await? {
+        if workspace.done && !discard {
+            continue;
+        }
+        let saved = saved_work(ctx, &workspace, discard)?;
+        if !saved.is_empty() {
+            stopped.push((workspace, saved));
+        }
+    }
+    Ok(stopped)
+}
+
+/// `workspace`'s stopped work and last sessions: with the agents waiting in
+/// their wrappers, which a resume starts there, except to `discard`, which
+/// leaves them to their wrappers.
+fn saved_work(ctx: &Context, workspace: &Workspace, discard: bool) -> Result<Saved> {
+    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    if discard {
+        saved.retain_unattended();
+    }
+    Ok(saved)
 }
 
 #[cfg(test)]
