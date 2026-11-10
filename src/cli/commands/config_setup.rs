@@ -23,17 +23,30 @@ pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i3
     let model = std::mem::take(&mut args.model).into();
     chat::check_model(&settings, &agent, &model)?;
     let config = installed_config(ctx)?;
-    chat::start_outside_repositories(ctx, topic(&config), options(args, agent, model)).await
+    let options = options(args, agent, model, ctx.interactive());
+    chat::start_outside_repositories(ctx, topic(&config), options).await
 }
 
 /// How the setup chat of `agent` starts: as chats do, at once, and unless
 /// `--here` in a focused place beside this terminal, whatever the `focus`
-/// setting says, since the user works with it straight away.
-fn options(args: ConfigSetupArgs, agent: Agent, model: ModelChoice) -> chat::Options {
+/// setting says, since the user works with it straight away. A call that
+/// is not `interactive` has no terminal to start it beside, so it starts
+/// in a background place instead.
+fn options(
+    args: ConfigSetupArgs,
+    agent: Agent,
+    model: ModelChoice,
+    interactive: bool,
+) -> chat::Options {
+    let place = match (args.here, interactive) {
+        (true, _) => chat::ChatPlace::Here,
+        (false, true) => chat::ChatPlace::Beside,
+        (false, false) => chat::ChatPlace::Background,
+    };
     chat::Options {
         narrowing: chat::Narrowing::Requested(Default::default()),
         agent: Some(agent),
-        place: chat::ChatPlace::here(args.here),
+        place,
         name: args.name,
         model,
         args: args.args,

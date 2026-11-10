@@ -34,10 +34,9 @@ fn the_subject_names_the_global_config() {
     );
 }
 
-#[test]
-fn the_setup_chat_opens_in_a_focused_place_beside_this_terminal() {
+fn place(here: bool, interactive: bool) -> ChatPlace {
     let args = ConfigSetupArgs {
-        here: false,
+        here,
         agent: None,
         model: Default::default(),
         name: None,
@@ -47,6 +46,20 @@ fn the_setup_chat_opens_in_a_focused_place_beside_this_terminal() {
         args: Vec::new(),
     };
     let agent = Agent::unchecked("claude".into());
-    let options = options(args, agent, Default::default());
-    assert_eq!(options.place, ChatPlace::Beside);
+    options(args, agent, Default::default(), interactive).place
+}
+
+#[test]
+fn the_setup_chat_opens_in_a_focused_place_beside_a_terminal() {
+    assert_eq!(place(false, true), ChatPlace::Beside);
+}
+
+#[test]
+fn the_setup_chat_starts_in_the_background_without_a_terminal() {
+    assert_eq!(place(false, false), ChatPlace::Background);
+}
+
+#[test]
+fn the_setup_chat_runs_here_when_asked() {
+    assert_eq!(place(true, false), ChatPlace::Here);
 }

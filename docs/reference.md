@@ -2804,7 +2804,8 @@ directory as another working directory; `--here` and `--agent` work as for
 Only the user runs `repo setup` and `config setup`, since both change the
 user's own config. Both start their agent at once regardless of the limits,
 in a tab that takes focus whatever `terminal.focus` says; without a terminal or
-with `--json`, they start it detached.
+with `--json`, `repo setup` starts it detached and `config setup` in a
+background place.
 
 ### Contributions
 
