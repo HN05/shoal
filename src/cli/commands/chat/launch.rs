@@ -230,7 +230,7 @@ impl Launch {
         let token = crate::client::chats::scope(&ctx.paths, chat).await?;
         handoff::report(&Ok(()));
         let profile = settings.launch(&self.agent).environment_with(&model);
-        let git = agent_logins(ctx)?;
+        let git = crate::agent_git::Launch::agent_logins(&ctx.paths)?;
         exec_agent(ctx, home.path(), chat, &token, &command, &profile, &git)
     }
 }
@@ -258,15 +258,6 @@ async fn initial_name(
         Some(name) => Ok(name),
         None => crate::client::chats::free_name(&ctx.paths, topic.name.clone()).await,
     }
-}
-
-/// The Git settings that give the chat's agent the agent token of each
-/// forge host with one.
-fn agent_logins(ctx: &Context) -> Result<crate::agent_git::Launch> {
-    let config = crate::config::Config::load(&ctx.paths)?;
-    let mut git = crate::agent_git::Launch::default();
-    git.add_agent_logins(&ctx.paths, config.machine.forges.agent_token_hosts())?;
-    Ok(git)
 }
 
 /// Replace this process with the agent in `path`, so the terminal's signals

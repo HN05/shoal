@@ -22,6 +22,16 @@ impl Launch {
         Ok(Self { git })
     }
 
+    /// The Git settings of an agent without a Git profile, such as a chat's:
+    /// the credential helper for each host the global config gives an agent
+    /// token.
+    pub fn agent_logins(paths: &crate::paths::Paths) -> Result<Self> {
+        let config = crate::config::Config::load(paths)?;
+        let mut launch = Self::default();
+        launch.add_agent_logins(paths, config.machine.forges.agent_token_hosts())?;
+        Ok(launch)
+    }
+
     /// Add the credential helper for each of `hosts`, the hosts with an
     /// agent token, that the profile's own credential helper leaves to it.
     pub fn add_agent_logins<'a>(

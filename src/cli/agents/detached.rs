@@ -446,7 +446,7 @@ fn stop_session(mut session: Child) {
 }
 
 /// Start the `prepared` session of `app` in a session of its own in
-/// `directory` with the chat's identity, writing to `log`.
+/// `directory` with the chat's identity and agent logins, writing to `log`.
 fn spawn_session(
     ctx: &Context,
     app: &dyn App,
@@ -471,6 +471,7 @@ fn spawn_session(
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)
         .stderr(output);
+    crate::agent_git::Launch::agent_logins(&ctx.paths)?.apply(&mut session);
     for name in app.not_inherited() {
         session.env_remove(name);
     }

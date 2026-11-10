@@ -20,6 +20,10 @@ def record_launch():
     args = '\0'.join(sys.argv[1:]) + '\0'
     stdin = 'data' if sys.stdin.readline().endswith('\n') else 'eof'
     stdout = 'tty' if sys.stdout.isatty() else 'notty'
+    git_config = '\0'.join(
+        f'{env.get(f"GIT_CONFIG_KEY_{index}", "")}={env.get(f"GIT_CONFIG_VALUE_{index}", "")}'
+        for index in range(int(env.get('GIT_CONFIG_COUNT') or 0))
+    )
     record = Path(env['HAPPY_RECORD'])
     temporary = record.with_suffix(record.suffix + '.tmp')
     temporary.write_text(
@@ -30,6 +34,7 @@ def record_launch():
         f'port={env.get("SHOAL_PORT_WEB", "")}\n'
         f'chat={env.get("SHOAL_CHAT", "")}\n'
         f'reconnect={reconnect}\nstdin={stdin}\nstdout={stdout}\n'
+        f'git_config={git_config}\n'
     )
     temporary.replace(record)
 

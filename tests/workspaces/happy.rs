@@ -615,6 +615,43 @@ done
     assert_eq!(workspace["state"], "ready");
 }
 
+/// A detached chat's Git asks Shoal's helper for the agent token of a host
+/// with one, after clearing the user's helpers for it.
+#[test]
+fn happy_chats_get_the_agent_token_helper_for_git() {
+    let fixture = Fixture::with_config(Some(&format!(
+        "{HAPPY_ENABLED}[machine.forges.\"git.example.com\"]\ntype = \"forgejo\"\nagent_token = \"agenttoken\"\n"
+    )));
+    let record = install_fake_happy(&fixture);
+    let repo = fixture.repo.to_str().unwrap();
+
+    let output = fixture
+        .command()
+        .args(["--json", "start", "--chat", repo, "--agent", "happy-claude"])
+        .env("HAPPY_RECORD", &record)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{output:?}");
+    wait_until("fake happy record", || record.exists());
+    let recorded = fs::read_to_string(&record).unwrap();
+    let git_config = recorded
+        .split_once("git_config=")
+        .unwrap()
+        .1
+        .trim_end_matches('\n');
+    let helpers: Vec<_> = git_config
+        .split('\0')
+        .filter_map(|entry| entry.strip_prefix("credential.https://git.example.com.helper="))
+        .collect();
+    assert_eq!(helpers.len(), 2, "{recorded}");
+    assert_eq!(helpers[0], "");
+    assert!(
+        helpers[1].ends_with(" internal git-credential"),
+        "{recorded}"
+    );
+}
+
 #[test]
 fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
