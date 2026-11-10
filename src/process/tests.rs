@@ -99,20 +99,27 @@ async fn own_git_commands_count_once_the_wait_for_them_ends() {
     git.kill().await.unwrap();
 }
 
-#[tokio::test]
-async fn own_git_commands_that_end_do_not_count() {
+/// The clock moves only while the check sleeps, since its scans block the
+/// runtime or run as blocking tasks, which hold the paused clock: the check
+/// is waiting once the test's own sleep ends.
+#[tokio::test(start_paused = true)]
+async fn own_git_commands_that_end_while_waited_for_do_not_count() {
     let root = tempfile::tempdir().unwrap();
     let mut git = waiting_git(root.path());
     let named = format!("(PID {})", git.id().unwrap());
-    let input = git.stdin.take();
-    let (found, _) = tokio::join!(
-        in_directory_besides(root.path(), async { Ok(Vec::new()) }),
-        async {
-            drop(input);
-            git.wait().await
-        }
-    );
-    let found = found.unwrap();
+    let started = tokio::time::Instant::now();
+    let path = root.path().to_owned();
+    let check =
+        tokio::spawn(async move { in_directory_besides(&path, async { Ok(Vec::new()) }).await });
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(!check.is_finished());
+    drop(git.stdin.take());
+    // Blocking reaps it before the check, and the clock, can go on.
+    while git.try_wait().unwrap().is_none() {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let found = check.await.unwrap().unwrap();
+    assert!(started.elapsed() < OWN_GIT_END);
     assert!(
         !found.iter().any(|process| process.ends_with(&named)),
         "{found:?}"

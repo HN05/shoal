@@ -64,13 +64,7 @@ async fn users_after_own_git(root: &Path) -> Result<Vec<(u32, String)>> {
         if own.is_empty() || tokio::time::Instant::now() >= deadline {
             return Ok(found);
         }
-        while tokio::time::Instant::now() < deadline
-            && own
-                .iter()
-                .any(|process| identity::alive(process).unwrap_or(true))
-        {
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
+        identity::exited_by(&own, deadline).await;
     }
 }
 

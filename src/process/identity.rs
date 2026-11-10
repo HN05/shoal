@@ -170,6 +170,15 @@ pub(super) fn own_child_above(pid: u32) -> Option<u32> {
     None
 }
 
+/// Wait until every process of `targets` has exited, or `deadline` passes.
+pub async fn exited_by(targets: &[Identity], deadline: tokio::time::Instant) {
+    while tokio::time::Instant::now() < deadline
+        && targets.iter().any(|process| alive(process).unwrap_or(true))
+    {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 /// The process group of the live process `identity` names, `None` once it
 /// has exited.
 pub fn group_of(identity: &Identity) -> Option<u32> {
