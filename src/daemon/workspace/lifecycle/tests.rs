@@ -1,15 +1,25 @@
+use super::super::Manager;
+use super::remove::worktrunk_removal_options;
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
+        cleanup::{Rule, Snapshot},
+        events::EventCause,
         test_support::{git, install_test_script, manager, repository},
         workspace_files::Attacher,
     },
-    model::Workspace,
+    git::{
+        self,
+        worktrunk::{BranchRemoval, FileRemoval},
+    },
+    model::{CleanupReason, Workspace},
     process::identity,
     protocol::QueuedLaunches,
+    removal::{InspectionPolicy, NOTHING, UnsavedWork},
+    state::WorkspaceState,
 };
 use std::{fs, sync::Arc};
 
