@@ -4,7 +4,6 @@ use super::chats::journal;
 use super::resources::wait_for_busy;
 use super::*;
 
-#[cfg(target_os = "macos")]
 pub(crate) const SIM_CONFIG: &str = r#"
 [machine.simulators]
 max_booted = 1
@@ -20,7 +19,6 @@ runtime = "iOS Test"
 "#;
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
     let config = SIM_CONFIG.replace("runtime = \"iOS Test\"", "");
     let fixture = Fixture::with_tools(Some(&config), true);
@@ -101,7 +99,6 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
@@ -208,7 +205,6 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_leases_journal_acquisition_and_release() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
@@ -243,7 +239,6 @@ fn simulator_leases_journal_acquisition_and_release() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
     let mut fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
@@ -297,7 +292,6 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_requires_confirmed_native_boot_and_shutdown_states() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("worker");
@@ -368,7 +362,6 @@ fn simulator_requires_confirmed_native_boot_and_shutdown_states() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_policy_capacity_reclamation_and_external_devices() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     let workspace = fixture.add("worker");
@@ -462,7 +455,6 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1\nallow_any = true");
     let fixture = Fixture::with_tools(Some(&config), true);
@@ -544,7 +536,6 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     let config = SIM_CONFIG
         .replace("max_booted = 1", "max_booted = 2")
@@ -587,7 +578,6 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     fixture.ok(&["rm", "second"]);
 }
 
-#[cfg(target_os = "macos")]
 fn set_sim_apps(fixture: &Fixture, udid: &Value, count: usize) {
     let path = fixture.root.path().join("sim-devices.json");
     let mut devices: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -601,7 +591,6 @@ fn set_sim_apps(fixture: &Fixture, udid: &Value, count: usize) {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_removal() {
     let config = SIM_CONFIG.replace("max_booted = 1", "max_booted = 2");
     let mut fixture = Fixture::with_tools(Some(&config), true);
@@ -722,7 +711,6 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
@@ -772,7 +760,6 @@ fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn clean_simulator_wait_retries_share_one_audit_entry() {
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
     let fixture = Fixture::with_tools(Some(&config), true);
@@ -817,7 +804,6 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
     let config = SIM_CONFIG.replace("max_booted = 1", "max_booted = 2");
     let fixture = Fixture::with_tools(Some(&config), true);
@@ -873,7 +859,6 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
     let fixture = Fixture::with_tools(Some(&config), true);
@@ -920,38 +905,32 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn a_failed_simulator_creation_retains_its_audit_and_ownership() {
     simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("create");
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn a_failed_simulator_shutdown_retains_its_audit_and_ownership() {
     simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("shutdown");
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn a_failed_simulator_erase_retains_its_audit_and_ownership() {
     simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("erase");
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn a_failed_simulator_boot_retains_its_audit_and_ownership() {
     simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("bootstatus");
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn a_failed_simulator_eviction_retains_its_audit_and_ownership() {
     simulator_mutations_observe_persisted_audits_and_failure_retains_ownership("delete");
 }
 
 /// Fail the simulator command `failure` during a clean acquisition and check
 /// the audit and ownership the database held when the command ran.
-#[cfg(target_os = "macos")]
 fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership(failure: &str) {
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
     let mut fixture = Fixture::with_tools(Some(&config), true);
@@ -1054,7 +1033,6 @@ fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership(fa
 }
 
 #[test]
-#[cfg(target_os = "macos")]
 fn local_repository_config_selects_simulator_preferences() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("worker");

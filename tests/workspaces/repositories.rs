@@ -1,6 +1,7 @@
 //! Registering, cloning, syncing and removing repositories, the root and
 //! clone directories, and repository setup.
 use super::chats::{chat_args, install_recording_agent};
+#[cfg(target_os = "macos")]
 use super::simulators::SIM_CONFIG;
 use super::*;
 

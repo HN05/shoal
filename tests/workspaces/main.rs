@@ -26,6 +26,7 @@ mod resources;
 mod restarts;
 mod rex;
 mod secrets;
+#[cfg(target_os = "macos")]
 mod simulators;
 mod start;
 mod stopping;
@@ -62,10 +63,9 @@ use support::{
 };
 
 use fixture::{
-    FORGEJO_HOST, Fixture, NO_GRACE, NO_OVERLOAD_WARNINGS, PASSTHROUGH_ZMX, READABLE_SLEEP,
-    UNLIMITED_AGENTS, UNSETTLED, commit_file, commit_resource_config, install_fake_agents, lines,
-    link_runner_program, process_running, scoped_command, scoped_hook, set_repository_toml,
-    upstream_remote, wait_registered_execution,
+    Fixture, PASSTHROUGH_ZMX, READABLE_SLEEP, UNLIMITED_AGENTS, commit_file,
+    commit_resource_config, install_fake_agents, lines, link_runner_program, process_running,
+    scoped_command, scoped_hook, set_repository_toml, upstream_remote, wait_registered_execution,
 };
 use serde_json::Value;
 use std::{

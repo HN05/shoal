@@ -1,4 +1,5 @@
 //! Demos: restarts, screens, presets and handoffs.
+#[cfg(target_os = "macos")]
 use super::simulators::SIM_CONFIG;
 use super::*;
 

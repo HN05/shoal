@@ -1,5 +1,6 @@
 //! Approvals and scope: execution scope, exported environments, approval
 //! requests and their pickers, and pushes that wait for approval.
+#[cfg(target_os = "macos")]
 use super::simulators::SIM_CONFIG;
 use super::*;
 

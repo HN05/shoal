@@ -1,5 +1,7 @@
 //! Global, repository and local configuration, its layers and reloads, and
 //! Git profiles.
+#[cfg(target_os = "macos")]
+use super::fixture::{FORGEJO_HOST, NO_GRACE, NO_OVERLOAD_WARNINGS, UNSETTLED};
 use super::*;
 
 #[test]
