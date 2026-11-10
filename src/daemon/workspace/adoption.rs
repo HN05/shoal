@@ -3,12 +3,7 @@ use super::creation::{existing_base, recorded_base};
 use super::{Manager, identity::directory_identity};
 use crate::client::space_names::SpaceName;
 use crate::daemon::log;
-use crate::{
-    fsutil::off_runtime,
-    git::{self, worktrunk},
-    model::Workspace,
-    state::WorkspaceState,
-};
+use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use std::path::{Path, PathBuf};
 
@@ -120,14 +115,14 @@ impl Manager {
             Some(branch),
             WorkspaceState::Preparing,
         );
-        // Reserve the branch and destination before Worktrunk can mutate Git.
+        // Reserve the branch and destination before Git creates the worktree.
         let workspace = self.insert_workspace(workspace, None, None, true).await?;
         let result = self.materialize_copy(repo, source, &workspace).await;
         match result {
             Ok(()) => self.workspace_by_id(&workspace.id).await,
             Err(error) => {
-                // Worktrunk can report an error after Git has created the
-                // worktree. Capture its identity before retaining the failure.
+                // Creation can fail after Git has created the worktree.
+                // Capture its identity before retaining the failure.
                 if let Err(identity_error) = self.record_copy_identity_if_present(&workspace).await
                 {
                     log!(
@@ -157,9 +152,8 @@ impl Manager {
         workspace: &Workspace,
     ) -> Result<()> {
         let commit = git::resolve_commit(source, "HEAD", git::run_isolated).await?;
-        worktrunk::create(
+        git::worktree::add(
             &repo.path,
-            &self.paths.worktrunk_config(),
             &workspace.path,
             workspace.require_branch("copying a worktree")?,
             Some(&commit),
@@ -183,7 +177,7 @@ impl Manager {
         Ok(())
     }
 
-    /// Best-effort identity capture when Worktrunk failed after creating Git data.
+    /// Best-effort identity capture when creation failed after making Git data.
     async fn record_copy_identity_if_present(&self, workspace: &Workspace) -> Result<()> {
         if !off_runtime::exists(&workspace.path).await? {
             return Ok(());

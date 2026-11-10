@@ -11,7 +11,10 @@ use crate::{
         events::{self, EventCause, EventKind},
     },
     fsutil::off_runtime,
-    git::worktrunk::{self, BranchRemoval, FileRemoval},
+    git::{
+        self,
+        worktree::{BranchRemoval, FileRemoval},
+    },
     hooks::{self, Hook, HookKind},
     model::{RemovedWorkspace, SpaceKind, SpaceRef, Workspace},
     removal::{
@@ -685,7 +688,7 @@ impl Manager {
     ) -> Result<RemovalResult> {
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
-        let (files, branch) = worktrunk_removal_options(check, removal);
+        let (files, branch) = removal_options(check, removal);
         self.remove_worktree(repo, workspace, files, branch, true)
             .await
     }
@@ -857,8 +860,8 @@ impl Manager {
         self.stop_removed_processes(workspace, WorktreeTies::None)
             .await?;
         let children = self.remove_workspace_children(workspace, removal).await?;
-        // Prune only this owned registration, through Worktrunk, and retain
-        // its branch because the contents cannot be inspected.
+        // Prune only this owned registration, and retain its branch because
+        // the contents cannot be inspected.
         let registered = self.is_registered_worktree(workspace).await?;
         let removed = self
             .remove_worktree(
@@ -942,14 +945,7 @@ impl Manager {
     ) -> Result<RemovalResult> {
         self.remove_simulators(&workspace.id).await?;
         if registered {
-            worktrunk::remove(
-                repo,
-                &self.paths.worktrunk_config(),
-                &workspace.path,
-                files,
-                branch,
-            )
-            .await
+            git::worktree::remove(repo, &workspace.path, files, branch).await
         } else {
             Ok(RemovalResult {
                 removed: true,
@@ -981,7 +977,7 @@ fn ensure_checkpoint_keeps_files(
     Ok(())
 }
 
-/// Worktrunk's options for the worktree the final inspection `check` saw.
+/// What removal takes with the worktree the final inspection `check` saw.
 /// A branch goes when its commits are all preserved, except the default
 /// branch, which an unresolved default branch could be; files go by force
 /// only once `removal` may discard unsaved work, or discards unsaved files a
@@ -989,7 +985,7 @@ fn ensure_checkpoint_keeps_files(
 /// whichever its worktree is on. A disposable workspace's branch counts as
 /// preserved while the worktree is still on it, and its files always go by
 /// force.
-pub(super) fn worktrunk_removal_options(
+pub(super) fn removal_options(
     check: &Inspection,
     removal: Removal<'_>,
 ) -> (FileRemoval, BranchRemoval) {
@@ -1007,8 +1003,8 @@ pub(super) fn worktrunk_removal_options(
     } else {
         BranchRemoval::Keep
     };
-    // Worktrunk refuses a changed worktree unless forced, even when the
-    // changes are only what a copy started with.
+    // Git refuses a changed worktree unless forced, even when the changes
+    // are only what a copy started with.
     let files = if check.workspace.disposable
         || removal.unsaved().deletes_unsaved()
         || check.starting_files

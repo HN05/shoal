@@ -13,7 +13,7 @@ use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
 use crate::{
-    git::{self, worktrunk},
+    git,
     model::{
         Checkpoint, CheckpointCause, CopiedFrom, Repository, StartingCommit, Workspace,
         WorkspaceRef,
@@ -343,9 +343,8 @@ impl Manager {
     ) -> Result<bool> {
         match &workspace.branch {
             Some(branch) => {
-                let config = self.paths.worktrunk_config();
                 let head = Some(files.head.as_str());
-                worktrunk::create(&repo.path, &config, &workspace.path, branch, head).await?
+                git::worktree::add(&repo.path, &workspace.path, branch, head).await?
             }
             None => git::detached::add_workspace(&repo.path, &workspace.path, &files.head).await?,
         }

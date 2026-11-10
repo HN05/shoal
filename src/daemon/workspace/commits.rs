@@ -1,7 +1,6 @@
 //! Workspaces at a commit: worktrees at a detached HEAD with no branch of
-//! their own, created from a revision or a PR's head. Worktrunk only creates
-//! worktrees on a branch, so plain Git creates theirs; removal goes through
-//! Worktrunk like any workspace's.
+//! their own, created from a revision or a PR's head. Removal goes the way
+//! of any workspace's.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;

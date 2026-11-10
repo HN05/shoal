@@ -3,16 +3,11 @@ use serde_json::json;
 
 #[test]
 fn branch_outcome_spellings_and_deletion_are_preserved() {
-    // Worktrunk 0.81.0: src/commands/worktree/types.rs,
-    // BranchFate::json_outcome. Only `deleted` confirms deletion, even though
-    // Worktrunk's own BranchFate::deleted also counts the deferred intention.
+    // Only `deleted` confirms deletion.
     let cases = [
         ("deleted", BranchOutcome::Deleted),
         ("not_attempted", BranchOutcome::NotAttempted),
-        ("deferred", BranchOutcome::Deferred),
-        ("retained_unmerged", BranchOutcome::RetainedUnmerged),
         ("retained_checked_out", BranchOutcome::RetainedCheckedOut),
-        ("retained_raced", BranchOutcome::RetainedRaced),
         ("retained_failed", BranchOutcome::RetainedFailed),
         ("retained", BranchOutcome::Retained),
         (
@@ -52,7 +47,7 @@ fn branch_outcome_spellings_and_deletion_are_preserved() {
 
 #[test]
 fn deletion_is_derived_from_outcome_on_both_sides_of_the_protocol() {
-    for outcome in ["deleted", "deferred", "retained", "future_outcome"] {
+    for outcome in ["deleted", "retained", "future_outcome"] {
         let deleted = outcome == "deleted";
         let wire = json!({
             "removed": true,

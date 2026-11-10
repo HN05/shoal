@@ -1,7 +1,6 @@
 //! Detached checkouts of one commit: the worktrees of workspaces at a
 //! commit, and read-only checkouts beside a workspace, such as a review's,
-//! that no workspace owns. Worktrunk's worktrees are always on a branch, so
-//! these are plain Git worktrees.
+//! that no workspace owns.
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -17,8 +16,7 @@ pub async fn add(repo: &Path, path: &Path, commit: &str) -> Result<()> {
 }
 
 /// Check out `commit` at `path`, a new linked worktree of `repo` on no
-/// branch, for a workspace at a commit. No hooks run, as for the worktrees
-/// Worktrunk creates on a branch.
+/// branch, for a workspace at a commit. No hooks run.
 pub async fn add_workspace(repo: &Path, path: &Path, commit: &str) -> Result<()> {
     worktree_add(repo, path, commit, &[]).await
 }

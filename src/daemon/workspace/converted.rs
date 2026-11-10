@@ -8,7 +8,10 @@ use crate::git::existing_branch::BranchExt;
 use crate::{
     config::modes::ModeName,
     daemon::conversions::Converting,
-    git::{self, worktrunk},
+    git::{
+        self,
+        worktree::{BranchRemoval, FileRemoval},
+    },
     model::{Repository, Workspace},
     protocol::CreationOptions,
 };
@@ -165,12 +168,11 @@ impl Manager {
                 crate::daemon::log!("worktree of {} kept: {error:#}", workspace.name);
                 return;
             }
-            let removed = worktrunk::remove(
+            let removed = git::worktree::remove(
                 &repo.path,
-                &self.paths.worktrunk_config(),
                 &workspace.path,
-                worktrunk::FileRemoval::Force,
-                worktrunk::BranchRemoval::Keep,
+                FileRemoval::Force,
+                BranchRemoval::Keep,
             )
             .await;
             if let Err(error) = removed {

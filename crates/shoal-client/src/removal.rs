@@ -176,17 +176,17 @@ impl UnsavedWork {
 }
 
 crate::state::open_enum! {
-    /// Worktrunk 0.81.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
-    /// synthetic outcome for an already-missing worktree registration. Future
-    /// Worktrunk values decode as `Unknown` without claiming confirmed deletion.
+    /// What removing a worktree did with its branch. Other values decode as
+    /// `Unknown` without claiming confirmed deletion.
     BranchOutcome {
         Deleted => "deleted",
+        /// The removal kept the branch.
         NotAttempted => "not_attempted",
-        Deferred => "deferred",
-        RetainedUnmerged => "retained_unmerged",
+        /// Another worktree has the branch checked out.
         RetainedCheckedOut => "retained_checked_out",
-        RetainedRaced => "retained_raced",
+        /// Git could not delete the branch for another reason.
         RetainedFailed => "retained_failed",
+        /// Git no longer listed the worktree, so the branch was not looked at.
         Retained => "retained",
     }
 }

@@ -1,0 +1,225 @@
+use super::*;
+
+async fn git(repo: &Path, args: &[&str]) -> String {
+    crate::git::run(repo, args).await.unwrap()
+}
+
+/// A repository of `format` with one commit on `main`.
+fn repository(root: &Path, format: &str) -> std::path::PathBuf {
+    let repo = root.join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    for args in [
+        &["init", "-b", "main", &format!("--object-format={format}")][..],
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    ] {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(args)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+    }
+    repo
+}
+
+/// Open each of `names`, new and existing, in a new repository of `format`,
+/// and check that the worktree is on the branch of that literal name.
+async fn check_literal_branches(format: &str, names: &[String]) {
+    for name in names {
+        for existing in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let repo = repository(root.path(), format);
+            if existing {
+                git(&repo, &["branch", "--", name, "main"]).await;
+            }
+            let workspace = root.path().join("workspace");
+            let base = (!existing).then_some("main");
+            add(&repo, &workspace, name, base).await.unwrap();
+            assert_eq!(
+                git(&workspace, &["symbolic-ref", "HEAD"]).await,
+                format!("refs/heads/{name}\n"),
+                "{format} {name} existing={existing}"
+            );
+        }
+    }
+}
+
+/// Names around the reserved ones that Git takes literally: hex names one
+/// digit off an object ID's length, non-hex names of that length, and
+/// reserved names as one component of several.
+fn near_reserved_names() -> Vec<String> {
+    let mut names: Vec<String> = [39, 41, 63, 65]
+        .into_iter()
+        .map(|len| "a".repeat(len))
+        .collect();
+    names.extend([40, 64].map(|len| "g".repeat(len)));
+    for reserved in ["HEAD", "@", &"b".repeat(40)] {
+        names.extend([format!("topic/{reserved}"), format!("{reserved}/topic")]);
+    }
+    names
+}
+
+#[tokio::test]
+async fn names_near_reserved_ones_are_literal_branches_in_sha1() {
+    check_literal_branches("sha1", &near_reserved_names()).await;
+}
+
+#[tokio::test]
+async fn names_near_reserved_ones_are_literal_branches_in_sha256() {
+    check_literal_branches("sha256", &near_reserved_names()).await;
+}
+
+/// Template syntax in the workspace path stays literal, and the default
+/// branch opens there while the main checkout is on another branch.
+#[tokio::test]
+async fn the_default_branch_opens_at_a_literal_path() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "sha1");
+    git(&repo, &["switch", "-c", "other"]).await;
+    let workspace = root.path().join("main {{ branch }}");
+    add(&repo, &workspace, "main", None).await.unwrap();
+    assert_eq!(
+        git(&workspace, &["symbolic-ref", "HEAD"]).await,
+        "refs/heads/main\n"
+    );
+}
+
+#[tokio::test]
+async fn a_new_branch_that_exists_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "sha1");
+    git(&repo, &["branch", "topic"]).await;
+    let workspace = root.path().join("topic");
+    assert!(add(&repo, &workspace, "topic", Some("main")).await.is_err());
+}
+
+/// A repository with a worktree on `topic` at `<root>/topic`.
+async fn with_topic(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    let repo = repository(root, "sha1");
+    let workspace = root.join("topic");
+    add(&repo, &workspace, "topic", Some("main")).await.unwrap();
+    (repo, workspace)
+}
+
+async fn has_branch(repo: &Path, name: &str) -> bool {
+    crate::git::ref_exists(repo, &crate::git::local_ref(name), crate::git::command)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn removal_deletes_the_branch_only_when_asked() {
+    for (branch, outcome, kept) in [
+        (BranchRemoval::Keep, BranchOutcome::NotAttempted, true),
+        (BranchRemoval::Delete, BranchOutcome::Deleted, false),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let (repo, workspace) = with_topic(root.path()).await;
+        // The worktree's own branch goes, whichever it was created on.
+        git(&workspace, &["switch", "-c", "moved"]).await;
+        let removed = remove(&repo, &workspace, FileRemoval::CleanOnly, branch)
+            .await
+            .unwrap();
+        assert!(!workspace.exists());
+        assert_eq!(removed.branch.as_deref(), Some("moved"));
+        assert_eq!(removed.branch_outcome, outcome);
+        assert_eq!(has_branch(&repo, "moved").await, kept);
+        assert!(has_branch(&repo, "topic").await);
+    }
+}
+
+#[tokio::test]
+async fn a_detached_worktree_has_no_branch_to_delete() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    git(&workspace, &["switch", "--detach"]).await;
+    let removed = remove(
+        &repo,
+        &workspace,
+        FileRemoval::CleanOnly,
+        BranchRemoval::Delete,
+    )
+    .await
+    .unwrap();
+    assert_eq!(removed.branch, None);
+    assert_eq!(removed.branch_outcome, BranchOutcome::NotAttempted);
+    assert!(has_branch(&repo, "topic").await);
+}
+
+#[tokio::test]
+async fn a_branch_checked_out_elsewhere_is_retained() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    // A second worktree on the same branch, which Git allows only by force.
+    let other = root.path().join("other");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "--force",
+            other.to_str().unwrap(),
+            "topic",
+        ],
+    )
+    .await;
+    let removed = remove(
+        &repo,
+        &workspace,
+        FileRemoval::CleanOnly,
+        BranchRemoval::Delete,
+    )
+    .await
+    .unwrap();
+    assert!(!workspace.exists());
+    assert_eq!(removed.branch_outcome, BranchOutcome::RetainedCheckedOut);
+    assert!(has_branch(&repo, "topic").await);
+}
+
+#[tokio::test]
+async fn only_forced_removal_deletes_changed_files() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    std::fs::write(workspace.join("untracked"), "notes").unwrap();
+    let refused = remove(
+        &repo,
+        &workspace,
+        FileRemoval::CleanOnly,
+        BranchRemoval::Delete,
+    )
+    .await;
+    assert!(refused.is_err());
+    assert!(workspace.join("untracked").exists());
+    assert!(has_branch(&repo, "topic").await);
+    let removed = remove(&repo, &workspace, FileRemoval::Force, BranchRemoval::Delete)
+        .await
+        .unwrap();
+    assert!(!workspace.exists());
+    assert_eq!(removed.branch_outcome, BranchOutcome::Deleted);
+}
+
+/// A worktree whose directory is gone is forgotten, its branch reported.
+#[tokio::test]
+async fn a_deleted_worktree_is_unregistered() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    std::fs::remove_dir_all(&workspace).unwrap();
+    let removed = remove(&repo, &workspace, FileRemoval::Force, BranchRemoval::Keep)
+        .await
+        .unwrap();
+    assert_eq!(removed.branch.as_deref(), Some("topic"));
+    let listed = git(&repo, &["worktree", "list", "--porcelain"]).await;
+    assert!(!listed.contains("topic"), "{listed}");
+}

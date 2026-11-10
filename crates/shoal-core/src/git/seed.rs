@@ -1,7 +1,6 @@
 //! The detached worktree a repository's seed builds the default branch in,
 //! and the file lists that decide which build outputs a workspace may reuse.
-//! Worktrunk manages branch worktrees; the seed has no branch, so plain Git
-//! creates it, locked so pruning and adoption leave it alone.
+//! It is locked so pruning and adoption leave it alone.
 use std::{collections::HashSet, path::Path};
 
 use anyhow::Result;

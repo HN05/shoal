@@ -10,7 +10,7 @@ use crate::{
     config::Config,
     daemon::store,
     fsutil::off_runtime,
-    git::{self, default_branch::DefaultBranchLookup, worktrunk},
+    git::{self, default_branch::DefaultBranchLookup},
     model::{Repository, Workspace},
     protocol::CreationOptions,
     state::WorkspaceState,
@@ -352,9 +352,8 @@ impl Manager {
         }
         let base = self.resolve_worktree_base(repo, workspace, &source).await?;
         let commit = self.record_worktree_base(repo, workspace, &base).await?;
-        worktrunk::create(
+        git::worktree::add(
             &repo.path,
-            &self.paths.worktrunk_config(),
             &workspace.path,
             workspace.require_branch("creating a branch worktree")?,
             matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
@@ -458,7 +457,7 @@ impl Manager {
         Ok(base.to_owned())
     }
 
-    /// Record the base before Worktrunk creates the worktree.
+    /// Record the base before Git creates the worktree.
     async fn record_worktree_base(
         &self,
         repo: &Repository,

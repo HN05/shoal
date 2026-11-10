@@ -629,11 +629,10 @@ async fn a_failed_removal_keeps_its_checkpoint() {
         .await
         .unwrap();
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
-    // An unreadable Worktrunk config fails the removal after the checkpoint
-    // is saved.
-    let config = manager.paths.worktrunk_config();
-    let valid = fs::read_to_string(&config).unwrap();
-    fs::write(&config, "not [valid toml").unwrap();
+    // Git refuses to remove a locked worktree, which fails the removal after
+    // the checkpoint is saved.
+    let path = workspace.path.to_str().unwrap();
+    git(&checkout, &["worktree", "lock", path]);
     let removed = manager
         .remove_workspace(
             &SpaceSelector::id(&workspace.id),
@@ -641,7 +640,7 @@ async fn a_failed_removal_keeps_its_checkpoint() {
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await;
-    fs::write(&config, valid).unwrap();
+    git(&checkout, &["worktree", "unlock", path]);
     assert!(removed.is_err());
     let record = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(

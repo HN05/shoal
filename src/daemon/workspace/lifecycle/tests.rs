@@ -1,5 +1,5 @@
 use super::super::Manager;
-use super::remove::worktrunk_removal_options;
+use super::remove::removal_options;
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::space_ids::SpaceId;
@@ -13,7 +13,7 @@ use crate::{
     },
     git::{
         self,
-        worktrunk::{BranchRemoval, FileRemoval},
+        worktree::{BranchRemoval, FileRemoval},
     },
     model::{CleanupReason, Workspace},
     process::identity,
@@ -1081,7 +1081,7 @@ async fn branch_removal_uses_the_inspected_default_branch() {
             &["symbolic-ref", "HEAD", &git::local_ref(later_default)],
         );
 
-        let (_, branch) = worktrunk_removal_options(&check, Removal::Deleted);
+        let (_, branch) = removal_options(&check, Removal::Deleted);
         assert_eq!(matches!(branch, BranchRemoval::Delete), delete);
     }
 }
@@ -1364,9 +1364,9 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
         release_holds: true,
         taking: None,
     };
-    let (files, _) = worktrunk_removal_options(&check, manual(&confirmed));
+    let (files, _) = removal_options(&check, manual(&confirmed));
     assert!(matches!(files, FileRemoval::CleanOnly));
-    let (files, _) = worktrunk_removal_options(&check, manual(&UnsavedWork::All));
+    let (files, _) = removal_options(&check, manual(&UnsavedWork::All));
     assert!(matches!(files, FileRemoval::Force));
 }
 

@@ -1,7 +1,6 @@
 //! Copies of a worktree: a new linked worktree at another worktree's HEAD
 //! that holds its index and files, uncommitted, untracked and ignored ones
-//! included. Worktrunk checks files out of the commit when it creates a
-//! worktree, so plain Git creates these without checking anything out.
+//! included. Git creates these without checking anything out.
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};

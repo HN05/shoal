@@ -408,13 +408,12 @@ transactions; failures and migrations preserve ownership. `install` preserves co
 commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.
 
-Worktrunk creates and removes worktrees through Shoal's adapter with isolated
-configuration and hooks disabled, except that plain Git, with hooks disabled too,
-creates a workspace at a commit's worktree, since Worktrunk only makes worktrees on
-a branch, and a copy's, since Worktrunk always checks files out; Worktrunk removes
-them like any other. Typed adapter outcomes preserve unfamiliar strings;
-only confirmed branch deletion sets the response deletion flag. Invoke external
-tools with argument arrays. Captured subprocesses share optional deadlines, whose
+Plain Git creates and removes worktrees through the `git` module with hooks
+disabled: `git worktree add` on a new or existing branch, at a commit, or without
+checking files out for a copy, and `git worktree remove`, then `git branch -D` when
+the removal decision deletes the branch. Typed removal outcomes preserve
+unfamiliar strings; only confirmed branch deletion sets the response deletion
+flag. Invoke external tools with argument arrays. Captured subprocesses share optional deadlines, whose
 error names the command line and directory, and a
 single diagnostic limit, terminate on cancellation, and drain output while sending
 input. Keep writable state outside the binary's directory.
@@ -1655,8 +1654,7 @@ wrapper, so the editor gets scope and port variables and counts as activity.
 `review run` chooses between the `review` command and a local review, which
 follows the review bot. The daemon runs the reviewer once, without a session,
 read-only in a detached checkout of the committed HEAD, so the review judges what
-the agent committed and never sees or changes its uncommitted work; Worktrunk only
-creates worktrees on branches, so the checkout is a plain Git worktree. The
+the agent committed and never sees or changes its uncommitted work. The
 reviewer returns findings in a fixed schema, which the daemon stores, so the agent
 answers each with a typed outcome carrying its reason, issue or original finding,
 and the next review checks every `fixed` one instead of rereading free text. A finding

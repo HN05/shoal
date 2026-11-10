@@ -257,7 +257,7 @@ instead of the PR delivery guidance below.
   simulators; while any remain, every other new claim is busy. Renewals and
   approval requests ignore the queue, and a request in progress keeps its place.
 - Allocation is atomic and persisted before the external mutation (simctl,
-  Worktrunk). Leases survive restart and failed removal and are released only
+  Git). Leases survive restart and failed removal and are released only
   with successful removal. Active permits block automatic cleanup. Caller-named workspace holds persist
   across restarts, block automatic removal without deferring completion, and are
   released with successful removal; deleted-worktree cleanup still forgets them.
