@@ -301,7 +301,10 @@ it: usage in README.md, behavior in docs/reference.md, decisions in docs/design.
 contributor rules here; a new document needs a subject none of those covers. The
 skill under `skills/` says only what Shoal's commands do; a practice goes in a
 user rule, and a rule about anything else, such as how to write or structure
-code, goes here. Edit
+code, goes here. This repository's own practices, such as how its agents
+deliver and follow up a PR, go here and never into the rules and mode
+instructions Shoal ships under `crates/shoal-client/src/config/`, which every
+user's agents receive. Edit
 the sentence that describes the changed behavior instead of appending a paragraph,
 and cut text that restates code, tests, history, or another section. State a rule
 as its condition, never as the list of things that satisfy it: the condition

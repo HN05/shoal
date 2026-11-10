@@ -674,7 +674,8 @@ configured command for another agent, plus proven child
   decisions in docs/design.md, contributor rules in AGENTS.md. The skill under
   `skills/` says only what Shoal's commands do; flag any practice there,
   which belongs in a user rule, and any rule about something else, such as
-  how to write or structure code. Flag behavior
+  how to write or structure code. Flag a practice of this repository in the
+  rules or mode instructions Shoal ships, which belongs in AGENTS.md. Flag behavior
   changes without the matching sentence edit, text that restates code or
   history, and sentences that list or count what a rule covers instead of
   stating the rule; an overstated rule is narrowed, not annotated with its
