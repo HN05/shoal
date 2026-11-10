@@ -38,7 +38,7 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             let reviewer = start::Reviewer::new(manual, agent, &model);
             start::start(ctx, target, reviewer, model, args).await
         }
-        ReviewCommand::List { space, repository } => show::list(ctx, space, repository).await,
+        ReviewCommand::Ls { space, repository } => show::list(ctx, space, repository).await,
         ReviewCommand::Cancel { id, space } => answer::cancel(ctx, id, space).await,
         ReviewCommand::Reply {
             finding,

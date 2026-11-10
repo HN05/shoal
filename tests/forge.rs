@@ -3034,14 +3034,14 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
             {"body": {"items": [{"number": 40, "title": "Flaky watch", "state": "open",
                 "labels": [{"name": "bug"}]}]}},
     }));
-    let listed = fixture.ok_in_topic(&["issue", "list", "flaky", "watch"]);
+    let listed = fixture.ok_in_topic(&["issue", "ls", "flaky", "watch"]);
     assert_eq!(
         listed,
         json!([{"kind": "issue", "number": 40, "url": format!("{}/issues/40", fixture.web),
             "title": "Flaky watch", "state": "open", "labels": ["bug"], "assignees": [],
             "milestone": null}])
     );
-    let output = fixture.run_in_topic(&["issue", "list", "flaky", "watch"]);
+    let output = fixture.run_in_topic(&["issue", "ls", "flaky", "watch"]);
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "#40  open    Flaky watch  [bug]\n"
@@ -3051,7 +3051,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         let output = fixture
             .command()
             .current_dir(fixture.root.path())
-            .args(["issue", "list"])
+            .args(["issue", "ls"])
             .args(filter)
             .output()
             .unwrap();
@@ -3061,7 +3061,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     }
     // So does a repository that names none, for every command taking --repo.
     for args in [
-        &["issue", "list"][..],
+        &["issue", "ls"][..],
         &["forge", "api", "repos/{owner}/{repo}"],
     ] {
         let output = fixture
@@ -3079,7 +3079,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["issue", "list"])
+        .args(["issue", "ls"])
         .output()
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
@@ -3087,7 +3087,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         .command()
         .current_dir(fixture.root.path())
         .args([
-            "--json", "issue", "list", "--repo", "repo", "flaky", "watch",
+            "--json", "issue", "ls", "--repo", "repo", "flaky", "watch",
         ])
         .output()
         .unwrap();
@@ -3106,7 +3106,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         })
         .collect();
     fixture.respond(Value::Object(pages));
-    let listed = fixture.ok_in_topic(&["issue", "list", "--limit", "400"]);
+    let listed = fixture.ok_in_topic(&["issue", "ls", "--limit", "400"]);
     let numbers: Vec<u64> = listed
         .as_array()
         .unwrap()
@@ -3124,7 +3124,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         "GET repos/team/project/pulls/9": {"body": pull(9, "closed", "Crash", &["bug"])},
     }));
     let listed = fixture.ok_in_topic(&[
-        "pr", "list", "--state", "closed", "--label", "bug", "--author", "dev", "--limit", "1",
+        "pr", "ls", "--state", "closed", "--label", "bug", "--author", "dev", "--limit", "1",
         "crash",
     ]);
     assert_eq!(listed.as_array().unwrap().len(), 1, "{listed}");
@@ -3171,7 +3171,7 @@ fn lists_search_another_repository_with_the_same_filters() {
     }));
     let list = [
         "issue",
-        "list",
+        "ls",
         "--repo",
         "team/tool",
         "--state",
@@ -4021,7 +4021,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
         writes(&fixture),
         [json!([other, {"ref": "trunk", "inputs": {}}])]
     );
-    // GitHub reports no run URL, and ci list would list only the workspace's
+    // GitHub reports no run URL, and ci ls would list only the workspace's
     // repository.
     let output = fixture.run(&[
         "ci",
@@ -4137,11 +4137,11 @@ fn ci_runs_are_started_viewed_and_listed_from_a_registered_checkout() {
         (&view["url"], &view["state"]),
         (&json!(url), &json!("finished"))
     );
-    let runs = in_checkout(&["ci", "list"]);
+    let runs = in_checkout(&["ci", "ls"]);
     assert_eq!(runs[0]["url"], url, "{runs}");
     // --repo names the registered repository from anywhere.
     let repo = fixture.repo.to_str().unwrap();
-    let runs = fixture.ok(&["ci", "list", "--repo", repo]);
+    let runs = fixture.ok(&["ci", "ls", "--repo", repo]);
     assert_eq!(runs[0]["url"], url, "{runs}");
     let view = fixture.ok(&["view", "ci", "2765", "--repo", repo]);
     assert_eq!(view["url"], url, "{view}");
@@ -4183,7 +4183,7 @@ fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
     // With nothing linked, runs are listed and start on the default branch,
     // and the chat follows the run it started.
     assert_eq!(
-        fixture.ok(&["ci", "list", "--space", "planning"]),
+        fixture.ok(&["ci", "ls", "--space", "planning"]),
         json!([])
     );
     let started = fixture.ok(&["ci", "run", "deps.yml", "--space", "planning"]);
@@ -4202,7 +4202,7 @@ fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
 
     // A linked PR's head is where its runs and checks are.
     fixture.ok(&["link", "pr", "8", "assigned", "--space", "planning"]);
-    let runs = fixture.ok(&["ci", "list", "--space", "planning"]);
+    let runs = fixture.ok(&["ci", "ls", "--space", "planning"]);
     let url = format!("{}/actions/runs/2765", fixture.web);
     assert_eq!(runs[0]["url"], url, "{runs}");
     let cancelled = fixture.ok(&["ci", "cancel", "--space", "planning"]);
@@ -4783,7 +4783,7 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     // The workspace's branch is listed unless another is named.
     let runs = fixture.ok(&[
         "ci",
-        "list",
+        "ls",
         "--workflow",
         "deps.yml",
         "--limit",
@@ -4796,11 +4796,11 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
         json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed"}])
     );
     // A PR's runs are those on its head commit.
-    let runs = fixture.ok(&["ci", "list", "--pr", "#8", "--space", "topic"]);
+    let runs = fixture.ok(&["ci", "ls", "--pr", "#8", "--space", "topic"]);
     assert_eq!(runs[0]["url"], url, "{runs}");
-    let output = fixture.run(&["ci", "list", "--pr", "8", "--branch", "topic"]);
+    let output = fixture.run(&["ci", "ls", "--pr", "8", "--branch", "topic"]);
     assert!(!output.status.success());
-    let output = fixture.run(&["ci", "list", "--limit", "0"]);
+    let output = fixture.run(&["ci", "ls", "--limit", "0"]);
     assert!(!output.status.success(), "{output:?}");
 }
 
@@ -5802,7 +5802,7 @@ fn item_commands_act_from_a_registered_checkout() {
         writes(&fixture),
         [json!(["POST repos/team/project/issues/40/comments", {"body": "Seen"}])]
     );
-    let listed = in_checkout(&["--json", "issue", "list", "flaky"]);
+    let listed = in_checkout(&["--json", "issue", "ls", "flaky"]);
     let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
     assert_eq!(listed[0]["url"], format!("{}/issues/40", fixture.web));
     let viewed = in_checkout(&["--json", "view", "issue", "40", "--no-comments"]);
@@ -5880,7 +5880,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
         writes(&fixture),
         [json!(["POST repos/team/project/issues/40/comments", {"body": "Seen"}])]
     );
-    let listed = read(&["issue", "list", "flaky", "--repo", "repo"]);
+    let listed = read(&["issue", "ls", "flaky", "--repo", "repo"]);
     assert_eq!(listed[0]["url"], format!("{}/issues/40", fixture.web));
     let labels = read(&["repo", "labels", "--repo", "repo"]);
     assert_eq!(labels[0]["name"], "bug", "{labels}");
@@ -5922,7 +5922,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
     let close = ["issue", "close", "40", "--repo", "repo"];
     refused(&[&["run", "--workspace", "topic", "--", shoal][..], &close].concat());
     // Where --repo names any repository, it stays a forge repository for one.
-    let list = ["issue", "list", "--repo", "repo"];
+    let list = ["issue", "ls", "--repo", "repo"];
     refused(&[&["run", "--workspace", "topic", "--", shoal][..], &list].concat());
     assert!(writes(&fixture).is_empty());
 

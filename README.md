@@ -255,8 +255,8 @@ shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal pr merge 42 --auto --method squash # Merge it once checks pass; --cancel-auto withdraws it
 shoal pr delete-branch 42     # Delete the branch of a merged or closed PR on the forge; agents cannot
 shoal pr revert 42            # Open a PR that reverts merged PR 42
-shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
-shoal issue list --repo team/tool crash # Search another repository's issues
+shoal issue ls --label bug flaky # Search issues by text, label, author and state; pr ls too
+shoal issue ls --repo team/tool crash # Search another repository's issues
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
 shoal issue open --repo team/tool --title Bug # Open it in another repository
@@ -267,7 +267,7 @@ shoal forge api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; a
 shoal forge download URL -o shot.png # An image or attached file on the forge, with its login
 shoal ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
 shoal ci run https://github.com/team/tool/actions/workflows/ci.yml  # Or paste a workflow's link
-shoal ci list --pr 44               # The runs on a PR's head; --branch and --workflow filter too
+shoal ci ls --pr 44               # The runs on a PR's head; --branch and --workflow filter too
 shoal view ci 2765                  # A run's jobs and failed jobs' logs, or paste any run's URL
 shoal view ci 2765 --job rust       # The whole log of one job, passed or failed
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
@@ -310,7 +310,7 @@ To have an agent review a workspace's committed changes or a PR:
 ```sh
 shoal review run fix-login    # Queue a one-shot, read-only review; findings reach the agent
 shoal review run <pr-url>     # Review a PR in the workspace that owns its branch
-shoal review list             # Reviews, newest first, with unresolved findings
+shoal review ls             # Reviews, newest first, with unresolved findings
 shoal view review             # The latest review in full
 shoal review resolve 17.2 false-positive --reason 'The caller checks it'
 ```

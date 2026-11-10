@@ -42,7 +42,7 @@ pub(super) use open::push_and_open;
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
-        PrCommand::List(args) => return list(ctx, ItemKind::Pr, args).await,
+        PrCommand::Ls(args) => return list(ctx, ItemKind::Pr, args).await,
         PrCommand::Open { workspace, pull } => {
             return open_pr(ctx, workspace, pull_options(pull)?).await;
         }
@@ -108,7 +108,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
 
 pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
-        IssueCommand::List(args) => return list(ctx, ItemKind::Issue, args).await,
+        IssueCommand::Ls(args) => return list(ctx, ItemKind::Issue, args).await,
         IssueCommand::Open {
             space,
             repo,

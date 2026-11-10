@@ -140,7 +140,7 @@ pub enum ReviewCommand {
         args: Vec<OsString>,
     },
     /// List reviews with their state and unresolved findings, newest first.
-    List {
+    Ls {
         /// Space whose reviews to list, a workspace or a chat, whose reviews
         /// are those of its linked PRs; defaults to the current workspace or
         /// chat, else every review.
@@ -194,7 +194,7 @@ pub enum ReviewCommand {
 #[command(defer = true)]
 pub enum PrCommand {
     /// List or search the PRs of the workspace's repository or another one, newest first.
-    List(ListArgs),
+    Ls(ListArgs),
     /// Push the workspace branch, open a PR for it or find its open PR, and link it.
     Open {
         /// Workspace to use; defaults to the current workspace or picker.
@@ -333,7 +333,7 @@ pub enum PrCommand {
 #[command(defer = true)]
 pub enum IssueCommand {
     /// List or search the issues of the workspace's repository or another one, newest first.
-    List(ListArgs),
+    Ls(ListArgs),
     /// Open an issue in the space's repository or another one.
     Open {
         /// Space, a workspace or chat, that opens it; defaults to the current

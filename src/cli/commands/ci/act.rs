@@ -136,7 +136,7 @@ fn outcome(action: CiAction) -> &'static str {
 }
 
 /// How to find and follow a started run whose URL the forge does not
-/// report: `ci list` lists only the repository of the workspace or checkout,
+/// report: `ci ls` lists only the repository of the workspace or checkout,
 /// while a workflow's URL may name another, and only a workspace links runs.
 fn follow_hint(context: Option<&ItemContext>, by_url: bool) -> &'static str {
     match (context, by_url) {
@@ -144,13 +144,13 @@ fn follow_hint(context: Option<&ItemContext>, by_url: bool) -> &'static str {
             "find it in the forge's web UI"
         }
         (Some(ItemContext::Checkout(_) | ItemContext::ChatIn { .. }), false) => {
-            "find it with shoal ci list"
+            "find it with shoal ci ls"
         }
         (Some(ItemContext::Workspace(_) | ItemContext::Chat(_)), true) => {
             "find it in the forge's web UI and follow it with shoal link ci <URL> opened"
         }
         (Some(ItemContext::Workspace(_) | ItemContext::Chat(_)), false) => {
-            "find it with shoal ci list and follow it with shoal link ci <URL> opened"
+            "find it with shoal ci ls and follow it with shoal link ci <URL> opened"
         }
     }
 }

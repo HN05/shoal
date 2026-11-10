@@ -10,7 +10,7 @@ use crate::client::space_names::SpaceSelector;
 pub enum CiCommand {
     /// List the newest CI runs, on the workspace's branch or a chat's linked
     /// PR by default.
-    List(ListArgs),
+    Ls(ListArgs),
     /// Start a workflow run on a branch, also in another repository by the
     /// workflow's URL.
     ///
@@ -71,7 +71,7 @@ pub struct Subject {
     pub repo: crate::cli::args::changes::RegisteredRepo,
 }
 
-// Which runs `shoal ci list` lists.
+// Which runs `shoal ci ls` lists.
 #[derive(Debug, Args)]
 pub struct ListArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or

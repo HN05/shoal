@@ -119,7 +119,7 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     }
     // Nothing was queued.
     assert_eq!(
-        fixture.ok(&["review", "list", "changes"]),
+        fixture.ok(&["review", "ls", "changes"]),
         serde_json::json!([])
     );
     // Without a configured review command, the agent reviews in the daemon.
@@ -154,7 +154,7 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
         resolved["findings"][0]["outcome"],
         serde_json::json!({"outcome": "false-positive", "reason": "The name says it"})
     );
-    let listed = fixture.ok(&["review", "list", "agent-only"]);
+    let listed = fixture.ok(&["review", "ls", "agent-only"]);
     assert_eq!(listed[0]["id"].to_string(), id);
     assert_eq!(fixture.ok(&["view", "review", &id])["summary"], "One nit.");
     let workspaces = fixture.ok(&["work"]);
@@ -318,7 +318,7 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
     let url = "https://forge.example/team/project/pulls/7";
     assert_eq!(ended["target"]["url"], url, "{ended}");
     assert_eq!(ended["target"]["post"], false, "{ended}");
-    let listed = fixture.ok(&["review", "list", "planning"]);
+    let listed = fixture.ok(&["review", "ls", "planning"]);
     assert_eq!(listed[0]["id"], 1, "{listed}");
     let output = run(&["review", "cancel", "--space", "planning"]);
     assert!(!output.status.success(), "{output:?}");

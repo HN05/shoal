@@ -1,4 +1,4 @@
-//! `shoal view ci` and `shoal ci list`: read CI runs with their jobs and the
+//! `shoal view ci` and `shoal ci ls`: read CI runs with their jobs and the
 //! logs of failed ones.
 use anyhow::{Context as _, Result};
 

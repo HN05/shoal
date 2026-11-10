@@ -186,7 +186,7 @@ shoal pr resolve <comment-id> --body-file F
 shoal pr react +1 [--comment <comment-id>] [--remove]
 shoal pr review [<number>] --comment --body-file F --line PATH:LINE 'text'
 shoal issue open --title T --body-file F [--link] [--repo OWNER/NAME]
-shoal issue list <words> [--state all] [--label L] [--author A] [--limit N]
+shoal issue ls <words> [--state all] [--label L] [--author A] [--limit N]
 shoal repo labels
 ```
 
@@ -214,7 +214,7 @@ commands act on the linked item, or on the number or URL given.
 assigns it. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;
-`issue list` and `pr list` take `--repo` too. `shoal pr revert [<number>]`
+`issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
 Workspace processes cannot merge a PR, delete its branch, approve or request
@@ -305,7 +305,7 @@ rebase command.
 ## CI
 
 ```sh
-shoal ci list [--pr N]
+shoal ci ls [--pr N]
 shoal view ci <run-url> [--job '<name>' | --job-id <id>]
 shoal ci rerun [--check '<name>'] [--pr N]
 shoal ci rerun <run-url> [--failed]
@@ -328,7 +328,7 @@ wait for approval instead of checks; `shoal view` lists them in `waiting_runs`.
 
 ```sh
 shoal review run                    # Or a workspace name, or a PR URL
-shoal review list                   # Reviews, newest first, with unresolved findings
+shoal review ls                   # Reviews, newest first, with unresolved findings
 shoal view review [<id>]
 shoal watch review [<id>]
 shoal review resolve 17.1 fixed

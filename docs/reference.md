@@ -1060,7 +1060,7 @@ coordinating the workspace hears one line, such as `fix-login: review 17
 finished: 1 blocker, 2 should-fix`.
 
 ```sh
-shoal review list [space]       # Newest first; --repo R for a repository's
+shoal review ls [space]       # Newest first; --repo R for a repository's
 shoal view review [ID]          # One review in full; default: the workspace's latest
 shoal watch review [ID]         # Wait until it ends, then show it
 shoal review cancel [ID]        # Default: the space's queued or running review; --space S
@@ -1071,7 +1071,7 @@ shoal review resolve 17.2 --undo
 
 `watch review` keeps waiting through a daemon restart, and continues from the
 installed binary after an upgrade changes the protocol. Findings are numbered
-`<review>.<n>`. `review list` marks a review outdated once
+`<review>.<n>`. `review ls` marks a review outdated once
 the workspace's HEAD has moved past it and counts its unresolved findings. Plain
 `shoal view` in a workspace ends with its latest review, and `shoal work` shows each
 workspace's latest review state. `review resolve` takes one outcome with its data;
@@ -1130,7 +1130,7 @@ reviewer. Workspace reviews are never posted, even with a linked PR.
 
 <a id="chat-reviews"></a>A [chat](#chats) has no changes of its own, so `review run` from a chat, or
 naming one, reviews the chat's one linked PR as `--pr` would. A chat's reviews
-are those of its linked PRs: `review list` lists them, and `review cancel`
+are those of its linked PRs: `review ls` lists them, and `review cancel`
 cancels the one queued or running. `review reply` and `review resolve` name the
 finding, so they work from a chat as from anywhere else.
 
@@ -1914,7 +1914,7 @@ chat, commands that act only on workspaces, such as `shoal diff`,
 `shoal work status`, which takes the current directory's workspace before the chat;
 commands that act on chats, such as `shoal view`, `shoal ci`, `shoal link`,
 `shoal ready` and `shoal done`, act on the chat, and `--space <workspace>`
-reads the workspace's, as `shoal view --space` and `shoal ci list --space` do. A running chat keeps the workspace from idle, merged,
+reads the workspace's, as `shoal view --space` and `shoal ci ls --space` do. A running chat keeps the workspace from idle, merged,
 PR and completion cleanup, and one Shoal saved keeps it from idle cleanup.
 Removing the workspace, including the cleanup of a worktree deleted outside
 Shoal, which nothing keeps, removes its chats first and stops their agents;
@@ -4036,9 +4036,9 @@ shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto w
 shoal pr delete-branch 12           # delete a merged or closed PR's branch on the forge
 shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal pr comment 12 --repo shoal --body-file notes.md  # in a registered repository, without a workspace
-shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
-shoal pr list --state all --author dev
-shoal issue list --repo team/review-bot missed  # search another repository
+shoal issue ls --label bug flaky  # search by text; --state, --author and --limit too
+shoal pr ls --state all --author dev
+shoal issue ls --repo team/review-bot missed  # search another repository
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue edit 12 --add-assignee kim --milestone v2  # --clear-milestone removes it
 shoal issue open --title "Flaky watch test" --label bug
@@ -4226,7 +4226,7 @@ the body as a summary and requested changes as your reviewer state, then
 approves; since publishing takes every draft the account has on the merge
 request, a review is refused while others are pending; Bitbucket posts each line comment, then the body, then the verdict.
 A failure after part of a review was posted says that it reached the forge.
-`issue list` and `pr list` list the repository's issues or PRs, newest first,
+`issue ls` and `pr ls` list the repository's issues or PRs, newest first,
 through the forge's own search: words after the command are text it searches for
 in titles and descriptions, repeated `--label` keeps items with every label,
 `--author` those a login opened, and `--state open|closed|all` defaults to open,
@@ -4470,22 +4470,22 @@ shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
 shoal view ci 2765 --job rust            # the whole log of the run's job rust, in any state
 shoal view ci https://github.com/team/tool/actions/runs/12   # a run of another repository
-shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
-shoal ci list --pr 12                    # the runs on PR 12's head commit
+shoal ci ls --workflow deps.yml        # the newest runs on the workspace's branch
+shoal ci ls --pr 12                    # the runs on PR 12's head commit
 shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
 shoal ci rerun --pr 12 --repo shoal      # in a registered repository, without a workspace
-shoal ci list --space planning           # a chat's linked PR's runs
+shoal ci ls --space planning           # a chat's linked PR's runs
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
 `--branch` names, with each repeated `--input NAME=VALUE`. Every `ci` command
 also runs outside a workspace as [issue and PR actions](#issue-and-pr-actions)
-do, from a registered checkout or with `--repo`, where `ci run` and `ci list`
+do, from a registered checkout or with `--repo`, where `ci run` and `ci ls`
 take the repository's default branch. `--space` names the workspace or running
 [chat](#chats) to act from, which defaults to the current workspace, then the
 chat this runs in, then the current checkout, then a picker. A chat acts in its repository's
 checkout like a registered checkout, but with its links: `ci run` starts on
-`--branch` or the default branch and links the run it starts, `ci list` lists
+`--branch` or the default branch and links the run it starts, `ci ls` lists
 the runs on its one linked PR's head or else on the default branch, and
 `rerun`, `cancel` and `approve` act on its linked PR without `--pr`. It also takes a
 workflow's web URL: its page, GitHub's `…/actions/workflows/<file>` or
@@ -4553,7 +4553,7 @@ run.
 branch, workflow and jobs, and the log tails of its failed jobs as `shoal view`
 shows a PR's; `--job` shows only that job's whole log, in any state and up to
 8 MiB, and `--job-id` that of the job with that ID when several share a name. A number after `ci`
-names a run; a number alone never does. `shoal ci list` lists the newest runs,
+names a run; a number alone never does. `shoal ci ls` lists the newest runs,
 ten unless `--limit` says up to 100, on the workspace's branch, the one
 `--branch` names or the head commit of the PR `--pr` names, and of one workflow
 file with `--workflow`, which GitLab does not take. Both read any run of the

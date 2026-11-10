@@ -1838,7 +1838,7 @@ fn outside_a_checkout_issue_open_picks_a_workspace_and_repo_commands_a_repositor
     );
     for args in [
         &["repo", "labels"][..],
-        &["issue", "list"],
+        &["issue", "ls"],
         &["forge", "reactions"],
     ] {
         assert_eq!(

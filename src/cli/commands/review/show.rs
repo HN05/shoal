@@ -1,4 +1,4 @@
-//! Showing reviews: `review list`, `view review`, `watch review`, and the
+//! Showing reviews: `review ls`, `view review`, `watch review`, and the
 //! latest review `shoal view` adds after a workspace's linked items.
 use anyhow::Result;
 

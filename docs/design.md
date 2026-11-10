@@ -3007,7 +3007,7 @@ cannot complete an assignment: watches follow it until they deliver its finish,
 since a dispatched Forgejo run belongs to no PR and a run can outlive its PR's
 watch. A PR's runs are not linked for it, as its checks already cover them. A
 chat links the runs it starts as a workspace does, but its checkout's branch is
-not its own: `ci list` defaults to the runs on its linked PR's head, its other
+not its own: `ci ls` defaults to the runs on its linked PR's head, its other
 CI commands act on that PR's checks, and `ci run` starts on the default branch
 unless `--branch` names another. Unlinking
 selects a relation's items, one kind of them, or one item. PR links accumulate

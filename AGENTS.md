@@ -75,7 +75,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `watch pr 12`. Leases follow the same grammar: `acquire port`, `release sim`.
   Every other action goes subject first under its kind's group, even when
   another group has one of the same name: `pr merge`, `issue comment`,
-  `ci rerun`. Listing is one, since each kind filters its own way: `ci list`.
+  `ci rerun`. Listing is one, since each kind filters its own way: `ci ls`.
+  A command that prints a list and exits is named `ls`; `list` names a picker.
   A new kind joins the cross-kind verbs that apply to it instead of growing its
   own `view` or `watch`.
 - Forge requests, and logic that reads forge data without the daemon's state,
@@ -480,7 +481,7 @@ the failing test and log excerpt; rerun only after that, never instead of it.
 - A PR closes every issue it fixes, one `Closes #n` line each. Before opening
   it, and again when work beyond the assigned issue lands in it, such as a
   failing test or a bug found along the way, search the open issues with
-  `shoal issue list <words>` for each such fix and add the reference for every
+  `shoal issue ls <words>` for each such fix and add the reference for every
   issue it completes.
 - An assigned issue that is already fixed needs no PR: verify the fix on the
   default branch, comment on the issue with the PR or commit that fixed it
@@ -510,7 +511,7 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   head that only rebases it; check that before `shoal ready`.
 - When your work is a PR, run `shoal done` only after it merges: until then,
   keep handling its reviews, CI results and merge conflicts. After it merges,
-  watch the `ci.yml` run on `main` for its merge (`shoal ci list --branch
+  watch the `ci.yml` run on `main` for its merge (`shoal ci ls --branch
   main`, `shoal view ci <run>`). When that run fails, open a PR that fixes
   `main`. You are finished once the run passes, or once another PR merges
   into `main` after yours, which makes `main` no longer yours to fix.

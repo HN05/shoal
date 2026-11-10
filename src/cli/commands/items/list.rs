@@ -1,4 +1,4 @@
-//! `shoal pr list` and `shoal issue list`: search the items of the
+//! `shoal pr ls` and `shoal issue ls`: search the items of the
 //! repository of the workspace or registered checkout, or of another one.
 use anyhow::Result;
 

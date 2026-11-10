@@ -25,7 +25,7 @@ use crate::{
 
 pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     match command {
-        CiCommand::List(args) => {
+        CiCommand::Ls(args) => {
             let filter = RunFilter {
                 branch: args.branch,
                 workflow: args.workflow,

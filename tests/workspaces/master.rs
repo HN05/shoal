@@ -22,7 +22,7 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
             "pwd -P > \"$HOME/chat-dir\"\n\
              printf %s \"$TMPDIR\" > \"$HOME/chat-tmp\"\n\
              echo $$ > \"$HOME/chat-pid\"\n\
-             '{0}' --json issue list --repo \"$(cat \"$HOME/repo-path\")\" \
+             '{0}' --json issue ls --repo \"$(cat \"$HOME/repo-path\")\" \
                  > /dev/null 2> \"$HOME/list-error\" < /dev/null\n\
              '{0}' --json issue open --title Flaky --repo \"$(cat \"$HOME/repo-path\")\" \
                  > /dev/null 2> \"$HOME/open-error\" < /dev/null\n\
