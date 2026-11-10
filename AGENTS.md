@@ -506,7 +506,11 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   `shoal forge api 'repos/{owner}/{repo}/pulls/<number>/reviews'`, and every
   head that only rebases it; check that before `shoal ready`.
 - When your work is a PR, run `shoal done` only after it merges: until then,
-  keep handling its reviews, CI results and merge conflicts.
+  keep handling its reviews, CI results and merge conflicts. After it merges,
+  watch the `ci.yml` run on `main` for its merge (`shoal ci list --branch
+  main`, `shoal view ci <run>`). When that run fails, open a PR that fixes
+  `main`. You are finished once the run passes, or once another PR merges
+  into `main` after yours, which makes `main` no longer yours to fix.
 
 ## Shoal feedback
 
