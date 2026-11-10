@@ -24,8 +24,8 @@ const OLDEST: (u32, u32) = (3, 3);
 /// What tmux reports for each pane Shoal reads, space-separated since newer
 /// tmux prints tabs as `_`, with the window name last as the one field that
 /// may hold a space.
-const PANE_FORMAT: &str = "#{pane_id} #{window_id} #{window_panes} #{window_active} \
-    #{session_attached} #{pane_in_mode} #{pane_pid} #{pid}:#{start_time} #{window_name}";
+const PANE_FORMAT: &str = "#{pane_id} #{window_id} #{window_active} #{session_attached} \
+    #{pane_in_mode} #{pane_pid} #{pid}:#{start_time} #{window_name}";
 /// What tmux reports for a session: its ID and name.
 const SESSION_FORMAT: &str = "#{session_id} #{session_name}";
 /// A server instance, its process and start time, as tmux formats it.
@@ -57,8 +57,6 @@ pub(crate) struct Pane {
     pub id: String,
     pub window: String,
     pub window_name: String,
-    /// How many panes share its window.
-    pub window_panes: u32,
     /// Clients showing it: those attached to its session, while its window
     /// is the session's current one.
     pub clients: u32,
@@ -346,13 +344,20 @@ impl Tmux {
 
     /// Name the window of `pane` `name`, which keeps tmux from renaming it
     /// after its program, while the server is the instance that listed the
-    /// pane.
-    pub async fn rename_window(&self, pane: &Pane, name: &str) -> Result<()> {
-        let window = &pane.window;
-        let rename = words(&["rename-window", "-t", window, name]);
-        self.run(&on_instance(&pane.id, &pane.instance, &[rename], &[])?)
+    /// pane, the pane is alone in its window and, with `expected`, the
+    /// window shows that name. tmux checks all of it as it renames, so a
+    /// window that changed since the listing keeps its name.
+    pub async fn rename_window(
+        &self,
+        pane: &Pane,
+        expected: Option<&str>,
+        name: &str,
+    ) -> Result<()> {
+        let rename = words(&["rename-window", "-t", &pane.id, &plain_name(name)]);
+        let condition = rename_condition(&pane.instance, expected)?;
+        self.run(&when(&pane.id, &condition, &[rename], &[]))
             .await
-            .with_context(|| format!("rename tmux window {window}"))?;
+            .with_context(|| format!("rename tmux window {}", pane.window))?;
         Ok(())
     }
 
@@ -433,7 +438,7 @@ fn open_args(shell: &Shell<'_>) -> Vec<OsString> {
             "-t".into(),
             format!("{}:", shell.session).into(),
             "-n".into(),
-            literal(shell.label),
+            literal(plain_name(shell.label)),
         ],
     };
     args.extend(["-P".into(), "-F".into(), OPENED_FORMAT.into(), "-c".into()]);
@@ -465,24 +470,75 @@ fn on_instance(
     commands: &[Vec<String>],
     otherwise: &[Vec<String>],
 ) -> Result<Vec<String>> {
+    Ok(when(pane, &is_instance(instance)?, commands, otherwise))
+}
+
+/// The tmux format that is true while the server is the instance
+/// `instance`.
+fn is_instance(instance: &str) -> Result<String> {
     ensure!(
         instance
             .bytes()
             .all(|byte| byte.is_ascii_digit() || byte == b':'),
         "invalid tmux server instance {instance}"
     );
+    Ok(format!("#{{==:{INSTANCE_FORMAT},{instance}}}"))
+}
+
+/// The tmux format that is true while both formats are.
+fn both(first: &str, second: &str) -> String {
+    format!("#{{&&:{first},{second}}}")
+}
+
+/// `commands` on `pane`, run in order only while the tmux format
+/// `condition` is true there, which tmux checks as it runs them;
+/// `otherwise` runs instead.
+fn when(
+    pane: &str,
+    condition: &str,
+    commands: &[Vec<String>],
+    otherwise: &[Vec<String>],
+) -> Vec<String> {
     let mut args = vec![
         "if-shell".into(),
         "-F".into(),
         "-t".into(),
         pane.to_owned(),
-        format!("#{{==:{INSTANCE_FORMAT},{instance}}}"),
+        condition.to_owned(),
         command_list(commands),
     ];
     if !otherwise.is_empty() {
         args.push(command_list(otherwise));
     }
-    Ok(args)
+    args
+}
+
+/// `name` as a window name tmux keeps as it is: tmux expands formats in
+/// the names it is given, where `#` starts one.
+fn plain_name(name: &str) -> String {
+    name.replace('#', "##")
+}
+
+/// `text` as an argument of a tmux format such as `#{==:a,b}`, which reads
+/// it as itself.
+fn format_argument(text: &str) -> String {
+    text.replace('#', "##")
+        .replace(',', "#,")
+        .replace('}', "#}")
+}
+
+/// The tmux format, on a pane, that is true while the server is the
+/// instance `instance`, the pane is alone in its window and, with
+/// `expected`, the window shows that name.
+fn rename_condition(instance: &str, expected: Option<&str>) -> Result<String> {
+    let alone = both(&is_instance(instance)?, "#{==:#{window_panes},1}");
+    Ok(match expected {
+        Some(expected) => {
+            let shows = format!("#{{==:#{{window_name}},{}}}", format_argument(expected));
+            both(&alone, &shows)
+        }
+        None => alone,
+    })
 }
 
 /// `commands` as one tmux command list, as `if-shell` takes it.
@@ -525,11 +581,10 @@ fn nothing_to_list(error: &str) -> bool {
 }
 
 fn parse_pane(line: &str) -> Option<Pane> {
-    let mut fields = line.splitn(9, ' ');
+    let mut fields = line.splitn(8, ' ');
     let mut next = || fields.next();
     let id = next()?.to_owned();
     let window = next()?.to_owned();
-    let window_panes = next()?.parse().ok()?;
     let window_active = next()? == "1";
     let attached: u32 = next()?.parse().ok()?;
     let in_mode = next()? == "1";
@@ -540,7 +595,6 @@ fn parse_pane(line: &str) -> Option<Pane> {
         id,
         window,
         window_name,
-        window_panes,
         clients: if window_active { attached } else { 0 },
         in_mode,
         pid,

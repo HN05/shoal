@@ -433,9 +433,10 @@ async fn reveal(place: &Origin) -> Result<()> {
 }
 
 /// Name the window of `pane` `label` while the pane is alone there, and,
-/// with `expected`, while the window shows that; a pane beside others
-/// leaves the user's window its name, and a pane that is gone, or under its
-/// ID on a server instance other than `instance`, leaves nothing to rename.
+/// with `expected`, while the window shows that, as tmux checks when it
+/// renames; a pane beside others leaves the user's window its name, and a
+/// pane that is gone, or under its ID on a server instance other than
+/// `instance`, leaves nothing to rename.
 async fn rename_alone(
     server: &Server,
     pane: &str,
@@ -446,10 +447,7 @@ async fn rename_alone(
     let Some(pane) = server.pane(pane, Some(instance)).await? else {
         return Ok(());
     };
-    if pane.window_panes != 1 || expected.is_some_and(|expected| pane.window_name != expected) {
-        return Ok(());
-    }
-    server.rename_window(&pane, label).await
+    server.rename_window(&pane, expected, label).await
 }
 
 #[cfg(test)]

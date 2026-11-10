@@ -35,21 +35,20 @@ fn session_names_drop_what_tmux_rejects() {
 
 #[test]
 fn panes_count_clients_only_on_the_current_window() {
-    let shown = parse_pane("%3 @2 2 1 1 0 4321 99:1700000000 my window").unwrap();
+    let shown = parse_pane("%3 @2 1 1 0 4321 99:1700000000 my window").unwrap();
     assert_eq!(
         shown,
         Pane {
             id: "%3".into(),
             window: "@2".into(),
             window_name: "my window".into(),
-            window_panes: 2,
             clients: 1,
             in_mode: false,
             pid: 4321,
             instance: "99:1700000000".into(),
         }
     );
-    let hidden = parse_pane("%3 @2 1 0 2 1 4321 99:1 w").unwrap();
+    let hidden = parse_pane("%3 @2 0 2 1 4321 99:1 w").unwrap();
     assert_eq!(hidden.clients, 0);
     assert!(hidden.in_mode);
     assert_eq!(parse_pane("%3 @2"), None);
@@ -235,7 +234,7 @@ async fn sessions_are_found_by_name_or_created() {
 }
 
 #[tokio::test]
-async fn names_and_directories_ending_in_a_semicolon_reach_tmux_as_they_are() {
+async fn names_holding_formats_and_paths_ending_in_a_semicolon_reach_tmux_as_they_are() {
     let Some(server) = Isolated::start() else {
         return;
     };
@@ -244,7 +243,7 @@ async fn names_and_directories_ending_in_a_semicolon_reach_tmux_as_they_are() {
     std::fs::create_dir(&cwd).unwrap();
     let session = tmux.session("repo;", &cwd).await.unwrap().session;
     let mut shell = server.shell(&session, None);
-    shell.label = "topic;";
+    shell.label = "#S topic;";
     shell.cwd = &cwd;
     let opened = tmux.open(&shell).await.unwrap();
     let pane = tmux
@@ -252,7 +251,7 @@ async fn names_and_directories_ending_in_a_semicolon_reach_tmux_as_they_are() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(pane.window_name, "topic;");
+    assert_eq!(pane.window_name, "#S topic;");
     let listed = tmux
         .run(&["list-sessions", "-F", "#{session_name}"])
         .await
@@ -269,6 +268,49 @@ async fn names_and_directories_ending_in_a_semicolon_reach_tmux_as_they_are() {
         .await
         .unwrap();
     assert!(path.trim_end().ends_with("dir;"), "{path}");
+}
+
+#[tokio::test]
+async fn a_window_takes_a_new_name_only_while_tmux_sees_the_expected_one() {
+    let Some(server) = Isolated::start() else {
+        return;
+    };
+    let tmux = &server.tmux;
+    let session = tmux.session("repo", server.cwd()).await.unwrap().session;
+    let opened = tmux.open(&server.shell(&session, None)).await.unwrap();
+    let listed = tmux
+        .pane(&opened.pane, Some(&opened.instance))
+        .await
+        .unwrap()
+        .unwrap();
+    let name = async || {
+        let pane = tmux.pane(&opened.pane, None).await.unwrap().unwrap();
+        pane.window_name
+    };
+    // The user renamed the window after Shoal listed it.
+    tmux.run(&["rename-window", "-t", &opened.pane, "mine"])
+        .await
+        .unwrap();
+    tmux.rename_window(&listed, Some("placed"), "next")
+        .await
+        .unwrap();
+    assert_eq!(name().await, "mine");
+
+    tmux.rename_window(&listed, Some("mine"), "#S, {x}")
+        .await
+        .unwrap();
+    assert_eq!(name().await, "#S, {x}");
+    tmux.rename_window(&listed, Some("#S, {x}"), "next")
+        .await
+        .unwrap();
+    assert_eq!(name().await, "next");
+
+    // A split beside the pane leaves the window its name.
+    tmux.open(&server.shell(&session, Some(&opened.pane)))
+        .await
+        .unwrap();
+    tmux.rename_window(&listed, None, "other").await.unwrap();
+    assert_eq!(name().await, "next");
 }
 
 #[tokio::test]
@@ -315,7 +357,6 @@ async fn closing_a_pane_leaves_the_others() {
         .unwrap()
         .unwrap();
     assert_eq!(pane.window_name, "placed");
-    assert_eq!(pane.window_panes, 2);
 
     tmux.close(&opened.pane, Some("1:1")).await.unwrap();
     tmux.close(&opened.pane, None).await.unwrap();
