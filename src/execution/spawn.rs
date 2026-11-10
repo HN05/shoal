@@ -256,6 +256,11 @@ pub(super) fn spawn(
     if matches!(mode, Mode::Publish | Mode::Merge { .. }) {
         crate::push_gate::strip(&mut process);
     }
+    // A merge pushes the default branch as the user, not as an enclosing
+    // agent's account.
+    if matches!(mode, Mode::Merge { .. }) {
+        crate::git_credential::strip(&mut process);
+    }
     export_execution(&mut process, paths, plan);
     // A demo is the user's, so the agent's output setting stays behind, and
     // its own port or device wins over a reservation exported as `PORT`.

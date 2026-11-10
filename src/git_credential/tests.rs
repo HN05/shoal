@@ -1,4 +1,4 @@
-use super::{helper_covers, settings};
+use super::{helper_covers, settings, strip};
 use crate::paths::Paths;
 
 #[test]
@@ -79,4 +79,42 @@ fn helpers_cover_the_hosts_git_asks_them_for() {
         uncovered.is_empty(),
         "these should not cover {host}: {uncovered:?}"
     );
+}
+
+#[test]
+fn strip_drops_shoal_s_helpers_and_their_resets_and_keeps_the_rest() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let user = [
+        ("user.name".to_owned(), "Agent".to_owned()),
+        (
+            "credential.https://other.example.com.helper".to_owned(),
+            String::new(),
+        ),
+    ];
+    let entries: Vec<_> = user
+        .iter()
+        .cloned()
+        .chain(settings(&paths, ["git.example.com"], &[]).unwrap())
+        .collect();
+    let mut command = tokio::process::Command::new("git");
+    for (index, (key, value)) in entries.iter().enumerate() {
+        command
+            .env(format!("GIT_CONFIG_KEY_{index}"), key)
+            .env(format!("GIT_CONFIG_VALUE_{index}"), value);
+    }
+    command.env("GIT_CONFIG_COUNT", entries.len().to_string());
+
+    strip(&mut command);
+
+    let kept: Vec<_> = crate::agent_git::passed_on(&command)
+        .into_iter()
+        .map(|(key, value)| {
+            (
+                key.to_string_lossy().into_owned(),
+                value.to_string_lossy().into_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(kept, user);
 }

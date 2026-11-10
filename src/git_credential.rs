@@ -2,11 +2,13 @@
 //! token of each host that has one, through Shoal's credential helper. For
 //! each such host, an empty helper first clears the user's helpers for that
 //! host only, so none of them answers for it or saves the token.
+use std::ffi::{OsStr, OsString};
+
 use anyhow::Result;
 
 use crate::{
     paths::Paths,
-    workers::{Worker, internal_command},
+    workers::{GIT_CREDENTIAL, GROUP, Worker, internal_command},
 };
 
 /// The settings for `hosts`, the hosts with an agent token, leaving out
@@ -32,6 +34,25 @@ pub fn settings<'a>(
             [(key.clone(), String::new()), (key, helper.clone())]
         })
         .collect())
+}
+
+/// Remove Shoal's credential helpers, and the resets before them, from the
+/// Git settings `command` passes on, for a push that goes out as the user.
+pub fn strip(command: &mut tokio::process::Command) {
+    let helpers: Vec<OsString> = crate::agent_git::passed_on(command)
+        .into_iter()
+        .filter(|(_, value)| is_helper(value))
+        .map(|(key, _)| key)
+        .collect();
+    crate::agent_git::retain(command, |(key, value)| {
+        !(helpers.contains(key) && (value.is_empty() || is_helper(value)))
+    });
+}
+
+/// Whether the Git setting `value` is Shoal's helper.
+fn is_helper(value: &OsStr) -> bool {
+    let value = value.to_string_lossy();
+    value.starts_with('!') && value.ends_with(&format!(" {GROUP} {GIT_CREDENTIAL}"))
 }
 
 /// The helper setting's value: a shell command that runs this binary's
