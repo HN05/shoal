@@ -16,7 +16,7 @@ use crate::{
     config::permissions::PermissionChange,
     execution::recovery::{
         Copied, LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
-        consume, saved_at,
+        consume,
     },
     model::{Chat, Inspection, Workspace},
     protocol::ConfigTarget,
@@ -245,7 +245,7 @@ pub async fn run(
         ctx.show(&report, |_| {})?;
         return Ok(0);
     }
-    let (selected_id, selected) = select_agent(ctx, &saved.agents, agent_label)?;
+    let (selected_id, selected) = picker::select_agent(ctx, &saved.agents, picker::agent_label)?;
     if waits_in_wrapper(&selected) {
         saved.retain_execution(&selected_id, true);
         let stopped = vec![(workspace.clone(), saved)];
@@ -305,7 +305,7 @@ async fn continue_last_session(
     here: bool,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let (id, path) = select_agent(ctx, &saved.sessions, session_label)?;
+    let (id, path) = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
     permission_change::apply_one(ctx, workspace, &id, change).await?;
     if !here {
         let session = (workspace.clone(), id, path);
@@ -495,65 +495,6 @@ async fn launch(
         records,
     )
     .await
-}
-
-/// The execution ID and saved file of the agent to restore of `agents`: the
-/// only one, or one picked on a terminal by its `label`.
-fn select_agent(
-    ctx: &Context,
-    agents: &[(ExecutionId, PathBuf)],
-    label: fn(&Path) -> String,
-) -> Result<(ExecutionId, PathBuf)> {
-    match agents {
-        [agent] => Ok(agent.clone()),
-        agents if ctx.interactive() => {
-            let labels = agents
-                .iter()
-                .map(|(_, path)| label(path))
-                .collect::<Vec<_>>();
-            let choices = agents
-                .iter()
-                .cloned()
-                .zip(labels.iter().map(String::as_str))
-                .collect::<Vec<_>>();
-            ui::pick_choice(ctx, "Resume agent> ", &choices)
-        }
-        _ => anyhow::bail!("multiple stopped agents; select one with --execution <id>"),
-    }
-}
-
-/// How the agent picker names a stopped agent: its name, when it stopped,
-/// why when known, and whether it was interrupted mid-turn or idle.
-fn agent_label(path: &Path) -> String {
-    let record = Record::load(path).ok().flatten();
-    let mut label = record
-        .as_ref()
-        .map_or_else(|| "agent".to_owned(), |record| record.agent.to_string());
-    label.push_str(&stop_time(path));
-    let idle = record.as_ref().is_some_and(Record::between_turns);
-    if let Some(reason) = record.and_then(|record| record.stop_reason) {
-        label.push_str(&format!(" ({reason})"));
-    }
-    label.push_str(if idle { ", idle" } else { ", interrupted" });
-    label
-}
-
-/// How the agent picker names a last session: its agent and when it stopped.
-fn session_label(path: &Path) -> String {
-    let agent = LastSession::load(path).ok().flatten();
-    let mut label = agent.map_or_else(|| "agent".to_owned(), |last| last.agent.into());
-    label.push_str(&stop_time(path));
-    label
-}
-
-/// `, stopped <time>` for the agent saved at `path`, empty when unknown.
-fn stop_time(path: &Path) -> String {
-    saved_at(path)
-        .map(|stopped| {
-            let time = stopped.local_minutes();
-            format!(", stopped {time}")
-        })
-        .unwrap_or_default()
 }
 
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
@@ -958,6 +899,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 
 mod chats;
 pub(super) mod permission_change;
+mod picker;
 pub(super) mod queue;
 pub(super) mod queued;
 mod targets;
