@@ -56,6 +56,7 @@ fn helpers_cover_the_hosts_git_asks_them_for() {
         "credential.https://code.example.com.helper",
         "credential.https://git.example.com:3000.helper",
         "credential.https://*.git.example.com.helper",
+        "credential.https://git*.example.com.helper",
         "credential.https://agent@git.example.com.helper",
         "credential.https://git.example.com/team/repo.git.helper",
         "credential.https://git.example.com.username",

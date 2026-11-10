@@ -75,9 +75,9 @@ fn helper_covers(key: &str, host: &str) -> bool {
         && host_matches(authority, &host.to_ascii_lowercase())
 }
 
-/// Whether the host `pattern` matches `host`, where Git lets `*` in a
-/// pattern match one label of the host name and HTTPS's default port
-/// matches a host without one.
+/// Whether the host `pattern` matches `host`, where Git lets a `*` label
+/// of a pattern match any one label of the host name and HTTPS's default
+/// port matches a host without one.
 fn host_matches(pattern: &str, host: &str) -> bool {
     let (pattern, pattern_port) = https_port(pattern);
     let (host, port) = https_port(host);
@@ -88,7 +88,7 @@ fn host_matches(pattern: &str, host: &str) -> bool {
         && patterns
             .iter()
             .zip(&labels)
-            .all(|(pattern, label)| label_matches(pattern, label))
+            .all(|(pattern, label)| *pattern == "*" || pattern == label)
 }
 
 /// The host name and port of `authority`, with HTTPS's default port as
@@ -98,22 +98,6 @@ fn https_port(authority: &str) -> (&str, &str) {
         Some((host, "443")) | Some((host, "")) => (host, ""),
         Some((host, port)) => (host, port),
         None => (authority, ""),
-    }
-}
-
-/// Whether `label` matches `pattern`, in which `*` stands for any run of
-/// characters.
-fn label_matches(pattern: &str, label: &str) -> bool {
-    match pattern.split_once('*') {
-        None => pattern == label,
-        Some((prefix, rest)) => {
-            let Some(remaining) = label.strip_prefix(prefix) else {
-                return false;
-            };
-            (0..=remaining.len())
-                .filter(|&at| remaining.is_char_boundary(at))
-                .any(|at| label_matches(rest, &remaining[at..]))
-        }
     }
 }
 
