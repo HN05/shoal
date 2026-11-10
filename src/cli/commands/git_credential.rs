@@ -3,6 +3,8 @@
 //! over HTTPS it answers with the login the daemon gives the caller's scope,
 //! the agent token of the host. It answers nothing otherwise, or when the
 //! daemon gives nothing, and Git moves on; `store` and `erase` do nothing.
+//! When the daemon cannot answer, it tells Git to quit, so Git neither asks
+//! for a password nor signs in as anyone else.
 use std::io::{Read as _, Write as _};
 
 use anyhow::Result;
@@ -19,17 +21,18 @@ pub(super) async fn run(ctx: &Context, operation: String) -> Result<i32> {
     let Some(host) = https_host(&request) else {
         return Ok(0);
     };
-    match crate::client::agents::git_credential(&ctx.paths, host.to_owned()).await {
-        Ok(Some(credential)) => {
-            let answer = format!(
-                "username={}\npassword={}\n",
-                credential.username, credential.password
-            );
-            std::io::stdout().lock().write_all(answer.as_bytes())?;
+    let answer = match crate::client::agents::git_credential(&ctx.paths, host.to_owned()).await {
+        Ok(Some(credential)) => format!(
+            "username={}\npassword={}\n",
+            credential.username, credential.password
+        ),
+        Ok(None) => String::new(),
+        Err(error) => {
+            eprintln!("shoal: no agent login for {host}: {error:#}");
+            "quit=true\n".to_owned()
         }
-        Ok(None) => {}
-        Err(error) => eprintln!("shoal: no agent login for {host}: {error:#}"),
-    }
+    };
+    std::io::stdout().lock().write_all(answer.as_bytes())?;
     Ok(0)
 }
 
