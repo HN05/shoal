@@ -806,11 +806,12 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
-                    chats.restore,chats.completion,
+                    chats.restore,space_completion.record AS completion,
                     workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode,
                     chats.root_dir,chats.narrowing,chats.converted
              FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
+                LEFT JOIN space_completion ON space_completion.space_id=chats.id
              ORDER BY chats.started_at, chats.rowid",
     )?
     .query_map([], |row| {

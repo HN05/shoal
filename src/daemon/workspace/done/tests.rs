@@ -617,7 +617,7 @@ async fn undone_keeps_an_unreadable_completion() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,'{','manual')",
+                "INSERT INTO space_completion(space_id,record,cause) VALUES (?1,'{','manual')",
                 [id],
             )?;
             Ok(())
@@ -1239,7 +1239,7 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'not json')",
+                "INSERT INTO space_completion(space_id,record) VALUES (?1,'not json')",
                 [id],
             )?;
             Ok(())
@@ -1256,7 +1256,7 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .store
         .run(move |db| {
             Ok(db.query_row(
-                "SELECT record FROM workspace_completion WHERE workspace_id=?1",
+                "SELECT record FROM space_completion WHERE space_id=?1",
                 [id],
                 |row| row.get(0),
             )?)

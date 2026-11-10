@@ -53,7 +53,7 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
     let open = db
         .prepare(
             "SELECT id,repository_id FROM workspaces w WHERE NOT EXISTS
-                (SELECT 1 FROM workspace_completion c WHERE c.workspace_id=w.id)",
+                (SELECT 1 FROM space_completion c WHERE c.space_id=w.id)",
         )?
         .query_map([], |row| Ok((row.get("id")?, row.get("repository_id")?)))?
         .collect::<rusqlite::Result<_>>()?;

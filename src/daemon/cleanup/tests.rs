@@ -180,7 +180,7 @@ async fn failed_step_does_not_skip_later_steps() {
         .store
         .run(|db| {
             db.execute_batch(
-                "CREATE TEMP TRIGGER full_disk BEFORE UPDATE ON workspace_completion
+                "CREATE TEMP TRIGGER full_disk BEFORE UPDATE ON space_completion
                      BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;",
             )?;
             Ok(())

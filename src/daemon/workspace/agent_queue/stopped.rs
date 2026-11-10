@@ -150,7 +150,7 @@ fn open_workspaces(db: &Connection) -> Result<Vec<Target>> {
     Ok(db
         .prepare(
             "SELECT id,repository_id,name FROM workspaces w WHERE state='ready' AND NOT EXISTS
-                (SELECT 1 FROM workspace_completion c WHERE c.workspace_id=w.id)",
+                (SELECT 1 FROM space_completion c WHERE c.space_id=w.id)",
         )?
         .query_map([], |row| {
             Ok(Target {

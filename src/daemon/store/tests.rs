@@ -484,6 +484,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 152 {
         db.execute_batch(STARTED_LAUNCHES)?;
     }
+    if version >= 153 {
+        db.execute_batch(include_str!("space_completion.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1243,7 +1246,7 @@ fn migration_retires_keep_requests_and_requests_the_cleanup_they_awaited() -> Re
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(requests, ["land"]);
     let completions = db
-        .prepare("SELECT workspace_id,record FROM workspace_completion ORDER BY workspace_id")?
+        .prepare("SELECT space_id,record FROM space_completion ORDER BY space_id")?
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(
@@ -1330,6 +1333,68 @@ fn migration_makes_the_restores_waiting_wrappers_carry_out_automatic() -> Result
         automatic,
         [("resumed".into(), false), ("wrapper".into(), true)]
     );
+    Ok(())
+}
+
+#[test]
+fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
+    let mut db = historical_database(152)?;
+    db.execute_batch(
+        r#"INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,completion)
+             VALUES ('done','repo','done','claude',1,'b',1,'{"head":"abc","cleanup":true}'),
+                ('open','repo','open','claude',2,'b',1,NULL);
+         INSERT INTO workspace_completion(workspace_id,record,cause)
+             VALUES ('workspace','{"head":"def","cleanup":false}','issue');"#,
+    )?;
+    let events: i64 = db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?;
+    migrate(&mut db)?;
+
+    let completions = db
+        .prepare("SELECT space_id,record,cause FROM space_completion ORDER BY space_id")?
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        completions,
+        [
+            (
+                "done".into(),
+                r#"{"head":"abc","cleanup":true}"#.into(),
+                "manual".into()
+            ),
+            (
+                "workspace".into(),
+                r#"{"head":"def","cleanup":false}"#.into(),
+                "issue".into()
+            ),
+        ]
+    );
+    // Moving the records journals nothing.
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r
+            .get::<_, i64>(0))?,
+        events
+    );
+    // A removed space's completion goes with it, without an `undone` event.
+    db.execute_batch(
+        "DELETE FROM chats WHERE id='done'; DELETE FROM executions; DELETE FROM workspaces;",
+    )?;
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM space_completion", [], |r| r
+            .get::<_, i64>(0))?,
+        0
+    );
+    let undone: i64 = db.query_row(
+        "SELECT COUNT(*) FROM workspace_events WHERE json_extract(record,'$.kind')='undone'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(undone, 0);
     Ok(())
 }
 

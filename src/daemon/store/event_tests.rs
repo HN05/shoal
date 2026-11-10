@@ -29,15 +29,12 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
         "UPDATE workspaces SET state='ready',error=NULL WHERE id='w'",
         [],
     )?;
-    db.execute("INSERT INTO workspace_completion(workspace_id,record,cause) VALUES ('w','{\"error\":null}','issue')", [])?;
+    db.execute("INSERT INTO space_completion(space_id,record,cause) VALUES ('w','{\"error\":null}','issue')", [])?;
     db.execute(
-        "UPDATE workspace_completion SET record='{\"error\":\"retained\"}'",
+        "UPDATE space_completion SET record='{\"error\":\"retained\"}'",
         [],
     )?;
-    db.execute(
-        "DELETE FROM workspace_completion WHERE workspace_id='w'",
-        [],
-    )?;
+    db.execute("DELETE FROM space_completion WHERE space_id='w'", [])?;
     db.execute(
         "UPDATE workspaces SET observed_branch=NULL WHERE id='w'",
         [],
@@ -203,6 +200,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("space_completion_undo.sql"))?;
     // Spaces convert no more.
     db.execute_batch(
         "DROP TRIGGER workspace_converted; DROP TRIGGER chat_converted;
@@ -441,8 +439,9 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
         "https://forge.example/team/repo/issues/1",
     )?;
     db.execute_batch(
-        "UPDATE chats SET completion='{\"head\":\"abc\",\"cleanup\":true,\"error\":null}' WHERE id='c';
-         UPDATE chats SET completion=NULL WHERE id='c';",
+        "INSERT INTO space_completion(space_id,record)
+             VALUES ('c','{\"head\":\"abc\",\"cleanup\":true,\"error\":null}');
+         DELETE FROM space_completion WHERE space_id='c';",
     )?;
     let rows = db
         .prepare(

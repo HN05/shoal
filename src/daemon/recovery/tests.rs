@@ -24,7 +24,7 @@ async fn recovery_reads_only_its_executions_without_inspection_details() -> Resu
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'invalid')",
+                    "INSERT INTO space_completion(space_id,record) VALUES (?1,'invalid')",
                     [&id],
                 )?;
                 db.execute(

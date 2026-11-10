@@ -72,7 +72,6 @@ const CHAT_COLUMNS: &[&str] = &[
     "restore",
     "unique_id",
     "asks_in_chat",
-    "completion",
     "stopped_at",
     "saved",
     "scope_token",

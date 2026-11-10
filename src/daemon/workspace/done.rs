@@ -18,13 +18,14 @@ use crate::{
 };
 
 impl Manager {
+    /// The completion the space `id` recorded, a workspace's or a chat's.
     pub async fn completion(&self, id: &SpaceId) -> Result<Option<Completion>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let record: Option<String> = db
                     .query_row(
-                        "SELECT record FROM workspace_completion WHERE workspace_id=?1",
+                        "SELECT record FROM space_completion WHERE space_id=?1",
                         [id],
                         |row| row.get(0),
                     )
@@ -45,17 +46,7 @@ impl Manager {
             .store
             .write(move |tx| {
                 store::require_ready(tx, &workspace.id)?;
-                let record: String = tx
-                    .query_row(
-                        "DELETE FROM workspace_completion WHERE workspace_id=?1 RETURNING record",
-                        [&workspace.id],
-                        |row| row.get(0),
-                    )
-                    .optional()?
-                    .context("assignment is not marked done")?;
-                // An unreadable record stays in place for diagnosis.
-                let completion = serde_json::from_str(&record)?;
-                Ok(completion)
+                take_completion(tx, &workspace.id)?.context("assignment is not marked done")
             })
             .await?;
         self.signals.wake_cleanup();
@@ -318,7 +309,7 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT cause FROM workspace_completion WHERE workspace_id=?1",
+                        "SELECT cause FROM space_completion WHERE space_id=?1",
                         [id],
                         |r| r.get(0),
                     )
@@ -335,8 +326,8 @@ impl Manager {
             .run(move |db| {
                 // Preserve malformed records for diagnosis instead of overwriting them.
                 db.execute(
-                    "UPDATE workspace_completion SET record=json_set(record, '$.error', ?2)
-                WHERE workspace_id=?1 AND json_valid(record)",
+                    "UPDATE space_completion SET record=json_set(record, '$.error', ?2)
+                WHERE space_id=?1 AND json_valid(record)",
                     rusqlite::params![id, error],
                 )?;
                 Ok(())
@@ -356,27 +347,45 @@ struct Persisted {
     progressed: bool,
 }
 
-/// Record `completion`, returning whether it differs from the recorded one
-/// in any field, or that record is unreadable.
-fn record_completion(
+/// Record `completion` for the space `id`, returning whether it differs from
+/// the recorded one in any field, or that record is unreadable.
+pub(crate) fn record_completion(
     tx: &rusqlite::Transaction,
     id: &SpaceId,
     completion: &Completion,
 ) -> Result<bool> {
     let recorded: Option<String> = tx
         .query_row(
-            "SELECT record FROM workspace_completion WHERE workspace_id=?1",
+            "SELECT record FROM space_completion WHERE space_id=?1",
             [id],
             |row| row.get(0),
         )
         .optional()?;
     let recorded = recorded.and_then(|record| serde_json::from_str::<Completion>(&record).ok());
     tx.execute(
-        "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
-         ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
+        "INSERT INTO space_completion(space_id,record,cause) VALUES (?1,?2,?3)
+         ON CONFLICT(space_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
         rusqlite::params![id, serde_json::to_string(completion)?, EventCause::Manual],
     )?;
     Ok(recorded.as_ref() != Some(completion))
+}
+
+/// Delete and return the completion the space `id` recorded, or `None`
+/// without one. An unreadable record stays in place for diagnosis.
+pub(crate) fn take_completion(
+    tx: &rusqlite::Transaction,
+    id: &SpaceId,
+) -> Result<Option<Completion>> {
+    let record: Option<String> = tx
+        .query_row(
+            "DELETE FROM space_completion WHERE space_id=?1 RETURNING record",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record
+        .map(|record| serde_json::from_str(&record))
+        .transpose()?)
 }
 
 /// What the user is told about a completion, the questions it closed and

@@ -3,7 +3,6 @@
 //! removes the chat as it removes a workspace.
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
-use rusqlite::{OptionalExtension, params};
 
 use crate::{
     client::assignments::Done,
@@ -12,9 +11,10 @@ use crate::{
         notifications::{About, NotificationKind},
         progress, questions,
         spaces::removal_notices::Cleanup,
+        store,
         workspace::{
             Manager,
-            done::{CompletedAncestor, push_completion_details},
+            done::{self, CompletedAncestor, push_completion_details},
         },
         workspace_files::Attacher,
     },
@@ -151,7 +151,9 @@ impl Manager {
         let chat = (self.chat_by_id(id).await?).with_context(|| format!("no chat {id}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let id = chat.id.clone();
-        self.store.write(move |tx| take_completion(tx, &id)).await
+        (self.store)
+            .write(move |tx| done::take_completion(tx, &id)?.context("the chat is not marked done"))
+            .await
     }
 
     async fn done_chat(&self, id: &SpaceId) -> Result<Chat> {
@@ -181,43 +183,21 @@ fn record_completion(
     completion: &Completion,
     progressed: bool,
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
-    let previous: Option<Option<String>> = tx
-        .query_row(
-            "SELECT completion FROM chats WHERE id=?1 AND restore IS NULL",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let previous = previous.context("the chat stopped running")?;
-    let previous: Option<Completion> = previous
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?;
-    tx.execute(
-        "UPDATE chats SET completion=?2 WHERE id=?1",
-        params![id, serde_json::to_string(completion)?],
-    )?;
+    ensure!(
+        store::exists(
+            tx,
+            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL",
+            [id]
+        )?,
+        "the chat stopped running"
+    );
+    let changed = done::record_completion(tx, id, completion)?;
     let closed = questions::close_open(tx, id)?;
     ensure!(
-        previous.as_ref() != Some(completion) || !closed.is_empty() || progressed,
+        changed || !closed.is_empty() || progressed,
         "the chat is already marked done at this HEAD"
     );
     Ok(closed)
-}
-
-/// Delete and return the completion the chat `id` recorded.
-fn take_completion(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Completion> {
-    let record: String = tx
-        .query_row(
-            "SELECT completion FROM chats WHERE id=?1 AND completion IS NOT NULL",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?
-        .context("the chat is not marked done")?;
-    // An unreadable record stays in place for diagnosis.
-    let completion = serde_json::from_str(&record)?;
-    tx.execute("UPDATE chats SET completion=NULL WHERE id=?1", [id])?;
-    Ok(completion)
 }
 
 #[cfg(test)]

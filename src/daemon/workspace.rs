@@ -504,7 +504,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     )?;
     workspace.done = store::exists(
         db,
-        "SELECT 1 FROM workspace_completion WHERE workspace_id=?1",
+        "SELECT 1 FROM space_completion WHERE space_id=?1",
         [&workspace.id],
     )?;
     Ok(())

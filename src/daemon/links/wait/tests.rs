@@ -1672,7 +1672,7 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'{}')",
+                "INSERT INTO space_completion(space_id,record) VALUES (?1,'{}')",
                 [id],
             )?;
             Ok(())

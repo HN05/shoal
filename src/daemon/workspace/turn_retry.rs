@@ -265,8 +265,8 @@ fn due(db: &Connection, workspace_id: &SpaceId, now: UnixTime) -> Result<Option<
         .query_row(
             "SELECT r.failure,r.attempt,
                 s.state IS 'idle' AND s.execution_id IS r.execution_id
-                AND NOT EXISTS (SELECT 1 FROM workspace_completion c
-                    WHERE c.workspace_id=r.workspace_id)
+                AND NOT EXISTS (SELECT 1 FROM space_completion c
+                    WHERE c.space_id=r.workspace_id)
              FROM workspace_turn_retries r
              LEFT JOIN space_agent_state s ON s.space_id=r.workspace_id
              WHERE r.workspace_id=?1 AND r.delivered=0 AND r.due_at<=?2",
