@@ -284,7 +284,8 @@ further before the kernel kills processes.
 
 Durations are seconds, bounded to one day; polling, cooldown and sustained CPU
 and recovery durations must be positive. CPU usage measures aggregate busy time
-across all cores, excluding I/O wait. A failed reading resets that signal’s timer and cannot authorize a stop;
+across all cores, excluding I/O wait and niced time, such as a [CI
+job](#runner)'s or your own niced work. A failed reading resets that signal’s timer and cannot authorize a stop;
 memory protection remains independent of CPU readings.
 
 A resume command is an argument array in the agent's `[agents.<name>]

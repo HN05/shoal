@@ -168,7 +168,10 @@ answered before the protocol check, since restarting is how an upgrade reaches
 a daemon of another release; a daemon that does not answer gets SIGTERM.
 
 Overload protection is configured machine-wide: memory is enabled by default,
-CPU is opt-in and requires sustained aggregate busy time. One `load` setting
+CPU is opt-in and requires sustained aggregate busy time, which leaves out
+niced time: more work on a busy CPU only runs slower, and work at low priority,
+such as CI jobs or the user's own niced work, takes only cores nothing else
+wants. One `load` setting
 (`light`, `balanced`, `full`) sets the default CPU and memory thresholds, so a
 user chooses how hard to load the machine without tuning each percentage;
 explicit thresholds override it. Linux memory defaults rise with swap, which

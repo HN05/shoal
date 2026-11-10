@@ -128,8 +128,10 @@ pub fn critical_memory(_used_percent: u8) -> Result<bool> {
 #[cfg(test)]
 mod tests;
 
-/// Cumulative CPU ticks across every core. I/O wait is idle; Linux guest ticks
-/// are already included in user/nice and must not be counted twice.
+/// Cumulative CPU ticks across every core. I/O wait and niced time are idle:
+/// work at low priority, such as CI jobs, takes only cores nothing else
+/// wants. Linux guest ticks are already included in user/nice and must not be
+/// counted twice.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct CpuTicks {
     pub(crate) busy: u64,
@@ -169,8 +171,12 @@ fn linux_cpu(text: &str) -> Result<CpuTicks> {
         .iter()
         .try_fold(0u64, |sum, value| sum.checked_add(*value))
         .context("CPU ticks overflow")?;
-    let idle = values[3]
-        .checked_add(values.get(4).copied().unwrap_or_default())
+    // nice, idle and iowait
+    let idle = [1, 3, 4]
+        .into_iter()
+        .try_fold(0u64, |sum, index| {
+            sum.checked_add(values.get(index).copied().unwrap_or_default())
+        })
         .context("idle ticks overflow")?;
     Ok(CpuTicks {
         busy: total - idle,
@@ -201,12 +207,29 @@ pub fn cpu_ticks() -> Result<CpuTicks> {
         result == libc::KERN_SUCCESS && count == libc::HOST_CPU_LOAD_INFO_COUNT,
         "read CPU ticks: Mach error {result}"
     );
-    let ticks = unsafe { info.assume_init() }.cpu_ticks.map(u64::from);
+    Ok(mach_cpu(
+        unsafe { info.assume_init() }.cpu_ticks.map(u64::from),
+    ))
+}
+
+/// Mach's CPU states, as `host_cpu_load_info` orders its ticks.
+#[cfg(any(target_os = "macos", test))]
+const MACH_IDLE: usize = 2;
+#[cfg(any(target_os = "macos", test))]
+const MACH_NICE: usize = 3;
+#[cfg(target_os = "macos")]
+const _: () = assert!(
+    MACH_IDLE == libc::CPU_STATE_IDLE as usize && MACH_NICE == libc::CPU_STATE_NICE as usize
+);
+
+/// The busy and total ticks of Mach's per-state `ticks`.
+#[cfg(any(target_os = "macos", test))]
+fn mach_cpu(ticks: [u64; 4]) -> CpuTicks {
     let total = ticks.iter().sum();
-    Ok(CpuTicks {
+    CpuTicks {
         total,
-        busy: total - ticks[libc::CPU_STATE_IDLE as usize],
-    })
+        busy: total - ticks[MACH_IDLE] - ticks[MACH_NICE],
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
