@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{commands, queue};
+use super::{commands, queue, reports};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::{Resumed, ResumedAgent};
 use crate::client::space_names::SpaceSelector;
@@ -108,31 +108,7 @@ pub(super) async fn start_sessions(
             reused,
         });
     }
-    ctx.show(&output, |output| {
-        if in_wrappers > 0 {
-            let noun = if in_wrappers == 1 { "agent" } else { "agents" };
-            outln!("Starting {in_wrappers} {noun} where they wait to restore");
-        }
-        if let Some(place) = place {
-            let started = output.agents.len() - listed.len() - in_wrappers;
-            let noun = if started == 1 { "agent" } else { "agents" };
-            outln!("Resuming {started} {noun} in {place}");
-        }
-        if !listed.is_empty() {
-            outln!("Resume each agent in its own terminal:");
-        }
-        for (workspace, id) in &listed {
-            let words = [
-                "shoal",
-                "resume",
-                &workspace.name,
-                "--execution",
-                id.as_str(),
-                "--focus",
-            ];
-            outln!("  {}", crate::shell::quote(&words));
-        }
-    })?;
+    reports::started(ctx, &output, in_wrappers, place, &listed)?;
     Ok(if output.failed.is_empty() { 0 } else { 1 })
 }
 

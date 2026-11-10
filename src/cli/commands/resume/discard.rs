@@ -2,7 +2,7 @@
 //! sessions instead of restoring them, and removing stopped chats.
 use anyhow::Result;
 
-use super::chats;
+use super::{chats, reports};
 use crate::client::assignments;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::DiscardedWork;
@@ -26,12 +26,7 @@ pub(super) async fn discard_work(
         chats: Vec::new(),
         failed: Vec::new(),
     };
-    ctx.show(&forgotten, |_| {
-        outln!(
-            "Discarded stopped agents and commands for {}",
-            discarded.workspace
-        )
-    })?;
+    reports::discarded(ctx, &forgotten, &[discarded.workspace.as_str()])?;
     Ok(0)
 }
 
@@ -59,14 +54,7 @@ pub(super) async fn discard_each(
         chats,
         failed,
     };
-    ctx.show(&discarded, |_| {
-        if !names.is_empty() {
-            outln!(
-                "Discarded stopped agents and commands for {}",
-                names.join(", ")
-            );
-        }
-    })?;
+    reports::discarded(ctx, &discarded, &names)?;
     Ok(if discarded.failed.is_empty() { 0 } else { 1 })
 }
 

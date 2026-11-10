@@ -1,8 +1,9 @@
-//! Manual recovery uses saved agent identity and today's restore configuration.
-//! It queues restores unless asked to start them now, and restores the
-//! stopped chats at once.
+//! `shoal resume`: choosing how the selected spaces resume, which the
+//! modules below carry out. Restores use saved agent identity and today's
+//! restore configuration; they queue unless asked to start now, the stopped
+//! chats restore at once, and `--discard` forgets the stopped work instead.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{Queued, Resumed};
+use crate::client::output::resume::Resumed;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context},
     config::permissions::PermissionChange,
@@ -87,17 +88,6 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     }
 }
 
-/// Report that no space has anything to resume, as a resume that starts
-/// agents at once when `started`, otherwise as one that queues them.
-fn report_nothing(ctx: &Context, started: bool) -> Result<i32> {
-    let message = "No stopped agents, commands or chats";
-    match started {
-        true => ctx.emit(message, Resumed::default())?,
-        false => ctx.emit(message, Queued::default())?,
-    }
-    Ok(0)
-}
-
 /// Continue the turns an interrupt ended of the agents in the `selected`
 /// workspaces, which keeps the workspaces without one, refusing those and
 /// selected chats, which a request that also resumes stopped work would
@@ -155,7 +145,8 @@ async fn resume_each(
 ) -> Result<i32> {
     let stopped = selected.stopped(ctx, discard).await?;
     if stopped.is_empty() && selected.chats.is_empty() {
-        return report_nothing(ctx, discard || queuing == Queuing::Here { now: true });
+        reports::nothing(ctx, discard || queuing == Queuing::Here { now: true })?;
+        return Ok(0);
     }
     if discard {
         return discard::discard_each(ctx, &stopped, &selected.chats).await;
@@ -186,6 +177,7 @@ pub(super) mod permission_change;
 mod picker;
 pub(super) mod queue;
 pub(super) mod queued;
+pub(super) mod reports;
 mod sessions;
 mod stale;
 mod targets;

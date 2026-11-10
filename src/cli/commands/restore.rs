@@ -1,6 +1,6 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
-use crate::cli::commands::resume::queue::QueuedExt;
+use crate::cli::commands::resume::reports::QueuedExt;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;

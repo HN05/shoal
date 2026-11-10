@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, ensure};
 use std::path::PathBuf;
 
-use super::{commands, discard, permission_change, picker, queue, sessions, stale};
+use super::{commands, discard, permission_change, picker, queue, reports, sessions, stale};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
 use crate::client::space_names::SpaceSelector;
@@ -60,7 +60,7 @@ pub async fn run(
     if saved.agents.is_empty() {
         let _commands = commands::claim(&mut saved.commands);
         let report = commands::report(ctx, workspace, &saved.commands)?;
-        ctx.show(&report, |_| {})?;
+        reports::commands_only(ctx, &report)?;
         return Ok(0);
     }
     let (selected_id, selected) = picker::select_agent(ctx, &saved.agents, picker::agent_label)?;
@@ -84,7 +84,7 @@ pub async fn run(
     let _claim = claim(&selected)?;
     let recorded = Record::load(&selected)?.context("recovery record was already consumed")?;
     if let Some(reason) = &recorded.stop_reason {
-        eprintln!("shoal: restoring {}, stopped: {reason}", recorded.agent);
+        reports::restoring(&recorded.agent, reason);
     }
     let session = recorded.into_last_session(selected_id, &selected);
     restore(ctx, workspace, session, selected, saved.commands).await
@@ -112,7 +112,7 @@ pub(super) async fn continue_last_session(
     let mut commands = saved.commands;
     let _commands = commands::claim(&mut commands);
     if !last.moved {
-        eprintln!("shoal: continuing the last {} session", last.agent);
+        reports::continuing(&last.agent);
     }
     restore(ctx, workspace, last, path, commands).await
 }
@@ -161,7 +161,7 @@ async fn restore(
     )
     .await?;
     if !commands.is_empty() && !recovery.handoff_delivered {
-        eprintln!("{}", commands::command_list(workspace, &commands));
+        reports::commands_not_told(workspace, &commands);
     }
     records.extend(commands.into_iter().map(|command| command.path));
     launch(ctx, workspace, recovery, records).await
@@ -178,10 +178,7 @@ async fn start_moved(
     handoff: Option<&str>,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
-    eprintln!(
-        "shoal: starting a new {} session in the moved workspace",
-        session.agent
-    );
+    reports::starting_moved(&session.agent);
     let message = crate::execution::recovery::moved_prompt(handoff);
     start_told(ctx, workspace, session, None, message, records).await
 }
@@ -208,10 +205,7 @@ async fn start_copied(
         .session
         .clone()
         .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
-    match fork {
-        Some(_) => eprintln!("shoal: starting {agent} from a fork of its session in the copy"),
-        None => eprintln!("shoal: starting a new {agent} session in the copy"),
-    }
+    reports::starting_copied(agent, fork.is_some());
     let message = crate::execution::recovery::copied_prompt(copied, fork.is_some(), handoff);
     start_told(ctx, workspace, session, fork, message, records).await
 }

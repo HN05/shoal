@@ -2,6 +2,7 @@
 //! then reports them to the user or hands them to the restored agent.
 use anyhow::Result;
 
+use super::reports;
 use crate::client::output::resume::StoppedCommands;
 use crate::{
     cli::context::Context,
@@ -35,23 +36,11 @@ pub(super) fn report(
             .map(|command| command.argv.clone())
             .collect(),
     };
-    if !commands.is_empty() && !ctx.json {
-        outln!("{}", command_list(workspace, commands));
-    }
+    reports::stopped_commands(ctx, workspace, commands);
     for command in commands {
         consume(&command.path)?;
     }
     Ok(report)
-}
-
-pub(super) fn command_list(workspace: &Workspace, commands: &[SavedCommand]) -> String {
-    let mut text = format!("Stopped commands in {}, not restarted:", workspace.name);
-    for command in commands {
-        let mut words = vec!["shoal", "run", "--workspace", &workspace.name, "--"];
-        words.extend(command.argv.iter().map(String::as_str));
-        text.push_str(&format!("\n  {}", crate::shell::quote(&words)));
-    }
-    text
 }
 
 /// The first prompt of a restored session, naming the commands stopped with it.
