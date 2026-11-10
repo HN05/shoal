@@ -1,6 +1,8 @@
 //! The Git settings of agent launches only: the selected Git profile, the
 //! agent token logins of [`crate::git_credential`], and the push rewrites of
 //! [`crate::push_gate`].
+use std::ffi::{OsStr, OsString};
+
 use anyhow::{Context, Result};
 
 #[derive(Default)]
@@ -77,4 +79,51 @@ impl Launch {
         }
         command.env("GIT_CONFIG_COUNT", (inherited + self.git.len()).to_string());
     }
+}
+
+/// Keep only the Git settings `command` passes on that `keep` accepts, as
+/// `(key, value)`; the others keep their order.
+pub fn retain(command: &mut tokio::process::Command, keep: impl Fn(&(OsString, OsString)) -> bool) {
+    let entries = passed_on(command);
+    let kept: Vec<_> = entries.iter().filter(|entry| keep(entry)).collect();
+    if kept.len() == entries.len() {
+        return;
+    }
+    for index in 0..entries.len() {
+        command
+            .env_remove(format!("GIT_CONFIG_KEY_{index}"))
+            .env_remove(format!("GIT_CONFIG_VALUE_{index}"));
+    }
+    for (index, (key, value)) in kept.iter().enumerate() {
+        command
+            .env(format!("GIT_CONFIG_KEY_{index}"), key)
+            .env(format!("GIT_CONFIG_VALUE_{index}"), value);
+    }
+    command.env("GIT_CONFIG_COUNT", kept.len().to_string());
+}
+
+/// The Git settings `command` passes on, as `(key, value)`: those it sets,
+/// else those this process inherited.
+pub fn passed_on(command: &tokio::process::Command) -> Vec<(OsString, OsString)> {
+    let set: Vec<(OsString, Option<OsString>)> = command
+        .as_std()
+        .get_envs()
+        .map(|(name, value)| (name.to_owned(), value.map(OsStr::to_owned)))
+        .collect();
+    let read = |name: &str| match set.iter().find(|(set, _)| set == name) {
+        Some((_, value)) => value.clone(),
+        None => std::env::var_os(name),
+    };
+    let count = read("GIT_CONFIG_COUNT")
+        .and_then(|count| count.into_string().ok())
+        .and_then(|count| count.parse::<usize>().ok())
+        .unwrap_or(0);
+    (0..count)
+        .map(|index| {
+            (
+                read(&format!("GIT_CONFIG_KEY_{index}")).unwrap_or_default(),
+                read(&format!("GIT_CONFIG_VALUE_{index}")).unwrap_or_default(),
+            )
+        })
+        .collect()
 }

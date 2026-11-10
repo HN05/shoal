@@ -5,11 +5,7 @@
 //! every push to them to Shoal's remote helper, which asks the daemon before
 //! it pushes. Fetches keep their URLs.
 use crate::paths::PathsExt;
-use std::{
-    ffi::{OsStr, OsString},
-    os::unix::fs::PermissionsExt,
-    path::Path,
-};
+use std::{ffi::OsStr, os::unix::fs::PermissionsExt, path::Path};
 
 use anyhow::{Context, Result};
 
@@ -108,46 +104,9 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
 }
 
 /// Remove the rewrites from the Git settings `command` passes on, for a
-/// push Shoal already authorized or the helper runs itself. The settings
-/// are those `command` sets, else those this process inherited; the others
-/// keep their order.
+/// push Shoal already authorized or the helper runs itself.
 pub fn strip(command: &mut tokio::process::Command) {
-    let set: Vec<(OsString, Option<OsString>)> = command
-        .as_std()
-        .get_envs()
-        .map(|(name, value)| (name.to_owned(), value.map(OsStr::to_owned)))
-        .collect();
-    let read = |name: &str| match set.iter().find(|(set, _)| set == name) {
-        Some((_, value)) => value.clone(),
-        None => std::env::var_os(name),
-    };
-    let count = read("GIT_CONFIG_COUNT")
-        .and_then(|count| count.into_string().ok())
-        .and_then(|count| count.parse::<usize>().ok())
-        .unwrap_or(0);
-    let entries: Vec<_> = (0..count)
-        .map(|index| {
-            (
-                read(&format!("GIT_CONFIG_KEY_{index}")).unwrap_or_default(),
-                read(&format!("GIT_CONFIG_VALUE_{index}")).unwrap_or_default(),
-            )
-        })
-        .collect();
-    let kept: Vec<_> = entries.iter().filter(|(key, _)| !is_rewrite(key)).collect();
-    if kept.len() == entries.len() {
-        return;
-    }
-    for index in 0..count {
-        command
-            .env_remove(format!("GIT_CONFIG_KEY_{index}"))
-            .env_remove(format!("GIT_CONFIG_VALUE_{index}"));
-    }
-    for (index, (key, value)) in kept.iter().enumerate() {
-        command
-            .env(format!("GIT_CONFIG_KEY_{index}"), key)
-            .env(format!("GIT_CONFIG_VALUE_{index}"), value);
-    }
-    command.env("GIT_CONFIG_COUNT", kept.len().to_string());
+    crate::agent_git::retain(command, |(key, _)| !is_rewrite(key));
 }
 
 /// Whether the Git setting `key` is one of the rewrites; Git compares the
