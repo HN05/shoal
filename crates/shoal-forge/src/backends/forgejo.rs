@@ -190,6 +190,11 @@ impl Backend for Forgejo {
         "Forgejo API request failed; private repositories need a token under [machine.forges.\"<host>\"]"
     }
 
+    /// Forgejo ignores the username when the password is a token.
+    fn git_username(&self) -> &'static str {
+        "token"
+    }
+
     fn authorization(&self, token: &str, _email: Option<&str>) -> String {
         format!("token {token}")
     }

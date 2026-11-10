@@ -149,6 +149,10 @@ impl Backend for GitLab {
         "GitLab API request failed; private projects need a token under [machine.forges.\"<host>\"]"
     }
 
+    fn git_username(&self) -> &'static str {
+        "oauth2"
+    }
+
     async fn send(
         &self,
         repo: &ForgeRepo,

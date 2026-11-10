@@ -104,6 +104,11 @@ impl ForgeKind {
     pub fn uses_account_email(self) -> bool {
         Backend::uses_account_email(&self)
     }
+
+    /// The username Git sends over HTTPS with a token as the password.
+    pub fn git_username(self) -> &'static str {
+        Backend::git_username(&self)
+    }
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -207,6 +212,9 @@ pub(crate) trait Backend {
     fn authorization(&self, token: &str, _email: Option<&str>) -> String {
         format!("Bearer {token}")
     }
+
+    /// The username Git sends over HTTPS with a token as the password.
+    fn git_username(&self) -> &'static str;
 
     /// Send `request` as `account` and return the forge's response, which
     /// may report a failure.

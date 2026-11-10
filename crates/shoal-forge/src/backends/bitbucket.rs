@@ -168,6 +168,11 @@ impl Backend for Bitbucket {
         "Bitbucket API request failed; private repositories need a token under [machine.forges.\"bitbucket.org\"]"
     }
 
+    /// Both API tokens and access tokens take this static username.
+    fn git_username(&self) -> &'static str {
+        "x-token-auth"
+    }
+
     /// An API token signs in with its account's email.
     fn uses_account_email(&self) -> bool {
         true

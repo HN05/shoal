@@ -46,6 +46,14 @@ impl Logins {
     fn get(&self, host: &str) -> Option<&Signer> {
         self.0.get(&host.to_ascii_lowercase())
     }
+
+    /// The token of the login for `host`, or none without one.
+    pub async fn token(&self, host: &str) -> Result<Option<&str>> {
+        match self.get(host) {
+            Some(signer) => signer.token().await.map(Some),
+            None => Ok(None),
+        }
+    }
 }
 
 /// A login and its token, fetched once for the account's requests and
@@ -134,12 +142,19 @@ impl Account {
 impl Signer {
     /// The curl config line that signs a request to a `kind` forge in.
     async fn authorization(&self, kind: ForgeKind) -> Result<Vec<u8>> {
+        let token = self.token().await?;
+        let value = kind.authorization(token, self.login.email.as_deref());
+        Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
+    }
+
+    /// The login's token, fetched once. It goes into a curl config line and
+    /// a Git credential, so anything but a plain token is refused.
+    async fn token(&self) -> Result<&str> {
         let token = self
             .token
             .get_or_try_init(|| self.login.token.fetch())
             .await?;
         let token = token.trim();
-        // The value goes into a curl config line; anything but a plain token is refused.
         ensure!(
             !token.is_empty()
                 && token
@@ -147,8 +162,7 @@ impl Signer {
                     .all(|c| c.is_ascii_graphic() && !matches!(c, '"' | '\\')),
             "the token is empty or has an unexpected format"
         );
-        let value = kind.authorization(token, self.login.email.as_deref());
-        Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
+        Ok(token)
     }
 }
 

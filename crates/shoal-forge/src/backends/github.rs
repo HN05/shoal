@@ -155,6 +155,10 @@ impl Backend for GitHub {
         "GitHub API request failed; private repositories need a token under [machine.forges.\"<host>\"]"
     }
 
+    fn git_username(&self) -> &'static str {
+        "x-access-token"
+    }
+
     async fn send(
         &self,
         repo: &ForgeRepo,
