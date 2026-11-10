@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use crate::space_names::SpaceSelector;
 use crate::{
-    connection::{Daemon, pages, request},
+    connection::{Daemon, joined, pages, request},
     forge::{
         PullRequest,
         capability::Capabilities,
@@ -24,7 +24,7 @@ use crate::{
         review::{reviewers::Reviewer, thread::Thread},
     },
     model::{Dependency, MergeWarning, Selected},
-    protocol::{DownloadPiece, ItemContext, ItemMethod, ViewPiece},
+    protocol::{DownloadPiece, ItemContext, ItemMethod},
 };
 
 /// The forge's JSON response to `request` in `context`'s repository, or in
@@ -156,9 +156,7 @@ pub async fn issue_details(
     context: ItemContext,
     item: String,
 ) -> Result<IssueDetails> {
-    let pieces = pages::<ViewPiece>(daemon, ItemMethod::IssueDetails { context, item }).await?;
-    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
-    serde_json::from_str(&json).context("the daemon sent an invalid issue")
+    joined(daemon, ItemMethod::IssueDetails { context, item }, "issue").await
 }
 
 /// The open issues the forge records as blocking the issue `item` names in

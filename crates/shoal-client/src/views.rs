@@ -1,7 +1,7 @@
 //! What `shoal view` reads through the daemon: issues and PRs as the forge
 //! reports them, with failed checks' logs, and CI runs with their jobs and
 //! failed jobs' logs, in the order they were selected.
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
     },
     model::SelectedItem,
     output::view::{RunRead, Shown, ShownItem, ShownRun},
-    protocol::{CiMethod, ItemContext, ItemMethod, ViewPiece},
+    protocol::{CiMethod, ItemContext, ItemMethod},
 };
 
 /// The items a selection named, in order, and the views of the issues and
@@ -56,9 +56,7 @@ async fn view_items(
         selection,
         comments,
     };
-    let pieces = connection::pages::<ViewPiece>(daemon, method).await?;
-    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
-    serde_json::from_str(&json).context("the daemon sent an invalid view")
+    connection::joined(daemon, method, "view").await
 }
 
 /// Each selected run with its jobs and failed jobs' logs, read in the

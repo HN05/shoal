@@ -5,6 +5,7 @@
 use std::{io, sync::OnceLock, time::Duration};
 
 use anyhow::{Context, Result, ensure};
+use serde::de::DeserializeOwned;
 use tokio::{
     io::{AsyncBufRead, BufReader},
     net::{
@@ -18,7 +19,8 @@ use crate::{
     paths::Paths,
     processes::Identity,
     protocol::{
-        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response,
+        ViewPiece, timing,
     },
     scope_tokens::ScopeToken,
 };
@@ -315,6 +317,17 @@ where
             body => items.extend(Vec::<T>::try_from(body)?),
         }
     }
+}
+
+/// The `what` the daemon sends for `method` as pieces of its JSON, joined.
+pub async fn joined<T: DeserializeOwned>(
+    daemon: &impl Daemon,
+    method: impl Into<Method>,
+    what: &str,
+) -> Result<T> {
+    let pieces = pages::<ViewPiece>(daemon, method).await?;
+    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
+    serde_json::from_str(&json).with_context(|| format!("the daemon sent an invalid {what}"))
 }
 
 /// `None` when no daemon is running; one that runs without answering is an
