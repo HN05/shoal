@@ -1085,7 +1085,7 @@ async fn branch_removal_uses_the_inspected_default_branch() {
             &["symbolic-ref", "HEAD", &git::local_ref(later_default)],
         );
 
-        let (_, branch) = worktrunk_removal_options(&check, &NOTHING);
+        let (_, branch) = worktrunk_removal_options(&check, Removal::Deleted);
         assert_eq!(matches!(branch, BranchRemoval::Delete), delete);
     }
 }
@@ -1362,9 +1362,15 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
         default_branch: None,
         idle_restores: vec![],
     };
-    let (files, _) = worktrunk_removal_options(&check, &confirmed);
+    let manual = |unsaved| Removal::Manual {
+        unsaved,
+        inspection: InspectionPolicy::GitOnly,
+        release_holds: true,
+        taking: None,
+    };
+    let (files, _) = worktrunk_removal_options(&check, manual(&confirmed));
     assert!(matches!(files, FileRemoval::CleanOnly));
-    let (files, _) = worktrunk_removal_options(&check, &UnsavedWork::All);
+    let (files, _) = worktrunk_removal_options(&check, manual(&UnsavedWork::All));
     assert!(matches!(files, FileRemoval::Force));
 }
 

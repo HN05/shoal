@@ -13,7 +13,7 @@ use crate::{
     fsutil::off_runtime,
     git::worktrunk::{self, BranchRemoval, FileRemoval},
     hooks::{self, Hook, HookKind},
-    model::{SpaceKind, SpaceRef, Workspace},
+    model::{RemovedWorkspace, SpaceKind, SpaceRef, Workspace},
     removal::{
         self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck,
         RemovalResult, UnsavedWork,
@@ -21,7 +21,11 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
-use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 /// Refuse to remove any of `children`, those the removal of the space named
 /// `parent` takes first, when the user confirmed `removal` without one of
@@ -542,30 +546,8 @@ impl Manager {
         self.recheck_removal(workspace, removal, Stage::AfterStop, &cancelled)
             .await?;
         let children = self.remove_workspace_children(workspace, removal).await?;
-        // The hook sees the worktree intact; a failing hook retains it.
-        if let Some(command) = self.removal_hook(workspace, HookKind::PreRemove).await? {
-            let configured_env = self.configured_workspace_environment(workspace).await?;
-            hooks::run_detached(
-                Hook::PreRemove,
-                workspace,
-                &command,
-                &self.paths,
-                &configured_env,
-            )
-            .await?;
-        }
-        let leases = (self.list_resources(Some(&SpaceSelector::id(&workspace.id)))).await?;
-        // Resolved only for leases to release, since it fails while the
-        // worktree's config file is rejected.
-        if !leases.is_empty() {
-            let release_hook = self
-                .workspace_hook(workspace, HookKind::PreResourceRelease)
-                .await?;
-            for lease in leases {
-                self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
-                    .await?;
-            }
-        }
+        self.run_pre_remove_hook(workspace).await?;
+        self.run_resource_release_hooks(workspace).await?;
         // Processes can write files as they stop, which the final inspection
         // and the checkpoint must include.
         self.stop_removed_processes(workspace, removal.worktree_ties())
@@ -573,40 +555,85 @@ impl Manager {
         let check = self
             .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)
             .await?;
-        // The final inspection decides what goes.
-        let (files, branch) = worktrunk_removal_options(&check, removal.unsaved());
-        // A disposable workspace keeps nothing to restore.
-        let record = match workspace.disposable {
-            true => None,
-            false => Some(self.save_removal_record(workspace, removal.cause()).await?),
-        };
-        let removed = async {
-            if check.dirty
-                && (removal.discards_archived_files()
-                    || removal.unsaved().promises_restorable_files())
-            {
-                ensure!(
-                    record
-                        .as_ref()
-                        .is_some_and(|record| !record.checkpoint.files_omitted),
-                    "a checkpoint cannot keep the unsaved files; retaining the workspace"
-                );
-            }
-            let files = if removal.discards_archived_files() && check.dirty {
-                FileRemoval::Force
-            } else {
-                files
-            };
-            self.remove_worktree(&repo.path, workspace, files, branch, true)
-                .await
-        }
-        .await;
-        // A failed removal may have deleted some files, so its checkpoint
-        // stays; the next attempt takes another, and both expire as usual.
+        let removed = self
+            .delete_checkpointed_worktree(&repo.path, workspace, removal, &check)
+            .await?;
         Ok(RemovalResult {
             children,
-            ..removed?
+            ..removed
         })
+    }
+
+    /// Run the pre-remove hook, which sees the worktree intact; a failing
+    /// hook retains the workspace.
+    async fn run_pre_remove_hook(&self, workspace: &Workspace) -> Result<()> {
+        let Some(command) = self.removal_hook(workspace, HookKind::PreRemove).await? else {
+            return Ok(());
+        };
+        let configured_env = self.configured_workspace_environment(workspace).await?;
+        hooks::run_detached(
+            Hook::PreRemove,
+            workspace,
+            &command,
+            &self.paths,
+            &configured_env,
+        )
+        .await
+    }
+
+    /// Run the pre-resource-release hook for each resource lease of the
+    /// workspace, which committing the removal releases. The hook is resolved
+    /// only for leases to release, since it fails while the worktree's config
+    /// file is rejected.
+    async fn run_resource_release_hooks(&self, workspace: &Workspace) -> Result<()> {
+        let leases = self
+            .list_resources(Some(&SpaceSelector::id(&workspace.id)))
+            .await?;
+        if leases.is_empty() {
+            return Ok(());
+        }
+        let release_hook = self
+            .workspace_hook(workspace, HookKind::PreResourceRelease)
+            .await?;
+        for lease in leases {
+            self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Delete the worktree as the final inspection `check` decides, once a
+    /// checkpoint keeps its HEAD and the unsaved files `removal` discards or
+    /// promises to keep. A failed deletion may have deleted some files, so
+    /// its checkpoint stays; the next attempt takes another, and both expire
+    /// as usual.
+    async fn delete_checkpointed_worktree(
+        &self,
+        repo: &Path,
+        workspace: &Workspace,
+        removal: Removal<'_>,
+        check: &Inspection,
+    ) -> Result<RemovalResult> {
+        let record = self.save_restore_record(workspace, removal).await?;
+        ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
+        let (files, branch) = worktrunk_removal_options(check, removal);
+        self.remove_worktree(repo, workspace, files, branch, true)
+            .await
+    }
+
+    /// The record that restores the workspace, with a checkpoint of its HEAD
+    /// and unsaved files; a disposable workspace keeps nothing to restore.
+    async fn save_restore_record(
+        &self,
+        workspace: &Workspace,
+        removal: Removal<'_>,
+    ) -> Result<Option<RemovedWorkspace>> {
+        if workspace.disposable {
+            return Ok(None);
+        }
+        self.save_removal_record(workspace, removal.cause())
+            .await
+            .map(Some)
     }
 
     /// Inspect the workspace again and apply every check `removal` needs at
@@ -821,7 +848,7 @@ impl Manager {
     /// cleanup retains their ownership records so removal can be retried.
     async fn remove_worktree(
         &self,
-        repo: &std::path::Path,
+        repo: &Path,
         workspace: &Workspace,
         files: FileRemoval,
         branch: BranchRemoval,
@@ -849,16 +876,36 @@ impl Manager {
     }
 }
 
-/// Worktrunk's options for the inspected worktree. A branch goes when its
-/// commits are all preserved, except the default branch, which an
-/// unresolved default branch could be; files go by force only once the
-/// removal may discard unsaved work. A workspace at a commit owns no branch
-/// to delete, whichever its worktree is on. A disposable workspace's branch
-/// counts as preserved while the worktree is still on it, and its files
-/// always go by force.
+/// Refuse to delete the unsaved files of the worktree `check` inspected
+/// when `removal` discards them or promises to keep them restorable, unless
+/// the checkpoint of `record` keeps them.
+fn ensure_checkpoint_keeps_files(
+    check: &Inspection,
+    removal: Removal<'_>,
+    record: Option<&RemovedWorkspace>,
+) -> Result<()> {
+    if check.dirty
+        && (removal.discards_archived_files() || removal.unsaved().promises_restorable_files())
+    {
+        ensure!(
+            record.is_some_and(|record| !record.checkpoint.files_omitted),
+            "a checkpoint cannot keep the unsaved files; retaining the workspace"
+        );
+    }
+    Ok(())
+}
+
+/// Worktrunk's options for the worktree the final inspection `check` saw.
+/// A branch goes when its commits are all preserved, except the default
+/// branch, which an unresolved default branch could be; files go by force
+/// only once `removal` may discard unsaved work, or discards unsaved files a
+/// checkpoint keeps. A workspace at a commit owns no branch to delete,
+/// whichever its worktree is on. A disposable workspace's branch counts as
+/// preserved while the worktree is still on it, and its files always go by
+/// force.
 pub(super) fn worktrunk_removal_options(
     check: &Inspection,
-    unsaved: &UnsavedWork,
+    removal: Removal<'_>,
 ) -> (FileRemoval, BranchRemoval) {
     let own_branch = check.workspace.branch.is_some()
         && (!check.workspace.disposable || check.branch == check.workspace.branch);
@@ -875,7 +922,11 @@ pub(super) fn worktrunk_removal_options(
     };
     // Worktrunk refuses a changed worktree unless forced, even when the
     // changes are only what a copy started with.
-    let files = if check.workspace.disposable || unsaved.deletes_unsaved() || check.starting_files {
+    let files = if check.workspace.disposable
+        || removal.unsaved().deletes_unsaved()
+        || check.starting_files
+        || (check.dirty && removal.discards_archived_files())
+    {
         FileRemoval::Force
     } else {
         FileRemoval::CleanOnly
