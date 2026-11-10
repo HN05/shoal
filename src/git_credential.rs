@@ -48,34 +48,37 @@ fn helper(paths: &Paths) -> Result<String> {
 }
 
 /// Whether the Git setting `key` is a credential helper Git asks for every
-/// HTTPS request to `host`: `credential.helper`, or `credential.<url>.helper`
-/// whose URL names that host, with or without `https://`. One whose URL also
-/// names a user or a path answers only some requests, so it leaves the host
-/// to Shoal's helper. Git compares the section and variable names without
-/// case.
+/// HTTPS request to `host`: `credential.helper`, or `credential.<context>.helper`
+/// whose context names that host. Git compares a URL context's scheme and
+/// host without case, and reads a context without a scheme literally, as
+/// a host to compare exactly. A context that also names a user or a path
+/// answers only some requests, so it leaves the host to Shoal's helper.
+/// Git compares the section and variable names without case.
 fn helper_covers(key: &str, host: &str) -> bool {
+    const SECTION: &str = "credential.";
+    const VARIABLE: &str = ".helper";
     let lowered = key.to_ascii_lowercase();
-    let Some(rest) = lowered.strip_prefix("credential.") else {
+    if lowered == "credential.helper" {
+        return true;
+    }
+    if !lowered.starts_with(SECTION)
+        || !lowered.ends_with(VARIABLE)
+        || key.len() < SECTION.len() + VARIABLE.len()
+    {
         return false;
-    };
-    let Some(url) = rest.strip_suffix("helper") else {
-        return false;
-    };
-    let Some(url) = url.strip_suffix('.') else {
-        return url.is_empty();
-    };
-    let url = match url.split_once("://") {
-        Some(("https", rest)) => rest,
-        Some(_) => return false,
-        None => url,
+    }
+    let context = &key[SECTION.len()..key.len() - VARIABLE.len()];
+    let Some((scheme, url)) = context.split_once("://") else {
+        return context == host;
     };
     let (authority, path) = url.split_once('/').unwrap_or((url, ""));
-    !authority.contains('@')
+    scheme.eq_ignore_ascii_case("https")
+        && !authority.contains('@')
         && path.is_empty()
-        && host_matches(authority, &host.to_ascii_lowercase())
+        && host_matches(&authority.to_ascii_lowercase(), &host.to_ascii_lowercase())
 }
 
-/// Whether the host `pattern` matches `host`, where Git lets a `*` label
+/// Whether the URL host `pattern` matches `host`, where Git lets a `*` label
 /// of a pattern match any one label of the host name and HTTPS's default
 /// port matches a host without one.
 fn host_matches(pattern: &str, host: &str) -> bool {
