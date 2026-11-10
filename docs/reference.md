@@ -3482,8 +3482,8 @@ start` admits a job regardless of the limits, `queue move` moves it, and
 `queue cancel` passes it over, leaving it to other runners. A PR's job whose PR
 has a newer head when it is admitted is passed over too.
 
-An admitted job runs the forge's runner as a tracked execution in a disposable
-workspace at the job's commit, fetched from its PR's or branch's ref, or by
+An admitted job runs the forge's runner at nice 10, as a tracked execution in a
+disposable workspace at the job's commit, fetched from its PR's or branch's ref, or by
 commit. On Forgejo that is `forgejo-runner one-job --handle <handle>` with
 each label on the host backend. On GitHub it is a just-in-time runner for the
 labels, run from a copy of the installation in the job's directory under the

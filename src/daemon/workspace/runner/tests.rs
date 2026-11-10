@@ -391,9 +391,11 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
         .collect();
     let directory = manager.job_directory(&claimed[0].id);
     let token = directory.join("token");
-    assert!(argv[0].ends_with("/bin/forgejo-runner"), "{argv:?}");
+    // The runner and every process it starts run at low priority.
+    assert_eq!(argv[..3], ["nice", "-n", "10"]);
+    assert!(argv[3].ends_with("/bin/forgejo-runner"), "{argv:?}");
     assert_eq!(
-        argv[1..5],
+        argv[4..8],
         [
             "--config",
             directory.join("config.yaml").to_str().unwrap(),

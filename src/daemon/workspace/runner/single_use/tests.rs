@@ -40,7 +40,14 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.head);
     let (command, started) = launched(workspace.id.as_str());
     let copy = manager.job_directory(&job.id).join("runner");
-    assert_eq!(command.argv, [copy.join("run.sh").into_os_string()]);
+    assert_eq!(
+        command.argv,
+        ["nice", "-n", "10"]
+            .map(std::ffi::OsString::from)
+            .into_iter()
+            .chain([copy.join("run.sh").into_os_string()])
+            .collect::<Vec<_>>()
+    );
     assert!(copy.join("run.sh").exists() && copy.join("bin/Runner.Listener").exists());
     assert_eq!(
         std::fs::read_link(copy.join("_work/repo/repo")).unwrap(),

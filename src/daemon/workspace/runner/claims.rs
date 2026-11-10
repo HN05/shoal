@@ -1,15 +1,17 @@
 //! Claiming the jobs admission admitted: each runs the forge's runner,
 //! which claims the job by its handle, as a tracked execution in a workspace
 //! at the job's commit that starts from the seed and holds a permit from the
-//! repository's `runner.permit` pool when it names one. A PR's job whose PR
-//! moved to a newer head is passed over instead, as is one that cannot
-//! start, and either stays with the forge for other runners, as do the jobs
-//! of a repository whose runner was turned off. A job admitted as the system
-//! shuts down waits in the queue again.
+//! repository's `runner.permit` pool when it names one, at low CPU priority
+//! so that it takes only the cores agents and the user leave idle. A PR's
+//! job whose PR moved to a newer head is passed over instead, as is one that
+//! cannot start, and either stays with the forge for other runners, as do the
+//! jobs of a repository whose runner was turned off. A job admitted as the
+//! system shuts down waits in the queue again.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::{
+    ffi::OsString,
     io::Write as _,
     os::unix::fs::OpenOptionsExt as _,
     path::{Path, PathBuf},
@@ -35,6 +37,9 @@ use crate::{
 
 /// The name of the lease a job holds from the repository's permit pool.
 const PERMIT: &str = "ci-job";
+
+/// The niceness a job's runner runs at.
+const JOB_NICENESS: &str = "10";
 
 /// How a claim ended.
 enum Claim {
@@ -202,7 +207,7 @@ impl Manager {
         }
         let log = self.job_directory(&claim.entry.id).join("job.log");
         let execution = self
-            .launch_job_command(claim.workspace, log, command)
+            .launch_job_command(claim.workspace, log, at_low_priority(command))
             .await?;
         self.record_job_execution(claim.entry.id.as_str(), execution)
             .await
@@ -421,6 +426,14 @@ impl Manager {
         .await?;
         Ok(())
     }
+}
+
+/// `command` run through `nice` at [`JOB_NICENESS`], which its whole process
+/// tree inherits.
+fn at_low_priority(mut command: JobCommand) -> JobCommand {
+    let nice = ["nice", "-n", JOB_NICENESS].map(OsString::from);
+    command.argv.splice(0..0, nice);
+    command
 }
 
 /// Put in place what `command` needs before it runs: its files, readable by

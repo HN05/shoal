@@ -1074,7 +1074,8 @@ another commit. Polling stands in for webhooks, which a local daemon cannot
 receive; it runs only while a job could start, and conditional reads keep
 unchanged answers off the rate limit. Each job runs as a tracked execution in
 a disposable workspace at its commit, which goes once the forge's runner
-exits. A job ends only on the forge's word, so stopping it cancels its run
+exits, at low CPU priority so that a build takes only the cores agents and the
+user leave idle. A job ends only on the forge's word, so stopping it cancels its run
 there and protection leaves it running. The workspace a run's PR or branch links lists the job, but
 neither owns it, lends it a build nor reaches it with its scope. The runner is
 registered per repository with the user's own login, never for a user,
