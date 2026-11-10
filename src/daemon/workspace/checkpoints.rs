@@ -1,5 +1,5 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
-//! until they expire, which `shoal work restore` returns the workspace to.
+//! until they expire, which `shoal restore` returns the workspace to.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
@@ -22,7 +22,7 @@ use crate::{
 };
 
 impl Manager {
-    /// `shoal work checkpoint`: keep the workspace's current state.
+    /// `shoal checkpoint`: keep the workspace's current state.
     pub async fn take_checkpoint(
         &self,
         selector: &SpaceSelector,
@@ -206,7 +206,7 @@ impl Manager {
             .await?
             .with_context(|| {
                 format!(
-                    "workspace {name} has no checkpoint {number}; shoal work restore {name} lists them"
+                    "workspace {name} has no checkpoint {number}; shoal restore {name} lists them"
                 )
             })
     }

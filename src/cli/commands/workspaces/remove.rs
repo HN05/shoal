@@ -260,7 +260,7 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     };
     if !children.is_empty() {
         lines.push(format!(
-            "Removes the workspaces split from it first, whatever their work or holds; shoal work restore brings each back: {}",
+            "Removes the workspaces split from it first, whatever their work or holds; shoal restore brings each back: {}",
             names(&children)
         ));
     }
@@ -272,7 +272,7 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     }
     if !unsaved.is_empty() {
         lines.push(if !check.dirty || check.unsaved_files_archived {
-            "shoal work restore brings them back until the checkpoint expires.".into()
+            "shoal restore brings them back until the checkpoint expires.".into()
         } else {
             "The checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored.".into()
         });

@@ -165,7 +165,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert!(session["SHOAL_ADD_PLAN"].is_string(), "{session}");
     let log = fs::read_to_string(home.join("zmx-background.log")).unwrap_or_default();
     assert_eq!(runs(), "background tracked go\n", "{log}");
-    let workspace = fixture.ok(&["work", "status", "background"]);
+    let workspace = fixture.ok(&["status", "background"]);
     let id = workspace["workspace"]["id"].as_str().unwrap();
     let labels = [
         "set",
@@ -184,7 +184,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // detaching returns to the caller's shell where it was. Its slot must be
     // free in the daemon; the previous agent's output does not prove that.
     wait_until("the detached agent's recorded completion", || {
-        fixture.ok(&["work", "status", "background"])["executions"] == serde_json::json!([])
+        fixture.ok(&["status", "background"])["executions"] == serde_json::json!([])
     });
     let directive = home.join("shell-directive");
     let (output, transcript) = fixture.terminal_command(
@@ -213,7 +213,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let workspace = fixture.ok(&["work", "status", "shell-here"]);
+    let workspace = fixture.ok(&["status", "shell-here"]);
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
         workspace["workspace"]["path"].as_str().unwrap()
@@ -239,7 +239,7 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     wait_until("the detached workspace shell", || {
         fs::read_to_string(home.join("shell-cwd")).is_ok_and(|cwd| !cwd.is_empty())
     });
-    let workspace = fixture.ok(&["work", "status", "shell-only"]);
+    let workspace = fixture.ok(&["status", "shell-only"]);
     let log = fs::read_to_string(home.join("zmx-shell-only.log")).unwrap_or_default();
     assert_eq!(
         fs::read_to_string(home.join("shell-cwd"))
@@ -413,7 +413,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     });
     assert!(ended.is_some(), "{}\n{transcript}", watched());
     assert!(
-        fixture.ok(&["work", "status", "kept"])["workspace"]["done"]
+        fixture.ok(&["status", "kept"])["workspace"]["done"]
             .as_bool()
             .unwrap()
     );
@@ -594,7 +594,7 @@ pub(crate) fn agent_in_session<'a>(
         workspace: workspace.to_owned(),
         agent,
     };
-    let id = fixture.ok(&["work", "status", workspace])["workspace"]["id"].clone();
+    let id = fixture.ok(&["status", workspace])["workspace"]["id"].clone();
     wait_until("the agent listed in its session", || {
         if let Some(status) = agent.agent.try_wait().unwrap() {
             panic!(
@@ -824,7 +824,7 @@ fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(attached(), ["attach", "failed"]);
     assert_eq!(
-        fixture.ok(&["work", "status", "failed"])["sessions"],
+        fixture.ok(&["status", "failed"])["sessions"],
         serde_json::json!([{"name": "failed", "agent": null, "clients": 0}])
     );
 }
@@ -836,7 +836,7 @@ fn a_later_session_under_a_recorded_name_is_not_the_recorded_one() {
     let sessions = fixture.root.path().join("zmx-sessions");
     fs::write(&sessions, "  name=persist\tpid=1\tcreated=10\tclients=0\n").unwrap();
     let agent = agent_in_session(&fixture, "persist", "persist");
-    let listed = || fixture.ok(&["work", "status", "persist"])["sessions"].clone();
+    let listed = || fixture.ok(&["status", "persist"])["sessions"].clone();
     assert_eq!(
         listed(),
         serde_json::json!([{"name": "persist", "agent": "claude", "clients": 0}])
@@ -859,14 +859,14 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
     )
     .unwrap();
     let agent = agent_in_session(&fixture, "persist", "persist");
-    let status = fixture.ok(&["work", "status", "persist"]);
+    let status = fixture.ok(&["status", "persist"]);
     assert_eq!(
         status["sessions"],
         serde_json::json!([{"name": "persist", "agent": "claude", "clients": 1}])
     );
 
     install_test_script(home.join("bin/zmx"), "#!/bin/sh\necho broken >&2\nexit 1\n");
-    let status = fixture.ok(&["work", "status", "persist"]);
+    let status = fixture.ok(&["status", "persist"]);
     assert_eq!(status["sessions"], serde_json::json!([]));
     assert!(status["sessions_error"].is_string(), "{status}");
     // The agent stops through the daemon, which reads zmx again.
@@ -889,7 +889,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
         true,
     );
     assert!(!output.status.success(), "{transcript}");
-    assert!(!fixture.run(&["work", "status", "no-zmx"]).status.success());
+    assert!(!fixture.run(&["status", "no-zmx"]).status.success());
 
     // Without a terminal the agent starts detached, which needs zmx too,
     // unless --here runs it in place.
@@ -904,7 +904,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     };
     let output = start(&[]);
     assert!(!output.status.success(), "{output:?}");
-    assert!(!fixture.run(&["work", "status", "no-zmx"]).status.success());
+    assert!(!fixture.run(&["status", "no-zmx"]).status.success());
     let output = start(&["--here"]);
     assert!(output.status.success(), "{output:?}");
 }

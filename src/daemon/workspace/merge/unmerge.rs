@@ -36,7 +36,7 @@ impl Manager {
             .await?
         {
             Some(name) => bail!(
-                "workspace {name} was removed; restore it with shoal work restore {name}, then unmerge it"
+                "workspace {name} was removed; restore it with shoal restore {name}, then unmerge it"
             ),
             None => Err(error),
         }

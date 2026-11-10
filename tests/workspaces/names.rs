@@ -27,7 +27,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let error: Value = serde_json::from_slice(&denied.stderr).unwrap();
     assert_eq!(error["error"]["code"], "scope_denied", "{error}");
     assert_eq!(
-        fixture.ok(&["work", "status", "other"])["workspace"]["branch"],
+        fixture.ok(&["status", "other"])["workspace"]["branch"],
         "other"
     );
     let renamed = fixture.ok(&[
@@ -66,7 +66,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
             &["--json", "branch", "rename", "explicit", "other"][..],
             "name_taken",
         ),
-        (&["--json", "work", "status", "missing"], "not_found"),
+        (&["--json", "status", "missing"], "not_found"),
     ] {
         let output = fixture.run(args);
         assert!(!output.status.success(), "{args:?}");
@@ -82,7 +82,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let denied = fixture.rename("explicit", "blocked");
     assert_eq!(denied["type"], "error");
     assert_eq!(
-        fixture.ok(&["work", "status", "explicit"])["workspace"]["branch"],
+        fixture.ok(&["status", "explicit"])["workspace"]["branch"],
         "explicit"
     );
     db.execute("DELETE FROM executions WHERE id='unknown'", [])
@@ -117,7 +117,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     // A PR registration names no branch, so it stays through the rename.
     fixture.acknowledge("original");
     fixture.ok(&["done", "original"]);
-    let before = fixture.ok(&["work", "status", "original"]);
+    let before = fixture.ok(&["status", "original"]);
     assert!(before["pr_cleanup"]["head"].is_string(), "{before}");
     let response = fixture.rename("original", "feature/topic");
     assert_eq!(response["type"], "workspace", "{response}");
@@ -125,7 +125,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     assert_eq!(renamed["name"], "feature-topic");
     assert_eq!(renamed["branch"], "feature/topic");
     assert_eq!(
-        fixture.ok(&["work", "status", "feature-topic"])["workspace"]["branch"],
+        fixture.ok(&["status", "feature-topic"])["workspace"]["branch"],
         "feature/topic"
     );
     fs::write(path.join("after-rename"), "changed after rename\n").unwrap();
@@ -146,12 +146,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     ] {
         assert_eq!(renamed[field], workspace[field]);
     }
-    assert!(
-        !fixture
-            .run(&["work", "status", "original"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["status", "original"]).status.success());
     assert_eq!(
         git(path, &["symbolic-ref", "HEAD"]).trim(),
         "refs/heads/feature/topic"
@@ -168,11 +163,11 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
         "preserve\n"
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "dependent"])["workspace"]["base_ref"],
+        fixture.ok(&["status", "dependent"])["workspace"]["base_ref"],
         "refs/heads/feature/topic"
     );
     fixture.restart();
-    let after = fixture.ok(&["work", "status", id]);
+    let after = fixture.ok(&["status", id]);
     for field in ["ports", "resources"] {
         assert_eq!(after[field], before[field]);
     }
@@ -194,7 +189,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     assert_eq!(reopened["id"], created["id"]);
     assert_eq!(reopened["path"], created["path"]);
     assert_eq!(reopened["branch"], renamed["branch"]);
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -216,10 +211,7 @@ fn workspace_rename_refuses_collisions_and_recovers_git_failure() {
     ] {
         let response = fixture.rename("original", branch);
         assert_eq!(response["type"], "error", "{branch}: {response}");
-        assert_eq!(
-            fixture.ok(&["work", "status", "original"])["workspace"],
-            workspace
-        );
+        assert_eq!(fixture.ok(&["status", "original"])["workspace"], workspace);
         assert_eq!(
             git(path, &["symbolic-ref", "HEAD"]).trim(),
             "refs/heads/original"
@@ -273,10 +265,7 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
                 .unwrap();
         }
         fixture.restart();
-        assert_eq!(
-            fixture.ok(&["work", "status", id])["workspace"]["state"],
-            "failed"
-        );
+        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
         let rejected = fixture.run(&["start", fixture.repo.to_str().unwrap(), "new-topic"]);
         assert!(!rejected.status.success());
         if branch == "unrelated" {
@@ -295,7 +284,7 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             vec![id, "--repair"]
         };
         repaired_workspaces(&fixture, &repair_args);
-        let inspection = fixture.ok(&["work", "status", id]);
+        let inspection = fixture.ok(&["status", id]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(
             inspection["workspace"]["branch"],
@@ -352,17 +341,11 @@ fn work_rename_finishes_an_interrupted_rename() {
         )
         .unwrap();
         fixture.restart();
-        assert_eq!(
-            fixture.ok(&["work", "status", id])["workspace"]["state"],
-            "failed"
-        );
+        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
         // Another recorded execution keeps the rename unfinished.
         let refused = fixture.run(&["branch", "rename", id, requested]);
         assert!(!refused.status.success());
-        assert_eq!(
-            fixture.ok(&["work", "status", id])["workspace"]["state"],
-            "failed"
-        );
+        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
         db.execute("DELETE FROM executions WHERE id='leftover'", [])
             .unwrap();
         // Running the rename again finishes or cancels the interrupted one,
@@ -404,12 +387,7 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
     drop(db);
     let removed = fixture.ok(&["rm", "original"]);
     assert_eq!(removed["branch_deleted"], false);
-    assert!(
-        !fixture
-            .run(&["work", "status", "original"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["status", "original"]).status.success());
     assert!(
         fixture
             .ok(&["leases", "port", "--all"])
@@ -444,7 +422,7 @@ fn concurrent_adds_cannot_claim_the_same_name() {
         let second = fixture.run(&["start", fixture.repo.to_str().unwrap(), second_name]);
         let first = first.wait_with_output().unwrap();
         assert_ne!(first.status.success(), second.status.success());
-        assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
         fixture.ok(&["rm", workspace_name]);
     }
 }
@@ -532,7 +510,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
                 .success(),
             "{branch}"
         );
-        assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     }
     git(&fixture.repo, &["branch", "-d", "previous"]);
     let existing = fixture.add("feature/topic");
@@ -540,7 +518,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
         let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), branch]);
         assert!(!output.status.success());
     }
-    assert_eq!(fixture.ok(&["work"]), serde_json::json!([existing]));
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([existing]));
     assert_eq!(
         git(
             &fixture.repo,
@@ -558,7 +536,7 @@ fn interactive_add_preserves_literal_branch_spelling() {
         "\u{2003}henrik/topic\u{2003}\n",
     );
     assert!(output.status.success(), "{transcript}");
-    let workspace = &fixture.ok(&["work", "status", "henrik-topic-"])["workspace"];
+    let workspace = &fixture.ok(&["status", "henrik-topic-"])["workspace"];
     assert_eq!(workspace["branch"], "\u{2003}henrik/topic\u{2003}");
     fixture.ok(&["rm", "henrik-topic-"]);
 }

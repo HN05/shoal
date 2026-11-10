@@ -9,8 +9,8 @@ use tokio::{io::BufReader, net::UnixStream};
 
 use crate::{
     connection::{self, Daemon},
+    log::LogTopic,
     protocol::{Body, Responses, SubscriptionMethod},
-    work::LogTopic,
 };
 use records::{Record, RecordKey, Topic};
 

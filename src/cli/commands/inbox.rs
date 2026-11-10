@@ -419,7 +419,7 @@ impl ItemExt for Item {
     fn note(&self) -> String {
         match self {
             Self::Question { question } => question_note(question),
-            Self::Untracked { .. } => "adopt it with shoal work adopt".to_owned(),
+            Self::Untracked { .. } => "adopt it with shoal adopt".to_owned(),
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             _ => String::new(),
         }

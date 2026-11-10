@@ -65,7 +65,7 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
                 }
                 ensure!(
                     current.is_some(),
-                    "{0} has no agent session to attach; shoal work status {0} shows whether its agent runs, and shoal alerts why it did not start",
+                    "{0} has no agent session to attach; shoal status {0} shows whether its agent runs, and shoal alerts why it did not start",
                     entry.name
                 );
             }

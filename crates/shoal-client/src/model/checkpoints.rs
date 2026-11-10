@@ -45,7 +45,7 @@ pub struct Checkpoint {
     pub expires_at: crate::time::UnixTime,
 }
 
-/// A workspace `shoal work restore` returned to one of its checkpoints, and the
+/// A workspace `shoal restore` returned to one of its checkpoints, and the
 /// checkpoint of the state it replaced.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RestoredCheckpoint {

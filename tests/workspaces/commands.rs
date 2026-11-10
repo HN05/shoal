@@ -31,7 +31,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
         b"pipe:custom\nliteral $HOME\ntwo words\n--flag\n"
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "custom"])["executions"],
+        fixture.ok(&["status", "custom"])["executions"],
         serde_json::json!([])
     );
     fs::write(
@@ -92,7 +92,7 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
 #[test]
 fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nwork = ['printf', '%s', 'configured work']\n[agents.claude]\ncommand = ['global-claude']\n",
+        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nlist = ['printf', '%s', 'configured list']\n[agents.claude]\ncommand = ['global-claude']\n",
     ));
     let workspace = fixture.add("run-command");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -109,14 +109,14 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
-    let output = fixture.run(&["run", "work", "--workspace", "run-command"]);
+    let output = fixture.run(&["run", "list", "--workspace", "run-command"]);
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.stdout, b"configured work");
-    assert!(fixture.ok(&["work"]).is_array());
+    assert_eq!(output.stdout, b"configured list");
+    assert!(fixture.ok(&["list"]).is_array());
 
     let output = fixture
         .command()
@@ -134,7 +134,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     // Agents launch under [agents], so `run` lists only the shortcuts.
     assert!(!listed.iter().any(|entry| entry["name"] == "claude"));
     assert_eq!(command("global")["bare_name"], "shorthand");
-    assert_eq!(command("work")["bare_name"], "built_in");
+    assert_eq!(command("list")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
     assert_eq!(command("saved")["layer"], "local_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));

@@ -1,5 +1,5 @@
 //! Removal records: every removal of an existing worktree takes a checkpoint
-//! and records what `shoal work restore` needs to reopen the workspace, until the
+//! and records what `shoal restore` needs to reopen the workspace, until the
 //! record expires.
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
@@ -23,7 +23,7 @@ use crate::{
 };
 
 impl Manager {
-    /// Take the removal's checkpoint and record what `shoal work restore` reopens
+    /// Take the removal's checkpoint and record what `shoal restore` reopens
     /// before any file is deleted, so an interrupted or failed removal stays
     /// restorable. Records of workspaces that still exist are not listed.
     pub(super) async fn save_removal_record(
@@ -194,7 +194,7 @@ impl Manager {
     /// with its checkpoint, fetched from `bundle` or else on the default
     /// branch, and its agents' `session_files`, and restore it; a `copy` as
     /// a new workspace of its own. A failed restore leaves the record for
-    /// `shoal work restore`.
+    /// `shoal restore`.
     pub async fn import_workspace(
         &self,
         selector: &crate::repository::Selector,
@@ -223,7 +223,7 @@ impl Manager {
             .await
             .with_context(|| {
                 format!(
-                    "the imported workspace is recorded as removed; shoal work restore {} retries",
+                    "the imported workspace is recorded as removed; shoal restore {} retries",
                     removed.name
                 )
             })
@@ -383,7 +383,7 @@ impl Manager {
             .write(move |tx| claim(tx, &name))
             .await?
             .with_context(|| {
-                format!("no restorable workspace {selector}; shoal work restore lists them")
+                format!("no restorable workspace {selector}; shoal restore lists them")
             })
     }
 

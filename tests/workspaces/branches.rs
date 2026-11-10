@@ -317,12 +317,11 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     let removed = fixture.run(&["unmerge", "worker"]);
     assert!(!removed.status.success());
     assert!(
-        String::from_utf8_lossy(&removed.stderr)
-            .contains("restore it with shoal work restore worker"),
+        String::from_utf8_lossy(&removed.stderr).contains("restore it with shoal restore worker"),
         "{removed:?}"
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
-    fixture.ok(&["work", "restore", "worker"]);
+    fixture.ok(&["restore", "worker"]);
     fixture.ok(&["unmerge", "worker"]);
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
 }
@@ -435,7 +434,7 @@ fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             .trim()
             .parse()
             .unwrap();
-        let during = fixture.ok(&["work", "status", "worker"]);
+        let during = fixture.ok(&["status", "worker"]);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
         // The daemon starts the merge, whose wrapper restores the checkout

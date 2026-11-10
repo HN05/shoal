@@ -16,23 +16,23 @@ fn resolves_json(args: &[&str], setting: Option<&str>) -> anyhow::Result<bool> {
 #[test]
 fn the_command_line_selects_output_before_the_environment() {
     for setting in [None, Some(""), Some("text")] {
-        assert!(!resolves_json(&["work", "status"], setting).unwrap());
+        assert!(!resolves_json(&["status"], setting).unwrap());
     }
-    assert!(resolves_json(&["work", "status"], Some("json")).unwrap());
+    assert!(resolves_json(&["status"], Some("json")).unwrap());
     for setting in [None, Some("text"), Some("json")] {
-        assert!(resolves_json(&["--json", "work", "status"], setting).unwrap());
-        assert!(resolves_json(&["work", "status", "--json"], setting).unwrap());
-        assert!(!resolves_json(&["work", "status", "--text"], setting).unwrap());
+        assert!(resolves_json(&["--json", "status"], setting).unwrap());
+        assert!(resolves_json(&["status", "--json"], setting).unwrap());
+        assert!(!resolves_json(&["status", "--text"], setting).unwrap());
     }
-    assert!(resolves_json(&["--json", "work", "status", "--text"], None).is_err());
-    assert!(resolves_json(&["--text", "work", "status", "--json"], None).is_err());
+    assert!(resolves_json(&["--json", "status", "--text"], None).is_err());
+    assert!(resolves_json(&["--text", "status", "--json"], None).is_err());
 }
 
 #[test]
 fn an_invalid_output_setting_fails_unless_the_command_line_selects_one() {
-    assert!(resolves_json(&["work", "status"], Some("JSON")).is_err());
-    assert!(resolves_json(&["--json", "work", "status"], Some("yaml")).unwrap());
-    assert!(!resolves_json(&["--text", "work", "status"], Some("yaml")).unwrap());
+    assert!(resolves_json(&["status"], Some("JSON")).is_err());
+    assert!(resolves_json(&["--json", "status"], Some("yaml")).unwrap());
+    assert!(!resolves_json(&["--text", "status"], Some("yaml")).unwrap());
 }
 
 /// Builds each command's deferred arguments and checks that its
@@ -178,9 +178,9 @@ fn only_the_user_sets_up_config() {
 
 #[test]
 fn skipping_setup_is_administrative() {
-    let skip = Cli::try_parse_from(["shoal", "work", "setup", "--skip"]).unwrap();
+    let skip = Cli::try_parse_from(["shoal", "setup", "--skip"]).unwrap();
     assert!(skip.command.unwrap().is_administrative());
-    let retry = Cli::try_parse_from(["shoal", "work", "setup"]).unwrap();
+    let retry = Cli::try_parse_from(["shoal", "setup"]).unwrap();
     assert!(!retry.command.unwrap().is_administrative());
 }
 
@@ -303,7 +303,7 @@ fn only_wrappers_that_never_replace_themselves_claim_privacy_grants() {
         "3"
     ]));
     assert!(
-        !Cli::try_parse_from(["shoal", "work", "status"])
+        !Cli::try_parse_from(["shoal", "status"])
             .unwrap()
             .command
             .as_ref()

@@ -38,13 +38,13 @@ impl NeedExt for Need {
             ["repo", "labels"]
             | ["forge", "capabilities" | "reactions" | "api" | "download"]
             | ["ci", ..] => Self::Any,
-            ["work", "setup"] => Self::Setup,
-            ["work", "status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
-            ["work", "checkpoint"] => Self::Checkpoint,
+            ["setup"] => Self::Setup,
+            ["status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
+            ["checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,
             ["branch", "base", "clear"] => Self::Base,
             ["branch", "base", ..] => Self::Any,
-            ["work", "env"] => Self::Ready,
+            ["internal", "env"] => Self::Ready,
             ["release", "hold"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [

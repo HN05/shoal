@@ -11,9 +11,9 @@ fn done_records_a_summary_that_status_shows() {
     fixture.add("audit");
     let refused = fixture.run(&["done", "audit", "--summary", "two\nlines"]);
     assert!(!refused.status.success());
-    assert!(fixture.ok(&["work", "status", "audit"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
     fixture.ok(&["done", "audit", "--summary", "No leak"]);
-    let status = fixture.ok(&["work", "status", "audit"]);
+    let status = fixture.ok(&["status", "audit"]);
     assert_eq!(status["completion"]["summary"], "No leak", "{status}");
 }
 
@@ -61,7 +61,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         fs::read_to_string(&events).unwrap(),
         "post_agent_exit|agent-work|helper|7|true|unset|unset\n"
     );
-    assert!(fixture.ok(&["work", "status", "agent-work"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "agent-work"])["completion"].is_null());
     assert_eq!(
         fixture
             .run(&["run", "failing", "--workspace", "agent-work"])
@@ -126,7 +126,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     ]);
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
     wait_until("completion from exit hook", || {
-        fixture.ok(&["work", "status", "agent-work"])["completion"]["cleanup"] == false
+        fixture.ok(&["status", "agent-work"])["completion"]["cleanup"] == false
     });
 }
 
@@ -231,7 +231,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
     fixture.ok(&["done", "hooked"]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["work", "status", "hooked"])["completion"]["error"].is_string()
+        fixture.ok(&["status", "hooked"])["completion"]["error"].is_string()
     });
     assert_eq!(
         fs::read_to_string(&events).unwrap(),
@@ -293,11 +293,11 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         fixture.root.path().join("done-started").exists()
     });
     assert_eq!(
-        fixture.ok(&["work", "status", "hooked"])["completion"]["cleanup"],
+        fixture.ok(&["status", "hooked"])["completion"]["cleanup"],
         false
     );
     for args in [
-        vec!["work", "setup", "hooked"],
+        vec!["setup", "hooked"],
         vec!["rm", "hooked", "--yes"],
         vec!["acquire", "resource", "device", "--workspace", "hooked"],
     ] {
@@ -381,10 +381,10 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
     fs::write(path.join("work"), "retain").unwrap();
     fixture.ok(&["done", "unfinished"]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["work", "status", "unfinished"])["completion"]["error"].is_string()
+        fixture.ok(&["status", "unfinished"])["completion"]["error"].is_string()
     });
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "retain");
-    assert!(fixture.ok(&["work", "status", "unfinished"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "unfinished"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -439,7 +439,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
     fixture.ok(&["link", "pr", "2", "assigned", "--space", "multi"]);
     fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
     assert_eq!(
-        fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["urls"]
+        fixture.ok(&["status", "multi"])["pr_cleanup"]["urls"]
             .as_array()
             .unwrap()
             .len(),
@@ -459,7 +459,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         "assigned",
     ]);
     assert_eq!(
-        fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["url"],
+        fixture.ok(&["status", "multi"])["pr_cleanup"]["url"],
         "https://github.com/team/project/pull/1"
     );
     fixture.ok(&[
@@ -486,16 +486,16 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
             .unwrap()
             .contains("GET repos/team/project/pulls/2\"")
     });
-    assert!(fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"].is_null());
+    assert!(fixture.ok(&["status", "multi"])["pr_cleanup"]["merged_head"].is_null());
     write_pr(&fixture, 2, "merged", head.trim());
     fixture.restart();
     if cleanup {
         wait_removed(&fixture, "multi");
     } else {
         wait_until("confirmed merges", || {
-            fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
+            fixture.ok(&["status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
         });
-        let state = fixture.ok(&["work", "status", "multi"]);
+        let state = fixture.ok(&["status", "multi"]);
         assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
         fixture.ok(&["alerts"]);
         // A changed default must not change a kept assignment.
@@ -506,7 +506,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         .unwrap();
         fixture.restart();
         assert_eq!(
-            fixture.ok(&["work", "status", "multi"])["completion"]["cleanup"],
+            fixture.ok(&["status", "multi"])["completion"]["cleanup"],
             false
         );
     }
@@ -553,7 +553,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     ]);
     scoped(&fixture, &["done"]);
     assert_eq!(
-        fixture.ok(&["work", "status", "issue-work"])["workspace"]["done"],
+        fixture.ok(&["status", "issue-work"])["workspace"]["done"],
         true
     );
     let undone = scoped(&fixture, &["done", "--undo"]);
@@ -568,7 +568,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         "--undo",
     ]);
     assert!(!refused.status.success());
-    let inspection = fixture.ok(&["work", "status", "issue-work"]);
+    let inspection = fixture.ok(&["status", "issue-work"]);
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["done"], false);
     fixture.ok(&[

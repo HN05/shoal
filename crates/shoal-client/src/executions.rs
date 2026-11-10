@@ -160,7 +160,7 @@ pub struct Stop {
     pub at: Option<crate::time::UnixTime>,
 }
 
-/// An agent stopped in a removed workspace, which `shoal work restore` saves
+/// An agent stopped in a removed workspace, which `shoal restore` saves
 /// again for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedAgent {

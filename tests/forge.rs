@@ -211,7 +211,7 @@ impl Fixture {
 
     /// The `topic` workspace's directory.
     fn topic(&self) -> PathBuf {
-        let status = self.ok(&["work", "status", "topic"]);
+        let status = self.ok(&["status", "topic"]);
         PathBuf::from(status["workspace"]["path"].as_str().unwrap())
     }
 
@@ -677,7 +677,7 @@ fn apps_read_forge_items_through_the_daemon() {
 
     // A workspace's agent reads as its agent account, and only from its
     // workspace.
-    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -993,7 +993,7 @@ fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["kind"], "chat_ready", "{inbox}");
     assert_eq!(inbox[0]["chat"]["name"], "planning", "{inbox}");
-    let ready = fixture.ok(&["work", "--chats", "--status", "ready"]);
+    let ready = fixture.ok(&["list", "--chats", "--status", "ready"]);
     assert_eq!(ready.to_string().matches("planning").count(), 1, "{ready}");
 
     // A linked PR is marked at its head on the forge, replacing that mark.
@@ -1117,7 +1117,7 @@ fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
         "GET repos/team/project/pulls/8.diff": {"body": diff},
         "POST repos/team/project/pulls/8/reviews": {"body": {"id": 5}},
     }));
-    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -2160,7 +2160,7 @@ fn watches_deliver_item_activity_while_git_fails_in_the_worktree() {
             {"body": [{"id": 1, "body": "Hello?"}]},
     }));
     fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-    let workspace = fixture.ok(&["work", "status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".git"), "gitdir: missing\n").unwrap();
     let result = fixture.ok(&["watch", "--space", "topic", "--timeout", "600"]);
@@ -2397,7 +2397,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     }));
     fixture.ok(&["link", "8", "assigned", "--space", "topic"]);
     fixture.ok(&["link", "#9", "assigned", "--space", "topic"]);
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
@@ -2416,7 +2416,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     assert_eq!(marks.as_array().unwrap().len(), 1, "{marks}");
     assert_eq!(marks[0]["kind"], "issue", "{marks}");
     fixture.ok(&["unlink", "8", "assigned", "--space", "topic"]);
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert!(links["issue"].is_null(), "{links}");
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
@@ -2437,7 +2437,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         })
         .collect();
     assert!(asked.is_empty(), "{asked:?}");
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
 }
 
@@ -2456,7 +2456,7 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
             {"body": {"total_count": 0, "statuses": []}},
     }));
     fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["prs"], json!([format!("{}/pulls/8", fixture.web)]));
     let watched = fixture.ok(&["watch", "pr", "--space", "topic"]);
     assert_eq!(watched["updates"][0]["kind"], "comment", "{watched}");
@@ -2651,7 +2651,7 @@ fn issues_open_with_labels_and_link_on_request() {
         assert_eq!(opened["linked"], forge == Forge::GitHub);
         // Linked or not, the issue is recorded as opened by the workspace.
         assert_eq!(
-            fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["opened"],
+            fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
             json!([{"kind": "issue", "url": url, "title": "Flaky"}])
         );
         let sent: Vec<_> = fixture
@@ -2669,7 +2669,7 @@ fn issues_open_with_labels_and_link_on_request() {
                         json!({"title": "Flaky", "body": "", "labels": ["bug"]})
                     )]
                 );
-                let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+                let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
                 assert_eq!(links["issue"], url);
                 assert_eq!(links["issue_title"], "Flaky");
             }
@@ -2743,12 +2743,12 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             .find(|request| request[0] == "POST repos/team/project/pulls")
             .unwrap();
         assert_eq!(created[1], expected);
-        let path = fixture.ok(&["work", "status", "topic"])["workspace"]["path"].clone();
+        let path = fixture.ok(&["status", "topic"])["workspace"]["path"].clone();
         assert_eq!(
             git(&remote, &["rev-parse", "refs/heads/topic"]),
             git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
         );
-        let links = fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["prs"].clone();
+        let links = fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"].clone();
         assert_eq!(links, json!([url]));
 
         // An open PR for the branch is linked instead of opening another.
@@ -2806,7 +2806,7 @@ fn pr_open_pushes_to_a_fork_and_opens_the_pr_from_it() {
         .find(|request| request[0] == "POST repos/team/project/pulls")
         .unwrap();
     assert_eq!(created[1]["head"], "someone:topic");
-    let path = fixture.ok(&["work", "status", "topic"])["workspace"]["path"].clone();
+    let path = fixture.ok(&["status", "topic"])["workspace"]["path"].clone();
     assert_eq!(
         git(&fork, &["rev-parse", "refs/heads/topic"]),
         git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
@@ -2823,7 +2823,7 @@ fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
         &fixture.repo,
         &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
     );
-    let workspace = fixture.ok(&["work", "status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap());
     let refused = || {
         let output = fixture.run(&["pr", "open", "--workspace", "topic"]);
@@ -3086,9 +3086,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args([
-            "--json", "issue", "ls", "--repo", "repo", "flaky", "watch",
-        ])
+        .args(["--json", "issue", "ls", "--repo", "repo", "flaky", "watch"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -3141,7 +3139,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
             .all(|request| request[2] == "token usertoken")
     );
 
-    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -3221,7 +3219,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut responses = failed_check_responses();
     fixture.respond(responses.clone());
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let method = json!({"check_log": {"workspace": "topic", "selection": {"kind": "pr", "input": "8"}, "check": "rust"}});
     let result = fixture.request_as(method.clone(), Some(scope));
@@ -3645,7 +3643,7 @@ fn status_finds_the_chats_that_link_a_pr() {
     );
     fixture.ok(&["link", "pr", "12", "assigned", "--space", "planning"]);
 
-    let found = fixture.ok(&["work", "status", "pr", "12"]);
+    let found = fixture.ok(&["status", "pr", "12"]);
     let found = found.as_array().unwrap();
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0]["kind"], "chat", "{found:?}");
@@ -3822,7 +3820,7 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     assert_eq!(posts(), ["POST repos/team/project/actions/jobs/11/rerun"]);
 
     // A registered checkout acts too, but links nothing to default to.
-    let repository = fixture.ok(&["work", "status", "topic"])["workspace"]["repository_id"].clone();
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
     let in_checkout = |item: Value| {
         fixture.request(json!({"ci_action": {"checkout": repository, "item": item,
             "action": "rerun", "checks": ["rust"]}}))
@@ -3852,7 +3850,7 @@ fn forgejo_ci_cancels_runs_and_reruns_jobs_from_release_17_as_the_scoped_agent()
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     });
     fixture.respond(responses.clone());
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let ci = |action: &str| {
         fixture.request_as(
@@ -3940,7 +3938,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
     );
 
     // Workspace processes start runs only on their own branch.
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let start = |branch: &str| {
         fixture.request_as(
@@ -4060,7 +4058,7 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
         ),
         "{started}"
     );
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["opened"][0]["url"], started["url"], "{links}");
     assert_eq!(
         writes(&fixture),
@@ -4068,7 +4066,7 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
     );
 
     // Workspace processes start runs only in their repository, on their branch.
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let own_file = format!(
         "{}/src/branch/main/.forgejo/workflows/deps.yml",
@@ -4182,10 +4180,7 @@ fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
 
     // With nothing linked, runs are listed and start on the default branch,
     // and the chat follows the run it started.
-    assert_eq!(
-        fixture.ok(&["ci", "ls", "--space", "planning"]),
-        json!([])
-    );
+    assert_eq!(fixture.ok(&["ci", "ls", "--space", "planning"]), json!([]));
     let started = fixture.ok(&["ci", "run", "deps.yml", "--space", "planning"]);
     assert_eq!(
         (&started["branch"], &started["linked"]),
@@ -4237,7 +4232,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
     );
     // The run is linked as opened, so watches follow it.
     assert_eq!(started["linked"], true, "{started}");
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(
         links["opened"],
         json!([{"kind": "ci", "url": started["url"], "title": "deps.yml"}]),
@@ -4277,7 +4272,7 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
         "{viewed}"
     );
     for target in [vec!["ci", "2765"], vec![url.as_str()]] {
-        let found = fixture.ok(&[&["work", "status"], target.as_slice()].concat());
+        let found = fixture.ok(&[&["status"], target.as_slice()].concat());
         assert_eq!(
             found[0]["workspace"]["name"], "topic",
             "{target:?}: {found}"
@@ -4305,7 +4300,7 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     let output = fixture.run(&["ready", "ci", "--space", "topic"]);
     assert!(!output.status.success(), "{output:?}");
     fixture.ok(&["unlink", "ci", "2765", "related", "--space", "topic"]);
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
     // Unlinking drops the run's cursor, so linking it again watches it afresh.
     fixture.ok(&["link", "ci", "2765", "opened", "--space", "topic"]);
@@ -4407,7 +4402,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
     assert_eq!(view["pr"]["checks"], json!([]), "{view}");
     assert_eq!(view["pr"]["waiting_runs"], waiting, "{view}");
     fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let status = fixture.ok(&["work", "status", "topic"]);
+    let status = fixture.ok(&["status", "topic"]);
     assert_eq!(status["prs"][0]["waiting_runs"], waiting, "{status}");
     fixture.requests();
 
@@ -4527,7 +4522,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     );
 
     // Workspace processes act only on runs of their own branch.
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let act = |run: &str, action: &str, scope| {
         fixture.request_as(
@@ -4611,7 +4606,7 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
     let viewed = fixture.ok(&["view", &other, "--space", "topic"]);
     assert_eq!(viewed[0]["url"], other, "{viewed}");
     fixture.ok(&["link", &other, "related", "--space", "topic"]);
-    let links = &fixture.ok(&["work", "status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(
         links["related"],
         json!([{"kind": "ci", "url": other, "title": "deps.yml"}]),
@@ -4635,7 +4630,7 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
     fixture.ok(&["unlink", &other, "related", "--space", "topic"]);
 
     // Workspace processes read, link and act only within their repository.
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     for method in [
         json!({"view_ci_run": {"run": other}}),
@@ -4930,7 +4925,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
 
     // A worktree replaced while the proposal waits is refused before
     // anything is sent, and the proposal stays.
-    let workspace = fixture.ok(&["work", "status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
     let owner = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, "another-workspace\n").unwrap();
@@ -4951,7 +4946,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     );
     assert_eq!(fixture.ok(&["approvals"]), json!([]));
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Flaky test"}])
     );
     let told = messages(&fixture);
@@ -5303,7 +5298,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
         "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
         "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
     }));
-    let workspace = fixture.ok(&["work", "status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let head = || git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
 
@@ -5318,7 +5313,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     );
     assert!(writes(&fixture).is_empty());
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["cleanup_reason"]["reason"],
+        fixture.ok(&["status", "topic"])["cleanup_reason"]["reason"],
         "pr_proposal"
     );
 
@@ -5388,7 +5383,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
             {"title": "Fix", "body": "", "head": "topic", "base": "main", "draft": false}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"],
         json!([url])
     );
     assert!(messages(&fixture)[0].contains(&url));
@@ -5421,7 +5416,7 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
         ]);
     }
     config(&["config", "remote.pushDefault", "alice"]);
-    let workspace = fixture.ok(&["work", "status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
     let mut opened = pull(9, "open", "Fix", &[]);
@@ -5659,7 +5654,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         [json!(["PUT repos/team/project/issues/9/labels", {"labels": ["bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"],
         json!([url])
     );
 }
@@ -5745,10 +5740,10 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
     let (output, stderr) = open_in(&fixture.repo, &["--label", "type/bug", "--link"]);
     assert!(!output.status.success(), "{stderr}");
     // A workspace process acts from its own workspace.
-    let repository = fixture.ok(&["work", "status", "topic"])["workspace"]["repository_id"].clone();
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
     let method = json!({"open_issue": {"checkout": repository, "repository": null,
         "link": false, "issue": {"title": "Flaky", "body": "", "labels": ["type/bug"]}}});
-    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"].clone();
+    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"].clone();
     let scoped = fixture.request_as(method, scope.as_str());
     assert_eq!(scoped["type"], "error", "{scoped}");
     assert!(writes(&fixture).is_empty());
@@ -5765,7 +5760,7 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
             {"title": "Flaky", "body": "", "labels": ["type/bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([])
     );
 }
@@ -5945,7 +5940,7 @@ fn checkout_merges_go_out_without_the_agent_account() {
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
         format!("POST {endpoint}/merge"): {"body": {}},
     }));
-    let repository = fixture.ok(&["work", "status", "topic"])["workspace"]["repository_id"].clone();
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
     let merged = fixture.request(json!({"item_action": {"checkout": repository, "kind": "pr",
         "item": "8", "action": {"action": "merge", "method": "rebase", "delete_branch": false}}}));
     assert_eq!(merged["type"], "item", "{merged}");
@@ -6028,7 +6023,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
             {"title": "Wrong finding", "body": "", "labels": ["bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Wrong finding"}])
     );
     let told = messages(&fixture);
@@ -6090,7 +6085,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
         [json!(["POST repos/them/tool/issues", {"title": "Crash", "body": "", "labels": []}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Crash"}])
     );
 }
@@ -6306,7 +6301,7 @@ fn gitlab_downloads_read_an_upload_from_its_api_route() {
 fn the_git_credential_helper_answers_scoped_processes_with_the_agent_token() {
     let broken = "[machine.forges.\"broken.example\"]\ntype = \"forgejo\"\nagent_token = { cmd = [\"false\"] }\n";
     let fixture = Fixture::new(Forge::GitHub, &format!("{AGENT_TOKEN}{broken}"));
-    let exported = fixture.ok(&["work", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let fill = |scope: Option<&str>, protocol: &str, host: &str| {
         let mut command = fixture.command();

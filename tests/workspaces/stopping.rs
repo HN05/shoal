@@ -185,7 +185,7 @@ fn leftovers_reach_status_and_the_agent_hook_once() {
     // The daemon sweeps as it starts.
     fixture.restart();
     let leftovers = wait_for("the sweep to find the leftover", || {
-        let status = fixture.ok(&["work", "status", "leaky"]);
+        let status = fixture.ok(&["status", "leaky"]);
         let leftovers = status["leftovers"].as_array().unwrap().clone();
         (!leftovers.is_empty()).then_some(leftovers)
     });
@@ -251,7 +251,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     fixture.add("unused");
     for name in running {
         wait_until("execution registration", || {
-            !fixture.ok(&["work", "status", name])["executions"]
+            !fixture.ok(&["status", name])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -282,7 +282,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     let refused = fixture.run(&["stop", "first", "second"]);
     assert!(!refused.status.success());
     assert_eq!(
-        fixture.ok(&["work", "status", "first"])["executions"]
+        fixture.ok(&["status", "first"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -294,7 +294,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
         ["first", "second"]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "third"])["executions"]
+        fixture.ok(&["status", "third"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -399,7 +399,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(split.status.success(), "{split:?}");
     let save_agent = |name: &str| {
-        let id = fixture.ok(&["work", "status", name])["workspace"]["id"]
+        let id = fixture.ok(&["status", name])["workspace"]["id"]
             .as_str()
             .unwrap()
             .to_owned();
@@ -457,7 +457,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let split = scoped_command(&fixture, "child", &["split", "grandchild"]);
     assert!(split.status.success(), "{split:?}");
     let paths = ["child", "grandchild"].map(|name| {
-        let workspace = fixture.ok(&["work", "status", name])["workspace"].clone();
+        let workspace = fixture.ok(&["status", name])["workspace"].clone();
         let state = fixture
             .root
             .path()
@@ -521,7 +521,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(split.status.success(), "{split:?}");
     // Only the child has an agent, stopped so its restore queues.
-    let child = fixture.ok(&["work", "status", "child"])["workspace"].clone();
+    let child = fixture.ok(&["status", "child"])["workspace"].clone();
     let state = fixture
         .root
         .path()
@@ -537,7 +537,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     fixture.ok(&["resume", "child"]);
     wait_until("the restore", || path.join("restored").exists());
     let running = || {
-        fixture.ok(&["work", "status", "child"])["executions"]
+        fixture.ok(&["status", "child"])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -601,7 +601,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     ];
     let mut last_inspection = Value::Null;
     let ids = try_wait_for(|| {
-        let inspection = fixture.ok(&["work", "status", "stopped"]);
+        let inspection = fixture.ok(&["status", "stopped"]);
         last_inspection = inspection.clone();
         let ids = inspection["executions"]
             .as_array()
@@ -631,7 +631,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(
-        fixture.ok(&["work", "status", "stopped"])["executions"]
+        fixture.ok(&["status", "stopped"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -730,7 +730,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
     assert!(output.status.success(), "{output:?}");
 
     // Its files are not on this machine yet.
-    let status = fixture.ok(&["work", "status", "talked"]);
+    let status = fixture.ok(&["status", "talked"]);
     assert_eq!(
         status["transcripts"],
         serde_json::json!([{
@@ -749,7 +749,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
     fs::create_dir_all(subagent.parent().unwrap()).unwrap();
     fs::write(&transcript, "{}\n").unwrap();
     fs::write(&subagent, "{}\n").unwrap();
-    let status = fixture.ok(&["work", "status", "talked"]);
+    let status = fixture.ok(&["status", "talked"]);
     let found = &status["transcripts"][0];
     assert_eq!(found["path"], transcript.to_str().unwrap(), "{status}");
     assert_eq!(
@@ -783,7 +783,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
     assert!(output.status.success(), "{output:?}");
     // The removal record keeps the last session for the restored workspace.
     fixture.ok(&["rm", "quit", "--yes"]);
-    let removed = fixture.ok(&["work", "restore"]);
+    let removed = fixture.ok(&["restore"]);
     let last = &removed[0]["last_sessions"][0];
     assert_eq!(
         (&last["agent"], &last["session"]),
@@ -793,7 +793,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         ),
         "{removed}"
     );
-    let restored = fixture.ok(&["work", "restore", "quit"]);
+    let restored = fixture.ok(&["restore", "quit"]);
     assert_eq!(restored["warnings"], serde_json::json!([]));
     let output = fixture
         .command()
@@ -855,7 +855,7 @@ while True:
         "descendant cleanup was killed: {output:?}"
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "worker"])["executions"],
+        fixture.ok(&["status", "worker"])["executions"],
         serde_json::json!([])
     );
 }
@@ -879,7 +879,7 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
         .unwrap();
     };
     let executions = |fixture: &Fixture| {
-        fixture.ok(&["work", "status", "legacy"])["executions"]
+        fixture.ok(&["status", "legacy"])["executions"]
             .as_array()
             .unwrap()
             .len()
@@ -892,7 +892,7 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     let piped = fixture.run(&["stop", "legacy"]);
     assert!(!piped.status.success());
     assert_eq!(executions(&fixture), 1);
-    assert!(fixture.ok(&["work", "status", "legacy"])["workspace"]["error"].is_null());
+    assert!(fixture.ok(&["status", "legacy"])["workspace"]["error"].is_null());
 
     let (output, transcript) = fixture.interactive(&["stop", "legacy"], "y\n");
     assert!(output.status.success(), "{transcript}");

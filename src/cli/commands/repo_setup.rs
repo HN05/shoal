@@ -132,13 +132,13 @@ fn subject(name: &str, local_config: &Path) -> String {
          say so when you ask.\n\n\
          To commit it, write `.shoal.toml`, or `.shoal/config.toml` when that file \
          already exists, and the scripts the config runs. Test the setup script with \
-         `shoal work setup`, then commit them and open a PR.\n\n\
+         `shoal setup`, then commit them and open a PR.\n\n\
          To save it locally, write `{local_config}`, which Shoal reads in place outside \
          the repository's Git tree, and save the scripts it runs in `{directory}` beside \
          it, naming them by paths relative to that directory; `setup.seed` stays \
          relative to the worktree. The committed config still applies beneath the local \
          config option by option, so write only what it lacks or must change. Commit \
-         nothing, and test the setup script with `shoal work setup` in this worktree: the local config applies to every \
+         nothing, and test the setup script with `shoal setup` in this worktree: the local config applies to every \
          workspace of the repository. Finish with `shoal done`, which removes this \
          workspace and its branch."
     )

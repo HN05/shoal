@@ -180,7 +180,7 @@ then suggests `shoal resume --all`.
 At the configured memory threshold, the daemon asks one connected tracked agent
 to stop: one you are not attached to while there is one, and of those the one
 idle longest, otherwise the newest. Each agent's wrapper reports every 10
-seconds whether a terminal shows the agent, as `shoal work status` marks its session
+seconds whether a terminal shows the agent, as `shoal status` marks its session
 `attached`; one running in a terminal no host serves always counts as attached.
 An agent is idle when its
 hooks last reported a finished turn and none of its processes run outside its
@@ -533,7 +533,7 @@ picked several at once, and
 `shoal stop --leftovers [space...]` only their leftovers; neither takes the
 workspaces below. The daemon looks for every space's leftovers in each cleanup sweep, from one
 listing of the machine's processes, and keeps them in memory until the next
-one; the first sweep after a restart finds them again. `shoal work status` shows a
+one; the first sweep after a restart finds them again. `shoal status` shows a
 workspace's count and the PID and command of the first ten, and with `--json`
 `leftover_count` and a `leftovers` list of the first ten with `pid`, `command`,
 `directory` and `started_at` in Unix seconds. Its agent's hook names each new
@@ -649,13 +649,13 @@ again: it first finishes the interrupted rename when Git completed it, or cancel
 when the branch is unchanged, then renames to the branch given. Confirmed-deleted
 worktrees can still be removed through normal cleanup.
 
-`shoal work rename [WORKSPACE] TITLE` gives a workspace a title, one line of at
+`shoal rename [WORKSPACE] TITLE` gives a workspace a title, one line of at
 most 40 characters that its agent chooses to say what the work is. The tabs,
 windows and blocks Shoal opens for the workspace show it in place of the issue
 label or branch, and setting it renames those already open, wherever the command
 runs, while they still show the label Shoal gave them; one the user named keeps
 its label. Scoped callers may title their own workspace.
-`shoal work rename --request [WORKSPACE]` sends the workspace's agent an
+`shoal rename --request [WORKSPACE]` sends the workspace's agent an
 [agent message](#agent-messages) asking it to choose the title and set it; it is
 refused while no agent runs there.
 
@@ -719,11 +719,11 @@ shoal open fix-login                     # app.default, else the only installed 
 shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker
 shoal happy-codex fix-login              # Detached Happy session for the Happy app
-shoal work status fix-login              # Activity, changes, held resources, issue and PR state
-shoal work status planning               # A chat's agent, sessions, issue and PR state
-shoal work status pr 12                  # Workspaces and chats that link PR 12
-shoal work status ci 2765                # Workspaces and chats that link CI run 2765
-shoal work status resource devices       # Workspaces that hold a devices lease
+shoal status fix-login              # Activity, changes, held resources, issue and PR state
+shoal status planning               # A chat's agent, sessions, issue and PR state
+shoal status pr 12                  # Workspaces and chats that link PR 12
+shoal status ci 2765                # Workspaces and chats that link CI run 2765
+shoal status resource devices       # Workspaces that hold a devices lease
 shoal stop fix-login                     # Stop agents and commands until shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 shoal rm fix-login old-spike             # Remove several, confirming once for all
@@ -732,14 +732,14 @@ shoal rm plan-cache                      # Remove a chat and the spaces below it
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,
 searching for the current workspace's items when it has any, otherwise on the
-list of workspaces; `shoal inbox` and `shoal work` open it on
+list of workspaces; `shoal inbox` and `shoal list` open it on
 their view on a terminal. Tab cycles the inbox, the workspaces and recent
 notifications, which it marks read as `shoal alerts` does; there
 Enter enters the notification's workspace (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow;
 commands that only Shoal, its agent hooks and integrations run live under the
 hidden `shoal internal`). Workspace processes see only the workspaces.
-Its rows, like `shoal work` and workspace pickers, are aligned and marked by what
+Its rows, like `shoal list` and workspace pickers, are aligned and marked by what
 their status asks of you: ● your turn to answer, review or resume, ◐ an agent
 or process works, ○ quiet, ◌ changing state, or ✗ failed. Each shows the
 space's number, then names the workspace, its repository when the
@@ -748,7 +748,7 @@ linked issue's title, cut with `…` to fit a terminal's width. Usage counts eve
 process carrying the workspace's `SHOAL_WORKSPACE_ID`: CPU as a percent of one
 core over the daemon's last ten-second sample, including children those
 processes have waited for, then memory, resident on Linux and the physical
-footprint on macOS. `shoal work status` adds the process count, and `--json` gives
+footprint on macOS. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when stopped agents or commands wait for `shoal resume` and the
@@ -759,10 +759,10 @@ work is stopped, `ready`, the other [agent states](#agent-state),
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
 subagents work in a child it split, `ready (outdated)`, or `inactive`.
-Branches and paths are in `shoal work status`.
+Branches and paths are in `shoal status`.
 Every space, a workspace or a [chat](#chats), has a number no other space
 holds, the smallest free when it is created; it stays through renames and
-stops, and a later space may take it once the space is removed. `shoal work status`
+stops, and a later space may take it once the space is removed. `shoal status`
 shows it, and `--json` gives it as `number`. Every argument that takes a space
 selects it by that number, its name or its ID, so `shoal attach 3` and
 `--space 3` name space 3; a removed workspace has no number and is named by
@@ -775,12 +775,12 @@ where Enter shows one with `shoal view` and Ctrl-O opens it in the browser with
 `shoal view --web`, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
 opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
-`shoal work` with `-p`/`--print`, like a filter, `--json` or output that is not a terminal,
+`shoal list` with `-p`/`--print`, like a filter, `--json` or output that is not a terminal,
 prints the list instead: your own workspaces first, then each running [chat](#chats)
-with its agent, followed by the workspaces it opened; `work --chats`
-lists only the chats. `work --repo <repository>`, with or without
+with its agent, followed by the workspaces it opened; `list --chats`
+lists only the chats. `list --repo <repository>`, with or without
 `--chats` or `--status`, lists only that registered repository's workspaces,
-chats and queued agents. `work --status <status>`,
+chats and queued agents. `list --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`).
 A chat's status is `stopped` until it is restored, or `finished` after
@@ -797,9 +797,9 @@ Shoal directory that no workspace owns, automatic cleanup failing other than in
 a workspace, and repositories whose default branch has failed to
 [sync](#repositories) for 30 minutes. There Enter answers a question, approves or denies a request after
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
-workspace, and shows a ready PR or issue with `shoal view` (`shoal work status` for a
+workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
-with [`shoal work adopt`](#adopting-a-worktree), shows `shoal daemon status`
+with [`shoal adopt`](#adopting-a-worktree), shows `shoal daemon status`
 for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox` with `-p`/`--print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
@@ -823,7 +823,7 @@ interactive fzf picker; a deleted current directory provides no workspace contex
 The picker leaves out workspaces without what the command acts on, such as an
 agent session for `attach` or a running agent or command for `stop`, and reports
 when none is left. Workspaces the command would refuse for their state, or for
-`work setup` a running execution, come last with the reason in place of their status.
+`setup` a running execution, come last with the reason in place of their status.
 `cd`, `attach` and the commands that open, show or run something in one workspace
 remember, across terminals, the workspaces each acted on, and take `-` as the
 target for the latest one other than the current workspace; `cd` also remembers
@@ -853,7 +853,7 @@ chosen issue or PR opens as its link would. Noninteractive and JSON calls never 
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
-`shoal work status [target]` summarizes one space, a workspace or a [chat](#chats),
+`shoal status [target]` summarizes one space, a workspace or a [chat](#chats),
 running or stopped, which the target names, else the current one: its state, a
 workspace's changes since its fork point and what it holds, its agent sessions,
 each session its agents reported with the path of its transcript on this machine,
@@ -880,7 +880,7 @@ open questions, a pending PR proposal or push request, a running chat in it, que
 when nothing does, in `cleanup_reason`. It lists the chats in the worktree, in
 `chats`. A chat's status leaves out what needs a worktree: its
 branch, changes, setup, executions, leases, sync and cleanup; it names the
-workspace it runs in, as `shoal work --chats`, the inbox and the menu do with
+workspace it runs in, as `shoal list --chats`, the inbox and the menu do with
 `in <workspace>`. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
 record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
@@ -892,11 +892,11 @@ which Shoal finds where the agent's tool keeps them and never reads. A session
 whose files are not on this machine, or of an agent whose tool Shoal does not
 know, has no `path` and no files, and one whose files could not be looked for
 says why in `error`; sessions the agents' hooks never reported, such as those
-before a `/clear`, are not listed. Workspace records from `work --json` and `work status --json` include
+before a `/clear`, are not listed. Workspace records from `list --json` and `status --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
-`links.prs` empty. `work status` lists opened and related items too. An issue, PR or
+`links.prs` empty. `status` lists opened and related items too. An issue, PR or
 CI run URL, `pr`, `issue` or `ci` with a number or URL, or `resource` with a pool
 or member name shows every space that links it or workspace that holds it instead, as a JSON array; a number must be linked in only one repository.
 Scoped callers find only their own workspace and its child workspaces.
@@ -1073,7 +1073,7 @@ shoal review resolve 17.2 --undo
 installed binary after an upgrade changes the protocol. Findings are numbered
 `<review>.<n>`. `review ls` marks a review outdated once
 the workspace's HEAD has moved past it and counts its unresolved findings. Plain
-`shoal view` in a workspace ends with its latest review, and `shoal work` shows each
+`shoal view` in a workspace ends with its latest review, and `shoal list` shows each
 workspace's latest review state. `review resolve` takes one outcome with its data;
 `review reply` discusses a finding without resolving it:
 
@@ -1201,7 +1201,7 @@ unless `[terminal] close_when_done = false` keeps it open.
 
 `shoal attach [target]` reattaches to the session of the workspace or running
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
-workspace has several; the picker and `shoal work status` list each with the agent
+workspace has several; the picker and `shoal status` list each with the agent
 the daemon recorded running there and mark it `attached` while a terminal shows
 it: a zmx client, a Rex app with the block's session open, or, since Herdr does
 not count its clients, the focused Herdr tab. Without a target it takes the
@@ -1334,7 +1334,7 @@ window in the session it was queued from, then falls back to the
 Shoal finds `rex` in Rex's bin directory, on PATH, then in the Rex app, and
 needs Rex API revision 7 or later.
 
-`shoal attach` and `shoal work status` find a workspace's or chat's Rex block by the
+`shoal attach` and `shoal status` find a workspace's or chat's Rex block by the
 place its agent was recorded in: attach makes the block's window active inside
 Rex and selects it in the Mac app from another terminal; a block that is gone
 leaves nothing to attach. Shoal closes only the blocks it created, and never
@@ -1382,7 +1382,7 @@ in the session it was queued from, then falls back to the `session_name`
 session on the same server, then to `terminal.default_host`. Shoal needs tmux
 3.3 or later.
 
-`shoal attach` and `shoal work status` find a workspace's or chat's pane by the place
+`shoal attach` and `shoal status` find a workspace's or chat's pane by the place
 its agent was recorded in, named after its window: attach selects the pane and
 switches your tmux client to it, or attaches a client from outside tmux; a
 pane on another tmux server is refused inside tmux. A window is renamed only
@@ -1438,7 +1438,7 @@ the session it was queued from while a client shows it, otherwise a session of
 its own. `ZELLIJ_SOCKET_DIR` chooses the sessions Shoal reaches, as it does
 for `zellij`. Shoal needs Zellij 0.45 or later.
 
-`shoal attach` and `shoal work status` find a workspace's or chat's pane by the place
+`shoal attach` and `shoal status` find a workspace's or chat's pane by the place
 its agent was recorded in, named after its tab: attach selects the tab and pane
 and switches your Zellij client to its session, or attaches a client from
 outside Zellij; a pane in another socket directory is refused inside Zellij. A tab is renamed only while the pane Shoal opened is alone in
@@ -1540,7 +1540,7 @@ template for is refused with the template to configure, and `--model` or
 `--effort` without an agent is refused. A Happy session's agent, such as
 `happy-claude`, takes them through the tool it starts, whose `model` and
 `effort` fill in what nothing else sets. A restored, resumed or moved agent runs
-with the values it started with, which its execution in `shoal work status --json`
+with the values it started with, which its execution in `shoal status --json`
 and its recovery records show; a `resume_command` gets them before its `--`.
 One whose tool no longer has the templates for them is not restored until it
 does. A desktop app takes
@@ -1577,11 +1577,11 @@ one a retry does not fix, such as failed authentication, gets a `turn_failed`
 notification naming the failure, which a child workspace's coordinating agent
 receives instead; later failed turns of the same agent add none until one of its
 turns ends normally. A pending retry outlasts a daemon restart;
-`work status` shows it, and `--json` gives `turn_retry` with `failure`, `attempt`,
+`status` shows it, and `--json` gives `turn_retry` with `failure`, `attempt`,
 `due_at` and `delivered`.
 
 `prompt_cache_minutes` sets how long a tool's prompt cache lives after its last
-request, which `work status` uses to show when an idle agent's
+request, which `status` uses to show when an idle agent's
 [cache expires](#agent-state); a tool's launch profiles inherit it unless they
 set their own. Without it, Claude Code's is what its environment and settings
 give, and every other tool's is 30 minutes, the least OpenAI keeps a GPT-5.6 or
@@ -1652,7 +1652,7 @@ succeeds; a failure a retry does not fix, or one after content arrived, reaches
 the agent unchanged. A Codex stream that gives up ends with a `response.failed`
 event, carrying the upstream's own error such as a usage limit and its reset,
 which ends its turn, instead of an HTTP failure Codex would retry itself, and the
-wrapper reports that turn for `retry`, which waits out rate and usage limits. `work status`
+wrapper reports that turn for `retry`, which waits out rate and usage limits. `status`
 shows a request the proxy waits to retry, which the wrapper reports, through the installed release once an upgrade changed the daemon's protocol under it; `--json` gives `proxy_retry` with
 `failure`, `attempt` and the Unix-seconds `next_at`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed
@@ -1841,7 +1841,7 @@ config as workspace launches trust theirs.
 
 Every call starts a new chat and focuses it. Its name is `--name`, else the
 default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it,
-without asking; the agent renames it with `shoal work rename` once it knows the
+without asking; the agent renames it with `shoal rename` once it knows the
 work. Inside Herdr it
 opens a focused tab labelled with the name regardless of `terminal.focus`, unless
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
@@ -1872,7 +1872,7 @@ under it that `--parent` names, in the background, and returns once the chat
 holds its own scope, or with the error that stopped it. Such an agent's
 `--here` is refused, so the chat's processes are never the agent's. A
 workspace process that cleared its scope token cannot run `shoal start` or
-`shoal work rename --request`.
+`shoal rename --request`.
 Chats are not tracked executions, so they are never queued or stopped under
 pressure. The daemon records each chat under its
 name, with the session the agent's session-start
@@ -1884,7 +1884,7 @@ stops when it exits: it waits for `shoal resume <chat>`, as does one
 shutdown, a logout or a signal is saved and stopped, and comes back on its own
 once the daemon runs again: under its name, in a background place where a
 restored agent opens, continuing its session. A stopped chat keeps its links,
-files, messages, questions, workspaces and `TMPDIR`, and `shoal work` lists it
+files, messages, questions, workspaces and `TMPDIR`, and `shoal list` shows it
 as `stopped`. A chat ends only when it is removed: by `shoal rm <chat>`, which
 first removes the spaces below it and stops its agent, by
 `shoal resume <chat> --discard`, or by [cleanup](#automatic-cleanup), as a workspace is.
@@ -1911,7 +1911,7 @@ agent may be editing there and makes its code changes. Its record, and
 `--json`, name the `workspace`, and `shoal resume` restores it there. In the
 chat, commands that act only on workspaces, such as `shoal diff`,
 `shoal conflicts` and `shoal branch base`, act on the workspace, and so does
-`shoal work status`, which takes the current directory's workspace before the chat;
+`shoal status`, which takes the current directory's workspace before the chat;
 commands that act on chats, such as `shoal view`, `shoal ci`, `shoal link`,
 `shoal ready` and `shoal done`, act on the chat, and `--space <workspace>`
 reads the workspace's, as `shoal view --space` and `shoal ci ls --space` do. A running chat keeps the workspace from idle, merged,
@@ -1921,21 +1921,21 @@ Shoal, which nothing keeps, removes its chats first and stops their agents;
 `shoal rm` lists them before asking. A chat
 never moves to another directory: one about another workspace is a new chat.
 
-`shoal work rename [chat] NAME` gives a running chat a new name that is free as
+`shoal rename [chat] NAME` gives a running chat a new name that is free as
 a new chat's would be, and frees the old one. Without a space it gives the
 current workspace a title, else renames the chat it runs in, else the current
 checkout's only running chat, else offers a picker. A Happy chat's log and saved first
 message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs. The tab,
 window or block the chat runs in takes the new name while it still shows the
-old one; one the user named keeps its label. `shoal work rename --request [chat]`
+old one; one the user named keeps its label. `shoal rename --request [chat]`
 asks the chat's agent to choose the name and set it instead. Workspace processes
 cannot rename chats.
 
-`shoal work` lists the chat by name with the spaces below it, and
+`shoal list` shows the chat by name with the spaces below it, and
 [workspace events](#workspace-events) report its start, renames, stops,
 restores and removal. A workspace the chat's agent opens with `shoal start` is
-below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal work status` name the chat until the
+below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
 workspace is opened outside a chat, which returns it to you. The chat opens
 workspaces only in its own repository; one in another repository is refused.
 With `--agent`, the agent is queued once the workspace is set up, and the
@@ -1958,7 +1958,7 @@ starts its chat the same way. It runs in `root_dir`, with its `TMPDIR` in
 `root_dir`'s `.tmp`, and its settings come from the global config alone; a
 repository, `--repo` or `--issue` is refused, and `--in` starts the mode's
 chat in that workspace's worktree, in its repository, instead. The agent waits for you
-to speak first, as in any chat. `shoal work` and `--json` list it with a null
+to speak first, as in any chat. `shoal list` and `--json` list it with a null
 `repository_id` and the `root_dir` it started in, where it resumes and keeps its
 `TMPDIR` however `root_dir` changes later, and it is stopped, resumed and removed
 like any other chat; removing it first removes every space below it, in every
@@ -2155,13 +2155,13 @@ admission pass, as `held by` memory with what the entry needs and what is
 left, low disk space, `machine.max_agents`, `machine.max_jobs`,
 `agent.max_running`, a full `runner.permit` pool, or a critical or missing
 reading; the stagger between starts is too brief to show. A restore shows its
-agent; `shoal work` lists the entries after the workspaces. `queue --json` gives the entries with their `kind`,
+agent; `shoal list` shows the entries after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
 with its run, `waiting_for` while dependencies remain,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
 `repository_limit`, `permits` or `reading`) and
-`base` once a launch starts on a dependency's branch, while `work --json` stays
+`base` once a launch starts on a dependency's branch, while `list --json` stays
 a list of workspaces. Entries are named as listed, by workspace name or by ID
 when several share one. On a terminal, `shoal queue` picks a waiting entry and
 then starts it, with or without attaching, moves or cancels it.
@@ -2320,7 +2320,7 @@ planned_label` takes `worker` and one labelled `plan_label` takes `plan`
 instead of the picker. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
-`shoal work status` names it, and the rows of `shoal work`, `shoal inbox`, the
+`shoal status` names it, and the rows of `shoal list`, `shoal inbox`, the
 queue and the menu name a mode other than `worker` for a workspace or `chat`
 for a chat in a column of its own. The built-in [`work` rule](../crates/shoal-client/src/config/rules/work.md)
 holds the practices of Shoal's workflow. A user's own modes may list it or
@@ -2356,7 +2356,7 @@ or a [chat without a repository](../crates/shoal-client/src/config/templates/fac
 which describe the space and state no practices; then the
 [space rules](../crates/shoal-client/src/config/templates/space_rules.md), to load the
 `shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` only when it has no
-further work to do and it and its work are completely finished, to name its space with `shoal work rename`, and to run each `shoal`
+further work to do and it and its work are completely finished, to name its space with `shoal rename`, and to run each `shoal`
 command as its own shell call, writing the files it reads with file tools. Its
 mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
 message is its subject, an issue or the prompt it was given, worded the same in
@@ -2407,7 +2407,7 @@ modes and the tree, so a config change reaches running agents and the spaces
 below them; only the hold on an agent's plain `git push` follows the `push`
 permission it launched with, which a restart renews. A check uses the
 permissions of the space that acts, so a parent acting on a space below it
-acts under its own. `shoal work status` lists a space's permissions, each with
+acts under its own. `shoal status` lists a space's permissions, each with
 `mode`, `given` or `parent` for where it comes from; `--json` gives them
 as `permissions`, each key with its `value` and `from`.
 
@@ -2429,7 +2429,7 @@ agent's mode, on its execution, queue entry, workspace or chat, and a restore
 or restart keeps them; `shoal resume` and `shoal restart` take `--permission`
 too, which sets the keys it names, `KEY=mode` dropping one, and keeps the
 rest. A dropped key takes the value its space has without one, which a space's
-agent must hold too. Nothing changes them while the agent runs. `shoal work status --json`
+agent must hold too. Nothing changes them while the agent runs. `shoal status --json`
 gives the recorded ones as `narrowing`, beside the effective `permissions`,
 where a given key's `from` is `given`.
 
@@ -2455,7 +2455,7 @@ The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, dro
 leading `-_`, truncates to 64 characters, and falls back to `workspace`; a name
 that would be all digits takes the prefix `workspace-`, as a branch `123` gives
 `workspace-123`, since a number selects a space. A name given with `--name` or
-`shoal work rename` cannot be all digits. Globally colliding names fail. Commands
+`shoal rename` cannot be all digits. Globally colliding names fail. Commands
 use this name, the space's number or its ID. Directories default to the repository's
 Shoal workspace directory;
 `start --path <dir>` selects an exact new directory for this workspace only (relative
@@ -2474,7 +2474,7 @@ existing branch reports incompatibility. Nested components remain literal.
 Suffixes never change the derived workspace name.
 
 ### Adopting a worktree
-`shoal work adopt <path>` registers an existing linked worktree in place
+`shoal adopt <path>` registers an existing linked worktree in place
 and enters it with shell integration. The path is relative to the current directory
 (`~/` allowed) and must name its root. `--repo` selects the registered repository;
 otherwise it is the one whose checkout owns the worktree, else the only one sharing
@@ -2492,7 +2492,7 @@ Adoption preserves commits, dirty files, and Git settings without fetching, setu
 or post-setup hooks. It takes full Shoal ownership with normal cleanup, including
 the pre-remove hook. Disable automatic cleanup
 in repository configuration before adopting work that should stay indefinitely.
-Use `shoal work setup` explicitly when setup is wanted.
+Use `shoal setup` explicitly when setup is wanted.
 
 Pass `--copy` to create a new branch worktree under the repository's Shoal
 directory, copy the source worktree's files into it, and leave the source in
@@ -2529,7 +2529,7 @@ shoal branch base set feature-a --workspace feature-b
 The base must be another workspace of the same repository and must not create
 a cycle; setting the current base, or clearing none, fails. Scoped callers may set their own workspace's base. Removing a base
 workspace moves the workspaces stacked on it to its own base workspace, or to
-none. `work status` shows both directions; `work --json` and `work status --json` give
+none. `status` shows both directions; `list --json` and `status --json` give
 `base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
 
 Once every watched PR of a base workspace has merged, with its HEAD among the
@@ -2588,8 +2588,8 @@ repository that the user owns. It does not take a branch name, `--issue`,
 or the user runs things in it with `shoal run`, `shoal demo` or a shell.
 Commands that need a branch, `pr open`, `merge`, `ready`, `done`, `branch rename`
 and CI runs on its branch, refuse it, saying it is at a commit; diffs, demos,
-ports, simulators, checkpoints, reviews and CI and PR views work as anywhere. `work status` shows `At:` with its commit and what it was made
-for where a branch workspace shows `Branch:`; `work --json` and `work status --json`
+ports, simulators, checkpoints, reviews and CI and PR views work as anywhere. `status` shows `At:` with its commit and what it was made
+for where a branch workspace shows `Branch:`; `list --json` and `status --json`
 give `branch` null and `at` with `commit` and `made_for` (`{"ref": name}` or
 `{"pr": number}`). `{branch}` is empty for it in configured commands and agent
 templates, and place names use its name instead.
@@ -2608,7 +2608,7 @@ the cleanup of its deleted directory, first removes the spaces below it,
 deepest first, whatever their work, holds or questions: each workspace stops its
 agents, and unless it is disposable keeps a checkpoint of its HEAD and unsaved
 files, and its branch unless a remote or the default branch has its commits, so
-`shoal work restore` brings it back, and each chat stops its agent. A child that cannot go retains the parent. `shoal rm` names the children
+`shoal restore` brings it back, and each chat stops its agent. A child that cannot go retains the parent. `shoal rm` names the children
 before asking, and its result names them in `children`; each child's journal
 records a `removed` event with the cause `parent`, and the user is notified of
 those an unattended removal took. Exporting one workspace with children is
@@ -2622,7 +2622,7 @@ question, pending PR proposal or push request, or queued agent launch of its own
 spaces still below it until they go. `undone`, a commit after `done`, or a
 `done` without cleanup leaves the children. A child's own `done` follows the
 usual rules. `work` lists children indented below their parent;
-`work status` shows both directions, and `work --json` and `work status --json` give
+`status` shows both directions, and `list --json` and `status --json` give
 `parent` (`id`, `name`, `kind`, `workspace` or `chat`, and a workspace's
 `branch`, or null) and `children`, the spaces below it, as do chats.
 
@@ -2689,8 +2689,8 @@ shoal start --copy topic --checkpoint 3  # From topic's checkpoint 3, live or re
 a copy of a workspace's current files: its HEAD with its staged, unstaged,
 untracked and ignored files. Without a value it copies the current workspace,
 else one picked. `--checkpoint <NUMBER>` starts from that checkpoint of the
-`--copy` workspace instead, a live or a removed one's; `shoal work restore
-<workspace>` lists a workspace's checkpoints, and `shoal work restore` names each
+`--copy` workspace instead, a live or a removed one's; `shoal restore
+<workspace>` lists a workspace's checkpoints, and `shoal restore` names each
 removed workspace's removal checkpoint. Both conflict with `--base`, which names
 a Git ref and so brings committed work only, even for a branch a workspace has
 checked out. Uses include trying another approach from where an agent is now,
@@ -2711,11 +2711,11 @@ submodule, whose files a checkpoint cannot hold, is refused, and so is a
 checked-out submodule or a worktree inside an ignored directory, whose Git
 metadata the copy would share. A copy of a
 checkpoint checks out the checkpoint's HEAD and writes its files as uncommitted
-changes, without telling staged from unstaged, as `shoal work restore` does; a
+changes, without telling staged from unstaged, as `shoal restore` does; a
 checkpoint that kept HEAD only is refused. A start the [agent queue](#agent-queue)
 holds creates its copy when it leaves the queue, so it copies the files of that
 moment; `--now` copies them at once, and a checkpoint taken first with `shoal
-work checkpoint` keeps the moment for `--checkpoint`.
+checkpoint` keeps the moment for `--checkpoint`.
 
 A copy of current files has its source's ignored files instead of the
 [seed](#seed-builds) clone and `setup.copy_ignored`; a copy of a checkpoint, which
@@ -2742,8 +2742,8 @@ commits on top of it and files that differ are the copy's own work. Removal
 still deletes the copy's branch only when a remote or the default branch has all
 its commits, and otherwise [keeps](#kept-branches) it. Workspace
 processes copy only their own workspace and those below it, never from a removed
-workspace's checkpoint. `work status` shows `Copied from:` with the workspace, and
-`(checkpoint <n>)` for a copy of a checkpoint; `work --json` and `work status --json`
+workspace's checkpoint. `status` shows `Copied from:` with the workspace, and
+`(checkpoint <n>)` for a copy of a checkpoint; `list --json` and `status --json`
 give `copied_from` with `workspace` (`id`, `name` and `branch`, null once it is
 removed), `checkpoint`, `starting_checkpoint`, that checkpoint's `head` and
 `commit`, and `index`, the tree of the index the copy started with.
@@ -2802,12 +2802,12 @@ whether to commit it or save it locally, unless you have said already, and
 mentions a committed or local config the repository has.
 
 - **Commit** writes `.shoal.toml`, or `.shoal/config.toml` when that file
-  exists, and the scripts it runs, tests the setup script with `work setup`,
+  exists, and the scripts it runs, tests the setup script with `setup`,
   commits them and opens a PR.
 - **Save locally** writes the repository's
   [local config](#store-repository-config-outside-git) and the scripts it runs
   beside it, named by paths relative to that directory, commits nothing and
-  tests the setup script with `work setup` in its own worktree. Its `shoal done` removes the workspace and its empty branch.
+  tests the setup script with `setup` in its own worktree. Its `shoal done` removes the workspace and its empty branch.
 
 The agent writes the local config through the repository directory, which
 every workspace agent has as another working directory. The agent is
@@ -3097,7 +3097,7 @@ merge = "propose"        # Default: "propose"; "direct" merges at once
 default branch while that merge is unpushed. It works for fast-forwards and merge
 commits alike, and the branch and its commits stay as they are; when cleanup deleted
 the branch, `unmerge` creates it again at the commit that merged. A workspace
-cleanup removed comes back first with `shoal work restore <workspace>`, which
+cleanup removed comes back first with `shoal restore <workspace>`, which
 `unmerge` names when it refuses. Afterwards the branch's commits no longer count
 as merged, so cleanup keeps the workspace.
 
@@ -3204,7 +3204,7 @@ arguments and shell logic inside them.
 `hooks.pre_setup` runs in the daemon before tracked setup, after ownership and
 execution checks, with a 60-second limit. It works without a `setup.command`.
 Failure marks the workspace failed and skips setup;
-retry with `shoal work setup`. Lifecycle and permit changes are rejected while it runs.
+retry with `shoal setup`. Lifecycle and permit changes are rejected while it runs.
 
 Tracked setup starts with Worktrunk's `wt step copy-ignored`, which copies the
 repository checkout's ignored files, such as `.env` or local signing settings,
@@ -3224,15 +3224,15 @@ and interrupting the command interrupts them, while they go on when the command 
 otherwise, such as when its terminal closes. `shoal start` waits for setup before
 entering the worktree or launching an agent; the workspace stays `preparing` until it exits 0 with no
 surviving processes. When that command is interrupted before setup starts,
-`shoal work setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to delete the
+`shoal setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to delete the
 new workspace and branch, ignore the failure and continue, or keep it for
 inspection (default). JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. Then choose explicitly; `--skip`
 leaves what setup did and is not available to workspace processes:
 
 ```sh
-shoal work setup fix-login                 # Rerun setup and the post-setup hook
-shoal work setup fix-login --skip          # Accept the failure after ownership checks
+shoal setup fix-login                 # Rerun setup and the post-setup hook
+shoal setup fix-login --skip          # Accept the failure after ownership checks
 shoal rm fix-login --yes                    # Delete this workspace
 ```
 
@@ -3241,14 +3241,14 @@ setup, for one that only needs a checkout, such as one a CI job or a reviewer
 reads: no `hooks.pre_setup`, ignored-file copy, `setup.command` or
 `hooks.post_setup`, and since they tear down what setup made, no
 `hooks.pre_remove` or `hooks.post_remove` either. The [seed](#seed-builds) clone
-still happens. `work status` shows `Setup: skipped` and `--json` `setup_skipped`;
-`shoal work setup` runs the full setup later and clears it.
+still happens. `status` shows `Setup: skipped` and `--json` `setup_skipped`;
+`shoal setup` runs the full setup later and clears it.
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
 and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `hooks.post_setup` runs without a terminal
-after `start` or `work setup` has a ready workspace and before any `--agent`; a
+after `start` or `setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
 `hooks.pre_remove` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
 after the removal checks pass and managed commands stop, without a terminal and with
@@ -3324,7 +3324,7 @@ and the seed passes none after `--`. To fail on warnings, use Cargo's
 
 Cargo keeps separate builds of the workspace's crates for each
 wrapper, so a Cargo command run without the preset's environment, such as from
-a shell `shoal work env` did not set up, builds them from scratch.
+a shell `shoal internal env` did not set up, builds them from scratch.
 
 The `ccache` preset needs ccache installed and CMake 3.17 or later, and applies
 when a build directory is first configured. With the workspace as ccache's base
@@ -3335,7 +3335,7 @@ The `xcode` preset keeps an xcconfig and an `xcodebuild` wrapper in a [shared
 cache](#shared-caches) named `preset.xcode-files`, and Xcode's compilation cache
 and Swift package checkouts in one named `preset.xcode`. It sets
 `XCODE_XCCONFIG_FILE` to the xcconfig, and puts the wrapper first on
-the PATH of every process Shoal starts in a workspace and of `shoal work env`. The
+the PATH of every process Shoal starts in a workspace and of `shoal internal env`. The
 xcconfig turns compilation caching on and maps the workspace and its DerivedData
 folder out of cache keys, so a workspace reuses what another compiled. Packages
 checked out per workspace would still miss, so the wrapper passes
@@ -3525,9 +3525,9 @@ before a system shutdown or on a signal cancel the run before they stop the
 runner. A job that cannot start is passed over with a
 `runner_failed` notification.
 
-`shoal work` lists a running job's workspace below the workspace that links its
+`shoal list` shows a running job's workspace below the workspace that links its
 run's PR, or owns the branch it ran on, with the job and what its processes
-use, and that workspace's `shoal work status` lists the job under `CI jobs`,
+use, and that workspace's `shoal status` lists the job under `CI jobs`,
 and each job still waiting to start under `Waiting jobs` with what holds it
 back, as `shoal queue` shows it. The job
 is not that workspace's child: it starts from the seed rather than the
@@ -3559,7 +3559,7 @@ jobs:
 
 Every workspace and chat has its own directory for temporary files, `.tmp/<id>`
 in the repository directory, named by the workspace's or chat's ID. Every process
-Shoal starts in a workspace, its hooks other than `hooks.post_remove`, `shoal work
+Shoal starts in a workspace, its hooks other than `hooks.post_remove`, `shoal internal
 env` and a chat's agent get it as `TMPDIR`, so their scratch files stay out of the
 shared `/tmp`; a `TMPDIR` in `[env]` replaces it. The daemon creates the
 directory, readable only by you, when it starts a process in the workspace,
@@ -3596,7 +3596,7 @@ workspace is disposable, first keeps them, with HEAD, in a
 A [workspace at a commit](#child-workspaces) has no branch to delete or keep. The
 commit it started at counts as kept, so a fork PR's head or a local commit it was
 created at never keeps it from cleanup; commits made on top of it and uncommitted
-changes are unsaved work as on a detached HEAD. `shoal work restore` reopens it
+changes are unsaved work as on a detached HEAD. `shoal restore` reopens it
 without a branch at the checkpoint's HEAD.
 
 `--disposable` on `shoal start` and `shoal split` creates a workspace that holds
@@ -3605,12 +3605,12 @@ its parent's removal and idle or other cleanup, deletes it without inspecting it
 unsaved work or asking, keeps no checkpoint, and deletes its branch whatever
 commits only it has while the worktree is still on it. It applies only to a new
 branch, never to an existing one that removal would then delete. Holds, open questions and running commands keep it from
-unattended removal as they keep any workspace. `work status` shows `Disposable: yes`
+unattended removal as they keep any workspace. `status` shows `Disposable: yes`
 and `--json` `disposable`.
 
 Removal stops tracked commands, then the workspace's
 [untracked processes](#untracked-processes) as `shoal stop --processes` does,
-including those hooks and `shoal work env` exports started. Automatic cleanup
+including those hooks and `shoal internal env` exports started. Automatic cleanup
 leaves out leftovers working in the worktree, which keep the workspace as
 activity instead. Ownership and removal policy are checked again after removal hooks,
 and the branch decision uses that last inspection. Ignored files go; shared caches
@@ -3641,16 +3641,16 @@ Workspace processes cannot list or delete kept branches.
 ### Checkpoints and restore
 
 ```sh
-shoal work checkpoint --name "before migration"  # keep the current workspace's state
-shoal work restore topic    # pick one of topic's checkpoints, or open removed topic again
-shoal work restore topic 3  # return topic to checkpoint 3
-shoal work restore          # pick a removed workspace to open again
+shoal checkpoint --name "before migration"  # keep the current workspace's state
+shoal restore topic    # pick one of topic's checkpoints, or open removed topic again
+shoal restore topic 3  # return topic to checkpoint 3
+shoal restore          # pick a removed workspace to open again
 ```
 
 A checkpoint is a commit of HEAD plus the uncommitted and untracked files, without
 ignored ones, under `refs/shoal/checkpoints/<commit>` in the
 repository; taking one leaves the worktree and its index untouched.
-`shoal work checkpoint [workspace]` takes one, and Shoal takes one when an agent
+`shoal checkpoint [workspace]` takes one, and Shoal takes one when an agent
 exits or is stopped, before a restore to a checkpoint, when a [copy](#copies)
 starts, and on every removal of an existing worktree except a disposable
 workspace's. An automatic checkpoint that would keep what the newest one keeps
@@ -3661,7 +3661,7 @@ keeps every file whatever their size. Checkpoints expire after
 `retention_days`, a copy's starting checkpoint only once the copy is gone; their
 numbers are never reused, so a number names one checkpoint for good.
 
-`shoal work restore <workspace> <number>` keeps the current state in a new checkpoint,
+`shoal restore <workspace> <number>` keeps the current state in a new checkpoint,
 then moves the workspace's branch to the checkpoint's HEAD and puts its files back
 as uncommitted changes, deleting tracked changes and untracked files it lacks.
 It refuses while an execution other than the caller's own runs in the workspace,
@@ -3671,7 +3671,7 @@ inside or around an ignored file, which it would delete or overwrite and no
 checkpoint keeps. Workspace processes may list and
 restore their own workspace's checkpoints.
 
-`shoal work restore` and `shoal work restore <workspace>` open a picker of the removed
+`shoal restore` and `shoal restore <workspace>` open a picker of the removed
 workspaces or of an existing workspace's checkpoints and restore the one picked;
 without a terminal, or with `--json`, they list them instead, each removed
 workspace with the number of its removal's checkpoint. When
@@ -3746,8 +3746,8 @@ failure there leaves the remaining ones to export, and the command exits 1
 naming each failed space.
 
 `shoal move export [space] --keep -o <file>` leaves the space running and writes a
-copy of it instead: a workspace at a new checkpoint, as `shoal work checkpoint`
-takes one, or with `--checkpoint N` at an earlier one `shoal work restore
+copy of it instead: a workspace at a new checkpoint, as `shoal checkpoint`
+takes one, or with `--checkpoint N` at an earlier one `shoal restore
 <workspace>` lists, and a chat with its session. It refuses a removed workspace
 and a chat whose agent reported no session. With several spaces, a directory or
 `--all`, it writes a copy of each to `<name>.shoal` in the directory, reporting
@@ -3777,7 +3777,7 @@ such as one whose files were copied by hand, and `--new-sessions` none.
 
 An imported workspace fetches the default branch when the repository lacks the
 commit the bundle builds on, is recorded as removed with its checkpoint, then
-restored as `shoal work restore` does; when that restore fails, `shoal work
+restored as `shoal restore` does; when that restore fails, `shoal
 restore <workspace>` retries it. The agents' session files stay with the removal
 record, in the repository directory's `.sessions`, until the restore that opens
 the workspace puts them in place, as its own
@@ -3787,7 +3787,7 @@ without `SHOAL_DEV_USER_FILES`, stay for the workspace's next removal record.
 `shoal resume` continues its agents' sessions,
 and `--resume` queues the restores of the agents the export stopped, as `shoal
 resume` does, under the importing machine's agent limits. Every reopen, by import or
-`shoal work restore`, trusts the workspace's path for the agents that resume there. An agent
+`shoal restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
 its `resume_command`. An imported chat starts in the repository's checkout as
@@ -3805,7 +3805,7 @@ ends. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-resume` leaves the workspaces' agents stopped; chats still
 start in the background there. It checks the spaces as a batch export does and
 asks once before ending them. A workspace whose import fails stays removed here
-with the other machine's error, and `shoal work restore` opens it again, unless
+with the other machine's error, and `shoal restore` opens it again, unless
 that machine recorded it; a chat's file stays in `<state>/unmoved`, and the error
 names the `shoal move import` that continues the chat here.
 `--keep`, with `--checkpoint N` for one workspace, copies the spaces instead, as
@@ -3825,10 +3825,10 @@ work under new commits, as after a cherry-pick or a rebase that edited them: unt
 HEAD moves, commits no remote or default branch has no longer keep the workspace
 from completion cleanup, and the [watch](#linked-items-and-cleanup) stops reporting its
 branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
-`work status` shows it as integrated elsewhere. `--attach FILE`, repeated for up to
+`status` shows it as integrated elsewhere. `--attach FILE`, repeated for up to
 64 files, hands back files such as a report: Shoal copies each, of at most 100 MiB, into
 the workspace's [attached files](#attached-files) as a result, the completion
-lists their names in `results`, `work status` names them, and the completion notice
+lists their names in `results`, `status` names them, and the completion notice
 ends with `results in shoal files <workspace>:` and the first three names, then
 how many more. `--summary TEXT` states what the work found in one line of at
 most 512 bytes without control characters, as for `shoal alerts send`: the
@@ -3840,7 +3840,7 @@ invalid summary fails before anything is stopped or recorded. The setting follow
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal, except
-a disposable workspace's, is reversible with [`shoal work restore`](#checkpoints-and-restore); to review in a workspace,
+a disposable workspace's, is reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
 [hold](#workspace-holds) it. `done` closes the workspace's open
 [questions](#questions), so completion and PR cleanup wait only while a hold, a
 question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)
@@ -3903,7 +3903,7 @@ files must be clean and all commits pushed as
 [automatic cleanup](#automatic-cleanup) means it, unless the completion is
 integrated; an existing registration keeps its merge requirements. Files and the completed HEAD
 are checked again after stopping and removal hooks. Failure retains ownership;
-`work status` and `inspect` show the completion choice and cleanup errors. Changed HEAD
+`status` and `inspect` show the completion choice and cleanup errors. Changed HEAD
 requires a new `done` signal before completion cleanup can proceed.
 
 Keeping persists across restarts and suppresses idle and PR cleanup until a new
@@ -3935,7 +3935,7 @@ do: a workspace or a chat, which needs no grant to decide it, else the user;
 approval places the hold,
 and acquiring again returns it.
 Workspace processes release only the holds agents placed, on their own workspace
-or below it; the user's stay theirs to release. `work status` and `work --json` show holds on the workspace record. `rm` lists holders before
+or below it; the user's stay theirs to release. `status` and `list --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges
@@ -4564,7 +4564,7 @@ of those it could not.
 
 Forges hold the runs of PRs from forks and first-time contributors until a
 maintainer approves them, and until then those runs report no checks. `shoal
-view` and `shoal work status` list an open PR's waiting runs in `waiting_runs`, each
+view` and `shoal status` list an open PR's waiting runs in `waiting_runs`, each
 with its `url` and `workflow`, and the text names how to approve them. GitHub
 reports the runs it holds; Forgejo and Gitea mark them among the head commit's
 runs; GitLab and Bitbucket hold none. `shoal ci approve` approves one run, which
@@ -4647,7 +4647,7 @@ and PR numbers. The relation is required:
 | `related` | Records an item the work relates to |
 
 Opened and related issues and PRs have no watch, completion or cleanup effect;
-`work status pr <number>` finds the workspaces that link an item under any relation.
+`status pr <number>` finds the workspaces that link an item under any relation.
 A run is linked only as opened or related, since an assigned item drives
 completion and cleanup, and records its workflow as its title. `shoal ci run`
 links the run it starts as opened where the forge reports its URL. Linked runs
@@ -4685,7 +4685,7 @@ who approved or requested changes unasked), how many commits its base has that i
 left out for a closed PR and on Bitbucket), its `auto_merge` while the forge is to
 merge it once it can, with the `method` where the forge reports it (Forgejo and
 Gitea do not), the merge conflicts, CI checks, runs waiting for approval and
-review state `work status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
+review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
 by the runner or listed by Forgejo 17 and later. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and
@@ -4737,7 +4737,7 @@ state and base branch, such as `Labels added: bug; title changed to "Fix"`;
 Shoal's own retargeting of a stacked PR is left to its `base_merged` update. A passing check is held while
 another check on the PR's head commit is pending, and arrives with a check that
 fails or does not pass, or with the last pending one; a new head commit drops
-the passes held for the previous one. `shoal work status` and `item_activity` events
+the passes held for the previous one. `shoal status` and `item_activity` events
 show each check as it completes. A PR's conflict is reported once
 two polls in a row see it at the same head and base commits, and again when it
 persists across new ones.
@@ -4825,8 +4825,8 @@ with its reason on stderr, and fails when that PR was selected or nothing
 else is left to mark. Marking again moves the mark to the current HEAD, and
 marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal alerts send` to
-ask for attention. New commits make a mark outdated: `work` shows
-`ready (outdated)`, and `work status`, `inspect` and `work --json` list
+ask for attention. New commits make a mark outdated: `list` shows
+`ready (outdated)`, and `status`, `inspect` and `list --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`, which
 is absent when HEAD cannot be read within three seconds or its file access
 stalled.
@@ -4838,8 +4838,8 @@ workspace; `--space` selects another workspace or a chat for unscoped callers.
 
 A [chat](#chats) marks each linked open PR at the PR's head on the forge, since its
 checkout is not on the PR's branch, and its linked issue, or the chat itself
-when nothing is linked, at its checkout's HEAD. `work --chats` shows a marked
-chat as `ready`, `inbox` lists its marks, and `work --json` lists them as the
+when nothing is linked, at its checkout's HEAD. `list --chats` shows a marked
+chat as `ready`, `inbox` lists its marks, and `list --json` lists them as the
 chat's `review` without `stale`. A chat's marks are not workspace events, and
 the [review gate](#local-reviews) does not apply to them; `hooks.post_ready` runs in
 the chat's checkout, with the repository's `[env]`, whose `{path}` is the
@@ -4894,12 +4894,12 @@ ends. Codex has no hook for a permission prompt, so it reports `working`
 instead of `waiting`. Other agents can call the command from their own hooks; a JSON event
 on stdin with a `session_id`, as Claude Code and Codex hooks pass, names the session
 to [resume](#overload-protection). The command reads only that first event, and stops waiting after
-two seconds without input. `work` and `work status` show
+two seconds without input. `list` and `status` show
 `working`, `needs input` for `waiting`, or `waiting` for `idle`, since an idle
-agent waits for the user or for activity that [wakes it](#agent-messages); `work status`,
-`inspect` and `work --json` give `agent_state` with `state` and the Unix-seconds
+agent waits for the user or for activity that [wakes it](#agent-messages); `status`,
+`inspect` and `list --json` give `agent_state` with `state` and the Unix-seconds
 `since` it began. An idle report that ends a turn starts the agent's prompt cache
-lifetime: until the agent works again, `work status` shows `Prompt cache` with when
+lifetime: until the agent works again, `status` shows `Prompt cache` with when
 the cache expires, and the JSON adds `prompt_cache_expires_at` in Unix seconds.
 The lifetime is the AI tool's [`prompt_cache_minutes`](#agents), else what the
 agent's own settings give, else 30 minutes. A state
@@ -4944,15 +4944,15 @@ already has starts a new plan. A subagent's calls change nothing, and Happy
 sessions register no hooks. Other agents set the steps with `--steps`, which
 reads a markdown task list, one `- [ ] name` or `- [x] name` per line.
 
-`work status` shows a `Progress` section with the status line and the numbered
-steps, marking the current one, and `work` shows how many steps are done with
+`status` shows a `Progress` section with the status line and the numbered
+steps, marking the current one, and `list` shows how many steps are done with
 the current step, such as `3/5 Fix the timeout`, followed by the status line
-in place of the issue title where the width allows. `work status`, `inspect`,
-`work --json` and `shoal progress --json` give `progress` with `status`,
+in place of the issue title where the width allows. `status`, `inspect`,
+`list --json` and `shoal progress --json` give `progress` with `status`,
 `steps` (`name`, `done`), `current` (the step's index, or null once every step
 is done) and Unix-seconds `updated_at`; a space without progress has none.
 Each change is a `progress_changed` [event](#workspace-events), which
-`shoal work log --all` shows, and setting the same value again is not a
+`shoal log --all` shows, and setting the same value again is not a
 change. Progress never notifies, and coordinating agents read their
 children's progress on demand.
 
@@ -5007,7 +5007,7 @@ default branch as removal decides, or with its changes on the branch the
 workspace builds on: its base workspace's branch, otherwise the local branch
 it was created from; no fetch.
 A restore of an idle agent waiting for an update blocks nothing: removal cancels
-it and keeps the agent stopped, so `shoal work restore` brings it back for
+it and keeps the agent stopped, so `shoal restore` brings it back for
 `shoal resume`.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart.
@@ -5026,7 +5026,7 @@ Every automatic removal except for low disk space waits `grace_minutes` from the
 first sweep that would remove the workspace, so its agent keeps running while you
 decide to take the work back: idle, merged and PR cleanup, and cleanup after
 `shoal done`. A workspace that would not pass removal's checks, such as one with
-unsaved work after `done`, does not start it. `shoal work status` shows when the grace
+unsaved work after `done`, does not start it. `shoal status` shows when the grace
 period ends; a sweep that no longer removes the workspace, as after `done --undo`, a
 new commit or new activity, ends it, and a later attempt starts a new one. The end
 time survives restarts, except that idle cleanup starts over with its timers. `shoal rm`, `shoal cleanup` and disk-space removal do not wait.
@@ -5053,7 +5053,7 @@ time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,
 index and reflog; the period runs from the latest of those and survives restarts.
 Saved agents and stopped commands do not keep a merged workspace; removal drops
-queued restores and keeps the agents for `shoal work restore`.
+queued restores and keeps the agents for `shoal restore`.
 Removals record the `merged` event cause.
 
 ```toml
@@ -5074,7 +5074,7 @@ shoal cleanup caches --repo project  # Empty one repository's shared caches
 spaces it would remove now, without their idle periods and also where those
 rules are disabled; in `branches`, [kept branches](#kept-branches); and in `caches`,
 [shared caches](#shared-caches), each repository's with the `outcome` `emptied`,
-`busy` or `failed`. `kept` gives, by `space`, the reason `work status` gives for keeping each other
+`busy` or `failed`. `kept` gives, by `space`, the reason `status` gives for keeping each other
 space, `agent_running` for a running chat. Without a terminal, or with `--dry-run`, it stops there. On a terminal,
 a picker offers the spaces, kept branches and caches nothing is using, with
 nothing selected; Tab selects several, and deleting kept branches asks first unless
@@ -5095,15 +5095,15 @@ repository config applies to that repository's workspaces on the next sweep.
 ### Space log
 
 ```sh
-shoal work log                 # This space, or a picker outside one
-shoal work log fix-login       # A named space, including a removed one
-shoal work log --all           # Every event Shoal recorded for the space
-shoal work log --limit 20      # The newest 20 entries (default 50)
-shoal work log --follow        # Keep printing new entries
-shoal work log --json          # One JSON line per entry
+shoal log                 # This space, or a picker outside one
+shoal log fix-login       # A named space, including a removed one
+shoal log --all           # Every event Shoal recorded for the space
+shoal log --limit 20      # The newest 20 entries (default 50)
+shoal log --follow        # Keep printing new entries
+shoal log --json          # One JSON line per entry
 ```
 
-`shoal work log [space]` shows the important events in a workspace's or
+`shoal log [space]` shows the important events in a workspace's or
 chat's life, oldest first, each with its local time, a label and its
 details, under a heading for each date:
 
@@ -5169,7 +5169,7 @@ a [chat](#chats) that opened it returned it to you. Earlier versions recorded
 `renamed` events record a workspace's new `name` and `branch`, as a branch
 rename gives them, or add its new `title`, null once cleared; a chat's rename
 is its own `chat_renamed` line. `restored` events record a workspace
-`shoal work restore` reopened, which takes the removed workspace's events
+`shoal restore` reopened, which takes the removed workspace's events
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`
 with its `name`, `execution_id` and `exit_code`, null for a start or stop
@@ -5219,7 +5219,7 @@ A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history or retention deleted events after it, then
 replay continues with the retained events from `oldest_id`; a stream reports
 deletions after its cursor while it runs the same way.
-Resync with `shoal work --json` after a gap or on first connection: the journal
+Resync with `shoal list --json` after a gap or on first connection: the journal
 starts when the daemon upgrades and does not reconstruct older changes.
 
 ### Notifications
@@ -5585,7 +5585,7 @@ paths without a daemon; with one running it also suggests repository-configured
 commands, repositories, workspaces, pools, members, lease names, ports,
 and simulator leases for the current or named workspace, honoring `--state-dir`
 and scope with a 500 ms timeout, never starting a daemon or picker. A workspace
-the command would refuse for its state, or for `work setup` a running execution, is
+the command would refuse for its state, or for `setup` a running execution, is
 described by the reason; one without what the command acts on is left out. Targets sort before flags,
 also in fzf-tab. `shoal shell completions <shell>` prints scripts for
 Bash, Zsh, Fish, PowerShell, and Elvish.
@@ -5596,9 +5596,9 @@ Bash, Zsh, Fish, PowerShell, and Elvish.
 shoal inbox                         # Failed workspaces and untracked worktrees, with their fix
 shoal alerts                        # Problems the daemon found when it started or reloaded
 shoal stop fix-login                # Stop survivors; asks before forgetting an unprovable execution
-shoal work setup fix-login --skip   # Accept a failed setup
+shoal setup fix-login --skip   # Accept a failed setup
 shoal branch rename fix-login topic # Finish an interrupted rename, then rename
-shoal work adopt <path>             # Reclaim a worktree at its recorded path after checking it
+shoal adopt <path>             # Reclaim a worktree at its recorded path after checking it
 ```
 
 Each problem shows where you look and names the command that resolves it. When
@@ -5621,8 +5621,8 @@ unknown until their wrappers reattach, then audits worktrees without deleting fi
 A workspace the audit failed, such as one on a volume that mounted late or
 whose file access stalled, becomes
 ready again once the cleanup sweep finds its ownership verified; other failures,
-such as a failed setup, wait for you. Repair, as `work adopt` and
-`work setup --skip` request it, restores verified worktrees to ready and clears
+such as a failed setup, wait for you. Repair, as `adopt` and
+`setup --skip` request it, restores verified worktrees to ready and clears
 executions proven stopped, preserving work and leases. Moved worktrees must return
 to their recorded path, and a deleted directory is forgotten by the next
 cleanup sweep or `shoal rm`, retaining the branch. Ownership is proven by a
@@ -5668,7 +5668,7 @@ PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 `ready`, `stop --processes`, `stop --leftovers`, `internal agent-state` and
 `internal turn-failed` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`work status`, inspect, execute, `diff`, `work setup`, and resources. They may read
+`status`, inspect, execute, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace and their space's repository,
 but cannot change configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot
@@ -5681,7 +5681,7 @@ gets the CLI's scoped refusals even after the token is removed from its
 environment. Scope is cooperative and does not restrict direct filesystem or
 Git operations.
 
-`shoal work env [workspace] --json` returns an object mapping environment variable names
+`shoal internal env [workspace] --json` returns an object mapping environment variable names
 to strings, using the same workspace identity and current port exports as tracked
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
 The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
@@ -5696,7 +5696,7 @@ precedence over `[env]`. Desktop handoffs may reuse an existing process and do
 not receive these variables.
 Only unscoped callers can export or revoke tokens, and export requires a ready,
 verified worktree. Add the returned variables to the processes your app starts.
-Each exported token survives daemon restarts until `shoal work env [workspace] --revoke
+Each exported token survives daemon restarts until `shoal internal env [workspace] --revoke
 <token>` or successful workspace removal; revoking one leaves other tokens valid.
 Running processes retain their port snapshot. These processes are untracked, the
 token provides no cleanup protection, and removing the workspace stops them.

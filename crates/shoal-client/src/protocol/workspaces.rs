@@ -241,7 +241,7 @@ pub enum WorkspaceMethod {
     /// oldest first, in pages.
     SpaceLog {
         space: SpaceSelector,
-        filter: crate::work::LogFilter,
+        filter: crate::log::LogFilter,
         limit: u32,
     },
 }
@@ -252,7 +252,7 @@ pub enum WorkspaceMethod {
 pub struct CreationOptions {
     /// Skip what gates readiness, `setup.command`, `hooks.pre_setup` and
     /// `setup.copy_ignored`, and the hooks around it, `hooks.post_setup` and
-    /// the removal hooks, until `shoal work setup` runs it; the seed clone
+    /// the removal hooks, until `shoal setup` runs it; the seed clone
     /// still happens.
     #[serde(default)]
     pub skip_setup: bool,

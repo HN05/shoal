@@ -492,7 +492,7 @@ mod streams {
 
     #[tokio::test]
     async fn a_log_subscription_follows_one_space_within_its_scope() {
-        use crate::client::work::{LogEntry, LogFilter, LogTopic};
+        use crate::client::log::{LogEntry, LogFilter, LogTopic};
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
@@ -539,7 +539,7 @@ mod streams {
 
     #[tokio::test]
     async fn a_log_subscription_keeps_following_its_space_after_a_rename() {
-        use crate::client::work::{LogEntry, LogFilter, LogTopic};
+        use crate::client::log::{LogEntry, LogFilter, LogTopic};
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let topic = LogTopic {

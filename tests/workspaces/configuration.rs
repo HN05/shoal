@@ -234,10 +234,10 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         ("root_dir", "/tmp/no"),
         ("default_agnet", "codex"),
         ("agents.claude.prompt_cache_minutes", "0"),
-        ("agents.work.command", "['echo']"),
+        ("agents.list.command", "['echo']"),
         ("commands.claude", "['echo']"),
         ("agents.loop.base", "loop"),
-        ("agents.helper.base", "work"),
+        ("agents.helper.base", "list"),
         ("agents.helper.base", "all"),
         ("agents.claude.resume", "['--resume']"),
     ] {
@@ -245,7 +245,8 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
             !fixture
                 .run(&["config", "set", key, value, "--repo", id])
                 .status
-                .success()
+                .success(),
+            "{key} = {value}"
         );
         assert_eq!(fixture.ok(&["repo", "config", id]), saved);
     }
@@ -545,7 +546,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
-    let failed = fixture.ok(&["work", "status", "unknown"]);
+    let failed = fixture.ok(&["status", "unknown"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
     fixture.ok(&["rm", "unknown", "--yes"]);
@@ -584,7 +585,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
             "manual@example.invalid"
         );
     }
-    let before = fixture.ok(&["work"]);
+    let before = fixture.ok(&["list"]);
     let output = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
@@ -593,7 +594,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
         "unknown",
     ]);
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["work"]), before);
+    assert_eq!(fixture.ok(&["list"]), before);
     assert!(git(&fixture.repo, &["branch", "--list", "bad-profile"]).is_empty());
 }
 

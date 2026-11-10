@@ -20,13 +20,13 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
     };
     let line = stop.manual_restore("worker", &ExecutionId::from("id"));
     assert!(line.contains("stopped by shoal stop"), "{line}");
-    assert!(!line.contains("work restore"), "{line}");
+    assert!(!line.contains("shoal restore"), "{line}");
     let removal = Halt::Pause {
         reason: Some("the workspace is being removed".into()),
         removed: true,
     };
     let line = removal.manual_restore("worker", &ExecutionId::from("id"));
-    assert!(line.contains("shoal work restore worker"), "{line}");
+    assert!(line.contains("shoal restore worker"), "{line}");
 }
 
 #[test]

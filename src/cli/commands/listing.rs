@@ -1,4 +1,4 @@
-//! Which workspaces, chats and queued agents `shoal work` lists.
+//! Which workspaces, chats and queued agents `shoal list` shows.
 use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
@@ -7,7 +7,7 @@ use crate::{
     model::{Chat, QueueEntry, Workspace},
 };
 
-/// The `shoal work` filters, with the repository resolved to its ID. No
+/// The `shoal list` filters, with the repository resolved to its ID. No
 /// statuses keeps every status.
 pub(super) struct ListFilter {
     repository: Option<RepositoryId>,

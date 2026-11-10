@@ -226,7 +226,7 @@ fn decode_path(hex: &str) -> Result<PathBuf> {
 pub(super) async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
     match view {
         View::Inbox => inbox_rows(ctx).await,
-        View::Work => work_rows(ctx, scoped).await,
+        View::Spaces => space_rows(ctx, scoped).await,
         View::Notifications => notification_rows(ctx).await,
     }
 }
@@ -305,7 +305,7 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
 }
 
 /// Every workspace, then an entry that adds one unless workspace processes ask.
-async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
+async fn space_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let palette = Palette::picker();

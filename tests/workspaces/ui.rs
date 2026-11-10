@@ -17,8 +17,8 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
         for _ in 0..depth {
             words.extend([shoal, "run", "--workspace", "first", "--"]);
         }
-        words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=3"]);
-        words.extend([shoal, "--", "shoal", "work", "setup", ""]);
+        words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=2"]);
+        words.extend([shoal, "--", "shoal", "setup", ""]);
         let output = fixture.command().args(&words[1..]).output().unwrap();
         assert!(output.status.success(), "{output:?}");
         String::from_utf8(output.stdout).unwrap()
@@ -82,7 +82,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    assert!(complete(&["work", "status", "fi"], fixture.root.path()).contains(&"first".into()));
+    assert!(complete(&["status", "fi"], fixture.root.path()).contains(&"first".into()));
     // A command taking several workspaces offers each one once.
     let choices = complete(&["rm", "first", ""], fixture.root.path());
     assert!(choices.contains(&"second".into()), "{choices:?}");
@@ -353,7 +353,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             assert!(!text.contains("other-only"), "{text}");
         }
         let output = command(cwd, scoped, false)
-            .args(["--json", "work", "status"])
+            .args(["--json", "status"])
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
@@ -372,7 +372,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         );
     }
     for args in [
-        vec!["work", "status", "context-other"],
+        vec!["status", "context-other"],
         vec!["stop"],
         vec!["config", "show", "context-other"],
     ] {
@@ -462,7 +462,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
 
     let output = fixture
         .command()
-        .args(["--json", "work", "status"])
+        .args(["--json", "status"])
         .current_dir(path)
         .output()
         .unwrap();
@@ -491,10 +491,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     );
     // The busy signing permit notified about the waiter, not this workspace.
     assert_eq!(status["unread_notifications"], 0);
-    assert_eq!(
-        fixture.ok(&["work", "status", "waiter"])["unread_notifications"],
-        1
-    );
+    assert_eq!(fixture.ok(&["status", "waiter"])["unread_notifications"], 1);
     assert_eq!(status["prs"][0]["state"], Value::Null);
     assert!(status["prs"][0]["errors"][0].is_string(), "{status}");
 
@@ -515,7 +512,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             {"context": "ci / rust", "status": "success"}, {"context": "review", "status": "pending"}
         ]}),
     );
-    let status = fixture.ok(&["work", "status", "summary"]);
+    let status = fixture.ok(&["status", "summary"]);
     assert_eq!(
         status["prs"][0]["url"],
         "https://forge.example/team/repo/pulls/7"
@@ -533,7 +530,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     assert_eq!(status["cleanup_reason"]["reason"], "pr_watch");
     assert!(status["prs"][0]["errors"][0].is_string(), "{status}");
 
-    let text = fixture.run(&["work", "status", "summary"]);
+    let text = fixture.run(&["status", "summary"]);
     assert!(text.status.success());
     let text = String::from_utf8(text.stdout).unwrap();
     for expected in [
@@ -543,7 +540,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     ] {
         assert!(text.contains(expected), "missing {expected:?} in {text:?}");
     }
-    assert!(!fixture.run(&["work", "status"]).status.success());
+    assert!(!fixture.run(&["status"]).status.success());
 
     for target in [
         vec!["pr", "7"],
@@ -551,7 +548,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         vec!["resource", "devices"],
         vec!["resource", "signing"],
     ] {
-        let found = fixture.ok(&[&["work", "status"], target.as_slice()].concat());
+        let found = fixture.ok(&[&["status"], target.as_slice()].concat());
         let found = found.as_array().unwrap();
         assert_eq!(found.len(), 1, "{target:?}");
         assert_eq!(found[0]["workspace"]["name"], "summary");
@@ -566,7 +563,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         vec!["ci", "2765"],
         vec!["summary", "7"],
     ] {
-        let output = fixture.run(&[&["work", "status"], target.as_slice()].concat());
+        let output = fixture.run(&[&["status"], target.as_slice()].concat());
         assert!(!output.status.success(), "{target:?}");
     }
     let scoped = |workspace: &str| {
@@ -579,7 +576,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
                 "--",
                 support::shoal_binary(),
             ])
-            .args(["--json", "work", "status", "resource", "devices"])
+            .args(["--json", "status", "resource", "devices"])
             .output()
             .unwrap()
     };
@@ -600,7 +597,7 @@ fn status_keeps_shared_state_when_the_worktree_is_missing() {
     fixture.ok(&["acquire", "port", "web", "--workspace", "missing-status"]);
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
 
-    let status = fixture.ok(&["work", "status", "missing-status"]);
+    let status = fixture.ok(&["status", "missing-status"]);
     assert_eq!(status["workspace"]["name"], "missing-status");
     assert_eq!(status["ports"].as_array().unwrap().len(), 1);
     assert!(status["diff"].is_null());
@@ -622,7 +619,7 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
         "#!/bin/sh\ntouch \"$HOME/picked\"\nawk -F '\\t' -v id=\"$PICK_ID\" '$1 == id {print}'\n",
     );
 
-    for action in [&["work", "status"][..], &["stop"]] {
+    for action in [&["status"][..], &["stop"]] {
         let pick = other["id"].as_str().unwrap();
         for (cwd, explicit, json, expected, picker) in [
             (nested.as_path(), None, false, &own, false),
@@ -661,10 +658,10 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             if picker {
                 fs::remove_file(&picked).unwrap();
             }
-            if action == ["work", "status"] && json {
+            if action == ["status"] && json {
                 let result: Value = serde_json::from_slice(&output.stdout).unwrap();
                 assert_eq!(result["workspace"]["id"], expected["id"]);
-            } else if action == ["work", "status"] {
+            } else if action == ["status"] {
                 let text = String::from_utf8_lossy(&output.stdout);
                 let name = expected["name"].as_str().unwrap();
                 assert!(text.starts_with(&format!("{name} ")), "{text}");
@@ -710,7 +707,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     .unwrap();
     let mut agent = Some(agent_in_session(&fixture, "available", "available"));
 
-    for args in [vec!["work", "status"], vec!["attach"], vec!["rm", "--yes"]] {
+    for args in [vec!["status"], vec!["attach"], vec!["rm", "--yes"]] {
         if args[0] == "rm" {
             drop(agent.take());
         }
@@ -751,12 +748,12 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
         } else {
             assert!(transcript.is_empty(), "{transcript}");
         }
-        if args[0] == "work" {
+        if args[0] == "status" {
             assert!(stdout.starts_with("available "), "{stdout}");
         } else if args[0] == "attach" {
             assert!(stdout.is_empty(), "{stdout}");
         } else {
-            assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+            assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
         }
         assert_eq!(fs::read_to_string(&picked).unwrap().trim(), "/");
         fs::remove_file(&picked).unwrap();
@@ -776,7 +773,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         &["start"][..],
         &["run", "--", "true"],
         &["rm"],
-        &["work", "status"],
+        &["status"],
         &["stop"],
         &["diff"],
         &["view", "pr", "12"],
@@ -849,7 +846,7 @@ test "${PWD##*/}" = acknowledged
 shoal done --undo
 rm untracked
 shoal done
-until ! shoal work status acknowledged >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal status acknowledged >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" held
@@ -857,7 +854,7 @@ shoal acquire hold --workspace held --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
 shoal release hold --workspace held --name review
-until ! shoal work status held >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal status held >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" completed
@@ -867,7 +864,7 @@ test "${PWD##*/}" = completed
 shoal done --undo
 rm untracked
 shoal done --cleanup
-until ! shoal work status completed >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal status completed >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
@@ -982,13 +979,10 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     let fixture = Fixture::new();
     fixture.add("first");
     fixture.add("second");
-    fixture.ok(&["work", "status", "first"]);
+    fixture.ok(&["status", "first"]);
     assert!(fixture.run(&["diff", "second"]).status.success());
-    assert_eq!(
-        fixture.ok(&["work", "status", "-"])["workspace"]["name"],
-        "first"
-    );
-    let unsupported = fixture.run(&["work", "setup", "-"]);
+    assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
+    let unsupported = fixture.run(&["setup", "-"]);
     assert!(!unsupported.status.success());
     let binary = support::shoal_binary();
     let scoped = fixture
@@ -1000,7 +994,6 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
             "--",
             binary,
             "--json",
-            "work",
             "status",
             "-",
         ])
@@ -1039,13 +1032,13 @@ head -n 1 "$HOME/picker-input"
                     support::shoal_binary(),
                 ]
             } else if key == "ctrl-o" {
-                // `shoal work` opens the same picker when its output is a terminal.
-                vec!["work"]
+                // `shoal list` opens the same picker when its output is a terminal.
+                vec!["list"]
             } else {
                 vec![]
             };
             fs::remove_file(fixture.root.path().join("picker-input")).ok();
-            let listing = args == ["work"];
+            let listing = args == ["list"];
             let (output, transcript) =
                 fixture.terminal_command(fixture.command().args(&args), "", listing);
             assert!(
@@ -1091,9 +1084,9 @@ head -n 1 "$HOME/picker-input"
     // `--print` lists on a terminal instead of opening the picker, as a
     // redirected listing does.
     fs::remove_file(fixture.root.path().join("picker-input")).ok();
-    fixture.interactive(&["work"], "");
+    fixture.interactive(&["list"], "");
     assert!(!fixture.root.path().join("picker-input").exists());
-    let (output, transcript) = fixture.interactive(&["work", "--print"], "");
+    let (output, transcript) = fixture.interactive(&["list", "--print"], "");
     assert!(output.status.success(), "{transcript}");
     assert!(!fixture.root.path().join("picker-input").exists());
     assert!(
@@ -1137,7 +1130,7 @@ esac
 
     // With nothing that needs the user, bare shoal shows the work going on.
     let (_, _, args, rows) = open("", "");
-    assert!(args.contains("--prompt\nwork> \n"), "{args}");
+    assert!(args.contains("--prompt\nspaces> \n"), "{args}");
     assert!(rows.contains(asker["id"].as_str().unwrap()), "{rows}");
     // An empty inbox still opens, so Tab can reach the other views.
     fixture.terminal_command(fixture.command().arg("inbox").env("PICK", ""), "", true);
@@ -1167,14 +1160,14 @@ esac
             .unwrap();
         String::from_utf8(output.stdout).unwrap()
     };
-    let to_work = next("inbox> ");
+    let to_spaces = next("inbox> ");
     assert!(
-        to_work.contains("change-prompt(work> )")
-            && !to_work.contains("unbind(")
-            && to_work.ends_with("internal menu-rows work\n"),
-        "{to_work}"
+        to_spaces.contains("change-prompt(spaces> )")
+            && !to_spaces.contains("unbind(")
+            && to_spaces.ends_with("internal menu-rows spaces\n"),
+        "{to_spaces}"
     );
-    let to_notifications = next("work> ");
+    let to_notifications = next("spaces> ");
     assert!(
         to_notifications.starts_with("unbind(ctrl-t,ctrl-f,ctrl-v,ctrl-e,ctrl-s,ctrl-d)+")
             && to_notifications.ends_with("internal menu-rows notifications\n"),
@@ -1424,7 +1417,7 @@ fn omitted_repositories_come_from_the_current_checkout() {
     let repo = fixture.repo.to_str().unwrap();
     let output = run(&["--json", "start", repo, "fresh"]);
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
     let output = run(&["repo", "rename", repo, "renamed"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["repo", "ls"])[0]["name"], "renamed");
@@ -1449,7 +1442,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     assert!(!rows.contains(foreign["id"].as_str().unwrap()));
     assert_eq!(
-        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
 }
@@ -1463,7 +1456,7 @@ fn work_lists_only_the_selected_repository() {
     fixture.ok(&["start", other.to_str().unwrap(), "foreign"]);
     let names = |repository: &str| -> Vec<_> {
         fixture
-            .ok(&["work", "--repo", repository])
+            .ok(&["list", "--repo", repository])
             .as_array()
             .unwrap()
             .iter()
@@ -1472,7 +1465,7 @@ fn work_lists_only_the_selected_repository() {
     };
     assert_eq!(names("other"), ["foreign"]);
     assert_eq!(names(fixture.repo.to_str().unwrap()), ["local"]);
-    let unknown = fixture.run(&["work", "--repo", "missing"]);
+    let unknown = fixture.run(&["list", "--repo", "missing"]);
     assert!(!unknown.status.success());
 }
 
@@ -1483,7 +1476,7 @@ fn work_lists_only_the_selected_statuses() {
     fixture.add("reviewed");
     fixture.ok(&["ready", "--space", "reviewed"]);
     let names = |statuses: &[&str]| -> Vec<_> {
-        let mut args = vec!["work"];
+        let mut args = vec!["list"];
         for status in statuses {
             args.extend(["--status", status]);
         }
@@ -1500,14 +1493,14 @@ fn work_lists_only_the_selected_statuses() {
     assert_eq!(names(&["inactive,ready"]), ["quiet", "reviewed"]);
     assert_eq!(names(&["failed", "ready"]), ["reviewed"]);
     assert!(names(&["working"]).is_empty());
-    let listed = String::from_utf8(fixture.run(&["work", "--status", "inactive"]).stdout).unwrap();
+    let listed = String::from_utf8(fixture.run(&["list", "--status", "inactive"]).stdout).unwrap();
     assert!(
         listed.contains("quiet") && !listed.contains("reviewed"),
         "{listed}"
     );
     assert!(
         !fixture
-            .run(&["work", "--status", "unknown"])
+            .run(&["list", "--status", "unknown"])
             .status
             .success()
     );
@@ -1577,7 +1570,7 @@ fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
     assert!(scoped.status.success(), "{scoped:?}");
     assert!(!String::from_utf8_lossy(&scoped.stdout).contains("untracked"));
 
-    fixture.ok(&["work", "adopt", stray.to_str().unwrap()]);
+    fixture.ok(&["adopt", stray.to_str().unwrap()]);
     assert!(untracked(&fixture).is_empty());
 }
 
@@ -1816,7 +1809,7 @@ fn the_inbox_lists_untracked_worktrees_under_shoal_directories_only() {
         [fs::canonicalize(&orphan).unwrap().to_str().unwrap()]
     );
     assert_eq!(fs::read_to_string(orphan.join("dirty")).unwrap(), "keep me");
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]

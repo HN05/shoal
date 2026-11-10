@@ -19,6 +19,9 @@ use crate::{
 pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand) -> Result<i32> {
     match command {
         InternalCommand::Events { follow, after } => events::run(&ctx, follow, after).await,
+        InternalCommand::Env { workspace, revoke } => {
+            workspaces::environment(&ctx, workspace, revoke).await
+        }
         InternalCommand::MenuRows { view } => menu::print_rows(&ctx, view).await,
         InternalCommand::MenuNext => menu::print_next(&ctx),
         InternalCommand::ApprovalRows { space } => approvals::print_rows(&ctx, space).await,

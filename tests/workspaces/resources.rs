@@ -61,7 +61,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         format!("{}:{}", web["port"], api["port"])
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "first"])["ports"]
+        fixture.ok(&["status", "first"])["ports"]
             .as_array()
             .unwrap()
             .len(),
@@ -273,7 +273,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
     // A config file that cannot be read fails its workspace's reads.
     fs::create_dir(Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml")).unwrap();
     // The daemon lists by name, so a failure must not short-circuit the query.
-    let workspaces = fixture.ok(&["work"]);
+    let workspaces = fixture.ok(&["list"]);
     assert_eq!(workspaces[0]["name"], "broken");
     assert_eq!(workspaces[1]["name"], "healthy");
     // Port reservations read no configuration, so only resources can fail here.
@@ -549,7 +549,7 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
             .status
             .success()
     );
-    let inspection = fixture.ok(&["work", "status", "first"]);
+    let inspection = fixture.ok(&["status", "first"]);
     assert!(inspection["ports"].as_array().unwrap().is_empty());
     assert!(inspection["resources"].as_array().unwrap().is_empty());
 }
@@ -662,7 +662,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "Parallel job",
     ]);
     assert_eq!(
-        fixture.ok(&["work", "status", "third"])["resources"]
+        fixture.ok(&["status", "third"])["resources"]
             .as_array()
             .unwrap()
             .len(),
@@ -839,10 +839,7 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
     assert_eq!(renewed["id"], lease["id"]);
     assert_eq!(renewed["created_at"], lease["created_at"]);
     assert_eq!(renewed["reason"], "still signing");
-    assert_eq!(
-        fixture.ok(&["work", "status", "first"])["resources"][0],
-        renewed
-    );
+    assert_eq!(fixture.ok(&["status", "first"])["resources"][0], renewed);
     fs::remove_file(first_path.join(".shoal.toml")).unwrap();
     fixture.ok(&[
         "release",
@@ -1552,7 +1549,7 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     for args in [
         vec!["acquire", "repo", "server", "--workspace", "consumer"],
         vec!["leases", "repo", "--workspace", "consumer"],
-        vec!["work", "status", "consumer"],
+        vec!["status", "consumer"],
     ] {
         let rendered = fixture.run(&args);
         assert!(rendered.status.success());
@@ -1645,7 +1642,7 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
     );
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
-    let pools: Vec<_> = fixture.ok(&["work", "status", "consumer"])["resources"]
+    let pools: Vec<_> = fixture.ok(&["status", "consumer"])["resources"]
         .as_array()
         .unwrap()
         .iter()
@@ -1729,7 +1726,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     let missing = fixture.run(&["acquire", "repo", "server", "--workspace", "consumer"]);
     assert!(!missing.status.success());
     assert!(
-        fixture.ok(&["work", "status", "consumer"])["resources"]
+        fixture.ok(&["status", "consumer"])["resources"]
             .as_array()
             .unwrap()
             .is_empty()

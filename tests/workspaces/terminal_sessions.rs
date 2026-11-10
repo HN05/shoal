@@ -150,7 +150,7 @@ fn assert_failed_labelling_refuses_launches(
         assert!(!fixture.root.path().join("new-agent-started").exists());
         assert_eq!(fs::read_to_string(&recovery)?, saved);
         assert_eq!(
-            fixture.ok(&["work", "status", "new-owner"])["executions"],
+            fixture.ok(&["status", "new-owner"])["executions"],
             serde_json::json!([])
         );
     }
@@ -383,7 +383,7 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         "{sent:?}"
     );
     assert!(
-        fixture.ok(&["work", "status", "resumed"])["workspace"]["done"]
+        fixture.ok(&["status", "resumed"])["workspace"]["done"]
             .as_bool()
             .unwrap_or_default()
     );
@@ -416,7 +416,7 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
     assert!(!export.status.success());
     let removal = in_session("sessioned", &["rm", "sessioned", "other", "--yes"])?;
     assert!(!removal.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().map(Vec::len), Some(2));
+    assert_eq!(fixture.ok(&["list"]).as_array().map(Vec::len), Some(2));
     // Another session goes on with the batch.
     let removal = in_session("elsewhere", &["rm", "sessioned", "other", "--yes"])?;
     assert!(removal.status.success(), "{removal:?}");

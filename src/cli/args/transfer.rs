@@ -36,7 +36,7 @@ pub enum MoveCommand {
     ///
     /// Runs shoal move export | ssh HOST shoal move import --resume for each space, once ssh
     /// reaches Shoal there; nothing ends when it does not. The other machine needs a repository
-    /// with the same origin. A workspace whose import fails stays removed here, and shoal work
+    /// with the same origin. A workspace whose import fails stays removed here, and shoal
     /// restore opens it again; a chat's file stays here for shoal move import. --keep copies the
     /// spaces instead and leaves them running here.
     Ssh(SshArgs),
@@ -73,7 +73,7 @@ pub struct ExportArgs {
     /// its session.
     #[arg(long)]
     pub keep: bool,
-    /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal work restore
+    /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal restore
     /// lists them.
     #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
     pub checkpoint: Option<CheckpointNumber>,
@@ -120,7 +120,7 @@ pub struct SshArgs {
     /// its session.
     #[arg(long)]
     pub keep: bool,
-    /// Copy the workspace at this earlier checkpoint, numbered as shoal work restore lists them.
+    /// Copy the workspace at this earlier checkpoint, numbered as shoal restore lists them.
     #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
     pub checkpoint: Option<CheckpointNumber>,
     /// Leave the agents stopped on the other machine instead of queueing their restores; chats

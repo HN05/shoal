@@ -27,6 +27,7 @@ pub mod items;
 pub mod leases;
 pub mod links;
 pub mod list_status;
+pub mod log;
 pub mod model;
 pub mod notifications;
 pub mod operations;
@@ -59,7 +60,6 @@ pub mod transcripts;
 pub mod transfer;
 pub mod validate;
 pub mod views;
-pub mod work;
 pub mod workspaces;
 
 pub use shoal_forge as forge;

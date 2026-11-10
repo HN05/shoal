@@ -86,7 +86,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
     // The remaining inferred name now resolves, deleting its workspace too.
     fixture.ok(&["repo", "rm", "saldoir-server", "--yes"]);
     assert!(!Path::new(clones[0]["path"].as_str().unwrap()).exists());
-    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     assert!(fixture.repo.exists());
 }
 
@@ -476,7 +476,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
 
     // Without confirmation nothing stops.
     assert!(!fixture.run(&["move", "root", "~/moved"]).status.success());
-    let running = fixture.ok(&["work", "status", "moving"]);
+    let running = fixture.ok(&["status", "moving"]);
     assert!(
         !running["executions"].as_array().unwrap().is_empty(),
         "{running}"
@@ -864,7 +864,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         .spawn()
         .unwrap();
     wait_until("execution registration", || {
-        !fixture.ok(&["work", "status", "first"])["executions"]
+        !fixture.ok(&["status", "first"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -878,7 +878,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!first_path.exists());
     assert!(!Path::new(second["path"].as_str().unwrap()).exists());
     assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
-    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
     let claude: Value = serde_json::from_str(
         &fs::read_to_string(fixture.root.path().join(".claude.json")).unwrap(),
     )
@@ -1158,7 +1158,7 @@ fn repository_removal_serializes_with_workspace_creation() {
         );
     }
     assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
-    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
     // The emptied repository directory goes with the registration.
     assert!(!Path::new(repo["workspaces_dir"].as_str().unwrap()).exists());
     assert!(!fixture.repo.exists());
@@ -1298,7 +1298,7 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
     assert!(output.status.success(), "{output:?}");
 
     // The agent works in a workspace on the setup branch, in setup mode.
-    let workspace = &fixture.ok(&["work", "status", "shoal-setup"])["workspace"];
+    let workspace = &fixture.ok(&["status", "shoal-setup"])["workspace"];
     assert_eq!(workspace["branch"], "shoal-setup", "{workspace}");
     assert_eq!(workspace["mode"], "setup", "{workspace}");
     // It is told where the local config goes, which lies in the
@@ -1322,7 +1322,7 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
     // A later setup reopens the same workspace.
     let output = setup();
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -1342,7 +1342,7 @@ fn repository_setup_starts_its_agent_past_max_agents() {
         .unwrap();
     wait_until("the first agent start", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()

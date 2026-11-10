@@ -89,11 +89,11 @@ shoal start --copy fix-api --fork            # Try another approach from fix-api
 shoal start --copy fix-api --checkpoint 3    # Start from fix-api's checkpoint 3, live or removed
 shoal start my-project --existing origin/feature/api --agent codex
 shoal start my-project quick-fix --path ../quick-fix
-shoal work adopt ../existing-worktree        # Take ownership, including automatic cleanup
-shoal work adopt --copy ../existing-worktree # Copy work into Shoal's default directory
+shoal adopt ../existing-worktree        # Take ownership, including automatic cleanup
+shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directory
 shoal branch rename fix-login fix/login      # Rename its branch and workspace together
-shoal work rename fix-login "Login retries"  # Title the tabs Shoal opens for it
-shoal work rename --request fix-login        # Ask its agent to choose the title
+shoal rename fix-login "Login retries"  # Title the tabs Shoal opens for it
+shoal rename --request fix-login        # Ask its agent to choose the title
 shoal start https://github.com/owner/repo/issues/68 # Create from an issue
 shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
@@ -164,13 +164,13 @@ that starts and steers the work of every repository for you. Without `--mode`,
 shoal                         # Inbox when something needs you, else workspaces; Tab switches
 shoal repo                    # Interactive repository menu
 shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
-shoal work                    # Workspaces, chats and queued agents; --print to list
+shoal list                    # Workspaces, chats and queued agents; --print to list
 shoal queue                   # Agents waiting for a slot under the agent limits; start, move or cancel one
-shoal work --chats            # Running chats
-shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
-shoal work --status needs-input,failed  # Only rows with these statuses
-shoal work status fix-login   # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
-shoal work status pr 12       # Workspaces and chats that link PR 12; also issue, ci or resource
+shoal list --chats            # Running chats
+shoal list --repo my-project  # Only one repository's workspaces, chats and queued agents
+shoal list --status needs-input,failed  # Only rows with these statuses
+shoal status fix-login        # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
+shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
 shoal config set agent.default codex
@@ -193,8 +193,8 @@ shoal start my-project --mode chat  # Discuss the repository with an agent in it
 shoal start --in fix-login     # Review a workspace's live work in a chat in its worktree, beside its agent
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
 shoal start --mode orchestrate   # Manage the spaces of every repository from one chat
-shoal work rename my-project-chat login  # Rename a running chat
-shoal work rename --request my-project-chat  # Ask its agent to choose the name
+shoal rename my-project-chat login  # Rename a running chat
+shoal rename --request my-project-chat  # Ask its agent to choose the name
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
@@ -205,7 +205,7 @@ shoal progress --space fix-login  # Its status line and plan steps
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Network is back"  # Message every agent, running or stopped
-shoal work log fix-login      # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
+shoal log fix-login      # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
 shoal files fix-login         # The files attached to the workspace
 shoal files my-project-chat   # The files a chat's agent attached
 shoal questions               # Pick a question and answer it
@@ -232,9 +232,9 @@ shoal done fix-login --undo        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
 shoal rm fix-login old-spike  # Remove several; the picker selects them with Tab or Ctrl-A
 shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
-shoal work checkpoint fix-login    # Keep HEAD and unsaved files to return to later
-shoal work restore fix-login       # Pick a checkpoint, or open a removed workspace again
-shoal work restore fix-login 3     # Return the workspace to checkpoint 3
+shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
+shoal restore fix-login       # Pick a checkpoint, or open a removed workspace again
+shoal restore fix-login 3     # Return the workspace to checkpoint 3
 shoal move ssh other fix-login # Move the workspace or chat to another machine; its agents continue there
 shoal move export fix-login | ssh other shoal move import # The same through any pipe
 shoal move export --repo app --all -o moving # Export every workspace and chat of app, a file each
@@ -327,9 +327,9 @@ to a file Shoal names, and stop with `shoal stop`. Codex and Claude run with
 their own sandbox and approval settings; Shoal turns on network access in Codex's
 sandbox so its commands reach the daemon. Use `shoal run --workspace fix-login -- codex`
 for a custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
-Apps that launch their own processes can request `shoal work env fix-login --json`
+Apps that launch their own processes can request `shoal internal env fix-login --json`
 and add the returned variables to each child's environment. Revoke its scope
-with `shoal work env fix-login --revoke <token>`. See
+with `shoal internal env fix-login --revoke <token>`. See
 [workspace scope](docs/reference.md#scoped-workspace-commands) for token lifetime
 and cleanup behavior.
 The agents Shoal starts get JSON from `shoal` without `--json`; give an agent
@@ -426,7 +426,7 @@ in global config; see [Git profiles](docs/reference.md#git-profiles).
 New workspaces get the repository checkout's ignored local files, such as `.env`;
 set `[setup] copy_ignored = false` in that file to turn this off. The same file can name a
 `setup.command`, run automatically on workspace creation or explicitly with
-`shoal work setup [workspace]`, and hooks around setup, assignment completion,
+`shoal setup [workspace]`, and hooks around setup, assignment completion,
 agent exits, removal, and resource acquisition/release, for example to open a tmux session or prepare an
 external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
 and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.
@@ -470,17 +470,17 @@ A chat whose agent stopped goes by the same rules.
 `shoal cleanup` lists what Shoal left behind: those spaces, kept branches, and
 shared caches nothing is using, with why it keeps the other spaces. On a terminal
 it opens a picker, where Tab selects several, and removes what you pick.
-`shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal work status`
+`shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal status`
 shows why it keeps one workspace.
 Removal keeps the workspace's HEAD and unsaved files in a checkpoint, except a
-disposable workspace's, as `shoal work checkpoint` does and Shoal does when an
+disposable workspace's, as `shoal checkpoint` does and Shoal does when an
 agent exits or is stopped. Until the checkpoint expires, after 30 days by default,
-`shoal work restore` picks a removed workspace, and `shoal work restore <workspace>`
+`shoal restore` picks a removed workspace, and `shoal restore <workspace>`
 opens one again with its links and the unsaved files the checkpoint kept;
 `shoal resume` then continues the agents the removal stopped. A checkpoint keeps
 HEAD only when the unsaved files are too large or include a nested repository or
 changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
-`shoal work restore <workspace> <number>` returns an existing workspace to one of
+`shoal restore <workspace> <number>` returns an existing workspace to one of
 its checkpoints. `shoal move export <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal
 move import <file>` opens it on another machine or the same one, where `shoal resume`
@@ -504,7 +504,7 @@ enabled = false
 ```
 
 When something looks wrong, `shoal inbox` and `shoal alerts` show what Shoal
-found and the command that fixes it, and `shoal work status <name>` shows one
+found and the command that fixes it, and `shoal status <name>` shows one
 workspace or chat; see [cleanup](docs/reference.md#automatic-cleanup) and
 [recovery](docs/reference.md#recovery) for details.
 

@@ -1,6 +1,6 @@
 //! A restore waiting for an update to an agent stopped between turns keeps
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
-//! `shoal work restore`.
+//! `shoal restore`.
 use super::*;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;

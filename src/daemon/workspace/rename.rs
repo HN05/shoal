@@ -242,7 +242,7 @@ impl Manager {
         if let Err(error) = self.verify_worktree(workspace).await {
             ensure!(
                 reclaim,
-                "unfinished rename ownership cannot be verified: {error:#}; check the worktree at {}, then reclaim it with shoal work adopt {}",
+                "unfinished rename ownership cannot be verified: {error:#}; check the worktree at {}, then reclaim it with shoal adopt {}",
                 workspace.path.display(),
                 workspace.path.display()
             );

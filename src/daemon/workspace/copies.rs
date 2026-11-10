@@ -207,7 +207,7 @@ impl Manager {
             .await?;
         let Some(checkpoint) = checkpoint else {
             anyhow::bail!(
-                "workspace {name} has no checkpoint {number}; shoal work restore {name} lists them"
+                "workspace {name} has no checkpoint {number}; shoal restore {name} lists them"
             );
         };
         ensure!(

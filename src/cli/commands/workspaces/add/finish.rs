@@ -161,7 +161,7 @@ pub(super) async fn add_planned(
     else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
-                "setup of {name} did not complete; retry it with `shoal work setup {name}` or skip it with `shoal work setup {name} --skip`"
+                "setup of {name} did not complete; retry it with `shoal setup {name}` or skip it with `shoal setup {name} --skip`"
             );
             queued_agents::fail(ctx, entry, &error).await;
         }

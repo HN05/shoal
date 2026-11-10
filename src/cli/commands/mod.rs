@@ -31,6 +31,7 @@ mod labels;
 mod leases;
 mod links;
 mod listing;
+mod log;
 pub(crate) mod menu;
 mod merge_warning;
 mod messages;
@@ -45,6 +46,7 @@ mod questions;
 mod queue;
 mod queued_agents;
 mod reactions;
+mod rename;
 mod repo_menu;
 mod repo_setup;
 mod repositories;
@@ -66,7 +68,6 @@ mod transfer;
 mod turns;
 mod update;
 mod view;
-mod work;
 pub(in crate::cli) mod workspaces;
 
 mod worktree_hooks;
@@ -194,13 +195,12 @@ fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu:
         })) if lists_interactively(ctx) && !env::inherits_scope(&ctx.paths.state) => {
             Some(Some(menu::View::Inbox))
         }
-        Some(Command::Workspace(WorkspaceCommand::Work {
-            command: None,
+        Some(Command::Workspace(WorkspaceCommand::List {
             chats: false,
             repository: None,
             status,
             print: false,
-        })) if status.is_empty() && lists_interactively(ctx) => Some(Some(menu::View::Work)),
+        })) if status.is_empty() && lists_interactively(ctx) => Some(Some(menu::View::Spaces)),
         _ => None,
     }
 }

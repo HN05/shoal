@@ -61,7 +61,7 @@ fn record_setup_result(
         if code == 0 {
             format!("setup command exited successfully (exit 0), but process verification is incomplete{reason}; stop its processes with shoal stop, then retry or skip setup")
         } else {
-            format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal work setup")
+            format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal setup")
         }
     });
     let state = if error.is_none() {

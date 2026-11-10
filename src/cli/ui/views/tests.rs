@@ -2,17 +2,20 @@ use super::*;
 
 #[test]
 fn view_cycle_wraps_and_unknown_prompts_start_at_the_first_view() -> Result<()> {
-    let views = ["inbox> ", "work> ", "notifications> "];
+    let views = ["inbox> ", "spaces> ", "notifications> "];
     for (shown, expected) in [
-        ("inbox> ", "work> "),
-        ("work> ", "notifications> "),
+        ("inbox> ", "spaces> "),
+        ("spaces> ", "notifications> "),
         ("notifications> ", "inbox> "),
         ("", "inbox> "),
         ("unknown> ", "inbox> "),
     ] {
         assert_eq!(*view_after(&views, shown, |view| *view)?, expected);
     }
-    assert_eq!(*view_after(&["work> "], "work> ", |view| *view)?, "work> ");
+    assert_eq!(
+        *view_after(&["spaces> "], "spaces> ", |view| *view)?,
+        "spaces> "
+    );
     assert!(view_after::<&str>(&[], "", |view| *view).is_err());
     Ok(())
 }
@@ -61,7 +64,7 @@ fn initial_and_reloaded_views_disable_the_same_unavailable_actions() {
 fn a_single_view_with_every_action_needs_no_unbinding_or_tab() {
     let picker = ViewPicker {
         view: PickerView {
-            prompt: "work> ",
+            prompt: "spaces> ",
             header: "enter: cd".into(),
             keys: vec![Key::Enter],
         },
@@ -80,7 +83,7 @@ fn a_single_view_with_every_action_needs_no_unbinding_or_tab() {
     );
     assert_eq!(
         picker.view.transition(picker.keys, "reload rows"),
-        "rebind(enter)+change-prompt(work> )+change-header(enter: cd)+reload:reload rows"
+        "rebind(enter)+change-prompt(spaces> )+change-header(enter: cd)+reload:reload rows"
     );
 }
 

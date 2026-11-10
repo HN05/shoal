@@ -8,9 +8,9 @@ use super::{EventCursor, EventItem, EventKind, decode};
 use crate::time::UnixTime;
 use crate::{
     client::{
+        log::{LogEntry, LogFilter, LogTopic},
         space_ids::SpaceId,
         space_names::SpaceSelector,
-        work::{LogEntry, LogFilter, LogTopic},
     },
     daemon::{scope::Caller, workspace::Manager},
 };

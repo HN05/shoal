@@ -1,9 +1,9 @@
-//! `shoal work rename`: title a workspace or rename a chat, or ask its
+//! `shoal rename`: title a workspace or rename a chat, or ask its
 //! agent to choose.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
-use super::super::{chat, workspaces};
+use super::{chat, workspaces};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -51,7 +51,7 @@ async fn chosen_chat(
 ) -> Result<Result<SpaceId, SpaceSelector>> {
     if space.is_none() && ui::current_chat(&None).is_none() {
         let chats = crate::client::chats::list(&ctx.paths).await?;
-        if let Some(chat) = super::super::sessions::checkout_chat(ctx, &chats).await? {
+        if let Some(chat) = super::sessions::checkout_chat(ctx, &chats).await? {
             return Ok(Ok(chat.id));
         }
     }

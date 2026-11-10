@@ -2,7 +2,7 @@
 use crate::{
     client::{
         events::{ChatEventKind, EventCause, EventDetails, EventKind, FileEventKind},
-        work::LogEntry,
+        log::LogEntry,
     },
     forge::{items::link::LinkKind, updates::UpdateKind},
     model::SpaceKind,

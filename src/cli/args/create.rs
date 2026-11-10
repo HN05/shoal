@@ -297,7 +297,7 @@ pub struct CopyArgs {
     #[arg(long, num_args = 0..=1, value_name = "WORKSPACE", conflicts_with = "base")]
     pub copy: Option<Option<SpaceSelector>>,
     /// Start from this checkpoint of the --copy workspace, live or removed,
-    /// instead of its current files; shoal work restore <workspace> lists
+    /// instead of its current files; shoal restore <workspace> lists
     /// them.
     #[arg(long, value_name = "NUMBER", conflicts_with = "base")]
     pub checkpoint: Option<CheckpointNumber>,
@@ -315,7 +315,7 @@ impl CopyArgs {
 #[derive(Debug, Default, Clone, Args)]
 pub struct CreationArgs {
     /// Skip setup.command, hooks.pre_setup, setup.copy_ignored, hooks.post_setup
-    /// and the removal hooks; `shoal work setup` runs the setup later.
+    /// and the removal hooks; `shoal setup` runs the setup later.
     #[arg(long)]
     pub skip_setup: bool,
     /// Nothing in it is worth keeping: every removal deletes it whatever it

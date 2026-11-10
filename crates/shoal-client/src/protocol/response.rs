@@ -177,7 +177,7 @@ response_bodies! {
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
     AttachedFiles(Vec<crate::files::AttachedFile>),
-    LogEntries(Vec<crate::work::LogEntry>),
+    LogEntries(Vec<crate::log::LogEntry>),
     Demos(Vec<crate::demos::Running>),
     DemoProgress(crate::demos::Progress),
     Workspaces(Vec<Workspace>),

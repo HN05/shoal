@@ -42,7 +42,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     );
     assert!(!state.join(format!("{execution}.recovery.json")).exists());
     assert!(
-        fixture.ok(&["work", "status", "quarantined"])["executions"]
+        fixture.ok(&["status", "quarantined"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -103,7 +103,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         saved
     };
     let running = |fixture: &Fixture| {
-        fixture.ok(&["work", "status", "restarted"])["executions"]
+        fixture.ok(&["status", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -134,7 +134,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     assert!(agent.wait().unwrap().success());
     assert_eq!(saved(), [".last-session.json"]);
     assert!(
-        fixture.ok(&["work", "status", "restarted"])["executions"]
+        fixture.ok(&["status", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -231,7 +231,7 @@ pub(crate) fn repaired_workspaces(fixture: &Fixture, args: &[&str]) -> Value {
     reports
 }
 
-/// The daemon's reconciliation reports, as `work adopt` and `work setup --skip`
+/// The daemon's reconciliation reports, as `adopt` and `setup --skip`
 /// request them: `args` name the workspace, or none for all, and the options
 /// as flags (`--repair`, `--stop`, `--acknowledge-stopped`, `--reclaim`).
 pub(crate) fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
@@ -302,7 +302,7 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
     for _ in 0..2 {
         fixture.restart();
         for (state, workspace) in states.iter().zip(&workspaces) {
-            let inspection = fixture.ok(&["work", "status", state]);
+            let inspection = fixture.ok(&["status", state]);
             let saved = &inspection["workspace"];
             assert_eq!(
                 saved["state"],
@@ -385,7 +385,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["work", "status", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["status", "interrupted"])["workspace"]["state"],
         "failed"
     );
     let preview = recovery_report(&fixture, &["interrupted"]);
@@ -393,7 +393,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
     assert_eq!(
-        fixture.ok(&["work", "status", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["status", "interrupted"])["workspace"]["state"],
         "failed"
     );
     db.execute(
@@ -450,7 +450,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
     db.execute("UPDATE workspaces SET git_dir_id='birth:1:2:3'", [])
         .unwrap();
     fixture.restart();
-    let saved = fixture.ok(&["work", "status", "marked"])["workspace"].clone();
+    let saved = fixture.ok(&["status", "marked"])["workspace"].clone();
     assert_eq!(saved["state"], "ready", "{saved}");
     assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
     assert!(
@@ -499,23 +499,23 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
     // Reclaiming still requires the recorded branch and metadata no one else owns.
     git(path, &["switch", "-q", "-c", "elsewhere"]);
-    let refused = fixture.run(&["work", "adopt", path_arg]);
+    let refused = fixture.run(&["adopt", path_arg]);
     assert!(!refused.status.success());
     git(path, &["switch", "-q", "reclaimed"]);
     fs::write(&marker, format!("{}\n", other["id"].as_str().unwrap())).unwrap();
-    let refused = fixture.run(&["work", "adopt", path_arg]);
+    let refused = fixture.run(&["adopt", path_arg]);
     assert!(!refused.status.success());
     fs::remove_file(&marker).unwrap();
     // An explicit repository must be the recorded one.
-    let refused = fixture.run(&["work", "adopt", path_arg, "--repo", "missing"]);
+    let refused = fixture.run(&["adopt", path_arg, "--repo", "missing"]);
     assert!(!refused.status.success());
     assert_eq!(
-        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
 
@@ -524,12 +524,12 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     let output = fixture
         .command()
         .env("SHOAL_SHELL_DIRECTIVE", &directive)
-        .args(["work", "adopt", path_arg])
+        .args(["adopt", path_arg])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fs::read_to_string(&directive).unwrap().trim(), path_arg);
-    let reclaimed = fixture.ok(&["work", "status", "reclaimed"])["workspace"].clone();
+    let reclaimed = fixture.ok(&["status", "reclaimed"])["workspace"].clone();
     assert_eq!(reclaimed["id"], workspace["id"]);
     assert_eq!(reclaimed["state"], "ready");
     assert_eq!(
@@ -567,7 +567,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
     let report = recovery_report(&fixture, &["reclaimed", "--repair"]);
@@ -607,7 +607,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     );
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
         "ready"
     );
 }
@@ -645,7 +645,7 @@ fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
     assert!(elsewhere.join("tracked").exists());
     assert!(fixture.run(&["rm", "deleted", "--yes"]).status.success());
     let names: Vec<_> = fixture
-        .ok(&["work"])
+        .ok(&["list"])
         .as_array()
         .unwrap()
         .iter()
@@ -686,7 +686,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
     }
     fixture.restart();
     for (name, workspace, legacy, lease) in cases {
-        let saved = fixture.ok(&["work", "status", name])["workspace"].clone();
+        let saved = fixture.ok(&["status", name])["workspace"].clone();
         if name == "ready" {
             assert_eq!(saved["state"], "ready");
             assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
@@ -695,7 +695,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert_eq!(saved["git_dir_id"], legacy);
         }
         recovery_report(&fixture, &[name]);
-        assert_eq!(fixture.ok(&["work", "status", name])["workspace"], saved);
+        assert_eq!(fixture.ok(&["status", name])["workspace"], saved);
         let report = recovery_report(&fixture, &[name, "--repair"]);
         if name == "renumbered" {
             assert_eq!(report[0]["directory"], "unverified");
@@ -851,7 +851,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     let mut last_names = Vec::new();
     try_wait_for(|| {
         let names: Vec<String> = fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -862,7 +862,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     })
     .unwrap_or_else(|| panic!("deleted worktrees remain: {last_names:?}"));
     assert_eq!(
-        fixture.ok(&["work", "status", "moved"])["workspace"]["state"],
+        fixture.ok(&["status", "moved"])["workspace"]["state"],
         "failed"
     );
     assert!(!fixture.run(&["rm", "moved"]).status.success());
@@ -953,7 +953,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["work", "status", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
     });
     let report = recovery_report(&fixture, &["orphan", "--repair"]);
     assert!(
@@ -964,7 +964,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
             .any(|p| p["pid"] == execution["child"]["pid"])
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "orphan"])["executions"]
+        fixture.ok(&["status", "orphan"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -975,11 +975,11 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
         &["orphan", "--repair", "--stop", "--acknowledge-stopped"],
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "orphan"])["executions"],
+        fixture.ok(&["status", "orphan"])["executions"],
         serde_json::json!([])
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "orphan"])["workspace"]["state"],
+        fixture.ok(&["status", "orphan"])["workspace"]["state"],
         "ready"
     );
 }
@@ -1036,7 +1036,7 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_i
     assert!(!report[0]["executions"][0]["cleared"].as_bool().unwrap());
     repaired_workspaces(&fixture, &["crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(
-        fixture.ok(&["work", "status", "crash"])["executions"],
+        fixture.ok(&["status", "crash"])["executions"],
         serde_json::json!([])
     );
 }
@@ -1058,7 +1058,7 @@ fn a_finished_command_stops_the_detached_children_it_leaves() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
     assert_eq!(
-        fixture.ok(&["work", "status", "detached"])["executions"],
+        fixture.ok(&["status", "detached"])["executions"],
         serde_json::json!([])
     );
     let pid = fs::read_to_string(Path::new(workspace["path"].as_str().unwrap()).join("child-pid"))
@@ -1086,7 +1086,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["work", "status", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
     });
     fixture.ok(&["rm", "orphan"]);
     assert_eq!(
@@ -1131,7 +1131,7 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
     repaired_workspaces(&fixture, &["connected", "--repair", "--stop"]);
     wrapper.wait().unwrap();
     assert_eq!(
-        fixture.ok(&["work", "status", "connected"])["executions"],
+        fixture.ok(&["status", "connected"])["executions"],
         serde_json::json!([])
     );
     assert_eq!(
@@ -1179,7 +1179,7 @@ time.sleep(30)
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["work", "status", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
     });
     let mut stopping = fixture
         .command()

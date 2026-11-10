@@ -143,9 +143,9 @@ impl Drop for TmuxServer {
     }
 }
 
-/// The names of `workspace`'s sessions, as `shoal work status` lists them.
+/// The names of `workspace`'s sessions, as `shoal status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["work", "status", workspace])["sessions"]
+    fixture.ok(&["status", workspace])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -154,7 +154,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["work", "status", workspace])["executions"]
+    fixture.ok(&["status", workspace])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -166,13 +166,13 @@ const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec s
 fn wait_for_agent(fixture: &Fixture, workspace: &str) {
     wait_until("setup to finish with the agent running", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
             .any(|listed| listed["name"] == workspace)
             && executions(fixture, workspace) == 1
-            && fixture.ok(&["work", "status", workspace])["setup_finished"] == true
+            && fixture.ok(&["status", workspace])["setup_finished"] == true
     });
 }
 
@@ -329,7 +329,7 @@ fn a_workspace_title_from_outside_tmux_relabels_the_window_on_its_recorded_serve
         assert!(recorded.get("error").is_none(), "{recorded}");
     }
 
-    fixture.ok(&["work", "rename", "titled", "Login retries"]);
+    fixture.ok(&["rename", "titled", "Login retries"]);
     assert_eq!(tmux.windows(), ["mine", "Login retries"]);
 }
 
@@ -353,8 +353,8 @@ fn chat_rename_relabels_a_tmux_window_that_still_shows_the_old_name() {
     start("talk", &tmux.new_window("talk"));
     start("notes", &tmux.users);
 
-    fixture.ok(&["work", "rename", "talk", "topic"]);
-    fixture.ok(&["work", "rename", "notes", "other"]);
+    fixture.ok(&["rename", "talk", "topic"]);
+    fixture.ok(&["rename", "notes", "other"]);
     assert_eq!(tmux.windows(), ["mine", "topic"]);
 }
 

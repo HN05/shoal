@@ -60,7 +60,7 @@ async fn input_context(
     ))
 }
 
-/// What `view` and `work status` say of the `waiting` runs on the head of the PR
+/// What `view` and `status` say of the `waiting` runs on the head of the PR
 /// at `pr_url` that wait for approval, with how to approve them.
 pub(super) fn waiting_runs_line(pr_url: &str, waiting: usize) -> String {
     let (runs, them) = match waiting {

@@ -17,7 +17,7 @@ pub(in crate::cli::commands) fn losses(chat: &Chat, spaces: &Spaces) -> Vec<Stri
         .collect();
     if !below.is_empty() {
         lines.push(format!(
-            "Removes the spaces below it first, whatever their work or holds; shoal work restore brings each workspace back: {}",
+            "Removes the spaces below it first, whatever their work or holds; shoal restore brings each workspace back: {}",
             below.join(", ")
         ));
     }

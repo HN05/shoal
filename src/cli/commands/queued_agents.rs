@@ -163,7 +163,7 @@ pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
     queue::entries(&ctx.paths).await
 }
 
-/// The entries `shoal work` and `shoal queue` show under `filter`.
+/// The entries `shoal list` and `shoal queue` show under `filter`.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<QueueEntry>> {
     let mut entries = entries(ctx).await?;
     entries.retain(|entry| filter.keeps_entry(entry));

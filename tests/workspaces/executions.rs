@@ -71,7 +71,7 @@ try:
     if mode in ('interrupt', 'stop'):
         import json
         workspace = pathlib.Path(json.loads(subprocess.check_output(
-            [binary, '--json', 'work', 'status', 'terminal'], text=True))['workspace']['path'])
+            [binary, '--json', 'status', 'terminal'], text=True))['workspace']['path'])
         deadline = time.monotonic() + 10
         while not (workspace / 'raw-ready').exists():
             assert child.poll() is None, child.communicate()
@@ -155,7 +155,7 @@ finally:
                 );
             }
         }
-        let workspace = fixture.ok(&["work", "status", "terminal"]);
+        let workspace = fixture.ok(&["status", "terminal"]);
         fs::remove_file(
             Path::new(workspace["workspace"]["path"].as_str().unwrap()).join("raw-ready"),
         )
@@ -228,7 +228,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
     assert_eq!(output.stdout, b"pipe:execute");
     assert_eq!(output.stderr, b"error");
     assert_eq!(
-        fixture.ok(&["work", "status", "execute"])["executions"],
+        fixture.ok(&["status", "execute"])["executions"],
         serde_json::json!([])
     );
     fixture.ok(&["rm", "execute"]);
@@ -293,7 +293,7 @@ fn configured_environment_renders_for_tracked_commands() {
         format!("{}|http://localhost:{}", port["port"], port["port"])
     );
     assert!(cache.ends_with("/.caches/shared/go"), "{cache}");
-    let exported = fixture.ok(&["work", "env", "env-values"]);
+    let exported = fixture.ok(&["internal", "env", "env-values"]);
     assert_eq!(exported["API_PORT"], port["port"].to_string());
     assert_eq!(exported["SESSION"], "env-values");
     assert_eq!(
@@ -334,7 +334,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .spawn()
             .unwrap();
         wait_until("execution registration", || {
-            !fixture.ok(&["work", "status", "running"])["executions"]
+            !fixture.ok(&["status", "running"])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()

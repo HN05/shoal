@@ -178,7 +178,7 @@ impl Manager {
             .with_context(|| format!("no space or restorable workspace {selector}"))?;
         ensure!(
             !removed.checkpoint.files_omitted,
-            "the removal could not keep the uncommitted files; shoal work restore {} opens the workspace here again",
+            "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
             removed.name
         );
         let repo = self.repository(&removed.repository_id).await?;

@@ -23,7 +23,7 @@ use crate::{
     state::WorkspaceState,
 };
 
-/// `shoal work checkpoint`: keep the workspace's current state.
+/// `shoal checkpoint`: keep the workspace's current state.
 pub(super) async fn checkpoint(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
@@ -48,7 +48,7 @@ pub(super) async fn checkpoint(
     Ok(0)
 }
 
-/// `shoal work restore`: return an existing workspace to a checkpoint or choose
+/// `shoal restore`: return an existing workspace to a checkpoint or choose
 /// one, open a removed workspace again, or choose a removed one. Without a
 /// terminal, the choices are listed instead.
 pub(super) async fn run(
@@ -60,7 +60,7 @@ pub(super) async fn run(
     let Some(workspace) = workspace else {
         ensure!(
             !scoped,
-            "workspace processes cannot reopen removed workspaces; shoal work restore <workspace> lists your workspace's checkpoints"
+            "workspace processes cannot reopen removed workspaces; shoal restore <workspace> lists your workspace's checkpoints"
         );
         return choose_removed(ctx).await;
     };
@@ -72,7 +72,7 @@ pub(super) async fn run(
     }
     ensure!(
         !scoped,
-        "workspace processes cannot reopen removed workspaces; ask the user to run shoal work restore"
+        "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
     );
     reopen(ctx, workspace).await
 }

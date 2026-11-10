@@ -19,19 +19,19 @@ every space. Inside a space, commands without a target act on it, or
 on a child workspace when run inside the child's directory; outside one, they
 open a picker on a terminal. A session Shoal did not launch in a managed
 worktree resolves the workspace from its directory, without scope or lifecycle
-tracking; `shoal work` lists the workspaces with their `path`. Leases need a
+tracking; `shoal list` shows the workspaces with their `path`. Leases need a
 managed workspace.
 
-Every space has a number, which `shoal work` and `shoal work status` show. A
+Every space has a number, which `shoal list` and `shoal status` show. A
 command that takes a space selects it by that number, its name or its ID:
 `shoal attach 3`, `--space 3`. Space names are never all digits, so
-`shoal work rename` refuses one. A removed workspace has no number. Approval
+`shoal rename` refuses one. A removed workspace has no number. Approval
 requests and questions are numbered `S.N`: the number of the space that asked,
 then the item's own, such as `3.2`.
 
 A chat in a workspace's worktree (`shoal start --in <workspace>`) reads that
 workspace and changes nothing there: `shoal diff`, `shoal conflicts`,
-`shoal work status` and `shoal branch base` act on the workspace, the commands that
+`shoal status` and `shoal branch base` act on the workspace, the commands that
 also act on chats act on the chat, and `--space <workspace>` reads the
 workspace's issue, PRs and CI runs. Removing the workspace removes the chat.
 
@@ -137,17 +137,17 @@ to the space above or the user.
 ## Follow progress
 
 ```sh
-shoal work            # Spaces, children below their parent; --chats for chats
+shoal list            # Spaces, children below their parent; --chats for chats
 shoal inbox           # Questions, approvals, waiting or failed spaces, ready marks
-shoal work status fix-login
-shoal work log fix-login   # Its log; --all for every event, --follow
+shoal status fix-login
+shoal log fix-login   # Its log; --all for every event, --follow
 shoal alerts
 ```
 
-`work status` names a workspace's base, parent and children, its watched PRs in
+`status` names a workspace's base, parent and children, its watched PRs in
 `prs` with state, merge conflicts, CI results, review state and lookup errors,
-and in `cleanup_reason` why cleanup keeps it. `work` and `work status` show the
-`agent_state` agents' hooks report (`working`, `waiting`, `idle`). `work log`
+and in `cleanup_reason` why cleanup keeps it. `list` and `status` show the
+`agent_state` agents' hooks report (`working`, `waiting`, `idle`). `log`
 lists a space's creation, agent starts and exits, links, PR changes, ready
 marks, completion, questions, approvals, alerts and child spaces, oldest
 first; a removed space is named by its last name.
@@ -157,7 +157,7 @@ scoped callers cannot read them.
 
 ## Space title
 
-`shoal work rename "<title>"` names the space's work; the tabs and windows
+`shoal rename "<title>"` names the space's work; the tabs and windows
 Shoal opens for it show the title instead of its branch or issue number.
 
 ## Progress
@@ -169,7 +169,7 @@ shoal progress --steps < plan.md    # `- [ ] name` / `- [x] name` per line
 ```
 
 `progress` sets the space's status line, one line in the agent's words that
-`work`, `work status` and the PRs the space opened or was assigned show. Claude
+`list`, `status` and the PRs the space opened or was assigned show. Claude
 Code's and Codex's plan tools set the steps through Shoal's hooks; `--steps`
 sets them for other agents. Each open PR's body ends with a section showing
 both, until `shoal ready` removes it. Changes never notify; a coordinator
@@ -234,7 +234,7 @@ from the forge with the same login.
 A space's permissions (`issue_open`, `pr_open`, `issue_other_repositories`,
 `merge`, `push`, `api_writes`) are its agent's mode's under config, each no
 wider than the space above it, then each key a `--permission` given to its
-agent sets; `shoal work status` lists them,
+agent sets; `shoal status` lists them,
 each with where it comes from. A command acting on a space below uses the
 caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
 a permission whatever its mode allows, such as `--permission push=propose`;
@@ -426,7 +426,7 @@ a workspace once every assigned PR has merged and contains HEAD, or without a
 PR once its files are clean and every commit is pushed, on the default branch,
 or on the branch it builds on; a chat whatever PRs it watches. Holds, open
 questions and pending proposals or pushes keep a space. Each removed space but
-a disposable one keeps a checkpoint and its branch, and `shoal work restore`
+a disposable one keeps a checkpoint and its branch, and `shoal restore`
 reopens it. `completion.error` and `pr_cleanup.error` report cleanup or lookup
 failures.
 
@@ -454,8 +454,8 @@ agents placed.
 
 ```sh
 shoal rm <space>
-shoal work checkpoint --name "<what comes next>"
-shoal work restore <workspace> [<number>]
+shoal checkpoint --name "<what comes next>"
+shoal restore <workspace> [<number>]
 shoal cleanup spaces
 shoal cleanup --dry-run
 shoal cleanup caches
@@ -465,7 +465,7 @@ shoal move export <workspace> --yes | shoal move import --resume
 
 Removing a space removes the spaces below it first, held ones included, and
 asks what to do with unmerged work. A checkpoint keeps HEAD and unsaved files;
-Shoal also takes one when an agent exits or is stopped. `work restore` reopens
+Shoal also takes one when an agent exits or is stopped. `restore` reopens
 a removed workspace, or lists an existing one's checkpoints, and with a number
 returns to one after keeping the current state in a new checkpoint; it refuses
 while another command runs in the workspace. `cleanup spaces` removes every
@@ -608,7 +608,7 @@ After a tool call Shoal names processes the space's commands left running
 after their parent exited, such as a failed test run's servers.
 `shoal stop --leftovers` stops them, and `shoal stop --processes` stops every
 process of the workspace Shoal does not track, never the agent or its shells.
-`shoal work setup` reruns the configured setup command and post-setup hook.
+`shoal setup` reruns the configured setup command and post-setup hook.
 
 ## Daemon
 

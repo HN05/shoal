@@ -117,7 +117,7 @@ states!(EventKind {
     SimulatorReleased => "simulator_released",
     /// The workspace took a new name and branch, or a new `title`.
     Renamed => "renamed",
-    /// `shoal work restore` reopened the removed workspace, whose events
+    /// `shoal restore` reopened the removed workspace, whose events
     /// the reopened one took.
     Restored => "restored",
     /// The space's agent started, or started again after a stop.

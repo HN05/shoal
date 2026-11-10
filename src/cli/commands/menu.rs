@@ -1,4 +1,4 @@
-//! The bare `shoal` picker, which `shoal inbox` and `shoal work` also open
+//! The bare `shoal` picker, which `shoal inbox` and `shoal list` also open
 //! on a terminal: a list per view that Tab cycles, reloading its rows from
 //! `shoal internal menu-rows`. Each view binds only the keys that mean
 //! something there. A selection plus key becomes an ordinary [`Command`].

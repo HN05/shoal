@@ -1,4 +1,4 @@
-//! What `shoal resume` and `shoal work restore` print.
+//! What `shoal resume` and `shoal restore` print.
 use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_names::SpaceName;

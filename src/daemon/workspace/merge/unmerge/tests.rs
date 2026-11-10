@@ -161,7 +161,7 @@ async fn a_removed_workspace_is_restored_before_its_merge_is_undone() {
     assert!(
         error
             .to_string()
-            .contains("restore it with shoal work restore worker"),
+            .contains("restore it with shoal restore worker"),
         "{error:#}"
     );
     assert_ne!(f.main(), before);

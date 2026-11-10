@@ -105,10 +105,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     fixture.add("second");
     let first = fixture.ok(&["acquire", "sim", "--workspace", "first"]);
     assert_eq!(first["state"], "leased");
-    assert_eq!(
-        fixture.ok(&["work", "status", "first"])["simulators"][0],
-        first
-    );
+    assert_eq!(fixture.ok(&["status", "first"])["simulators"][0], first);
     assert_eq!(
         fixture.ok(&["acquire", "sim", "--workspace", "first"]),
         first
@@ -144,7 +141,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "first",
     ]);
     assert_eq!(
-        fixture.ok(&["work", "status", "first"])["simulators"],
+        fixture.ok(&["status", "first"])["simulators"],
         serde_json::json!([])
     );
     let second = waiting.wait_with_output().unwrap();

@@ -124,7 +124,7 @@ fn restart_restores_a_chat_in_a_new_place() {
     wait_until("chat restored", || home.join("chat-restored").exists());
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
-    let chats = fixture.ok(&["work", "--chats"]);
+    let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["restore"], Value::Null, "{chats}");
     fixture.ok(&["rm", "talk", "--yes"]);
     wait_zmx_sessions_ended(&home);
@@ -158,13 +158,13 @@ fn restart_gives_a_workspaces_agent_permissions() {
         wait_until("agent to restore", || {
             running.path.join("restored").exists()
         });
-        let status = fixture.ok(&["work", "status", "narrowed"]);
+        let status = fixture.ok(&["status", "narrowed"]);
         assert_eq!(
             &status["workspace"]["narrowing"], given,
             "{args:?}: {status}"
         );
     }
-    let status = fixture.ok(&["work", "status", "narrowed"]);
+    let status = fixture.ok(&["status", "narrowed"]);
     assert_eq!(
         status["permissions"]["merge"]["value"], "direct",
         "{status}"
@@ -182,7 +182,7 @@ fn restart_gives_a_chats_agent_permissions() {
     let fixture = parent_fixture();
     let home = fixture.root.path().to_owned();
     let restored = home.join("chat-restored");
-    let narrowing = || fixture.ok(&["work", "--chats"])[0]["narrowing"].clone();
+    let narrowing = || fixture.ok(&["list", "--chats"])[0]["narrowing"].clone();
     std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
@@ -195,7 +195,7 @@ fn restart_gives_a_chats_agent_permissions() {
         wait_until("chat started", || home.join("chat-started").exists());
         let output = fixture.run(&["restart", "talk", "--permission", "pushes=propose"]);
         assert!(!output.status.success(), "{output:?}");
-        assert_eq!(fixture.ok(&["work", "--chats"])[0]["restore"], Value::Null);
+        assert_eq!(fixture.ok(&["list", "--chats"])[0]["restore"], Value::Null);
         fixture.ok(&["restart", "talk", "--permission", "push=propose"]);
         let (output, transcript) = chat.join().unwrap();
         assert!(output.status.success(), "{output:?}\n{transcript}");

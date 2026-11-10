@@ -58,7 +58,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(imported["workspace"]["name"], "moving");
     assert_eq!(imported["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
     // The agent never reported a session, so it starts as a new agent
     // does, told the workspace moved.
     let record = fixture
@@ -345,7 +345,7 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
     // A checkpoint number names one workspace's checkpoint.
     let refused = here.run(&ssh(&["--checkpoint", "1"]));
     assert!(!refused.status.success());
-    assert_eq!(there.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(there.ok(&["list"]), serde_json::json!([]));
 
     let copied = here.ok(&ssh(&[]));
     assert_eq!(copied["failed"], serde_json::json!([]), "{copied}");
@@ -364,7 +364,7 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
             format!("{name}\n")
         );
     }
-    assert_eq!(here.ok(&["work"]).as_array().unwrap().len(), 2);
+    assert_eq!(here.ok(&["list"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -559,7 +559,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
     assert!(!refused.status.success(), "{refused:?}");
     assert!(rows.is_empty(), "{rows}");
     // An existing directory takes the workspaces the picker selects.
-    let third = fixture.ok(&["work", "status", "third"])["workspace"]["id"]
+    let third = fixture.ok(&["status", "third"])["workspace"]["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -859,12 +859,12 @@ fn a_chat_moves_with_its_session_and_continues_it() {
             )
         });
         wait_until("chat started", || home.join("chat-started").exists());
-        let chats = fixture.ok(&["work", "--chats"]);
+        let chats = fixture.ok(&["list", "--chats"]);
         assert_eq!(chats[0]["session"], "chat-session", "{chats}");
         fs::create_dir_all(&project).unwrap();
         let transcript = project.join("chat-session.jsonl");
         fs::write(&transcript, "{\"turn\":1}\n").unwrap();
-        let status = fixture.ok(&["work", "status", "talk"]);
+        let status = fixture.ok(&["status", "talk"]);
         assert_eq!(
             (
                 &status["transcripts"][0]["path"],
@@ -884,12 +884,12 @@ fn a_chat_moves_with_its_session_and_continues_it() {
             .output()
             .unwrap();
         assert!(!inside.status.success(), "{inside:?}");
-        assert_eq!(fixture.ok(&["work", "--chats"])[0]["name"], "talk");
+        assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
 
         // Ending a chat the user talks with needs a confirmation.
         let unconfirmed = fixture.run(&["move", "export", "talk", "-o", file]);
         assert!(!unconfirmed.status.success(), "{unconfirmed:?}");
-        assert_eq!(fixture.ok(&["work", "--chats"])[0]["name"], "talk");
+        assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
         let exported = fixture.ok(&["move", "export", "talk", "-o", file, "--yes"]);
         assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
         assert_eq!(exported["manifest"]["name"], "talk", "{exported}");
@@ -900,7 +900,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         let (output, transcript) = chat.join().unwrap();
         assert!(output.status.success(), "{output:?}\n{transcript}");
     });
-    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 
     // The importing machine has no transcript; the import puts it back and
     // the chat continues its session under its name, free again.
@@ -1014,7 +1014,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     let restored = fixture
         .command()
         .env_remove("SHOAL_DEV_USER_FILES")
-        .args(["--json", "work", "restore", "unplaced"])
+        .args(["--json", "restore", "unplaced"])
         .output()
         .unwrap();
     assert!(restored.status.success(), "{restored:?}");
@@ -1074,7 +1074,7 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
     let restored = fixture
         .command()
         .env("SHOAL_DEV_USER_FILES", "1")
-        .args(["--json", "work", "restore", workspace])
+        .args(["--json", "restore", workspace])
         .output()
         .unwrap();
     assert!(restored.status.success(), "{restored:?}");

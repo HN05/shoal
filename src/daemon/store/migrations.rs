@@ -523,7 +523,7 @@ pub(super) const CHAT_WORKSPACES: &str =
 pub(super) const DISPOSABLE_WORKSPACES: &str = "ALTER TABLE workspaces ADD COLUMN disposable INTEGER NOT NULL DEFAULT 0 CHECK(disposable IN (0,1));";
 
 /// Whether a workspace was created without its setup, which also skips its
-/// removal hooks until `shoal work setup` runs it.
+/// removal hooks until `shoal setup` runs it.
 pub(super) const SKIPPED_SETUP: &str = "ALTER TABLE workspaces ADD COLUMN setup_skipped INTEGER NOT NULL DEFAULT 0 CHECK(setup_skipped IN (0,1));";
 
 /// Where a workspace without a branch started, and the tag, branch or PR it

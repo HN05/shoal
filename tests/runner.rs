@@ -72,7 +72,7 @@ fn run(root: &Path, args: &[&str]) -> Output {
 }
 
 fn workspaces(root: &Path) -> Vec<Value> {
-    serde_json::from_slice(&run(root, &["--json", "work"]).stdout).unwrap()
+    serde_json::from_slice(&run(root, &["--json", "list"]).stdout).unwrap()
 }
 
 #[test]

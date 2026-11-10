@@ -339,7 +339,7 @@ impl Halt {
 fn restore_steps(workspace: &str, execution: &ExecutionId, removed: bool) -> String {
     let resume = format!("shoal resume {workspace} --execution {execution}");
     if removed {
-        format!("restore with shoal work restore {workspace}, then {resume}")
+        format!("restore with shoal restore {workspace}, then {resume}")
     } else {
         format!("restore with {resume}")
     }

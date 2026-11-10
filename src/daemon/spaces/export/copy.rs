@@ -31,7 +31,7 @@ impl Manager {
             .find(|removed| selector.names(&removed.workspace_id, &removed.name));
         match removed {
             Some(removed) => anyhow::bail!(
-                "workspace {name} was removed, so nothing runs to keep; export it without --keep, or shoal work restore {name} opens it again",
+                "workspace {name} was removed, so nothing runs to keep; export it without --keep, or shoal restore {name} opens it again",
                 name = removed.name
             ),
             None => Err(error),

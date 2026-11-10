@@ -8,11 +8,11 @@ use anyhow::Result;
 
 use super::agents;
 use crate::{
+    client::log::LogTopic,
     client::subscriptions::records::{
         Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
         Topic, WorkspaceRecord,
     },
-    client::work::LogTopic,
     daemon::{
         agent_messages::AgentMessage,
         approvals::DecisionStatus,

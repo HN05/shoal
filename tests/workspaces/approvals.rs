@@ -30,7 +30,7 @@ fn execution_scope_limits_management_and_expires() {
             .output()
             .unwrap()
     };
-    let output = scoped(&["--json", "work"]);
+    let output = scoped(&["--json", "list"]);
     assert!(output.status.success());
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
@@ -61,7 +61,7 @@ fn execution_scope_limits_management_and_expires() {
         .spawn()
         .unwrap();
     wait_until("sibling execution", || sibling_started.exists());
-    let output = scoped(&["work", "setup", "worker"]);
+    let output = scoped(&["setup", "worker"]);
     assert!(!output.status.success(), "{output:?}");
     fixture.ok(&["stop", "worker"]);
     assert!(!sibling.wait().unwrap().success());
@@ -70,7 +70,7 @@ fn execution_scope_limits_management_and_expires() {
         .command()
         .env("SHOAL_OUTPUT", "json")
         .args(["run", "--workspace", "worker", "--", binary])
-        .args(["work", "setup", "worker"])
+        .args(["setup", "worker"])
         .output()
         .unwrap();
     assert!(
@@ -87,7 +87,7 @@ fn execution_scope_limits_management_and_expires() {
         "hookhook"
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "worker"])["executions"],
+        fixture.ok(&["status", "worker"])["executions"],
         serde_json::json!([]),
         "hook survivors must not belong to the invoking execution"
     );
@@ -107,9 +107,9 @@ fn execution_scope_limits_management_and_expires() {
     for args in [
         vec!["rm", "worker", "--yes"],
         vec!["stop", "worker"],
-        vec!["work", "status", "other"],
+        vec!["status", "other"],
         vec!["run", "--workspace", "other", "--", "true"],
-        vec!["work", "setup", "other"],
+        vec!["setup", "other"],
         vec!["link", "pr", "42", "assigned", "--space", "other"],
         vec!["unlink", "pr", "assigned", "--space", "other"],
         vec!["done", "--undo", "other"],
@@ -155,11 +155,11 @@ fn execution_scope_limits_management_and_expires() {
     let output = fixture
         .command()
         .env("SHOAL_SCOPE_TOKEN", token)
-        .args(["work"])
+        .args(["list"])
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -1034,7 +1034,7 @@ fn exported_scopes_request_simulator_approval_before_mutations() {
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("external");
-    let exported = fixture.ok(&["work", "env", "external"]);
+    let exported = fixture.ok(&["internal", "env", "external"]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported).unwrap();
     let acquire = |args: &[&str]| {
@@ -1167,7 +1167,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         "--env",
         "API_PORT",
     ]);
-    let exported = fixture.ok(&["work", "env", "external"]);
+    let exported = fixture.ok(&["internal", "env", "external"]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported.clone()).unwrap();
     assert_eq!(exported["SHOAL_WORKSPACE_ID"], workspace["id"]);
@@ -1195,7 +1195,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         format!("{}|{}", web["port"], api["port"])
     );
     assert!(
-        fixture.ok(&["work", "status", "external"])["executions"]
+        fixture.ok(&["status", "external"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -1210,9 +1210,9 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
             .unwrap()
     };
     for args in [
-        vec!["work", "status"],
+        vec!["status"],
         vec!["leases", "port"],
-        vec!["work", "setup"],
+        vec!["setup"],
         vec!["run", "--", support::shoal_binary(), "leases", "port"],
     ] {
         let output = scoped(&args);
@@ -1222,17 +1222,17 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     // its own.
     let below = scoped(&["start", fixture.repo.to_str().unwrap(), "below"]);
     assert!(below.status.success(), "{below:?}");
-    let below = fixture.ok(&["work", "status", "below"]);
+    let below = fixture.ok(&["status", "below"]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
     for args in [
         vec!["rm", "external", "--yes"],
         vec!["rm", "other", "--yes"],
         vec!["alerts"],
-        vec!["work", "status", "other"],
-        vec!["work", "env"],
-        vec!["work", "env", "other"],
+        vec!["status", "other"],
+        vec!["internal", "env"],
+        vec!["internal", "env", "other"],
         vec![
-            "work",
+            "internal",
             "env",
             "external",
             "--revoke",
@@ -1246,7 +1246,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let output = fixture
         .command()
         .envs(&values)
-        .args(["work", "status", "external"])
+        .args(["status", "external"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -1257,23 +1257,23 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     let fixture = Fixture::new();
     let workspace = fixture.add("external");
     fixture.add("other");
-    let first = fixture.ok(&["work", "env", "external"]);
-    let second = fixture.ok(&["work", "env", "external"]);
+    let first = fixture.ok(&["internal", "env", "external"]);
+    let second = fixture.ok(&["internal", "env", "external"]);
     let first_token = first["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let second_token = second["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let inspect = |token: &str| {
         fixture
             .command()
             .env("SHOAL_SCOPE_TOKEN", token)
-            .args(["work", "status", "external"])
+            .args(["status", "external"])
             .output()
             .unwrap()
     };
-    let wrong_owner = fixture.run(&["work", "env", "other", "--revoke", first_token]);
+    let wrong_owner = fixture.run(&["internal", "env", "other", "--revoke", first_token]);
     assert!(!wrong_owner.status.success());
     assert!(inspect(first_token).status.success());
     assert_eq!(
-        fixture.ok(&["work", "env", "external", "--revoke", first_token])["revoked"],
+        fixture.ok(&["internal", "env", "external", "--revoke", first_token])["revoked"],
         true
     );
     let revoked = inspect(first_token);
@@ -1292,7 +1292,7 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     // The branch had no commits, so removal deleted it too.
     fixture.ok(&["start", fixture.repo.to_str().unwrap(), "external"]);
     assert!(!inspect(second_token).status.success());
-    assert!(fixture.ok(&["work", "env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
+    assert!(fixture.ok(&["internal", "env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
 }
 
 #[test]

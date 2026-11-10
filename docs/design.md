@@ -546,7 +546,7 @@ it exists, can wait too, and no time limit interrupts a read waiting in the
 kernel, so requests and sweeps read worktree files on the blocking pool, where
 a read holds no runtime thread and a check's time limit ends the wait for it.
 The startup audit, its recheck, the sweep's branch observation and cleanup
-checks, the Git reads of `shoal work status`, and the reads of a checkout's or
+checks, the Git reads of `shoal status`, and the reads of a checkout's or
 worktree's config file, which every command that resolves its settings, such
 as `shoal attach`, waits on, check a worktree within 30 seconds, a status
 reporting what it could not read; one that runs out or is interrupted
@@ -563,7 +563,7 @@ observation can read; an unattended removal, deleted-worktree cleanup included,
 is refused while a workspace below it is in a stalled directory, and PR cleanup
 skips a base while one stacked on it is. Listings read
 HEAD for review marks within three seconds in all and skip stalled directories,
-leaving staleness unknown, so `shoal attach` and `shoal work` answer from the
+leaving staleness unknown, so `shoal attach` and `shoal list` answer from the
 daemon's state. Repository pickers start Git only to tell apart repositories
 that share a name, reading their origins at once within three seconds, and
 label one whose origin they cannot read by its recorded source.
@@ -607,7 +607,7 @@ it; when the user's login cannot push there, the user's fork, created or reused,
 becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
 cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
 left for the unattended grace period: no workspace, queued agent, chat, pending
-issue proposal, kept branch or borrowed resource, nothing `shoal work restore` could
+issue proposal, kept branch or borrowed resource, nothing `shoal restore` could
 use, no files a removed chat keeps, and no work in its checkout that the remotes' advertised branches and tags
 lack. The final
 check records the removal in the same transaction, under the gates creation
@@ -674,7 +674,7 @@ conflict, preserving dirty files and Git settings and recording it ready without
 setup or hooks. It takes normal cleanup ownership. Reopening verifies its record;
 adoption cannot repair a moved managed worktree, and repairs one whose metadata was
 replaced only by reclaiming it at its recorded path. Never adopt a main checkout.
-`work adopt --copy` records a preparing workspace before creating a fresh worktree
+`adopt --copy` records a preparing workspace before creating a fresh worktree
 under the repository's Shoal directory, copies the source worktree's files while
 leaving the source in place, removes checkout files the source deleted at any
 depth, and adopts the copy on an available branch derived from the source branch; failures retain a failed record for normal removal.
@@ -777,8 +777,8 @@ stands at its HEAD, its children of either kind go too after the grace period,
 whatever their own work, unless one of their own keep-reasons, or a space still
 below them, keeps them; a child's own `done` follows the usual rules. The parent owns its
 children, so its processes may remove and hold them, except that the user's
-holds anywhere below refuse the removal. `work` lists children below their
-parent, and `work status` names the parent and children of either kind. `shoal start`
+holds anywhere below refuse the removal. `list` shows children below their
+parent, and `status` names the parent and children of either kind. `shoal start`
 is the only command that starts an agent, so `split` creates worktrees alone: a
 workspace process's `start` gives a child an agent of its own through the agent
 queue, and `start --fork` gives it the parent's agent
@@ -853,7 +853,7 @@ setup an interrupted command never started. Failures preserve files, branches, a
 failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.
-`work setup` reruns setup explicitly; nothing retries automatically.
+`setup` reruns setup explicitly; nothing retries automatically.
 Tracked setup starts by copying the repository checkout's ignored files through
 Worktrunk unless `setup.copy_ignored = false`, so local files like `.env` arrive without a
 setup script and failures gate readiness; `.worktreeinclude` selects what to copy.
@@ -881,7 +881,7 @@ Leftovers are reported, not stopped on sight: the cleanup sweep finds every
 space's from one process listing and keeps them in memory, so no tool call
 waits for a scan, and the agent's hook names each new one once, since the agent
 knows whether its own test servers should keep running. They create no
-notification; `shoal work status` lists them for the user.
+notification; `shoal status` lists them for the user.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
@@ -969,7 +969,7 @@ changes, or does not apply cleanly, and an undo that would overwrite ignored fil
 in the default checkout; Shoal makes
 no revert commits. It recreates a branch cleanup deleted, so the commits stay on one.
 Since it runs in the workspace's tracked execution, a workspace cleanup removed is
-restored with `shoal work restore` first; records follow the branch, not the
+restored with `shoal restore` first; records follow the branch, not the
 workspace's ID, so the restored workspace's merge stays undoable.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures;
@@ -1114,12 +1114,12 @@ command, until the command exits, and the command's identity while it lives,
 because macOS hides the environments of its own platform binaries, such as
 shells; an exported environment is recognised only where an ancestor's
 environment is readable. Unscoped callers may export a ready, verified
-workspace's identity, current port variables and a fresh token through `work env`.
+workspace's identity, current port variables and a fresh token through `internal env`.
 Exported tokens persist across restarts until explicitly revoked or the workspace
 is removed; they register no execution and do not prevent cleanup.
 
-Root help groups built-in commands by task; workspace maintenance lives under
-`work`, repository administration under `repo`, moving workspaces to another
+Root help groups built-in commands by task; space maintenance commands such as
+`status`, `log` and `rename` are top-level, repository administration under `repo`, moving workspaces to another
 machine and repositories to another root under `move`, forge inspection and API access under
 `forge`, CI runs and the checks on a PR's head under `ci`, and
 shell integration under `shell`. `run` lists configured commands, runs one by
@@ -1247,7 +1247,7 @@ tab Herdr finds to close, rename or focus. Generic code passes the
 record to the host that reads it and never interprets the data, which for Rex
 is how to reach the server and its CLI. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
-and the daemon the place each execution and chat runs in, which `attach`, `work status`
+and the daemon the place each execution and chat runs in, which `attach`, `status`
 and attach completion ask the host about for every host, together with the
 places Shoal created for each workspace, whose records outlive their sessions;
 the host never calls the daemon. A host
@@ -1437,7 +1437,7 @@ the stopped agent's processes are proven stopped. A restore of an agent stopped
 between turns waits for an update instead, holding no slot and holding back
 nothing, since that agent has nothing to do until one arrives; until then it
 also keeps its workspace from no cleanup, whose removal cancels it and keeps
-the agent stopped for `shoal work restore`. Woken, it is
+the agent stopped for `shoal restore`. Woken, it is
 admitted like a launch once free disk space has recovered, and an update's
 admission holds through later stops. Any other waiting restore keeps the
 agent's slot, so fixed limits let it take that slot back rather than counting it
@@ -1538,7 +1538,7 @@ terminal; noninteractive and JSON calls require it.
 An agent whose executables are not on PATH
 is refused before any work starts and left out of pickers, the workspace menu
 and completion; pickers offer “No agent” to continue without launching one. `config show` reports effective repository values with their winning layers and uses a registered checkout
-before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `work status` shows any space,
+before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `status` shows any space,
 a workspace or a chat, running or stopped, through one path: links, watched PR state,
 completion, sessions and what awaits the user for both, and for a workspace also
 lifecycle, fork-point changes, active work and leases; the daemon looks PRs up on each
@@ -1574,12 +1574,12 @@ redirected or JSON output.
 Bare `shoal` is the one place to see what needs the user and the work going
 on: a plain fzf picker whose inbox view lists open questions, pending approvals,
 agents that need input, failed workspaces and current ready marks, and whose
-work view lists workspaces, followed by a view of recent notifications. It opens
+spaces view lists workspaces, followed by a view of recent notifications. It opens
 on the inbox when that has rows, searching for the current workspace's items
 when it has some; Tab reloads the next view in place, and each view binds only the keys that act on
 its rows, with a key meaning the same wherever it is bound and its header listing
 them by how often each is used. Acting on a row
-runs the command that handles its kind. `inbox` and `work` open the same picker
+runs the command that handles its kind. `inbox` and `list` open the same picker
 on their view, and print for scripts with `--print`, filters, JSON or without a
 terminal. Items that only report status stay out of the inbox, including idle
 agents, which may be waiting for PR activity rather than the user.
@@ -1806,7 +1806,7 @@ another's history: a space keeps its events while it exists and for
 attached files, and a restored workspace takes the removed one's; only its
 high-volume events, its agent's turn states, its progress changes and forge
 activity other than an item's closing, merging and reopening, keep a cap of the newest 500 per space.
-A space's log (`shoal work log`, `client::work::log`) is a filtered view of
+A space's log (`shoal log`, `client::work::log`) is a filtered view of
 this journal, not a second store: renames, restores, agent starts, stops and
 exits, questions, approvals, alerts, and the spaces created and removed below
 a space (in that parent's log) are journal events for it, each recorded where
@@ -1855,7 +1855,7 @@ otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own, messages
 a workspace's agent sends to ask for attention) and the
 CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); `work status` and `daemon status` only count them. Recording never fails the operation it describes,
+terminal's own notifications (OSC 9); `status` and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. What a
@@ -2287,7 +2287,7 @@ one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 is removed or renamed. A chat starts under its default name without asking
 the user for one: its agent learns what the work is and renames the chat with
-`shoal work rename`. Renaming changes the record and the files kept under the
+`shoal rename`. Renaming changes the record and the files kept under the
 name, not the zmx session, which zmx names only at creation. A place that
 hosts a space, a workspace or a chat, takes a new label only while it still
 shows the label Shoal gave it, since another label is the user's: a chat's its
@@ -2829,7 +2829,7 @@ logins, as it merges, also outside a workspace, and refuses workspace
 processes, which stay within their own repository. A workflow file's URL also
 names the branch a run starts on.
 Forges hold the runs of fork and first-time contributors' PRs for approval, which
-leaves such a PR without checks; `view` and `work status` report the waiting runs
+leaves such a PR without checks; `view` and `status` report the waiting runs
 beside the checks, which stay exactly what the forge reports, so watches and
 their wake-ups do not change. Approving lets outside code run, so like merging it
 uses the user's login and is refused to workspace processes. Only GitHub has an
@@ -2873,7 +2873,7 @@ agents' recovery records, with its checkpoint) persists before any file is delet
 removal stays restorable; records of workspaces that still exist are not offered,
 and a retried removal replaces the record with a new checkpoint while the earlier
 one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains
-the workspace. Records expire with their checkpoint. `shoal work restore`
+the workspace. Records expire with their checkpoint. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
 snapshot's files without staging them, links what the record names and saves its
@@ -3048,7 +3048,7 @@ Passing checks wait on the cursor while another check on the PR's head commit is
 pending, since a pass asks nothing of the agent until the rest finish and each
 wake costs it a turn: a check that does not pass delivers them at once, the last
 pending one with itself, and a new head drops them. A check that never finishes
-keeps them held; `work status` shows them meanwhile. Holding happens where the poll
+keeps them held; `status` shows them meanwhile. Holding happens where the poll
 queues activity, so watches and agent hooks report the same updates, and only
 for a PR's checks; the `item_activity` stream reports each one.
 A conflict belongs to the head and base commits it was seen at, so a push or base
@@ -3106,7 +3106,7 @@ lists failed workspaces and untracked worktrees (skipping a repository whose Git
 gate is busy), and the daemon checks its PATH with the shared executable catalog,
 `root_dir`, checkouts, the global config and recorded forge hosts when it starts
 or reloads its config, recording an alert for each problem. Repair is a request
-the commands that need it send: `work adopt` reclaims, `work setup --skip`
+the commands that need it send: `adopt` reclaims, `setup --skip`
 accepts a failed setup, and both restore verified worktrees and clear executions
 proven stopped while preserving work and leases; `stop` stops survivors and asks
 before forgetting an execution it cannot prove ended. Every other command reports

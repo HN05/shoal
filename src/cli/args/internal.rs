@@ -19,6 +19,13 @@ pub enum InternalCommand {
         #[arg(long = "since")]
         after: Option<EventCursor>,
     },
+    /// Export the environment for processes started in a workspace.
+    Env {
+        workspace: Option<SpaceSelector>,
+        /// Revoke a previously exported scope token.
+        #[arg(long)]
+        revoke: Option<crate::client::scope_tokens::ScopeToken>,
+    },
     /// Print a view's rows for the bare `shoal` picker to reload.
     MenuRows { view: commands::menu::View },
     /// Print the fzf actions that switch the bare `shoal` picker to its next view.

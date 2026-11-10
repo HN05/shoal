@@ -37,7 +37,7 @@ fn a_scoped_start_refuses_a_detached_agent_without_zmx_before_creating_the_child
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn start_refuses_an_unavailable_agent_before_creating_the_child() {
         "droid",
     ]);
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn start_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child
     let repo = fixture.repo.to_str().unwrap();
     let output = fixture.run(&["start", repo, "child", "--parent", "parent", "--fork"]);
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 /// The parent's agent starts a child whose agent starts from a fork of its
@@ -117,7 +117,7 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
     // workspace is created.
     let refused = fs::read_to_string(home.join("refused.err")).unwrap();
     assert!(refused.contains("cannot fork a session of pi"), "{refused}");
-    let names = fixture.ok(&["work"]).to_string();
+    let names = fixture.ok(&["list"]).to_string();
     assert!(!names.contains("\"refused\""), "{names}");
     let forked = home.join("forked");
     wait_until("the forked agent start", || forked.exists());
@@ -162,7 +162,7 @@ fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
     assert!(output.status.success(), "{output:?}");
     let home = fixture.root.path();
     let errors = fs::read_to_string(home.join("copy.err")).unwrap();
-    let copy = &fixture.ok(&["work", "status", "parent-copy"])["workspace"];
+    let copy = &fixture.ok(&["status", "parent-copy"])["workspace"];
     assert_eq!(copy["branch"], "parent-copy", "{copy} {errors}");
     assert_eq!(copy["copied_from"]["workspace"]["name"], "parent", "{copy}");
     let path = Path::new(copy["path"].as_str().unwrap());
@@ -207,7 +207,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
         "waiter",
     ]);
     assert!(!output.status.success(), "{output:?}");
-    let child = &fixture.ok(&["work", "status", "child"])["workspace"];
+    let child = &fixture.ok(&["status", "child"])["workspace"];
     assert_eq!(child["state"], "ready", "{child}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
@@ -227,7 +227,7 @@ fn a_scoped_start_refuses_to_run_its_agent_here() {
         String::from_utf8_lossy(&output.stderr).contains("--here"),
         "{output:?}"
     );
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
         install_test_script_with_mode(
             &stub,
             r#"#!/bin/sh
-"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json work status "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
+"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json status "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
 test -f tracked || exit 98
 test -z "$SHOAL_SHELL_DIRECTIVE" || exit 97
 printf '%s\n' "$PWD" "$SHOAL_WORKSPACE" "$@"
@@ -270,7 +270,7 @@ exit 7
         let during: Value = serde_json::from_slice(&fs::read(&inspection).unwrap()).unwrap();
         assert_eq!(during["workspace"]["name"], name);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
-        let after = fixture.ok(&["work", "status", name]);
+        let after = fixture.ok(&["status", name]);
         assert_eq!(after["executions"], serde_json::json!([]));
         let path = after["workspace"]["path"].as_str().unwrap();
         assert!(Path::new(path).join("tracked").exists());
@@ -323,12 +323,7 @@ exit 7
             .unwrap()
     };
     assert!(!add("missing-agent").status.success());
-    assert!(
-        !fixture
-            .run(&["work", "status", "missing-agent"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["status", "missing-agent"]).status.success());
 
     // A launch that fails only once it starts leaves the worktree for retry.
     fs::write(
@@ -338,7 +333,7 @@ exit 7
     .unwrap();
     let output = add("failed-agent");
     assert!(!output.status.success());
-    let workspace = fixture.ok(&["work", "status", "failed-agent"]);
+    let workspace = fixture.ok(&["status", "failed-agent"]);
     assert!(
         Path::new(workspace["workspace"]["path"].as_str().unwrap())
             .join("tracked")
@@ -587,7 +582,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         "m1",
     ]);
     assert!(!output.status.success(), "{output:?}");
-    let workspaces = fixture.ok(&["work"]);
+    let workspaces = fixture.ok(&["list"]);
     assert!(
         !workspaces.to_string().contains("unsupported"),
         "{workspaces}"
@@ -744,7 +739,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
                 )
             );
             assert_eq!(
-                fixture.ok(&["work", "status", "desktop"])["executions"],
+                fixture.ok(&["status", "desktop"])["executions"],
                 serde_json::json!([])
             );
         }
@@ -1253,11 +1248,11 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         );
         if choice == "cancel" {
             assert_eq!(output.status.code(), Some(130), "{output:?}");
-            assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+            assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
-        let inspection = fixture.ok(&["work", "status", "298-pick-agent"]);
+        let inspection = fixture.ok(&["status", "298-pick-agent"]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         if choice == "No agent" {
@@ -1318,7 +1313,7 @@ fn a_picked_agent_without_its_session_host_creates_no_workspace() {
         !output.status.success(),
         "{output:?}\n{transcript}\n{offered}"
     );
-    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
 }
 
 #[test]
@@ -1439,7 +1434,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     }
     assert_eq!(rest, format!("literal {{prompt}}\0{branch}\0"));
     assert_eq!(
-        fixture.ok(&["work", "status", workspace["id"].as_str().unwrap()])["executions"],
+        fixture.ok(&["status", workspace["id"].as_str().unwrap()])["executions"],
         serde_json::json!([])
     );
     assert!(!fixture.root.path().join(".claude.json").exists());
@@ -1489,7 +1484,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap()),
         "Follow custom-add\0user message\0"
     );
-    let before = fixture.ok(&["work"]);
+    let before = fixture.ok(&["list"]);
     let unknown = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
@@ -1498,7 +1493,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "typo",
     ]);
     assert!(!unknown.status.success());
-    assert_eq!(fixture.ok(&["work"]), before);
+    assert_eq!(fixture.ok(&["list"]), before);
 }
 
 /// `--permission` gives the started agent a permission, narrower or wider
@@ -1524,7 +1519,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     ];
     let output = fixture.run(&[&start[..], &given[..]].concat());
     assert_eq!(output.status.code(), Some(7), "{output:?}");
-    let status = fixture.ok(&["work", "status", "narrowed"]);
+    let status = fixture.ok(&["status", "narrowed"]);
     assert_eq!(
         status["workspace"]["narrowing"],
         serde_json::json!({"push": "propose", "merge": "direct"}),
@@ -1544,7 +1539,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
         "{status}"
     );
 
-    let before = fixture.ok(&["work"]);
+    let before = fixture.ok(&["list"]);
     let unknown = [
         "start",
         repo,
@@ -1555,7 +1550,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     ];
     let output = fixture.run(&unknown);
     assert!(!output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["work"]), before);
+    assert_eq!(fixture.ok(&["list"]), before);
     // A chat takes a value wider than its mode's too.
     let chat = [
         "start", "--chat", repo, "--mode", "plan", "--agent", "helper", "--here",
@@ -1566,7 +1561,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
         .args(["--permission", "api_writes=direct"]);
     let (output, transcript) = fixture.interactive_command(&mut command, "");
     assert_eq!(output.status.code(), Some(7), "{output:?}\n{transcript}");
-    let chats = fixture.ok(&["work", "--chats"]);
+    let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(
         chats[0]["narrowing"],
         serde_json::json!({"api_writes": "direct"}),
@@ -1603,7 +1598,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
         "[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'exit 0']\n",
     ));
     let workspace = fixture.add("stopped");
-    let narrowing = || fixture.ok(&["work", "status", "stopped"])["workspace"]["narrowing"].clone();
+    let narrowing = || fixture.ok(&["status", "stopped"])["workspace"]["narrowing"].clone();
     let resume = |args: &[&str]| {
         let resume = [
             "resume",
@@ -1666,7 +1661,7 @@ fn queued_restore_narrowing(args: &[&str]) -> Value {
     assert_eq!(queued["queued"].as_array().unwrap().len(), 1, "{queued}");
     let path = Path::new(workspace["path"].as_str().unwrap());
     wait_until("the restore", || path.join("restored").exists());
-    let status = fixture.ok(&["work", "status", "stopped"]);
+    let status = fixture.ok(&["status", "stopped"]);
     fixture.ok(&["stop", "stopped"]);
     status["workspace"]["narrowing"].clone()
 }
@@ -1703,7 +1698,7 @@ fn resume_changes_the_permissions_a_stopped_chat_was_given() {
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
     fixture.restart();
-    let narrowing = |fixture: &Fixture| fixture.ok(&["work", "--chats"])[0]["narrowing"].clone();
+    let narrowing = |fixture: &Fixture| fixture.ok(&["list", "--chats"])[0]["narrowing"].clone();
     let resume = |fixture: &Fixture, args: &[&str]| {
         let mut command = fixture.command();
         command.args(["resume", "talk", "--focus"]).args(args);
@@ -1755,7 +1750,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
         let workspace: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
         let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
-        let status = fixture.ok(&["work", "status", workspace["name"].as_str().unwrap()]);
+        let status = fixture.ok(&["status", workspace["name"].as_str().unwrap()]);
         (workspace, remove_guidance(&args), status)
     };
     let (workspace, args, status) = start(&["--mode", "triage", "--base", "HEAD"]);
@@ -1780,7 +1775,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
     assert_eq!(status["workspace"]["mode"], "plan", "{status}");
     // A mode no config defines is refused before anything is created, also
     // when a flag decides the kind.
-    let before = fixture.ok(&["work"]);
+    let before = fixture.ok(&["list"]);
     for args in [
         &["start", "38", "--repo", repo, "--mode", "missing"][..],
         &["start", repo, "topic", "--worktree", "--mode", "missing"],
@@ -1791,7 +1786,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
             "{args:?}: {output:?}"
         );
     }
-    assert_eq!(fixture.ok(&["work"]), before);
+    assert_eq!(fixture.ok(&["list"]), before);
     // Outside any checkout, the issue URL names the repository whose mode
     // it is.
     let output = fixture
@@ -1829,7 +1824,7 @@ fn start_puts_a_chat_below_the_parent_it_names() {
         "",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let chats = fixture.ok(&["work", "--chats"]);
+    let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["parent"]["name"], "worker", "{chats}");
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
     // A parent in another repository is refused before the agent picker.
@@ -1863,7 +1858,7 @@ fn start_on_a_terminal_picks_its_mode() {
         ["worker", "chat", "orchestrate", "plan"],
         "{rows}"
     );
-    let chats = fixture.ok(&["work", "--chats"]);
+    let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
     let repo = fixture.repo.to_str().unwrap();
     let (_, rows) = fixture.pick(&["start", repo, "--agent", "claude"], "none", "");
@@ -2300,7 +2295,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     // Setup runs first, so an agent has started once its entry leaves the queue.
     let started = |name: &str| {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -2322,7 +2317,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
         serde_json::json!([])
     );
     // A queued entry creates nothing until it starts.
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 
     // Entries move to a position and leave the queue when cancelled.
     fixture.ok(&["start", repo, "third", "--here", "--agent", "waiter"]);
@@ -2381,7 +2376,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(shared["state"], "queued", "{shared}");
     let ambiguous = fixture.run(&["rm", "first", "--yes"]);
     assert!(!ambiguous.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     fixture.ok(&["rm", shared["id"].as_str().unwrap()]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     fixture.ok(&["stop", "first"]);
@@ -2410,7 +2405,7 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .unwrap();
     wait_until("the first agent start", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -2505,7 +2500,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
         .unwrap();
     wait_until("the first agent start", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -2572,7 +2567,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     let started = fixture.root.path().join("waiter-started");
     wait_until("the detached agent start", || started.exists());
     wait_until("the detached agent's execution", || {
-        fixture.ok(&["work", "status", "detached"])["executions"]
+        fixture.ok(&["status", "detached"])["executions"]
             .as_array()
             .is_some_and(|executions| !executions.is_empty())
     });

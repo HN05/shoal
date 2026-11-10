@@ -19,11 +19,8 @@ pub enum WorkspaceCommand {
         #[arg(short = 'p', long)]
         print: bool,
     },
-    /// List ongoing work, or manage a workspace.
-    #[command(args_conflicts_with_subcommands = true)]
-    Work {
-        #[command(subcommand)]
-        command: Option<WorkCommand>,
+    /// Pick a space from the ongoing work, or print the list.
+    List {
         /// List only the running chats.
         #[arg(long)]
         chats: bool,
@@ -36,6 +33,41 @@ pub enum WorkspaceCommand {
         /// Print the list instead of opening the picker, as filters and JSON do.
         #[arg(short = 'p', long)]
         print: bool,
+    },
+    /// Show a space's activity and issue and PR state, and a workspace's
+    /// changes and resources.
+    ///
+    /// Name a workspace or chat, find the spaces that link an issue, PR or
+    /// CI run, or the workspaces that hold a resource: `status pr 12`,
+    /// `status ci 2765`, `status <issue-PR-or-run-URL>`,
+    /// `status resource <pool-or-member>`.
+    Status {
+        /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
+        /// resource.
+        #[arg(value_name = "TARGET")]
+        space: Option<SpaceSelector>,
+        /// Number, URL, or resource name after pr, issue, ci or resource.
+        #[arg(value_parser = item_reference)]
+        item: Option<String>,
+    },
+    /// Show a space's log: its creation, agent, work, issues and PRs,
+    /// questions, approvals and alerts, and the spaces below it.
+    ///
+    /// Without a space, shows the log of the space this runs in, else
+    /// offers a picker. A removed space is named by its last name while its
+    /// log lasts. Entries print oldest first, by local time.
+    Log {
+        space: Option<SpaceSelector>,
+        /// Show every event Shoal recorded for the space, such as agent
+        /// turn states, forge comments and checks, demos and attached files.
+        #[arg(short = 'A', long)]
+        all: bool,
+        /// Show the newest this many entries.
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=1000))]
+        limit: u32,
+        /// Keep printing new entries as Shoal records them.
+        #[arg(long)]
+        follow: bool,
     },
     /// Enter a workspace, or use - for the one you were in before.
     ///
@@ -65,47 +97,6 @@ pub enum WorkspaceCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-}
-
-pub use crate::config::repo::DesktopApp;
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum WorkCommand {
-    /// Show a space's activity and issue and PR state, and a workspace's
-    /// changes and resources.
-    ///
-    /// Name a workspace or chat, find the spaces that link an issue, PR or
-    /// CI run, or the workspaces that hold a resource: `work status pr
-    /// 12`, `work status ci 2765`, `work status <issue-PR-or-run-URL>`,
-    /// `work status resource <pool-or-member>`.
-    Status {
-        /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
-        /// resource.
-        #[arg(value_name = "TARGET")]
-        space: Option<SpaceSelector>,
-        /// Number, URL, or resource name after pr, issue, ci or resource.
-        #[arg(value_parser = item_reference)]
-        item: Option<String>,
-    },
-    /// Export the environment for processes started in a workspace.
-    Env {
-        workspace: Option<SpaceSelector>,
-        /// Revoke a previously exported scope token.
-        #[arg(long)]
-        revoke: Option<crate::client::scope_tokens::ScopeToken>,
-    },
-    /// Bring an existing worktree under Shoal management, including cleanup.
-    Adopt {
-        /// Existing worktree root; files and Git settings are preserved, setup is skipped.
-        path: PathBuf,
-        /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
-        #[arg(short = 'r', long = "repo")]
-        repository: Option<String>,
-        /// Copy the work into a new worktree under the repository's Shoal directory.
-        #[arg(long)]
-        copy: bool,
-    },
     /// Give a workspace a short title, which the tabs Shoal opens for it
     /// show, or a chat a new name.
     ///
@@ -127,29 +118,29 @@ pub enum WorkCommand {
         #[arg(long, conflicts_with = "space")]
         request: bool,
     },
-    /// Show a space's log: its creation, agent, work, issues and PRs,
-    /// questions, approvals and alerts, and the spaces below it.
-    ///
-    /// Without a space, shows the log of the space this runs in, else
-    /// offers a picker. A removed space is named by its last name while its
-    /// log lasts. Entries print oldest first, by local time.
-    Log {
-        space: Option<SpaceSelector>,
-        /// Show every event Shoal recorded for the space, such as agent
-        /// turn states, forge comments and checks, demos and attached files.
-        #[arg(short = 'A', long)]
-        all: bool,
-        /// Show the newest this many entries.
-        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=1000))]
-        limit: u32,
-        /// Keep printing new entries as Shoal records them.
+    /// Bring an existing worktree under Shoal management, including cleanup.
+    Adopt {
+        /// Existing worktree root; files and Git settings are preserved, setup is skipped.
+        path: PathBuf,
+        /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
+        #[arg(short = 'r', long = "repo")]
+        repository: Option<String>,
+        /// Copy the work into a new worktree under the repository's Shoal directory.
         #[arg(long)]
-        follow: bool,
+        copy: bool,
     },
-    /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.
+    /// Run or retry workspace setup and the post-setup hook.
+    Setup {
+        /// Workspace to use; defaults to the current workspace or picker.
+        workspace: Option<SpaceSelector>,
+        /// Accept a failed setup as it is and mark the verified workspace ready.
+        #[arg(long)]
+        skip: bool,
+    },
+    /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal restore returns to.
     Checkpoint {
         workspace: Option<SpaceSelector>,
-        /// Describe the checkpoint in shoal work restore's list, in at most 200 characters.
+        /// Describe the checkpoint in shoal restore's list, in at most 200 characters.
         #[arg(long)]
         name: Option<String>,
     },
@@ -163,12 +154,6 @@ pub enum WorkCommand {
         #[arg(requires = "workspace")]
         checkpoint: Option<CheckpointNumber>,
     },
-    /// Run or retry workspace setup and the post-setup hook.
-    Setup {
-        /// Workspace to use; defaults to the current workspace or picker.
-        workspace: Option<SpaceSelector>,
-        /// Accept a failed setup as it is and mark the verified workspace ready.
-        #[arg(long)]
-        skip: bool,
-    },
 }
+
+pub use crate::config::repo::DesktopApp;

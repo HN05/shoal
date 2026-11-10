@@ -95,7 +95,7 @@ outputs!(
     crate::demos::Running,
     crate::events::EventItem,
     crate::files::AttachedFile,
-    crate::work::LogEntry,
+    crate::log::LogEntry,
     crate::links::Proposed,
     crate::links::Updates,
     crate::notifications::Cleared,

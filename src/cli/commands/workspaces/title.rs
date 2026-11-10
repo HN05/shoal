@@ -14,8 +14,8 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-/// What `shoal work rename --request` asks the workspace's agent.
-const TITLE_REQUEST: &str = "The user asks you to retitle this workspace: name the work as it stands now in two to five words with `shoal work rename \"<title>\"`.";
+/// What `shoal rename --request` asks the workspace's agent.
+const TITLE_REQUEST: &str = "The user asks you to retitle this workspace: name the work as it stands now in two to five words with `shoal rename \"<title>\"`.";
 
 pub(in crate::cli::commands) async fn title(
     ctx: &Context,
@@ -72,7 +72,7 @@ pub(in crate::cli::commands) async fn request_title(
     let (workspace, agents) = turns::agents_of(ctx, selector).await?;
     ensure!(
         !agents.is_empty(),
-        "{name} has no running agent to ask; set its title with shoal work rename {name} <TITLE>",
+        "{name} has no running agent to ask; set its title with shoal rename {name} <TITLE>",
         name = workspace.name
     );
     let message = TITLE_REQUEST.into();

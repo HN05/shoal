@@ -157,7 +157,7 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     let listed = fixture.ok(&["review", "ls", "agent-only"]);
     assert_eq!(listed[0]["id"].to_string(), id);
     assert_eq!(fixture.ok(&["view", "review", &id])["summary"], "One nit.");
-    let workspaces = fixture.ok(&["work"]);
+    let workspaces = fixture.ok(&["list"]);
     assert_eq!(workspaces[0]["latest_review"]["status"], "finished: 1 nit");
     // Plain view shows it in a repository without a forge, with nothing linked.
     let viewed = fixture.ok(&["view", "--space", "agent-only"]);
@@ -263,7 +263,7 @@ fn review_refers_issues_to_plan_mode() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
 }
 
 #[test]
@@ -391,8 +391,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
             .contains("https://forge.example/api/v1/repos/team/project/pulls/7\n")
     );
     let url = "https://forge.example/team/project/pulls/7";
-    let linked_prs =
-        || fixture.ok(&["work", "status", "stack-top"])["workspace"]["links"]["prs"].clone();
+    let linked_prs = || fixture.ok(&["status", "stack-top"])["workspace"]["links"]["prs"].clone();
     assert_eq!(linked_prs(), serde_json::json!([url]));
     // Opening the PR again relinks it to its owner.
     fixture.ok(&["unlink", "pr", url, "assigned", "--space", "stack-top"]);
@@ -417,7 +416,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
-    let workspace = &fixture.ok(&["work", "status", "stack-top"])["workspace"];
+    let workspace = &fixture.ok(&["status", "stack-top"])["workspace"];
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
     let path_in = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -491,7 +490,7 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
         let (output, transcript) = fixture.interactive_command(fixture.command().args(&args), "");
         assert!(output.status.success(), "{output:?} {transcript}");
     }
-    let workspace = fixture.ok(&["work", "status", "topic"]);
+    let workspace = fixture.ok(&["status", "topic"]);
     assert_eq!(
         workspace["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
@@ -553,7 +552,7 @@ pub(crate) fn forgejo_pull(number: u64, state: &str, head: &str, sha: &str) -> V
 pub(crate) fn wait_removed(fixture: &Fixture, name: &str) {
     try_wait_for(|| {
         (!fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -563,7 +562,7 @@ pub(crate) fn wait_removed(fixture: &Fixture, name: &str) {
     .unwrap_or_else(|| {
         panic!(
             "PR cleanup did not remove workspace: {}",
-            fixture.ok(&["work", "status", name])
+            fixture.ok(&["status", name])
         )
     });
 }
@@ -571,7 +570,7 @@ pub(crate) fn wait_removed(fixture: &Fixture, name: &str) {
 fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
     let mut inspection = Value::Null;
     try_wait_for(|| {
-        inspection = fixture.ok(&["work", "status", name]);
+        inspection = fixture.ok(&["status", name]);
         inspection["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|s| s.contains(message))
@@ -640,7 +639,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
     fixture.ok(&["unlink", "pr", "assigned", "--space", "retain"]);
-    assert!(fixture.ok(&["work", "status", "retain"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "retain"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -652,13 +651,13 @@ fn pr_cleanup_can_be_disabled_independently() {
     fixture.script_github(&github_pr(7, "keep"));
     fixture.ok(&["link", "pr", "7", "assigned", "--space", "keep"]);
     assert_eq!(
-        fixture.ok(&["work", "status", "keep"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", "keep"])["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
     );
     fixture.ok(&["unlink", "pr", "assigned", "--space", "keep"]);
     let output = fixture.acknowledge("keep");
     assert_eq!(output["type"], "error");
-    assert!(fixture.ok(&["work", "status", "keep"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "keep"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -684,9 +683,9 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         )
         .unwrap();
         fixture.restart();
-        assert_eq!(fixture.ok(&["work", "status", name])["pr_cleanup"], record);
+        assert_eq!(fixture.ok(&["status", name])["pr_cleanup"], record);
         assert_eq!(fixture.acknowledge(name)["type"], "error");
-        assert_eq!(fixture.ok(&["work", "status", name])["pr_cleanup"], record);
+        assert_eq!(fixture.ok(&["status", name])["pr_cleanup"], record);
         // Clear remains allowed while disabled, including for a scoped caller.
         assert_eq!(
             fixture.ok(&[
@@ -703,7 +702,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
             serde_json::json!({"registered": false})
         );
         fixture.restart();
-        assert!(fixture.ok(&["work", "status", name])["pr_cleanup"].is_null());
+        assert!(fixture.ok(&["status", name])["pr_cleanup"].is_null());
         let again = fixture.run(&["unlink", "pr", "assigned", "--space", name]);
         assert!(!again.status.success(), "{again:?}");
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
@@ -725,11 +724,11 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
         )
         .unwrap();
         fixture.restart();
-        let output = fixture.run(&["work", "status", "invalid"]);
+        let output = fixture.run(&["status", "invalid"]);
         assert!(!output.status.success());
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
         fixture.ok(&["unlink", "pr", "assigned", "--space", "invalid"]);
-        assert!(fixture.ok(&["work", "status", "invalid"])["pr_cleanup"].is_null());
+        assert!(fixture.ok(&["status", "invalid"])["pr_cleanup"].is_null());
     }
 }
 
@@ -765,7 +764,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     fixture.add("kept");
     let output = fixture.acknowledge("kept");
     assert_eq!(output["type"], "error");
-    assert!(fixture.ok(&["work", "status", "kept"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "kept"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -774,7 +773,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let workspace = fixture.add("watch");
     let failed = fixture.run(&["link", "pr", "56", "assigned", "--space", "watch"]);
     assert!(!failed.status.success());
-    assert!(fixture.ok(&["work", "status", "watch"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "watch"])["pr_cleanup"].is_null());
     git(
         &fixture.repo,
         &[
@@ -793,7 +792,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "watch",
     ]);
     assert!(!failed.status.success());
-    assert!(fixture.ok(&["work", "status", "watch"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "watch"])["pr_cleanup"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -872,7 +871,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     ]);
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["work", "status", "watch"])["pr_cleanup"]["url"],
+        fixture.ok(&["status", "watch"])["pr_cleanup"]["url"],
         "https://github.com/team/repo/pull/56"
     );
     // Watched PRs are looked up once the assignment is done.
@@ -948,7 +947,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
     );
     fixture.ok(&["link", "pr", "56", "assigned", "--space", "forgejo-watch"]);
     // A merge alone waits for the agent's explicit done.
-    assert!(fixture.ok(&["work", "status", "forgejo-watch"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "forgejo-watch"])["completion"].is_null());
     fixture.ok(&["done", "forgejo-watch"]);
     wait_removed(&fixture, "forgejo-watch");
 }
@@ -1042,7 +1041,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     let third = fixture.ok(&["watch", "pr", "--space", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
     assert_eq!(third["updates"][0]["kind"], "merge_conflict");
-    assert!(fixture.ok(&["work", "status", "watch"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "watch"])["completion"].is_null());
     fixture.ok(&["unlink", "pr", "assigned", "--space", "watch"]);
     let missing = fixture.run(&["watch", "pr", "--space", "watch"]);
     assert!(!missing.status.success());
@@ -1207,7 +1206,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         "1",
         "assigned",
     ]);
-    let inspection = fixture.ok(&["work", "status", "items"]);
+    let inspection = fixture.ok(&["status", "items"]);
     assert!(inspection["issue"].is_null());
     assert_eq!(
         inspection["pr_cleanup"]["url"],
@@ -1219,16 +1218,16 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         explicit["updates"][0]["url"],
         "https://github.com/team/project/issues/2"
     );
-    let inspection = fixture.ok(&["work", "status", "items"]);
+    let inspection = fixture.ok(&["status", "items"]);
     assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
     write_issue(&fixture, 1, "relink");
     fixture.ok(&["link", "issue", "1", "assigned", "--space", "items"]);
     fixture.ok(&["unlink", "assigned", "--space", "items"]);
-    assert!(fixture.ok(&["work", "status", "items"])["issue"].is_null());
-    assert!(fixture.ok(&["work", "status", "items"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "items"])["issue"].is_null());
+    assert!(fixture.ok(&["status", "items"])["pr_cleanup"].is_null());
     // With nothing linked, a watch waits for branch conflicts alone.
     let items = PathBuf::from(
-        fixture.ok(&["work", "status", "items"])["workspace"]["path"]
+        fixture.ok(&["status", "items"])["workspace"]["path"]
             .as_str()
             .unwrap(),
     );
@@ -1251,7 +1250,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     fixture.script_github(&fork);
     let explicit = fixture.ok(&["watch", "pr", "7", "--space", "items"]);
     assert_eq!(explicit["updates"].as_array().unwrap().len(), 1);
-    assert!(fixture.ok(&["work", "status", "items"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", "items"])["pr_cleanup"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -1305,7 +1304,7 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
     assert_eq!(updates[0]["kind"], "comment");
     assert_eq!(updates[1]["message"], "rust: success");
     assert_eq!(updates[0]["url"], "https://forge.example/team/repo/pulls/7");
-    let inspection = fixture.ok(&["work", "status", "items"]);
+    let inspection = fixture.ok(&["status", "items"]);
     assert!(inspection["pr_cleanup"].is_null());
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["branch"], "items");
@@ -1359,7 +1358,7 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
     state("open");
     let reopened = fixture.ok(&["watch", "issue", "8", "--space", "issue-watch"]);
     assert_eq!(reopened["updates"][0]["kind"], "reopened");
-    assert!(fixture.ok(&["work", "status", "issue-watch"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "issue-watch"])["completion"].is_null());
 }
 
 #[test]
@@ -1629,7 +1628,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
         check["changed_on_both_sides"],
         serde_json::json!(["version"])
     );
-    let status = fixture.ok(&["work", "status", "worker"]);
+    let status = fixture.ok(&["status", "worker"]);
     assert_eq!(
         status["changed_on_both_sides"]["files"],
         serde_json::json!(["version"])
@@ -1765,7 +1764,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
         "{pr}"
     );
 
-    let status = fixture.ok(&["work", "status", "view"]);
+    let status = fixture.ok(&["status", "view"]);
     assert_eq!(status["issue_status"]["state"], "open");
 
     let brief = fixture.ok(&["view", "pr", "--no-comments", "--space", "view"]);
@@ -1798,7 +1797,7 @@ case "$*" in
 esac
 "#,
     );
-    let (output, transcript) = fixture.terminal_command(fixture.command().arg("work"), "", true);
+    let (output, transcript) = fixture.terminal_command(fixture.command().arg("list"), "", true);
     assert!(output.status.success(), "{transcript}");
     let rows = fs::read_to_string(root.join("view-rows")).unwrap();
     assert_eq!(rows.lines().count(), 2, "{rows}");
@@ -1855,7 +1854,7 @@ cat "$HOME/release" > /dev/null
     fs::write(&release, "").unwrap();
     // Ctrl-O in the chooser opens the chosen item instead.
     let (output, transcript) = fixture.terminal_command(
-        fixture.command().arg("work").env("VIEW_KEY", "ctrl-o"),
+        fixture.command().arg("list").env("VIEW_KEY", "ctrl-o"),
         "",
         true,
     );
@@ -1997,7 +1996,7 @@ cat >/dev/null
     fixture.ok(&["link", "pr", "2", "assigned", "--space", "upper"]);
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
 
@@ -2006,7 +2005,7 @@ cat >/dev/null
     }
     fixture.restart();
     wait_until("restacked upper", || {
-        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()
+        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"].is_null()
     });
     let edits = fs::read_to_string(root.join("edits")).unwrap();
     assert_eq!(edits, "2 main\n");
@@ -2107,7 +2106,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fs::write(root.join("fail"), "commits").unwrap();
     fixture.restart();
     wait_until("recorded merge lookup failure", || {
-        fixture.ok(&["work", "status", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("could not check whether"))
     });
@@ -2118,12 +2117,12 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     write_pr(&fixture, 1, "merged", "lower", "main", &"0".repeat(40));
     fixture.restart();
     wait_until("recorded unmerged base HEAD", || {
-        fixture.ok(&["work", "status", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("do not contain the base workspace's HEAD"))
     });
     assert_eq!(
-        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // A failure after the merge is confirmed is reported: the merged PR now
@@ -2133,21 +2132,21 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     write_pr(&fixture, 1, "merged", "lower", "", head.trim());
     fixture.restart();
     wait_until("reported restack failure", || {
-        fixture.ok(&["work", "status", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("has no head or base branch"))
     });
     assert_eq!(
-        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // Recovery restacks and clears the recorded error.
     write_pr(&fixture, 1, "merged", "lower", "main", head.trim());
     fixture.restart();
     wait_until("restack after recovery", || {
-        let lower = fixture.ok(&["work", "status", "lower"]);
+        let lower = fixture.ok(&["status", "lower"]);
         lower["pr_cleanup"]["error"].is_null()
-            && fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()
+            && fixture.ok(&["status", "upper"])["workspace"]["base_workspace"].is_null()
     });
 }
 
@@ -2212,7 +2211,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     script(&first);
     // An app's request for the head with an agent that can run is refused
     // before anything is created, since the head holds no agent of its own.
-    let before = fixture.ok(&["work"]);
+    let before = fixture.ok(&["list"]);
     let start = shoal_client::protocol::OperationMethod::StartWorkspace {
         repository: fixture.repo.to_str().unwrap().into(),
         start: shoal_client::protocol::operations::WorkspaceStart::PullHead {
@@ -2243,12 +2242,12 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
                 shoal_client::protocol::operations::StartedWorkspace,
             >(&fixture.connector(), start));
     assert!(refused.is_err(), "expected a refusal: {refused:?}");
-    assert_eq!(fixture.ok(&["work"]), before);
+    assert_eq!(fixture.ok(&["list"]), before);
     let output = run(&["review", "run", "--pr", "8", "--agent", "reviewer"]);
     assert!(output.status.success(), "{output:?}");
     let ended = fixture.ok(&["watch", "review", "1"]);
     assert_eq!(ended["head"], first, "{ended}");
-    let workspace = &fixture.ok(&["work", "status", "pr-8"])["workspace"];
+    let workspace = &fixture.ok(&["status", "pr-8"])["workspace"];
     assert_eq!(workspace["branch"], Value::Null);
     assert_eq!(workspace["at"]["made_for"], serde_json::json!({"pr": 8}));
     assert_eq!(workspace["setup_skipped"], true);
@@ -2283,10 +2282,10 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
     fixture.ok(&["watch", "review", &review_number(&output)]);
-    let moved = &fixture.ok(&["work", "status", "pr-8"])["workspace"];
+    let moved = &fixture.ok(&["status", "pr-8"])["workspace"];
     assert_eq!(moved["id"], workspace["id"]);
     assert_eq!(moved["at"]["commit"], second);
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     // A manual review compares the PR's head with its base.
     let output = run(&["review", "run", url, "--manual"]);
     assert!(output.status.success(), "{output:?}");

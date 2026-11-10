@@ -80,7 +80,7 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
         assert!(error.contains("origin remote"), "{error}");
     }
     assert_eq!(started.tmp_dir, root.join(".tmp").join(id));
-    let chats = fixture.ok(&["work", "--chats"]);
+    let chats = fixture.ok(&["list", "--chats"]);
     assert!(!chats[0]["restore"].is_null(), "{chats}");
 
     // Resumed, it runs there again under its name.
@@ -107,7 +107,7 @@ fn run_agent(fixture: &Fixture, args: &[&str]) -> Ran {
         });
         wait_until("chat started", || home.join("chat-started").exists());
         let ran = Ran {
-            chats: fixture.ok(&["work", "--chats"]),
+            chats: fixture.ok(&["list", "--chats"]),
             directory: PathBuf::from(
                 fs::read_to_string(home.join("chat-dir"))
                     .unwrap()

@@ -185,7 +185,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
         .unwrap();
     wait_until("the first agent start", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -278,7 +278,7 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
         "droid",
     ]);
     assert!(!refused.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     // The daemon's cleanup sweep may list sessions of every installed host.
     let calls = zmx_calls(&fixture);
     assert!(calls.iter().all(|call| call[..] == ["list"]), "{calls:?}");

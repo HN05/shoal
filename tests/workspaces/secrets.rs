@@ -49,7 +49,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
     assert!(!home.join("claude-args").exists());
-    let status = fixture.ok(&["work", "status", "proxied"]);
+    let status = fixture.ok(&["status", "proxied"]);
     assert_eq!(status["executions"], serde_json::json!([]), "{status}");
 
     // With it, Claude Code is pointed at the proxy on a loopback port.
@@ -121,7 +121,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         .command()
         .env("AGENT_TOKEN", "inherited")
         .env("SHOAL_SECRET_ENV", "AGENT_TOKEN")
-        .args(["work", "setup", "secrets"])
+        .args(["setup", "secrets"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -209,7 +209,7 @@ fn tool_secrets_reach_only_their_tools() {
         .command()
         .env("PATH", path)
         .env("SHOAL_SECRET_TOOLS", &launchers)
-        .args(["work", "setup", "tool-secrets"])
+        .args(["setup", "tool-secrets"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");

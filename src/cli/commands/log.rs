@@ -1,4 +1,4 @@
-//! `shoal work log`: a space's log, oldest first, a line for each entry
+//! `shoal log`: a space's log, oldest first, a line for each entry
 //! with its local time, a label and its details, under a heading for each
 //! date; `--json` prints each entry as one JSON line.
 use anyhow::Result;
@@ -10,9 +10,9 @@ use crate::{
         ui::{self, Fallback},
     },
     client::{
+        log::{LogEntry, LogFilter, LogTopic},
         space_names::SpaceSelector,
         subscriptions::{Subscription, Update, records::Record},
-        work::{LogEntry, LogFilter, LogTopic},
     },
 };
 
@@ -40,7 +40,7 @@ pub(super) async fn run(
         };
         return follow_log(ctx, topic, &mut printer).await;
     }
-    let entries = crate::client::work::log(&ctx.paths, space, filter, limit).await?;
+    let entries = crate::client::log::log(&ctx.paths, space, filter, limit).await?;
     for entry in &entries {
         printer.print(entry)?;
     }

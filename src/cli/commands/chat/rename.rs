@@ -1,4 +1,4 @@
-//! Renaming a running chat, or asking its agent to, for `shoal work
+//! Renaming a running chat, or asking its agent to, for `shoal
 //! rename`.
 use anyhow::Result;
 
@@ -10,8 +10,8 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-/// What `shoal work rename --request` asks a chat's agent.
-const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal work rename <name>`.";
+/// What `shoal rename --request` asks a chat's agent.
+const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal rename <name>`.";
 
 /// Rename `chat`, by ID or name; the daemon lets a chat's agent rename only
 /// its own chat.

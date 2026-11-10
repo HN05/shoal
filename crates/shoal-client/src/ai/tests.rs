@@ -183,7 +183,7 @@ fn directory_arguments_name_one_directory_each() {
 #[test]
 fn provider_launchers_need_reachable_unique_names() {
     for config in [
-        "[agents.work]\ncommand = ['work']\n",
+        "[agents.list]\ncommand = ['list']\n",
         "[agents.Droid]\ncommand = ['droid']\n",
         "[agents.droid]\ncommand = []\n",
         "[commands]\ndroid = ['droid']\n[agents.droid]\ncommand = ['droid']\n",
@@ -286,7 +286,7 @@ fn launch_profiles_need_a_reachable_base_and_valid_variables() {
         "[agents.direct]\nbase = 'notes'\n[machine.agents.notes]\nskill_dir = '/s'\n",
         "[agents.one]\nbase = 'two'\n[agents.two]\nbase = 'one'\n",
         "[agents.self]\nbase = 'self'\n",
-        "[agents.work]\nbase = 'claude'\n",
+        "[agents.list]\nbase = 'claude'\n",
         "[commands]\ndirect = ['claude']\n[agents.direct]\nbase = 'claude'\n",
         "[agents.direct]\nbase = 'claude'\nenv = { 'bad-name' = 'x' }\n",
         "[agents.direct]\nbase = 'claude'\nenv_remove = ['CLAUDE_CONFIG_DIR']\n",

@@ -253,7 +253,7 @@ async fn handle_setup_failure(
     let name = &workspace.name;
     ensure!(
         ctx.interactive(),
-        "setup failed for {name}: {error}; workspace retained. Retry with `shoal work setup {name}`, skip it with `shoal work setup {name} --skip`, or delete with `shoal rm {name} --yes`"
+        "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, skip it with `shoal setup {name} --skip`, or delete with `shoal rm {name} --yes`"
     );
     eprintln!(
         "{} for {name}: {error}",
@@ -304,7 +304,7 @@ async fn report_setup_verification_failure(
         .as_deref()
         .unwrap_or("process state is unknown");
     let message = format!(
-        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Stop its processes with `shoal stop {name}`, then retry setup with `shoal work setup {name}` or skip it with `shoal work setup {name} --skip`.",
+        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Stop its processes with `shoal stop {name}`, then retry setup with `shoal setup {name}` or skip it with `shoal setup {name} --skip`.",
         workspace.path.display()
     );
     ensure!(ctx.interactive(), "{message}");

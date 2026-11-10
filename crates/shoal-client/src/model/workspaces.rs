@@ -72,7 +72,7 @@ pub struct Workspace {
     /// Whether `shoal done` recorded a completion that is not withdrawn.
     #[serde(default)]
     pub done: bool,
-    /// Whether it was created without setup, which `shoal work setup` runs.
+    /// Whether it was created without setup, which `shoal setup` runs.
     #[serde(default)]
     pub setup_skipped: bool,
     /// Whether every removal deletes it whatever it holds, keeping no

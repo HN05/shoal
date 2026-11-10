@@ -511,7 +511,7 @@ fn daemon_launch(root: &Path) -> Command {
 
 pub(crate) fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
     wait_for("registered execution with a child", || {
-        let inspection = fixture.ok(&["work", "status", workspace]);
+        let inspection = fixture.ok(&["status", workspace]);
         inspection["executions"]
             .as_array()
             .unwrap()

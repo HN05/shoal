@@ -21,7 +21,7 @@ use super::{
     workspace::Manager,
 };
 use crate::{
-    client::{subscriptions::records::Topic, work::LogTopic},
+    client::{log::LogTopic, subscriptions::records::Topic},
     protocol::{Body, ErrorCode, Response},
 };
 use snapshot::{Records, Topics};

@@ -165,9 +165,9 @@ impl Drop for RexServer {
     }
 }
 
-/// The names of `workspace`'s sessions, as `shoal work status` lists them.
+/// The names of `workspace`'s sessions, as `shoal status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["work", "status", workspace])["sessions"]
+    fixture.ok(&["status", workspace])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -176,7 +176,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["work", "status", workspace])["executions"]
+    fixture.ok(&["status", workspace])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -209,7 +209,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     // for the session itself.
     wait_until("the agent to run in its window", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
@@ -220,7 +220,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     // agent keeps running in its block. Setup records its place too, so
     // only once it finished is the one execution the agent's.
     wait_until("setup to finish with the agent running", || {
-        let status = fixture.ok(&["work", "status", "placed"]);
+        let status = fixture.ok(&["status", "placed"]);
         status["setup_finished"] == true
             && status["executions"]
                 .as_array()
@@ -272,13 +272,13 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     launch(&["start", repo, "placed", "--agent", "pi"]);
     wait_until("setup to finish with the agent running", || {
         fixture
-            .ok(&["work"])
+            .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
             .any(|workspace| workspace["name"] == "placed")
             && executions(&fixture, "placed") == 1
-            && fixture.ok(&["work", "status", "placed"])["setup_finished"] == true
+            && fixture.ok(&["status", "placed"])["setup_finished"] == true
     });
     // The split names itself, never the caller's window.
     assert_eq!(rex.windows(&session), windows);
@@ -326,11 +326,11 @@ fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
     assert_eq!(response["type"], "chat", "{response}");
 
     label("talk");
-    fixture.ok(&["work", "rename", "talk", "topic"]);
+    fixture.ok(&["rename", "talk", "topic"]);
     assert_eq!(rex.windows(&session), ["topic"]);
     // A name the user gave stays.
     label("notes");
-    fixture.ok(&["work", "rename", "topic", "other"]);
+    fixture.ok(&["rename", "topic", "other"]);
     assert_eq!(rex.windows(&session), ["notes"]);
 }
 
@@ -362,11 +362,11 @@ fn a_workspace_title_relabels_a_block_that_still_shows_its_label() {
     // Shoal labelled the block with the branch, as the workspace had no
     // title.
     label("titled");
-    fixture.ok(&["work", "rename", "titled", "Login retries"]);
+    fixture.ok(&["rename", "titled", "Login retries"]);
     assert_eq!(rex.windows(&session), ["Login retries"]);
     // A name the user gave stays.
     label("notes");
-    fixture.ok(&["work", "rename", "titled", "Login backoff"]);
+    fixture.ok(&["rename", "titled", "Login backoff"]);
     assert_eq!(rex.windows(&session), ["notes"]);
 }
 

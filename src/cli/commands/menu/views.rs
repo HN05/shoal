@@ -7,7 +7,7 @@ use crate::cli::ui::PickerView;
 #[derive(Clone, Copy, PartialEq, Eq, Debug, clap::ValueEnum)]
 pub(crate) enum View {
     Inbox,
-    Work,
+    Spaces,
     Notifications,
 }
 
@@ -15,7 +15,7 @@ impl View {
     pub(super) fn prompt(self) -> &'static str {
         match self {
             Self::Inbox => "inbox> ",
-            Self::Work => "work> ",
+            Self::Spaces => "spaces> ",
             Self::Notifications => "notifications> ",
         }
     }
@@ -27,14 +27,14 @@ impl View {
             Self::Notifications => {
                 matches!(action, Action::Enter | Action::Status | Action::Add)
             }
-            Self::Work => true,
+            Self::Spaces => true,
         }
     }
 
     pub(super) fn enter_label(self) -> &'static str {
         match self {
             Self::Inbox => "act",
-            Self::Work | Self::Notifications => "cd",
+            Self::Spaces | Self::Notifications => "cd",
         }
     }
 
@@ -42,9 +42,9 @@ impl View {
     /// processes cannot decide what needs the user or read notifications.
     pub(super) fn available(scoped: bool) -> &'static [Self] {
         if scoped {
-            &[Self::Work]
+            &[Self::Spaces]
         } else {
-            &[Self::Inbox, Self::Work, Self::Notifications]
+            &[Self::Inbox, Self::Spaces, Self::Notifications]
         }
     }
 

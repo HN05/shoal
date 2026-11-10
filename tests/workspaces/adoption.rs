@@ -70,7 +70,7 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
         fs::read_to_string(occupied.join("keep")).unwrap(),
         "precious"
     );
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     assert!(!git(&fixture.repo, &["branch", "--list", "rejected"]).contains("rejected"));
 }
 
@@ -97,7 +97,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["--json", "work", "adopt", "existing worktree"])
+        .args(["--json", "adopt", "existing worktree"])
         .output()
         .unwrap();
     assert!(
@@ -115,7 +115,6 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     );
     fixture.restart();
     let again = fixture.ok(&[
-        "work",
         "adopt",
         "~/existing worktree",
         "--repo",
@@ -135,7 +134,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     fixture.ok(&["acquire", "port", "test", "--workspace", "adopt-topic"]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
     assert!(!path.exists());
-    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -174,14 +173,7 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
     fs::write(source.join("tracked"), "changed\n").unwrap();
     fs::write(source.join("untracked"), "new\n").unwrap();
     fs::remove_file(source.join(".gitignore")).unwrap();
-    let output = fixture.ok(&[
-        "work",
-        "adopt",
-        source.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--copy",
-    ]);
+    let output = fixture.ok(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
     assert_eq!(output["branch"], "copy/topic-2");
     let destination = PathBuf::from(output["path"].as_str().unwrap());
     assert!(destination.starts_with(fixture.shoal_dir()));
@@ -237,14 +229,7 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
     let destination =
         Path::new(repositories[0]["workspaces_dir"].as_str().unwrap()).join("copy-topic-2");
 
-    let output = fixture.run(&[
-        "work",
-        "adopt",
-        source.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--copy",
-    ]);
+    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
     assert!(!output.status.success());
     assert!(source.exists());
     assert_eq!(
@@ -270,7 +255,7 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
         fs::read_to_string(occupied.join("tracked")).unwrap(),
         "committed\n"
     );
-    let workspaces = fixture.ok(&["work"]);
+    let workspaces = fixture.ok(&["list"]);
     assert_eq!(workspaces.as_array().unwrap().len(), 1);
     assert_eq!(workspaces[0]["id"], occupied_workspace["id"]);
     assert_eq!(workspaces[0]["path"], occupied_workspace["path"]);
@@ -289,27 +274,13 @@ fn adopt_copy_refuses_a_dangling_symlink_at_the_default_directory() {
         path
     };
     let first = add("copy/first", "first worktree");
-    let output = fixture.ok(&[
-        "work",
-        "adopt",
-        first.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--copy",
-    ]);
+    let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
     let directory = PathBuf::from(output["path"].as_str().unwrap());
     let directory = directory.parent().unwrap();
     let source = add("copy/second", "second worktree");
     let planted = directory.join("copy-second-2");
     std::os::unix::fs::symlink(fixture.root.path().join("missing"), &planted).unwrap();
-    let output = fixture.run(&[
-        "work",
-        "adopt",
-        source.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--copy",
-    ]);
+    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
     assert!(!output.status.success());
     assert!(planted.is_symlink());
     let branches = git(&fixture.repo, &["branch", "--list", "copy/second-2"]);
@@ -329,14 +300,7 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
         fs::canonicalize(path).unwrap()
     };
     let first = add("copy/first", "first worktree");
-    let output = fixture.ok(&[
-        "work",
-        "adopt",
-        first.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--copy",
-    ]);
+    let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
     let directory = PathBuf::from(output["path"].as_str().unwrap())
         .parent()
         .unwrap()
@@ -345,14 +309,7 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
     let source = add("copy/second", "second worktree");
     fs::remove_dir_all(&directory).unwrap();
     std::os::unix::fs::symlink(&source, &directory).unwrap();
-    let output = fixture.run(&[
-        "work",
-        "adopt",
-        source.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--copy",
-    ]);
+    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
     assert!(!output.status.success());
     assert!(!source.join("copy-second-2").exists());
 }
@@ -394,7 +351,7 @@ fn adopt_infers_a_checkout_with_a_separate_git_directory() {
         &checkout,
         &["worktree", "add", "-b", "topic", path.to_str().unwrap()],
     );
-    let adopted = fixture.ok(&["work", "adopt", path.to_str().unwrap()]);
+    let adopted = fixture.ok(&["adopt", path.to_str().unwrap()]);
     assert_eq!(adopted["name"], "topic");
 }
 
@@ -410,7 +367,7 @@ fn adopt_infers_the_repository_from_the_worktree_remote() {
             &clone,
             &["worktree", "add", "-b", "topic", path.to_str().unwrap()],
         );
-        let output = fixture.run(&["work", "adopt", path.to_str().unwrap()]);
+        let output = fixture.run(&["adopt", path.to_str().unwrap()]);
         assert!(!output.status.success());
         String::from_utf8_lossy(&output.stderr).into_owned()
     };
@@ -423,7 +380,7 @@ fn adopt_infers_the_repository_from_the_worktree_remote() {
     );
     let error = adopt("other", "git@github.com:team/other.git");
     assert!(error.contains("pass --repo <repository>"), "{error}");
-    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -454,7 +411,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
             adopted.to_str().unwrap(),
         ],
     );
-    fixture.ok(&["work", "adopt", adopted.to_str().unwrap(), "--repo", repo]);
+    fixture.ok(&["adopt", adopted.to_str().unwrap(), "--repo", repo]);
     for protected in [
         offline.join("nested"),
         Path::new(registration["workspaces_dir"].as_str().unwrap()).join("nested"),
@@ -472,5 +429,5 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
                 .success()
         );
     }
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 }

@@ -132,7 +132,7 @@ pub struct ReviewComment {
 
 impl ForgeRepo {
     /// The item at `url` with its discussion when `comments` is set; PRs also
-    /// carry the state `shoal work status` reports.
+    /// carry the state `shoal status` reports.
     pub async fn view(
         &self,
         account: &Account,

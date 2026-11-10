@@ -81,7 +81,7 @@ impl Stopped {
     }
 
     fn executions(&self, fixture: &Fixture) -> Vec<Value> {
-        let status = fixture.ok(&["work", "status", self.name]);
+        let status = fixture.ok(&["status", self.name]);
         status["executions"].as_array().unwrap().clone()
     }
 
@@ -188,12 +188,12 @@ fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     let workspace = Stopped::new(&fixture, "stopped");
     fixture.ok(&["acquire", "port", "web", "--workspace", "stopped"]);
     fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
-    let before = fixture.ok(&["work", "status", "stopped"]);
+    let before = fixture.ok(&["status", "stopped"]);
     let agent = workspace.start_agent(&fixture);
     let command = workspace.start_command(&fixture);
     workspace.stop(&fixture, vec![agent, command]);
 
-    let after = fixture.ok(&["work", "status", "stopped"]);
+    let after = fixture.ok(&["status", "stopped"]);
     assert_eq!(after["workspace"]["state"], before["workspace"]["state"]);
     assert_eq!(after["ports"].as_array().unwrap().len(), 1, "{after}");
     assert!(

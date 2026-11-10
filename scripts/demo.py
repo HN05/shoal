@@ -57,7 +57,7 @@ def fill(sandbox):
 
 def shell(env):
     print("Shoal development build with sample data. Try `shoal`, `shoal inbox`,\n"
-          "`shoal work` and `shoal questions`. Exit the shell to stop.", flush=True)
+          "`shoal list` and `shoal questions`. Exit the shell to stop.", flush=True)
     program = os.environ.get("SHELL") or "/bin/sh"
     return subprocess.call([program, "-i"], env=env, cwd=env["HOME"])
 

@@ -216,10 +216,10 @@ impl Manager {
         if !options.repair && workspace.state != WorkspaceState::Ready && report.issues.is_empty() {
             report.issues.push(match &workspace.error {
                 Some(error) => format!(
-                    "{error}; to keep the workspace as it is without retrying, accept a failed setup with shoal work setup --skip"
+                    "{error}; to keep the workspace as it is without retrying, accept a failed setup with shoal setup --skip"
                 ),
                 None => format!(
-                    "Workspace is {}; shoal work status shows why",
+                    "Workspace is {}; shoal status shows why",
                     workspace.state
                 ),
             });
@@ -263,7 +263,7 @@ impl Manager {
                     )),
                 },
                 Err(error) => report.issues.push(format!(
-                    "Worktree ownership cannot be verified: {error:#}; if {path} is still this workspace's worktree, reclaim it with shoal work adopt {path}",
+                    "Worktree ownership cannot be verified: {error:#}; if {path} is still this workspace's worktree, reclaim it with shoal adopt {path}",
                     path = workspace.path.display()
                 )),
             }

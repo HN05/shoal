@@ -78,7 +78,7 @@ pub enum Record {
     Message(Message),
     Notification(Notification),
     /// An entry of the space's log the subscription follows.
-    LogEntry(Box<crate::work::LogEntry>),
+    LogEntry(Box<crate::log::LogEntry>),
 }
 
 impl Record {

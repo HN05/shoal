@@ -796,7 +796,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
             .contains(replacement.to_str().unwrap())
     );
     let inspection: Value =
-        serde_json::from_slice(&run(&["--json", "work", "status", "keep-running"]).stdout).unwrap();
+        serde_json::from_slice(&run(&["--json", "status", "keep-running"]).stdout).unwrap();
     assert_eq!(inspection["executions"][0]["state"], "running");
     assert!(execution.try_wait().unwrap().is_none());
     fs::write(&finish, "").unwrap();
@@ -861,8 +861,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     wait_until("execution to reattach", || {
         assert!(execution.try_wait().unwrap().is_none());
         let inspection: Value =
-            serde_json::from_slice(&run(&["--json", "work", "status", "keep-running"]).stdout)
-                .unwrap();
+            serde_json::from_slice(&run(&["--json", "status", "keep-running"]).stdout).unwrap();
         inspection["executions"][0]["state"] == "running"
     });
     fs::write(&finish, "").unwrap();

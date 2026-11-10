@@ -176,7 +176,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         "",
     );
     assert!(caller.status.success(), "{caller:?}");
-    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
     assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
     let calls = herdr_changes(&fixture);
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
@@ -202,7 +202,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     // The tab's shell, not the caller's, enters the workspace after the agent.
     let tab_directive = herdr_tab_directive(&fixture);
-    let workspace = fixture.ok(&["work", "status", "herdr-agent"]);
+    let workspace = fixture.ok(&["status", "herdr-agent"]);
     assert_eq!(
         fs::read_to_string(&tab_directive).unwrap(),
         format!("{}\n", workspace["workspace"]["path"].as_str().unwrap())
@@ -369,7 +369,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
     assert!(transcript.contains("lookup-failed"), "{transcript}");
     assert!(!transcript.contains("Agent>"), "{transcript}");
     assert!(!fixture.root.path().join("herdr-calls").exists());
-    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -536,11 +536,11 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
     }
 }
 
-/// `shoal work rename` run in the tab Shoal opened for `workspace`.
+/// `shoal rename` run in the tab Shoal opened for `workspace`.
 fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
     fixture
         .command()
-        .args(["--json", "work", "rename", workspace, title])
+        .args(["--json", "rename", workspace, title])
         .env("HERDR_ENV", "1")
         .env("HERDR_WORKSPACE_ID", "w1")
         .env("HERDR_TAB_ID", "w1:t9")
@@ -579,7 +579,7 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
         &["tab", "rename", "w1:t9", "Agent tab names"]
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "topic"])["workspace"]["title"],
+        fixture.ok(&["status", "topic"])["workspace"]["title"],
         "Agent tab names"
     );
 
@@ -616,7 +616,7 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     assert!(!refused.status.success());
     // Without a workspace, the title is refused before a picker asks for one.
     let (refused, transcript) =
-        fixture.interactive_command(fixture.command().args(["work", "rename", "   "]), "");
+        fixture.interactive_command(fixture.command().args(["rename", "   "]), "");
     assert!(!refused.status.success());
     assert!(transcript.contains("titles must be"), "{transcript}");
 }
@@ -753,7 +753,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let (worker, transcript) =
         fixture.interactive_command(herdr_worker_command(&fixture).env("SHELL", shell), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
-    let workspace = fixture.ok(&["work", "status", "herdr-shell"]);
+    let workspace = fixture.ok(&["status", "herdr-shell"]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("shell-cwd"))
             .unwrap()
@@ -902,7 +902,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
     wait_for_herdr_close(&fixture);
     wait_until("done cleanup", || {
-        fixture.ok(&["work"]).as_array().unwrap().is_empty()
+        fixture.ok(&["list"]).as_array().unwrap().is_empty()
     });
     // The closed tab's shell never reaches a prompt to consume its directive.
     let directive = herdr_tab_directive(&fixture);
@@ -938,7 +938,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
         fixture.root.path().join("happy-exited").exists()
     });
     wait_until("Happy execution reporting", || {
-        fixture.ok(&["work", "status", "happy-tab"])["executions"]
+        fixture.ok(&["status", "happy-tab"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -947,7 +947,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     fixture.restart();
     fixture.ok(&["done", "happy-tab"]);
     wait_for_herdr_close(&fixture);
-    assert!(fixture.ok(&["work", "status", "happy-tab"])["completion"].is_object());
+    assert!(fixture.ok(&["status", "happy-tab"])["completion"].is_object());
 }
 
 #[test]
@@ -1099,8 +1099,8 @@ fn chat_rename_relabels_a_herdr_tab_that_still_shows_the_old_name() {
     )
     .unwrap();
 
-    fixture.ok(&["work", "rename", "talk", "topic"]);
-    fixture.ok(&["work", "rename", "mine", "other"]);
+    fixture.ok(&["rename", "talk", "topic"]);
+    fixture.ok(&["rename", "mine", "other"]);
     let renames: Vec<_> = herdr_calls(&fixture)
         .into_iter()
         .filter(|call| call.starts_with(&["tab".to_owned(), "rename".to_owned()]))

@@ -49,7 +49,7 @@ fn outside_a_workspace_only_the_directory_placeholder_has_a_value() {
 
 #[test]
 fn built_in_names_are_valid_for_explicit_run() {
-    for name in ["run", "work"] {
+    for name in ["run", "list"] {
         let config = format!("[commands]\n{name} = ['tool']\n");
         assert!(config::repo::parse(&config).is_ok(), "{config}");
     }

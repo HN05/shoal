@@ -45,7 +45,7 @@ fn happy_agents_are_refused_until_enabled() {
         .unwrap();
     assert!(!output.status.success());
     // The refusal comes before any work is created.
-    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         let execution_id = launch["execution_id"].as_str().unwrap();
         let log = PathBuf::from(launch["log"].as_str().unwrap());
         assert!(log.starts_with(fixture.root.path().join("state/workspaces")));
-        let inspection = fixture.ok(&["work", "status", &name]);
+        let inspection = fixture.ok(&["status", &name]);
         let executions = inspection["executions"].as_array().unwrap();
         assert_eq!(executions.len(), 1, "{inspection}");
         assert_eq!(executions[0]["id"], execution_id);
@@ -186,7 +186,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         wait_until("happy to exit", || !process_alive(pid));
         if operation == "stop" {
             assert_eq!(
-                fixture.ok(&["work", "status", &name])["executions"],
+                fixture.ok(&["status", &name])["executions"],
                 serde_json::json!([])
             );
             assert!(log.exists());
@@ -606,7 +606,7 @@ done
         .unwrap();
     assert!(stopped.success());
     wait_until("the daemon to record the chat stopped", || {
-        fixture.ok(&["work", "--chats"])[0]["restore"] == "resume"
+        fixture.ok(&["list", "--chats"])[0]["restore"] == "resume"
     });
     fs::write(fixture.root.path().join("setup-release"), "").unwrap();
     let output = setup.wait_with_output().unwrap();
@@ -727,7 +727,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     // The chat lasts while the session runs, not the command that started it.
     let pid = chat_record["pid"].as_u64().unwrap();
     assert_eq!(
-        fixture.ok(&["work", "--chats"]),
+        fixture.ok(&["list", "--chats"]),
         serde_json::json!([chat_record])
     );
     let log = PathBuf::from(started["log"].as_str().unwrap());
@@ -759,7 +759,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         Command::new("kill").arg(pid.to_string()).status().unwrap();
     }
     wait_until("the chats to stop", || {
-        let chats = fixture.ok(&["work", "--chats"]);
+        let chats = fixture.ok(&["list", "--chats"]);
         let chats = chats.as_array().unwrap();
         !chats.is_empty() && chats.iter().all(|chat| chat["restore"] == "resume")
     });
@@ -822,7 +822,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
         .spawn()
         .unwrap();
     wait_until("the first agent start", || {
-        (fixture.ok(&["work"]).as_array().unwrap().iter())
+        (fixture.ok(&["list"]).as_array().unwrap().iter())
             .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
             && fixture.ok(&["queue"]) == serde_json::json!([])
     });
@@ -843,7 +843,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     assert_eq!(entry["state"], "queued", "{stdout}");
     assert!(!record.exists());
     // It waits as a launch in the workspace it set up, which it keeps.
-    let status = fixture.ok(&["work", "status", "happy"]);
+    let status = fixture.ok(&["status", "happy"]);
     assert_eq!(
         fixture.ok(&["queue"])[0]["opens"],
         status["workspace"]["id"]

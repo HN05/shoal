@@ -132,7 +132,7 @@ async fn move_one(
     };
     let Some(chat) = chat else {
         return Err(error.context(format!(
-            "{name} is removed here; shoal work restore {name} opens it here again, unless {} opened it",
+            "{name} is removed here; shoal restore {name} opens it here again, unless {} opened it",
             remote.host
         )));
     };

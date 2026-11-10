@@ -1,4 +1,4 @@
-//! Listing chats, for `shoal work --chats`.
+//! Listing chats, for `shoal list --chats`.
 use anyhow::Result;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     model::Chat,
 };
 
-/// `shoal work --chats`.
+/// `shoal list --chats`.
 pub(in crate::cli::commands) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let chats = listed(ctx, filter).await?;
     let rows = ui::workspace_tree_rows(

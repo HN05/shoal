@@ -1,5 +1,5 @@
 //! Contribution repositories, which Shoal removes once nothing of them is
-//! left: no work, nothing waiting to start, and nothing `shoal work restore`
+//! left: no work, nothing waiting to start, and nothing `shoal restore`
 //! could still bring back.
 use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};

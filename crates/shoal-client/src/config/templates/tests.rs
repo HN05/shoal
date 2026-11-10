@@ -95,7 +95,7 @@ fn assert_layers(system: &str, place_text: &str, rules: &str) {
             .unwrap_or_else(|| panic!("no {text}: {system}"))
     };
     assert!(at(place_text) < at("`shoal done`"), "{system}");
-    assert!(at(place_text) < at("`shoal work rename`"), "{system}");
+    assert!(at(place_text) < at("`shoal rename`"), "{system}");
     assert!(system.ends_with(rules), "{system}");
     assert!(!system.contains('{'), "{system}");
 }

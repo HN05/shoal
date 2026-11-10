@@ -16,7 +16,7 @@ pub enum SubscriptionMethod {
     Subscribe {
         topics: Vec<Topic>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        log: Option<crate::work::LogTopic>,
+        log: Option<crate::log::LogTopic>,
     },
 }
 

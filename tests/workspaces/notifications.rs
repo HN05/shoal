@@ -52,7 +52,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let status = fixture.ok(&["daemon", "status"]);
     assert_eq!(status["daemon"]["unread_notifications"], 3);
     // The listing leaves the count to alerts and status.
-    let list = fixture.run(&["work"]);
+    let list = fixture.run(&["list"]);
     assert!(list.status.success());
     assert!(list.stderr.is_empty(), "{list:?}");
     let scoped = fixture
@@ -123,7 +123,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let all = fixture.ok(&["alerts", "--all", "--limit", "2"]);
     assert_eq!(all.as_array().unwrap().len(), 2);
     assert!(all.as_array().unwrap().iter().all(|n| n["read"] == true));
-    assert_eq!(fixture.run(&["work"]).stderr, b"");
+    assert_eq!(fixture.run(&["list"]).stderr, b"");
     let text = fixture.run(&["alerts", "--all"]);
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
@@ -261,7 +261,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
             &serde_json::json!("PR #12 is ready to merge")
         )]
     );
-    assert!(fixture.ok(&["work", "status", "sender"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "sender"])["completion"].is_null());
 }
 
 #[test]
@@ -425,7 +425,7 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
 fn a_title_request_reaches_only_a_running_agent() {
     let fixture = Fixture::new();
     fixture.add("titled");
-    let output = fixture.run(&["work", "rename", "--request", "titled"]);
+    let output = fixture.run(&["rename", "--request", "titled"]);
     assert!(!output.status.success());
     assert_eq!(fixture.ok(&["messages", "titled"]), serde_json::json!([]));
 
@@ -452,7 +452,7 @@ fn a_title_request_reaches_only_a_running_agent() {
     wait_until("the agent to start", || started.exists());
     // An identical request the agent has not read yet collapses.
     for _ in 0..2 {
-        fixture.ok(&["work", "rename", "--request", "titled"]);
+        fixture.ok(&["rename", "--request", "titled"]);
     }
     let messages = fixture.ok(&["messages", "titled"]);
     assert_eq!(messages.as_array().unwrap().len(), 1, "{messages}");
@@ -617,7 +617,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         .arg(concat!(
             r#""$0" internal agent-state idle >/dev/null && "#,
             r#""$0" internal wake --agent "$1"; woke=$?; "#,
-            r#""$0" work status --json && exit "$woke""#
+            r#""$0" status --json && exit "$woke""#
         ))
         .arg(support::shoal_binary())
         .arg(std::process::id().to_string())
@@ -869,7 +869,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
     fs::write(fixture.root.path().join("report.md"), "No leaks").unwrap();
     let missing = fixture.run(&["done", "audit", "--attach", "/missing/report.md"]);
     assert!(!missing.status.success(), "{missing:?}");
-    assert!(fixture.ok(&["work", "status", "audit"])["completion"].is_null());
+    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
 
     let output = fixture
         .command()
@@ -932,7 +932,7 @@ fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
         .args(["run", "--workspace", "cached", "--", "sh", "-c"])
         .arg(concat!(
             r#""$0" internal agent-state idle --ends-turn claude >/dev/null && "#,
-            r#""$0" work status --json"#
+            r#""$0" status --json"#
         ))
         .arg(support::shoal_binary())
         .env("CLAUDE_CODE_PROMPT_CACHE_TTL", "5m")
@@ -963,7 +963,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     let output = fixture
         .command()
         .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
-        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" --json work status"#)
+        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" --json status"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
@@ -974,7 +974,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
         "{shown}"
     );
     assert!(
-        fixture.ok(&["work", "status", "reporter"])["workspace"]
+        fixture.ok(&["status", "reporter"])["workspace"]
             .get("agent_state")
             .is_none()
     );
@@ -1011,7 +1011,7 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
         .arg(concat!(
             r#"cd "$1/locked/inside" && chmod 000 "$1/locked" && "#,
             r#""$0" internal agent-state waiting >/dev/null; reported=$?; "#,
-            r#"chmod 755 "$1/locked" && cd "$1" && "$0" --json work status && exit $reported"#
+            r#"chmod 755 "$1/locked" && cd "$1" && "$0" --json status && exit $reported"#
         ))
         .arg(support::shoal_binary())
         .arg(outside.path())
@@ -1078,7 +1078,7 @@ fn agent_state_reports_from_an_input_that_never_closes() {
     let output = child.wait_with_output().unwrap();
     assert!(status.is_some_and(|status| status.success()), "{output:?}");
     assert_eq!(
-        fixture.ok(&["work", "status", "reporter"])["workspace"]["agent_state"]["state"],
+        fixture.ok(&["status", "reporter"])["workspace"]["agent_state"]["state"],
         "waiting"
     );
 }
@@ -1126,7 +1126,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     // An outdated mark no longer needs the user.
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert_eq!(
-        fixture.ok(&["work", "status", "reviewed"])["workspace"]["review"][0]["stale"],
+        fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
         true
     );
 
@@ -1141,7 +1141,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         1
     );
     assert!(
-        fixture.ok(&["work", "status", "reviewed"])["workspace"]
+        fixture.ok(&["status", "reviewed"])["workspace"]
             .get("review")
             .is_none()
     );

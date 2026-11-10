@@ -38,7 +38,7 @@ pub struct BranchTarget {
     pub head: String,
 }
 
-/// What `shoal work restore` recreates of a removed workspace until `expires_at`.
+/// What `shoal restore` recreates of a removed workspace until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemovedWorkspace {
     pub workspace_id: SpaceId,
@@ -87,7 +87,7 @@ impl RemovedWorkspace {
     }
 }
 
-/// A workspace `shoal work restore` opened again from its removal record; the
+/// A workspace `shoal restore` opened again from its removal record; the
 /// caller sets it up and links its PRs.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RestoredWorkspace {

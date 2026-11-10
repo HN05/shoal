@@ -46,7 +46,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   code call what applies to both a space (`--space`), and say workspace only
   for what needs a worktree. A command's flag becomes `--space` in the change
   that lets it act on a chat. Command names stay short: `shoal start` starts
-  every agent, in a workspace or a chat, and `shoal work` maintains spaces.
+  every agent, in a workspace or a chat, and a command that maintains a space
+  is top-level, such as `shoal status` and `shoal rename`.
 - Spaces form one tree in `space_parents`: every space has at most one parent,
   a ready workspace or a chat of its own repository, or a chat without a
   repository, which takes children in any, never one below it; any other
@@ -264,7 +265,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.
-- Problems show where the user looks (`inbox`, `alerts`, `work status`, the failing
+- Problems show where the user looks (`inbox`, `alerts`, `status`, the failing
   command's error) and name the command that fixes them; repair preserves work
   and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
   workspace the audit failed once its ownership verifies; the daemon clears an unknown

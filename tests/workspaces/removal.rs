@@ -49,13 +49,13 @@ fn cleanup_removes_idle_candidates_on_request() {
     assert_eq!(report["retained"], serde_json::json!([]));
     assert_eq!(report["kept"], serde_json::json!([]));
     assert!(!Path::new(clean["path"].as_str().unwrap()).exists());
-    let chats = fixture.ok(&["work", "--chats"]);
+    let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats.as_array().unwrap().len(), 1, "{chats}");
     assert_eq!(chats[0]["name"], "talk", "{chats}");
     talking.kill().unwrap();
     talking.wait().unwrap();
     let names: Vec<_> = fixture
-        .ok(&["work"])
+        .ok(&["list"])
         .as_array()
         .unwrap()
         .iter()
@@ -72,27 +72,27 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     fs::write(path.join("notes"), "draft\n").unwrap();
     fixture.ok(&["rm", "scratch", "--yes"]);
     assert!(!path.exists());
-    let removed = fixture.ok(&["work", "restore"]);
+    let removed = fixture.ok(&["restore"]);
     assert_eq!(removed[0]["name"], "scratch");
     assert_eq!(removed[0]["cause"], "manual");
 
-    let restored = fixture.ok(&["work", "restore", "scratch"]);
+    let restored = fixture.ok(&["restore", "scratch"]);
     assert_eq!(restored["workspace"]["name"], "scratch");
     assert_eq!(restored["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
-    let missing = fixture.run(&["work", "restore", "missing"]);
+    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    let missing = fixture.run(&["restore", "missing"]);
     assert!(!missing.status.success());
 
     // The restored workspace keeps the removal's checkpoint, and returns to
     // any checkpoint after keeping the state it replaces.
-    let checkpoints = fixture.ok(&["work", "restore", "scratch"]);
+    let checkpoints = fixture.ok(&["restore", "scratch"]);
     assert_eq!(checkpoints[0]["number"], 1);
     assert_eq!(checkpoints[0]["cause"], "removal");
-    let checkpoint = fixture.ok(&["work", "checkpoint", "scratch", "--name", "draft"]);
+    let checkpoint = fixture.ok(&["checkpoint", "scratch", "--name", "draft"]);
     assert_eq!(checkpoint["number"], 2);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let restored = fixture.ok(&["work", "restore", "scratch", "2"]);
+    let restored = fixture.ok(&["restore", "scratch", "2"]);
     assert_eq!(restored["replaced"]["number"], 3);
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
@@ -115,7 +115,7 @@ fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
         [],
     )
     .unwrap();
-    let removed = fixture.ok(&["work", "restore"]);
+    let removed = fixture.ok(&["restore"]);
     let names: Vec<_> = removed
         .as_array()
         .unwrap()
@@ -140,7 +140,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     fixture.ok(&["rm", "picked", "--yes"]);
     fixture.ok(&["rm", "kept", "--yes"]);
 
-    let (output, rows) = fixture.pick(&["work", "restore"], picked["id"].as_str().unwrap(), "");
+    let (output, rows) = fixture.pick(&["restore"], picked["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
@@ -149,7 +149,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
         "{rows:?}"
     );
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    let removed = fixture.ok(&["work", "restore"]);
+    let removed = fixture.ok(&["restore"]);
     let names: Vec<_> = removed
         .as_array()
         .unwrap()
@@ -158,9 +158,9 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
         .collect();
     assert_eq!(names, ["kept"]);
 
-    fixture.ok(&["work", "checkpoint", "picked", "--name", "draft"]);
+    fixture.ok(&["checkpoint", "picked", "--name", "draft"]);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let (output, rows) = fixture.pick(&["work", "restore", "picked"], "2", "");
+    let (output, rows) = fixture.pick(&["restore", "picked"], "2", "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
@@ -213,12 +213,12 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     agent.wait_with_output().unwrap();
     command.wait_with_output().unwrap();
     assert!(!path.exists());
-    let removed = fixture.ok(&["work", "restore"]);
+    let removed = fixture.ok(&["restore"]);
     let agents = removed[0]["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 1, "{removed}");
     assert_eq!(agents[0]["record"]["agent"], "claude");
 
-    let restored = fixture.ok(&["work", "restore", "removed"]);
+    let restored = fixture.ok(&["restore", "removed"]);
     assert_eq!(restored["warnings"], serde_json::json!([]));
     assert_eq!(restored["workspace"]["path"], workspace["path"]);
     let execution = agents[0]["execution"].as_str().unwrap();
@@ -283,7 +283,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
     assert!(!fixture.run(&["rm", "dirty"]).status.success());
     assert_eq!(fs::read_to_string(file).unwrap(), "keep me");
     assert_eq!(
-        fixture.ok(&["work", "status", "dirty"])["workspace"]["state"],
+        fixture.ok(&["status", "dirty"])["workspace"]["state"],
         "ready"
     );
     fixture.ok(&["rm", "dirty", "--yes"]);
@@ -301,7 +301,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "broken"])["workspace"]["state"],
+        fixture.ok(&["status", "broken"])["workspace"]["state"],
         "failed"
     );
     fixture.ok(&["rm", "broken"]);
@@ -528,7 +528,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let refused = scoped_command(&fixture, "parent", &["rm", "child", "held", "--yes"]);
     assert!(!refused.status.success(), "{refused:?}");
     assert_eq!(
-        fixture.ok(&["work", "status", "child"])["workspace"]["state"],
+        fixture.ok(&["status", "child"])["workspace"]["state"],
         "preparing"
     );
     let removed = scoped_command(&fixture, "parent", &["rm", "child", "--yes"]);
@@ -536,11 +536,11 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let again = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(again.status.success(), "{again:?}");
     assert_eq!(
-        fixture.ok(&["work", "status", "child"])["workspace"]["parent"]["name"],
+        fixture.ok(&["status", "child"])["workspace"]["parent"]["name"],
         "parent"
     );
     assert_eq!(
-        fixture.ok(&["work", "status", "other"])["workspace"]["name"],
+        fixture.ok(&["status", "other"])["workspace"]["name"],
         "other"
     );
 }
@@ -852,7 +852,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
             fs::read_to_string(path.join("tracked")).unwrap(),
             "preserved work\n"
         );
-        assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     }
 }
 
@@ -873,10 +873,10 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     assert_eq!(hold["workspace_id"], workspace["id"]);
     let expected = serde_json::json!([hold]);
     assert_eq!(
-        fixture.ok(&["work", "status", "held"])["workspace"]["holds"],
+        fixture.ok(&["status", "held"])["workspace"]["holds"],
         expected
     );
-    assert_eq!(fixture.ok(&["work"])[0]["holds"], expected);
+    assert_eq!(fixture.ok(&["list"])[0]["holds"], expected);
     assert_eq!(
         fixture.ok(&["leases", "hold", "--workspace", "held"]),
         expected
@@ -988,7 +988,7 @@ fn removing_a_parent_lists_and_removes_its_children() {
     let (yes, prompt) = fixture.interactive(&["rm", "parent"], "y\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!child_path.exists());
-    assert!(!fixture.run(&["work", "status", "child"]).status.success());
+    assert!(!fixture.run(&["status", "child"]).status.success());
 
     fixture.add("parent");
     fixture.ok(&["split", "child", "--workspace", "parent"]);
@@ -1036,7 +1036,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert_eq!(removed["branch_deleted"], true, "{removed}");
     assert!(!path.exists() && !child_path.exists());
     assert!(git(&fixture.repo, &["branch", "--list", "scratch"]).is_empty());
-    assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
 
     // Its removal keeps nothing to export, which refuses a batch before
     // removing any of it.
@@ -1054,5 +1054,5 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
         "--yes",
     ]);
     assert!(!refused.status.success());
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 }

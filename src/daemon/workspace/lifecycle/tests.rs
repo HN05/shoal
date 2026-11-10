@@ -950,7 +950,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
 }
 
 /// Start a process outside any execution that carries `workspace` as its
-/// identity, as hooks and processes started with `shoal work env` do.
+/// identity, as hooks and processes started with `shoal internal env` do.
 fn workspace_process(root: &std::path::Path, workspace: &str) -> tokio::process::Child {
     crate::daemon::test_support::spawn_marked_child(
         crate::daemon::test_support::marked_child()

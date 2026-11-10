@@ -81,7 +81,7 @@ fn only_a_workspace_with_a_checkpoint_is_restorable() {
         name: &name,
     };
     let restorable =
-        |kind, cleanup| (space(kind).removal_notice(cleanup)).contains("shoal work restore topic");
+        |kind, cleanup| (space(kind).removal_notice(cleanup)).contains("shoal restore topic");
     assert!(restorable(SpaceKind::Workspace, Cleanup::Idle));
     assert!(restorable(SpaceKind::Workspace, Cleanup::Parent("parent")));
     assert!(!restorable(SpaceKind::Workspace, Cleanup::DeletedWorktree));
