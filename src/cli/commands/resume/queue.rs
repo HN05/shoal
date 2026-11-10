@@ -145,7 +145,8 @@ pub(super) async fn queue_workspace(
     let last_session = saved.agents.is_empty() && !saved.sessions.is_empty();
     let now = match queuing {
         Queuing::Here { .. } if last_session => {
-            return super::continue_last_session(ctx, &workspace, saved, false, change).await;
+            return super::workspace::continue_last_session(ctx, &workspace, saved, false, change)
+                .await;
         }
         Queuing::Here { .. } => false,
         Queuing::Daemon { now } => now || last_session,

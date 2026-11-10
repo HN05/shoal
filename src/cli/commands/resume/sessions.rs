@@ -77,7 +77,8 @@ pub(super) async fn start_sessions(
                 // Boxed, since `run` calls back into this function.
                 let id = Some(id.clone());
                 let workspace = SpaceSelector::id(&workspace.id);
-                return Box::pin(super::run(ctx, workspace, id, false, true, None)).await;
+                return Box::pin(super::workspace::run(ctx, workspace, id, false, true, None))
+                    .await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Ok(Started::InWrapper) => {

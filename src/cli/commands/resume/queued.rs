@@ -39,7 +39,8 @@ pub async fn start_entry(
         .iter()
         .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
     ensure!(admitted, "the queued restore was cancelled");
-    let restored = super::run(ctx, workspace.clone(), Some(execution), false, true, None).await;
+    let restored =
+        super::workspace::run(ctx, workspace.clone(), Some(execution), false, true, None).await;
     if let Err(error) = &restored {
         queued_agents::fail(ctx, &entry, error).await;
     }
