@@ -221,6 +221,11 @@ jobs:
       # Runner-mounted volume; a plain directory when unmounted.
       CARGO_TARGET_DIR: /ci-target
       RUSTFLAGS: '-D warnings'
+      # As in release.yml: linking the test binary with full debuginfo and
+      # incremental state outgrows the runner LXC's memory and gets rustc killed.
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       # The checkout is shallow, so it fetches the PR's base commit too for
       # the identity test's path filter. A base it cannot fetch runs the test.
