@@ -13,7 +13,12 @@ pub mod usage;
 
 use anyhow::{Context, Result};
 use directories::WorkingDirectory;
-use std::path::Path;
+use identity::Identity;
+use std::{path::Path, time::Duration};
+
+/// How long [`in_directory_besides`] waits for the Git commands this
+/// process runs in the directory to end before it counts them.
+const OWN_GIT_END: Duration = Duration::from_secs(60);
 
 /// Automatic cleanup treats every process using the directory as activity.
 pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
@@ -30,13 +35,12 @@ pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<St
 /// The processes using the directory other than those `excluded` names,
 /// which is read after they are listed: a process started meanwhile that
 /// it covers is among them, and one known to have exited since no longer
-/// uses the directory.
+/// uses the directory. The Git commands this process runs there end first.
 pub async fn in_directory_besides(
     root: &Path,
     excluded: impl Future<Output = Result<Vec<u32>>>,
 ) -> Result<Vec<String>> {
-    let users = DirectoryUsers::default();
-    let users = users.of(root).await?;
+    let users = users_after_own_git(root).await?;
     let excluded = excluded.await?;
     let mut found = Vec::new();
     for (pid, name) in users {
@@ -46,6 +50,28 @@ pub async fn in_directory_besides(
         found.push(format!("{name} (PID {pid})"));
     }
     Ok(found)
+}
+
+/// The processes using the directory once the Git commands this process
+/// runs there, such as the daemon's status reads, and what they started
+/// have ended; those still running after [`OWN_GIT_END`] count.
+async fn users_after_own_git(root: &Path) -> Result<Vec<(u32, String)>> {
+    let deadline = tokio::time::Instant::now() + OWN_GIT_END;
+    loop {
+        let users = DirectoryUsers::default();
+        let found = users.of(root).await?;
+        let own = users.own_git(&found).await?;
+        if own.is_empty() || tokio::time::Instant::now() >= deadline {
+            return Ok(found);
+        }
+        while tokio::time::Instant::now() < deadline
+            && own
+                .iter()
+                .any(|process| identity::alive(process).unwrap_or(true))
+        {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
 }
 
 /// The working directories of this user's processes other than this one,
@@ -78,6 +104,25 @@ impl DirectoryUsers {
             .filter(|process| process.path.starts_with(&root))
             .map(|process| (process.pid, process.name.clone()))
             .collect())
+    }
+
+    /// Those of `users` that are Git commands this process runs, or that
+    /// such a command started.
+    async fn own_git(&self, users: &[(u32, String)]) -> Result<Vec<Identity>> {
+        let listed = self.listed.get_or_try_init(working_directories).await?;
+        let mut own = Vec::new();
+        for (pid, _) in users {
+            let Some(child) = identity::own_child_above(*pid) else {
+                continue;
+            };
+            let git = listed
+                .iter()
+                .any(|process| process.pid == child && process.name == "git");
+            if git && let Some(identity) = identity::capture(*pid)? {
+                own.push(identity);
+            }
+        }
+        Ok(own)
     }
 }
 

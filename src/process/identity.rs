@@ -152,6 +152,24 @@ pub fn parent_of(identity: &Identity) -> Option<u32> {
     platform::parent(identity.pid)
 }
 
+/// The child of this process that the process `pid` is or descends from,
+/// `None` when it descends from none or exits meanwhile.
+pub(super) fn own_child_above(pid: u32) -> Option<u32> {
+    let this = std::process::id();
+    let mut current = pid;
+    for _ in 0..MAX_ANCESTRY {
+        let parent = platform::parent(current)?;
+        if parent == this {
+            return Some(current);
+        }
+        if parent <= 1 {
+            return None;
+        }
+        current = parent;
+    }
+    None
+}
+
 /// The process group of the live process `identity` names, `None` once it
 /// has exited.
 pub fn group_of(identity: &Identity) -> Option<u32> {

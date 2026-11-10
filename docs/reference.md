@@ -2996,7 +2996,8 @@ chat, queued agent launches or a starting CI job, a queued or running review, a 
 operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
-leave those directories first. A [master session](#master-session) or any
+leave those directories first. A Git command the daemon itself runs there is
+waited for, for up to a minute, before it counts. A [master session](#master-session) or any
 other chat without a repository, running or stopped, also refuses the move,
 since it runs in `root_dir` and keeps its temporary directory and attached files
 there, and so do the files a removed one left; remove it first and delete those
