@@ -36,8 +36,8 @@ impl Manager {
         self.verify_rename_source(&workspace, &repo.path).await?;
         git::check_branch_name(Some(&repo.path), branch).await?;
         ensure!(
-            !git::worktrunk::is_reserved_branch_name(branch),
-            "branch name is incompatible with Worktrunk: {branch}"
+            !git::branch::is_reserved_name(branch),
+            "branch name is ambiguous as a Git revision: {branch}"
         );
         if branch == current {
             return Ok(workspace);

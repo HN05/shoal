@@ -15,7 +15,7 @@ use crate::{
         existing_branch::{Branch, ensure_not_checked_out},
         fetch,
         repo::{allocate_branch, clean_branch, upstream},
-        run_isolated as git_run, worktrunk,
+        run_isolated as git_run,
     },
     model::{OpenedWorkspace, PulledBranch, Repository, SyncedRepository, Workspace},
 };
@@ -498,8 +498,8 @@ impl Manager {
     async fn validate_existing_branch(&self, repo: &Repository, branch: &Branch) -> Result<()> {
         let name = &branch.name;
         ensure!(
-            !worktrunk::is_reserved_branch_name(name),
-            "branch name is reserved by Worktrunk: {name}"
+            !git::branch::is_reserved_name(name),
+            "branch name is ambiguous as a Git revision: {name}"
         );
         git::check_branch_name(Some(&repo.path), name).await?;
         if let Some(remote) = &branch.remote {

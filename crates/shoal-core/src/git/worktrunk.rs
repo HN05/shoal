@@ -90,16 +90,6 @@ fn decode_removal(output: &str, workspace_dir: &Path) -> Result<RemovalResult> {
     })
 }
 
-/// Names that cannot portably identify a literal branch through Worktrunk.
-/// Worktrunk 0.81.0 expands `@`; Git treats `HEAD` and full object IDs
-/// specially. Reserve both supported object-ID lengths regardless of the
-/// repository's format. Check the whole name, not individual components:
-/// `topic/HEAD` and `HEAD/topic` are literal branches.
-pub fn is_reserved_branch_name(name: &str) -> bool {
-    matches!(name, "HEAD" | "@")
-        || (matches!(name.len(), 40 | 64) && name.bytes().all(|c| c.is_ascii_hexdigit()))
-}
-
 pub(crate) fn command(repository_dir: &Path, worktrunk_config: &Path) -> Command {
     let mut command = Command::new(Tool::Worktrunk.program());
     command.arg("--config").arg(worktrunk_config);

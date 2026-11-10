@@ -646,9 +646,9 @@ at creation; only `shoal rename` changes it, so a label never shifts under the
 user. The workspace's portable directory name derives from the branch, suffixed while another workspace of any repository has that
 directory name, so a normalization collision touches no existing work. Branch
 conflicts get numeric suffixes on the blocking component only, never changing the
-workspace's name. Names reserved by the Worktrunk
-adapter across supported Git object formats get a leaf suffix on creation and
-an incompatibility error on existing-branch selection. Ownership of a worktree's
+workspace's name. Names Git reads as a revision
+instead of a branch, in either supported object format, get a leaf suffix on
+creation and an error on existing-branch selection. Ownership of a worktree's
 Git admin directory is proven by a marker naming the workspace, written there on
 creation, adoption and verified repair: Git keeps it across moves and drops it
 when the worktree is re-created, so device renumbering, restores and copies keep

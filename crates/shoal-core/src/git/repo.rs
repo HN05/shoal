@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
     fsutil::off_runtime,
-    git::{self, run_isolated as git_run, worktrunk},
+    git::{self, run_isolated as git_run},
     model::{MergePlan, MergePush, MergedBranch, Repository},
 };
 
@@ -41,7 +41,7 @@ pub fn allocate_branch(name: &str, taken: &[String]) -> String {
         let mut candidate = base.clone();
         let mut suffix = 2_u64;
         let last = components.peek().is_none();
-        while (last && worktrunk::is_reserved_branch_name(&candidate))
+        while (last && git::branch::is_reserved_name(&candidate))
             || taken.iter().any(|existing| {
                 existing == &candidate || (last && existing.starts_with(&format!("{candidate}/")))
             })

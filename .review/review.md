@@ -330,10 +330,11 @@ instead of the PR delivery guidance below.
   directory arrived, and let recovery finish a completed move or roll back an
   incomplete one; never delete the source before the records name the destination,
   nor any directory whose identity differs from the recorded one.
-- Worktrunk compatibility is shared across creation and existing-branch selection:
-  reserved names get a leaf suffix on creation and an error on opening; suffixes
-  never change a workspace's name or directory. Adapter outcomes preserve
-  unfamiliar strings without treating them as confirmed branch deletion.
+- Branch names Git reads as revisions are reserved across creation and
+  existing-branch selection: they get a leaf suffix on creation and an error on
+  opening; suffixes never change a workspace's name or directory. Removal
+  outcomes preserve unfamiliar strings without treating them as confirmed
+  branch deletion.
 - A branch rename preserves the recorded path, name and ownership while changing
   the checked-out branch; PR watches and acknowledgements name no
   branch and stay. Reserve intent before changing Git;

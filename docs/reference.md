@@ -651,7 +651,7 @@ and settings. Dirty files are preserved;
 Git keeps the branch's upstream and reflog. Remotes and open PR head branches
 are unchanged. The branch must be free locally and in no other workspace of the
 repository; rename does not choose a suffix. The default branch, branches checked out
-elsewhere, and Worktrunk-reserved names are refused. Scoped callers may rename
+elsewhere, and reserved names are refused. Scoped callers may rename
 their own workspace when no other execution is recorded; unscoped renames
 require no recorded executions. The caller keeps its original environment, and
 new commands receive the renamed identity. PR watches and acknowledgements stay.
@@ -2581,10 +2581,10 @@ the same setup, ownership, and cleanup rules as default locations.
 For new branches, names taken by a local branch, known remote branch, branch
 namespace, or retained Shoal record get `-2`, `-3`, etc. on the leaf; when an
 ancestor blocks it, that component is suffixed (`feature` makes `feature/topic`
-into `feature-2/topic`). Names interpreted specially by the Worktrunk adapter
-(`HEAD`, `@`, or entirely hexadecimal names of exactly 40 or 64 characters) are
-reserved across Git object formats: creation suffixes them, while opening an
-existing branch reports incompatibility. Nested components remain literal.
+into `feature-2/topic`). Names Git reads as a revision
+instead of a branch (`HEAD`, `@`, or entirely hexadecimal names of exactly 40
+or 64 characters, a full object ID in either object format) are reserved:
+creation suffixes them, while opening an existing branch is refused. Nested components remain literal.
 Suffixes never change the derived workspace name.
 
 ### Adopting a worktree

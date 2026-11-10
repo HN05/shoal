@@ -30,6 +30,16 @@ pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Names Git reads as a revision rather than as a branch: `@` is HEAD's
+/// shorthand, Git refuses a branch named `HEAD`, and a full object ID names a
+/// commit. Both object-ID lengths are reserved whatever the repository's
+/// format. The whole name counts, not its components: `topic/HEAD` and
+/// `HEAD/topic` are literal branches.
+pub fn is_reserved_name(name: &str) -> bool {
+    matches!(name, "HEAD" | "@")
+        || (matches!(name.len(), 40 | 64) && name.bytes().all(|c| c.is_ascii_hexdigit()))
+}
+
 /// Create a local branch at `commit`; an existing branch is an error.
 pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
     git::run_isolated(repo, &["branch", "--no-track", "--", name, commit]).await
