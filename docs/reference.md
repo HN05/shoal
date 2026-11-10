@@ -2189,6 +2189,20 @@ Forge reads follow the same rule: processes inside a workspace and a chat's
 agent read issues, PRs, labels, reactions and the forge's capabilities as the
 agent account, anyone else with your own logins.
 
+Git over HTTPS to a host with an `agent_token` uses it too, as the agent
+account, for tracked agents in workspaces and chats and for the pushes Shoal
+runs for them (`shoal pr open` and approved pushes): fetches, pulls and pushes,
+to that host's every repository. Their Git settings clear your credential
+helpers for that host only and add Shoal's own, which asks the daemon for the
+token each time, so a changed token applies at once while a new host applies
+from the agent's next start. The token stays out of the agent's environment and
+Git config, and your helpers neither answer for that host nor save the token;
+while the daemon cannot answer, as during a restart, Git on that host fails
+instead of using your login. Your own terminal, `shoal merge` and the daemon's
+fetches keep your login. A Git profile that sets a credential helper for the
+host, or `credential.helper`, takes precedence, and SSH remotes never ask a
+helper.
+
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
 the agent and its nested commands in any repository; the worktree's config and

@@ -33,7 +33,10 @@ shares one form: as written, `{ env }` from the agent's environment, or `{ cmd }
 run like a secret's command when the agent starts, and Shoal prints no written
 value. Forge changes Shoal
 makes for a workspace act as the agent too, with the host's configured
-`agent_token`. An agent Git profile
+`agent_token`, and so does the Git of agents and of the pushes Shoal runs for
+them over HTTPS to that host, through a credential helper the agent's Git
+settings scope to the host after clearing the user's helpers for it, so the
+token never enters a file, the environment or argv. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs; the push rewrites of the agent's `push` permission

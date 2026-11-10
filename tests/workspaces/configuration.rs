@@ -658,3 +658,40 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     let output = fixture.run(&["claude", "agent-git"]);
     assert!(!output.status.success());
 }
+
+/// An agent's Git over HTTPS to a host with an agent token gets the token
+/// from Shoal's helper, which the user's own helper neither replaces nor
+/// saves; other processes keep the user's login.
+#[test]
+fn agents_git_over_https_uses_the_hosts_agent_token() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.forges.\"git.example.com\"]\ntype = \"forgejo\"\nagent_token = \"agenttoken\"\n",
+    ));
+    let saved = fixture.root.path().join("git-credentials");
+    fs::write(&saved, "https://me:usertoken@git.example.com\n").unwrap();
+    let store = format!("store --file={}", saved.display());
+    git(&fixture.repo, &["config", "credential.helper", &store]);
+    let workspace = fixture.add("agent-login");
+    let worktree = Path::new(workspace["path"].as_str().unwrap());
+    let fill = "printf 'protocol=https\\nhost=git.example.com\\n\\n' | GIT_TERMINAL_PROMPT=0 git credential fill";
+    let approve = "printf 'protocol=https\\nhost=git.example.com\\nusername=token\\npassword=agenttoken\\n\\n' | git credential approve";
+    fs::write(
+        worktree.join(".shoal.toml"),
+        format!("[agents.claude]\ncommand = ['sh', '-c', \"{fill}; {approve}\"]\n"),
+    )
+    .unwrap();
+
+    let agent = fixture.run(&["claude", "agent-login"]);
+    let other = fixture.run(&["run", "--workspace", "agent-login", "--", "sh", "-c", fill]);
+
+    assert!(agent.status.success(), "{agent:?}");
+    let stdout = String::from_utf8(agent.stdout).unwrap();
+    assert!(stdout.contains("password=agenttoken\n"), "{stdout}");
+    assert_eq!(
+        fs::read_to_string(&saved).unwrap(),
+        "https://me:usertoken@git.example.com\n"
+    );
+    assert!(other.status.success(), "{other:?}");
+    let stdout = String::from_utf8(other.stdout).unwrap();
+    assert!(stdout.contains("password=usertoken\n"), "{stdout}");
+}

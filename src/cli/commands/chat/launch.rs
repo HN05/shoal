@@ -230,7 +230,8 @@ impl Launch {
         let token = crate::client::chats::scope(&ctx.paths, chat).await?;
         handoff::report(&Ok(()));
         let profile = settings.launch(&self.agent).environment_with(&model);
-        exec_agent(ctx, home.path(), chat, &token, &command, &profile)
+        let git = agent_logins(ctx)?;
+        exec_agent(ctx, home.path(), chat, &token, &command, &profile, &git)
     }
 }
 
@@ -259,10 +260,19 @@ async fn initial_name(
     }
 }
 
+/// The Git settings that give the chat's agent the agent token of each
+/// forge host with one.
+fn agent_logins(ctx: &Context) -> Result<crate::agent_git::Launch> {
+    let config = crate::config::Config::load(&ctx.paths)?;
+    let mut git = crate::agent_git::Launch::default();
+    git.add_agent_logins(&ctx.paths, config.machine.forges.agent_token_hosts())?;
+    Ok(git)
+}
+
 /// Replace this process with the agent in `path`, so the terminal's signals
 /// reach it alone and the process the daemon recorded for `chat` runs it,
-/// changed by the agent's `profile`. Workspaces the agent opens belong to
-/// the chat.
+/// changed by the agent's `profile` and `git` settings. Workspaces the agent
+/// opens belong to the chat.
 fn exec_agent(
     ctx: &Context,
     path: &Path,
@@ -270,6 +280,7 @@ fn exec_agent(
     token: &ScopeToken,
     command: &[OsString],
     profile: &crate::ai::Environment,
+    git: &crate::agent_git::Launch,
 ) -> Result<i32> {
     let (program, args) = command
         .split_first()
@@ -282,6 +293,7 @@ fn exec_agent(
         .args(args)
         .current_dir(path)
         .envs(crate::env::chat_environment(chat, token, &ctx.paths));
+    git.apply(&mut process);
     profile.apply(&mut process, &ctx.paths.home);
     let error = process.exec();
     Err(error).with_context(|| format!("run {}", program.to_string_lossy()))

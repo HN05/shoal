@@ -566,6 +566,7 @@ async fn prepare_agent_launch(
         settings.agent.git_profile.as_deref(),
         &config.machine.git_profiles,
     )?;
+    git.add_agent_logins(paths, config.machine.forges.agent_token_hosts())?;
     git.add(push_gate.settings());
     Ok(Some(AgentLaunch {
         git,

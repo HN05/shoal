@@ -74,6 +74,14 @@ impl Forges {
             .any(|(name, forge)| name.eq_ignore_ascii_case(host) && forge.agent_token.is_some())
     }
 
+    /// The hosts the agent account has a token of its own for.
+    pub fn agent_token_hosts(&self) -> impl Iterator<Item = &str> {
+        self.0
+            .iter()
+            .filter(|(_, forge)| forge.agent_token.is_some())
+            .map(|(host, _)| host.as_str())
+    }
+
     /// The logins of `whose` tokens, each fetched when a request first
     /// needs it.
     pub fn logins(&self, whose: Whose) -> Logins {

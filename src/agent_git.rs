@@ -1,7 +1,9 @@
-//! The Git settings of agent launches only: the selected Git profile, and
-//! the push rewrites of [`crate::push_gate`].
+//! The Git settings of agent launches only: the selected Git profile, the
+//! agent token logins of [`crate::git_credential`], and the push rewrites of
+//! [`crate::push_gate`].
 use anyhow::{Context, Result};
 
+#[derive(Default)]
 pub struct Launch {
     git: Vec<(String, String)>,
 }
@@ -20,6 +22,18 @@ impl Launch {
         Ok(Self { git })
     }
 
+    /// Add the credential helper for each of `hosts`, the hosts with an
+    /// agent token, that the profile's own credential helper leaves to it.
+    pub fn add_agent_logins<'a>(
+        &mut self,
+        paths: &crate::paths::Paths,
+        hosts: impl IntoIterator<Item = &'a str>,
+    ) -> Result<()> {
+        let logins = crate::git_credential::settings(paths, hosts, &self.git)?;
+        self.git.extend(logins);
+        Ok(())
+    }
+
     /// Add `settings` after the profile's.
     pub fn add(&mut self, settings: &[(String, String)]) {
         self.git.extend_from_slice(settings);
@@ -29,7 +43,7 @@ impl Launch {
     /// precedence over every Git config file. Inherited author and committer
     /// variables would override the profile's identity, so they are dropped
     /// for each identity setting it names.
-    pub fn apply(&self, command: &mut tokio::process::Command) {
+    pub fn apply(&self, command: &mut std::process::Command) {
         if self.git.is_empty() {
             return;
         }

@@ -15,6 +15,7 @@ mod env;
 mod execution;
 mod fsutil;
 mod git;
+mod git_credential;
 mod git_profile;
 mod happy;
 mod hooks;

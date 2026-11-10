@@ -193,7 +193,7 @@ impl AgentLaunch {
     /// and the key the proxy wants. Its own `env_remove` still removes those
     /// defaults.
     fn apply(&self, command: &mut Command, environment: &BTreeMap<String, OsString>) {
-        self.git.apply(command);
+        self.git.apply(command.as_std_mut());
         self.push_gate.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);

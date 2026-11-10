@@ -76,6 +76,9 @@ pub enum Worker<'a> {
     /// Git's remote helper for an agent's pushes; the launcher appends the
     /// remote and URL Git gives it.
     PushGate,
+    /// Git's credential helper for an agent's Git over HTTPS; Git appends
+    /// the operation.
+    GitCredential,
     /// A tracked agent inside a new place a host opened; `records` are
     /// recovery records the launch consumes once it starts. With `close_in`,
     /// the place of that host closes once the workspace is done.
@@ -286,6 +289,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             ]);
         }
         Worker::PushGate => args.push(PUSH_GATE.into()),
+        Worker::GitCredential => args.push(GIT_CREDENTIAL.into()),
         Worker::Session {
             workspace,
             agent,
