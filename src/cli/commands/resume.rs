@@ -2,22 +2,19 @@
 //! It queues restores unless asked to start them now, and restores the
 //! stopped chats at once.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{Queued, Resumed, StoppedCommands};
+use crate::client::output::resume::{Queued, Resumed};
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::waits_in_wrapper;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal},
-    client::recovery::ReconcileOptions,
     config::permissions::PermissionChange,
     execution::recovery::{
-        Copied, LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
-        consume,
+        Copied, LastSession, Record, Recovery, Restored, Saved, SavedCommand, claim,
     },
-    model::{Inspection, Workspace},
+    model::Workspace,
     protocol::ConfigTarget,
-    state::ExecutionState,
 };
 use anyhow::{Context as _, Result, ensure};
 use queue::Queuing;
@@ -225,14 +222,14 @@ pub async fn run(
     let recovery_id = execution
         .as_ref()
         .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].0));
-    reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
+    stale::reconcile(ctx, &inspection, recovery_id).await?;
     inspection =
         crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
     let workspace = &inspection.workspace;
     let active = |id: &ExecutionId| inspection.executions.iter().any(|e| e.id == *id);
     if saved.agents.is_empty() {
-        let _commands = claim_commands(&mut saved.commands);
-        let report = report_commands(ctx, workspace, &saved.commands)?;
+        let _commands = commands::claim(&mut saved.commands);
+        let report = commands::report(ctx, workspace, &saved.commands)?;
         ctx.show(&report, |_| {})?;
         return Ok(0);
     }
@@ -253,7 +250,7 @@ pub async fn run(
     }
     // The restore claims the commands it reports, which a restore started
     // elsewhere claims for itself.
-    let _commands = claim_commands(&mut saved.commands);
+    let _commands = commands::claim(&mut saved.commands);
     let _claim = claim(&selected)?;
     let recorded = Record::load(&selected)?.context("recovery record was already consumed")?;
     if let Some(reason) = &recorded.stop_reason {
@@ -283,7 +280,7 @@ async fn continue_last_session(
     let _claim = claim(&path)?;
     let last = LastSession::load(&path)?.context("last session was already continued")?;
     let mut commands = saved.commands;
-    let _commands = claim_commands(&mut commands);
+    let _commands = commands::claim(&mut commands);
     if !last.moved {
         eprintln!("shoal: continuing the last {} session", last.agent);
     }
@@ -300,7 +297,7 @@ async fn restore(
     path: PathBuf,
     commands: Vec<SavedCommand>,
 ) -> Result<i32> {
-    let handoff = handoff(&commands);
+    let handoff = commands::handoff(&commands);
     let mut records = vec![path];
     if let Some(copied) = session.copied {
         records.extend(commands.into_iter().map(|command| command.path));
@@ -334,7 +331,7 @@ async fn restore(
     )
     .await?;
     if !commands.is_empty() && !recovery.handoff_delivered {
-        eprintln!("{}", command_list(workspace, &commands));
+        eprintln!("{}", commands::command_list(workspace, &commands));
     }
     records.extend(commands.into_iter().map(|command| command.path));
     launch(ctx, workspace, recovery, records).await
@@ -466,129 +463,15 @@ async fn launch(
     .await
 }
 
-/// A daemon restart quarantines interrupted executions as unknown. Recovery
-/// records are still safe to use once the daemon has rechecked that execution's
-/// recorded processes are gone, so make that repair part of resume itself. An
-/// agent whose wrapper waits to restore it is stopped, not active.
-async fn reconcile_stale_execution(
-    ctx: &Context,
-    inspection: &Inspection,
-    selected: Option<&ExecutionId>,
-) -> Result<()> {
-    let Some(selected) = selected else {
-        return Ok(());
-    };
-    let Some(execution) = inspection
-        .executions
-        .iter()
-        .find(|execution| execution.id == *selected)
-    else {
-        return Ok(());
-    };
-    ensure!(
-        execution.state != ExecutionState::Running || execution.stopped.is_some(),
-        "selected execution is active; stop it before resuming"
-    );
-    if execution.state != ExecutionState::Unknown {
-        return Ok(());
-    }
-    let reports = crate::client::recovery::reconcile(
-        &ctx.paths,
-        Some(SpaceSelector::id(&inspection.workspace.id)),
-        ReconcileOptions {
-            repair: true,
-            // A protection handoff is persisted only after Shoal has
-            // decided to stop this agent. The pause path clears the child
-            // identity before the daemon can restart, so the normal
-            // launch-proof acknowledgement is unavailable even though
-            // process scanning still proves that no survivor is visible.
-            acknowledge_stopped: true,
-            ..Default::default()
-        },
-    )
-    .await?;
-    let report = reports
-        .into_iter()
-        .next()
-        .context("daemon returned no reconciliation report")?;
-    ensure!(
-        report
-            .executions
-            .iter()
-            .find(|execution| execution.id == *selected)
-            .is_some_and(|execution| execution.cleared),
-        "selected execution is still unresolved; stop what remains of it with shoal stop, then resume again"
-    );
-    Ok(())
-}
-
-/// Only one resume reports a command; another holding its lock skips it.
-fn claim_commands(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
-    let mut claims = Vec::new();
-    commands.retain(|command| match claim(&command.path) {
-        Ok(file) => {
-            claims.push(file);
-            true
-        }
-        Err(_) => false,
-    });
-    claims
-}
-
-/// Without an agent to receive them, interrupted commands go to the user once.
-fn report_commands(
-    ctx: &Context,
-    workspace: &Workspace,
-    commands: &[SavedCommand],
-) -> Result<StoppedCommands> {
-    let report = StoppedCommands {
-        workspace: workspace.name.clone(),
-        commands: commands
-            .iter()
-            .map(|command| command.argv.clone())
-            .collect(),
-    };
-    if !commands.is_empty() && !ctx.json {
-        outln!("{}", command_list(workspace, commands));
-    }
-    for command in commands {
-        consume(&command.path)?;
-    }
-    Ok(report)
-}
-
-fn command_list(workspace: &Workspace, commands: &[SavedCommand]) -> String {
-    let mut text = format!("Stopped commands in {}, not restarted:", workspace.name);
-    for command in commands {
-        let mut words = vec!["shoal", "run", "--workspace", &workspace.name, "--"];
-        words.extend(command.argv.iter().map(String::as_str));
-        text.push_str(&format!("\n  {}", crate::shell::quote(&words)));
-    }
-    text
-}
-
-/// The first prompt of a restored session, naming the commands stopped with it.
-fn handoff(commands: &[SavedCommand]) -> Option<String> {
-    if commands.is_empty() {
-        return None;
-    }
-    let mut text = String::from(
-        "Shoal stopped this session. These workspace commands were stopped too and were not restarted:",
-    );
-    for command in commands {
-        text.push_str(&format!("\n- {}", crate::shell::quote(&command.argv)));
-    }
-    text.push_str("\nRerun the ones that are still needed.");
-    Some(text)
-}
-
 mod chats;
+mod commands;
 mod discard;
 pub(super) mod permission_change;
 mod picker;
 pub(super) mod queue;
 pub(super) mod queued;
 mod sessions;
+mod stale;
 mod targets;
 
 #[cfg(test)]

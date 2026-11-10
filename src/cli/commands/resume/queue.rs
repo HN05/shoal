@@ -3,10 +3,7 @@
 use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
 
-use super::{
-    chats, claim_commands, permission_change, reconcile_stale_execution, report_commands,
-    targets::Selected,
-};
+use super::{chats, commands, permission_change, stale, targets::Selected};
 use crate::client::output::{
     batch::Failure,
     resume::{Queued, RestoredChat},
@@ -237,8 +234,8 @@ pub(super) async fn queue_each(
     let mut failed = Vec::new();
     for (workspace, mut saved) in stopped {
         if !saved.restores_outside_wrappers() {
-            let _claims = claim_commands(&mut saved.commands);
-            match report_commands(ctx, &workspace, &saved.commands) {
+            let _claims = commands::claim(&mut saved.commands);
+            match commands::report(ctx, &workspace, &saved.commands) {
                 Ok(report) => commands.push(report),
                 Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
             }
@@ -276,7 +273,7 @@ pub(super) async fn queue(
 ) -> Result<QueueEntry> {
     let inspection =
         crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
-    reconcile_stale_execution(ctx, &inspection, Some(execution)).await?;
+    stale::reconcile(ctx, &inspection, Some(execution)).await?;
     let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
     crate::client::queue::restore(
         &ctx.paths,

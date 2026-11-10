@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{claim_commands, queue, report_commands};
+use super::{commands, queue};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::{Resumed, ResumedAgent};
 use crate::client::space_names::SpaceSelector;
@@ -33,8 +33,8 @@ pub(super) async fn run_all(
     let mut sessions = Vec::new();
     for (workspace, mut saved) in stopped {
         if !saved.restores_outside_wrappers() {
-            let _claims = claim_commands(&mut saved.commands);
-            match report_commands(ctx, &workspace, &saved.commands) {
+            let _claims = commands::claim(&mut saved.commands);
+            match commands::report(ctx, &workspace, &saved.commands) {
                 Ok(report) => resumed.commands.push(report),
                 Err(error) => {
                     let failure = ui::failure(ctx, "resume", &workspace.name, &error);
