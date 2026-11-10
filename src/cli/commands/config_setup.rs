@@ -77,7 +77,6 @@ pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
     chat::Topic {
         relaunch: chat::Relaunch::ConfigSetup,
         name: modes::ModeName::SETUP.into(),
-        asks_name: false,
         mode: modes::ModeName::SETUP,
         subject: Some(Subject::told(subject(config))),
         linked_issue: None,

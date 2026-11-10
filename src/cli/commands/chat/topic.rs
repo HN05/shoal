@@ -18,8 +18,6 @@ pub(in crate::cli::commands) struct Topic {
     pub relaunch: Relaunch,
     /// The chat's default name, suffixed `-2`, `-3`, ... while another holds it.
     pub name: String,
-    /// Whether an interactive start without `--name` asks for the name.
-    pub asks_name: bool,
     /// The mode the agent starts in.
     pub mode: crate::config::modes::ModeName,
     /// What the agent starts on, or `None` to wait for the user.
@@ -43,7 +41,6 @@ impl Topic {
         Self {
             relaunch: Relaunch::start(mode, in_checkout(repo)),
             name: format!("{}-chat", repository::name(repo)),
-            asks_name: true,
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
@@ -59,7 +56,6 @@ impl Topic {
         Self {
             relaunch: Relaunch::start(mode, StartArgs::default()),
             name: mode.to_string(),
-            asks_name: true,
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
@@ -80,7 +76,6 @@ impl Topic {
         Self {
             relaunch: Relaunch::start(mode, place),
             name: format!("{}-chat", workspace.name),
-            asks_name: true,
             mode: mode.clone(),
             subject: None,
             linked_issue: None,

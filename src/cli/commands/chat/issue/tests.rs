@@ -22,7 +22,6 @@ fn a_chat_on_an_issue_is_named_after_it_and_its_mode_without_asking() {
     assert_eq!(topic.mode, "plan");
     assert_eq!(topic.subject.unwrap().issue.unwrap().number, 1211);
     assert_eq!(topic.name, "shoal-plan-1211");
-    assert!(!topic.asks_name);
     let super::super::Relaunch::Start(start) = topic.relaunch else {
         panic!("expected a start");
     };

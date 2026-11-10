@@ -1564,8 +1564,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     command
         .args(chat)
         .args(["--permission", "api_writes=direct"]);
-    // Take the offered chat name.
-    let (output, transcript) = fixture.interactive_command(&mut command, "\n");
+    let (output, transcript) = fixture.interactive_command(&mut command, "");
     assert_eq!(output.status.code(), Some(7), "{output:?}\n{transcript}");
     let chats = fixture.ok(&["work", "--chats"]);
     assert_eq!(

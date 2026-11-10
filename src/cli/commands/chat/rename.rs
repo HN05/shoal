@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{context::Context, terminal, ui},
+    cli::{context::Context, terminal},
     client::space_names::SpaceName,
     model::RenamedChat,
     protocol::ConfigTarget,
@@ -65,14 +65,4 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let places = std::slice::from_ref(place);
     terminal::relabel_space(&settings, places, async |_| labels.clone()).await;
     Ok(())
-}
-
-/// Ask for the chat's name, offering `default`, until the daemon accepts one.
-pub(super) async fn ask_name(ctx: &Context, default: &str) -> Result<SpaceName> {
-    ui::input_until(ctx, "Chat name", Some(default), |name| async move {
-        let name = SpaceName::parse(&name)?;
-        crate::client::chats::check_name(&ctx.paths, &name).await?;
-        Ok(name)
-    })
-    .await
 }

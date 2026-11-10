@@ -669,8 +669,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let id = repository["id"].as_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
 
-    // Enter takes the offered name.
-    let launch = |command: &mut Command| fixture.terminal_command(command, "\n", true);
+    // The chat starts under its default name without asking.
+    let launch = |command: &mut Command| fixture.terminal_command(command, "", true);
     // A person in a JSON-default environment chats with `--text`, which the
     // session's Shoal uses too, since a chat needs text on a terminal.
     let (output, transcript) = launch(fixture.command().env("SHOAL_OUTPUT", "json").args([

@@ -1838,10 +1838,9 @@ request to reply only that it is ready and wait for you. The template substitute
 config as workspace launches trust theirs.
 
 Every call starts a new chat and focuses it. Its name is `--name`, else the
-default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
-On a terminal, a chat without `--name` asks `Chat name [<default>]:`,
-where empty input takes the default and a taken or invalid name is asked for
-again; JSON and Happy launches take the default without asking. Inside Herdr it
+default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it,
+without asking; the agent renames it with `shoal work rename` once it knows the
+work. Inside Herdr it
 opens a focused tab labelled with the name regardless of `terminal.focus`, unless
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
 window; on a terminal it runs in a zmx

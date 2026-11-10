@@ -10,7 +10,6 @@ use super::{
     ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
     handoff,
-    rename::ask_name,
     topic::with_saved_issue,
 };
 use crate::client::output::chat::BackgroundChat;
@@ -86,8 +85,6 @@ struct Launch {
     chat: ChatLaunch,
     topic: Topic,
     options: Options,
-    /// Whether a start in this terminal asks for the chat's name.
-    asks_name: bool,
 }
 
 impl Launch {
@@ -103,7 +100,6 @@ impl Launch {
         let agent = chat_agent(ctx, &settings, options.agent.clone())?;
         check_model(&settings, &agent, &options.model)?;
         let topic = restored(ctx, topic, options.restore.as_ref()).await?;
-        let asks_name = topic.asks_name && options.name.is_none();
         let name = initial_name(ctx, &topic, options.name.clone()).await?;
         let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
@@ -112,7 +108,6 @@ impl Launch {
             chat,
             topic,
             options,
-            asks_name,
         })
     }
 
@@ -144,26 +139,17 @@ impl Launch {
         })
     }
 
-    /// Name the chat and run it in a new place beside this terminal, where
-    /// a host opens one and its place asks for it, otherwise here.
+    /// Run the chat in a new place beside this terminal, where a host opens
+    /// one and its place asks for it, otherwise here.
     async fn run_in_terminal(self, ctx: &Context) -> Result<i32> {
         ensure!(ctx.interactive(), "chat needs a terminal");
         let model_args =
             crate::agents::model_args(&self.chat.settings, &self.agent, &self.chat.model)?;
-        let launch = self.named(ctx).await?;
-        if launch.options.place == ChatPlace::Beside && launch.start_beside(ctx).await? {
+        if self.options.place == ChatPlace::Beside && self.start_beside(ctx).await? {
             return Ok(0);
         }
-        let chat = launch.record(ctx).await?;
-        launch.run_here(ctx, &chat, model_args).await
-    }
-
-    /// The launch with the name the user gives, when it asks for one.
-    async fn named(mut self, ctx: &Context) -> Result<Self> {
-        if self.asks_name {
-            self.chat.name = ask_name(ctx, &self.chat.name).await?;
-        }
-        Ok(self)
+        let chat = self.record(ctx).await?;
+        self.run_here(ctx, &chat, model_args).await
     }
 
     /// Run the chat in a new focused tab or session in its checkout or

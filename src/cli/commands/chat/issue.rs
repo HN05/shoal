@@ -77,7 +77,6 @@ pub(super) fn on(topic: Topic, repo: &Repository, issue: &Issue) -> Topic {
             issue.number
         ),
         relaunch: topic.relaunch.on_issue(&issue.url),
-        asks_name: false,
         subject: Some(issue.subject()),
         links: vec![(
             Relation::Assigned,

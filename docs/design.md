@@ -2249,7 +2249,9 @@ has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
-is removed or renamed. Renaming changes the record and the files kept under the
+is removed or renamed. A chat starts under its default name without asking
+the user for one: its agent learns what the work is and renames the chat with
+`shoal work rename`. Renaming changes the record and the files kept under the
 name, not the zmx session, which zmx names only at creation. A place that
 hosts a space, a workspace or a chat, takes a new label only while it still
 shows the label Shoal gave it, since another label is the user's: a chat's its
