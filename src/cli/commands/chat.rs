@@ -73,7 +73,7 @@ pub(super) async fn start(
             &settings.modes,
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
-        options.check_given(ctx, Some(&repo.id)).await?;
+        options.check_given(ctx, Some(repo.id.as_str())).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::repository(&repo, &mode)
@@ -145,7 +145,7 @@ pub(super) async fn start_in_workspace(
             &settings.modes,
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
-        options.check_given(ctx, Some(&repo.id)).await?;
+        options.check_given(ctx, Some(repo.id.as_str())).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::workspace(workspace, &mode)

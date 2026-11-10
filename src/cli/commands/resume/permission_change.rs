@@ -41,7 +41,7 @@ pub(super) async fn check(
         super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     for chat in &selected.chats {
-        let repository = chat.repository_id.as_deref().map(Into::into);
+        let repository = (chat.repository_id.as_ref()).map(|id| id.as_str().into());
         super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())

@@ -690,7 +690,7 @@ async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_re
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
     let id = execution.plan.id.clone();
