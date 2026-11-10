@@ -24,6 +24,9 @@ use crate::{
     model::SpaceKind,
 };
 
+mod name;
+pub use name::ModeName;
+
 /// The mode `shoal start` uses without `--mode`.
 pub const DEFAULT: &str = "worker";
 /// The mode a chat starts in without `--mode`.
