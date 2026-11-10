@@ -390,9 +390,9 @@ async fn read_context_space<'a>(
     context_workspace(context).map(Some)
 }
 
-/// `value` as pieces of its JSON, each fitting a frame: one PR's discussion
-/// or one issue's description may outgrow a frame of its own.
-fn json_pieces(value: &impl serde::Serialize) -> Result<Vec<ViewPiece>> {
+/// `value` as pieces of its JSON, each fitting a frame: one PR's discussion,
+/// one issue's description or one job's log may outgrow a frame of its own.
+pub(super) fn json_pieces(value: &impl serde::Serialize) -> Result<Vec<ViewPiece>> {
     let json = serde_json::to_string(value)?;
     Ok(protocol::text_pieces(&json)
         .into_iter()

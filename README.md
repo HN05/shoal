@@ -268,6 +268,7 @@ shoal ci run deps.yml --input level=full  # Start a workflow run on the workspac
 shoal ci run https://github.com/team/tool/actions/workflows/ci.yml  # Or paste a workflow's link
 shoal ci list --pr 44               # The runs on a PR's head; --branch and --workflow filter too
 shoal view ci 2765                  # A run's jobs and failed jobs' logs, or paste any run's URL
+shoal view ci 2765 --job rust       # The whole log of one job, passed or failed
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to

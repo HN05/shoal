@@ -4424,6 +4424,7 @@ shoal ci cancel --pr 12 --check rust     # cancel one running or waiting check o
 shoal ci rerun 2765 --failed             # rerun a run's failed jobs
 shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
+shoal view ci 2765 --job rust            # the whole log of the run's job rust, in any state
 shoal view ci https://github.com/team/tool/actions/runs/12   # a run of another repository
 shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
 shoal ci list --pr 12                    # the runs on PR 12's head commit
@@ -4506,8 +4507,8 @@ run.
 `shoal view ci` shows a run's state (`waiting` until a runner takes a job,
 `running`, `failed` or `finished`),
 branch, workflow and jobs, and the log tails of its failed jobs as `shoal view`
-shows a PR's; `--job` shows only that job's log, in any state, and `--job-id`
-the log of the job with that ID when several share a name. A number after `ci`
+shows a PR's; `--job` shows only that job's whole log, in any state and up to
+8 MiB, and `--job-id` that of the job with that ID when several share a name. A number after `ci`
 names a run; a number alone never does. `shoal ci list` lists the newest runs,
 ten unless `--limit` says up to 100, on the workspace's branch, the one
 `--branch` names or the head commit of the PR `--pr` names, and of one workflow

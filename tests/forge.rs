@@ -4721,19 +4721,26 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     head_pull["head"]["sha"] = json!("head");
     let run = json!({"id": 9331, "index_in_repo": 2765, "prettyref": "topic",
         "workflow_id": "deps.yml", "status": "failure"});
+    // Logs longer than the tail a run's view keeps and than one frame.
+    let audit = format!(
+        "{}⭐ Run Audit\nadvisory found\n⚙️ [runner]: exitcode '1': failure\n",
+        "checking advisories\n".repeat(4096)
+    );
+    let built = (0..8192)
+        .map(|line| format!("compiled crate {line}\n"))
+        .collect::<String>();
     fixture.respond(json!({
         "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [run]}},
         "GET repos/team/project/actions/runs/9331/jobs": {"body": [
             {"id": 18344, "name": "build", "run_id": 9331, "status": "success"},
             {"id": 18345, "name": "audit", "run_id": 9331, "status": "failure"}
         ]},
-        "GET repos/team/project/actions/jobs/18345/logs":
-            {"body": "⭐ Run Audit\nadvisory found\n⚙️ [runner]: exitcode '1': failure\n"},
+        "GET repos/team/project/actions/jobs/18345/logs": {"body": audit},
         "GET repos/team/project/actions/jobs/18345": {"body": {"id": 18345, "steps": [
             {"name": "Set up job", "number": 0, "status": "success"},
             {"name": "Audit dependencies", "number": 1, "status": "failure"}
         ]}},
-        "GET repos/team/project/actions/jobs/18344/logs": {"body": "built\n"},
+        "GET repos/team/project/actions/jobs/18344/logs": {"body": built},
         "GET repos/team/project/actions/runs?limit=5&page=1&ref=refs%2Fheads%2Ftopic&workflow_id=deps.yml":
             {"body": {"workflow_runs": [run], "total_count": 1}},
         "GET repos/team/project/pulls/8": {"body": head_pull},
@@ -4761,9 +4768,17 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     // Forgejo 17 lists the job's steps, which name the failing one.
     assert_eq!(logs[0]["failed_step"], "Audit dependencies");
     assert_eq!(logs[0]["job_url"], format!("{url}/jobs/1"));
+    // The view keeps a failed job's tail; selecting a job reads its whole log.
+    assert_eq!(logs[0]["truncated"], true);
+    assert!(audit.ends_with(logs[0]["text"].as_str().unwrap()), "{view}");
 
     let log = fixture.ok(&["view", "ci", &url, "--job", "build", "--space", "topic"]);
-    assert_eq!(log["text"], "built\n", "{log}");
+    assert_eq!(
+        (&log["text"], &log["truncated"]),
+        (&json!(built), &json!(false))
+    );
+    let log = fixture.ok(&["view", "ci", &url, "--job", "audit", "--space", "topic"]);
+    assert_eq!(log["text"], audit);
 
     // The workspace's branch is listed unless another is named.
     let runs = fixture.ok(&[

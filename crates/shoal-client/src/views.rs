@@ -167,7 +167,7 @@ async fn read_failed_job_logs(
         .collect::<Vec<_>>();
     for (id, name) in failed {
         match job_log(daemon, context, run, JobRef::Id(id)).await {
-            Ok(log) => view.logs.push(log),
+            Ok(log) => view.logs.push(log.tail()),
             Err(error) => view
                 .errors
                 .push(format!("{name}: log unavailable: {error:#}")),
@@ -175,21 +175,18 @@ async fn read_failed_job_logs(
     }
 }
 
-/// The log of the run's `job`, read in `context`, or without one by the
-/// run's URL.
+/// The whole log of the run's `job`, read in `context`, or without one by
+/// the run's URL.
 pub async fn job_log(
     daemon: &impl Daemon,
     context: Option<&ItemContext>,
     run: &str,
     job: JobRef,
 ) -> Result<CheckLog> {
-    connection::request(
-        daemon,
-        CiMethod::CiRunJobLog {
-            context: context.cloned(),
-            run: run.into(),
-            job,
-        },
-    )
-    .await
+    let method = CiMethod::CiRunJobLog {
+        context: context.cloned(),
+        run: run.into(),
+        job,
+    };
+    connection::joined(daemon, method, "job log").await
 }

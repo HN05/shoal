@@ -77,10 +77,10 @@ pub struct ViewArgs {
     /// Show only this failed check's log, where the forge reads job logs.
     #[arg(long, value_name = "NAME", conflicts_with_all = ["job", "job_id"])]
     pub check: Option<String>,
-    /// Show only the log of this job of a CI run.
+    /// Show only the whole log of this job of a CI run, in any state.
     #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
     pub job: Option<String>,
-    /// Show only the log of the CI run's job with this ID, for jobs that share a name.
+    /// Show only the whole log of the CI run's job with this ID, for jobs that share a name.
     #[arg(long, value_name = "ID")]
     pub job_id: Option<JobId>,
     /// Open the items in the browser instead.

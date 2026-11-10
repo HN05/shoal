@@ -92,7 +92,11 @@ fn find_job<'a>(run: &Run, jobs: &'a [RunJob], job: &JobRef) -> Result<&'a RunJo
         .collect::<Vec<_>>();
     match (job, matching.as_slice()) {
         (_, [found]) => Ok(found),
-        (JobRef::Name(name), []) => bail!("run {} has no job {name}", run.url),
+        (JobRef::Name(name), []) => bail!(
+            "run {} has no job {name}; shoal view ci {} lists its jobs' names",
+            run.url,
+            run.url
+        ),
         (JobRef::Name(name), _) => bail!(
             "several jobs of {} are named {name}; select one by its ID",
             run.url
@@ -114,7 +118,7 @@ impl ForgeRepo {
         self.jobs_of(account, &run).await
     }
 
-    /// The log of the job `job` of the run `input` names.
+    /// The whole log of the job `job` of the run `input` names.
     pub async fn run_job_log(
         &self,
         account: &Account,
@@ -130,7 +134,7 @@ impl ForgeRepo {
             None => self.kind.failed_step(&log),
             listed => listed,
         };
-        let log = CheckLog::from_text(&run.url, &job.name, &log, step);
+        let log = CheckLog::whole(&run.url, &job.name, log, step);
         Ok(match &job.url {
             Some(url) => log.with_job(url.clone()),
             None => log,

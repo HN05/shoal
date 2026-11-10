@@ -60,11 +60,13 @@ pub(super) async fn handle(
                 .view_ci_run(context.as_ref(), run, caller.is_some())
                 .await?,
         ),
-        CiMethod::CiRunJobLog { context, run, job } => Body::CheckLog(
-            manager
+        CiMethod::CiRunJobLog { context, run, job } => {
+            let log = manager
                 .ci_run_job_log(context.as_ref(), run, job, caller.is_some())
-                .await?,
-        ),
+                .await
+                .and_then(|log| super::items::json_pieces(&log));
+            return Ok(Answer::pages(log, Body::ViewPieces));
+        }
         CiMethod::StartCiRun {
             context,
             workflow,

@@ -181,24 +181,37 @@ impl ForgeRepo {
 }
 
 impl CheckLog {
+    /// The last [`TAIL_BYTES`] of the log `text`.
     pub(crate) fn from_text(
         url: &str,
         name: &str,
         text: &str,
         failed_step: Option<String>,
     ) -> Self {
-        let mut start = text.len().saturating_sub(TAIL_BYTES);
-        while !text.is_char_boundary(start) {
-            start += 1;
-        }
+        Self::whole(url, name, text.into(), failed_step).tail()
+    }
+
+    /// The whole log `text`.
+    pub(crate) fn whole(url: &str, name: &str, text: String, failed_step: Option<String>) -> Self {
         Self {
             url: url.into(),
             name: name.into(),
             job_url: None,
-            text: text[start..].into(),
-            truncated: start > 0,
+            text,
+            truncated: false,
             failed_step,
         }
+    }
+
+    /// The log's last [`TAIL_BYTES`], marked truncated when it is longer.
+    pub fn tail(mut self) -> Self {
+        let mut start = self.text.len().saturating_sub(TAIL_BYTES);
+        while !self.text.is_char_boundary(start) {
+            start += 1;
+        }
+        self.text.drain(..start);
+        self.truncated |= start > 0;
+        self
     }
 
     pub(crate) fn with_job(self, job_url: String) -> Self {
