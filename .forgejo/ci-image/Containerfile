@@ -21,8 +21,11 @@
 # .forgejo/scripts/lock-target-dir.sh, which moves CARGO_TARGET_DIR to a free
 # slot directory under it and holds that slot for the rest of the step, and runs
 # `cargo clean --workspace` before its first build so another branch's build of
-# the workspace's packages is never taken as fresh. The directories grow without
-# bound; clear /var/cache/ci/target on the runner host when it gets large.
+# the workspace's packages is never taken as fresh. ci.yml's musl job instead
+# touches its tracked files once it holds the slot, which makes them newer than
+# any build there and keeps the dependencies' builds warm. The directories grow
+# without bound; clear /var/cache/ci/target on the runner host when it gets
+# large.
 
 ARG RUST=1.99
 FROM docker.io/library/rust:${RUST}-trixie
@@ -92,9 +95,10 @@ RUN CARGO_PROFILE_RELEASE_LTO=false \
     cargo install --locked cargo-outdated --version 0.19.0 \
  && rm -rf "$CARGO_HOME/registry"
 
-# release.yml cross-builds the release binaries with cargo-zigbuild, which
-# links every target through Zig: static musl for Linux and, because Shoal
-# links only libSystem and no Apple frameworks, macOS without an Apple SDK.
+# release.yml cross-builds the release binaries with cargo-zigbuild, and
+# ci.yml's musl job checks the musl build with it. It links every target
+# through Zig: static musl for Linux and, because Shoal links only libSystem
+# and no Apple frameworks, macOS without an Apple SDK.
 # The tarball is picked for this host's architecture from Zig's release index
 # and verified against the checksum published there.
 ARG ZIG=0.14.1

@@ -1,9 +1,10 @@
-# PR and main checks; the rust job, which runs on Shoal runners, is intended
-# as the required check on the `main` protection rule.
+# PR and main checks; the rust job, which runs on Shoal runners, and the musl
+# job, on Docker, are intended as the required checks on the `main` protection
+# rule.
 #
 # A PR whose only `area/` label is `area/docs` runs no checks: the gate job
-# reads the labels and the rust job's check steps skip themselves, which still
-# reports a status for the required check.
+# reads the labels and the rust and musl jobs' check steps skip themselves,
+# which still reports a status for the required check.
 # Pushes to main and dispatches always run everything, except that a release
 # PR (`release/v*`) and its version commit on main run no checks: release.py
 # validates that tree itself.
@@ -17,12 +18,12 @@
 # the case right after the PR leaves draft. Edits queue apart from other runs,
 # so they never cancel one.
 #
-# The rust job takes its name from a matrix that waits on the gate's output.
-# Forgejo posts no commit status for such a job until the gate has finished,
-# and none when the gate is skipped, so drafts and other edits never post to
-# the required check. A skipped status there would count as passing: Forgejo
-# ranks `skipped` above `success`. The undraft job names the rust and gate
-# contexts; keep them in step with the job names.
+# The rust and musl jobs take their names from matrices that wait on the
+# gate's output. Forgejo posts no commit status for such a job until the gate
+# has finished, and none when the gate is skipped, so drafts and other edits
+# never post to the required checks. A skipped status there would count as
+# passing: Forgejo ranks `skipped` above `success`. The undraft job names the
+# rust and gate contexts; keep them in step with the job names.
 #
 # The rust job runs on a Shoal runner (docs/reference.md#runner), on Linux or
 # macOS, whichever machine with `runner.enabled` for this repository admits it
@@ -33,7 +34,8 @@
 # that change Cargo's fingerprints, such as CARGO_INCREMENTAL or a profile's
 # debuginfo, would rebuild everything instead. The undraft and gate jobs only
 # query the forge and gain nothing from a seeded workspace, so they stay on
-# Docker.
+# Docker, as does the musl job, which needs the CI image's Zig and musl
+# targets.
 
 name: ci
 
@@ -106,8 +108,10 @@ jobs:
       image: git.henriknordvik.com/hn05/ci-shoal:1.99
     outputs:
       docs_only: ${{ steps.labels.outputs.docs_only }}
-      # Names the rust job through its matrix (see the top of the file).
+      # Name the rust and musl jobs through their matrices (see the top of
+      # the file).
       checks: fmt, clippy, test, scripts
+      musl_checks: check, identity test
     steps:
       - name: Read the PR's area labels
         id: labels
@@ -155,8 +159,6 @@ jobs:
         working-directory: ${{ env.SHOAL_WORKSPACE_PATH }}
     env:
       DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
-      # Empty outside PRs.
-      PR_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
       - name: Toolchain
         if: env.DOCS_ONLY != 'true'
@@ -193,23 +195,68 @@ jobs:
         if: env.DOCS_ONLY != 'true'
         run: cargo test --doc --locked
 
-      # Distributed Linux binaries link musl, whose libc types differ from
-      # GNU's: the shipped code must compile against them. Only a Linux runner
-      # checks it; the release workflow builds every target.
-      - name: musl build (Linux runners)
+  # Distributed Linux binaries link musl, whose libc types differ from GNU's:
+  # the shipped code must compile against them. The CI image has Zig,
+  # cargo-zigbuild and the musl targets, so every PR gets this check whichever
+  # machine takes the rust job, and it runs beside that job. The release
+  # workflow builds every target.
+  musl:
+    # Named `musl (check, identity test)` by its matrix, which waits on the
+    # gate (see the top of the file). A skipped gate skips this job without a
+    # status.
+    name: musl
+    needs: gate
+    # A failed gate leaves docs_only empty and every check runs.
+    if: "!cancelled()"
+    strategy:
+      matrix:
+        checks: ["${{ needs.gate.outputs.musl_checks }}"]
+    runs-on: docker
+    container:
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
+    env:
+      DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
+      # Empty outside PRs.
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      # Runner-mounted volume; a plain directory when unmounted.
+      CARGO_TARGET_DIR: /ci-target
+      RUSTFLAGS: '-D warnings'
+    steps:
+      # The checkout is shallow, so it fetches the PR's base commit too for
+      # the identity test's path filter. A base it cannot fetch runs the test.
+      - name: Checkout
         if: env.DOCS_ONLY != 'true'
         run: |
-          if [ "$(uname -s)" != Linux ]; then
-            echo "not a Linux runner: skipping the musl build"
-            exit 0
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')"
+          git -c http.extraheader="$auth" fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+          if [ -n "$PR_BASE" ]; then
+            git -c http.extraheader="$auth" fetch -q --depth 1 origin "$PR_BASE" ||
+              echo "could not fetch the PR's base $PR_BASE"
           fi
+
+      # One step, because the /ci-target slot lasts as long as the step's
+      # shell. The slot keeps its build, unlike the cross-build's, so the
+      # dependencies stay warm. Instead of `cargo clean`, the tracked files are
+      # touched once the slot is held: newer than any build already in it,
+      # Cargo rebuilds the workspace's packages rather than take another
+      # branch's build of them as fresh.
+      - name: musl check and identity test (holding a /ci-target slot)
+        if: env.DOCS_ONLY != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          . .forgejo/scripts/lock-target-dir.sh
+          git ls-files -z | xargs -0 touch -h --
           musl_target="$(uname -m)-unknown-linux-musl"
           cargo-zigbuild check --locked --target "$musl_target" --lib --bins
           # GNU-only tests cannot catch musl's unsupported Metadata::created().
           # Testing rebuilds the whole binary with codegen for 5 tests of the
           # identity module, so a PR runs them only when it changes that
           # module, the dependencies or this workflow; pushes to main and
-          # dispatches, and a PR whose base the workspace lacks, always run them.
+          # dispatches, and a PR whose base the checkout lacks, always run them.
           if [ -z "$PR_BASE" ] || ! git cat-file -e "$PR_BASE^{commit}" 2>/dev/null ||
               ! git diff --quiet "$PR_BASE" HEAD -- \
                 src/daemon/workspace/identity.rs src/daemon/workspace/identity \

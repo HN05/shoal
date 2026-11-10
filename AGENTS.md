@@ -376,19 +376,22 @@ count a test's daemons and commands, but not processes that outlive it.
 ## CI
 
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
-`rust` job (the required check) runs `cargo fmt --check`, clippy,
+`rust` job (a required check) runs `cargo fmt --check`, clippy,
 `cargo nextest run` with the `ci` profile, `cargo test --doc` and the Python
-release-script tests; a PR whose only `area/` label is
-`area/docs` skips them, as do the release workflow's PR and version commit,
+release-script tests, and its `musl` job (the other required check) checks the build for the
+host's musl target with cargo-zigbuild and runs the identity module's tests
+there when a PR changes them, the dependencies or the workflow; a PR whose
+only `area/` label is `area/docs` skips them, as do the release workflow's PR and version commit,
 which `scripts/release.py` validates itself. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
 Its `rust` job and `flaky.yml`'s job, which build, run with `runs-on: shoal` on
-Shoal runners; the jobs that only query the forge stay on Docker. A Shoal runner
+Shoal runners; the jobs that only query the forge stay on Docker, as does the
+`musl` job, which needs the CI image's Zig and musl targets. A Shoal runner
 is any Linux or macOS machine whose Shoal has `runner.enabled` for this
 repository, with Rust at `rust-version`, which the jobs check, with clippy, rustfmt and
 cargo-nextest, which the jobs also check, and the tools the tests spawn installed on
-the host (those `.forgejo/ci-image/Containerfile` installs; on Linux, which alone checks the
-musl build, cargo-zigbuild, Zig and the host's musl Rust target). The test
+the host (those `.forgejo/ci-image/Containerfile` installs for them; Shoal
+runners need no Zig, cargo-zigbuild or musl targets). The test
 fixtures' daemons commit SQLite with fsync under `TMPDIR`, which Shoal puts in
 the repository directory; where that disk stalls on fsync, the machine's local
 config sets `TMPDIR` in `[env]` to a tmpfs. Each job runs in a workspace at its
@@ -405,7 +408,9 @@ on the runner host, then updates `workspace.package.rust-version` in `Cargo.toml
 Containerfile's `ARG RUST`, and the `image:` tag in every workflow, and the
 Shoal runners' machines install the same Rust. The Docker jobs' cargo
 builds share the runner-mounted `/ci-target` through
-`.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes.
+`.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes; the
+`musl` job keeps its slot's build warm, touching its checkout instead of
+cleaning.
 `.forgejo/workflows/deps.yml` runs weekly (and on `shoal ci run deps.yml
 --branch main`) and rewrites one evergreen `tracking` issue, found by the marker comment
 in its body, with `cargo audit` and `cargo outdated` findings. It is never a
