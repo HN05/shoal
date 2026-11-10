@@ -20,6 +20,7 @@ crypto_box = { version = "0.9", features = ["std"] }
 crypto_secretbox = { version = "0.1", features = ["std"] }
 fs2 = "0.4"
 futures-util.workspace = true
+ignore = "0.4"
 libc.workspace = true
 plist = "1"
 rusqlite = { workspace = true, features = ["bundled"] }

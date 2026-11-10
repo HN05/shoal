@@ -84,11 +84,6 @@ impl Paths {
         self.state.join("state.db")
     }
 
-    /// Managed Worktrunk configuration, isolating Shoal from personal hooks.
-    pub fn worktrunk_config(&self) -> PathBuf {
-        self.state.join("worktrunk.toml")
-    }
-
     /// Copies of the files proposed issues and PRs attach, kept until the
     /// user decides, since the agent's copies may be gone by then.
     pub fn proposal_files(&self) -> PathBuf {

@@ -3322,16 +3322,19 @@ execution checks, with a 60-second limit. It works without a `setup.command`.
 Failure marks the workspace failed and skips setup;
 retry with `shoal setup`. Lifecycle and permit changes are rejected while it runs.
 
-Tracked setup starts with Worktrunk's `wt step copy-ignored`, which copies the
-repository checkout's ignored files, such as `.env` or local signing settings,
-into the workspace before `setup.command`. It runs without a `setup.command`, and a
+Tracked setup starts by copying the repository checkout's ignored files, such as
+`.env` or local signing settings, into the workspace before `setup.command`,
+cloning them where the filesystem can. It runs without a `setup.command`, and a
 failure fails setup. It prints how many files it copied, and nothing when it
 copied none. `[setup] copy_ignored = false`, also a global default, turns it off.
 Files the workspace already has are kept, including paths cloned from a
-[seed](#seed-builds). A [copy](#copies) of a workspace's current files skips it,
-since it has that workspace's ignored files. Without a `.worktreeinclude` in the checkout every
-ignored file is copied, build caches included; its gitignore-style patterns limit
-the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it further.
+[seed](#seed-builds), and nothing is written through a symbolic link to outside
+the workspace. A [copy](#copies) of a workspace's current files skips it, since
+it has that workspace's ignored files. Without a `.worktreeinclude` in the
+checkout every ignored file is copied, build caches included; its gitignore-style
+patterns limit the copy to what they match. The state directories of other version control systems and worktree
+tools (`.bzr`, `.conductor`, `.entire`, `.hg`, `.jj`, `.pijul`, `.sl`, `.svn` and
+`.worktrees`) and directories holding another worktree are never copied.
 
 `setup.command` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`

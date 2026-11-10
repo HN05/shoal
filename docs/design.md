@@ -882,9 +882,11 @@ failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.
 `setup` reruns setup explicitly; nothing retries automatically.
-Tracked setup starts by copying the repository checkout's ignored files through
-Worktrunk unless `setup.copy_ignored = false`, so local files like `.env` arrive without a
-setup script and failures gate readiness; `.worktreeinclude` selects what to copy.
+Tracked setup starts by copying the repository checkout's ignored files unless
+`setup.copy_ignored = false`, so local files like `.env` arrive without a setup
+script and failures gate readiness; `.worktreeinclude`, a convention other worktree
+tools share, selects what to copy. The copy is Shoal's own, ported from
+Worktrunk's `wt step copy-ignored`.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that

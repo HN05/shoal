@@ -94,7 +94,7 @@ use crate::{
 use anyhow::Result;
 use futures_util::StreamExt as _;
 use rusqlite::OptionalExtension;
-use std::{collections::HashSet, fs, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 use tokio::sync::OwnedMutexGuard;
 
 /// Review checks a listing runs at once, each reading HEAD with one Git
@@ -175,8 +175,6 @@ pub struct Manager {
 impl Manager {
     pub async fn open(paths: Paths) -> Result<Arc<Self>> {
         paths.prepare()?;
-        // Avoid inheriting personal Worktrunk hooks and layout preferences.
-        fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
         let config = Config::load(&paths)?;
         super::forge_hosts::learn_forge_pins(&Default::default(), &config.machine.forges);
         Ok(Arc::new(Self {

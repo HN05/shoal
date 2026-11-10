@@ -10,6 +10,7 @@ pub mod diff;
 pub mod existing_branch;
 pub mod fetch;
 pub mod files;
+pub mod ignored;
 pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 pub(crate) mod queries;
@@ -28,7 +29,6 @@ pub mod seed;
 pub mod status;
 pub mod unmerge;
 pub mod worktree;
-pub mod worktrunk;
 
 use crate::tools::Tool;
 use std::{

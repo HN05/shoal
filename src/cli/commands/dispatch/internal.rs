@@ -80,7 +80,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             workspaces::unmerge_worker(&ctx, plan, result).await
         }
         InternalCommand::CopyIgnored { setup_cmd } => {
-            workspaces::copy_ignored_worker(&ctx, setup_cmd).await
+            workspaces::copy_ignored_worker(setup_cmd).await
         }
         InternalCommand::Detached {
             workspace,

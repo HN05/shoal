@@ -1,5 +1,9 @@
 //! Copies of files and directory trees: mirrors, clones and moves.
-use std::{ffi::OsStr, fs, io, path::Path};
+use std::{
+    ffi::OsStr,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context;
 
@@ -228,6 +232,64 @@ pub async fn clone_or_copy_keeping_times(source: &Path, destination: &Path) -> a
     copy_keeping_attributes(&[source], destination)
         .await
         .with_context(|| format!("copy {}", source.display()))
+}
+
+/// Copy `source`, a file, symbolic link or directory tree, to `destination`
+/// as [`clone_or_copy_keeping_times`] does, keeping everything `destination`
+/// already has: a directory there gets the entries it lacks, at any depth,
+/// and any other entry stays as it is. Returns how many files and symbolic
+/// links it wrote.
+pub async fn copy_missing(source: &Path, destination: &Path) -> anyhow::Result<u64> {
+    let (from, to) = (source.to_owned(), destination.to_owned());
+    let missing = off_runtime::run(move || {
+        missing_entries(&from, &to).with_context(|| format!("compare with {}", from.display()))
+    })
+    .await?;
+    let mut copied = 0;
+    for (from, to) in missing {
+        clone_or_copy_keeping_times(&from, &to).await?;
+        copied += off_runtime::run(move || {
+            count_files(&to).with_context(|| format!("read {}", to.display()))
+        })
+        .await?;
+    }
+    Ok(copied)
+}
+
+/// The entries at or below `source` that `destination` lacks, each the top
+/// of a missing subtree, with the path each goes to. Only a directory on
+/// both sides is compared further down, so no symbolic link is followed.
+fn missing_entries(source: &Path, destination: &Path) -> io::Result<Vec<(PathBuf, PathBuf)>> {
+    let mut missing = Vec::new();
+    let mut pending = vec![(source.to_owned(), destination.to_owned())];
+    while let Some((from, to)) = pending.pop() {
+        match fs::symlink_metadata(&to) {
+            Ok(existing) => {
+                if existing.is_dir() && fs::symlink_metadata(&from)?.is_dir() {
+                    for entry in fs::read_dir(&from)? {
+                        let entry = entry?;
+                        pending.push((entry.path(), to.join(entry.file_name())));
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => missing.push((from, to)),
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(missing)
+}
+
+/// How many files and symbolic links `path` is or holds.
+fn count_files(path: &Path) -> io::Result<u64> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_dir() {
+        return Ok(u64::from(metadata.is_file() || metadata.is_symlink()));
+    }
+    let mut count = 0;
+    for entry in fs::read_dir(path)? {
+        count += count_files(&entry?.path())?;
+    }
+    Ok(count)
 }
 
 /// `cp -pPR` of `sources` to `destination`: into it when it is a directory,
