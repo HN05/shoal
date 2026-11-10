@@ -17,6 +17,7 @@ impl Operation {
                     AgentMethod::AgentMessages { .. }
                         | AgentMethod::AgentUpdates { .. }
                         | AgentMethod::Progress { .. }
+                        | AgentMethod::GitCredential { .. }
                 )
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }

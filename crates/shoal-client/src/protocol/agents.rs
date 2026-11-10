@@ -159,6 +159,12 @@ pub enum AgentMethod {
     WaitAgentUpdates {
         space: SpaceSelector,
     },
+    /// The caller's login for Git over HTTPS to `host`: the agent token
+    /// `[machine.forges]` sets for it, for any scoped caller; none for an
+    /// unscoped caller or a host without one.
+    GitCredential {
+        host: String,
+    },
     AcknowledgePrUpdates {
         space: SpaceSelector,
         deliveries: Vec<String>,

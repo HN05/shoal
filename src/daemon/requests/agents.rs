@@ -182,6 +182,9 @@ pub(super) async fn handle(
         AgentMethod::AgentMessages { space } => {
             Body::AgentMessages(manager.space_messages(&space).await?)
         }
+        AgentMethod::GitCredential { host } => {
+            Body::GitCredential(manager.agent_git_credential(caller, &host).await?)
+        }
         AgentMethod::AgentUpdates { space } => {
             Body::PrUpdates(manager.space_updates(&space).await?)
         }
@@ -199,6 +202,7 @@ impl Scoped for AgentMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
+            AgentMethod::GitCredential { .. } => None,
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentSession { workspace } => Some(workspace),
             AgentMethod::AgentMessages { space }

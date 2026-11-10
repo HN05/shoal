@@ -2,6 +2,7 @@
 //! the user's interrupts, and the sessions they run.
 use crate::execution_ids::ExecutionId;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentSessionId;
 use crate::space_ids::SpaceId;
@@ -156,6 +157,27 @@ pub async fn restart_chat(
 /// The agents connected in `workspace`.
 pub async fn running(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<RunningAgent>> {
     request(daemon, AgentMethod::WorkspaceAgents { workspace }).await
+}
+
+/// A login Git sends over HTTPS. Its `Debug` leaves out the password.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitCredential {
+    pub username: String,
+    pub password: String,
+}
+
+impl std::fmt::Debug for GitCredential {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GitCredential")
+            .field("username", &self.username)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The caller's login for Git over HTTPS to `host`, or none.
+pub async fn git_credential(daemon: &impl Daemon, host: String) -> Result<Option<GitCredential>> {
+    request(daemon, AgentMethod::GitCredential { host }).await
 }
 
 /// The session of the agent in `workspace`, which a fork starts from.

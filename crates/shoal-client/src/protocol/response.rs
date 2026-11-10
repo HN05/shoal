@@ -273,6 +273,7 @@ response_bodies! {
     ApprovalRequest(Box<crate::approvals::ApprovalRequest>),
     ApprovalRequests(Vec<crate::approvals::ApprovalRequest>),
     SecretGrant(crate::secrets::SecretGrant),
+    GitCredential(Option<crate::agents::GitCredential>),
     SecretCatalog(crate::secrets::SecretCatalog),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
