@@ -29,10 +29,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             close_in,
         } => {
             if let Some(host) = opened_in {
-                resume::record_place(&ctx, host, &targets).await;
+                resume::queued::record_place(&ctx, host, &targets).await;
             }
             if let Some(host) = close_in {
-                resume::close_place_when_done(&ctx, host, &targets).await;
+                resume::queued::close_place_when_done(&ctx, host, &targets).await;
             }
             match queue_entry {
                 None => {
@@ -45,7 +45,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                     };
                     resume::select(&ctx, targets, options).await
                 }
-                Some(entry) => resume::start_entry(&ctx, targets, execution, entry).await,
+                Some(entry) => resume::queued::start_entry(&ctx, targets, execution, entry).await,
             }
         }
         SessionsCommand::Restart {

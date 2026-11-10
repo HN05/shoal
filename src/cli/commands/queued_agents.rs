@@ -129,7 +129,7 @@ pub(super) async fn start(ctx: &Context, entry: QueueEntryId) -> Result<i32> {
             .ok_or_else(|| anyhow::anyhow!("queue entry no longer exists"))?;
         match queued.kind {
             QueueKind::Launch => start_launch(ctx, &entry).await,
-            QueueKind::Restore => super::resume::start_queued(ctx, &queued).await,
+            QueueKind::Restore => super::resume::queued::start_queued(ctx, &queued).await,
             QueueKind::Job => anyhow::bail!("the daemon starts a CI job itself"),
         }
     }
