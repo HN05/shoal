@@ -172,6 +172,11 @@ pub enum InternalCommand {
     /// before pushing; the agent's push helper launcher calls it.
     #[command(name = workers::PUSH_GATE)]
     PushGate { remote: String, url: String },
+    /// Git's credential helper for an agent's Git over HTTPS, which asks
+    /// the daemon for the host's agent token; the agent's Git settings call
+    /// it with Git's operation.
+    #[command(name = workers::GIT_CREDENTIAL)]
+    GitCredential { operation: String },
     /// Run an operation the daemon started, reading its order on stdin.
     #[command(name = workers::OPERATION)]
     Operation,

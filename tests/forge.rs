@@ -6298,3 +6298,36 @@ fn gitlab_downloads_read_an_upload_from_its_api_route() {
         [(json!(format!("GET {endpoint}")), json!("Bearer agenttoken"))]
     );
 }
+
+/// Git's credential helper gives a scoped process the agent token of an
+/// HTTPS host, and the user's own processes and other protocols nothing.
+#[test]
+fn the_git_credential_helper_answers_scoped_processes_with_the_agent_token() {
+    let fixture = Fixture::new(Forge::GitHub, AGENT_TOKEN);
+    let exported = fixture.ok(&["work", "env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let fill = |scope: Option<&str>, protocol: &str| {
+        let mut command = fixture.command();
+        command.args(["internal", "git-credential", "get"]);
+        if let Some(scope) = scope {
+            command.env("SHOAL_SCOPE_TOKEN", scope);
+        }
+        let mut child = command
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let request = format!("protocol={protocol}\nhost=github.com\n\n");
+        std::io::Write::write_all(&mut child.stdin.take().unwrap(), request.as_bytes()).unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    assert_eq!(
+        fill(Some(scope), "https"),
+        "username=x-access-token\npassword=agenttoken\n"
+    );
+    assert_eq!(fill(None, "https"), "");
+    assert_eq!(fill(Some(scope), "http"), "");
+}
