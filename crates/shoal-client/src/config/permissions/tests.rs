@@ -211,3 +211,19 @@ fn a_permission_change_keeps_the_keys_it_does_not_name() {
         assert!(PermissionChange::assigned(refused).is_err());
     }
 }
+
+#[test]
+fn a_narrowings_changes_and_a_changes_assignments_give_it_again() {
+    let narrowing =
+        PermissionsConfig::assigned(&["push=deny".to_owned(), "merge=propose".to_owned()]).unwrap();
+    let changes = narrowing.changes();
+    assert_eq!(changes.len(), 2);
+    assert_eq!(PermissionChange::combined(&changes).set, narrowing);
+    let reassigned: Vec<_> = (changes.iter())
+        .flat_map(PermissionChange::assignments)
+        .map(|assignment| PermissionChange::assigned(&assignment).unwrap())
+        .collect();
+    assert_eq!(reassigned, changes);
+    let dropped = PermissionChange::assigned("merge=mode").unwrap();
+    assert_eq!(dropped.assignments(), ["merge=mode"]);
+}

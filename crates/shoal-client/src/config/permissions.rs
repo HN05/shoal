@@ -141,6 +141,18 @@ impl PermissionsConfig {
             .collect()
     }
 
+    /// One change per key this narrowing sets, each setting that key alone,
+    /// as one `--permission KEY=VALUE` gives it.
+    pub fn changes(&self) -> Vec<PermissionChange> {
+        (PermissionKey::ALL.iter())
+            .filter(|&&key| self.get(key).is_some())
+            .map(|&key| PermissionChange {
+                set: self.only(&[key]),
+                dropped: Vec::new(),
+            })
+            .collect()
+    }
+
     /// Refuse a key these permissions set wider than the giver's own
     /// permission for it, `held`, since a scoped caller gives only what it
     /// holds itself.
@@ -221,6 +233,13 @@ impl PermissionChange {
                 dropped: Vec::new(),
             }),
         }
+    }
+
+    /// The `--permission KEY=VALUE` assignments that make this change,
+    /// `KEY=mode` for each key it drops.
+    pub fn assignments(&self) -> Vec<String> {
+        let dropped = (self.dropped.iter()).map(|key| format!("{key}={MODE_VALUE}"));
+        self.set.assignments().into_iter().chain(dropped).collect()
     }
 
     /// The change that turns the permissions `recorded` gives into those
