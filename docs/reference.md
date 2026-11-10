@@ -2198,10 +2198,10 @@ token each time, so a changed token applies at once while a new host applies
 from the agent's next start. The token stays out of the agent's environment and
 Git config, and your helpers neither answer for that host nor save the token;
 while the daemon cannot answer, as during a restart, Git on that host fails
-instead of using your login. Your own terminal, `shoal merge` and the daemon's
-fetches keep your login. A Git profile that sets a credential helper for the
-host, or `credential.helper`, takes precedence, and SSH remotes never ask a
-helper.
+instead of using your login or asking for a password. Your own terminal,
+`shoal merge` and the daemon's fetches keep your login. A Git profile that sets
+`credential.helper`, or a credential helper for the whole host, takes
+precedence, and SSH remotes never ask a helper.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for

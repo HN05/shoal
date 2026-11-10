@@ -47,10 +47,12 @@ fn helper(paths: &Paths) -> Result<String> {
     Ok(format!("!{}", crate::shell::quote(&words)))
 }
 
-/// Whether the Git setting `key` is a credential helper Git asks for HTTPS
-/// requests to `host`: `credential.helper`, or `credential.<url>.helper`
-/// whose URL names that host, with or without `https://`, a user or a path.
-/// Git compares the section and variable names without case.
+/// Whether the Git setting `key` is a credential helper Git asks for every
+/// HTTPS request to `host`: `credential.helper`, or `credential.<url>.helper`
+/// whose URL names that host, with or without `https://`. One whose URL also
+/// names a user or a path answers only some requests, so it leaves the host
+/// to Shoal's helper. Git compares the section and variable names without
+/// case.
 fn helper_covers(key: &str, host: &str) -> bool {
     let lowered = key.to_ascii_lowercase();
     let Some(rest) = lowered.strip_prefix("credential.") else {
@@ -67,11 +69,10 @@ fn helper_covers(key: &str, host: &str) -> bool {
         Some(_) => return false,
         None => url,
     };
-    let authority = url.split('/').next().unwrap_or_default();
-    let named = authority
-        .rsplit_once('@')
-        .map_or(authority, |(_, host)| host);
-    host_matches(named, &host.to_ascii_lowercase())
+    let (authority, path) = url.split_once('/').unwrap_or((url, ""));
+    !authority.contains('@')
+        && path.is_empty()
+        && host_matches(authority, &host.to_ascii_lowercase())
 }
 
 /// Whether the host `pattern` matches `host`, where Git lets `*` in a
