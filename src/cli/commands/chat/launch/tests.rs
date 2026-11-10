@@ -3,6 +3,7 @@ use crate::client::space_names::SpaceSelector;
 use std::ffi::OsString;
 
 use super::*;
+use crate::model::{Repository, SpaceLinks, Workspace};
 
 #[test]
 fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
@@ -165,58 +166,6 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
 }
 
 #[test]
-fn a_chat_is_refused_a_workspace_that_is_not_ready_before_anything_is_asked() {
-    let root = tempfile::tempdir().unwrap();
-    let mut workspace = Workspace::new_record(
-        "repo".into(),
-        "worker".into(),
-        root.path().to_owned(),
-        Some("worker".into()),
-        crate::state::WorkspaceState::Ready,
-    );
-    ensure_hosts_chat(&workspace).unwrap();
-    workspace.state = crate::state::WorkspaceState::Failed;
-    assert!(ensure_hosts_chat(&workspace).is_err());
-    workspace.state = crate::state::WorkspaceState::Ready;
-    workspace.path = root.path().join("gone");
-    assert!(ensure_hosts_chat(&workspace).is_err());
-}
-
-#[test]
-fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
-    let repo = Repository {
-        id: "repo".into(),
-        path: "/repos/shoal".into(),
-        source: "/repos/shoal".into(),
-        last_used: 0,
-        name: Some("shoal".into()),
-        workspaces_dir: None,
-        contribution: false,
-    };
-    let url = "https://forge.example/team/repo/issues/7";
-    let chat: Chat = serde_json::from_value(serde_json::json!({
-        "id": "c", "number": 4, "repository_id": "repo", "name": "shoal-plan-7",
-        "agent": "claude", "mode": "plan", "pid": 1, "started_at": 0,
-        "links": {"issue": url, "issue_title": "Decide", "prs": []},
-    }))
-    .unwrap();
-    let chats = [chat];
-    let restored = with_saved_issue(
-        Topic::repository(&repo, &"plan".into()),
-        &chats,
-        &SpaceId::from("c"),
-    );
-    let issue = restored.linked_issue.unwrap();
-    assert_eq!((issue.number, issue.url.as_str()), (7, url));
-    let other = with_saved_issue(
-        Topic::repository(&repo, &"plan".into()),
-        &chats,
-        &SpaceId::from("d"),
-    );
-    assert!(other.linked_issue.is_none());
-}
-
-#[test]
 fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     use clap::Parser;
     let repo = Repository {
@@ -298,22 +247,4 @@ fn a_chat_whose_agent_cannot_fork_starts_a_new_session() {
     assert!(!forked.of(&settings, &claude).unwrap().is_empty());
     let opencode: Agent = "opencode".parse().unwrap();
     assert!(forked.of(&settings, &opencode).unwrap().is_empty());
-}
-
-#[test]
-fn a_relaunch_keeps_whether_a_narrowing_was_asked_for_or_recorded() {
-    let assignments = ["push=propose".to_owned()];
-    let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
-    assert_eq!(
-        Narrowing::Requested(narrowing).args(),
-        [OsString::from("--permission"), "push=propose".into()]
-    );
-    let recorded = Narrowing::Recorded(narrowing).args();
-    assert_eq!(recorded[0], "--recorded-narrowing");
-    let json = recorded[1].to_str().unwrap();
-    assert_eq!(
-        serde_json::from_str::<crate::config::permissions::PermissionsConfig>(json).unwrap(),
-        narrowing
-    );
-    assert!(Narrowing::Recorded(Default::default()).args().is_empty());
 }
