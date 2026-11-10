@@ -52,7 +52,6 @@ the daemon. Prebuilt binaries do not require Rust.
 | Tool | Needed for |
 | --- | --- |
 | Git 2.43+ (`git`) | Repository and branch operations |
-| [Worktrunk](https://worktrunk.dev/) (`wt`, tested with 0.81.0) | Creating and removing worktrees |
 | [zmx](https://github.com/neurosnap/zmx) 1.0.1+, unless `terminal.default_host` names another host | Agent sessions that keep running after you detach |
 | [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
 

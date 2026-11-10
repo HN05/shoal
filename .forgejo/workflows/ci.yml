@@ -162,7 +162,7 @@ jobs:
     steps:
       - name: Toolchain
         if: env.DOCS_ONLY != 'true'
-        run: .forgejo/scripts/check-toolchain.sh && wt --version
+        run: .forgejo/scripts/check-toolchain.sh
 
       - name: Release script tests
         if: env.DOCS_ONLY != 'true'

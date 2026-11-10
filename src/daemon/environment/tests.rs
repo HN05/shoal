@@ -20,13 +20,14 @@ async fn root_dir_reports_whether_the_daemon_can_write_there() {
 #[test]
 fn dependencies_require_executable_files_on_the_supplied_path() {
     let root = tempfile::tempdir().unwrap();
-    install_test_script(&root.path().join("git"), "#!/bin/sh\n");
-    fs::write(root.path().join("wt"), "not executable").unwrap();
+    fs::write(root.path().join("git"), "not executable").unwrap();
     fs::create_dir(root.path().join("fzf")).unwrap();
     let checks = dependencies(Some(root.path().as_os_str()));
+    assert_eq!(checks[0].status, CheckStatus::Error);
+    assert_eq!(checks[1].status, CheckStatus::Warning);
+    install_test_script(&root.path().join("git"), "#!/bin/sh\n");
+    let checks = dependencies(Some(root.path().as_os_str()));
     assert_eq!(checks[0].status, CheckStatus::Ok);
-    assert_eq!(checks[1].status, CheckStatus::Error);
-    assert_eq!(checks[2].status, CheckStatus::Warning);
     assert!(
         dependencies(None)
             .iter()

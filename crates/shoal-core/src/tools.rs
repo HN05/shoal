@@ -33,7 +33,6 @@ macro_rules! tools {
 
 tools! {
     Git => ("git", Some(Dependency::Required)),
-    Worktrunk => ("wt", Some(Dependency::Required)),
     Fzf => ("fzf", Some(Dependency::Optional("needed for interactive pickers"))),
     // The default terminal host's program is checked as that host's;
     // feature-specific and platform tools are diagnosed when invoked.

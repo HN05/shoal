@@ -30,7 +30,7 @@
 ARG RUST=1.99
 FROM docker.io/library/rust:${RUST}-trixie
 
-# The daemon and workspace tests spawn these: git and Worktrunk for worktrees,
+# The daemon and workspace tests spawn these: git for worktrees,
 # lsof for port checks, zsh and bash as user shells, python3 for the xcrun
 # fixture and the release scripts, tmux for the tmux host's tests against an
 # isolated server. curl and jq serve ci.yml's undraft and gate jobs,
@@ -76,16 +76,12 @@ RUN set -eu \
  && echo "$sum  /usr/local/bin/zellij" | sha256sum -c - \
  && rm -f /tmp/zellij.tar.gz
 
-# Worktrunk is pinned because Shoal drives its CLI. --locked builds it against
-# its own lockfile, so an upstream release cannot break this image. Every layer
-# drops the registry it downloaded: layers are additive, so sources left here
-# would survive a later RUN that deletes them, and the runner mounts the host's
-# registry over that path at run time anyway.
-RUN cargo install --locked worktrunk --version 0.81.0 \
- && rm -rf "$CARGO_HOME/registry"
-
 # cargo-audit and cargo-outdated feed deps.yml's weekly report, which parses
-# their JSON, so they are pinned as well. cargo-outdated builds in its own
+# their JSON, so they are pinned. --locked builds each against its own
+# lockfile, so an upstream release cannot break this image. Every layer drops
+# the registry it downloaded: layers are additive, so sources left here would
+# survive a later RUN that deletes them, and the runner mounts the host's
+# registry over that path at run time anyway. cargo-outdated builds in its own
 # layer with LTO off: it links the whole cargo crate, and its final LTO pass can
 # outgrow the runner LXC's memory. The slower binary does not matter weekly.
 RUN cargo install --locked cargo-audit --version 0.22.2 \
@@ -126,7 +122,7 @@ RUN cargo install --locked apple-codesign --version 0.29.0 \
 
 # Sanity: the versions the jobs will run with, visible in `podman build` output.
 RUN rustc --version && cargo clippy --version && cargo fmt --version \
- && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
+ && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
  && tmux -V && zellij --version \
  && zig version && cargo-zigbuild --version && rcodesign --version \
  && cargo audit --version && cargo outdated --version \

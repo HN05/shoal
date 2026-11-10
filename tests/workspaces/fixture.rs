@@ -51,11 +51,6 @@ impl Fixture {
     }
 
     pub(crate) fn with_tools(config: Option<&str>, fake_sim: bool) -> Self {
-        static WORKTRUNK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        assert!(
-            *WORKTRUNK.get_or_init(|| Command::new("wt").arg("--version").output().is_ok()),
-            "workspace integration tests require Worktrunk (wt)"
-        );
         let root = tempfile::tempdir_in("/tmp").unwrap();
         // Debug builds only open existing native ownership locks. Prepare the
         // isolated zmx namespace for terminal launch and cleanup tests.
@@ -333,15 +328,13 @@ impl Fixture {
     }
 
     /// Interactive commands open pickers for whatever agents and fzf they find,
-    /// so they see only the fixture's `bin`, the runner's Git and Worktrunk, and
-    /// system directories.
+    /// so they see only the fixture's `bin`, the runner's Git, and system
+    /// directories.
     pub(crate) fn interactive_path(&self) -> String {
         let tools = self.root.path().join("runner-bin");
         if !tools.exists() {
             fs::create_dir(&tools).unwrap();
-            for program in ["git", "wt"] {
-                link_runner_program(&tools, program);
-            }
+            link_runner_program(&tools, "git");
             install_test_script(tools.join("zmx"), PASSTHROUGH_ZMX);
         }
         format!(
@@ -352,13 +345,13 @@ impl Fixture {
         )
     }
 
-    /// `bin`, the runner's Worktrunk, which setup uses to copy ignored files,
-    /// and system directories.
+    /// `bin`, the runner's Git, which setup uses to copy ignored files, and
+    /// system directories.
     pub(crate) fn restricted_path(&self, bin: &Path) -> String {
-        let tools = self.root.path().join("worktrunk-bin");
+        let tools = self.root.path().join("git-bin");
         if !tools.exists() {
             fs::create_dir(&tools).unwrap();
-            link_runner_program(&tools, "wt");
+            link_runner_program(&tools, "git");
         }
         format!(
             "{}:{}:{}",

@@ -55,11 +55,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   delegated messages, removal and cleanup take one walk up or down that link
   and one check for an agent, with no branch on kind; messages to a space go
   through one operation.
-- Invoke external tools with argument arrays. Use Worktrunk for worktree
-  operations, except creating a workspace at a commit's worktree, which plain
-  Git creates since Worktrunk only makes worktrees on a branch, and a copy's,
-  since Worktrunk always checks files out; preserve Shoal's ownership records
-  and cleanup policy.
+- Invoke external tools with argument arrays. Worktrees are created and
+  removed with plain Git through the `git` module; preserve Shoal's ownership
+  records and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named
   operations and retain lifecycle and execution policy.
 - Interactive input lives in `cli::ui`, whose module doc lists what it offers:

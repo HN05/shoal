@@ -5769,7 +5769,7 @@ shoal adopt <path>             # Reclaim a worktree at its recorded path after c
 
 Each problem shows where you look and names the command that resolves it. When
 the daemon starts and when `daemon reload` rereads its config, it checks that
-`git` and `wt` are executable on its PATH, that the host the global
+`git` is executable on its PATH, that the host the global
 `terminal.default_host` names is installed, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have
 a working tree, whether a global rule repeats Shoal's guidance, and which forge each
