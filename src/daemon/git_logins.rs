@@ -9,11 +9,11 @@ use crate::{
 };
 
 impl Manager {
-    /// The agent token `[machine.forges]` sets for `host`, with the username
-    /// its forge takes from Git, for a scoped `caller`: only Shoal's agents
-    /// and the pushes it runs act as the agent account. None for the user's
-    /// own processes or a host without one. The token is read from the
-    /// current configuration on each request.
+    /// The agent token `[machine.forges]` sets for `host`, as Git names it,
+    /// with the username its forge takes from Git, for a scoped `caller`:
+    /// only Shoal's agents and the pushes it runs act as the agent account.
+    /// None for the user's own processes or a host without one. The token
+    /// is read from the current configuration on each request.
     pub(crate) async fn agent_git_credential(
         &self,
         caller: Option<&Caller>,
@@ -21,9 +21,9 @@ impl Manager {
     ) -> Result<Option<GitCredential>> {
         let config = self.config();
         let forges = &config.machine.forges;
-        if caller.is_none() || !forges.has_agent_token(host) {
+        let Some(host) = forges.agent_token_host(host).filter(|_| caller.is_some()) else {
             return Ok(None);
-        }
+        };
         let username = self.host_type(host, "https").await?.kind().git_username();
         let logins = forges.logins(Whose::Agent);
         Ok(logins.token(host).await?.map(|password| GitCredential {

@@ -82,6 +82,20 @@ impl Forges {
             .map(|(host, _)| host.as_str())
     }
 
+    /// The host, as the config names it, whose agent token Git over HTTPS
+    /// to `host` signs in with; HTTPS's default port counts as none on
+    /// either side.
+    pub fn agent_token_host(&self, host: &str) -> Option<&str> {
+        let https = |host: &str| {
+            host.strip_suffix(":443")
+                .unwrap_or(host)
+                .to_ascii_lowercase()
+        };
+        let requested = https(host);
+        self.agent_token_hosts()
+            .find(|configured| https(configured) == requested)
+    }
+
     /// The logins of `whose` tokens, each fetched when a request first
     /// needs it.
     pub fn logins(&self, whose: Whose) -> Logins {

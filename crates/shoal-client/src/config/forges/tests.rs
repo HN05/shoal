@@ -18,6 +18,26 @@ fn hosts_pin_a_known_type_case_insensitively() {
 }
 
 #[test]
+fn git_finds_an_agent_token_whether_or_not_either_side_names_https_default_port() {
+    let forges: Forges = toml::from_str(
+        "[\"Git.example.com\"]\nagent_token = \"a\"\n[\"code.example.com:443\"]\nagent_token = \"b\"\n\
+         [\"user.example.com\"]\ntoken = \"c\"\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        forges.agent_token_host("git.example.com:443"),
+        Some("Git.example.com")
+    );
+    assert_eq!(
+        forges.agent_token_host("code.example.com"),
+        Some("code.example.com:443")
+    );
+    assert_eq!(forges.agent_token_host("git.example.com:3000"), None);
+    assert_eq!(forges.agent_token_host("user.example.com"), None);
+}
+
+#[test]
 fn tokens_take_the_shared_value_forms_and_emails_only_on_bitbucket() {
     let forges: Forges = toml::from_str(
         r#"
