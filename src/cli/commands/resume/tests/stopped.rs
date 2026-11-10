@@ -98,16 +98,12 @@ async fn resume_child() {
     let id = SpaceId::from(std::env::var("SHOAL_TEST_WORKSPACE").unwrap());
     let discard = std::env::var("SHOAL_TEST_DISCARD").unwrap() == "true";
     let ctx = crate::cli::context::Context::new(paths, true);
-    match crate::cli::commands::resume::workspace::run(
-        &ctx,
-        SpaceSelector::id(&id),
-        None,
-        discard,
-        true,
-        None,
-    )
-    .await
-    {
+    let workspace = SpaceSelector::id(&id);
+    let resumed = match discard {
+        true => super::super::discard::discard_work(&ctx, workspace, None).await,
+        false => super::super::workspace::run(&ctx, workspace, None, true, None).await,
+    };
+    match resumed {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("{error:#}");

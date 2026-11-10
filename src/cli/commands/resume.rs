@@ -64,8 +64,11 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     }
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
-        ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
-            workspace::run(ctx, workspace.clone(), execution, discard, focus, change).await
+        ([], Some([workspace])) if discard => {
+            discard::discard_work(ctx, workspace.clone(), execution).await
+        }
+        ([], Some([workspace])) if focus || queuing == Queuing::Here { now: true } => {
+            workspace::run(ctx, workspace.clone(), execution, focus, change).await
         }
         ([], Some([workspace])) => {
             queue::queue_workspace(ctx, workspace.clone(), execution, queuing, change).await

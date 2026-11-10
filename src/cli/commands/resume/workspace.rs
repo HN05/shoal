@@ -1,10 +1,9 @@
-//! Resuming one workspace's stopped agent or last session: in this terminal,
-//! or where it stopped or in the background, or forgetting its stopped work
-//! for `--discard`.
+//! Resuming one workspace's stopped agent or last session, in this terminal
+//! or where it stopped or in the background.
 use anyhow::{Context as _, Result, ensure};
 use std::path::PathBuf;
 
-use super::{commands, discard, permission_change, picker, queue, reports, sessions, stale};
+use super::{commands, permission_change, picker, queue, reports, sessions, stale};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
 use crate::client::space_names::SpaceSelector;
@@ -19,22 +18,17 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-/// Resume `workspace`'s stopped agent, the `execution` one when given, or
-/// forget its stopped work for `discard`. The agent restores in this
-/// terminal when `here`, otherwise where it stopped or in the background,
-/// making `change` when given; one whose wrapper waits to restore it
-/// starts there at once.
-pub async fn run(
+/// Resume `workspace`'s stopped agent, the `execution` one when given. The
+/// agent restores in this terminal when `here`, otherwise where it stopped
+/// or in the background, making `change` when given; one whose wrapper
+/// waits to restore it starts there at once.
+pub(super) async fn run(
     ctx: &Context,
     workspace: SpaceSelector,
     execution: Option<ExecutionId>,
-    discard: bool,
     here: bool,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    if discard {
-        return discard::discard_work(ctx, workspace, execution).await;
-    }
     let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
