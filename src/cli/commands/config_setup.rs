@@ -17,6 +17,12 @@ use crate::{
 /// Start the setup chat, writing the packaged default config first when
 /// there is none and the agent is settled.
 pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
+    let handoff = args.handoff.take();
+    chat::handoff::serve(handoff.as_deref(), setup(ctx, args)).await
+}
+
+/// Start the setup chat `args` ask for.
+async fn setup(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     // Chosen before the config is written, so a refused agent leaves none.
     let settings = crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Global).await?;
     let agent = chat::chat_agent(ctx, &settings, args.agent.take())?;

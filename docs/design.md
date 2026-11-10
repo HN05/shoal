@@ -732,8 +732,10 @@ A chat an agent starts opens in a background place, since the agent cannot
 hand over its terminal, and keeps the agent's scope until it records the chat
 below the agent's space. Every start in a background place waits for the place
 to report that the chat is about to run its agent, or why not, since an open
-place proves neither. It waits as long as the place runs once the place takes
-the handoff, which a lock the place holds until it exits shows, and gives up
+place proves neither. The place takes the handoff before anything checks its
+scope, which it may still inherit from the starter's processes, and reports
+any failure after that. The starter waits as long as the place runs once the
+place takes the handoff, which a lock the place holds until it exits shows, and gives up
 only on a place that does not take it within a hang guard or that ends without
 a report; the report and a scoped starter's token go through a
 private directory the place's command names, never the place's environment,

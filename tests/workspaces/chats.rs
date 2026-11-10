@@ -1300,6 +1300,39 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     assert!(planned.status.success(), "{planned:?}");
 }
 
+/// A background place may still run below its scoped starter's processes,
+/// so it takes the scope token its starter hands it before its own scope is
+/// checked, and reports to the starter whatever stops the chat.
+#[test]
+fn a_background_place_below_its_starter_takes_the_handed_scope() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['true']\n"));
+    fixture.add("parent");
+    let handoff = fixture.root.path().join("handoff");
+    fs::create_dir(&handoff).unwrap();
+    // The place's command inherits the workspace's scope through its
+    // ancestors, without the token in its own environment.
+    let place = fixture
+        .command()
+        .args(["run", "--workspace", "parent", "--", "sh", "-c"])
+        .arg(
+            "printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HANDOFF/scope\"; unset SHOAL_SCOPE_TOKEN; \
+             exec \"$SHOAL\" --json start --chat \"$REPO\" --here --name sub --agent claude \
+             --handoff \"$HANDOFF\" </dev/null",
+        )
+        .env("SHOAL", support::shoal_binary())
+        .env("REPO", &fixture.repo)
+        .env("HANDOFF", &handoff)
+        .output()
+        .unwrap();
+    // Without a terminal the chat does not start, after the place took the
+    // token, and the starter learns why.
+    assert!(!place.status.success(), "{place:?}");
+    assert!(!handoff.join("scope").exists(), "{place:?}");
+    let error: Value = serde_json::from_slice(&place.stderr).unwrap();
+    let report = fs::read_to_string(handoff.join("report")).unwrap_or_default();
+    assert_eq!(error["error"]["message"], report.as_str(), "{place:?}");
+}
+
 #[test]
 fn any_space_opens_any_kind_of_child() {
     let fixture = Fixture::with_config(Some(
@@ -1313,11 +1346,12 @@ fn any_space_opens_any_kind_of_child() {
         fixture.repo.join("chat-agent.sh"),
         format!(
             "shoal='{}'\n\
+             echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
              if [ ! -e \"$HOME/nested-started\" ]; then\n\
              touch \"$HOME/nested-started\"\n\
              \"$shoal\" start --chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
+             echo $? > \"$HOME/nested-status\"\n\
              fi\n\
-             echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
             support::shoal_binary()
@@ -1355,7 +1389,15 @@ fn any_space_opens_any_kind_of_child() {
         &["start", "--chat", "--agent", "claude", "--name", "sub"],
     );
     assert!(sub.status.success(), "{sub:?}");
-    wait_until("both chats started", || {
+    // The nested start, like sub's, returns once its chat holds its own
+    // scope, or says why it did not.
+    let status = wait_for("sub's agent's start of nested", || {
+        (fs::read_to_string(home.join("nested-status")).ok())
+            .filter(|status| status.ends_with('\n'))
+    });
+    let output = fs::read_to_string(home.join("nested-chat")).unwrap_or_default();
+    assert_eq!(status.trim(), "0", "{output}");
+    wait_until("nested's agent", || {
         fs::read_to_string(home.join("chats-started")).is_ok_and(|ids| ids.lines().count() == 2)
     });
     let chats = fixture.ok(&["work", "--chats"]);

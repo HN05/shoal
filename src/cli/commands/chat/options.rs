@@ -189,9 +189,6 @@ impl Options {
     /// so its processes are not the agent's. Only that place runs it here,
     /// with the scope its handoff carries.
     pub fn for_caller(self, ctx: &Context) -> Result<Self> {
-        if let Some(path) = &self.handoff {
-            handoff::receive(path)?;
-        }
         ensure_scope_token(ctx)?;
         if !crate::env::is_scoped() {
             return Ok(self);

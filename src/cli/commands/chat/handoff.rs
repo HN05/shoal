@@ -132,12 +132,28 @@ fn place(path: &Path) -> Result<Place> {
     }
 }
 
+/// Run `start` as the place of the handoff at `path`, when one is given:
+/// take the handoff before `start` checks this process's scope, which it may
+/// still inherit from the starter's processes, and report how `start` went,
+/// so that no failure leaves the starter waiting.
+pub(in crate::cli::commands) async fn serve<T>(
+    path: Option<&Path>,
+    start: impl Future<Output = Result<T>>,
+) -> Result<T> {
+    if let Some(path) = path {
+        receive(path)?;
+    }
+    let outcome = start.await;
+    report(&outcome);
+    outcome
+}
+
 /// The handoff this process received, to which it reports.
 static RECEIVED: OnceLock<PathBuf> = OnceLock::new();
 
 /// Take the starter's scope token from the handoff at `path`, when it handed
 /// one, as this process's own, and report to the starter from now on.
-pub(super) fn receive(path: &Path) -> Result<()> {
+fn receive(path: &Path) -> Result<()> {
     ensure!(
         RECEIVED.set(path.to_owned()).is_ok(),
         "this process already received a chat's handoff"

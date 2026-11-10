@@ -32,6 +32,12 @@ use crate::{
 };
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
+    let handoff = args.handoff.take();
+    chat::handoff::serve(handoff.as_deref(), start(ctx, args)).await
+}
+
+/// Start what `args` ask for.
+async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     // Without its token, the daemon would take a workspace process's start
     // for the user's and create a space outside its own.
     ensure!(

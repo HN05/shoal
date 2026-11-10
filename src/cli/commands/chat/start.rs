@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::{Options, Topic, handoff, issue, launch::begin};
+use super::{Options, Topic, issue, launch::begin};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{agents::ChatRepository, context::Context, ui},
@@ -66,7 +66,6 @@ pub(in crate::cli::commands) async fn start(
         .await
     }
     .await;
-    handoff::report(&started);
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
 }
 
@@ -89,7 +88,6 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
         begin(ctx, repository, settings, topic, options).await
     }
     .await;
-    handoff::report(&started);
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
 }
 
@@ -138,7 +136,6 @@ pub(in crate::cli::commands) async fn start_in_workspace(
         .await
     }
     .await;
-    handoff::report(&started);
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
 }
 
