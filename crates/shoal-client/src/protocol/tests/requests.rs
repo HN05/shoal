@@ -197,6 +197,7 @@ const REQUESTS: &[&str] = &[
     r#"{"send_all_agent_message":{"message":"rebase"}}"#,
     r#"{"agent_messages":{"space":"fix"}}"#,
     r#"{"mark_agent_messages_delivered":{"space":"fix","ids":[5]}}"#,
+    r#"{"git_credential":{"host":"git.example.com"}}"#,
     r#"{"agent_updates":{"space":"fix"}}"#,
     r#"{"wait_agent_updates":{"space":"app-chat"}}"#,
     r#"{"agent_session":{"workspace":"fix"}}"#,
