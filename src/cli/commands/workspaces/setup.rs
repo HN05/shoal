@@ -22,9 +22,11 @@ use crate::{
     state::WorkspaceState,
 };
 
-/// Copy the main checkout's ignored files inside tracked setup, then become
-/// the setup command so its exit status and signals are the execution's.
+/// Copy the main checkout's ignored files but those `exclude` matches inside
+/// tracked setup, then become the setup command so its exit status and
+/// signals are the execution's.
 pub(in crate::cli::commands) async fn copy_ignored_worker(
+    exclude: &[String],
     setup_cmd: Option<PathBuf>,
 ) -> Result<i32> {
     ensure!(
@@ -33,7 +35,7 @@ pub(in crate::cli::commands) async fn copy_ignored_worker(
     );
     // Tracked setup runs in the workspace root.
     let workspace = std::env::current_dir()?;
-    let copied = git::ignored::copy(&workspace, &[]).await?;
+    let copied = git::ignored::copy(&workspace, exclude).await?;
     if copied > 0 {
         eprintln!(
             "Copied {copied} ignored file{} from the repository checkout",

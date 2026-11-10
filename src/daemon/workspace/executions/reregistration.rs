@@ -65,7 +65,7 @@ impl Manager {
             workspace,
             scope_token: registration.scope_token,
             setup_cmd: None,
-            copy_ignored: false,
+            copy_ignored: None,
             ports: registration.ports,
             environment,
             merge: None,

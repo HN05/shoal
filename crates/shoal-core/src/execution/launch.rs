@@ -644,11 +644,12 @@ fn execution_command(
             },
         );
     }
-    if plan.copy_ignored {
+    if let Some(copy) = &plan.copy_ignored {
         return internal_command(
             paths,
             false,
             Worker::CopyIgnored {
+                exclude: &copy.exclude,
                 setup_cmd: plan.setup_cmd.as_deref(),
             },
         );

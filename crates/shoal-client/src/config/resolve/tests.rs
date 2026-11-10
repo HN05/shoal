@@ -17,7 +17,7 @@ git_profile = 'work'\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
 [terminal.tmux]\nenabled = true\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
 [terminal.zellij]\nenabled = true\nnew_tab = false\nplacement = 'split'\ntab_name = '{branch}'\nclose_when_done = false\n\
-[setup]\ncommand = 'setup'\ncopy_ignored = false\npresets = ['cargo']\n[setup.seed]\ncommand = 'scripts/seed'\npaths = ['target']\n\
+[setup]\ncommand = 'setup'\ncopy_ignored = false\ncopy_ignored_exclude = ['build/']\npresets = ['cargo']\n[setup.seed]\ncommand = 'scripts/seed'\npaths = ['target']\n\
 [hooks]\npre_setup = 'pre-setup'\npost_remove = 'post-remove'\npost_done = 'post-done'\npost_ready = 'post-ready'\npost_agent_exit = 'agent-exit'\n\
 post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup = 'attach'\npre_remove = 'detach'\n\
 [env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n\

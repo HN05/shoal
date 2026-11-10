@@ -3300,6 +3300,7 @@ command, with local config taking precedence over the worktree file.
 ```toml
 [setup]
 copy_ignored = false              # Skip copying the checkout's ignored files
+copy_ignored_exclude = ["node_modules/"] # Ignored entries not to copy; default []
 command = "scripts/setup.sh"      # Prepares the worktree; must exit 0
 
 [hooks]
@@ -3332,7 +3333,9 @@ Files the workspace already has are kept, including paths cloned from a
 the workspace. A [copy](#copies) of a workspace's current files skips it, since
 it has that workspace's ignored files. Without a `.worktreeinclude` in the
 checkout every ignored file is copied, build caches included; its gitignore-style
-patterns limit the copy to what they match. The state directories of other version control systems and worktree
+patterns limit the copy to what they match. `[setup] copy_ignored_exclude`, a list
+of gitignore-style patterns that is also a global default, leaves out what it
+matches. The state directories of other version control systems and worktree
 tools (`.bzr`, `.conductor`, `.entire`, `.hg`, `.jj`, `.pijul`, `.sl`, `.svn` and
 `.worktrees`) and directories holding another worktree are never copied.
 

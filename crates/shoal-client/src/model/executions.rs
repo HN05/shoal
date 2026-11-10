@@ -48,13 +48,20 @@ pub struct ExecutionPlan {
     /// Absolute setup command path when the execution runs configured setup.
     pub setup_cmd: Option<PathBuf>,
     /// Copy the main checkout's ignored files before the setup command.
-    pub copy_ignored: bool,
+    pub copy_ignored: Option<CopyIgnored>,
     pub ports: Vec<PortReservation>,
     #[serde(default)]
     pub environment: std::collections::BTreeMap<String, std::ffi::OsString>,
     pub merge: Option<Box<MergePlan>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unmerge: Option<Box<UnmergePlan>>,
+}
+
+/// Setup's copy of the main checkout's ignored files.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CopyIgnored {
+    /// Gitignore-style patterns of the entries it leaves out.
+    pub exclude: Vec<String>,
 }
 
 /// A place Shoal created for a space, a workspace or a chat, which closes

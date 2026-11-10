@@ -209,15 +209,20 @@ fn approval_workers_round_trip_their_space_and_decision() {
 }
 
 #[test]
-fn copy_ignored_round_trips_optional_setup_command() {
+fn copy_ignored_round_trips_excludes_and_optional_setup_command() {
+    let exclude = ["-dash/".to_owned(), "!negated".into(), "target/".into()];
     for setup_cmd in [None, Some(Path::new("/repo/--setup 'literal'.sh"))] {
-        let InternalCommand::CopyIgnored {
-            setup_cmd: parsed_setup_cmd,
-        } = parse(Worker::CopyIgnored { setup_cmd }, false)
-        else {
-            panic!("expected copy-ignored worker");
-        };
-        assert_eq!(parsed_setup_cmd.as_deref(), setup_cmd);
+        for exclude in [&exclude[..], &[]] {
+            let InternalCommand::CopyIgnored {
+                exclude: parsed_exclude,
+                setup_cmd: parsed_setup_cmd,
+            } = parse(Worker::CopyIgnored { exclude, setup_cmd }, false)
+            else {
+                panic!("expected copy-ignored worker");
+            };
+            assert_eq!(parsed_exclude, exclude);
+            assert_eq!(parsed_setup_cmd.as_deref(), setup_cmd);
+        }
     }
 }
 

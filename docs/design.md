@@ -885,8 +885,8 @@ blocking evidence. Other failures let interactive callers choose delete, ignore
 Tracked setup starts by copying the repository checkout's ignored files unless
 `setup.copy_ignored = false`, so local files like `.env` arrive without a setup
 script and failures gate readiness; `.worktreeinclude`, a convention other worktree
-tools share, selects what to copy. The copy is Shoal's own, ported from
-Worktrunk's `wt step copy-ignored`.
+tools share, selects what to copy, and `setup.copy_ignored_exclude` leaves entries
+out. The copy is Shoal's own, ported from Worktrunk's `wt step copy-ignored`.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that

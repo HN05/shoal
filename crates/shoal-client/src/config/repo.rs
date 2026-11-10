@@ -211,6 +211,10 @@ pub struct SetupConfig {
     /// Copy the main checkout's ignored files into the worktree before setup.
     #[option(default = true)]
     pub copy_ignored: Option<bool>,
+    /// Gitignore-style patterns of ignored entries that copy leaves out; an
+    /// empty list turns inherited patterns off.
+    #[option(default = Vec::new())]
+    pub copy_ignored_exclude: Option<Vec<String>>,
     /// Build tools whose usual setup the repository's workspaces share; an
     /// empty list turns off presets a lower layer names. Unset when no layer
     /// names presets.

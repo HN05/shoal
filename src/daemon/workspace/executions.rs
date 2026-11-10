@@ -18,8 +18,8 @@ use crate::{
     fsutil::off_runtime,
     hooks::HookKind,
     model::{
-        CopiedFrom, Execution, ExecutionPlan, MergePlan, PortReservation, Repository, UnmergePlan,
-        Workspace,
+        CopiedFrom, CopyIgnored, Execution, ExecutionPlan, MergePlan, PortReservation, Repository,
+        UnmergePlan, Workspace,
     },
     process::{
         execution::Processes,
@@ -76,7 +76,7 @@ pub(crate) struct ExecutionRequest {
 #[derive(Default)]
 struct PreparedExecution {
     setup_cmd: Option<PathBuf>,
-    copy_ignored: bool,
+    copy_ignored: Option<CopyIgnored>,
     pre_setup: Option<PathBuf>,
     registration_guard: Option<OwnedMutexGuard<()>>,
     lifetime_guard: Option<OwnedMutexGuard<()>>,
@@ -517,14 +517,18 @@ impl Manager {
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
                 // A copy of a workspace's files has that workspace's ignored
                 // files instead.
-                let copy_ignored = self.workspace_settings(workspace).await?.setup.copy_ignored
-                    && !(workspace.copied_from.as_ref()).is_some_and(CopiedFrom::took_files);
+                let setup = &self.workspace_settings(workspace).await?.setup;
+                let copy_ignored = (setup.copy_ignored
+                    && !(workspace.copied_from.as_ref()).is_some_and(CopiedFrom::took_files))
+                .then(|| CopyIgnored {
+                    exclude: setup.copy_ignored_exclude.clone(),
+                });
                 // One that skipped setup runs it to clear that and run the
                 // hooks around it, whatever the setup does.
                 ensure!(
                     setup_cmd.is_some()
                         || pre_setup.is_some()
-                        || copy_ignored
+                        || copy_ignored.is_some()
                         || workspace.setup_skipped,
                     "no setup configured; set setup.command, hooks.pre_setup or setup.copy_ignored"
                 );

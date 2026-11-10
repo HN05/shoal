@@ -272,6 +272,9 @@ pub enum InternalCommand {
     /// Copy the main checkout's ignored files inside tracked setup, then run setup.
     #[command(name = workers::COPY_IGNORED)]
     CopyIgnored {
+        /// A gitignore-style pattern of entries to leave out; repeatable.
+        #[arg(long)]
+        exclude: Vec<String>,
         #[arg(last = true)]
         setup_cmd: Option<PathBuf>,
     },

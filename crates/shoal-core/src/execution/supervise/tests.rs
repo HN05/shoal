@@ -584,7 +584,7 @@ fn plan(root: &Path) -> ExecutionPlan {
         ),
         scope_token: "test-scope".into(),
         setup_cmd: None,
-        copy_ignored: false,
+        copy_ignored: None,
         ports: vec![],
         environment: Default::default(),
         merge: None,

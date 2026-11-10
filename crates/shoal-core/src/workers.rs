@@ -112,8 +112,10 @@ pub enum Worker<'a> {
         close_when_done: bool,
         focused: bool,
     },
-    /// Copy the checkout's ignored files, then run setup.
+    /// Copy the checkout's ignored files but those `exclude` matches, then
+    /// run setup.
     CopyIgnored {
+        exclude: &'a [String],
         setup_cmd: Option<&'a Path>,
     },
     /// Print a bare `shoal` picker view's rows, by its name.
@@ -350,8 +352,14 @@ pub(crate) fn internal_command_for(
                 args.push("--focused".into());
             }
         }
-        Worker::CopyIgnored { setup_cmd } => {
+        Worker::CopyIgnored { exclude, setup_cmd } => {
             args.push(COPY_IGNORED.into());
+            // Joined, so a pattern starting with a dash stays its value.
+            args.extend(
+                exclude
+                    .iter()
+                    .map(|pattern| format!("--exclude={pattern}").into()),
+            );
             if let Some(setup_cmd) = setup_cmd {
                 args.extend(["--".into(), setup_cmd.as_os_str().to_owned()]);
             }
