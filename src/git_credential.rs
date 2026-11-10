@@ -76,10 +76,11 @@ fn helper_covers(key: &str, host: &str) -> bool {
 }
 
 /// Whether the host `pattern` matches `host`, where Git lets `*` in a
-/// pattern match one label of the host name.
+/// pattern match one label of the host name and HTTPS's default port
+/// matches a host without one.
 fn host_matches(pattern: &str, host: &str) -> bool {
-    let (pattern, pattern_port) = pattern.split_once(':').unwrap_or((pattern, ""));
-    let (host, port) = host.split_once(':').unwrap_or((host, ""));
+    let (pattern, pattern_port) = https_port(pattern);
+    let (host, port) = https_port(host);
     let (patterns, labels): (Vec<_>, Vec<_>) =
         (pattern.split('.').collect(), host.split('.').collect());
     pattern_port == port
@@ -88,6 +89,16 @@ fn host_matches(pattern: &str, host: &str) -> bool {
             .iter()
             .zip(&labels)
             .all(|(pattern, label)| label_matches(pattern, label))
+}
+
+/// The host name and port of `authority`, with HTTPS's default port as
+/// none.
+fn https_port(authority: &str) -> (&str, &str) {
+    match authority.split_once(':') {
+        Some((host, "443")) | Some((host, "")) => (host, ""),
+        Some((host, port)) => (host, port),
+        None => (authority, ""),
+    }
 }
 
 /// Whether `label` matches `pattern`, in which `*` stands for any run of

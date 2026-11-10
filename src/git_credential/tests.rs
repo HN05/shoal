@@ -47,6 +47,7 @@ fn helpers_cover_the_hosts_git_asks_them_for() {
         "Credential.Helper",
         "credential.https://git.example.com.helper",
         "credential.https://Git.Example.com/.helper",
+        "credential.https://git.example.com:443.helper",
         "credential.git.example.com.helper",
         "credential.https://*.example.com.helper",
     ];
