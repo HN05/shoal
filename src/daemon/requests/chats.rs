@@ -1,8 +1,7 @@
 //! The daemon's answers to [`ChatMethod`] requests, and who may send them.
-use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::super::{
     answer::Answer,
@@ -121,16 +120,13 @@ pub(super) async fn handle(
             join,
             run,
             change,
-        } => {
-            let id = restarted_chat(manager, chat).await?;
-            Body::RestartedPlace(match join {
-                Some(joined) => manager.join_chat_restart(&id, joined.run, run).await?,
-                None => {
-                    let stopped_by = caller.map(|caller| caller.space_id.clone());
-                    (manager.restart_chat(&id, run, stopped_by, change)).await?
-                }
-            })
-        }
+        } => Body::RestartedPlace(match join {
+            Some(joined) => manager.join_chat_restart(&chat, joined.run, run).await?,
+            None => {
+                let stopped_by = caller.map(|caller| caller.space_id.clone());
+                (manager.restart_chat(&chat, run, stopped_by, change)).await?
+            }
+        }),
     }))
 }
 
@@ -152,18 +148,6 @@ async fn ensure_caller_holds(
     };
     let giver = Some(&caller.space_id);
     (manager.ensure_caller_holds(giver, given, repository.as_ref())).await
-}
-
-/// The ID of the chat a restart names, or of one that ended meanwhile,
-/// which a joined restart answers for as it did; a joined restart names
-/// its chat by ID.
-async fn restarted_chat(manager: &Manager, chat: SpaceSelector) -> Result<SpaceId> {
-    match (manager.chat(&chat).await, chat) {
-        (Ok(chat), _) => Ok(chat.id),
-        (Err(_), SpaceSelector::Id(id)) => Ok(id),
-        (Err(_), SpaceSelector::IdOrName(id)) => Ok(SpaceId::from(id)),
-        (Err(error), SpaceSelector::Number(_)) => Err(error),
-    }
 }
 
 impl Scoped for ChatMethod {
@@ -203,15 +187,15 @@ impl Scoped for ChatMethod {
             // The handler narrows the list to the chats below the caller's
             // space, the ones it may restart.
             ChatMethod::ChatAgents => None,
-            ChatMethod::RestartChat { chat, .. } => Some(
-                manager
-                    .workspace_below(
-                        caller,
-                        chat,
-                        "scoped processes restart only the agents of the spaces below their own",
-                    )
-                    .await?,
-            ),
+            // The chat may have ended already, as one a joined restart
+            // answers for does, so its ID is checked as given.
+            ChatMethod::RestartChat { chat, .. } => {
+                ensure!(
+                    *chat != caller.space_id && manager.reaches(caller, chat).await?,
+                    "scoped processes restart only the agents of the spaces below their own"
+                );
+                None
+            }
             ChatMethod::MoveChat { chat, .. }
             | ChatMethod::SaveChat { chat, .. }
             | ChatMethod::ChatScope { chat } => Some(

@@ -4,6 +4,7 @@ use crate::execution_ids::ExecutionId;
 use anyhow::Result;
 
 use crate::agent::AgentSessionId;
+use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionChange,
@@ -138,13 +139,13 @@ pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 /// place the chat runs in again, when it runs in a terminal host.
 pub async fn restart_chat(
     daemon: &impl Daemon,
-    chat: SpaceSelector,
+    chat: &SpaceId,
     join: Option<PendingRestart>,
     run: Option<String>,
     change: Option<PermissionChange>,
 ) -> Result<Option<Origin>> {
     let method = ChatMethod::RestartChat {
-        chat,
+        chat: chat.clone(),
         join,
         run,
         change,

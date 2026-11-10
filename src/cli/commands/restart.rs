@@ -9,7 +9,6 @@ use anyhow::{Result, ensure};
 use tokio::time::{Instant, sleep, sleep_until};
 
 use crate::client::output::agents::Restarted;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{args::SpaceTargets, context::Context},
@@ -161,7 +160,7 @@ impl Restart {
             PresentSpace::Chat(chat) => {
                 agents::restart_chat(
                     &ctx.paths,
-                    SpaceSelector::id(&chat.id),
+                    &chat.id,
                     self.joins.clone(),
                     run,
                     options.change.clone(),

@@ -231,6 +231,16 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
                 .await;
         assert_eq!(authorized.is_ok(), allowed, "{target}");
     }
+    // A place's workspace may be removed, so the request names it by ID.
+    for (workspace, allowed) in [(&child, true), (&parent, false), (&sibling, false)] {
+        let mut close = WorkspaceMethod::CloseOwnedPlace {
+            workspace: workspace.id.clone(),
+            place: crate::sessions::Origin::created(crate::sessions::HostName::Rex, "p".into()),
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut close).await;
+        assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
+    }
     let grandchild = manager
         .split_workspace(
             &SpaceSelector::id(&child.id),

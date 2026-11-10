@@ -2,7 +2,7 @@
 use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use tokio::net::UnixStream;
 
 use super::super::{
@@ -253,12 +253,6 @@ pub(super) async fn handle(
             Body::MergePreview(manager.preview_merge(&workspace, push).await?)
         }
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
-            // The workspace may be removed already, so its ID stays as given.
-            let workspace = match workspace {
-                SpaceSelector::Number(_) => manager.workspace(&workspace).await?.id,
-                SpaceSelector::Id(id) => id,
-                SpaceSelector::IdOrName(id) => SpaceId::from(id),
-            };
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
         }
         WorkspaceMethod::PlaceOwnership { workspace, place } => {
@@ -351,6 +345,15 @@ impl Scoped for WorkspaceMethod {
                 manager.parent_below(caller, parent).await?;
                 None
             }
+            // The workspace may be removed already, so its ID is checked as
+            // given instead of resolved.
+            WorkspaceMethod::CloseOwnedPlace { workspace, .. } => {
+                ensure!(
+                    manager.reaches(caller, workspace).await?,
+                    "workspace processes close only the places of their own space and those below it"
+                );
+                None
+            }
             // A coordinator follows the spaces below it, removed ones too.
             WorkspaceMethod::SpaceLog { space, .. } => {
                 manager.narrow_to_log(caller, space).await?;
@@ -382,7 +385,6 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
-            | WorkspaceMethod::CloseOwnedPlace { workspace, .. }
             | WorkspaceMethod::PlaceOwnership { workspace, .. }
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Workspace(workspace),

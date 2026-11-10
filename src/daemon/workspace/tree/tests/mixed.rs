@@ -540,3 +540,32 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;
+    for (caller, allowed) in [(&root.id, true), (&chat.id, false), (&worker.id, false)] {
+        let token = crate::client::scope_tokens::ScopeToken::from(caller.as_str());
+        let space_id = caller.clone();
+        let scope = crate::daemon::scope::Caller {
+            space_id,
+            execution: None,
+        };
+        manager.executions.issue_scope(token.clone(), scope).await;
+        // An ended chat is gone, so the request names it by ID.
+        let mut restart = crate::protocol::ChatMethod::RestartChat {
+            chat: chat.id.clone(),
+            join: None,
+            run: None,
+            change: None,
+        };
+        let authorized = crate::daemon::scope::authorize(&manager, Some(&token), &mut restart);
+        assert_eq!(authorized.await.is_ok(), allowed, "{caller}");
+    }
+}

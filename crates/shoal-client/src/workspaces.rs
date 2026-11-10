@@ -275,7 +275,7 @@ pub async fn close_owned_place(
     request(
         daemon,
         WorkspaceMethod::CloseOwnedPlace {
-            workspace: SpaceSelector::id(workspace),
+            workspace: workspace.clone(),
             place: place.clone(),
         },
     )

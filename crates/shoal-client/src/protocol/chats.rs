@@ -126,7 +126,7 @@ pub enum ChatMethod {
     /// have ended already. `run` names the `shoal restart` run that asks.
     /// `change` changes the permissions the chat's agent was given.
     RestartChat {
-        chat: SpaceSelector,
+        chat: SpaceId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         join: Option<crate::model::PendingRestart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

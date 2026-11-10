@@ -212,9 +212,9 @@ pub enum WorkspaceMethod {
     OwnedPlaces,
     /// Close `place`, a place Shoal created for `workspace`, while the
     /// daemon's record still names that workspace its owner. The workspace
-    /// may already be removed.
+    /// may already be removed, so the request names it by ID.
     CloseOwnedPlace {
-        workspace: SpaceSelector,
+        workspace: crate::space_ids::SpaceId,
         place: crate::sessions::Origin,
     },
     /// Whose `place` is, as the daemon knows it for `workspace`.
