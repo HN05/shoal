@@ -8,6 +8,7 @@ use anyhow::{Context as _, Result};
 use super::chat;
 use crate::config_file::ConfigExt;
 use crate::{
+    agent::{Agent, ModelChoice},
     cli::{args::service::ConfigSetupArgs, context::Context},
     config::{Config, modes, templates::Subject},
     protocol::ConfigTarget,
@@ -15,14 +16,21 @@ use crate::{
 
 /// Start the setup chat, writing the packaged default config first when
 /// there is none and the agent is settled.
-pub(super) async fn start(ctx: &Context, args: ConfigSetupArgs) -> Result<i32> {
+pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     // Chosen before the config is written, so a refused agent leaves none.
     let settings = crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Global).await?;
-    let agent = chat::chat_agent(ctx, &settings, args.agent)?;
-    let model = args.model.into();
+    let agent = chat::chat_agent(ctx, &settings, args.agent.take())?;
+    let model = std::mem::take(&mut args.model).into();
     chat::check_model(&settings, &agent, &model)?;
     let config = installed_config(ctx)?;
-    let options = chat::Options {
+    chat::start_outside_repositories(ctx, topic(&config), options(args, agent, model)).await
+}
+
+/// How the setup chat of `agent` starts: as chats do, at once, and unless
+/// `--here` in a focused place beside this terminal, whatever the `focus`
+/// setting says, since the user works with it straight away.
+fn options(args: ConfigSetupArgs, agent: Agent, model: ModelChoice) -> chat::Options {
+    chat::Options {
         narrowing: chat::Narrowing::Requested(Default::default()),
         agent: Some(agent),
         place: chat::ChatPlace::here(args.here),
@@ -34,8 +42,7 @@ pub(super) async fn start(ctx: &Context, args: ConfigSetupArgs) -> Result<i32> {
         restore: args.restore,
         handoff: args.handoff,
         parent: None,
-    };
-    chat::start_outside_repositories(ctx, topic(&config), options).await
+    }
 }
 
 /// The global config file, in a directory that exists and is named as the

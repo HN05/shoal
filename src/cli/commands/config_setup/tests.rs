@@ -1,7 +1,12 @@
 use std::path::Path;
 
-use super::{installed_config, subject};
-use crate::{cli::context::Context, config::Config, paths::Paths};
+use super::{installed_config, options, subject};
+use crate::{
+    agent::Agent,
+    cli::{args::service::ConfigSetupArgs, commands::chat::ChatPlace, context::Context},
+    config::Config,
+    paths::Paths,
+};
 
 #[test]
 fn setup_installs_the_default_config_only_where_there_is_none() {
@@ -27,4 +32,21 @@ fn the_subject_names_the_global_config() {
         subject.contains("`/home/me/.config/shoal/config.toml`"),
         "{subject}"
     );
+}
+
+#[test]
+fn the_setup_chat_opens_in_a_focused_place_beside_this_terminal() {
+    let args = ConfigSetupArgs {
+        here: false,
+        agent: None,
+        model: Default::default(),
+        name: None,
+        session: None,
+        restore: None,
+        handoff: None,
+        args: Vec::new(),
+    };
+    let agent = Agent::unchecked("claude".into());
+    let options = options(args, agent, Default::default());
+    assert_eq!(options.place, ChatPlace::Beside);
 }
