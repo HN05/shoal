@@ -1035,6 +1035,30 @@ fn removing_a_parent_lists_and_removes_its_children() {
 }
 
 #[test]
+fn a_named_child_its_failed_parent_took_is_not_removed_again() {
+    let fixture = Fixture::with_config(Some("hooks.pre_remove = 'hook.sh'\n"));
+    install_test_script(
+        fixture.repo.join("hook.sh"),
+        "#!/bin/sh\ntest \"$SHOAL_WORKSPACE\" != parent\n",
+    );
+    commit_resource_config(&fixture.repo, "");
+    fixture.add("parent");
+    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let output = fixture.run(&["--json", "rm", "--wait", "child", "parent", "--yes"]);
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    // The parent's removal took the child before its own hook failed.
+    let failed: Vec<_> = report["failed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| &f["workspace"])
+        .collect();
+    assert_eq!(failed, ["parent"], "{report}");
+    assert!(!Path::new(child["path"].as_str().unwrap()).exists());
+}
+
+#[test]
 fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     let fixture = Fixture::new();
     let repo = fixture.repo.to_str().unwrap();

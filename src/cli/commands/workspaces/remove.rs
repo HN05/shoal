@@ -112,9 +112,10 @@ async fn remove_one(ctx: &Context, check: RemovalCheck, wait: bool) -> Result<i3
     Ok(0)
 }
 
-/// Remove each of the `chats`, then each checked workspace, going on after
-/// one fails. One that a chat's removal took, or another named workspace's
-/// takes, with its own is not removed again.
+/// Remove each of the `chats`, then each checked workspace, those below
+/// another named one after it, going on after one fails. One that a removal
+/// before it took, or takes in the background, with its own is not removed
+/// again.
 async fn remove_each(
     ctx: &Context,
     chats: &[Chat],
@@ -138,14 +139,14 @@ async fn remove_each(
         }
     }
     let (chats, failed) = removed_chats.into_parts();
-    // A workspace below another named one goes with it, even while that
-    // removal goes on in the background.
-    let below = checks.iter().flat_map(|check| &check.children);
-    taken.extend(below.map(|child| child.name.clone()));
+    let checks = ancestors_first(checks);
+    // The spaces below a workspace whose removal failed, which it may have
+    // taken before it failed.
+    let mut maybe_taken: Vec<SpaceName> = Vec::new();
     let mut report = ui::Report::new("remove");
     for check in checks {
         let name = &check.workspace.name;
-        if taken.contains(name) {
+        if taken.contains(name) || (maybe_taken.contains(name) && !present(ctx, &check).await?) {
             continue;
         }
         match remove_checked(ctx, &check, Some(name), wait).await {
@@ -155,9 +156,13 @@ async fn remove_each(
                     &format!("Removing {name}"),
                     &removed,
                 );
+                taken.extend(removed.children().iter().cloned());
                 report.done(ctx, &message, removed);
             }
-            Err(error) => report.failed(ctx, name, &error),
+            Err(error) => {
+                maybe_taken.extend(check.children.iter().map(|child| child.name.clone()));
+                report.failed(ctx, name, &error);
+            }
         }
     }
     let chats_failed = !failed.is_empty();
@@ -168,6 +173,29 @@ async fn remove_each(
     })?;
     // A chat that was not removed fails the command as a workspace does.
     Ok(if chats_failed { 1 } else { code })
+}
+
+/// Whether the workspace `check` inspected still exists.
+async fn present(ctx: &Context, check: &RemovalCheck) -> Result<bool> {
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    Ok(spaces
+        .find(&SpaceSelector::id(&check.workspace.id))
+        .is_some())
+}
+
+/// `checks` with each workspace after those of the others it lies below,
+/// so a removal that takes it is tried first.
+fn ancestors_first(checks: Vec<RemovalCheck>) -> Vec<RemovalCheck> {
+    let depths: Vec<usize> = (checks.iter())
+        .map(|check| {
+            let id = &check.workspace.id;
+            let takes = |other: &&RemovalCheck| other.children.iter().any(|child| &child.id == id);
+            checks.iter().filter(takes).count()
+        })
+        .collect();
+    let mut ordered: Vec<_> = depths.into_iter().zip(checks).collect();
+    ordered.sort_by_key(|(depth, _)| *depth);
+    ordered.into_iter().map(|(_, check)| check).collect()
 }
 
 /// Remove the workspace `check` inspected, which a removal of several
