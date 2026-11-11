@@ -404,14 +404,18 @@ impl Manager {
 
     /// Destroy the subvolumes among the seed outputs `workspace`'s settings
     /// name, which a worktree started from the seed holds, so removing the
-    /// worktree need not delete their files one by one. Settings it cannot
-    /// read leave them to that delete.
+    /// worktree need not delete their files one by one. An output holding a
+    /// tracked file stays, so Git still finds a clean worktree clean, and
+    /// settings or files it cannot read leave every output to that delete.
     pub(super) async fn destroy_seed_outputs(&self, workspace: &Workspace) {
         let Ok(settings) = self.workspace_settings(workspace).await else {
             return;
         };
         let presets = settings.setup.presets.as_deref().unwrap_or_default();
         let outputs = build::outputs(&settings.setup.seed, presets);
+        let Ok(outputs) = git::seed::untracked_outputs(&workspace.path, &outputs).await else {
+            return;
+        };
         let root = workspace.path.clone();
         let destroyed = off_runtime::run(move || {
             subvolume::destroy_outputs(&Btrfs, &root, &outputs);

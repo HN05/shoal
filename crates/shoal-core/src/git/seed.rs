@@ -78,9 +78,39 @@ pub async fn unmodified_files(worktree: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// The `outputs` of the worktree that hold no tracked file, so deleting
+/// them leaves the worktree as clean as it was.
+pub async fn untracked_outputs(worktree: &Path, outputs: &[String]) -> Result<Vec<String>> {
+    if outputs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let pathspecs: Vec<String> = outputs
+        .iter()
+        .map(|output| format!(":(literal){output}"))
+        .collect();
+    let mut args = vec!["ls-files", "-z", "--"];
+    args.extend(pathspecs.iter().map(String::as_str));
+    let listing = super::run_isolated(worktree, &args).await?;
+    let tracked: Vec<String> = names(&listing).collect();
+    Ok(outputs
+        .iter()
+        .filter(|output| !tracked.iter().any(|file| holds(output, file)))
+        .cloned()
+        .collect())
+}
+
+/// Whether the tracked `file` is or lies inside `output`.
+fn holds(output: &str, file: &str) -> bool {
+    file.strip_prefix(output)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
 fn names(listing: &str) -> impl Iterator<Item = String> + '_ {
     listing
         .split('\0')
         .filter(|name| !name.is_empty())
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+mod tests;

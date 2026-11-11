@@ -60,6 +60,22 @@ fn removal_destroys_no_subvolume_reached_through_a_symlink() {
 }
 
 #[test]
+fn removal_destroys_nothing_below_a_symlinked_root() {
+    let temp = tempfile::tempdir().unwrap();
+    let (root, outside) = (temp.path().join("staging"), temp.path().join("outside"));
+    tree(&outside, &["target"]);
+    std::os::unix::fs::symlink(&outside, &root).unwrap();
+    let volumes = FakeSubvolumes::destroying();
+    volumes.add_root(&root.join("target"));
+
+    remove_tree(&volumes, &root, &["target".into()]).unwrap();
+
+    assert!(volumes.calls().is_empty());
+    assert!(outside.join("target/file").exists());
+    assert!(root.symlink_metadata().is_err());
+}
+
+#[test]
 fn removal_deletes_subvolumes_it_may_not_destroy() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("spare");

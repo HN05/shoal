@@ -49,6 +49,10 @@ pub fn remove_tree(volumes: &impl Subvolumes, path: &Path, outputs: &[String]) -
 /// inside another goes before it. One that cannot be destroyed is left for
 /// a recursive delete.
 pub fn destroy_outputs(volumes: &impl Subvolumes, root: &Path, outputs: &[String]) {
+    // A symbolic link could lead outside the tree.
+    if !fs::symlink_metadata(root).is_ok_and(|metadata| metadata.is_dir()) {
+        return;
+    }
     let mut outputs: Vec<&String> = outputs.iter().collect();
     outputs.sort_by_key(|output| std::cmp::Reverse(Path::new(output).components().count()));
     for output in outputs {
