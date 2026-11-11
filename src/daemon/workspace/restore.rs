@@ -1,6 +1,7 @@
 //! Removal records: every removal of an existing worktree takes a checkpoint
 //! and records what `shoal restore` needs to reopen the workspace, until the
 //! record expires.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use std::path::Path;
@@ -25,11 +26,14 @@ use crate::{
 impl Manager {
     /// Take the removal's checkpoint and record what `shoal restore` reopens
     /// before any file is deleted, so an interrupted or failed removal stays
-    /// restorable. Records of workspaces that still exist are not listed.
+    /// restorable, leaving out the agent `carried_on` ran as, which carries on
+    /// elsewhere, as in the chat a workspace becomes. Records of workspaces
+    /// that still exist are not listed.
     pub(super) async fn save_removal_record(
         &self,
         workspace: &Workspace,
         cause: EventCause,
+        carried_on: Option<&ExecutionId>,
     ) -> Result<RemovedWorkspace> {
         let checkpoint = self
             .checkpoint(workspace, CheckpointCause::Removal, None)
@@ -39,11 +43,13 @@ impl Manager {
         let links = self.workspace_by_id(&workspace.id).await?.links;
         // Removal has stopped every agent, and deletes the state their
         // records are in.
-        let agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
+        let mut agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
+        agents.retain(|agent| Some(&agent.execution) != carried_on);
         // An unreadable last session is not worth keeping the workspace for.
-        let last_sessions =
+        let mut last_sessions =
             crate::execution::recovery::LastSession::all(&self.paths, &workspace.id)
                 .unwrap_or_default();
+        last_sessions.retain(|last| Some(&last.execution) != carried_on);
         let removed = RemovedWorkspace {
             workspace_id: workspace.id.clone(),
             repository_id: workspace.repository_id.clone(),

@@ -7,8 +7,6 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{approvals::ApprovalRequest, conversions::record::ConvertedChat},
-    execution::recovery::{self, LastSession, LastSessionExt},
-    model::Workspace,
     removal::RemovalResult,
 };
 use anyhow::Result;
@@ -37,21 +35,5 @@ impl Manager {
         self.store
             .write(move |tx| crate::daemon::conversions::record::replace_workspace(tx, &id, &chat))
             .await
-    }
-
-    /// Forget the stopped agent of `workspace` that carries on as `chat`, so
-    /// the removal record, which a restore reopens, leaves it out.
-    pub(super) fn forget_converted_agent(
-        &self,
-        workspace: &Workspace,
-        chat: &ConvertedChat,
-    ) -> Result<()> {
-        let record = recovery::record_path(&self.paths, &workspace.id, &chat.execution);
-        recovery::consume(&record)?;
-        recovery::consume(&LastSession::path(
-            &self.paths,
-            &workspace.id,
-            &chat.execution,
-        ))
     }
 }

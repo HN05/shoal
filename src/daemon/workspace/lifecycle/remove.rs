@@ -682,9 +682,6 @@ impl Manager {
         removal: Removal<'_>,
         check: &Inspection,
     ) -> Result<RemovalResult> {
-        if let Removal::Converted { chat } = removal {
-            self.forget_converted_agent(workspace, chat)?;
-        }
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
         let (files, branch) = worktrunk_removal_options(check, removal);
@@ -702,7 +699,11 @@ impl Manager {
         if workspace.disposable {
             return Ok(None);
         }
-        self.save_removal_record(workspace, removal.cause())
+        let carried_on = match removal {
+            Removal::Converted { chat } => Some(&chat.execution),
+            _ => None,
+        };
+        self.save_removal_record(workspace, removal.cause(), carried_on)
             .await
             .map(Some)
     }

@@ -1,6 +1,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::progress::ProgressChange;
 use crate::client::space_names::SpaceSelector;
+use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         conversions::record::ConvertedChat,
@@ -126,9 +127,25 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         .unwrap()
         .unwrap();
     process.kill();
+    let execution = ExecutionId::generate();
+    let carried_on = crate::execution::recovery::LastSession {
+        execution: execution.clone(),
+        agent: "claude".into(),
+        session: Some("s1".into()),
+        moved: false,
+        copied: None,
+        converted: false,
+        origin: None,
+        stopped_by: None,
+        stop: None,
+        model: Default::default(),
+        mode: crate::config::modes::ModeName::DEFAULT,
+        narrowing: Default::default(),
+    };
+    carried_on.write(&manager.paths, &workspace.id).unwrap();
     let chat = ConvertedChat {
         agent: "claude".into(),
-        execution: ExecutionId::generate(),
+        execution,
         session: Some("s1".into()),
         origin: None,
         process: identity,
@@ -169,4 +186,10 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         .find(|removed| removed.workspace_id == workspace.id)
         .expect("a removal record restores the files");
     assert!(record.checkpoint.commit != record.checkpoint.head);
+    // The chat carries the agent on, so a restore does not bring it back.
+    assert!(
+        record.last_sessions.is_empty(),
+        "{:?}",
+        record.last_sessions
+    );
 }

@@ -533,7 +533,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             .is_err()
     );
     manager
-        .save_removal_record(&workspace, EventCause::Manual)
+        .save_removal_record(&workspace, EventCause::Manual, None)
         .await
         .unwrap();
     let saved = record(&manager, workspace.id.as_str()).await.unwrap();
@@ -566,7 +566,7 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
     commit(&workspace.path, "work");
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
     manager
-        .save_removal_record(&workspace, EventCause::Idle)
+        .save_removal_record(&workspace, EventCause::Idle, None)
         .await
         .unwrap();
     assert!(
@@ -682,7 +682,7 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
         .unwrap();
     let save = async || {
         manager
-            .save_removal_record(&workspace, EventCause::Manual)
+            .save_removal_record(&workspace, EventCause::Manual, None)
             .await
             .unwrap()
             .checkpoint
