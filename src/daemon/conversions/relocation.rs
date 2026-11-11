@@ -72,7 +72,7 @@ impl Manager {
                     chat,
                     execution,
                 } => self.relocate_to_workspace(&id, mode, chat, execution).await,
-                Pending::Chat { chat } => self.relocate_to_chat(&id, chat).await,
+                Pending::Chat { chat, held } => self.relocate_to_chat(&id, *chat, held).await,
             };
             if let Err(error) = relocated {
                 self.report_failed_relocation(&id, &pending, &error).await;
@@ -102,7 +102,7 @@ impl Manager {
                 let process = chat.agent()?.process()?;
                 Ok(idle || !identity::alive(&process)?)
             }
-            Pending::Chat { chat } => {
+            Pending::Chat { chat, .. } => {
                 let running = self.running_agents().await?;
                 Ok(idle || !running.iter().any(|agent| agent.ran_as(&chat.execution)))
             }
@@ -121,7 +121,7 @@ impl Manager {
         execution: ExecutionId,
     ) -> Result<()> {
         let origin = chat.agent()?.origin()?;
-        if let Err(error) = self.hand_over(id, mode, &chat, execution).await {
+        if let Err(error) = self.hand_over(id, mode, &chat, execution, None).await {
             log!("agent of {id} not handed over yet: {error:#}");
             return Ok(());
         }
@@ -130,10 +130,15 @@ impl Manager {
 
     /// Hand the agent of a chat that became the workspace `id`, whose row was
     /// `chat`, over to the workspace, ahead of a stop of the workspace's
-    /// agents, which finds it nowhere else: once its session is kept as the
+    /// agents, which finds it nowhere else, for the process of the space
+    /// `stopped_by`, or the user: once its session is kept as the
     /// workspace's last session, which `shoal resume` continues, stop it
     /// where it ran, and forget the conversion. Whether it had such an agent.
-    pub(crate) async fn stop_converting_agent(&self, id: &SpaceId) -> Result<bool> {
+    pub(crate) async fn stop_converting_agent(
+        &self,
+        id: &SpaceId,
+        stopped_by: Option<&SpaceId>,
+    ) -> Result<bool> {
         let _handovers = self.conversion_handovers.lock().await;
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
@@ -145,13 +150,29 @@ impl Manager {
         else {
             return Ok(false);
         };
-        self.hand_over(id, mode, &chat, execution).await?;
+        self.hand_over(id, mode, &chat, execution, stopped_by)
+            .await?;
         Ok(true)
+    }
+
+    /// Keep the chat that the workspace `id` becomes stopped, as a stop of
+    /// its agent by the process of the space `stopped_by`, or by the user,
+    /// keeps that agent down until `shoal resume`.
+    pub(crate) async fn hold_converting_chat(
+        &self,
+        id: &SpaceId,
+        stopped_by: Option<&SpaceId>,
+    ) -> Result<()> {
+        let (id, stopped_by) = (id.to_owned(), stopped_by.cloned());
+        (self.store)
+            .run(move |db| super::record::hold_chat(db, &id, stopped_by.as_ref()))
+            .await
     }
 
     /// Keep the session of the agent of the chat that became the workspace
     /// `id`, whose row was `chat`, as the workspace's last session under
-    /// `execution`, marked converted, in `mode`, then stop the agent where it
+    /// `execution`, marked converted, in `mode`, stopped by the process of
+    /// the space `stopped_by` when given, then stop the agent where it
     /// ran, keeping what each round signals for a hand-over that was
     /// interrupted to go on stopping, and forget the conversion and the
     /// scope the agent carried there.
@@ -161,6 +182,7 @@ impl Manager {
         mode: ModeName,
         chat: &ChatRow,
         execution: ExecutionId,
+        stopped_by: Option<&SpaceId>,
     ) -> Result<()> {
         let agent = chat.agent()?;
         let last = LastSession {
@@ -171,7 +193,7 @@ impl Manager {
             copied: None,
             converted: true,
             origin: agent.origin()?,
-            stopped_by: None,
+            stopped_by: stopped_by.cloned(),
             stop: None,
             model: Default::default(),
             mode,
@@ -199,13 +221,17 @@ impl Manager {
     /// Make the workspace `id` the stopped `chat` its agent carries on in:
     /// stop the agent, remove the worktree as `shoal rm` does, and restore
     /// the chat in the repository's checkout, continuing the session the
-    /// agent reported last, whether it still runs or exited.
-    async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat) -> Result<()> {
+    /// agent reported last, whether it still runs or exited, unless a stop
+    /// `held` it, which leaves the chat for `shoal resume`.
+    async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat, held: bool) -> Result<()> {
         let chat = ConvertedChat {
             session: self.latest_session(id, &chat),
             ..chat
         };
         self.convert_worktree_to_chat(id, &chat).await?;
+        if held {
+            return Ok(());
+        }
         let chat = self
             .chat_by_id(id)
             .await?

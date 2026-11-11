@@ -333,9 +333,20 @@ impl Manager {
         keep: Keep<'_>,
     ) -> Result<Vec<QueueEntry>> {
         let workspace = self.workspace(selector).await?;
+        // A stop that keeps the agents down until shoal resume keeps the
+        // chat a conversion makes of the workspace down too.
+        let stopped_by = match keep {
+            Keep::LastSessions { stopped_by, .. } => {
+                self.hold_converting_chat(&workspace.id, stopped_by).await?;
+                stopped_by
+            }
+            Keep::Records => None,
+        };
         // Setup is no agent's, so a workspace still preparing after a
         // conversion has only the converting agent to stop.
-        if self.stop_converting_agent(&workspace.id).await?
+        if self
+            .stop_converting_agent(&workspace.id, stopped_by)
+            .await?
             && workspace.state == WorkspaceState::Preparing
         {
             return Ok(Vec::new());
@@ -515,7 +526,7 @@ impl Manager {
         request: &StopRequest,
         protected: Protected,
     ) -> Result<()> {
-        self.stop_converting_agent(id).await?;
+        self.stop_converting_agent(id, None).await?;
         let id = id.to_owned();
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {

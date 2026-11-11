@@ -35,7 +35,15 @@ pub(crate) enum Pending {
     /// A workspace that becomes the chat `chat` once the agent it carries on
     /// stopped, with what its agent ran as and with, which outlives the
     /// agent's execution, as when the agent exits first.
-    Chat { chat: ConvertedChat },
+    ///
+    /// A stop of the workspace's agents that keeps them down until `shoal
+    /// resume` `held` it: the workspace still becomes the chat, which stays
+    /// stopped.
+    Chat {
+        chat: Box<ConvertedChat>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        held: bool,
+    },
 }
 
 /// The columns of a chat's row, which a conversion keeps as they are.
@@ -200,6 +208,19 @@ pub(crate) fn record_stopped(
     Ok(())
 }
 
+/// Hold the conversion of the workspace `id` into a chat, whose agent the
+/// process of the space `stopped_by`, or the user, stopped: the chat stays
+/// stopped once the workspace becomes it.
+pub(crate) fn hold_chat(db: &Connection, id: &SpaceId, stopped_by: Option<&SpaceId>) -> Result<()> {
+    db.execute(
+        "UPDATE space_conversions
+         SET record=json_set(record,'$.held',json('true'),'$.chat.stopped_by',?2)
+         WHERE space_id=?1 AND json_extract(record,'$.to')='chat'",
+        params![id, stopped_by],
+    )?;
+    Ok(())
+}
+
 /// Forget the conversion of the space `id`, once its agent started in the
 /// new place.
 pub(crate) fn forget(db: &Connection, id: &SpaceId) -> Result<()> {
@@ -275,6 +296,10 @@ pub(crate) struct ConvertedChat {
     pub process: Identity,
     pub mode: ModeName,
     pub narrowing: PermissionsConfig,
+    /// The space whose process stopped the agent, which with the spaces
+    /// above it may resume the chat; none for the user or Shoal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_by: Option<SpaceId>,
 }
 
 /// Replace the workspace `id` with the stopped chat `chat` under its ID,
@@ -289,9 +314,10 @@ pub(crate) fn replace_workspace(
 ) -> Result<Vec<ApprovalRequest>> {
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,session,
-            restore,stopped_at,saved,unique_id,scope_token,number,mode,narrowing,converted)
+            restore,stopped_at,saved,unique_id,scope_token,number,mode,narrowing,converted,
+            stopped_by)
          SELECT id,repository_id,name,?2,?3,?4,unixepoch(),?5,?6,?7,unixepoch(),1,?8,?9,
-            number,?10,?11,1
+            number,?10,?11,1,?12
          FROM workspaces WHERE id=?1",
         params![
             id,
@@ -307,6 +333,7 @@ pub(crate) fn replace_workspace(
             ScopeToken::generate(),
             chat.mode,
             crate::daemon::store::narrowing_column(&chat.narrowing)?,
+            chat.stopped_by,
         ],
     )?;
     tx.execute(

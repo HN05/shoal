@@ -240,15 +240,9 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
+        stopped_by: None,
     };
-    let (id, pending) = (
-        workspace.id.clone(),
-        crate::daemon::conversions::Pending::Chat { chat },
-    );
-    (manager.store)
-        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
-        .await
-        .unwrap();
+    record_chat_conversion(&manager, &workspace, chat).await;
 
     manager.relocate_finished_turns().await.unwrap();
 
@@ -258,6 +252,95 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         chat.session.map(|session| session.to_string()),
         Some("s2".into())
     );
+}
+
+/// Record that `workspace` becomes `chat` once its agent's turn ends.
+async fn record_chat_conversion(
+    manager: &Manager,
+    workspace: &Workspace,
+    chat: crate::daemon::conversions::record::ConvertedChat,
+) {
+    let (id, pending) = (
+        workspace.id.clone(),
+        crate::daemon::conversions::Pending::Chat {
+            chat: Box::new(chat),
+            held: false,
+        },
+    );
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_stop_keeps_the_chat_a_workspace_becomes_down_for_its_stopper() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (lead, _lead) =
+        crate::daemon::test_support::chat(&manager, "lead", "chat", Some(&repo), None).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution: crate::client::execution_ids::ExecutionId::generate(),
+        session: Some("s1".into()),
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    record_chat_conversion(&manager, &workspace, chat).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let keep = crate::protocol::QueuedLaunches::Keep;
+    (manager.stop_workspace_manually(&selector, false, Some(&lead.id), keep))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
+    assert!(chat.restore.is_some());
+    let resumed = crate::daemon::chats::restores::tests::RESUMED
+        .lock()
+        .unwrap()
+        .clone();
+    assert!(!resumed.contains(&workspace.id));
+    let stopper = manager.chat_stopped_by(&workspace.id).await.unwrap();
+    assert_eq!(stopper, Some(lead.id));
+}
+
+#[tokio::test]
+async fn a_coordinators_stop_of_a_converting_agent_is_its_to_resume() {
+    let (root, manager) = manager().await;
+    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    let coordinator = crate::client::space_ids::SpaceId::generate();
+    let selector = SpaceSelector::id(&workspace.id);
+    let keep = crate::protocol::QueuedLaunches::Keep;
+
+    (manager.stop_workspace_manually(&selector, false, Some(&coordinator), keep))
+        .await
+        .unwrap();
+
+    process.wait().unwrap();
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    let stoppers: Vec<_> = sessions
+        .iter()
+        .map(|last| last.stopped_by.clone())
+        .collect();
+    assert_eq!(stoppers, [Some(coordinator)]);
 }
 
 #[tokio::test]

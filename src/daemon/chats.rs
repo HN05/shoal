@@ -1003,7 +1003,7 @@ mod processes;
 mod removal;
 mod removing;
 mod restart;
-mod restores;
+pub(crate) mod restores;
 mod saved;
 mod stopped;
 mod stopping;

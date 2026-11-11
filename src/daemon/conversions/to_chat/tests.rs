@@ -151,6 +151,7 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
+        stopped_by: None,
     };
 
     manager
@@ -218,6 +219,7 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
         process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
+        stopped_by: None,
     };
     (manager.convert_worktree_to_chat(&workspace.id, &chat))
         .await

@@ -40,7 +40,13 @@ impl Manager {
                 )
             })?;
         let chat = self.converted_chat(&workspace.id, mode, execution).await?;
-        let (id, pending) = (workspace.id.clone(), Pending::Chat { chat });
+        let (id, pending) = (
+            workspace.id.clone(),
+            Pending::Chat {
+                chat: Box::new(chat),
+                held: false,
+            },
+        );
         self.store
             .write(move |tx| super::record::record(tx, &id, &pending))
             .await?;
@@ -78,6 +84,7 @@ impl Manager {
             mode,
             narrowing: recorded.narrowing,
             execution,
+            stopped_by: None,
         })
     }
 
