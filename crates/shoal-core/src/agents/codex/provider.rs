@@ -45,8 +45,8 @@ pub(super) fn route(
 
 /// Where the provider a launch with `args` uses, as [`route`] finds it,
 /// sends its requests: its `base_url`, or for the built-in OpenAI provider
-/// `OPENAI_BASE_URL`, which `variable` reads, else Codex's own for the login
-/// `auth.json` in `codex_home` records.
+/// `OPENAI_BASE_URL`, which `variable` reads, else Codex's own for its
+/// login.
 pub(super) fn base_url(
     args: &[OsString],
     codex_home: &Path,
@@ -60,13 +60,27 @@ pub(super) fn base_url(
         _ => selected.base_url,
     };
     let configured = configured.filter(|url| !url.trim().is_empty());
-    Ok(configured.unwrap_or_else(|| login_base_url(codex_home).to_owned()))
+    match configured {
+        Some(url) => Ok(url),
+        None => {
+            login_base_url(codex_home, selected.credentials_store.as_deref()).map(str::to_owned)
+        }
+    }
 }
 
-/// Codex's own base URL for the login `auth.json` in `codex_home` records:
-/// OpenAI's API for an API key, else ChatGPT's. A file without a login mode
-/// holds an API key when it names one, as Codex reads it.
-fn login_base_url(codex_home: &Path) -> &'static str {
+/// Codex's own base URL for its login, as `auth.json` in `codex_home`
+/// records it: OpenAI's API for an API key, else ChatGPT's, as without a
+/// login. A file without a login mode holds an API key when it names one,
+/// as Codex reads it. A login `store` may keep elsewhere than that file,
+/// such as in the keyring, Shoal cannot read, which the error says.
+fn login_base_url(codex_home: &Path, store: Option<&str>) -> Result<&'static str> {
+    if let Some(store) = store.filter(|store| *store != "file") {
+        bail!(
+            "Codex may keep its login in the keyring (cli_auth_credentials_store = {store:?}), \
+             where Shoal cannot tell a ChatGPT login from an API key; set OPENAI_BASE_URL in \
+             the tool's env to the URL it uses"
+        );
+    }
     let auth: serde_json::Value = std::fs::read(codex_home.join("auth.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -75,7 +89,7 @@ fn login_base_url(codex_home: &Path) -> &'static str {
         Some(mode) => mode.eq_ignore_ascii_case("apikey"),
         None => auth["OPENAI_API_KEY"].is_string(),
     };
-    if api_key { OPENAI_API } else { CHATGPT_API }
+    Ok(if api_key { OPENAI_API } else { CHATGPT_API })
 }
 
 /// The provider a launch with `flags` uses, by the Codex config in
@@ -124,6 +138,9 @@ struct Selected {
     headers: toml::Table,
     /// The base URL its config gives it.
     base_url: Option<String>,
+    /// Where Codex keeps the login it uses, by its config's
+    /// `cli_auth_credentials_store`.
+    credentials_store: Option<String>,
 }
 
 impl Selected {
@@ -172,11 +189,16 @@ impl Selected {
         let base_url = table
             .and_then(|provider| provider.get("base_url")?.as_str())
             .map(str::to_owned);
+        let credentials_store = config
+            .get("cli_auth_credentials_store")
+            .and_then(toml::Value::as_str)
+            .map(str::to_owned);
         Ok(Self {
             provider,
             key,
             headers,
             base_url,
+            credentials_store,
         })
     }
 }

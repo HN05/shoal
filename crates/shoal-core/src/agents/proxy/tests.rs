@@ -270,14 +270,22 @@ fn default_upstream(
     home: &Path,
     variables: &[(&str, &str)],
 ) -> String {
+    try_default_upstream(kind, args, home, variables).unwrap()
+}
+
+/// [`default_upstream`], or why Shoal cannot find it.
+fn try_default_upstream(
+    kind: IntegrationKind,
+    args: &[&str],
+    home: &Path,
+    variables: &[(&str, &str)],
+) -> Result<String> {
     let variable = |name: &str| {
         let set = variables.iter().find(|(set, _)| *set == name);
         set.map(|(_, value)| OsString::from(value))
     };
     let args: Vec<OsString> = args.iter().map(Into::into).collect();
-    integration(kind)
-        .default_upstream(&args, home, &variable, home)
-        .unwrap()
+    integration(kind).default_upstream(&args, home, &variable, home)
 }
 
 #[test]
@@ -359,4 +367,14 @@ fn codex_goes_to_its_providers_base_url_else_the_one_its_login_uses() {
     let gateway = ["codex", "-c", "model_provider=gateway"];
     assert_eq!(url(&gateway, &moved), "http://gateway/v1");
     assert_eq!(url(&["codex", "-c", "model_provider=bare"], &[]), chatgpt);
+    // A login Codex may keep in the keyring is one Shoal cannot read, so only
+    // a base URL the launch names says where its requests go.
+    let keyring = ["codex", "-c", "cli_auth_credentials_store=keyring"];
+    let error = try_default_upstream(IntegrationKind::Codex, &keyring, home.path(), &[])
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("cli_auth_credentials_store"), "{error}");
+    assert_eq!(url(&keyring, &moved), "http://moved/v1");
+    let gateway_keyring = [&keyring[..], &gateway[1..]].concat();
+    assert_eq!(url(&gateway_keyring, &[]), "http://gateway/v1");
 }

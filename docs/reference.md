@@ -1693,7 +1693,9 @@ proxy = "retry"
   sets it, else `https://api.openai.com/v1` when the `auth.json` under its
   `CODEX_HOME` records an API key, and `https://chatgpt.com/backend-api/codex`
   otherwise, as for a ChatGPT login. A provider of the user's without a
-  `base_url` goes there too.
+  `base_url` goes there too. Shoal cannot read a login Codex may keep in the
+  keyring, with a `cli_auth_credentials_store` other than `file`, so such a
+  launch needs `OPENAI_BASE_URL` in the tool's `env` or fails.
 
 Codex then gets the proxy's URL itself as its base URL. A `key` needs an
 `upstream`, since without one it would reach Anthropic or OpenAI in place of
