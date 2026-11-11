@@ -143,6 +143,10 @@ states!(EventKind {
     ChildCreated => "child_created",
     /// A space below the space was removed.
     ChildRemoved => "child_removed",
+    /// The chat became a workspace, or the workspace a chat, which its
+    /// `workspace_id` or `chat_id` names; `path` and `branch` are the new
+    /// workspace's.
+    Converted => "converted",
 });
 
 states!(

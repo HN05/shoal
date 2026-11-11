@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 147;
+pub(super) const SCHEMA_VERSION: i64 = 148;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -410,6 +410,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (145, "", Some(super::space_names::rename_invalid_copies)),
     (146, CI_JOB_PEAK_CPU_DROPPED, None),
     (147, "", Some(place_owners::own_by_space)),
+    (148, include_str!("space_conversions.sql"), None),
 ];
 
 /// Admission counts a CI job at its memory alone, so its runs' peak CPU is

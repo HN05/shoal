@@ -203,6 +203,12 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    // Spaces convert no more.
+    db.execute_batch(
+        "DROP TRIGGER workspace_converted; DROP TRIGGER chat_converted;
+         DROP TRIGGER workspace_conversion_removed; DROP TRIGGER chat_conversion_removed;
+         DROP TABLE space_conversions; ALTER TABLE chats DROP COLUMN converted;",
+    )?;
     // Spaces keep no progress again.
     db.execute_batch(
         "DROP TRIGGER workspace_progress_removed; DROP TRIGGER chat_progress_removed;

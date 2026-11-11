@@ -86,6 +86,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::Renamed => fixed("Renamed", renamed(event)),
         EventKind::Removed => fixed("Removed", event.cause.map(cause).unwrap_or_default()),
         EventKind::Restored => fixed("Restored", String::new()),
+        EventKind::Converted => fixed("Converted", converted(event)),
         EventKind::AgentStarted => fixed("Agent started", agent(event)),
         EventKind::AgentStopped => fixed("Agent stopped", agent(event)),
         EventKind::AgentExited => fixed("Agent exited", exit(event)),
@@ -157,6 +158,14 @@ fn created(event: &EventDetails) -> String {
         parts.push(format!("parent {}", parent.name));
     }
     parts.join(", ")
+}
+
+/// What the space became: a chat, or a workspace on its branch at its path.
+fn converted(event: &EventDetails) -> String {
+    match (&event.branch, &event.path) {
+        (Some(branch), Some(path)) => format!("to workspace on {branch} at {}", path.display()),
+        _ => "to chat".to_owned(),
+    }
 }
 
 /// A workspace's new title, or its new name and a branch named otherwise.
