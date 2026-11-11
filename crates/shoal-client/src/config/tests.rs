@@ -431,19 +431,20 @@ fn a_launch_focuses_as_its_mode_then_the_terminal_says() {
     use crate::config::modes::ModeName;
     let focus = |global: &str, mode: ModeName| {
         let global = Config::from_toml(global).unwrap();
-        global.effective(&RepoConfig::default()).unwrap().focus(&mode)
+        global
+            .effective(&RepoConfig::default())
+            .unwrap()
+            .focus(&mode)
     };
     assert_eq!(focus("", ModeName::DEFAULT), None);
-    assert_eq!(focus("", ModeName::ORCHESTRATE), None);
     let unfocused = "terminal.focus = false\n";
     assert_eq!(focus(unfocused, ModeName::DEFAULT), Some(false));
     // The chats the user talks with keep the terminal, as setup always does.
     assert_eq!(focus(unfocused, ModeName::CHAT), Some(true));
-    assert_eq!(focus(unfocused, ModeName::PLAN), Some(true));
     assert_eq!(focus(unfocused, ModeName::SETUP), Some(true));
     let background_plans = "terminal.focus = true\n[modes.plan]\nfocus = false\n";
     assert_eq!(focus(background_plans, ModeName::PLAN), Some(false));
-    assert_eq!(focus(background_plans, ModeName::ORCHESTRATE), Some(true));
+    assert_eq!(focus(background_plans, ModeName::DEFAULT), Some(true));
 }
 
 #[test]

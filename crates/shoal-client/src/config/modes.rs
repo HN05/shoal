@@ -75,7 +75,7 @@ pub struct RuleConfig {
 }
 
 /// The modes Shoal ships, each with the `work` rule before its own; the
-/// chats the user talks with take the terminal.
+/// chats, which wait for the user's input, take the terminal.
 pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     let mode = |kind, rule: &str, instructions: &str| ModeConfig {
         kind: Some(kind),
@@ -115,7 +115,7 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
                     "chat".to_owned(),
                     "orchestrate".to_owned(),
                 ],
-                ..mode(SpaceKind::Chat, "chat", "")
+                ..focused(mode(SpaceKind::Chat, "chat", ""))
             },
         ),
     ])

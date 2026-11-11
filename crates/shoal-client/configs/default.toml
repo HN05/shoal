@@ -154,7 +154,8 @@ dirs = ["/tmp"]
 # [modes.plan]
 # kind = "chat"
 # rules = ["chat"]
-# Whether its launches take the terminal, over [terminal] focus.
+# Whether its launches take the terminal, over [terminal] focus; set it for
+# a mode whose agent needs your input to start, such as one without instructions.
 # focus = true
 
 # Each AI tool's launch settings, merged option by option with a repository's.

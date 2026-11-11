@@ -1190,8 +1190,8 @@ By default, agents that start with an issue prompt or forwarded arguments stay i
 the background, and tabs that wait for the user's input receive focus; an
 explicit focus setting, the mode's over the terminal's, or `--focus`
 overrides this choice, so each mode can decide whether its spaces take the
-terminal, and the built-in `chat` and `plan` modes, whose agents the user
-talks with, are set to; `repo
+terminal, and the built-in chat modes, whose agents the user talks with,
+are set to; `repo
 setup` and `config setup` always focus the agent the user works with straight
 away. A launch the user waits for starts past `max_agents`, as `--now` does:
 one `--focus` focuses, or an interactive call's agent waiting for input that
