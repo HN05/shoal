@@ -37,11 +37,11 @@ const USERS: &str = "terminal_0";
 
 impl ZellijServer {
     fn start(fixture: &Fixture) -> Option<Self> {
-        if !Command::new("zellij")
-            .arg("--version")
-            .output()
-            .is_ok_and(|output| output.status.success())
-        {
+        let installed = match support::run::try_output(Command::new("zellij").arg("--version")) {
+            Err(error) if error.kind() == std::io::ErrorKind::TimedOut => panic!("{error}"),
+            output => output.is_ok_and(|output| output.status.success()),
+        };
+        if !installed {
             eprintln!("skipped: zellij is not installed");
             return None;
         }
@@ -98,14 +98,13 @@ impl ZellijServer {
     /// Create the user's session in the background. Its environment is
     /// every pane's: the fixture's tools, and a plain shell.
     fn create(&self, fixture: &Fixture) {
-        let output = self
-            .zellij()
-            .env("PATH", fixture.interactive_path())
-            .env("SHELL", "/bin/sh")
-            .current_dir(&fixture.repo)
-            .args(["attach", "--create-background", "caller"])
-            .output()
-            .unwrap();
+        let output = support::run::output(
+            self.zellij()
+                .env("PATH", fixture.interactive_path())
+                .env("SHELL", "/bin/sh")
+                .current_dir(&fixture.repo)
+                .args(["attach", "--create-background", "caller"]),
+        );
         assert!(output.status.success(), "{output:?}");
     }
 
@@ -208,11 +207,12 @@ impl ZellijServer {
     /// The pane each client of `session` shows, and `None` while Zellij
     /// reports the session missing, as it can a busy one or one starting.
     fn clients(&self, session: &str) -> Option<Vec<String>> {
-        let output = self
-            .zellij()
-            .args(["--session", session, "action", "list-clients"])
-            .output()
-            .unwrap();
+        let output = support::run::output(self.zellij().args([
+            "--session",
+            session,
+            "action",
+            "list-clients",
+        ]));
         if reported_missing(&output) {
             return None;
         }
@@ -237,18 +237,14 @@ impl ZellijServer {
     /// lists nothing, lists JSON that is not a list or reports the session
     /// missing.
     fn listed_panes(&self, session: &str) -> Option<Vec<(String, String)>> {
-        let output = self
-            .zellij()
-            .args([
-                "--session",
-                session,
-                "action",
-                "list-panes",
-                "--all",
-                "--json",
-            ])
-            .output()
-            .unwrap();
+        let output = support::run::output(self.zellij().args([
+            "--session",
+            session,
+            "action",
+            "list-panes",
+            "--all",
+            "--json",
+        ]));
         if reported_missing(&output) || output.stdout.trim_ascii().is_empty() {
             return None;
         }
@@ -293,7 +289,7 @@ impl ZellijServer {
     /// The sessions whose server runs in the test's socket directory, as
     /// the servers' last argument, the session's socket, names them.
     fn servers(&self) -> std::io::Result<Vec<String>> {
-        let output = Command::new("ps").args(["-A", "-o", "args="]).output()?;
+        let output = support::run::try_output(Command::new("ps").args(["-A", "-o", "args="]))?;
         if !output.status.success() {
             return Err(std::io::Error::other(format!("ps: {output:?}")));
         }
@@ -330,7 +326,7 @@ impl ZellijServer {
         write
             .args(["--session", "caller", "action", "write", "--pane-id", USERS])
             .args(line.bytes().map(|byte| byte.to_string()));
-        let output = write.output().unwrap();
+        let output = support::run::output(&mut write);
         assert!(output.status.success(), "{output:?}");
     }
 
@@ -350,16 +346,18 @@ impl ZellijServer {
 
     /// What `zellij action list-panes` prints of the user's session.
     fn pane_table(&self) -> std::io::Result<std::process::Output> {
-        self.zellij()
-            .args(["--session", "caller", "action", "list-panes", "--all"])
-            .output()
+        support::run::try_output(self.zellij().args([
+            "--session",
+            "caller",
+            "action",
+            "list-panes",
+            "--all",
+        ]))
     }
 
     /// What `zellij list-sessions` prints.
     fn session_table(&self) -> std::io::Result<std::process::Output> {
-        self.zellij()
-            .args(["list-sessions", "--no-formatting"])
-            .output()
+        support::run::try_output(self.zellij().args(["list-sessions", "--no-formatting"]))
     }
 
     /// Whether the client still runs, or how it exited.
@@ -407,7 +405,7 @@ impl Drop for ZellijServer {
         }
         let _ = self.client.kill();
         let _ = self.client.wait();
-        let _ = self.zellij().args(["kill-all-sessions", "--yes"]).output();
+        let _ = support::run::try_output(self.zellij().args(["kill-all-sessions", "--yes"]));
     }
 }
 
@@ -695,11 +693,14 @@ fn place_beside(fixture: &Fixture, workspace: &str, pane: &str) -> Value {
 impl ZellijServer {
     /// A new tab named `name` in the user's session, returning its pane.
     fn new_tab(&self, name: &str) -> String {
-        let output = self
-            .zellij()
-            .args(["--session", "caller", "action", "new-tab", "--name", name])
-            .output()
-            .unwrap();
+        let output = support::run::output(self.zellij().args([
+            "--session",
+            "caller",
+            "action",
+            "new-tab",
+            "--name",
+            name,
+        ]));
         assert!(output.status.success(), "{output:?}");
         wait_for("the new tab to show", || {
             self.listed_panes("caller")?
@@ -775,13 +776,13 @@ fn demos_open_in_sessions_of_their_own_outside_zellij_and_take_input() {
     };
     fixture.add("tried");
     let demo = |args: &[&str]| {
-        let output = zellij
-            .reaching(&mut fixture.command())
-            .arg("--json")
-            .arg("demo")
-            .args(args)
-            .output()
-            .unwrap();
+        let output = fixture.output(
+            zellij
+                .reaching(&mut fixture.command())
+                .arg("--json")
+                .arg("demo")
+                .args(args),
+        );
         assert!(output.status.success(), "{args:?}: {output:?}");
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
