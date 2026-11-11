@@ -55,6 +55,11 @@ for delivering a PR, under Committing near the end, decide when work is done.
   delegated messages, removal and cleanup take one walk up or down that link
   and one check for an agent, with no branch on kind; messages to a space go
   through one operation.
+- Shoal refuses a request only for a very good reason: it would act outside
+  the caller's scope or permissions, lose or damage work, or cannot be done at
+  all. A limit of how Shoal is built, such as a code path one kind of caller
+  does not take, is no such reason: support the request instead, or file an
+  issue for it when that lies outside the change.
 - Invoke external tools with argument arrays. Worktrees are created and
   removed with plain Git through the `git` module; preserve Shoal's ownership
   records and cleanup policy.
