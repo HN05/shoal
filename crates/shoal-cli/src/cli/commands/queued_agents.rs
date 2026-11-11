@@ -64,16 +64,19 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
     })
 }
 
+/// Report the launch `entry`, which waits behind `waiting` entries in
+/// total, or which the daemon already starts in the background.
 pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -> Result<i32> {
-    let start = starts_when(entry);
-    ctx.emit(
-        &format!(
-            "Queued {} (position {} of {waiting}); it starts {start}",
+    let text = match entry.state {
+        QueueState::Queued => format!(
+            "Queued {} (position {} of {waiting}); it starts {}",
             entry.name,
-            entry.position.unwrap_or(waiting)
+            entry.position.unwrap_or(waiting),
+            starts_when(entry)
         ),
-        entry,
-    )?;
+        _ => format!("Starting {} in the background", entry.name),
+    };
+    ctx.emit(&text, entry)?;
     Ok(0)
 }
 
