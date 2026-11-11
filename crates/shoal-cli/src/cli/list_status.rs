@@ -30,6 +30,7 @@ impl ListStatusExt for ListStatus {
             | Self::Restoring
             | Self::Updating
             | Self::Stopped
+            | Self::Blocked
             | Self::ReadyOutdated
             | Self::Starting => Style::Warning,
         }

@@ -81,6 +81,8 @@ impl Row {
             Item::NeedsInput { workspace } => Self::NeedsInput(workspace.id.clone()),
             Item::ChatNeedsInput { chat } => Self::NeedsInput(chat.id.clone()),
             Item::Failed { workspace } => Self::Failed(workspace.id.clone()),
+            Item::Blocked { workspace } => Self::Workspace(workspace.id.clone()),
+            Item::ChatBlocked { chat } => Self::Workspace(chat.id.clone()),
             Item::Ready { workspace, mark } => Self::Ready {
                 space: workspace.id.clone(),
                 url: mark.url.clone(),

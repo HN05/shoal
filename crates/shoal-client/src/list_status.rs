@@ -2,6 +2,7 @@
 //! that starts each row.
 use crate::{
     model::{Chat, QueueEntry, Workspace},
+    progress::Progress,
     state::{AgentState, QueueState, Sleep, WorkspaceState},
 };
 
@@ -19,6 +20,8 @@ pub enum ListStatus {
     Failed,
     Stopped,
     NeedsInput,
+    /// Its progress records what blocks it.
+    Blocked,
     Finished,
     Ready,
     Working,
@@ -40,13 +43,15 @@ pub enum ListStatus {
 
 impl ListStatus {
     /// The workspace's state unless ready, then a recorded completion when
-    /// its work is stopped, stopped work, an agent that needs input, a
-    /// recorded completion, a current ready mark, the agent's other turn
-    /// states as its sleep says, an agent or command running without one, the coordinator
-    /// that does its work working, an outdated mark, or inactive.
+    /// its work is stopped, stopped work unless blocked, an agent that needs
+    /// input, what blocks it, a recorded completion, a current ready mark,
+    /// the agent's other turn states as its sleep says, an agent or command
+    /// running without one, the coordinator that does its work working, an
+    /// outdated mark, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
         let agent = workspace.agent_state.map(|status| status.state);
+        let blocked = workspace.progress.as_ref().is_some_and(Progress::blocked);
         match workspace.state {
             WorkspaceState::Preparing => Self::Preparing,
             WorkspaceState::Stopping => Self::Stopping,
@@ -56,8 +61,9 @@ impl ListStatus {
             WorkspaceState::Updating => Self::Updating,
             WorkspaceState::Failed => Self::Failed,
             WorkspaceState::Ready if stopped && workspace.done => Self::Finished,
-            WorkspaceState::Ready if stopped => Self::Stopped,
+            WorkspaceState::Ready if stopped && !blocked => Self::Stopped,
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
+            WorkspaceState::Ready if blocked => Self::Blocked,
             WorkspaceState::Ready if workspace.done => Self::Finished,
             WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
             WorkspaceState::Ready => match agent {
@@ -72,17 +78,21 @@ impl ListStatus {
         }
     }
 
-    /// A chat is stopped until it is restored, or finished when it recorded
-    /// completion; a running one needs input
-    /// while its agent does, is finished once it records completion, ready
-    /// once it marks its work ready, or else shows its agent's other turn
-    /// states as its sleep says, or that it runs without one.
+    /// A chat is stopped until it is restored, finished when it recorded
+    /// completion or blocked while its progress records what blocks it; a
+    /// running one needs input while its agent does, is blocked, finished
+    /// once it records completion, ready once it marks its work ready, or
+    /// else shows its agent's other turn states as its sleep says, or that
+    /// it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
+        let blocked = chat.progress.as_ref().is_some_and(Progress::blocked);
         match chat.restore {
             Some(_) if chat.completion.is_some() => Self::Finished,
+            Some(_) if blocked => Self::Blocked,
             Some(_) => Self::Stopped,
             None if agent == Some(AgentState::Waiting) => Self::NeedsInput,
+            None if blocked => Self::Blocked,
             None if chat.completion.is_some() => Self::Finished,
             None if !chat.review.is_empty() => Self::Ready,
             None => agent.map_or(Self::ProcessRunning, |state| {
@@ -129,6 +139,7 @@ impl ListStatus {
             Self::Failed => "failed",
             Self::Stopped => "stopped",
             Self::NeedsInput => "needs input",
+            Self::Blocked => "blocked",
             Self::Finished => "finished",
             Self::Ready => "ready",
             Self::Working => "working",
@@ -152,6 +163,7 @@ impl ListStatus {
             Self::Waiting
             | Self::Sleeping
             | Self::SleepingPermanent
+            | Self::Blocked
             | Self::Finished
             | Self::ReadyOutdated
             | Self::Inactive

@@ -219,14 +219,20 @@ fn decision_items(
     questions.chain(requests).collect()
 }
 
-/// Workspaces whose agent needs input, then failed ones, then each mark made at
-/// the current commit.
+/// Workspaces whose agent needs input, then blocked ones, then failed ones,
+/// then each mark made at the current commit.
 fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<Item> {
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
         .iter()
         .filter(|w| status(w) == ListStatus::NeedsInput)
         .map(|w| Item::NeedsInput {
+            workspace: w.clone(),
+        });
+    let blocked = workspaces
+        .iter()
+        .filter(|w| status(w) == ListStatus::Blocked)
+        .map(|w| Item::Blocked {
             workspace: w.clone(),
         });
     let failed = workspaces
@@ -244,16 +250,20 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
                 mark: mark.clone(),
             })
     });
-    waiting.chain(failed).chain(review).collect()
+    waiting.chain(blocked).chain(failed).chain(review).collect()
 }
 
-/// Running chats whose agent needs input, then each running chat that
-/// recorded its work as finished, and each mark of the others.
+/// Running chats whose agent needs input, then blocked chats, then each
+/// running chat that recorded its work as finished, and each mark of the
+/// others.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
     let running = || chats.iter().filter(|chat| chat.restore.is_none());
     let waiting = running()
         .filter(|chat| ListStatus::of_chat(chat) == ListStatus::NeedsInput)
         .map(|chat| Item::ChatNeedsInput { chat: chat.clone() });
+    let blocked = (chats.iter())
+        .filter(|chat| ListStatus::of_chat(chat) == ListStatus::Blocked)
+        .map(|chat| Item::ChatBlocked { chat: chat.clone() });
     let finished = running().flat_map(|chat| match chat.completion {
         Some(_) => vec![Item::ChatDone { chat: chat.clone() }],
         None => (chat.review.iter())
@@ -263,7 +273,7 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
             })
             .collect(),
     });
-    waiting.chain(finished).collect()
+    waiting.chain(blocked).chain(finished).collect()
 }
 
 /// Operations on the client type [`Item`] that only the `shoal` command uses.
@@ -300,9 +310,11 @@ impl ItemExt for Item {
             Self::Question { question } => Some(&question.space_id),
             Self::Approval { request } => Some(&request.space_id),
             Self::NeedsInput { workspace }
+            | Self::Blocked { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => Some(&workspace.id),
             Self::ChatNeedsInput { chat }
+            | Self::ChatBlocked { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => Some(&chat.id),
             Self::Demo { demo } => Some(&demo.workspace_id),
@@ -324,9 +336,11 @@ impl ItemExt for Item {
             Self::Question { question } => &question.space,
             Self::Approval { request } => return super::approvals::space_label(request),
             Self::NeedsInput { workspace }
+            | Self::Blocked { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
             Self::ChatNeedsInput { chat }
+            | Self::ChatBlocked { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
@@ -359,6 +373,7 @@ impl ItemExt for Item {
             Self::NeedsInput { .. } | Self::ChatNeedsInput { .. } => {
                 ("needs input", Style::Warning)
             }
+            Self::Blocked { .. } | Self::ChatBlocked { .. } => ("blocked", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
             Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
             Self::ChatDone { .. } => ("finished", Style::Success),
@@ -376,6 +391,8 @@ impl ItemExt for Item {
             Self::Question { question } => question.one_line(),
             Self::Approval { request } => super::approvals::about(request),
             Self::NeedsInput { workspace } => title(workspace),
+            Self::Blocked { workspace } => blocked_by(workspace.progress.as_ref()),
+            Self::ChatBlocked { chat } => blocked_by(chat.progress.as_ref()),
             Self::Failed { workspace } => workspace
                 .error
                 .as_deref()
@@ -406,9 +423,11 @@ impl ItemExt for Item {
     fn mode(&self) -> Cell {
         match self {
             Self::NeedsInput { workspace }
+            | Self::Blocked { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => ui::workspace_mode_cell(workspace),
             Self::ChatNeedsInput { chat }
+            | Self::ChatBlocked { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => ui::chat_mode_cell(chat),
             _ => (String::new(), None),
@@ -441,6 +460,20 @@ fn question_note(question: &Question) -> String {
         .chain(files)
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+/// The first of what blocks a space, with its reason, and how many more.
+fn blocked_by(progress: Option<&crate::client::progress::Progress>) -> String {
+    let mut blockers =
+        (progress.into_iter()).flat_map(crate::client::progress::Progress::all_blockers);
+    let Some((_, first)) = blockers.next() else {
+        return String::new();
+    };
+    let text = format!("{}: {}", first.cause(), first.reason);
+    match blockers.count() {
+        0 => text,
+        more => format!("{text} (and {more} more)"),
+    }
 }
 
 /// The marked item, with the title of the space's issue when it has one.

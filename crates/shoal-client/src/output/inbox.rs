@@ -25,12 +25,20 @@ pub enum Item {
     Failed {
         workspace: Workspace,
     },
+    /// A workspace whose progress records what blocks it.
+    Blocked {
+        workspace: Workspace,
+    },
     Ready {
         workspace: Workspace,
         mark: ReviewMark,
     },
     /// A running chat whose agent needs input.
     ChatNeedsInput {
+        chat: Chat,
+    },
+    /// A chat whose progress records what blocks it.
+    ChatBlocked {
         chat: Chat,
     },
     /// A chat's mark on its linked work or on itself.

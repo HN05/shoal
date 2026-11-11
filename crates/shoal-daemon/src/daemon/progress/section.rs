@@ -1,8 +1,9 @@
 //! The progress section Shoal keeps at the end of a PR's body: the status
-//! line and the steps between two markers. The section is Shoal's, so a
+//! line, what blocks the space and the steps with theirs between two
+//! markers. The section is Shoal's, so a
 //! later update replaces what anyone wrote between them; the rest of the
 //! body stays as it was, byte for byte.
-use crate::client::progress::Progress;
+use crate::client::progress::{Progress, RecordedBlocker};
 
 const START: &str = "<!-- shoal:progress -->";
 const END: &str = "<!-- /shoal:progress -->";
@@ -16,15 +17,27 @@ pub(super) fn render(progress: &Progress) -> String {
     if let Some(status) = &progress.status {
         lines.push(format!("**Status:** {}", escaped(status)));
     }
-    if progress.status.is_some() && !progress.steps.is_empty() {
+    for blocker in &progress.blockers {
+        lines.push(format!("**Blocked by** {}", blocked_by(blocker)));
+    }
+    let heading = progress.status.is_some() || !progress.blockers.is_empty();
+    if heading && !progress.steps.is_empty() {
         lines.push(String::new());
     }
     for step in &progress.steps {
         let check = if step.done { "x" } else { " " };
         lines.push(format!("- [{check}] {}", escaped(&step.name)));
+        for blocker in &step.blockers {
+            lines.push(format!("  - Blocked by {}", blocked_by(blocker)));
+        }
     }
     lines.push(END.to_owned());
     lines.join("\n")
+}
+
+/// What `blocker` is and why it blocks.
+fn blocked_by(blocker: &RecordedBlocker) -> String {
+    escaped(&format!("{}: {}", blocker.cause(), blocker.reason))
 }
 
 /// `text` unable to end the section early or open another.

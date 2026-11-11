@@ -797,7 +797,8 @@ footprint on macOS. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when stopped agents or commands wait for `shoal resume` and the
-workspace is not done, `needs input`, `finished` after `shoal done` until
+workspace is neither done nor [blocked](#progress), `needs input`, `blocked`
+while its progress records what blocks it, `finished` after `shoal done` until
 `shoal done --undo` or `shoal resume` withdraws the completion, also while its
 work is stopped, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
@@ -832,19 +833,21 @@ chats and queued agents. `list --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`).
 A chat's status is `stopped` until it is restored, or `finished` after
-`shoal done`, then, in order of precedence, `needs input`, `finished`, `ready`, its agent's other
+`shoal done` or `blocked` while blocked, then, in order of precedence,
+`needs input`, `blocked`, `finished`, `ready`, its agent's other
 [states](#agent-state), or `process running` before its agent reports one.
 <a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions
 and pending approval requests that no coordinating agent decides, each with its
 [number](#questions), including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces and
-running chats whose agent needs input, failed
+running chats whose agent needs input, blocked workspaces and chats with the
+first of what blocks them, failed
 workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item, running [demos](#demos), Git worktrees under a repository's
 Shoal directory that no workspace owns, automatic cleanup failing other than in
 a workspace, and repositories whose default branch has failed to
 [sync](#repositories) for 30 minutes. There Enter answers a question, approves or denies a request after
-asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
+asking which, refusing one that replaced the request listed, attaches to the agent that needs input, opens a blocked space's actions, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
 with [`shoal adopt`](#adopting-a-worktree), shows Shoal's status, as `shoal status`

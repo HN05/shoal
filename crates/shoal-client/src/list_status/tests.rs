@@ -105,3 +105,39 @@ fn only_an_idle_agent_shows_its_sleep() {
         ListStatus::Working
     );
 }
+
+#[test]
+fn a_blocked_workspace_ranks_below_needs_input_and_above_stopped_work() {
+    let mut workspace = coordinated(AgentState::Idle);
+    workspace.progress = Some(crate::progress::Progress {
+        status: None,
+        steps: Vec::new(),
+        current: None,
+        blockers: vec![crate::progress::RecordedBlocker {
+            kind: crate::state::BlockerKind::Issue,
+            target: "https://forge.example/o/r/issues/1".into(),
+            name: "https://forge.example/o/r/issues/1".into(),
+            reason: "Needs it".into(),
+            lookup_failed: None,
+        }],
+        updated_at: crate::time::UnixTime::EPOCH,
+    });
+    assert_eq!(
+        ListStatus::of_workspace(&workspace, false),
+        ListStatus::Blocked
+    );
+    // Shoal stops a blocked agent, which stays blocked.
+    assert_eq!(
+        ListStatus::of_workspace(&workspace, true),
+        ListStatus::Blocked
+    );
+    workspace.agent_state = Some(crate::model::AgentStatus {
+        state: AgentState::Waiting,
+        since: crate::time::UnixTime::EPOCH,
+        prompt_cache_expires_at: None,
+    });
+    assert_eq!(
+        ListStatus::of_workspace(&workspace, false),
+        ListStatus::NeedsInput
+    );
+}

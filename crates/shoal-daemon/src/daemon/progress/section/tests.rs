@@ -39,6 +39,29 @@ fn a_section_shows_the_status_line_and_the_steps() {
 }
 
 #[test]
+fn a_section_shows_what_blocks_the_space_and_each_step() {
+    let blocker = |reason: &str| crate::client::progress::RecordedBlocker {
+        kind: crate::state::BlockerKind::Space,
+        target: "id".into(),
+        name: "api".into(),
+        reason: reason.into(),
+        lookup_failed: None,
+    };
+    let mut shown = progress(None, &[("Fix", false)]);
+    shown.blockers = vec![blocker("CI is down")];
+    shown.steps[0].blockers = vec![blocker("Needs the <!-- fix")];
+    assert_eq!(
+        render(&shown),
+        "<!-- shoal:progress -->\n\
+         **Blocked by** space api: CI is down\n\
+         \n\
+         - [ ] Fix\n  \
+         - Blocked by space api: Needs the &lt;!-- fix\n\
+         <!-- /shoal:progress -->"
+    );
+}
+
+#[test]
 fn sections_are_added_replaced_and_removed_leaving_the_body_as_it_was() {
     let first = render(&progress(Some("Reproduced"), &[]));
     let second = render(&progress(Some("Fixed"), &[("Fix", true)]));
