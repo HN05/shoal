@@ -3,7 +3,6 @@
 //! as duplicates once the user decides.
 use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
-use crate::daemon::approvals::proposals::ProposalExt;
 use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::BTreeSet,

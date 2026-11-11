@@ -8,127 +8,14 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
 use super::{
-    ApprovalRequest, DecisionStatus, Specification, Target,
+    ApprovalRequest, DecisionStatus, Target,
     store::{COLUMNS, by_key, current, decode_record, list, record_row, retire},
 };
 pub(crate) use crate::client::approvals::{
     Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
     PushSpecification,
 };
-use crate::{
-    daemon::{item_numbers, links::space::require_ready_space, store},
-    forge::{items::action::Edit, items::attach::Attachment},
-};
-
-/// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
-pub(crate) trait ProposalExt {
-    /// The proposed issue, for an issue proposal.
-    fn proposed_issue(&self) -> Option<&IssueSpecification>;
-
-    /// The proposed PR, for a PR proposal.
-    fn proposed_pull(&self) -> Option<&PullSpecification>;
-
-    /// The push approval runs: a push request's, or a PR proposal's that
-    /// pushes the branch first.
-    fn pending_push(&self) -> Option<&PushSpecification>;
-
-    /// The files the proposal attaches, its duplicates' included.
-    fn attachments(&self) -> Vec<&Attachment>;
-
-    /// The findings of duplicates an issue proposal has yet to post.
-    fn findings(&self) -> &[Finding];
-
-    /// What is left to do to an item approval posted.
-    fn follow_up(&self) -> Option<&Edit>;
-
-    fn set_follow_up(&mut self, follow_up: Option<Edit>);
-
-    /// Forget the first finding once it is posted.
-    fn finding_posted(&mut self);
-
-    /// Apply the user's edits to the proposed title and description.
-    fn edit(&mut self, decision: &ProposalDecision);
-}
-
-impl ProposalExt for ApprovalRequest {
-    fn proposed_issue(&self) -> Option<&IssueSpecification> {
-        match &self.specification {
-            Specification::Issue(issue) => Some(issue),
-            _ => None,
-        }
-    }
-
-    fn proposed_pull(&self) -> Option<&PullSpecification> {
-        match &self.specification {
-            Specification::Pull(pull) => Some(pull),
-            _ => None,
-        }
-    }
-
-    fn pending_push(&self) -> Option<&PushSpecification> {
-        match &self.specification {
-            Specification::Push(push) => Some(push),
-            Specification::Pull(pull) => pull.push.as_ref(),
-            _ => None,
-        }
-    }
-
-    fn attachments(&self) -> Vec<&Attachment> {
-        match &self.specification {
-            Specification::Issue(issue) => issue
-                .issue
-                .attachments
-                .iter()
-                .chain(issue.duplicates.iter().flat_map(|d| &d.attachments))
-                .collect(),
-            Specification::Pull(pull) => pull.pull.attachments.iter().collect(),
-            _ => Vec::new(),
-        }
-    }
-
-    fn findings(&self) -> &[Finding] {
-        self.proposed_issue()
-            .map_or(&[], |issue| issue.duplicates.as_slice())
-    }
-
-    fn follow_up(&self) -> Option<&Edit> {
-        match &self.specification {
-            Specification::Issue(issue) => issue.follow_up.as_ref(),
-            Specification::Pull(pull) => pull.follow_up.as_ref(),
-            _ => None,
-        }
-    }
-
-    fn set_follow_up(&mut self, follow_up: Option<Edit>) {
-        match &mut self.specification {
-            Specification::Issue(issue) => issue.follow_up = follow_up,
-            Specification::Pull(pull) => pull.follow_up = follow_up,
-            _ => {}
-        }
-    }
-
-    fn finding_posted(&mut self) {
-        if let Specification::Issue(issue) = &mut self.specification
-            && !issue.duplicates.is_empty()
-        {
-            issue.duplicates.remove(0);
-        }
-    }
-
-    fn edit(&mut self, decision: &ProposalDecision) {
-        let (title, body) = match &mut self.specification {
-            Specification::Issue(issue) => (&mut issue.issue.title, &mut issue.issue.body),
-            Specification::Pull(pull) => (&mut pull.pull.title, &mut pull.pull.body),
-            _ => return,
-        };
-        if let Some(edited) = &decision.title {
-            edited.clone_into(title);
-        }
-        if let Some(edited) = &decision.body {
-            edited.clone_into(body);
-        }
-    }
-}
+use crate::daemon::{item_numbers, links::space::require_ready_space, store};
 
 /// A stored proposal, and whether this call recorded it.
 pub type Recorded = (ApprovalRequest, bool);

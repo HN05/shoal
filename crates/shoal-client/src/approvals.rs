@@ -139,6 +139,21 @@ impl FromStr for Target {
 
 text_key!(Target);
 
+impl Target {
+    /// Whether the request proposes a forge write the user may edit before
+    /// approving, rather than granting access.
+    pub fn is_proposal(&self) -> bool {
+        matches!(self, Self::IssueOpen | Self::PrOpen | Self::Push)
+    }
+
+    /// Whether a coordinator decides the request only while it holds a grant
+    /// for the same thing. A hold grants nothing a coordinator could hold, so
+    /// the nearest one decides it.
+    pub fn needs_grant(&self) -> bool {
+        !matches!(self, Self::Hold(_))
+    }
+}
+
 /// The effective allocation settings a decision binds; a later request with
 /// different settings cannot reuse the grant. Each kind keeps the JSON shape
 /// its allocator has always recorded.
@@ -296,6 +311,95 @@ pub struct ApprovalRequest {
     /// request once the push is done; approving again waits until it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation: Option<String>,
+}
+
+impl ApprovalRequest {
+    /// The proposed issue, for an issue proposal.
+    pub fn proposed_issue(&self) -> Option<&IssueSpecification> {
+        match &self.specification {
+            Specification::Issue(issue) => Some(issue),
+            _ => None,
+        }
+    }
+
+    /// The proposed PR, for a PR proposal.
+    pub fn proposed_pull(&self) -> Option<&PullSpecification> {
+        match &self.specification {
+            Specification::Pull(pull) => Some(pull),
+            _ => None,
+        }
+    }
+
+    /// The push approval runs: a push request's, or a PR proposal's that
+    /// pushes the branch first.
+    pub fn pending_push(&self) -> Option<&PushSpecification> {
+        match &self.specification {
+            Specification::Push(push) => Some(push),
+            Specification::Pull(pull) => pull.push.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// The files the proposal attaches, its duplicates' included.
+    pub fn attachments(&self) -> Vec<&Attachment> {
+        match &self.specification {
+            Specification::Issue(issue) => issue
+                .issue
+                .attachments
+                .iter()
+                .chain(issue.duplicates.iter().flat_map(|d| &d.attachments))
+                .collect(),
+            Specification::Pull(pull) => pull.pull.attachments.iter().collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The findings of duplicates an issue proposal has yet to post.
+    pub fn findings(&self) -> &[Finding] {
+        self.proposed_issue()
+            .map_or(&[], |issue| issue.duplicates.as_slice())
+    }
+
+    /// What is left to do to an item approval posted.
+    pub fn follow_up(&self) -> Option<&Edit> {
+        match &self.specification {
+            Specification::Issue(issue) => issue.follow_up.as_ref(),
+            Specification::Pull(pull) => pull.follow_up.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn set_follow_up(&mut self, follow_up: Option<Edit>) {
+        match &mut self.specification {
+            Specification::Issue(issue) => issue.follow_up = follow_up,
+            Specification::Pull(pull) => pull.follow_up = follow_up,
+            _ => {}
+        }
+    }
+
+    /// Forget the first finding once it is posted.
+    pub fn finding_posted(&mut self) {
+        if let Specification::Issue(issue) = &mut self.specification
+            && !issue.duplicates.is_empty()
+        {
+            issue.duplicates.remove(0);
+        }
+    }
+
+    /// Apply the user's edits to the proposed title and description.
+    pub fn edit(&mut self, decision: &ProposalDecision) {
+        let (title, body) = match &mut self.specification {
+            Specification::Issue(issue) => (&mut issue.issue.title, &mut issue.issue.body),
+            Specification::Pull(pull) => (&mut pull.pull.title, &mut pull.pull.body),
+            _ => return,
+        };
+        if let Some(edited) = &decision.title {
+            edited.clone_into(title);
+        }
+        if let Some(edited) = &decision.body {
+            edited.clone_into(body);
+        }
+    }
 }
 
 /// The name of a workspace's single PR proposal.

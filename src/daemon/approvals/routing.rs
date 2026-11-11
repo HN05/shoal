@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, params};
 
 use super::{
-    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Target, TargetExt, proposals,
+    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Target, proposals,
     store::{CANDIDATES, by_key, decode_record, record_row, write_record},
 };
 use crate::client::space_names::SpaceSelector;
@@ -28,7 +28,6 @@ use crate::{
 /// alone, and what pushes by `push` too.
 fn governing(request: &ApprovalRequest) -> &'static [PermissionKey] {
     use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
-    use proposals::ProposalExt;
     match request.target {
         Target::IssueOpen
             if (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some()) =>
@@ -53,7 +52,6 @@ fn needed(
     approve: bool,
     details: &proposals::ProposalDecision,
 ) -> &'static [PermissionKey] {
-    use proposals::ProposalExt;
     if approve {
         return governing(request);
     }

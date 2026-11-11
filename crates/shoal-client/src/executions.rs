@@ -12,7 +12,7 @@ use crate::{
     agent::{AgentSessionId, ModelChoice},
     connection::{Daemon, request},
     processes::Identity,
-    protocol::ExecutionMethod,
+    protocol::{ExecutionMethod, timing},
     sessions::{HostName, Origin},
     state::{AgentState, TurnFailure, states},
 };
@@ -31,6 +31,17 @@ states!(
         Setup => "setup",
     }
 );
+
+impl ExecutionKind {
+    /// How long its wrapper waits for the daemon to register an execution
+    /// of this kind.
+    pub fn start_timeout(self) -> Duration {
+        match self {
+            Self::Command => timing::EXECUTION_START_TIMEOUT,
+            Self::Merge | Self::Unmerge | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
+        }
+    }
+}
 
 /// The least time between dynamic starts, so their first reads do not collide.
 pub const STAGGER: Duration = Duration::from_secs(10);

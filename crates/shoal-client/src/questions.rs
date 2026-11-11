@@ -1,6 +1,6 @@
 //! Questions agents ask the user.
 use crate::space_ids::SpaceId;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::space_names::{SpaceName, SpaceSelector};
@@ -44,6 +44,90 @@ pub struct Question {
     /// The files the agent sent with it, such as screenshots of the choices.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<crate::files::SentFile>,
+}
+
+impl Question {
+    /// The question on one line, as listings and notifications show it: a
+    /// question asked in the chat may span lines.
+    pub fn one_line(&self) -> String {
+        self.ask.question.replace(['\n', '\t'], " ")
+    }
+
+    /// The answer the agent recommends; a question asked in the chat has
+    /// none.
+    pub fn recommendation(&self) -> Option<&str> {
+        (!self.in_chat).then_some(self.ask.recommendation.as_str())
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.status == QuestionStatus::Open
+    }
+
+    /// Refuse an answer to a question that is answered or closed.
+    pub fn ensure_open(&self) -> Result<()> {
+        let number = self.number;
+        match self.status {
+            QuestionStatus::Open => Ok(()),
+            QuestionStatus::Answered { .. } => bail!("question {number} is already answered"),
+            QuestionStatus::Withdrawn { .. } => {
+                bail!("question {number} was withdrawn: its agent no longer needs an answer")
+            }
+            QuestionStatus::Closed { .. } => {
+                bail!("question {number} is closed: its workspace's assignment was marked done")
+            }
+        }
+    }
+
+    /// Whether `other` is this question as asked, though it may since be
+    /// answered: the same space, ask and time.
+    pub fn is_same(&self, other: &Question) -> bool {
+        self.space_id == other.space_id
+            && self.ask == other.ask
+            && self.created_at == other.created_at
+    }
+
+    /// What the user is told about a new question, including how to answer it.
+    /// It is cut to the length of other messages, so a batch of notifications
+    /// still fits one response.
+    pub fn notification(&self) -> String {
+        let mut text = format!(
+            "question {} (answer with shoal questions {}): {}",
+            self.number,
+            self.number,
+            self.one_line()
+        );
+        if let Some(recommendation) = self.recommendation() {
+            text.push_str(&format!(" Recommended: {recommendation}"));
+        }
+        crate::validate::shorten(text, crate::validate::MAX_MESSAGE_LEN)
+    }
+
+    /// What the user, or the coordinating agent, is told about a withdrawn
+    /// question whose notification was already shown.
+    pub fn withdrawal_notification(&self) -> String {
+        crate::validate::shorten(
+            format!(
+                "withdrew question {} (no answer needed): {}",
+                self.number,
+                self.one_line()
+            ),
+            crate::validate::MAX_MESSAGE_LEN,
+        )
+    }
+
+    /// The agent message carrying `answer`; it names the question it answers.
+    pub fn answer_message(&self, answer: &str) -> String {
+        if self.in_chat {
+            return format!(
+                "Answer to question {}, which you asked in the chat: {answer}",
+                self.number
+            );
+        }
+        format!(
+            "Answer to question {} ({}): {answer}",
+            self.number, self.ask.question
+        )
+    }
 }
 
 /// Whether a question waits for an answer, and how it stopped waiting.

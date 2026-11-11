@@ -6,7 +6,6 @@
 //! has stopped syncing.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
-use crate::daemon::questions::QuestionExt;
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};

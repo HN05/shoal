@@ -1,6 +1,5 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
-use crate::daemon::approvals::proposals::ProposalExt;
 use crate::daemon::{
     approvals::proposals::PR,
     test_support::{manager, repository},

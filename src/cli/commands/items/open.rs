@@ -1,6 +1,5 @@
 //! `shoal pr open` and `shoal issue open`: push and open or find a PR, or open
 //! an issue, and report what the repository's approval rules made of it.
-use crate::daemon::approvals::proposals::ProposalExt;
 use anyhow::Result;
 
 use super::{content::read_content, context::select_open_context};

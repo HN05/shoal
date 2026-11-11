@@ -17,28 +17,6 @@ pub(crate) use crate::client::approvals::{
 pub use store::{ReasonRequired, check, current, release};
 pub(crate) use store::{pending_count, release_decided_by};
 
-/// Operations on the client type [`Target`] that only the `shoal` command uses.
-pub(crate) trait TargetExt {
-    /// Whether the request proposes a forge write the user may edit before
-    /// approving, rather than granting access.
-    fn is_proposal(&self) -> bool;
-
-    /// Whether a coordinator decides the request only while it holds a grant
-    /// for the same thing. A hold grants nothing a coordinator could hold, so
-    /// the nearest one decides it.
-    fn needs_grant(&self) -> bool;
-}
-
-impl TargetExt for Target {
-    fn is_proposal(&self) -> bool {
-        matches!(self, Self::IssueOpen | Self::PrOpen | Self::Push)
-    }
-
-    fn needs_grant(&self) -> bool {
-        !matches!(self, Self::Hold(_))
-    }
-}
-
 /// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
 pub(crate) trait ApprovalRequestExt {
     fn new(

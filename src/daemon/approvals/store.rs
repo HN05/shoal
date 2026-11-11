@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use std::fmt;
 
-use super::{ApprovalRequest, DecisionStatus, Lifetime, MERGE, Target, TargetExt, proposals};
+use super::{ApprovalRequest, DecisionStatus, Lifetime, MERGE, Target, proposals};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
