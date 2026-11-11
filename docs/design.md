@@ -1806,8 +1806,10 @@ another's history: a space keeps its events while it exists and for
 attached files, and a restored workspace takes the removed one's; only its
 high-volume events, its agent's turn states, its progress changes and forge
 activity other than an item's closing, merging and reopening, keep a cap of the newest 500 per space.
-A space's log (`shoal log`, `client::work::log`) is a filtered view of
-this journal, not a second store: renames, restores, agent starts, stops and
+A space's log (`shoal log`, `client::log::log`) is a filtered view of
+this journal, not a second store, and so is Shoal's, every space's events
+with Shoal's own, which belong to no space and stay for the global
+retention: renames, restores, agent starts, stops and
 exits, questions, approvals, alerts, and the spaces created and removed below
 a space (in that parent's log) are journal events for it, each recorded where
 the change is made. A scoped caller reads the logs of its own space and the

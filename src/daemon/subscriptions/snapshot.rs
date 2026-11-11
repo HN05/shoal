@@ -95,7 +95,9 @@ pub(super) async fn take(
         found.extend(notifications(manager).await?);
     }
     if let Some(log) = &topics.log {
-        let entries = manager.space_log(&log.space, log.filter, log.limit).await?;
+        let entries = manager
+            .log(log.space.as_ref(), log.filter, log.limit)
+            .await?;
         found.extend(
             entries
                 .into_iter()

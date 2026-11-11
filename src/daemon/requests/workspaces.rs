@@ -30,7 +30,7 @@ pub(super) async fn handle(
             filter,
             limit,
         } => {
-            let log = manager.space_log(&space, filter, limit).await;
+            let log = manager.log(space.as_ref(), filter, limit).await;
             return Ok(Answer::pages(log, Body::LogEntries));
         }
         WorkspaceMethod::OpenBranch {

@@ -1,7 +1,10 @@
 //! What a log line says of an entry: a short label and its details.
 use crate::{
     client::{
-        events::{ChatEventKind, EventCause, EventDetails, EventKind, FileEventKind},
+        events::{
+            ChatEventKind, EventCause, EventDetails, EventKind, FileEventKind, ShoalEventDetails,
+            ShoalEventKind,
+        },
         log::LogEntry,
     },
     forge::{items::link::LinkKind, updates::UpdateKind},
@@ -33,6 +36,46 @@ pub(super) fn describe(entry: &LogEntry) -> (String, String) {
             };
             (label.to_owned(), event.details.file.name.clone())
         }
+        LogEntry::Shoal(event) => shoal_line(&event.details),
+    }
+}
+
+/// The name of the space `entry` belongs to, or `Shoal` for Shoal's own.
+pub(super) fn space(entry: &LogEntry) -> String {
+    match entry {
+        LogEntry::Event(event) => event.details.name.to_string(),
+        LogEntry::Chat(event) => event.chat.name.to_string(),
+        LogEntry::File(event) => {
+            let file = &event.details.file;
+            (file.workspace.as_ref().or(file.chat.as_ref()))
+                .map_or_else(String::new, ToString::to_string)
+        }
+        LogEntry::Shoal(_) => "Shoal".to_owned(),
+    }
+}
+
+fn shoal_line(event: &ShoalEventDetails) -> (String, String) {
+    let error = event.error.clone();
+    let (label, details) = match event.kind {
+        ShoalEventKind::DaemonStarted => ("Daemon started", event.version.clone()),
+        ShoalEventKind::DaemonStopped => ("Daemon stopped", error),
+        ShoalEventKind::DaemonRestarted => ("Daemon restarted", None),
+        ShoalEventKind::ConfigReloaded if error.is_some() => ("Config rejected", error),
+        ShoalEventKind::ConfigReloaded => ("Config reloaded", None),
+        ShoalEventKind::CleanupRan if event.removed.is_empty() => ("Cleanup failed", error),
+        ShoalEventKind::CleanupRan => ("Cleanup removed", Some(removed(event, error))),
+    };
+    (label.to_owned(), details.unwrap_or_default())
+}
+
+/// The spaces a cleanup run removed, and its `error` when another step
+/// failed.
+fn removed(event: &ShoalEventDetails, error: Option<String>) -> String {
+    let names: Vec<_> = event.removed.iter().map(ToString::to_string).collect();
+    let names = names.join(", ");
+    match error {
+        Some(error) => format!("{names}; failed: {error}"),
+        None => names,
     }
 }
 

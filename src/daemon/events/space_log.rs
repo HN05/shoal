@@ -4,7 +4,7 @@
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{EventCursor, EventItem, EventKind, decode};
+use super::{EventCursor, EventKind, decode, log_entry};
 use crate::time::UnixTime;
 use crate::{
     client::{
@@ -20,6 +20,20 @@ use crate::{
 const REMOVED_ANCESTORS: usize = 32;
 
 impl Manager {
+    /// The newest `limit` events of the log of the space `space` names, or
+    /// of Shoal's without one, that `filter` shows, oldest first.
+    pub(crate) async fn log(
+        &self,
+        space: Option<&SpaceSelector>,
+        filter: LogFilter,
+        limit: u32,
+    ) -> Result<Vec<LogEntry>> {
+        match space {
+            Some(space) => self.space_log(space, filter, limit).await,
+            None => self.shoal_log(filter, limit).await,
+        }
+    }
+
     /// The newest `limit` events of the log of the space `selector` names
     /// that `filter` shows, oldest first.
     pub(crate) async fn space_log(
@@ -34,12 +48,16 @@ impl Manager {
     }
 
     /// Point `selector` at the space whose log a scoped caller reads: its
-    /// own or one below it, or a removed space that was below it.
+    /// own or one below it, or a removed space that was below it. Shoal's
+    /// log, without a space, is the user's.
     pub(in crate::daemon) async fn narrow_to_log(
         &self,
         caller: &Caller,
-        selector: &mut SpaceSelector,
+        selector: &mut Option<SpaceSelector>,
     ) -> Result<()> {
+        let Some(selector) = selector else {
+            anyhow::bail!("workspace processes cannot read Shoal's log; name a space");
+        };
         let id = self.log_space(selector).await?;
         let reached = match self.nearest_existing(&id).await? {
             Some(space) => self.reaches(caller, &space).await?,
@@ -56,9 +74,12 @@ impl Manager {
     /// `topic` naming its space by ID, so a rename, or a later space taking
     /// its name, does not change the log a subscription follows.
     pub(in crate::daemon) async fn pin_log(&self, topic: LogTopic) -> Result<LogTopic> {
-        let id = self.log_space(&topic.space).await?;
+        let Some(space) = &topic.space else {
+            return Ok(topic);
+        };
+        let id = self.log_space(space).await?;
         Ok(LogTopic {
-            space: SpaceSelector::id(&id),
+            space: Some(SpaceSelector::id(&id)),
             ..topic
         })
     }
@@ -109,12 +130,7 @@ fn events_of(db: &Connection, id: &SpaceId) -> Result<Vec<LogEntry>> {
     let mut entries = Vec::new();
     for row in rows {
         let (id, created_at, record): (EventCursor, UnixTime, String) = row?;
-        entries.push(match decode(id, created_at, &record)? {
-            EventItem::Event(event) => LogEntry::Event(event),
-            EventItem::Chat(event) => LogEntry::Chat(event),
-            EventItem::File(event) => LogEntry::File(event),
-            EventItem::Shoal(_) | EventItem::Gap { .. } => continue,
-        });
+        entries.extend(log_entry(decode(id, created_at, &record)?));
     }
     Ok(entries)
 }

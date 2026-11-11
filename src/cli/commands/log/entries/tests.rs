@@ -84,3 +84,21 @@ fn shoal_s_and_the_forge_s_changes_name_the_item_and_change() {
             "update": {"kind": "closed", "message": "Closed"}}})));
     assert_eq!(label, "Issue closed");
 }
+
+#[test]
+fn a_cleanup_run_shows_its_removals_and_its_failure() {
+    let run = |record: serde_json::Value| {
+        let mut base = serde_json::json!({"type": "shoal", "id": 1, "created_at": 1,
+            "kind": "cleanup_ran"});
+        base.as_object_mut()
+            .unwrap()
+            .extend(record.as_object().unwrap().clone());
+        describe(&serde_json::from_value(base).unwrap())
+    };
+    let (label, details) = run(serde_json::json!({"removed": ["fix", "chat"], "error": "denied"}));
+    assert_eq!(label, "Cleanup removed");
+    assert_eq!(details, "fix, chat; failed: denied");
+    let (label, details) = run(serde_json::json!({"error": "denied"}));
+    assert_eq!(label, "Cleanup failed");
+    assert_eq!(details, "denied");
+}

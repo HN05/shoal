@@ -5099,7 +5099,7 @@ repository config applies to that repository's workspaces on the next sweep.
 ### Space log
 
 ```sh
-shoal log                 # This space, or a picker outside one
+shoal log                 # This space, or Shoal's log outside one
 shoal log fix-login       # A named space, including a removed one
 shoal log --all           # Every event Shoal recorded for the space
 shoal log --limit 20      # The newest 20 entries (default 50)
@@ -5134,6 +5134,16 @@ newest 500 agent turn states, progress changes and forge activity other than
 an item's closing, merging and reopening, so a busy space cannot push out another's
 log. A workspace process reads the logs of its own space and the spaces
 below it, removed ones included.
+
+Outside a space, `shoal log` shows Shoal's log: the entries of every space,
+removed ones while their log lasts, each line naming its space after the
+time, with Shoal's own events, named `Shoal`: the daemon's starts, stops and
+restarts, each config reload, with the error when the file was refused, and
+each automatic cleanup pass that removed spaces, naming them, or failed in a
+new way. `--all`, `--limit`, `--follow` and `--json` work there too. Shoal's
+own events stay for the global `cleanup.restore.retention_days`. The daemon's
+diagnostic log is not part of it. Workspace processes cannot read Shoal's
+log.
 
 ### Workspace events
 

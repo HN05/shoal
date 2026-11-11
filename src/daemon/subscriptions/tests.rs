@@ -497,7 +497,7 @@ mod streams {
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
         let topic = |space: &str| LogTopic {
-            space: SpaceSelector::parse(space),
+            space: Some(SpaceSelector::parse(space)),
             filter: LogFilter::Entries,
             limit: 50,
         };
@@ -543,7 +543,7 @@ mod streams {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let topic = LogTopic {
-            space: SpaceSelector::parse("own"),
+            space: Some(SpaceSelector::parse("own")),
             filter: LogFilter::Entries,
             limit: 50,
         };

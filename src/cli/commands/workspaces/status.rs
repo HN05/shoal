@@ -60,7 +60,7 @@ async fn space_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
     if crate::cli::client::status(&ctx.paths).await?.is_none() {
         return Ok(None);
     }
-    match ui::space_here(ctx).await {
+    match ui::space_here(ctx, ui::Workspaces::Any).await {
         Ok(space) => Ok(space),
         Err(error) => {
             eprintln!("warning: cannot tell which space this runs in: {error:#}");

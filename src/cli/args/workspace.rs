@@ -54,15 +54,18 @@ pub enum WorkspaceCommand {
         item: Option<String>,
     },
     /// Show a space's log: its creation, agent, work, issues and PRs,
-    /// questions, approvals and alerts, and the spaces below it.
+    /// questions, approvals and alerts, and the spaces below it; or Shoal's
+    /// log outside a space.
     ///
     /// Without a space, shows the log of the space this runs in, else
-    /// offers a picker. A removed space is named by its last name while its
-    /// log lasts. Entries print oldest first, by local time.
+    /// Shoal's: every space's entries, each naming its space, with the
+    /// daemon's starts and stops, config reloads and cleanup runs. A removed
+    /// space is named by its last name while its log lasts. Entries print
+    /// oldest first, by local time.
     Log {
         space: Option<SpaceSelector>,
-        /// Show every event Shoal recorded for the space, such as agent
-        /// turn states, forge comments and checks, demos and attached files.
+        /// Show every event Shoal recorded, such as agent turn states,
+        /// forge comments and checks, demos and attached files.
         #[arg(short = 'A', long)]
         all: bool,
         /// Show the newest this many entries.

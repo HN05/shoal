@@ -714,6 +714,45 @@ fn status_without_a_target_outside_a_space_shows_shoal() {
 }
 
 #[test]
+fn log_without_a_space_shows_the_space_here_else_shoal_s() {
+    let fixture = Fixture::new();
+    let here = PathBuf::from(fixture.add("here")["path"].as_str().unwrap());
+    fixture.add("elsewhere");
+    let log = |cwd: &Path| -> Vec<Value> {
+        let output = fixture
+            .command()
+            .args(["--json", "log", "--limit", "1000"])
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        stdout
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    };
+    let inside = log(&here);
+    assert!(!inside.is_empty());
+    assert!(
+        inside.iter().all(|entry| entry["name"] == "here"),
+        "{inside:?}"
+    );
+    let outside = log(fixture.root.path());
+    let names: std::collections::BTreeSet<_> = outside
+        .iter()
+        .filter_map(|entry| entry["name"].as_str())
+        .collect();
+    assert_eq!(names, ["elsewhere", "here"].into(), "{outside:?}");
+    assert!(
+        outside
+            .iter()
+            .any(|entry| entry["type"] == "shoal" && entry["kind"] == "daemon_started"),
+        "{outside:?}"
+    );
+}
+
+#[test]
 fn workspace_commands_select_from_a_deleted_current_directory() {
     use std::{ffi::CString, os::unix::process::CommandExt};
 

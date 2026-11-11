@@ -1,6 +1,7 @@
-//! `shoal log`: a space's log, oldest first, a line for each entry
-//! with its local time, a label and its details, under a heading for each
-//! date; `--json` prints each entry as one JSON line.
+//! `shoal log`: a space's log, or Shoal's outside a space, oldest first, a
+//! line for each entry with its local time, in Shoal's the space it belongs
+//! to, a label and its details, under a heading for each date; `--json`
+//! prints each entry as one JSON line.
 use anyhow::Result;
 
 use crate::{
@@ -25,13 +26,16 @@ pub(super) async fn run(
     limit: u32,
     follow: bool,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = match space {
+        Some(space) => Some(ui::select_space(ctx, Some(space), Fallback::CurrentDirectory).await?),
+        None => ui::space_here(ctx, ui::Workspaces::Below).await?,
+    };
     let filter = if all {
         LogFilter::All
     } else {
         LogFilter::Entries
     };
-    let mut printer = Printer::new(ctx);
+    let mut printer = Printer::new(ctx, space.is_none());
     if follow {
         let topic = LogTopic {
             space,
@@ -68,9 +72,15 @@ async fn follow_log(ctx: &Context, topic: LogTopic, printer: &mut Printer<'_>) -
     }
 }
 
+/// The width space names are padded to in Shoal's log, which a longer name
+/// exceeds.
+const SPACE_WIDTH: usize = 24;
+
 /// Prints entries in order, with a date heading where the date changes.
 struct Printer<'a> {
     ctx: &'a Context,
+    /// Whether lines name their space, as in Shoal's log.
+    spaces: bool,
     palette: Palette,
     date: Option<String>,
     /// The newest entry printed.
@@ -78,9 +88,10 @@ struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
-    fn new(ctx: &'a Context) -> Self {
+    fn new(ctx: &'a Context, spaces: bool) -> Self {
         Self {
             ctx,
+            spaces,
             palette: Palette::stdout(ctx.json),
             date: None,
             last: None,
@@ -110,17 +121,25 @@ impl<'a> Printer<'a> {
             outln!("{}", self.palette.paint(Style::Heading, date));
             self.date = Some(date.to_owned());
         }
-        outln!("{}", line(time, entry, self.palette));
+        let space = self.spaces.then(|| entries::space(entry));
+        outln!("{}", line(time, space.as_deref(), entry, self.palette));
         Ok(())
     }
 }
 
-/// The line of `entry` at `time`: its label padded to the longest label, so
-/// lines printed apart still align, and its details.
-fn line(time: &str, entry: &LogEntry, palette: Palette) -> String {
+/// The line of `entry` at `time`: the `space` it belongs to and its label,
+/// each padded to a fixed width, so lines printed apart still align, and its
+/// details.
+fn line(time: &str, space: Option<&str>, entry: &LogEntry, palette: Palette) -> String {
     let (label, details) = entries::describe(entry);
     let label = format!("{label:<width$}", width = entries::LABEL_WIDTH);
-    let line = format!("{time}  {label}  {details}");
+    let line = match space {
+        Some(space) => format!(
+            "{time}  {space:<width$}  {label}  {details}",
+            width = SPACE_WIDTH
+        ),
+        None => format!("{time}  {label}  {details}"),
+    };
     let line = line.trim_end();
     // Every event shows those the log leaves out dimmed.
     match entry.is_entry() {

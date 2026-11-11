@@ -237,10 +237,10 @@ pub enum WorkspaceMethod {
         after: Option<crate::events::EventCursor>,
         follow: bool,
     },
-    /// The newest `limit` events of a space's log that `filter` shows,
-    /// oldest first, in pages.
+    /// The newest `limit` events of a space's log, or Shoal's without
+    /// `space`, that `filter` shows, oldest first, in pages.
     SpaceLog {
-        space: SpaceSelector,
+        space: Option<SpaceSelector>,
         filter: crate::log::LogFilter,
         limit: u32,
     },

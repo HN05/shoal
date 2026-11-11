@@ -56,6 +56,18 @@ fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventIt
     })
 }
 
+/// The log entry of the journal's `item`; a gap is none.
+fn log_entry(item: EventItem) -> Option<crate::client::log::LogEntry> {
+    use crate::client::log::LogEntry;
+    Some(match item {
+        EventItem::Event(event) => LogEntry::Event(event),
+        EventItem::Chat(event) => LogEntry::Chat(event),
+        EventItem::File(event) => LogEntry::File(event),
+        EventItem::Shoal(event) => LogEntry::Shoal(event),
+        EventItem::Gap { .. } => return None,
+    })
+}
+
 /// The events after `cursor`, after a gap where the journal lost some of
 /// them.
 fn replay(
@@ -483,6 +495,7 @@ impl Manager {
 }
 
 mod retention;
+mod shoal_log;
 mod space_log;
 pub(crate) use retention::adopt;
 

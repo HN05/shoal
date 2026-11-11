@@ -1,11 +1,12 @@
-//! A space's log: the important events in the life of a workspace or chat,
-//! as the daemon's event journal holds them.
+//! A space's log, the important events in the life of a workspace or chat,
+//! and Shoal's, every space's with Shoal's own, as the daemon's event
+//! journal holds them.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     connection::{self, Daemon},
-    events::{ChatEvent, EventCursor, EventKind, FileEvent, WorkspaceEvent},
+    events::{ChatEvent, EventCursor, EventKind, FileEvent, ShoalEvent, WorkspaceEvent},
     forge::updates::UpdateKind,
     protocol::WorkspaceMethod,
     space_names::SpaceSelector,
@@ -14,44 +15,46 @@ use crate::{
 };
 
 states!(
-    /// Which of a space's events its log shows.
+    /// Which events a log shows.
     LogFilter {
         /// Its creation, renames, removal and restore; its agent's starts,
         /// stops and exits; its ready marks and completion; its issue and
         /// PR links, Shoal's changes to them and their closing, merging and
         /// reopening; its questions, approvals and alerts; and the spaces
-        /// created and removed below it.
+        /// created and removed below it; and Shoal's own events.
         Entries => "entries",
-        /// Every event the journal holds for the space.
+        /// Every event the journal holds for the log.
         All => "all",
     }
 );
 
-/// The entries of a space's log a subscription follows: the newest
-/// `limit` that `filter` shows.
+/// The entries of a space's log, or Shoal's without `space`, that a
+/// subscription follows: the newest `limit` that `filter` shows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogTopic {
-    pub space: SpaceSelector,
+    pub space: Option<SpaceSelector>,
     pub filter: LogFilter,
     pub limit: u32,
 }
 
-/// One event of a space's log, as `shoal internal events` prints it.
+/// One event of a log, as `shoal internal events` prints it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LogEntry {
     Event(Box<WorkspaceEvent>),
     Chat(Box<ChatEvent>),
     File(Box<FileEvent>),
+    Shoal(Box<ShoalEvent>),
 }
 
 impl LogEntry {
-    /// The journal ID, which orders a space's entries.
+    /// The journal ID, which orders a log's entries.
     pub fn id(&self) -> EventCursor {
         match self {
             Self::Event(event) => event.id,
             Self::Chat(event) => event.id,
             Self::File(event) => event.id,
+            Self::Shoal(event) => event.id,
         }
     }
 
@@ -60,14 +63,15 @@ impl LogEntry {
             Self::Event(event) => event.created_at,
             Self::Chat(event) => event.created_at,
             Self::File(event) => event.created_at,
+            Self::Shoal(event) => event.created_at,
         }
     }
 
     /// Whether [`LogFilter::Entries`] shows the event: a chat's lifecycle,
-    /// and the workspace and chat events that filter names.
+    /// Shoal's events, and the workspace and chat events that filter names.
     pub fn is_entry(&self) -> bool {
         let Self::Event(event) = self else {
-            return matches!(self, Self::Chat(_));
+            return matches!(self, Self::Chat(_) | Self::Shoal(_));
         };
         let details = &event.details;
         match details.kind {
@@ -109,12 +113,12 @@ const ENTRY_KINDS: [EventKind; 22] = [
     EventKind::Continued,
 ];
 
-/// The newest `limit` events of `space`'s log that `filter` shows, oldest
-/// first. A removed space is named by its last name until its events
-/// expire.
+/// The newest `limit` events of `space`'s log, or Shoal's without one, that
+/// `filter` shows, oldest first. A removed space is named by its last name
+/// until its events expire.
 pub async fn log(
     daemon: &impl Daemon,
-    space: SpaceSelector,
+    space: Option<SpaceSelector>,
     filter: LogFilter,
     limit: u32,
 ) -> Result<Vec<LogEntry>> {

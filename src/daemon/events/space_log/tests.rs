@@ -93,7 +93,7 @@ async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
         .unwrap();
     let narrowed = |caller_space: &str, space: &str| {
         let manager = manager.clone();
-        let (caller, mut selector) = (caller(caller_space), SpaceSelector::parse(space));
+        let (caller, mut selector) = (caller(caller_space), Some(SpaceSelector::parse(space)));
         async move {
             manager
                 .narrow_to_log(&caller, &mut selector)
@@ -103,7 +103,7 @@ async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
     };
     assert_eq!(
         narrowed("plan", "fix").await.unwrap(),
-        SpaceSelector::id(&SpaceId::from("fix-id"))
+        Some(SpaceSelector::id(&SpaceId::from("fix-id")))
     );
     assert!(narrowed("plan", "plan").await.is_ok());
     assert!(narrowed("other", "fix").await.is_err());
