@@ -851,3 +851,50 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
     // Refused before anything was created.
     assert!(manager.list_workspaces().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_restored_workspace_at_a_commit_cuts_a_name_an_older_shoal_recorded() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = create(&manager, &repo.id, None, CommitStart::Revision(None))
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    manager
+        .remove_workspace(
+            &selector,
+            crate::removal::UnsavedWork::All,
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    // Names were up to 64 characters before; an older export holds one.
+    let legacy = format!("legacy-{}", "x".repeat(57));
+    let (id, name) = (workspace.id.clone(), legacy.clone());
+    manager
+        .store
+        .write(move |tx| {
+            tx.execute(
+                "UPDATE removed_workspaces SET name=?2, record=json_set(record,'$.name',?2)
+                    WHERE workspace_id=?1",
+                rusqlite::params![id, name],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let restored = manager.restore_workspace(&selector).await.unwrap();
+
+    let reopened = restored.opened.workspace;
+    assert_eq!(reopened.branch, None);
+    assert_eq!(
+        reopened.name,
+        crate::client::space_names::SpaceName::derive(&legacy, "workspace")
+    );
+    assert_eq!(reopened.name.as_str().chars().count(), 40);
+}
