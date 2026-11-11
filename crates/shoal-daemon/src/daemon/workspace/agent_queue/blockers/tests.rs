@@ -96,6 +96,41 @@ async fn launches_start_on_a_blocker_once_it_is_done_at_its_head() {
 }
 
 #[tokio::test]
+async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    let (notes, _process) =
+        crate::daemon::test_support::chat(&manager, "notes", "chat", Some(&repo), None).await;
+    let blocker = Blocker::Space(notes.id.to_string());
+    let ui = add_blocked(&manager, &repo, "ui", vec![blocker]).await;
+    assert_eq!(ui.blockers, ["notes"]);
+
+    manager
+        .mark_chat_done(&notes.id, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&ui.id));
+    // A chat has no branch to build on.
+    assert_eq!(entry(&manager, &ui.id).await.base, None);
+
+    // A removed chat no longer blocks.
+    let (talk, process) =
+        crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let blocker = Blocker::Space(talk.id.to_string());
+    let docs = add_blocked(&manager, &repo, "docs", vec![blocker]).await;
+    process.kill();
+    manager.stop_finished_chats().await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&talk.id), None)
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&docs.id));
+}
+
+#[tokio::test]
 async fn a_launch_blocker_follows_the_workspace_it_opens_until_removal() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

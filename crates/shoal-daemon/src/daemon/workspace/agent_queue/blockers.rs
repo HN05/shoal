@@ -1,5 +1,6 @@
-//! What blocks a queued launch. A launch starts once every space blocking it
-//! is done at its current HEAD or removed, every launch has opened its
+//! What blocks a queued launch. A launch starts once every workspace blocking
+//! it is done at its current HEAD, every chat blocking it is done, either
+//! removed, every launch has opened its
 //! workspace, which then stands in for it, and every issue has closed or is
 //! done in a workspace of the repository that links it. It builds on the
 //! branch of the done blocker that contains the others.
@@ -94,7 +95,7 @@ fn ensure_spaces_exist(
     Ok(())
 }
 
-/// The workspace or queued launch of `repository`, other than `entry`, that
+/// The space or queued launch of `repository`, other than `entry`, that
 /// `selector` names. A launch that already opened its workspace stands for
 /// that workspace.
 fn space(
@@ -107,15 +108,10 @@ fn space(
         Ok(selector) => crate::daemon::spaces::selected(db, &selector)?,
         Err(_) => None,
     };
-    if let Some((SpaceKind::Workspace, id)) = selected {
-        let owned = crate::daemon::store::exists(
-            db,
-            "SELECT 1 FROM workspaces WHERE id=?1 AND repository_id=?2",
-            params![id, repository],
-        )?;
-        if owned {
-            return Ok((BlockerKind::Space, id.into()));
-        }
+    if let Some((kind, id)) = selected
+        && space_of(db, kind, &id, repository)?
+    {
+        return Ok((BlockerKind::Space, id.into()));
     }
     let launch: Option<(String, Option<String>)> = db
         .query_row(
@@ -128,8 +124,22 @@ fn space(
     match launch {
         Some((_, Some(workspace))) => Ok((BlockerKind::Space, workspace)),
         Some((id, None)) => Ok((BlockerKind::Launch, id)),
-        None => bail!("{selector} is neither a workspace nor a queued agent of this repository"),
+        None => bail!("{selector} is neither a space nor a queued agent of this repository"),
     }
+}
+
+/// Whether the `kind` space `id` belongs to `repository`.
+fn space_of(
+    db: &Connection,
+    kind: SpaceKind,
+    id: &SpaceId,
+    repository: &RepositoryId,
+) -> Result<bool> {
+    let query = match kind {
+        SpaceKind::Workspace => "SELECT 1 FROM workspaces WHERE id=?1 AND repository_id=?2",
+        SpaceKind::Chat => "SELECT 1 FROM chats WHERE id=?1 AND repository_id=?2",
+    };
+    crate::daemon::store::exists(db, query, params![id, repository])
 }
 
 /// Let `workspace`, which launch `entry` opened, stand for the launch.
