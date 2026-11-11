@@ -61,6 +61,7 @@ mod service;
 pub(in crate::cli) mod sessions;
 mod simulators;
 mod skill;
+mod sleep;
 mod split;
 mod start;
 mod stop;

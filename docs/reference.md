@@ -614,6 +614,33 @@ assignment is done and whatever `[machine.overload.recovery]` says. Timers the a
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
+### Idle wakes
+
+```sh
+shoal sleep                 # No idle wake until the agent's next turn starts
+shoal sleep --permanent     # No idle wakes for this space until --undo
+shoal sleep --undo [space]  # Idle wakes again; ends either kind of sleep
+```
+
+As a backup to the wakes its updates bring, Shoal wakes an agent that has
+stayed [idle](#agent-state) as long as its mode's `idle_wake_minutes` (60 for
+`worker`; unset or 0 never), counted from the end of its last turn, with an
+[agent message](#agent-messages): "You have been idle for 60 minutes. Continue
+your work if any remains; otherwise run `shoal sleep`." An agent that stays idle
+is woken again after each further period. A space whose work is
+[done](#assignment-completion) is never woken; open questions and pending
+approvals do not pause the timer.
+
+An agent that waits for something sleeps. A plain `shoal sleep` lasts until
+its next turn starts, by an update, a message or the user; a permission prompt
+in the turn that slept does not end it. `--permanent` lasts, through
+restarts, restores and later turns, until `shoal sleep --undo`, which the user
+or a coordinator can run for a space below. Neither keeps updates, messages
+or the user from waking the agent. In a space whose mode never wakes its agent,
+`shoal sleep` records nothing. `list` shows a sleeping idle agent as
+`sleeping` or `sleeping (permanent)`, and `status` adds a `Sleep` line;
+`--json` gives `sleep`, `turn` or `permanent`.
+
 ### Apps
 
 Apps other than the CLI, such as Quay, use Shoal's protocol through the

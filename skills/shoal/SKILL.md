@@ -206,6 +206,22 @@ sets them for other agents. Each open PR's body ends with a section showing
 both, until `shoal ready` removes it. Changes never notify; a coordinator
 reads its children's progress on demand.
 
+## Idle wakes
+
+```sh
+shoal sleep                 # No idle wake until your next turn starts
+shoal sleep --permanent     # No idle wakes for this space until --undo
+shoal sleep --undo [space]  # Idle wakes again
+```
+
+An agent whose mode sets `idle_wake_minutes`, 60 for `worker`, receives a
+message once it has stayed idle that long, and again after each further
+period, until its space is done: "You have been idle for 60 minutes. Continue
+your work if any remains; otherwise run `shoal sleep`." `sleep` stops these
+wakes until the agent's next turn starts, and `--permanent` until `--undo`;
+updates, messages and the user still wake it. In a space whose mode never
+wakes its agent, `sleep` does nothing. `list` and `status` show the sleep.
+
 ## Issues and pull requests
 
 ```sh

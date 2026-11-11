@@ -153,6 +153,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
     if chat.restore.is_none() {
         render_agent_state(chat.agent_state);
     }
+    render_sleep(chat.sleep);
     split::render(&chat.parent, &chat.children);
 }
 
@@ -297,6 +298,7 @@ fn render_jobs(status: &SpaceStatus, palette: Palette) {
 /// The turn state the workspace's agent reported and its retries.
 fn render_agent(status: &WorktreeStatus) {
     render_agent_state(status.workspace.agent_state);
+    render_sleep(status.workspace.sleep);
     if let Some(retry) = &status.proxy_retry {
         outln!("API retry:     {}", proxy_retry_label(retry));
     }
@@ -315,6 +317,18 @@ fn render_agent_state(agent_state: Option<AgentStatus>) {
     if let Some(expires_at) = agent_state.and_then(|status| status.prompt_cache_expires_at) {
         outln!("Prompt cache:  {}", prompt_cache_label(expires_at));
     }
+}
+
+/// How long a space's agent sleeps, while it does.
+fn render_sleep(sleep: Option<crate::state::Sleep>) {
+    let Some(sleep) = sleep else {
+        return;
+    };
+    let until = match sleep {
+        crate::state::Sleep::Turn => "until the next turn",
+        crate::state::Sleep::Permanent => "permanent",
+    };
+    outln!("Sleep:         {until}");
 }
 
 /// The ports, simulators and resources the workspace holds.

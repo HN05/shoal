@@ -77,3 +77,31 @@ fn a_done_chat_that_is_stopped_is_finished() {
     let done = serde_json::json!({"head": "abc", "cleanup": true, "error": null});
     assert_eq!(ListStatus::of_chat(&chat(done)), ListStatus::Finished);
 }
+
+#[test]
+fn only_an_idle_agent_shows_its_sleep() {
+    let status = |state: AgentState, sleep: Option<Sleep>| {
+        let mut workspace = coordinated(AgentState::Idle);
+        workspace.agent_state = Some(crate::model::AgentStatus {
+            state,
+            since: crate::time::UnixTime::EPOCH,
+            prompt_cache_expires_at: None,
+        });
+        workspace.sleep = sleep;
+        ListStatus::of_workspace(&workspace, false)
+    };
+    assert_eq!(status(AgentState::Idle, None), ListStatus::Waiting);
+    assert_eq!(
+        status(AgentState::Idle, Some(Sleep::Turn)),
+        ListStatus::Sleeping
+    );
+    assert_eq!(
+        status(AgentState::Idle, Some(Sleep::Permanent)),
+        ListStatus::SleepingPermanent
+    );
+    // A permanent sleep outlasts the turns the agent works.
+    assert_eq!(
+        status(AgentState::Working, Some(Sleep::Permanent)),
+        ListStatus::Working
+    );
+}

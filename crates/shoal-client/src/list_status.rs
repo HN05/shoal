@@ -2,7 +2,7 @@
 //! that starts each row.
 use crate::{
     model::{Chat, QueueEntry, Workspace},
-    state::{AgentState, QueueState, WorkspaceState},
+    state::{AgentState, QueueState, Sleep, WorkspaceState},
 };
 
 /// What a list row shows a workspace, chat or queued agent doing. Its value name
@@ -23,6 +23,10 @@ pub enum ListStatus {
     Ready,
     Working,
     Waiting,
+    /// An idle agent that Shoal does not wake until its next turn starts.
+    Sleeping,
+    /// An idle agent that Shoal does not wake until `shoal sleep --undo`.
+    SleepingPermanent,
     /// An agent or command without a reported turn state runs.
     ProcessRunning,
     /// No agent of its own has started, and the agent above that does its
@@ -38,7 +42,7 @@ impl ListStatus {
     /// The workspace's state unless ready, then a recorded completion when
     /// its work is stopped, stopped work, an agent that needs input, a
     /// recorded completion, a current ready mark, the agent's other turn
-    /// states, an agent or command running without one, the coordinator
+    /// states as its sleep says, an agent or command running without one, the coordinator
     /// that does its work working, an outdated mark, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
@@ -57,7 +61,7 @@ impl ListStatus {
             WorkspaceState::Ready if workspace.done => Self::Finished,
             WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
             WorkspaceState::Ready => match agent {
-                Some(state) => Self::agent(state),
+                Some(state) => Self::sleeping(state, workspace.sleep),
                 None if workspace.running => Self::ProcessRunning,
                 None if workspace.coordinator_state == Some(AgentState::Working) => {
                     Self::ParentWorking
@@ -72,7 +76,7 @@ impl ListStatus {
     /// completion; a running one needs input
     /// while its agent does, is finished once it records completion, ready
     /// once it marks its work ready, or else shows its agent's other turn
-    /// states, or that it runs without one.
+    /// states as its sleep says, or that it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
         match chat.restore {
@@ -81,7 +85,9 @@ impl ListStatus {
             None if agent == Some(AgentState::Waiting) => Self::NeedsInput,
             None if chat.completion.is_some() => Self::Finished,
             None if !chat.review.is_empty() => Self::Ready,
-            None => agent.map_or(Self::ProcessRunning, Self::agent),
+            None => agent.map_or(Self::ProcessRunning, |state| {
+                Self::sleeping(state, chat.sleep)
+            }),
         }
     }
 
@@ -97,6 +103,16 @@ impl ListStatus {
             AgentState::Working => Self::Working,
             AgentState::Waiting => Self::NeedsInput,
             AgentState::Idle => Self::Waiting,
+        }
+    }
+
+    /// The agent's turn `state`, an idle agent shown sleeping as `sleep`
+    /// says.
+    pub fn sleeping(state: AgentState, sleep: Option<Sleep>) -> Self {
+        match (state, sleep) {
+            (AgentState::Idle, Some(Sleep::Turn)) => Self::Sleeping,
+            (AgentState::Idle, Some(Sleep::Permanent)) => Self::SleepingPermanent,
+            (state, _) => Self::agent(state),
         }
     }
 
@@ -117,6 +133,8 @@ impl ListStatus {
             Self::Ready => "ready",
             Self::Working => "working",
             Self::Waiting => "waiting",
+            Self::Sleeping => "sleeping",
+            Self::SleepingPermanent => "sleeping (permanent)",
             Self::ProcessRunning => "process running",
             Self::ParentWorking => "parent working",
             Self::ReadyOutdated => "ready (outdated)",
@@ -132,6 +150,8 @@ impl ListStatus {
             Self::NeedsInput | Self::Ready | Self::Stopped => Group::YourTurn,
             Self::Working | Self::ProcessRunning | Self::ParentWorking => Group::Busy,
             Self::Waiting
+            | Self::Sleeping
+            | Self::SleepingPermanent
             | Self::Finished
             | Self::ReadyOutdated
             | Self::Inactive

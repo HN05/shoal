@@ -65,6 +65,24 @@ pub enum CoordinationCommand {
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
     },
+    /// Keep Shoal from waking a space's idle agent until its next turn
+    /// starts.
+    ///
+    /// A mode's idle_wake_minutes makes Shoal wake an agent that has stayed
+    /// idle that long. Updates, messages and the user still wake a sleeping
+    /// agent. In a space whose mode never wakes its agent, it does nothing.
+    Sleep {
+        /// Space, a workspace or chat; defaults to the current workspace or
+        /// chat, or a picker.
+        space: Option<SpaceSelector>,
+        /// Keep Shoal from waking the agent for having stayed idle until
+        /// --undo, whatever turns it takes.
+        #[arg(long, conflicts_with = "undo")]
+        permanent: bool,
+        /// Let Shoal wake the agent again, ending either kind of sleep.
+        #[arg(long)]
+        undo: bool,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     ///
     /// A chat records that its work is finished and keeps running.

@@ -19,7 +19,7 @@ impl ListStatusExt for ListStatus {
             Self::Ready => Style::Success,
             Self::Finished => Style::Done,
             Self::Working => Style::Heading,
-            Self::Waiting => Style::Idle,
+            Self::Waiting | Self::Sleeping | Self::SleepingPermanent => Style::Idle,
             Self::ProcessRunning | Self::ParentWorking => Style::Active,
             Self::NeedsInput => Style::Attention,
             Self::Inactive | Self::Queued => Style::Muted,
