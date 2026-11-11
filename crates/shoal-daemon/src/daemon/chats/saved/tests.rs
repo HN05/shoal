@@ -1130,3 +1130,61 @@ async fn a_survivor_that_left_the_group_of_an_exited_agent_holds_the_chat() {
     assert!(chat.tmp_dir.unwrap().exists());
     drop(escaped);
 }
+
+#[tokio::test]
+async fn a_blocked_chat_with_a_background_task_keeps_running() {
+    use crate::{client::progress::ProgressChange, model::Blocker, state::AgentState};
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let started = root.path().join("child");
+    let mut leader = ProcessGroup::spawn(
+        unmarked("sh")
+            .arg("-c")
+            .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
+            .arg(&started),
+    );
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            leader.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let child = wait_for_child(&started).await;
+    // The background task leads a session of its own, out of the agent's
+    // group.
+    let _task = KilledGroup(child);
+    while unsafe { libc::getpgid(child as i32) } != child as i32 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let selector = SpaceSelector::id(&chat.id);
+    let add = ProgressChange::AddBlocker {
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    manager.set_progress(&selector, add).await.unwrap();
+    let session = Some(crate::agent::AgentSessionId::from("session"));
+    manager
+        .set_agent_state(&selector, AgentState::Idle, None, session)
+        .await
+        .unwrap();
+
+    manager.save_blocked_chats().await.unwrap();
+
+    let running = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(
+        running.restore, None,
+        "its background task is still working"
+    );
+    unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
+    leader.wait().unwrap();
+}

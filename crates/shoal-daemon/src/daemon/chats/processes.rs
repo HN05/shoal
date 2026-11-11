@@ -68,6 +68,25 @@ pub(super) async fn owned(
     Ok(owned)
 }
 
+/// Whether the running chat `chat`, its agent running as `agent`, has work
+/// in flight outside the process group its agent runs in, such as a
+/// background task, other than the execution `wrappers`: an idle chat with
+/// such work is still working, as an idle workspace agent with it is.
+pub(super) async fn runs_outside_group(
+    chat: &SpaceId,
+    agent: &Identity,
+    wrappers: &[Identity],
+) -> Result<bool> {
+    // The live identity carries the never-reused ID that finds what the
+    // agent started.
+    let Some(agent) = identity::capture(agent.pid)?.filter(|live| live == agent) else {
+        return Ok(false);
+    };
+    let group = identity::group_of(&agent);
+    Ok((owned(chat, &agent, &[], wrappers).await?.iter())
+        .any(|process| *process != agent && identity::group_of(process) != group))
+}
+
 /// Those of `processes` still running.
 fn living(processes: &[Identity]) -> Result<Vec<Identity>> {
     let mut living = Vec::new();
