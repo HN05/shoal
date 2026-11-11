@@ -1107,7 +1107,9 @@ limit. Each job runs as a tracked execution in
 a disposable workspace at its commit, which goes once the forge's runner
 exits, at low CPU priority so that a build takes only the cores agents and the
 user leave idle. A job ends only on the forge's word, so stopping it cancels its run
-there and protection leaves it running. The workspace a run's PR or branch links lists the job, and a
+there and protection leaves it running; once the forge has finished the run,
+a runner that outlives it by a grace period, held open by a process a step
+left, is Shoal's to end with every process of the job's workspace. The workspace a run's PR or branch links lists the job, and a
 waiting one with what holds it back, but
 neither owns it, lends it a build nor reaches it with its scope. The runner is
 registered per repository with the user's own login, never for a user,

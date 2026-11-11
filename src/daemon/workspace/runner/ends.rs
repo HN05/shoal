@@ -4,7 +4,8 @@
 //! with its permit, and the runner's directory of a job no longer claimed,
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
-//! run there, and the forge's runner then stops it.
+//! run there, and the forge's runner then stops it, or Shoal does once the
+//! runner outlives the run.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
@@ -81,7 +82,10 @@ impl Manager {
     /// that never started one and whose claim no longer runs, as after a
     /// daemon restart. A removal that fails is tried again on the next pass.
     pub(crate) async fn finish_ended_jobs(&self) -> Result<()> {
-        for job in self.claimed_jobs().await? {
+        let jobs = self.claimed_jobs().await?;
+        self.runners
+            .keep_runs(&jobs.iter().map(|job| job.id.clone()).collect());
+        for job in jobs {
             let running = match &job.execution_id {
                 Some(execution) => {
                     self.job_execution_runs(&job.workspace_id, execution)
@@ -90,7 +94,7 @@ impl Manager {
                 None if self.runners.claiming(&job.id) => true,
                 None => self.adopt_job_execution(&job).await?,
             };
-            if running {
+            if running && !self.ended_overrun_job(&job).await {
                 continue;
             }
             self.record_job_usage(&job).await?;
@@ -131,6 +135,16 @@ impl Manager {
         if ran_job.unwrap_or(true) {
             self.runners.wake();
         }
+    }
+
+    /// Whether Shoal ended `job`, whose runner outlived its run; a job it
+    /// could not end, or whose run could not be read, is tried again on a
+    /// later pass.
+    async fn ended_overrun_job(&self, job: &ClaimedJob) -> bool {
+        self.end_overrun_job(job).await.unwrap_or_else(|error| {
+            crate::daemon::log!("runner: {}: {error:#}", job.job.job.name);
+            false
+        })
     }
 
     /// Record the execution running in the workspace of `job`, whose claim

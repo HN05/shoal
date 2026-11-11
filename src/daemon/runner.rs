@@ -28,6 +28,18 @@ const RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
 /// How long a repository's jobs wait after its permit pool was full.
 const PERMITS_BUSY_FOR: Duration = Duration::from_secs(15);
 
+/// How often the run of a running job is read on its forge.
+const RUN_READ_INTERVAL: Duration = Duration::from_secs(60);
+
+/// What the forge said about the run of a running job.
+#[derive(Default, Clone, Copy)]
+struct RunCheck {
+    /// When it was last read.
+    read: Option<Instant>,
+    /// When it was first found finished.
+    finished: Option<Instant>,
+}
+
 /// What the runner keeps between passes: when each repository's runner last
 /// failed to change or found its permits all held, and the jobs being claimed.
 #[derive(Default)]
@@ -38,6 +50,8 @@ pub(crate) struct Runners {
     waiting_read: Mutex<Option<Instant>>,
     /// The queue entries of the jobs whose claim runs.
     claiming: Mutex<HashSet<QueueEntryId>>,
+    /// The runs of the running jobs, by queue entry.
+    runs: Mutex<HashMap<QueueEntryId, RunCheck>>,
     /// Admission admitted a job, or one ended.
     wake: Notify,
     /// Held while a claim writes a job's files and while the sweep of
@@ -115,6 +129,51 @@ impl Runners {
 
     pub(crate) fn claiming(&self, entry: &QueueEntryId) -> bool {
         lock(&self.claiming).contains(entry)
+    }
+
+    /// Whether the run of the running job `entry` is to be read, which
+    /// marks it read: one found finished stays so, and one read a moment
+    /// ago waits.
+    pub(crate) fn take_run_read(&self, entry: &QueueEntryId) -> bool {
+        let mut runs = lock(&self.runs);
+        let check = runs.entry(entry.clone()).or_default();
+        let due = check.finished.is_none()
+            && check
+                .read
+                .is_none_or(|read| read.elapsed() >= RUN_READ_INTERVAL);
+        if due {
+            check.read = Some(Instant::now());
+        }
+        due
+    }
+
+    /// The forge reported the run of the running job `entry` finished.
+    pub(crate) fn run_finished(&self, entry: &QueueEntryId) {
+        let mut runs = lock(&self.runs);
+        let check = runs.entry(entry.clone()).or_default();
+        check.finished.get_or_insert_with(Instant::now);
+    }
+
+    /// How long ago the forge reported the run of the running job `entry`
+    /// finished, if it did.
+    pub(crate) fn finished_for(&self, entry: &QueueEntryId) -> Option<Duration> {
+        lock(&self.runs)
+            .get(entry)
+            .and_then(|check| check.finished)
+            .map(|finished| finished.elapsed())
+    }
+
+    /// Forget the runs of the jobs other than `running`.
+    pub(crate) fn keep_runs(&self, running: &HashSet<QueueEntryId>) {
+        lock(&self.runs).retain(|entry, _| running.contains(entry));
+    }
+
+    /// Take each run found finished to have finished `by` earlier.
+    #[cfg(test)]
+    pub(crate) fn backdate_finished_runs(&self, by: Duration) {
+        for check in lock(&self.runs).values_mut() {
+            check.finished = check.finished.and_then(|finished| finished.checked_sub(by));
+        }
     }
 
     /// The lock over the runner's job directories.

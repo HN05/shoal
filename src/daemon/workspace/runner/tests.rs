@@ -49,7 +49,7 @@ pub(super) async fn launch(
 
 /// A repository whose origin is a Forgejo that lists `jobs` as waiting:
 /// run 1 pushed `main` at its head and run 2 is for PR 12, whose head is
-/// `pull_head`.
+/// `pull_head`; run 3 runs, and run 6 was cancelled.
 struct Fixture {
     _root: tempfile::TempDir,
     manager: Arc<Manager>,
@@ -88,6 +88,12 @@ async fn fixture(jobs: Vec<Value>, pull_head: &'static str, settings: &str) -> F
             let mut running = run(3, "push", &pushed, json!({}));
             running["status"] = json!("running");
             json!({"workflow_runs": [running]})
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs/6" {
+            run(6, "push", &pushed, json!({"ref": "refs/heads/topic"}))
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs?run_number=6" {
+            let mut cancelled = run(6, "push", &pushed, json!({}));
+            cancelled["status"] = json!("cancelled");
+            json!({"workflow_runs": [cancelled]})
         } else if line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel" {
             return (204, Vec::new(), Vec::new());
         } else if line == "GET /api/v1/repos/team/repo/pulls/12" {
@@ -838,10 +844,14 @@ async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel
     }
 }
 
-/// End the daemon's work with `ending` while `job` runs, connected as its
-/// wrapper runs it, checking the daemon stops the runner rather than
-/// waiting for it to see its run cancelled.
-async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
+/// The runner of the job claimed in `workspace`, connected to the daemon
+/// as its wrapper runs it, and the daemon's side of that connection.
+struct ConnectedRunner {
+    connection: tokio::io::BufReader<tokio::net::UnixStream>,
+    executing: tokio::task::JoinHandle<anyhow::Result<()>>,
+}
+
+async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> ConnectedRunner {
     use tokio::{io::BufReader, net::UnixStream};
 
     use crate::{
@@ -849,11 +859,7 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
         protocol::{self, Body, Control, ExecutionEvent, Response},
     };
 
-    let fixture = fixture(vec![job], "unused", "").await;
-    let manager = &fixture.manager;
-    admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
-    let workspace = claimed[0].workspace_id.clone();
+    let workspace = workspace.clone();
     let (_, started) = LAUNCHED.lock().unwrap().remove(&workspace).unwrap();
     // The runner as its wrapper runs it: connected to the daemon.
     manager
@@ -908,6 +914,26 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;
     assert!(matches!(control, Control::Started));
+    ConnectedRunner {
+        connection,
+        executing,
+    }
+}
+
+/// End the daemon's work with `ending` while `job` runs, connected as its
+/// wrapper runs it, checking the daemon stops the runner rather than
+/// waiting for it to see its run cancelled.
+async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
+    use crate::protocol::{self, Control, ExecutionEvent};
+
+    let fixture = fixture(vec![job], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let ConnectedRunner {
+        mut connection,
+        executing,
+    } = connect_runner(manager, &claimed[0].workspace_id).await;
 
     let ending = tokio::spawn({
         let manager = manager.clone();
@@ -922,6 +948,82 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
     executing.await.unwrap().unwrap();
     ending.await.unwrap();
     fixture
+}
+
+#[tokio::test]
+async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
+    use crate::{
+        daemon::events::{EventItem, EventKind},
+        protocol::{self, Control, ExecutionEvent},
+    };
+
+    let fixture = fixture(vec![job("h6", 8, 6)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let workspace = manager
+        .workspace_by_id(&claimed[0].workspace_id)
+        .await
+        .unwrap();
+    let ConnectedRunner {
+        mut connection,
+        executing,
+    } = connect_runner(manager, &workspace.id).await;
+    // What a cancelled step left behind, holding the runner's output open:
+    // in a process group of its own, as a test's script runs.
+    let mut left = tokio::process::Command::from(crate::daemon::test_support::unmarked("sleep"));
+    let mut left = left
+        .arg("600")
+        .current_dir(&workspace.path)
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let pid = left.id().unwrap();
+
+    // The forge cancelled run 6, but the runner gets its grace period.
+    manager.finish_ended_jobs().await.unwrap();
+    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    assert!(left.try_wait().unwrap().is_none());
+
+    manager
+        .runners
+        .backdate_finished_runs(super::overrun::GRACE);
+    let finishing = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.finish_ended_jobs().await }
+    });
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
+    // The runner is stopped only once the processes its steps left are.
+    assert!(left.try_wait().unwrap().is_some());
+    let event = ExecutionEvent::Finished { exit_code: 143 };
+    protocol::write(connection.get_mut(), &event).await.unwrap();
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(control, Control::Finished { .. }), "{control:?}");
+    executing.await.unwrap().unwrap();
+    finishing.await.unwrap().unwrap();
+
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    let ended: Vec<_> = manager
+        .workspace_events(None, 1000)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|item| match item {
+            EventItem::Event(event) if event.details.kind == EventKind::JobEnded => {
+                event.details.job
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended.len(), 1);
+    assert!(ended[0].run.ends_with("/team/repo/actions/runs/6"));
+    let stopped: Vec<_> = (ended[0].stopped.iter())
+        .map(|process| (process.pid, process.command.as_str()))
+        .collect();
+    assert_eq!(stopped, [(pid, "sleep 600")]);
 }
 
 #[tokio::test]

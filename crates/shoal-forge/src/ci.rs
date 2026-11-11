@@ -59,7 +59,7 @@ states!(
 
 impl JobState {
     /// Whether the job or run has yet to finish.
-    pub(crate) fn unfinished(self) -> bool {
+    pub fn unfinished(self) -> bool {
         matches!(self, Self::Waiting | Self::Running)
     }
 }

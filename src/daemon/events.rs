@@ -9,8 +9,8 @@ use serde::Deserialize;
 use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
     AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventCursor,
-    EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, ShoalEvent, ShoalEventDetails,
-    ShoalEventKind, StoppedProcess, WorkspaceEvent,
+    EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent,
+    ShoalEventDetails, ShoalEventKind, StoppedProcess, WorkspaceEvent,
 };
 use crate::time::UnixTime;
 
@@ -400,6 +400,19 @@ impl Manager {
             .await;
         if let Err(error) = recorded {
             log!("alert of {id} not recorded: {error:#}");
+        }
+    }
+
+    /// Record that Shoal ended the CI job of the workspace `id`, which
+    /// outlived its run on the forge.
+    pub(crate) async fn record_job_ended(&self, id: &SpaceId, job: JobEndedEvent) {
+        let space = id.clone();
+        let recorded = self
+            .store
+            .run(move |db| record_with(db, &space, EventKind::JobEnded, "job", &job))
+            .await;
+        if let Err(error) = recorded {
+            log!("job end of {id} not recorded: {error:#}");
         }
     }
 
