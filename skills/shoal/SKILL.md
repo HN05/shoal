@@ -198,6 +198,8 @@ Its branch and worktree directory keep theirs.
 shoal progress "Reproduced; the cause is the query limit"  # "" clears it
 shoal progress [--space S]          # Show the status line and steps
 shoal progress --steps < plan.md    # `- [ ] name` / `- [x] name` per line
+shoal progress --add-blocker 1468 --reason "CI runner is down" [--step 3]
+shoal progress --remove-blocker 1468 [--step 3] [--space S]
 ```
 
 `progress` sets the space's status line, one line in the agent's words that
@@ -206,6 +208,12 @@ Code's and Codex's plan tools set the steps through Shoal's hooks; `--steps`
 sets them for other agents. Each open PR's body ends with a section showing
 both, until `shoal ready` removes it. Changes never notify; a coordinator
 reads its children's progress on demand.
+
+`--add-blocker` records what blocks the space, or with `--step` one step as
+`shoal progress` numbers them: an issue by number or URL, a PR or CI run by
+URL, or a space by name or ID, with a one-line `--reason`. A step's blocker
+goes with the step when the plan drops it. A space is blocked while it has a
+blocker of its own or every step not done has one.
 
 ## Idle wakes
 

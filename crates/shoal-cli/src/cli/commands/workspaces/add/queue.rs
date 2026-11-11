@@ -7,10 +7,9 @@ use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target
 use crate::{
     cli::{
         client::{self},
-        commands::{issues, queued_agents},
+        commands::{self, issues, queued_agents},
         context::Context,
     },
-    forge::IssueInput,
     model::Blocker,
     start_plan::AddPlan,
 };
@@ -28,9 +27,9 @@ pub(super) async fn named_blockers(
     let repo = target.repository(ctx).await?;
     let mut blockers = Vec::new();
     for input in named {
-        blockers.push(match names_issue(input) {
-            true => Blocker::Issue(issues::url(ctx, repo, input).await?),
-            false => Blocker::Space(input.clone()),
+        blockers.push(match commands::blockers::parse(input)? {
+            Blocker::Issue(issue) => Blocker::Issue(issues::url(ctx, repo, &issue).await?),
+            blocker => blocker,
         });
     }
     crate::client::workspaces::check_blockers(
@@ -40,13 +39,6 @@ pub(super) async fn named_blockers(
     )
     .await?;
     Ok(blockers)
-}
-
-/// Whether an `--add-blocker` value names an issue, by number or URL, as `shoal
-/// start` takes one: unlike every other space argument, a bare number here
-/// is an issue, never a space's number.
-pub(super) fn names_issue(input: &str) -> bool {
-    IssueInput::parse(input) != IssueInput::Invalid
 }
 
 /// Admit the plan's agent, if any, to the agent queue: a start takes its

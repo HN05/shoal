@@ -49,3 +49,33 @@ fn an_invalid_status_line_is_refused_before_anything_changes() {
     let cleared = changes(Some(String::new()), false).unwrap();
     assert_eq!(cleared, [ProgressChange::Status(None)]);
 }
+
+#[test]
+fn blocked_steps_list_their_blockers_below_them() {
+    let blocker = crate::client::progress::RecordedBlocker {
+        kind: crate::state::BlockerKind::Pr,
+        target: "https://forge.example/o/r/pulls/8".into(),
+        name: "https://forge.example/o/r/pulls/8".into(),
+        reason: "Needs the API fix".into(),
+        lookup_failed: Some("forge unreachable".into()),
+    };
+    let progress = Progress {
+        status: None,
+        steps: vec![crate::client::progress::Step {
+            name: "Fix".into(),
+            done: false,
+            blockers: vec![blocker],
+        }],
+        current: None,
+        blockers: Vec::new(),
+        updated_at: crate::time::UnixTime::EPOCH,
+    };
+    assert_eq!(
+        step_lines(&progress, Palette::stdout(true)),
+        [
+            "1. [ ] Fix",
+            "   Blocked by PR https://forge.example/o/r/pulls/8: Needs the API fix (lookup failed: forge unreachable)"
+        ]
+    );
+    assert_eq!(summary(&progress), "0/1 steps, blocked");
+}

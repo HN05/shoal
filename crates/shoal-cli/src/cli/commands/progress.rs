@@ -1,8 +1,8 @@
 //! `shoal progress`: show or set where a space's agent is in its work, as a
-//! status line and the steps of its plan.
+//! status line, the steps of its plan and what blocks it.
 use std::io::Read;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     ai::IntegrationKind,
@@ -12,21 +12,33 @@ use crate::{
         ui::{self, Fallback},
     },
     client::{
-        progress::{self, PlanStep, Progress, ProgressChange, StepState},
+        progress::{self, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
         space_names::SpaceSelector,
     },
 };
 
-/// Set the status line to `status`, which clears it when empty, and with
-/// `steps` replace the steps with the task list on stdin; with neither,
-/// show the progress of the space `space` names, else the current one.
+/// The blocker `shoal progress` adds or removes.
+pub(super) struct BlockerFlags {
+    pub add: Option<String>,
+    pub reason: Option<String>,
+    pub remove: Option<String>,
+    /// The step it blocks, numbered from 1; the space without one.
+    pub step: Option<usize>,
+}
+
+/// Set the status line to `status`, which clears it when empty, with
+/// `steps` replace the steps with the task list on stdin, and add or remove
+/// the blocker `blocker` names; with none of them, show the progress of the
+/// space `space` names, else the current one.
 pub(super) async fn run(
     ctx: &Context,
     space: Option<SpaceSelector>,
     status: Option<String>,
     steps: bool,
+    blocker: BlockerFlags,
 ) -> Result<i32> {
-    let changes = changes(status, steps)?;
+    let mut changes = changes(status, steps)?;
+    changes.extend(blocker_change(blocker)?);
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let progress = match changes.is_empty() {
         true => progress::get(&ctx.paths, space).await?,
@@ -55,6 +67,39 @@ fn changes(status: Option<String>, steps: bool) -> Result<Vec<ProgressChange>> {
         ));
     }
     Ok(changes)
+}
+
+/// The blocker change `flags` ask for, refused before anything is picked
+/// or changed when its blocker or reason is not valid.
+fn blocker_change(flags: BlockerFlags) -> Result<Option<ProgressChange>> {
+    let BlockerFlags {
+        add,
+        reason,
+        remove,
+        step,
+    } = flags;
+    Ok(match (add, remove) {
+        (Some(add), _) => {
+            let reason = reason.context("--add-blocker needs --reason")?;
+            progress::validate_line("blocker reasons", &reason)?;
+            Some(ProgressChange::AddBlocker {
+                blocker: super::blockers::parse(&add)?,
+                step,
+                reason,
+            })
+        }
+        (None, Some(remove)) => Some(ProgressChange::RemoveBlocker {
+            blocker: super::blockers::parse(&remove)?,
+            step,
+        }),
+        (None, None) => {
+            ensure!(
+                step.is_none(),
+                "--step goes with --add-blocker or --remove-blocker"
+            );
+            None
+        }
+    })
 }
 
 /// Report the plan change the hook event on stdin of an agent with
@@ -168,6 +213,9 @@ fn render(progress: Option<&Progress>, palette: Palette) {
     if let Some(status) = &progress.status {
         outln!("{status}");
     }
+    for line in blocker_lines(&progress.blockers) {
+        outln!("{line}");
+    }
     for line in step_lines(progress, palette) {
         outln!("{line}");
     }
@@ -184,32 +232,58 @@ pub(in crate::cli) fn render_section(progress: Option<&Progress>, palette: Palet
     if let Some(status) = &progress.status {
         outln!("  {status}");
     }
+    for line in blocker_lines(&progress.blockers) {
+        outln!("  {line}");
+    }
     for line in step_lines(progress, palette) {
         outln!("  {line}");
     }
 }
 
-/// How many of the steps are done, as `3/5 steps`.
+/// How many of the steps are done, as `3/5 steps`, and `blocked` when the
+/// space is.
 fn summary(progress: &Progress) -> String {
-    match progress.steps.len() {
+    let steps = match progress.steps.len() {
         0 => "no steps".to_owned(),
         total => format!("{}/{total} steps", progress.done()),
+    };
+    match progress.blocked() {
+        true => format!("{steps}, blocked"),
+        false => steps,
     }
 }
 
-/// Each step as `2. [x] name`, the current one marked.
-fn step_lines(progress: &Progress, palette: Palette) -> Vec<String> {
-    let width = progress.steps.len().to_string().len();
-    (progress.steps.iter().enumerate())
-        .map(|(at, step)| {
-            let check = if step.done { "[x]" } else { "[ ]" };
-            let line = format!("{:>width$}. {check} {}", at + 1, step.name);
-            match progress.current == Some(at) {
-                true => format!("{}  {}", palette.paint(Style::Heading, &line), "(current)"),
-                false => line,
+/// Each blocker as `Blocked by issue <url>: reason`, with a failed lookup.
+fn blocker_lines(blockers: &[RecordedBlocker]) -> Vec<String> {
+    (blockers.iter())
+        .map(|blocker| {
+            let line = format!("Blocked by {}: {}", blocker.cause(), blocker.reason);
+            match &blocker.lookup_failed {
+                Some(error) => format!("{line} (lookup failed: {error})"),
+                None => line,
             }
         })
         .collect()
+}
+
+/// Each step as `2. [x] name`, the current one marked, each followed by
+/// what blocks it.
+fn step_lines(progress: &Progress, palette: Palette) -> Vec<String> {
+    let width = progress.steps.len().to_string().len();
+    let mut lines = Vec::new();
+    for (at, step) in progress.steps.iter().enumerate() {
+        let check = if step.done { "[x]" } else { "[ ]" };
+        let line = format!("{:>width$}. {check} {}", at + 1, step.name);
+        lines.push(match progress.current == Some(at) {
+            true => format!("{}  {}", palette.paint(Style::Heading, &line), "(current)"),
+            false => line,
+        });
+        let indent = " ".repeat(width + 2);
+        lines.extend(
+            (blocker_lines(&step.blockers).into_iter()).map(|line| format!("{indent}{line}")),
+        );
+    }
+    lines
 }
 
 #[cfg(test)]

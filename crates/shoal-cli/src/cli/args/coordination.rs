@@ -60,6 +60,24 @@ pub enum CoordinationCommand {
         /// `- [ ] name` or `- [x] name` per line; empty input clears them.
         #[arg(long)]
         steps: bool,
+        /// Record what blocks the space, or with --step one step: an issue
+        /// number or URL, a PR or CI run URL, or a space's name or ID.
+        #[arg(
+            long,
+            value_name = "BLOCKER",
+            requires = "reason",
+            conflicts_with_all = ["status", "steps", "remove_blocker"]
+        )]
+        add_blocker: Option<String>,
+        /// Why --add-blocker blocks, in one line.
+        #[arg(long, requires = "add_blocker")]
+        reason: Option<String>,
+        /// Remove a blocker of the space, or with --step of one step.
+        #[arg(long, value_name = "BLOCKER", conflicts_with_all = ["status", "steps"])]
+        remove_blocker: Option<String>,
+        /// The step a blocker blocks, numbered as shoal progress shows them.
+        #[arg(long, value_name = "NUMBER")]
+        step: Option<usize>,
         /// Space, a workspace or chat; defaults to the current workspace or
         /// chat, or a picker.
         #[arg(short = 's', long)]

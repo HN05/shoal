@@ -6,6 +6,7 @@ mod agent_state;
 mod api;
 mod approvals;
 mod base;
+mod blockers;
 mod branches;
 mod capabilities;
 mod catalog;

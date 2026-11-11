@@ -5119,6 +5119,9 @@ shoal progress "Reproduced; the cause is the 5-second query limit"  # Set the st
 shoal progress                                                     # Show the status line and steps
 shoal progress --space 4                                           # Another workspace or chat
 shoal progress --steps < plan.md                                   # Replace the steps (empty input clears them)
+shoal progress --add-blocker 1468 --reason "CI runner is down"     # Record what blocks the space
+shoal progress --add-blocker api --step 3 --reason "Needs the API" # Record what blocks step 3
+shoal progress --remove-blocker 1468 [--step 3]                    # Remove one
 shoal done --summary "Fix merged; the timeout is now 30 seconds"   # Completes with this as the status line
 ```
 
@@ -5141,13 +5144,31 @@ already has starts a new plan. A subagent's calls change nothing, and Happy
 sessions register no hooks. Other agents set the steps with `--steps`, which
 reads a markdown task list, one `- [ ] name` or `- [x] name` per line.
 
+A blocker records what blocks the space, or one step of its plan with
+`--step`, numbered as `shoal progress` shows the steps, and why, in a
+`--reason` of one line. `--add-blocker` takes an issue by number or URL, so a
+bare number is an issue, never a space's number, a PR or CI run by URL, or a
+space, a workspace or a chat, by name or ID; adding it again replaces its
+reason. `--remove-blocker` names one the same way, and a space's coordinator
+removes one of a space below with `--space`. A step's blocker follows the
+step by the key its plan tool gave it, or by name when it has none, and goes
+with the step when the plan drops it. A space is blocked while it has a
+blocker of its own, or while every step that is not done has one. Adding and
+removing a blocker are `blocker_added` and `blocker_removed` events, which
+`shoal log` shows.
+
 `status` shows a `Progress` section with the status line and the numbered
 steps, marking the current one, and `list` shows how many steps are done with
 the current step, such as `3/5 Fix the timeout`, followed by the status line
 in place of the issue title where the width allows. `status`, `inspect`,
 `list --json` and `shoal progress --json` give `progress` with `status`,
-`steps` (`name`, `done`), `current` (the step's index, or null once every step
-is done) and Unix-seconds `updated_at`; a space without progress has none.
+`steps` (`name`, `done`, `blockers`), `current` (the step's index, or null
+once every step is done), `blockers` and Unix-seconds `updated_at`, each
+blocker with its `kind` (`space`, `issue`, `pr` or `ci_run`), `target` (the
+space's ID or the item's URL), `name`, `reason` and, after a failed lookup,
+`lookup_failed`; a space without progress has none. `shoal progress` and the
+`Progress` section list each blocker with its cause and reason, the space's
+after the status line and a step's below it.
 Each change is a `progress_changed` [event](#workspace-events), which
 `shoal log --all` shows, and setting the same value again is not a
 change. Progress never notifies, and coordinating agents read their

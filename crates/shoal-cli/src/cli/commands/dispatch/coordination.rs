@@ -119,8 +119,20 @@ pub(in crate::cli::commands) async fn run(
         CoordinationCommand::Progress {
             status,
             steps,
+            add_blocker,
+            reason,
+            remove_blocker,
+            step,
             space,
-        } => progress::run(&ctx, space, status, steps).await,
+        } => {
+            let blocker = progress::BlockerFlags {
+                add: add_blocker,
+                reason,
+                remove: remove_blocker,
+                step,
+            };
+            progress::run(&ctx, space, status, steps, blocker).await
+        }
         CoordinationCommand::Sleep {
             space,
             permanent,
