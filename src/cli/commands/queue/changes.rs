@@ -22,18 +22,19 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) ->
     // A CI job runs without a session to attach.
     let offered = |queued: &QueueEntry| !attach || queued.kind != QueueKind::Job;
     let entry = selection::selected_among(ctx, entry, "Start> ", offered).await?;
-    if attach {
-        super::attach::require_session(ctx, &entry).await?;
-    }
+    let existing = match attach {
+        true => Some(super::attach::before_start(ctx, &entry).await?),
+        false => None,
+    };
     let entry = queue::start(&ctx.paths, entry).await?;
     ctx.emit(
         &format!("Starting {} from the agent queue", entry.name),
         &entry,
     )?;
-    if attach {
-        return super::attach::started(ctx, &entry).await;
+    match existing {
+        Some(existing) => super::attach::started(ctx, &entry, &existing).await,
+        None => Ok(0),
     }
-    Ok(0)
 }
 
 /// `shoal queue cancel`: remove the entry; a restore's agent stays stopped.

@@ -19,20 +19,30 @@ use crate::{
 const WAIT: Duration = Duration::from_secs(600);
 const POLL: Duration = Duration::from_millis(200);
 
-/// Refuse to attach to the entry `selector` names when it is a CI job,
-/// which has no session, before anything starts it.
-pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()> {
+/// Before anything starts the entry `selector` names, refuse to attach to
+/// it when it is a CI job, which has no session, and return the workspaces
+/// that exist, none of which a launch it starts opens.
+pub(super) async fn before_start(ctx: &Context, selector: &str) -> Result<Vec<SpaceId>> {
     let entries = queued_agents::entries(ctx).await?;
     let job = (entries.iter()).find(|entry| entry.kind == QueueKind::Job && entry.id == selector);
-    match job {
-        Some(job) => bail!("{} is a CI job, which has no session to attach", job.name),
-        None => Ok(()),
+    if let Some(job) = job {
+        bail!("{} is a CI job, which has no session to attach", job.name);
     }
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    Ok(workspaces
+        .into_iter()
+        .map(|workspace| workspace.id)
+        .collect())
 }
 
-/// Attach to the session of the started `entry`'s agent once it has one.
-pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
-    let (workspace, session) = agent_terminal_session(ctx, entry).await?;
+/// Attach to the session of the started `entry`'s agent once it has one,
+/// knowing the workspaces that `existing` were before it started.
+pub(super) async fn started(
+    ctx: &Context,
+    entry: &QueueEntry,
+    existing: &[SpaceId],
+) -> Result<i32> {
+    let (workspace, session) = agent_terminal_session(ctx, entry, existing).await?;
     sessions::attach(ctx, Some(SpaceSelector::id(&workspace)), Some(session)).await
 }
 
@@ -43,13 +53,13 @@ pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
 /// agent where it runs before it takes the entry out of the queue, so an
 /// entry gone before the sessions were read without an agent session among
 /// them did not start in one.
-async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, String)> {
+async fn agent_terminal_session(
+    ctx: &Context,
+    entry: &QueueEntry,
+    existing: &[SpaceId],
+) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().cloned();
-    let existing: Vec<SpaceId> = (crate::client::workspaces::list(&ctx.paths).await?)
-        .into_iter()
-        .map(|workspace| workspace.id)
-        .collect();
     loop {
         let current = (queued_agents::entries(ctx).await?)
             .into_iter()
@@ -59,7 +69,7 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
         }
         if workspace.is_none() && current.is_none() {
             let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-            workspace = opened_workspace(workspaces, entry, &existing)?;
+            workspace = opened_workspace(workspaces, entry, existing)?;
         }
         match &workspace {
             Some(id) => {
@@ -91,7 +101,7 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
 /// The ID of the workspace the launch `entry` opened, once its agent took
 /// the entry out of the queue before a poll saw the workspace it recorded:
 /// the one of `workspaces` in its repository with its name that was not
-/// among the `existing` ones when the wait began. Names repeat, so several
+/// among the `existing` ones before it started. Names repeat, so several
 /// such workspaces are refused rather than guessed between.
 fn opened_workspace(
     workspaces: Vec<crate::model::Workspace>,
