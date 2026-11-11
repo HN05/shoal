@@ -90,11 +90,14 @@ impl Plan {
         self
     }
 
-    /// Add `step`; a key the plan already has starts a new plan.
+    /// Add `step`; a key the plan already has starts a new plan, without the
+    /// old plan's step blockers.
     fn create(&mut self, step: PlanStep) {
         let known = |known: &PlanStep| step.key.is_some() && known.key == step.key;
         if self.steps.iter().any(known) {
             self.steps.clear();
+            // The new plan's steps reuse the old keys for other work.
+            self.drop_step_blockers();
         }
         self.steps.push(step);
     }

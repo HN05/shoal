@@ -64,6 +64,20 @@ fn a_step_blocker_follows_its_step_by_key_and_goes_with_it() {
 }
 
 #[test]
+fn a_new_plan_that_reuses_a_key_drops_the_old_steps_blockers() {
+    let created = |name: &str, key: &str| {
+        ProgressChange::StepCreated(step(name, StepState::Pending, Some(key)))
+    };
+    let plan = Plan::default().changed(created("Fix", "1"));
+    let plan = blocked(plan, issue(7), Some(1));
+    let plan = blocked(plan, issue(8), None);
+    // A new task list numbers its tasks from 1 again, for other work.
+    let plan = plan.changed(created("Write the docs", "1"));
+    assert_eq!(step_blockers(&plan), [("Write the docs".into(), 0)]);
+    assert_eq!(plan.space_blockers().len(), 1);
+}
+
+#[test]
 fn a_step_without_a_key_keeps_its_blocker_by_name_across_a_new_list() {
     let steps = |names: &[&str]| {
         ProgressChange::Steps(

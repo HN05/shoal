@@ -99,6 +99,11 @@ impl Plan {
         (self, removed)
     }
 
+    /// Drop every step's blockers, keeping the space's.
+    pub(super) fn drop_step_blockers(&mut self) {
+        self.blockers.retain(|stored| stored.step.is_none());
+    }
+
     /// Drop the blockers of the steps the plan no longer has.
     pub(super) fn prune_blockers(&mut self) {
         let steps = &self.steps;
