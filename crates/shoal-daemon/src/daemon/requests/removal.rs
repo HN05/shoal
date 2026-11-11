@@ -89,10 +89,8 @@ pub(super) async fn handle(
             })
         }
         RemovalMethod::StartRemoval { workspace, unsaved } => {
-            let requester = caller.map(|caller| caller.space_id.clone());
-            let release_holds = caller.is_none();
             manager
-                .start_workspace_removal(&workspace, unsaved, release_holds, requester)
+                .start_workspace_removal(&workspace, unsaved, caller)
                 .await?;
             Body::Ok
         }

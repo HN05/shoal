@@ -1,7 +1,7 @@
 use super::super::tests::{fixture, fixture_with_hook, fixture_with_removal_hook};
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
 use crate::{
-    daemon::notifications::NotificationKind,
+    daemon::{notifications::NotificationKind, scope::Caller},
     removal::{NOTHING, UnsavedWork},
     state::WorkspaceState,
 };
@@ -26,7 +26,7 @@ async fn returns_before_the_removal_finishes() {
     .await;
     let selector = SpaceSelector::id(&workspace.id);
     manager
-        .start_workspace_removal(&selector, NOTHING.clone(), true, None)
+        .start_workspace_removal(&selector, NOTHING.clone(), None)
         .await
         .unwrap();
     let reserved = manager.workspace_by_id(&workspace.id).await.unwrap();
@@ -45,7 +45,7 @@ async fn refuses_unconfirmed_work_before_returning() {
     std::fs::write(workspace.path.join("draft.txt"), "unsaved").unwrap();
     let selector = SpaceSelector::id(&workspace.id);
     let error = manager
-        .start_workspace_removal(&selector, NOTHING.clone(), true, None)
+        .start_workspace_removal(&selector, NOTHING.clone(), None)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("confirm it or pass --yes"));
@@ -53,7 +53,7 @@ async fn refuses_unconfirmed_work_before_returning() {
     assert_eq!(retained.state, WorkspaceState::Ready);
 
     manager
-        .start_workspace_removal(&selector, everything(), true, None)
+        .start_workspace_removal(&selector, everything(), None)
         .await
         .unwrap();
     drop(manager.gates.quiesce().await);
@@ -65,7 +65,7 @@ async fn a_failure_retains_the_workspace_and_tells_the_user() {
     let (_root, manager, workspace) = fixture_with_removal_hook("exit 1").await;
     let selector = SpaceSelector::id(&workspace.id);
     manager
-        .start_workspace_removal(&selector, NOTHING.clone(), true, None)
+        .start_workspace_removal(&selector, NOTHING.clone(), None)
         .await
         .unwrap();
     drop(manager.gates.quiesce().await);
@@ -98,8 +98,7 @@ async fn a_failure_reaches_the_requesting_agent() {
         .start_workspace_removal(
             &SpaceSelector::id(&workspace.id),
             NOTHING.clone(),
-            false,
-            Some(requester.id.clone()),
+            Some(&caller_in(&requester.id)),
         )
         .await
         .unwrap();
@@ -143,8 +142,7 @@ async fn a_failure_outlives_the_requesting_chat() {
         .start_workspace_removal(
             &SpaceSelector::id(&workspace.id),
             NOTHING.clone(),
-            false,
-            Some(chat.id.clone()),
+            Some(&caller_in(&chat.id)),
         )
         .await
         .unwrap();
@@ -175,4 +173,12 @@ async fn a_failure_outlives_the_requesting_chat() {
             .iter()
             .any(failed)
     );
+}
+
+/// A scoped caller in the space `id`, without an execution.
+fn caller_in(id: &SpaceId) -> Caller {
+    Caller {
+        space_id: id.clone(),
+        execution: None,
+    }
 }

@@ -13,6 +13,7 @@ use crate::{
     daemon::{
         log,
         notifications::{About, NotificationKind},
+        scope::Caller,
         spaces,
         workspace::Manager,
     },
@@ -21,25 +22,26 @@ use crate::{
 };
 
 impl Manager {
-    /// Start removing the workspace `selector` names at a request, as
-    /// [`Self::remove_workspace`] removes it, or as
-    /// [`Self::remove_unheld_workspace`] does without `release_holds`.
+    /// Start removing the workspace `selector` names at `caller`'s request,
+    /// as [`Self::remove_workspace`] removes it for the user, or as
+    /// [`Self::remove_unheld_workspace`] does for a scoped caller.
     /// Returns the workspace once it is reserved and passes the checks
     /// removal makes before changing anything; the rest goes on in the
     /// background, which a daemon update waits for. A failure from then on
-    /// retains the workspace and reaches the agent of `requester`, or else
-    /// the user.
+    /// retains the workspace and reaches the agent of the caller's space,
+    /// or else the user.
     pub(crate) async fn start_workspace_removal(
         self: &Arc<Self>,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
-        release_holds: bool,
-        requester: Option<SpaceId>,
+        caller: Option<&Caller>,
     ) -> Result<Workspace> {
         let operation = self.gates.owned_operation().await;
         let id = self.workspace(selector).await?.id;
         let (checked, passed) = oneshot::channel();
         let manager = self.clone();
+        let release_holds = caller.is_none();
+        let requester = caller.map(|caller| caller.space_id.clone());
         // The reservation lives in the task, which reports the first checks'
         // outcome and goes on after them.
         tokio::spawn(async move {
