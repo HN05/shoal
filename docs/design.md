@@ -1296,8 +1296,8 @@ declares the variables naming its places, and a zmx session drops the
 other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
 falls back from its origin's group to its host's configured group on the same
 server, then to `terminal.default_host`; with that host turned off, a terminal no host
-serves runs work in place, a queued start without another fallback fails, and
-a demo runs as a background process. Rex cannot set a new terminal's
+serves runs work in place, and a queued start or a demo without another
+fallback fails. Rex cannot set a new terminal's
 environment, so a new block runs a launch step that loads the worker and its
 variables from a private file and deletes it, keeping them off screen and out
 of shell history, then the user's login shell, which stays as in a Herdr tab.
@@ -1437,8 +1437,9 @@ its launch ownership. Pending closes persist with execution deletion and retry
 at startup or cleanup, even while the workspace remains. The wrapper
 restarts the command, backing off after quick exits so a failing command keeps
 its error on screen. The CLI places the wrapper where queued agents start,
-through the terminal hosts, since a demo is something the user opens and reads,
-falling back to a background process with a log. Shoal knows how a demo reaches
+through the terminal hosts, since a demo is something the user opens and reads
+and the agent reads and types into; a start no host takes fails rather than
+run a demo without a terminal. Shoal knows how a demo reaches
 the user only through presets, which reserve ports or lease a simulator and say
 how to open it; the repository's `open` command replaces that, so tools such
 as browsers and screen sharing stay outside Shoal. Starting, reading and stopping

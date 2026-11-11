@@ -416,6 +416,30 @@ fn demos_refuse_cleared_scopes_and_commands_that_cannot_run() {
     );
 }
 
+#[test]
+fn a_demo_start_without_a_terminal_host_fails_and_records_no_demo() {
+    let fixture = Fixture::new();
+    fixture.add("tried");
+    // zmx, the default host, is missing from PATH.
+    let bin = fixture.root.path().join("bin");
+    let output = fixture
+        .command()
+        .env("PATH", fixture.restricted_path(&bin))
+        .args(["demo", "start", "--workspace", &fixture.id("tried")])
+        .args(["--", "sh", "-c", "exec sleep 600"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("zmx"), "{error}");
+    assert!(
+        demo(&fixture, &["ls", "--workspace", &fixture.id("tried")])["running"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
 /// The process groups of a workspace's only demo: its wrapper's, which its
 /// session leads, and its command's. Shoal stops neither when the fixture
 /// kills the daemon, so a test that ends early kills them here.

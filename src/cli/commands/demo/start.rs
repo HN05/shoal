@@ -216,8 +216,8 @@ async fn place(
     chosen: &Chosen,
     provided: presets::Provided,
 ) -> Result<Launch> {
-    // Places can repeat, such as a background demo's log, so the start finds
-    // its own record by this launch's ID.
+    // Places can repeat, such as a session name an ended demo had, so the
+    // start finds its own record by this launch's ID.
     let id = uuid::Uuid::new_v4().to_string();
     let launch = |place: &Origin| Launch {
         id: id.clone(),

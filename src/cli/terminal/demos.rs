@@ -1,8 +1,8 @@
-//! Demos in the places of the first host that keeps them, otherwise as
-//! background processes.
-use anyhow::Result;
+//! Demos in the places of the first host that keeps them; a demo needs a
+//! terminal host.
+use anyhow::{Context as _, Result};
 
-use super::{background, groups, launch::place_env};
+use super::{groups, launch::place_env};
 use crate::{
     cli::context::Context,
     config::Effective,
@@ -13,8 +13,8 @@ use crate::{
 };
 
 /// Start a demo of `workspace` in the first host that runs queued starts and
-/// keeps demos, otherwise as a background process with a log. `worker` gives
-/// the demo worker's argv for the place it runs in, which this returns.
+/// keeps demos, failing with the last host's reason when none does. `worker`
+/// gives the demo worker's argv for the place it runs in, which this returns.
 pub(in crate::cli) async fn start_demo(
     ctx: &Context,
     settings: &Effective,
@@ -26,7 +26,7 @@ pub(in crate::cli) async fn start_demo(
     let origin = current_origin();
     let repo = groups::Repo::Id(workspace.repository_id.as_str());
     let env = place_env(ctx)?;
-    let started = groups::first_queued(
+    groups::first_queued(
         ctx,
         settings,
         origin.as_ref(),
@@ -36,9 +36,7 @@ pub(in crate::cli) async fn start_demo(
             let Some(demos) = host.host.demos() else {
                 return Ok(None);
             };
-            if host.host.ensure_installed().is_err() {
-                return Ok(None);
-            }
+            host.host.ensure_installed()?;
             let demo = Demo {
                 launch,
                 state: &ctx.paths.state,
@@ -52,12 +50,11 @@ pub(in crate::cli) async fn start_demo(
             demos.start_demo(&demo).await.map(Some)
         },
     )
-    .await?;
-    match started {
-        Some(place) => Ok(place),
-        None => background::start_demo(&ctx.paths, workspace, name, worker),
-    }
+    .await?
+    .context(NO_DEMO_HOST)
 }
+
+const NO_DEMO_HOST: &str = "no terminal host can start demos";
 
 /// What the place `host` opens for demo `name` of `workspace` is called:
 /// readable where the host shows names, otherwise an identifier.
@@ -72,25 +69,29 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
 /// Show the demo `launch` describes in this terminal.
 pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
     let place = &launch.origin;
-    match named(place.host).places() {
-        Some(places) => places.show(place, "the demo").await,
-        None => background::open_demo(place.id()).await,
-    }
+    named(place.host)
+        .places()
+        .with_context(|| format!("{} cannot show demos", place.host))?
+        .show(place, "the demo")
+        .await
 }
 
 /// What the demo `launch` describes shows.
 pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
     let place = &launch.origin;
-    match named(place.host).demos() {
-        Some(demos) => demos.demo_screen(place).await,
-        None => background::demo_screen(place.id()),
-    }
+    named(place.host)
+        .demos()
+        .with_context(|| format!("{} cannot read demos", place.host))?
+        .demo_screen(place)
+        .await
 }
 
 /// Type `keys` into the demo `launch` describes.
 pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
-    match named(launch.origin.host).types() {
-        Some(types) => types.send_keys(&launch.origin, keys).await,
-        None => background::send_demo_keys(),
-    }
+    let place = &launch.origin;
+    named(place.host)
+        .types()
+        .with_context(|| format!("{} cannot type into demos", place.host))?
+        .send_keys(place, keys)
+        .await
 }

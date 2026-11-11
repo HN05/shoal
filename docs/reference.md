@@ -1203,8 +1203,8 @@ unreachable; Shoal reports them where it reads them, in `shoal status` and its
 cleanup notifications, until their processes end, which `shoal stop` does for
 an agent's.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
-[Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
-start that no other host takes fails, and a demo runs as a background process.
+[Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, and a queued
+start or a demo that no other host takes fails.
 `-H`/`--here` on `shoal start`, `contribute`, `repo setup` and `config setup`
 runs the launch in this terminal instead of a new tab or detached session,
 whatever the host. An agent that `start` or `contribute` then starts runs as
@@ -1826,8 +1826,8 @@ of the current workspace, or of every workspace outside one, or the demo `NAME`.
 Opening runs the demo's `open` command in the workspace with the demo's
 variables, otherwise shows it where it runs: Herdr focuses its tab, attaching its Herdr session
 outside Herdr, Rex its
-window (or selects it in the Mac app), tmux its window and Zellij its tab, attaching outside them, zmx attaches (Ctrl-\ detaches), and the
-background follows its log. `shoal demo ls` lists the configured and
+window (or selects it in the Mac app), tmux its window and Zellij its tab, attaching outside them, and zmx attaches (Ctrl-\ detaches).
+`shoal demo ls` lists the configured and
 running demos, with a running web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
 the screen you are looking at. `shoal demo stop [NAME]` stops one demo, or every
@@ -1836,8 +1836,9 @@ demo of the workspace.
 Each demo runs as a tracked command where queued agents start: a background
 Herdr tab inside Herdr, a background Rex window inside Rex, otherwise a
 detached zmx session
-named `<workspace>-<name>`, and without zmx in the background, writing a log in
-the workspace's state directory, which removal deletes, and takes no keys. A command that exits runs again; an exit
+named `<workspace>-<name>`. A demo needs a terminal host: without one, such as
+when zmx is missing from `PATH`, `shoal demo start` fails, saying why, and
+starts nothing. A command that exits runs again; an exit
 within 10 seconds of a start doubles the wait before the next run, from 1 to 30
 seconds. Stopping the demo, `shoal stop`, `shoal done` without `--keep-demos`
 and removing the workspace end it, and its session with it; a running demo keeps the workspace from idle cleanup as

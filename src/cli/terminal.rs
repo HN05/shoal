@@ -3,7 +3,6 @@
 //! background, and the [`Host`](crate::terminal::Host) that carries that out
 //! with its own primitives.
 mod add_place;
-mod background;
 mod closing;
 mod demos;
 mod groups;

@@ -252,8 +252,8 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
     install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
     install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
     fixture.add("tried");
-    // A demo without a host runs as a background process.
-    let started = fixture.ok(&[
+    // A demo without a host is refused and recorded nowhere.
+    let refused = fixture.run(&[
         "demo",
         "start",
         "--workspace",
@@ -262,8 +262,12 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
         "sleep",
         "600",
     ]);
-    assert_eq!(started["host"], "terminal", "{started}");
-    fixture.ok(&["demo", "stop", "--workspace", &fixture.id("tried")]);
+    assert!(!refused.status.success());
+    let running = fixture.ok(&["demo", "ls", "--workspace", &fixture.id("tried")]);
+    assert!(
+        running["running"].as_array().unwrap().is_empty(),
+        "{running}"
+    );
     // A queued start without a host is refused before the child exists.
     let refused = fixture.run(&[
         "run",
