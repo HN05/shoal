@@ -103,7 +103,7 @@ impl Manager {
     /// Whether the agent of `chat` continues its session when restored: the
     /// chat reported one, and its AI tool has arguments to resume it, without
     /// which a restore starts a new session.
-    async fn chat_resumes(&self, chat: &Chat) -> Result<bool> {
+    pub(super) async fn chat_resumes(&self, chat: &Chat) -> Result<bool> {
         let Some(session) = &chat.session else {
             return Ok(false);
         };

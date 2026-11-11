@@ -1,5 +1,6 @@
 //! Blocked chats: once a chat's agent ends a turn while its progress
-//! records what blocks it, Shoal saves the chat to come back on its own,
+//! records what blocks it, and its session can be resumed, Shoal saves the
+//! chat to come back on its own,
 //! which waits until nothing blocks it, then restores it in a background
 //! place as a saved chat's automatic restore does.
 use anyhow::Result;
@@ -24,9 +25,13 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether `chat` runs, its agent idle, while its space is blocked.
+    /// Whether `chat` runs, its agent idle, while its space is blocked, and
+    /// its restore would continue its session rather than start a new one.
     async fn stops_blocked(&self, chat: &Chat) -> Result<bool> {
         let idle = (chat.agent_state).is_some_and(|status| status.state == AgentState::Idle);
-        Ok(chat.restore.is_none() && idle && self.space_blocked(&chat.id).await?)
+        Ok(chat.restore.is_none()
+            && idle
+            && self.space_blocked(&chat.id).await?
+            && self.chat_resumes(chat).await?)
     }
 }
