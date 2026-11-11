@@ -48,7 +48,7 @@ impl DaemonGuard {
                 return None;
             }
             if support::cli(root)
-                .args(["daemon", "status"])
+                .args(["status"])
                 .output()
                 .unwrap()
                 .status

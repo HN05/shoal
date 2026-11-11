@@ -319,7 +319,7 @@ fn install_progress_clears_on_failure_and_leaves_json_and_preview_clean() {
 
 #[test]
 fn terminal_styles_respect_redirection_json_and_environment() {
-    for (args, stdout) in [(vec!["daemon", "status"], true), (vec!["cd", "-"], false)] {
+    for (args, stdout) in [(vec!["status"], true), (vec!["cd", "-"], false)] {
         let (output, text) = run(&args, Some(stdout), &[]);
         assert!(!output.status.success());
         assert!(
@@ -452,7 +452,7 @@ fn a_program_reads_json_output_with_the_librarys_types() {
     let skill: Skill = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(skill.name, "shoal");
 
-    let (output, _) = run(&["--json", "daemon", "status"], None, &[]);
+    let (output, _) = run(&["--json", "status"], None, &[]);
     let status: Status = serde_json::from_slice(&output.stdout).unwrap();
     assert!(!status.running && status.daemon.is_none());
 
@@ -464,4 +464,23 @@ fn a_program_reads_json_output_with_the_librarys_types() {
     assert!(!output.status.success(), "{output:?}");
     let failed: CommandError = serde_json::from_slice(&output.stderr).unwrap();
     assert_eq!(failed.error.code, "scope_denied");
+}
+
+#[test]
+fn status_shows_a_busy_daemon_s_own_status_when_it_refuses_the_space_lookup() {
+    let status = serde_json::json!({"type": "status", "data": {
+        "pid": 7, "version": "test", "uptime_secs": 1, "managed": false,
+        "unread_notifications": 0}});
+    let busy = serde_json::json!({"type": "error", "data": {
+        "code": "operation_failed", "message": "the daemon is busy"}});
+    let (output, _) = run_with_replies(
+        &["--json", "status"],
+        None,
+        &[],
+        vec![(false, status.clone()), (false, busy), (false, status)],
+    );
+    assert!(output.status.success(), "{output:?}");
+    let shown: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(shown["daemon"]["pid"], 7, "{shown}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("the daemon is busy"));
 }

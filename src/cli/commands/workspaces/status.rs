@@ -8,6 +8,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
+        commands::service,
         context::Context,
         terminal::{self, Recorded},
         ui,
@@ -24,7 +25,13 @@ pub(in crate::cli::commands) async fn status(
 ) -> Result<i32> {
     let first = space.as_ref().map(ToString::to_string);
     let Some(target) = status_target(first.as_deref(), item)? else {
-        let space = ui::select_space_here(ctx, space).await?;
+        let space = match space {
+            Some(space) => ui::select_space_here(ctx, Some(space)).await?,
+            None => match space_here(ctx).await? {
+                Some(space) => space,
+                None => return service::shoal_status(ctx).await,
+            },
+        };
         let status = status_view(ctx, space).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
@@ -43,6 +50,23 @@ pub(in crate::cli::commands) async fn status(
         }
     })?;
     Ok(0)
+}
+
+/// The space this runs in; none outside every space, or without a daemon,
+/// which could not say which workspace the current directory is in. A
+/// daemon whose request slots are full refuses that lookup but still
+/// answers its status, which tells why, so a failed lookup is none too.
+async fn space_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
+    if crate::cli::client::status(&ctx.paths).await?.is_none() {
+        return Ok(None);
+    }
+    match ui::space_here(ctx).await {
+        Ok(space) => Ok(space),
+        Err(error) => {
+            eprintln!("warning: cannot tell which space this runs in: {error:#}");
+            Ok(None)
+        }
+    }
 }
 
 /// The status of `space`, with the sessions its terminal hosts keep and

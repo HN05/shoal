@@ -139,12 +139,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     let shoal = || cli(root.path());
     wait_until("daemon startup", || {
         assert!(daemon.child.try_wait().unwrap().is_none(), "daemon exited");
-        shoal()
-            .args(["daemon", "status"])
-            .output()
-            .unwrap()
-            .status
-            .success()
+        shoal().args(["status"]).output().unwrap().status.success()
     });
     let added = shoal()
         .args(["--json", "repo", "add", repo.to_str().unwrap()])
@@ -203,10 +198,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         assert!(daemon.child.try_wait().unwrap().is_none(), "daemon exited");
         handed_off.exists()
     });
-    let status = shoal()
-        .args(["--json", "daemon", "status"])
-        .output()
-        .unwrap();
+    let status = shoal().args(["--json", "status"]).output().unwrap();
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["daemon"]["pid"], daemon.child.id());
     let after = shoal()

@@ -139,7 +139,7 @@ class Sandbox:
                                        stdin=subprocess.DEVNULL, stdout=log, stderr=log)
         deadline = time.monotonic() + DAEMON_START_SECONDS
         while time.monotonic() < deadline and self.daemon.poll() is None:
-            status = self.run(["--json", "daemon", "status"], check=False)
+            status = self.run(["--json", "status"], check=False)
             if status.returncode == 0 and json.loads(status.stdout).get("running"):
                 return
             time.sleep(0.1)

@@ -91,7 +91,7 @@ fn daemon_guard_reaps_child_when_a_test_panics() {
 #[test]
 fn cli_connects_to_daemon_and_stops_it() {
     let mut daemon = Daemon::start();
-    let output = daemon.run(&["--json", "daemon", "status"]);
+    let output = daemon.run(&["--json", "status"]);
     assert!(output.status.success());
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(status["daemon"]["pid"], daemon.guard.child.id());
@@ -112,7 +112,7 @@ fn cli_connects_to_daemon_and_stops_it() {
     );
     assert!(daemon.guard.child.wait().unwrap().success());
     assert!(!daemon.root.path().join("state/daemon.sock").exists());
-    let output = daemon.run(&["--json", "daemon", "status"]);
+    let output = daemon.run(&["--json", "status"]);
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(
         serde_json::from_slice::<Value>(&output.stdout).unwrap()["running"],
@@ -155,7 +155,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
             "daemon exited during startup"
         );
         command(root.path())
-            .args(["daemon", "status"])
+            .args(["status"])
             .output()
             .unwrap()
             .status
@@ -260,7 +260,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
     });
     wait_until("restarted daemon", || {
         command(root.path())
-            .args(["daemon", "status"])
+            .args(["status"])
             .output()
             .unwrap()
             .status
@@ -274,7 +274,7 @@ fn second_daemon_cannot_steal_the_socket() {
     let output = daemon.run(&["daemon", "run"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("already owns"));
-    assert!(daemon.run(&["daemon", "status"]).status.success());
+    assert!(daemon.run(&["status"]).status.success());
 }
 
 #[test]
@@ -287,14 +287,14 @@ fn protocol_rejects_bad_clients_and_remains_available() {
     assert_eq!(response["data"]["code"], "invalid_request");
     let mut stalled = daemon.socket();
     stalled.write_all(b"{\"protocol\":").unwrap();
-    assert!(daemon.run(&["daemon", "status"]).status.success());
+    assert!(daemon.run(&["status"]).status.success());
     let mut oversized = daemon.socket();
     oversized.write_all(&vec![b'x'; 65537]).unwrap();
     assert_eq!(
         daemon_client::receive(&oversized)["data"]["code"],
         "invalid_request"
     );
-    assert!(daemon.run(&["daemon", "status"]).status.success());
+    assert!(daemon.run(&["status"]).status.success());
 }
 
 #[test]
@@ -485,7 +485,7 @@ fn install_preserves_a_compatible_foreground_daemon() {
     let daemon = Daemon::start();
     let output = daemon.run(&["daemon", "install"]);
     assert!(!output.status.success());
-    assert!(daemon.run(&["daemon", "status"]).status.success());
+    assert!(daemon.run(&["status"]).status.success());
 }
 
 /// launchctl and systemctl stand-ins that run a real managed daemon. Only the
@@ -583,11 +583,7 @@ fn daemon_start_offers_to_install_a_missing_service() {
     );
     assert!(output.status.success(), "{transcript}");
     assert!(manager.pid.exists());
-    let status = manager
-        .command()
-        .args(["daemon", "status"])
-        .output()
-        .unwrap();
+    let status = manager.command().args(["status"]).output().unwrap();
     assert!(status.status.success(), "{status:?}");
 }
 
@@ -675,11 +671,7 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
         assert_eq!(fs::read_to_string(definition).unwrap(), original);
         assert_eq!(fs::read_to_string(&manager.pid).unwrap(), pid);
     }
-    let status = manager
-        .command()
-        .args(["daemon", "status"])
-        .output()
-        .unwrap();
+    let status = manager.command().args(["status"]).output().unwrap();
     assert!(status.status.success(), "{status:?}");
     let stopped = manager.command().args(["daemon", "stop"]).output().unwrap();
     assert!(stopped.status.success(), "{stopped:?}");
@@ -689,7 +681,7 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
         .command()
         .arg("--state-dir")
         .arg(&other_state)
-        .args(["daemon", "status"])
+        .args(["status"])
         .output()
         .unwrap();
     assert!(status.status.success(), "{status:?}");

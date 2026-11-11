@@ -49,7 +49,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             .success()
     );
 
-    let status = fixture.ok(&["daemon", "status"]);
+    let status = fixture.ok(&["status"]);
     assert_eq!(status["daemon"]["unread_notifications"], 3);
     // The listing leaves the count to alerts and status.
     let list = fixture.run(&["list"]);
@@ -170,10 +170,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     follower.kill().unwrap();
     follower.wait().unwrap();
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
-    assert_eq!(
-        fixture.ok(&["daemon", "status"])["daemon"]["unread_notifications"],
-        0
-    );
+    assert_eq!(fixture.ok(&["status"])["daemon"]["unread_notifications"], 0);
 }
 
 #[test]
@@ -272,7 +269,7 @@ fn notifications_kept_unread_stay_new() {
         let output = scoped_command(&fixture, "sender", &["alerts", "send", message]);
         assert!(output.status.success(), "{output:?}");
     }
-    let unread = || fixture.ok(&["daemon", "status"])["daemon"]["unread_notifications"].clone();
+    let unread = || fixture.ok(&["status"])["daemon"]["unread_notifications"].clone();
     let messages = |notifications: &[Value]| -> Vec<(i64, String)> {
         notifications
             .iter()

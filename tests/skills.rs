@@ -82,10 +82,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
     symlink(stable.join("skills"), package.join("libexec/shoal-skills")).unwrap();
     symlink(package.join("libexec/shoal"), bin.join("shoal")).unwrap();
 
-    for args in [
-        vec!["--json", "daemon", "status"],
-        vec!["skill", "install", "codex"],
-    ] {
+    for args in [vec!["--json", "status"], vec!["skill", "install", "codex"]] {
         let deleted = home.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
         let output = support::isolated(home.path(), "bash")
@@ -103,7 +100,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
             .output()
             .unwrap();
         assert!(output.stderr.is_empty(), "{output:?}");
-        if args.contains(&"daemon") {
+        if args.contains(&"status") {
             // No daemon runs in this home, which status reports without failing to start.
             assert_eq!(output.status.code(), Some(1));
             let status: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();

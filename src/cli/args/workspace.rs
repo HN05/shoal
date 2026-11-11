@@ -35,12 +35,15 @@ pub enum WorkspaceCommand {
         print: bool,
     },
     /// Show a space's activity and issue and PR state, and a workspace's
-    /// changes and resources.
+    /// changes and resources, or Shoal's status outside a space.
     ///
     /// Name a workspace or chat, find the spaces that link an issue, PR or
     /// CI run, or the workspaces that hold a resource: `status pr 12`,
     /// `status ci 2765`, `status <issue-PR-or-run-URL>`,
-    /// `status resource <pool-or-member>`.
+    /// `status resource <pool-or-member>`. Without a target, shows the space
+    /// this runs in, else the daemon: its PID, version and unread
+    /// notifications, stalled file access and failing cleanup; it exits 1
+    /// when the daemon is not running.
     Status {
         /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
         /// resource.

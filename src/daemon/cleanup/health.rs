@@ -20,7 +20,7 @@ use crate::{
 /// loop is stuck or has stopped.
 const STALLED_AFTER: Duration = Duration::from_secs(10 * 60);
 
-/// The outcome of recent passes: daemon status reports a failing or stalled
+/// The outcome of recent passes: Shoal's status reports a failing or stalled
 /// loop, and workspace status the workspace's own failures.
 pub struct Health {
     started: Moment,

@@ -551,7 +551,7 @@ worktree's config file, which every command that resolves its settings, such
 as `shoal attach`, waits on, check a worktree within 30 seconds, a status
 reporting what it could not read; one that runs out or is interrupted
 records the directory holding the worktree as stalled, which the daemon reports
-once as an alert and in `daemon status` until a check there finishes. The
+once as an alert and in Shoal's `status` until a check there finishes. The
 directory comes from the path alone, since reading the filesystem could stall
 too, and groups a repository's workspaces, which a prompt for their location
 holds together.
@@ -1855,7 +1855,7 @@ otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own, messages
 a workspace's agent sends to ask for attention) and the
 CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); `status` and `daemon status` only count them. Recording never fails the operation it describes,
+terminal's own notifications (OSC 9); `status`, in a space and outside one, only counts them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. What a
@@ -3096,7 +3096,7 @@ A failed sweep step does not skip the others.
 Background loops restart after a panic, and a failed daemon log write never stops them.
 A step's failure in a workspace, including one that keeps the step from
 reading the workspace's state, shows in that workspace's status, and other
-failures or a stalled loop in daemon status and the inbox; each notifies once per
+failures or a stalled loop in Shoal's `status` and the inbox; each notifies once per
 run of failed passes, about its workspace where it has one, and the log has a
 pass's failures only when they differ from the pass before.
 

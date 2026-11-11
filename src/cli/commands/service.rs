@@ -6,6 +6,7 @@ mod install;
 use anyhow::Result;
 
 pub(super) use config::{install_config, packaged_config};
+pub(super) use daemon::status as shoal_status;
 
 use crate::cli::{args::service::DaemonCommand, context::Context};
 
@@ -23,7 +24,6 @@ pub(super) async fn run(
             crate::daemon::run(ctx.paths, managed, handoff).await?;
             Ok(0)
         }
-        DaemonCommand::Status => daemon::status(&ctx).await,
         DaemonCommand::Start => daemon::start(&ctx).await,
         DaemonCommand::Stop => daemon::stop(&ctx).await,
         DaemonCommand::Reload => daemon::reload(&ctx).await,

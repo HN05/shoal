@@ -540,7 +540,6 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     ] {
         assert!(text.contains(expected), "missing {expected:?} in {text:?}");
     }
-    assert!(!fixture.run(&["status"]).status.success());
 
     for target in [
         vec!["pr", "7"],
@@ -653,6 +652,12 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
                 assert!(!picked.exists());
                 continue;
             }
+            if picker && action == ["status"] {
+                // Outside a space, status shows Shoal's own.
+                assert!(output.status.success(), "{output:?}");
+                assert!(!picked.exists());
+                continue;
+            }
             assert!(output.status.success(), "{action:?}: {output:?}");
             assert_eq!(picked.exists(), picker);
             if picker {
@@ -672,6 +677,9 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             (fixture.root.path(), [action, &["missing"]].concat()),
             (fixture.root.path(), [&["--json"], action].concat()),
         ] {
+            if args == ["--json", "status"] {
+                continue;
+            }
             let (_master, slave) = pty::open();
             let output = fixture
                 .command()
@@ -686,6 +694,23 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             assert!(!picked.exists());
         }
     }
+}
+
+#[test]
+fn status_without_a_target_outside_a_space_shows_shoal() {
+    let fixture = Fixture::new();
+    fixture.add("elsewhere");
+    let output = fixture
+        .command()
+        .args(["--json", "status"])
+        .current_dir(fixture.root.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(status["running"], true, "{status}");
+    assert!(status["daemon"]["pid"].is_u64(), "{status}");
+    assert!(status.get("workspace").is_none(), "{status}");
 }
 
 #[test]
@@ -707,7 +732,11 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     .unwrap();
     let mut agent = Some(agent_in_session(&fixture, "available", "available"));
 
-    for args in [vec!["status"], vec!["attach"], vec!["rm", "--yes"]] {
+    for args in [
+        vec!["rename", "Retitled"],
+        vec!["attach"],
+        vec!["rm", "--yes"],
+    ] {
         if args[0] == "rm" {
             drop(agent.take());
         }
@@ -748,8 +777,8 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
         } else {
             assert!(transcript.is_empty(), "{transcript}");
         }
-        if args[0] == "status" {
-            assert!(stdout.starts_with("available "), "{stdout}");
+        if args[0] == "rename" {
+            assert!(stdout.contains("of available to Retitled"), "{stdout}");
         } else if args[0] == "attach" {
             assert!(stdout.is_empty(), "{stdout}");
         } else {
@@ -773,7 +802,8 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         &["start"][..],
         &["run", "--", "true"],
         &["rm"],
-        &["status"],
+        &["checkpoint"],
+        &["rename"],
         &["stop"],
         &["diff"],
         &["view", "pr", "12"],

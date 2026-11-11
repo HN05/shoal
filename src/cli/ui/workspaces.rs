@@ -448,6 +448,26 @@ pub async fn select_space_here(
     }
 }
 
+/// The space [`select_space_here`] takes without one named, never offering a
+/// picker: none outside every space.
+pub async fn space_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
+    if let Some(chat) = current_chat(&None) {
+        return current_workspace_or_chat(ctx, chat, Workspaces::Any)
+            .await
+            .map(Some);
+    }
+    match resolve_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
+        Ok(Resolution::Current(id)) => {
+            let workspace = SpaceSelector::Id(id);
+            recent::record(ctx, &workspace).await;
+            Ok(Some(workspace))
+        }
+        Ok(Resolution::Named(_) | Resolution::Picker(_)) => Ok(None),
+        Err(error) if error.is::<NoCurrentWorkspace>() => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// Which workspaces containing the current directory come before the chat.
 enum Workspaces {
     /// Those below the chat, which its scope covers.

@@ -84,7 +84,8 @@ directory. Without that link, installation uses the embedded skills.
 cargo install --path .
 shoal daemon install --dry-run     # Preview the OS service definition
 shoal daemon install               # Register and start the per-user service
-shoal daemon status|stop|start|restart|reload
+shoal daemon stop|start|restart|reload
+shoal status                       # Outside a space: the daemon, notifications, stalls, cleanup
 ```
 
 macOS uses a launchd LaunchAgent in `~/Library/LaunchAgents` (requires a GUI
@@ -93,7 +94,8 @@ run `shoal --state-dir /tmp/shoal-dev daemon run` in the foreground and target
 it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 `~/.local/state/shoal`; runtime state and the Unix socket are private to the
 user. Service commands target the one registered per-user service, whose state
-directory must match. `daemon status` exits 1 when offline, and names each
+directory must match. `shoal status` outside a space shows the daemon's PID,
+version and unread notifications, exits 1 when it is offline, and names each
 directory whose file access stalls, as while macOS waits for an answer to a
 privacy prompt, whichever process the prompt is for: a worktree check that
 runs 30 seconds or is interrupted reports the directory holding the worktree
@@ -102,7 +104,9 @@ finishes. It also says, in `cleanup_error`, when a step of automatic cleanup
 fails other than in a workspace or no pass has finished for 10 minutes. While the daemon starts, its answer names the step, a stalled
 directory, or a path whose check has waited five seconds. A daemon that
 owns the state directory but does not answer is reported with its PID by every
-command. `daemon status`, `stop` and `restart` need no request capacity.
+command. The status request, `daemon stop` and `restart` need no request capacity;
+when a daemon with full request slots refuses to say which space the current
+directory is in, `shoal status` warns and shows the daemon's status.
 `daemon stop` and `restart` send a daemon that does not answer SIGTERM, through
 the service manager or directly for a foreground daemon, as while it starts.
 `daemon start`
@@ -799,8 +803,8 @@ a workspace, and repositories whose default branch has failed to
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
-with [`shoal adopt`](#adopting-a-worktree), shows `shoal daemon status`
-for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
+with [`shoal adopt`](#adopting-a-worktree), shows Shoal's status, as `shoal status`
+outside a space does, for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox` with `-p`/`--print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
 `kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo`,
@@ -5261,7 +5265,7 @@ with its record's `id`, `name`, `title` and `path`, when there are any. On a ter
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts, cleanup failures and messages collapse into one entry until read;
-every agent exit is listed. `daemon status` mentions pending ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
+every agent exit is listed. `shoal status` outside a space mentions pending ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read or clear notifications but may notify about their own
 workspace and withdraw those messages. Read entries older than the newest
 500 are dropped; unread ones stay.

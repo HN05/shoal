@@ -107,7 +107,7 @@ def daemon_running(shoal, env, log_path, recording):
 def wait_for_daemon(shoal, env, daemon, log_path):
     deadline = time.monotonic() + DAEMON_START_SECONDS
     while time.monotonic() < deadline and daemon.poll() is None:
-        status = run(shoal, ["--json", "daemon", "status"], env)
+        status = run(shoal, ["--json", "status"], env)
         if status.returncode == 0 and json.loads(status.stdout).get("running"):
             return
         time.sleep(0.1)

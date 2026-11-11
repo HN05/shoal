@@ -1,5 +1,6 @@
-//! `shoal daemon status`, `start`, `stop`, `reload` and `restart`, and
-//! stopping a daemon that does not answer.
+//! Shoal's own status, which `shoal status` shows outside a space; `shoal
+//! daemon start`, `stop`, `reload` and `restart`; and stopping a daemon
+//! that does not answer.
 use anyhow::{Result, ensure};
 
 use super::install::install;
@@ -11,7 +12,7 @@ use crate::{
     service::{self, Platform},
 };
 
-pub(super) async fn status(ctx: &Context) -> Result<i32> {
+pub(in crate::cli::commands) async fn status(ctx: &Context) -> Result<i32> {
     let status = client::status(&ctx.paths).await?;
     let running = status.is_some();
     let message = status

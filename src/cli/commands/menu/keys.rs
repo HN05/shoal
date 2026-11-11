@@ -3,7 +3,7 @@
 use anyhow::{Context as _, Result, ensure};
 
 use super::{Choice, View, execute::execute_command, linked::view_command, rows::Row};
-use crate::cli::commands::approvals;
+use crate::cli::commands::{approvals, service};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -16,7 +16,6 @@ use crate::{
             items::{ItemArgs, ItemsCommand, ViewArgs},
             lifecycle::LifecycleCommand,
             repository::{RepoCommand, RepositoryCommand},
-            service::{DaemonCommand, ServiceCommand},
             sessions::SessionsCommand,
             workspace::WorkspaceCommand,
         },
@@ -227,9 +226,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             repository: None,
             copy: false,
         }),
-        Row::Cleanup => Command::Service(ServiceCommand::Daemon {
-            command: DaemonCommand::Status,
-        }),
+        Row::Cleanup => return Ok(Choice::Done(service::shoal_status(ctx).await?)),
         Row::SyncFailed(repository) => Command::Repository(RepositoryCommand::Repo {
             command: Some(RepoCommand::Sync {
                 repository: Some(repository.into()),

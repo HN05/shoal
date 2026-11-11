@@ -20,7 +20,7 @@ pub enum ServiceCommand {
     },
     /// Replace a downloaded shoal with the latest GitHub release.
     Update,
-    /// Inspect and control the local daemon.
+    /// Install, start, stop, restart or reload the local daemon.
     Daemon {
         #[command(subcommand)]
         command: DaemonCommand,
@@ -140,7 +140,6 @@ pub enum DaemonCommand {
         #[arg(long)]
         executable: Option<PathBuf>,
     },
-    Status,
     Start,
     Stop,
     Restart,
