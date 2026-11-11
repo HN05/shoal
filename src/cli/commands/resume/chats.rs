@@ -153,12 +153,6 @@ async fn start_saved(
         }
         (None, ChatRepository::Outside(_)) => chat::Topic::outside_repositories(&chat.mode),
     };
-    // A converted chat starts from a fork of its session in the checkout,
-    // where the session never ran.
-    let topic = match (chat.converted, &repo) {
-        (true, ChatRepository::Registered(registered)) => topic.converted(&registered.path),
-        _ => topic,
-    };
     let options = chat::Options {
         narrowing: chat::Narrowing::Recorded(match change {
             Some(change) => change.applied_to(chat.narrowing),
@@ -170,6 +164,8 @@ async fn start_saved(
         model: Default::default(),
         args: Vec::new(),
         session: chat.session.clone(),
+        // A converted chat starts from a fork of its session in the
+        // checkout, where the session never ran; the launch tells it so.
         fork: chat.converted,
         restore: Some(chat.id.clone()),
         handoff: None,

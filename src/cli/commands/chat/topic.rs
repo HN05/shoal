@@ -133,14 +133,30 @@ impl Topic {
     }
 }
 
-/// `topic` with the issue the saved chat `restore` among `chats` is linked
-/// to, for its restored agent's rules; a restore relaunched in a new tab
-/// names only the chat.
-pub(super) fn with_saved_issue(topic: Topic, chats: &[Chat], restore: &SpaceId) -> Topic {
-    let saved = chats.iter().find(|chat| chat.id == *restore);
-    Topic {
-        linked_issue: saved.and_then(|chat| templates::IssueFields::linked(&chat.links)),
-        ..topic
+/// `topic` for a chat that restores the saved chat `restore` among `chats`
+/// in `home`: with the issue that one is linked to when the topic names
+/// none, for its restored agent's rules, and told what its space is now when
+/// it was a workspace. A restore relaunched in a new place names only the
+/// chat, so its topic comes from the saved chat there.
+pub(super) fn with_saved(
+    topic: Topic,
+    chats: &[Chat],
+    restore: &SpaceId,
+    home: &std::path::Path,
+) -> Topic {
+    let Some(saved) = chats.iter().find(|chat| chat.id == *restore) else {
+        return topic;
+    };
+    let topic = match topic.linked_issue {
+        Some(_) => topic,
+        None => Topic {
+            linked_issue: templates::IssueFields::linked(&saved.links),
+            ..topic
+        },
+    };
+    match saved.converted {
+        true => topic.converted(home),
+        false => topic,
     }
 }
 

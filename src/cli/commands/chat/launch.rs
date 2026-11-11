@@ -10,7 +10,7 @@ use super::{
     ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
     handoff,
-    topic::with_saved_issue,
+    topic::with_saved,
 };
 use crate::client::output::chat::BackgroundChat;
 use crate::client::space_names::{SpaceName, SpaceSelector};
@@ -99,7 +99,8 @@ impl Launch {
     ) -> Result<Self> {
         let agent = chat_agent(ctx, &settings, options.agent.clone())?;
         check_model(&settings, &agent, &options.model)?;
-        let topic = restored(ctx, topic, options.restore.as_ref()).await?;
+        let home = topic.home(&repo).path().to_owned();
+        let topic = restored(ctx, topic, options.restore.as_ref(), &home).await?;
         let name = initial_name(ctx, &topic, options.name.clone()).await?;
         let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
@@ -240,16 +241,19 @@ impl Launch {
     }
 }
 
-/// `topic`, for a chat that restores the saved chat `restore`, with the
-/// issue that one is linked to when the topic names none.
-async fn restored(ctx: &Context, topic: Topic, restore: Option<&SpaceId>) -> Result<Topic> {
-    Ok(match restore {
-        Some(chat) if topic.linked_issue.is_none() => {
-            let chats = crate::client::chats::recorded(&ctx.paths).await?;
-            with_saved_issue(topic, &chats, chat)
-        }
-        _ => topic,
-    })
+/// `topic`, for a chat that restores the saved chat `restore` in `home`, as
+/// [`with_saved`] makes it.
+async fn restored(
+    ctx: &Context,
+    topic: Topic,
+    restore: Option<&SpaceId>,
+    home: &Path,
+) -> Result<Topic> {
+    let Some(chat) = restore else {
+        return Ok(topic);
+    };
+    let chats = crate::client::chats::recorded(&ctx.paths).await?;
+    Ok(with_saved(topic, &chats, chat, home))
 }
 
 /// `--name`, which [`Options::check_name`] checked, else the topic's name

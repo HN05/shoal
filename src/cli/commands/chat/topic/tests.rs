@@ -221,17 +221,58 @@ fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
     }))
     .unwrap();
     let chats = [chat];
-    let restored = with_saved_issue(
+    let restored = with_saved(
         Topic::repository(&repo, &"plan".into()),
         &chats,
         &SpaceId::from("c"),
+        &repo.path,
     );
     let issue = restored.linked_issue.unwrap();
     assert_eq!((issue.number, issue.url.as_str()), (7, url));
-    let other = with_saved_issue(
+    let other = with_saved(
         Topic::repository(&repo, &"plan".into()),
         &chats,
         &SpaceId::from("d"),
+        &repo.path,
     );
     assert!(other.linked_issue.is_none());
+}
+
+#[test]
+fn a_restored_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
+    let repo = Repository {
+        id: "repo".into(),
+        path: "/repos/shoal".into(),
+        source: "/repos/shoal".into(),
+        last_used: 0,
+        name: Some("shoal".into()),
+        workspaces_dir: None,
+        contribution: false,
+    };
+    let saved = |converted: bool| -> Chat {
+        serde_json::from_value(serde_json::json!({
+            "id": "c", "number": 4, "repository_id": "repo", "name": "fix-login",
+            "agent": "claude", "mode": "chat", "pid": 1, "started_at": 0,
+            "restore": "resume", "converted": converted,
+        }))
+        .unwrap()
+    };
+    // The topic a relaunch in a new place starts from names only the chat.
+    let relaunched = || Topic::repository(&repo, &"chat".into());
+
+    let converted = with_saved(
+        relaunched(),
+        &[saved(true)],
+        &SpaceId::from("c"),
+        &repo.path,
+    );
+    let plain = with_saved(
+        relaunched(),
+        &[saved(false)],
+        &SpaceId::from("c"),
+        &repo.path,
+    );
+
+    assert!(converted.tells_resumed && converted.subject.is_some());
+    assert!(!plain.tells_resumed && plain.subject.is_none());
 }
