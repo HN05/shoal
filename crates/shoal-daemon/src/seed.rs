@@ -455,12 +455,14 @@ struct Conversion<'a, V> {
 
 impl<V: Subvolumes> Conversion<'_, V> {
     /// Where the output `path` at `source` moves when it becomes a
-    /// subvolume, or `None` when it stays as it is.
+    /// subvolume, or `None` when it stays as it is. An output reached
+    /// through a symbolic link stays, so nothing outside the worktree moves.
     fn aside(&mut self, source: &Path, path: &str) -> Option<PathBuf> {
         let plain = source
             .symlink_metadata()
             .is_ok_and(|metadata| metadata.is_dir())
-            && !self.volumes.is_root(source);
+            && !self.volumes.is_root(source)
+            && ensure_no_symlink(&self.layout.worktree(), path).is_ok();
         let usable = plain
             && *self.usable.get_or_insert_with(|| {
                 subvolume::removable_at(self.volumes, &self.layout.subvolume_probe())

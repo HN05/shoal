@@ -190,6 +190,36 @@ async fn outputs_stay_plain_where_the_probe_cannot_make_a_subvolume() {
     assert_eq!(lib, "web/node_modules/lib");
 }
 
+#[tokio::test]
+async fn an_output_reached_through_a_symlink_is_never_converted() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = built(root.path(), &[]);
+    let outside = root.path().join("outside");
+    fs::create_dir_all(outside.join("node_modules")).unwrap();
+    fs::write(outside.join("node_modules/lib"), "lib").unwrap();
+    fs::create_dir_all(layout.worktree()).unwrap();
+    std::os::unix::fs::symlink(&outside, layout.worktree().join("web")).unwrap();
+    let volumes = FakeSubvolumes::default();
+    let paths = vec!["web/node_modules".to_owned()];
+    freeze_with(
+        &snapshotting(&volumes),
+        &volumes,
+        &layout,
+        "c1",
+        &paths,
+        Vec::new(),
+    )
+    .await
+    .unwrap();
+
+    assert!(volumes.calls().is_empty());
+    assert!(!volumes.is_root(&outside.join("node_modules")));
+    assert_eq!(
+        fs::read_to_string(outside.join("node_modules/lib")).unwrap(),
+        "lib"
+    );
+}
+
 /// The real ioctls, where the temporary directory is on btrfs.
 #[tokio::test]
 async fn on_btrfs_each_copy_after_the_first_freeze_is_a_snapshot() {

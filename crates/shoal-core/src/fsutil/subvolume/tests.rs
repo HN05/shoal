@@ -43,6 +43,23 @@ fn removal_destroys_output_subvolumes_deepest_first_then_deletes_the_rest() {
 }
 
 #[test]
+fn removal_destroys_no_subvolume_reached_through_a_symlink() {
+    let temp = tempfile::tempdir().unwrap();
+    let (root, outside) = (temp.path().join("worktree"), temp.path().join("outside"));
+    tree(&outside, &["node_modules"]);
+    fs::create_dir_all(&root).unwrap();
+    std::os::unix::fs::symlink(&outside, root.join("web")).unwrap();
+    let volumes = FakeSubvolumes::destroying();
+    volumes.add_root(&outside.join("node_modules"));
+    volumes.add_root(&root.join("web/node_modules"));
+
+    destroy_outputs(&volumes, &root, &["web/node_modules".into()]);
+
+    assert!(volumes.calls().is_empty());
+    assert!(outside.join("node_modules/file").exists());
+}
+
+#[test]
 fn removal_deletes_subvolumes_it_may_not_destroy() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("spare");

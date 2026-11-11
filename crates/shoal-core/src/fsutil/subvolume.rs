@@ -12,6 +12,9 @@ use std::{
 pub trait Subvolumes {
     /// Whether `path` is a directory that is the root of a subvolume.
     fn is_root(&self, path: &Path) -> bool;
+    /// Whether the subvolume `path` may hold others, whose files its
+    /// snapshot would leave out; true when that cannot be read.
+    fn holds_subvolumes(&self, path: &Path) -> bool;
     /// Make the missing `path` an empty subvolume.
     fn create(&self, path: &Path) -> io::Result<()>;
     /// Make the missing `destination` a writable snapshot of the subvolume
@@ -49,7 +52,7 @@ pub fn destroy_outputs(volumes: &impl Subvolumes, root: &Path, outputs: &[String
     let mut outputs: Vec<&String> = outputs.iter().collect();
     outputs.sort_by_key(|output| std::cmp::Reverse(Path::new(output).components().count()));
     for output in outputs {
-        if !is_relative(output) {
+        if !lies_inside(root, output) {
             continue;
         }
         let path = root.join(output);
@@ -71,11 +74,21 @@ pub fn removable_at(volumes: &impl Subvolumes, path: &Path) -> bool {
     remove_tree(volumes, path, &[]).is_ok() && fs::symlink_metadata(path).is_err()
 }
 
-/// Whether `output` names a path inside the directory it is joined to.
-fn is_relative(output: &str) -> bool {
-    Path::new(output)
-        .components()
-        .all(|component| matches!(component, Component::Normal(_)))
+/// Whether `output` names an existing path inside `root`, reached through
+/// no symbolic link, which could lead outside it.
+fn lies_inside(root: &Path, output: &str) -> bool {
+    let mut current = root.to_path_buf();
+    for component in Path::new(output).components() {
+        let Component::Normal(name) = component else {
+            return false;
+        };
+        current.push(name);
+        match current.symlink_metadata() {
+            Ok(metadata) if !metadata.file_type().is_symlink() => {}
+            _ => return false,
+        }
+    }
+    true
 }
 
 #[cfg(target_os = "linux")]
@@ -87,6 +100,16 @@ impl Subvolumes for Btrfs {
             && ioctl::on_btrfs(path)
     }
 
+    fn holds_subvolumes(&self, path: &Path) -> bool {
+        let Ok(directory) = fs::File::open(path) else {
+            return true;
+        };
+        // SAFETY: the arguments are plain integers, valid when zeroed.
+        let mut args: ioctl::RootRefArgs = unsafe { std::mem::zeroed() };
+        // Kernels before 4.18 lack the ioctl, so their answer is unknown.
+        ioctl::call(&directory, ioctl::GET_SUBVOL_ROOTREF, &mut args).is_err() || args.num_items > 0
+    }
+
     fn create(&self, path: &Path) -> io::Result<()> {
         let (parent, name) = ioctl::parent_and_name(path)?;
         let mut args = ioctl::VolArgs {
@@ -94,7 +117,7 @@ impl Subvolumes for Btrfs {
             name: [0; 4088],
         };
         ioctl::set_name(&mut args.name, name)?;
-        ioctl::call(&parent, ioctl::SUBVOL_CREATE, &args)
+        ioctl::call(&parent, ioctl::SUBVOL_CREATE, &mut args)
     }
 
     fn snapshot(&self, source: &Path, destination: &Path) -> io::Result<()> {
@@ -112,7 +135,7 @@ impl Subvolumes for Btrfs {
             name: [0; 4040],
         };
         ioctl::set_name(&mut args.name, name)?;
-        ioctl::call(&parent, ioctl::SNAP_CREATE_V2, &args)
+        ioctl::call(&parent, ioctl::SNAP_CREATE_V2, &mut args)
     }
 
     fn destroy(&self, path: &Path) -> io::Result<()> {
@@ -125,7 +148,7 @@ impl Subvolumes for Btrfs {
             name: [0; 4088],
         };
         ioctl::set_name(&mut args.name, name)?;
-        ioctl::call(&parent, ioctl::SNAP_DESTROY, &args)
+        ioctl::call(&parent, ioctl::SNAP_DESTROY, &mut args)
     }
 }
 
@@ -133,6 +156,10 @@ impl Subvolumes for Btrfs {
 impl Subvolumes for Btrfs {
     fn is_root(&self, _: &Path) -> bool {
         false
+    }
+
+    fn holds_subvolumes(&self, _: &Path) -> bool {
+        true
     }
 
     fn create(&self, _: &Path) -> io::Result<()> {
@@ -165,6 +192,7 @@ mod ioctl {
     pub(super) const SUBVOL_CREATE: libc::Ioctl = libc::_IOW::<VolArgs>(MAGIC, 14);
     pub(super) const SNAP_DESTROY: libc::Ioctl = libc::_IOW::<VolArgs>(MAGIC, 15);
     pub(super) const SNAP_CREATE_V2: libc::Ioctl = libc::_IOW::<VolArgsV2>(MAGIC, 23);
+    pub(super) const GET_SUBVOL_ROOTREF: libc::Ioctl = libc::_IOWR::<RootRefArgs>(MAGIC, 61);
 
     /// `struct btrfs_ioctl_vol_args`.
     #[repr(C)]
@@ -181,6 +209,16 @@ mod ioctl {
         pub flags: u64,
         pub unused: [u64; 4],
         pub name: [u8; 4040],
+    }
+
+    /// `struct btrfs_ioctl_get_subvol_rootref_args`: the subvolumes whose
+    /// parent is the one the descriptor is in.
+    #[repr(C)]
+    pub(super) struct RootRefArgs {
+        pub min_treeid: u64,
+        pub rootref: [[u64; 2]; 255],
+        pub num_items: u8,
+        pub align: [u8; 7],
     }
 
     /// Whether `path` lies on a btrfs filesystem.
@@ -225,10 +263,16 @@ mod ioctl {
         Ok(())
     }
 
-    /// Run the ioctl `request` with `args` on the directory `parent`.
-    pub(super) fn call<T>(parent: &fs::File, request: libc::Ioctl, args: &T) -> io::Result<()> {
-        // SAFETY: `args` is the structure `request` reads, alive for the call.
-        let status = unsafe { libc::ioctl(parent.as_raw_fd(), request, std::ptr::from_ref(args)) };
+    /// Run the ioctl `request` with `args` on the directory `directory`.
+    pub(super) fn call<T>(
+        directory: &fs::File,
+        request: libc::Ioctl,
+        args: &mut T,
+    ) -> io::Result<()> {
+        // SAFETY: `args` is the structure `request` reads and writes, alive
+        // for the call.
+        let status =
+            unsafe { libc::ioctl(directory.as_raw_fd(), request, std::ptr::from_mut(args)) };
         if status == 0 {
             Ok(())
         } else {

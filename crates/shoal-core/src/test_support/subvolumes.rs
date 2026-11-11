@@ -85,6 +85,13 @@ impl Subvolumes for FakeSubvolumes {
         path.is_dir() && self.roots.lock().unwrap().contains(path)
     }
 
+    fn holds_subvolumes(&self, path: &Path) -> bool {
+        let roots = self.roots.lock().unwrap();
+        roots
+            .iter()
+            .any(|root| root != path && root.starts_with(path))
+    }
+
     fn create(&self, path: &Path) -> io::Result<()> {
         self.record(Call::Create(path.to_owned()));
         self.supported()?;

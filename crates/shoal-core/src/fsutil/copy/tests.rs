@@ -127,6 +127,20 @@ fn only_subvolume_roots_are_snapshotted_and_a_failed_snapshot_is_left_to_reflink
     Ok(())
 }
 
+#[test]
+fn a_subvolume_holding_another_is_left_to_reflinks() -> io::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let volume = temp.path().join("volume");
+    fs::create_dir_all(volume.join("nested"))?;
+    let volumes = FakeSubvolumes::default();
+    volumes.add_root(&volume);
+    volumes.add_root(&volume.join("nested"));
+
+    assert!(!snapshot_root(&volumes, &volume, &temp.path().join("copy")));
+    assert!(volumes.calls().is_empty());
+    Ok(())
+}
+
 /// The real ioctls, where the temporary directory is on btrfs.
 #[tokio::test]
 async fn copying_a_worktree_snapshots_its_subvolume_outputs() -> anyhow::Result<()> {
@@ -140,12 +154,20 @@ async fn copying_a_worktree_snapshots_its_subvolume_outputs() -> anyhow::Result<
     Btrfs.create(&source.join("target"))?;
     fs::write(source.join("target/built"), "built")?;
     fs::write(source.join("tracked"), "tracked")?;
+    // A snapshot of a subvolume holding another would leave its files out.
+    Btrfs.create(&source.join("web"))?;
+    Btrfs.create(&source.join("web/node_modules"))?;
+    fs::write(source.join("web/node_modules/lib"), "lib")?;
 
     clone_worktree(&source, &copy).await?;
 
     assert!(Btrfs.is_root(&copy.join("target")));
     assert_eq!(fs::read_to_string(copy.join("target/built"))?, "built");
     assert_eq!(fs::read_to_string(copy.join("tracked"))?, "tracked");
+    assert_eq!(
+        fs::read_to_string(copy.join("web/node_modules/lib"))?,
+        "lib"
+    );
     subvolume::remove_tree(&Btrfs, temp.path(), &[])?;
     Ok(())
 }

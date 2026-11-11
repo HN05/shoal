@@ -101,10 +101,13 @@ pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()>
 }
 
 /// Make `destination` a snapshot of `source` when it is a subvolume root,
-/// and say whether it did. Any other source, or a failed snapshot, as onto
-/// another filesystem, is left to a reflink.
+/// and say whether it did. Any other source, one holding subvolumes whose
+/// files a snapshot leaves out, or a failed snapshot, as onto another
+/// filesystem, is left to a reflink.
 fn snapshot_root(volumes: &impl Subvolumes, source: &Path, destination: &Path) -> bool {
-    volumes.is_root(source) && volumes.snapshot(source, destination).is_ok()
+    volumes.is_root(source)
+        && !volumes.holds_subvolumes(source)
+        && volumes.snapshot(source, destination).is_ok()
 }
 
 /// [`clone_tree`] by APFS clones or reflinks of every file.
