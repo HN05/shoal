@@ -241,8 +241,11 @@ impl Manager {
             CopyPlace::Commit => None,
         };
         let from = branch.clone().unwrap_or_else(|| requested.clone());
-        let name = (new.options.name.clone())
-            .unwrap_or_else(|| SpaceName::derive(&requested, "workspace"));
+        let name = match &new.options.name {
+            Some(given) => given.checked()?,
+            None => SpaceName::derive(&requested, "workspace"),
+        };
+        let chosen = new.path.is_none();
         let path = self
             .new_workspace_path(repo, &from, new.path.clone())
             .await?;
@@ -265,7 +268,7 @@ impl Manager {
             )
         };
         let base_branch = branch.and(source.base_branch.clone());
-        self.insert_workspace(record, base_branch, new.parent.clone())
+        self.insert_workspace(record, base_branch, new.parent.clone(), chosen)
             .await
     }
 

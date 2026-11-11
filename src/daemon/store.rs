@@ -169,6 +169,25 @@ pub fn free_directory(db: &Connection, base: &str) -> Result<String> {
     Ok(free.expect("an unused suffix exists"))
 }
 
+/// Refuse `path`, a directory Shoal named for a new workspace, when another
+/// workspace's directory took its name since it was chosen, which a start in
+/// another repository may have done meanwhile.
+pub fn ensure_directory_free(db: &Connection, path: &std::path::Path) -> Result<()> {
+    let name = path.file_name().unwrap_or_default();
+    let taken = db
+        .prepare("SELECT path FROM workspaces")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|recorded| std::path::Path::new(recorded).file_name() == Some(name));
+    anyhow::ensure!(
+        !taken,
+        "another workspace took the directory name {} meanwhile; run the command again",
+        name.to_string_lossy()
+    );
+    Ok(())
+}
+
 /// A recorded checkout or workspace that lies in `directory`.
 pub fn checkout_within(
     db: &Connection,

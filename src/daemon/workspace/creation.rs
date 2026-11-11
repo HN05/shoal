@@ -152,8 +152,12 @@ impl Manager {
             WorkspaceSource::Existing { .. } => None,
         }
         .or(below);
+        let chosen = path.is_none();
         let path = self.new_workspace_path(repo, &name, path).await?;
-        let name = (options.name.clone()).unwrap_or_else(|| SpaceName::derive(&name, "workspace"));
+        let name = match &options.name {
+            Some(given) => given.checked()?,
+            None => SpaceName::derive(&name, "workspace"),
+        };
         let workspace = Workspace {
             setup_skipped: options.skip_setup,
             disposable: options.disposable,
@@ -171,7 +175,7 @@ impl Manager {
             None => Placement::Below(parent),
         };
         let workspace = self
-            .insert_workspace_as(workspace, base_branch, placement)
+            .insert_workspace_as(workspace, base_branch, placement, chosen)
             .await?;
         let mut result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
@@ -215,14 +219,17 @@ impl Manager {
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`
     /// and below `parent`, refusing a parent chat being removed, which takes
-    /// no new workspace. Returns the record with the number it took.
+    /// no new workspace, and a directory Shoal chose, when `chosen`, whose
+    /// name another workspace took meanwhile. Returns the record with the
+    /// number it took.
     pub(super) async fn insert_workspace(
         &self,
         record: Workspace,
         base_branch: Option<String>,
         parent: Option<SpaceId>,
+        chosen: bool,
     ) -> Result<Workspace> {
-        self.insert_workspace_as(record, base_branch, Placement::Below(parent))
+        self.insert_workspace_as(record, base_branch, Placement::Below(parent), chosen)
             .await
     }
 
@@ -233,6 +240,7 @@ impl Manager {
         record: Workspace,
         base_branch: Option<String>,
         placement: Placement,
+        chosen: bool,
     ) -> Result<Workspace> {
         let record = match &placement {
             Placement::Replacing(converting) => converting.workspace(record),
@@ -256,6 +264,9 @@ impl Manager {
                     replaced,
                 )?;
                 store::ensure_path_unrecorded(tx, &record.path)?;
+                if chosen {
+                    store::ensure_directory_free(tx, &record.path)?;
+                }
                 store::ensure_path_outside_moves(tx, &record.path)?;
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?

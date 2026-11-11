@@ -53,6 +53,12 @@ impl SpaceName {
         Self(shortened(name))
     }
 
+    /// The name as [`Self::parse`] reads it, refusing one a request sent
+    /// that someone could not have set, since requests read names verbatim.
+    pub fn checked(&self) -> Result<Self> {
+        Self::parse(&self.0)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

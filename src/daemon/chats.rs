@@ -111,8 +111,9 @@ impl Manager {
         &self,
         repository: Option<crate::repository::Selector>,
         workspace: Option<&SpaceSelector>,
-        new: NewChat,
+        mut new: NewChat,
     ) -> Result<Chat> {
+        new.name = new.name.checked()?;
         let (repository, workspace) = match (workspace, repository) {
             (Some(selector), _) => {
                 let workspace = self.chat_workspace(selector).await?;

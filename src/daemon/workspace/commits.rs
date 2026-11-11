@@ -124,7 +124,10 @@ impl Manager {
         // record, so one whose creation fails is still there.
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
-        let name = options.name.clone().unwrap_or(start.name);
+        let name = match &options.name {
+            Some(given) => given.checked()?,
+            None => start.name,
+        };
         let workspace = self
             .record_commit_workspace(
                 repo,
@@ -371,7 +374,7 @@ impl Manager {
             disposable: options.disposable,
             ..Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing)
         };
-        self.insert_workspace(workspace, None, parent).await
+        self.insert_workspace(workspace, None, parent, true).await
     }
 
     /// Check out `head` and configure the worktree with `files` written into

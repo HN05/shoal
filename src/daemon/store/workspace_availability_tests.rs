@@ -27,3 +27,16 @@ fn a_branch_belongs_to_one_workspace_of_its_repository() -> Result<()> {
     ensure_branch_available(&tx, &"repo".into(), Some("topic"), Some(&owner))?;
     Ok(())
 }
+
+#[test]
+fn a_chosen_directory_name_belongs_to_one_workspace_of_any_repository() -> Result<()> {
+    let db = database()?;
+    // The owner's directory, `/worker`, has the name in another repository's directory too.
+    let error = ensure_directory_free(&db, std::path::Path::new("/other/worker")).unwrap_err();
+    assert!(
+        error.to_string().contains("run the command again"),
+        "{error:#}"
+    );
+    ensure_directory_free(&db, std::path::Path::new("/other/worker-2"))?;
+    Ok(())
+}

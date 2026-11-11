@@ -42,3 +42,40 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
         "Plan: summary with shoal done"
     );
 }
+
+#[tokio::test]
+async fn a_request_cannot_create_a_space_under_a_name_no_one_could_set() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // Requests read names verbatim, as stored records do.
+    for name in ["   ", "two\nlines", "a\u{202e}b", &"x".repeat(41)] {
+        let options = crate::protocol::CreationOptions {
+            name: Some(name.to_owned().into()),
+            ..Default::default()
+        };
+        let new = crate::daemon::workspace::NewWorkspace {
+            options,
+            ..Default::default()
+        };
+        let refused = manager
+            .create_workspace_with(&repo.id, "topic".into(), None, new)
+            .await;
+        assert!(refused.is_err(), "{name:?}");
+        let chat = manager
+            .start_chat(
+                repo.id.clone().into(),
+                name.to_owned().into(),
+                "claude".into(),
+                std::process::id(),
+                None,
+                false,
+            )
+            .await;
+        assert!(chat.is_err(), "{name:?}");
+    }
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+}
