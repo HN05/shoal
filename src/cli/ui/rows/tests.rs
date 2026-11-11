@@ -176,7 +176,7 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
         serde_json::from_value(serde_json::json!({
             "job": {"handle": "h", "id": 4, "run": 1, "name": "rust", "labels": ["shoal"]},
             "run": {"url": "", "workflow": "ci.yml", "commit": "abc", "trigger": {"pull": {"number": 12}}},
-            "workspace_id": pull.id,
+            "space_ids": [pull.id],
         }))
         .unwrap(),
     ));

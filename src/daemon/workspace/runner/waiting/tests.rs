@@ -134,10 +134,10 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
             number: PullNumber::new(12)
         }
     );
-    assert_eq!(first.workspace_id.as_ref(), Some(&pull.id));
+    assert_eq!(first.space_ids, std::slice::from_ref(&pull.id));
     assert_eq!(queued[0].name, "ci-rust-4");
     let second = queued[1].job.as_ref().unwrap();
-    assert_eq!(second.workspace_id.as_ref(), Some(&topic.id));
+    assert_eq!(second.space_ids, std::slice::from_ref(&topic.id));
 
     // Polling again queues nothing twice.
     manager.refresh_waiting_jobs().await.unwrap();
@@ -195,7 +195,7 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
         })
         .await
         .unwrap();
-    let queued = |handle: &str, workspace: Option<SpaceId>| QueuedJob {
+    let queued = |handle: &str, space_ids: Vec<SpaceId>| QueuedJob {
         job: serde_json::from_value(json!({
             "handle": handle, "id": 1, "run": 2, "name": handle, "labels": ["shoal"],
         }))
@@ -207,10 +207,12 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
             trigger: Trigger::Other,
             reference: None,
         },
-        workspace_id: workspace,
-        chat_ids: Vec::new(),
+        space_ids,
     };
-    let (unlinked, linked) = (queued("unlinked", None), queued("linked", Some(topic.id)));
+    let (unlinked, linked) = (
+        queued("unlinked", Vec::new()),
+        queued("linked", vec![topic.id]),
+    );
     let id = repo.id.clone();
     manager
         .store

@@ -723,7 +723,7 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
         "{}",
         job.path.display()
     );
-    assert_eq!(named.workspace_id.as_ref(), Some(&topic.id));
+    assert_eq!(named.space_ids, std::slice::from_ref(&topic.id));
     let linked = manager.linked_job_workspaces(&topic.id).await.unwrap();
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].id, claimed[0].workspace_id);
@@ -752,6 +752,25 @@ async fn a_waiting_job_lists_with_its_branchs_workspace_and_what_holds_it() {
     assert_eq!(waiting[0].held_by, Some(crate::model::HeldBy::Permits));
 }
 
+/// Record `space` as watching the PR `url`, or as watching none.
+async fn watch_pull(manager: &Manager, space: &SpaceId, url: Option<String>) {
+    let space = space.clone();
+    manager
+        .store
+        .run(move |db| {
+            match url {
+                Some(url) => db.execute(
+                    "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                    rusqlite::params![space, json!({"url": url}).to_string()],
+                )?,
+                None => db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [space])?,
+            };
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     let fixture = fixture(
@@ -775,33 +794,25 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     let (chat, _process) =
         crate::daemon::test_support::chat(manager, "talk", "chat", Some(&repository), None).await;
     let url = format!("http://{}/team/repo/pulls/12", fixture.server.host);
-    let linking = [pull.id.clone(), chat.id.clone()];
-    manager
-        .store
-        .run(move |db| {
-            for space in &linking {
-                db.execute(
-                    "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                    rusqlite::params![space, json!({"url": url}).to_string()],
-                )?;
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
+    watch_pull(manager, &pull.id, Some(url.clone())).await;
     let other = hold_the_builds_permit(&fixture).await;
     admit_and_claim(manager).await;
     manager.dispatch_queue().await.unwrap();
+    let chat_status = || async {
+        manager
+            .space_status(&SpaceSelector::id(&chat.id))
+            .await
+            .unwrap()
+    };
+    assert!(chat_status().await.waiting_jobs.is_empty());
 
-    // Waiting, the job lists in the chat's status with what holds it.
-    let status = manager
-        .space_status(&SpaceSelector::id(&chat.id))
-        .await
-        .unwrap();
+    // Linked after the job queued, the chat lists it waiting with what
+    // holds it, after the workspace that links the PR too.
+    watch_pull(manager, &chat.id, Some(url)).await;
+    let status = chat_status().await;
     assert_eq!(status.waiting_jobs.len(), 1);
     let waiting = status.waiting_jobs[0].job.as_ref().unwrap();
-    assert_eq!(waiting.workspace_id.as_ref(), Some(&pull.id));
-    assert_eq!(waiting.chat_ids, std::slice::from_ref(&chat.id));
+    assert_eq!(waiting.space_ids, [pull.id.clone(), chat.id.clone()]);
     assert_eq!(
         status.waiting_jobs[0].held_by,
         Some(crate::model::HeldBy::Permits)
@@ -823,14 +834,10 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let status = manager
-        .space_status(&SpaceSelector::id(&chat.id))
-        .await
-        .unwrap();
+    let status = chat_status().await;
     assert!(status.waiting_jobs.is_empty());
     assert_eq!(status.jobs.len(), 1);
     assert_eq!(status.jobs[0].id, claimed[0].workspace_id);
-    assert_eq!(claimed[0].job.workspace_id.as_ref(), Some(&pull.id));
     assert!(
         manager
             .ancestors(&claimed[0].workspace_id)
@@ -838,6 +845,10 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
             .unwrap()
             .is_empty()
     );
+
+    // Unlinked, the chat lists it no more, and the workspace still does.
+    watch_pull(manager, &chat.id, None).await;
+    assert!(chat_status().await.jobs.is_empty());
     let linked = manager.linked_job_workspaces(&pull.id).await.unwrap();
     assert_eq!(linked.len(), 1);
 }

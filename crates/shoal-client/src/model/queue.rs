@@ -88,20 +88,10 @@ pub enum HeldBy {
 pub struct QueuedJob {
     pub job: crate::forge::ci::runner::WaitingJob,
     pub run: crate::forge::ci::runner::JobRun,
-    /// The workspace that links the run's PR, or owns the branch it ran on.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace_id: Option<SpaceId>,
-    /// The chats that link the run's PR.
+    /// The spaces its run is for: the workspace that links the run's PR or
+    /// owns the branch it ran on, first, then the chats that link its PR.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chat_ids: Vec<SpaceId>,
-}
-
-impl QueuedJob {
-    /// Whether its run is for the space `id`: the workspace or a chat its
-    /// run links.
-    pub fn is_for(&self, id: &SpaceId) -> bool {
-        self.workspace_id.as_ref() == Some(id) || self.chat_ids.contains(id)
-    }
+    pub space_ids: Vec<SpaceId>,
 }
 
 impl QueueEntry {

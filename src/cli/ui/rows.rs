@@ -166,17 +166,16 @@ impl<'a> Listed<'a> {
     }
 
     /// The space it lists under: its parent, or for a CI job's workspace,
-    /// which has none, the workspace its run's PR or branch links.
+    /// which has none, the first space its run is for.
     fn parent(&self) -> Option<&'a SpaceId> {
         let parent = match self {
             Self::Workspace(workspace) => workspace.parent.as_ref(),
             Self::Chat(chat) => chat.parent.as_ref(),
         };
         let linked = match self {
-            Self::Workspace(workspace) => workspace
-                .job
-                .as_ref()
-                .and_then(|job| job.workspace_id.as_ref()),
+            Self::Workspace(workspace) => {
+                workspace.job.as_ref().and_then(|job| job.space_ids.first())
+            }
             Self::Chat(_) => None,
         };
         parent.map(|parent| &parent.id).or(linked)
