@@ -3449,11 +3449,12 @@ surviving processes. When that command is interrupted before setup starts,
 new workspace and branch, ignore the failure and continue, or keep it for
 inspection (default); a setup that never started, which the daemon refused,
 offers only retry or keep. JSON/noninteractive mode returns nonzero, keeps the
-workspace, and sends setup output to stderr. The agent `shoal start` launches
-there waits in the [agent queue](#agent-queue) for the setup, holding no
-slot, unless the prompt retries or ignores the failure, which starts it as
-before; `shoal setup` or `shoal resume <workspace>` retries the setup, after
-which the queue starts it with its mode, task and permissions. Then choose explicitly; `--skip`
+workspace, and sends setup output to stderr. The agent `shoal start` or an app
+launches there waits in the [agent queue](#agent-queue) for the setup,
+holding no slot; once a retried or ignored setup gets past the post-setup
+hook, from the prompt, `shoal setup` or `shoal resume <workspace>`, the queue
+starts it with its mode, task and permissions, and a failed hook keeps it
+waiting. Then choose explicitly; `--skip`
 leaves what setup did and is not available to workspace processes:
 
 ```sh

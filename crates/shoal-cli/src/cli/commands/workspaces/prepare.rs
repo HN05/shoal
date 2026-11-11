@@ -37,25 +37,33 @@ pub(in crate::cli::commands) async fn prepare(
         .workspace;
     if steps.setup {
         reporter.step(Step::SetupStarted).await?;
-        workspace = run_setup(ctx, &workspace).await?;
+        workspace = match run_setup(ctx, &workspace).await {
+            Ok(set_up) => set_up,
+            Err(error) => {
+                if let Some(launch) = steps.agent {
+                    leave_waiting(ctx, &workspace, *launch).await;
+                }
+                return Err(error);
+            }
+        };
         reporter.step(Step::Ready).await?;
     }
     if let Some(pr) = steps.pr {
         workspace = link_pr(ctx, workspace, &pr, reporter).await?;
     }
     // A workspace created without setup runs none of its hooks.
-    if steps.post_setup {
-        if !workspace.setup_skipped {
-            reporter.step(Step::PostSetupStarted).await?;
-            run_post_setup_hook(ctx, &workspace, reporter)
-                .await
-                .map_err(|error| {
-                    Failed(Failure::HookFailed {
-                        message: format!("{error:#}"),
-                    })
-                })?;
-        }
-        // The agents waiting to start in the workspace may start now.
+    if steps.post_setup && !workspace.setup_skipped {
+        reporter.step(Step::PostSetupStarted).await?;
+        run_post_setup_hook(ctx, &workspace, reporter)
+            .await
+            .map_err(|error| {
+                Failed(Failure::HookFailed {
+                    message: format!("{error:#}"),
+                })
+            })?;
+    }
+    // The agents waiting for the workspace's setup may start now.
+    if workspace.state == WorkspaceState::Ready {
         reporter.reached(Step::PostSetupEnded).await?;
     }
     let agent = match steps.agent {
@@ -166,6 +174,26 @@ async fn queue_agent(
     .await?;
     reporter.ensure_running()?;
     queue_in_workspace(ctx, workspace, &settings, launch).await
+}
+
+/// Leave `launch` waiting in the queue of `workspace`, whose setup failed,
+/// to start once a retried setup readies it; a refusal only warns.
+pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) {
+    let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
+    let queued = async {
+        let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+        queue_in_workspace(ctx, workspace, &settings, launch).await
+    };
+    let (name, number) = (&workspace.name, workspace.number);
+    match queued.await {
+        Ok(entry) => eprintln!(
+            "{} waits for the setup of {name}; `shoal resume {number}` retries it",
+            entry.agent
+        ),
+        Err(error) => {
+            eprintln!("warning: the agent of {name} cannot wait for its setup: {error:#}")
+        }
+    }
 }
 
 /// Queue `launch` in the ready `workspace`, whose effective `settings`

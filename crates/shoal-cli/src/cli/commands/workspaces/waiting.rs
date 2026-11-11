@@ -1,73 +1,59 @@
 //! The agent of a workspace whose setup failed: it waits in the agent queue
-//! for a retried setup, without the slot its start held, unless the user
-//! retries or ignores the failure at once, which takes it back to start as
-//! it would have.
-use anyhow::Result;
-
-use super::prepare::queue_in_workspace;
+//! for a retried setup, without the slot its start held, and the queue
+//! starts it once the setup succeeds.
 use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{commands::queued_agents, context::Context},
-    model::{QueueEntry, Workspace},
-    protocol::{ConfigTarget, operations::QueuedLaunch},
+    model::Workspace,
+    protocol::operations::QueuedLaunch,
     state::WorkspaceState,
 };
 
 pub(in crate::cli::commands) struct WaitingAgent {
-    launch: QueuedLaunch,
+    /// The agent the caller starts itself, which it queues; the preparation
+    /// queues the one it would have queued.
+    launch: Option<QueuedLaunch>,
     /// The starting queue entry whose slot the launch holds, until a failed
     /// setup frees it.
     pub starting: Option<QueueEntryId>,
-    /// Its entry while it waits in the queue.
-    queued: Option<QueueEntry>,
+    /// A setup failed, so the agent waits in the queue.
+    failed: bool,
 }
 
 impl WaitingAgent {
-    /// The agent `launch` would start, holding the slot of `starting`.
+    /// The agent of a start that holds the slot of `starting`, `launch` when
+    /// the caller starts it itself.
     pub(in crate::cli::commands) fn new(
-        launch: QueuedLaunch,
+        launch: Option<QueuedLaunch>,
         starting: Option<QueueEntryId>,
     ) -> Self {
         Self {
             launch,
             starting,
-            queued: None,
+            failed: false,
         }
     }
 
-    /// Free the starting slot and queue the agent in `workspace`, if its
-    /// setup failed, to start once a retried setup readies it, unless it
-    /// waits there already.
+    /// Whether a failed setup left the agent waiting in the queue.
+    pub(in crate::cli::commands) fn failed(&self) -> bool {
+        self.failed
+    }
+
+    /// Free the starting slot and queue the caller's agent in `workspace`,
+    /// if its setup failed, unless it waits there already.
     pub(super) async fn park(&mut self, ctx: &Context, workspace: &Workspace) {
-        if self.queued.is_some() || !setup_failed(ctx, workspace).await {
+        if self.failed || !setup_failed(ctx, workspace).await {
             return;
         }
-        let (name, number) = (&workspace.name, workspace.number);
+        self.failed = true;
         if let Some(entry) = self.starting.take() {
-            let error = anyhow::anyhow!("setup of {name} did not complete");
+            let error = anyhow::anyhow!("setup of {} did not complete", workspace.name);
             queued_agents::fail(ctx, &entry, &error).await;
         }
-        match queue_waiting(ctx, workspace, self.launch.clone()).await {
-            Ok(entry) => {
-                eprintln!(
-                    "{} waits for the setup of {name}; `shoal resume {number}` retries it",
-                    entry.agent
-                );
-                self.queued = Some(entry);
-            }
-            Err(error) => {
-                eprintln!("warning: the agent of {name} cannot wait for its setup: {error:#}");
-            }
+        if let Some(launch) = self.launch.take() {
+            super::prepare::leave_waiting(ctx, workspace, launch).await;
         }
-    }
-
-    /// Take the agent back from the queue, for the caller to start.
-    pub(super) async fn withdraw(&mut self, ctx: &Context) -> Result<()> {
-        if let Some(entry) = self.queued.take() {
-            crate::client::queue::remove(&ctx.paths, entry.id.to_string()).await?;
-        }
-        Ok(())
     }
 }
 
@@ -77,15 +63,4 @@ async fn setup_failed(ctx: &Context, workspace: &Workspace) -> bool {
     crate::client::workspaces::inspect(&ctx.paths, selector)
         .await
         .is_ok_and(|inspection| inspection.workspace.state == WorkspaceState::Failed)
-}
-
-/// Queue `launch` in `workspace`, whose setup failed, to wait for it.
-async fn queue_waiting(
-    ctx: &Context,
-    workspace: &Workspace,
-    launch: QueuedLaunch,
-) -> Result<QueueEntry> {
-    let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
-    queue_in_workspace(ctx, workspace, &settings, launch).await
 }

@@ -114,7 +114,7 @@ pub(super) async fn add_planned(
     // chat's session, stays its own.
     let told = (&prompt, args.as_slice(), &fork);
     // The agent a failed setup leaves waiting for its retry.
-    let waiting = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, false)?;
+    let own = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, false)?;
     let (launch, placed) = match start {
         AgentStart::Queued { now } => (
             queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?,
@@ -151,7 +151,11 @@ pub(super) async fn add_planned(
     let (name, number) = (started.workspace.name.clone(), started.workspace.number);
     let subject = (issue.as_ref().map(issues::Issue::subject))
         .or(prompt.map(crate::config::templates::Subject::told));
-    let waiting = waiting.map(|launch| WaitingAgent::new(*launch, queue_entry.clone()));
+    // Preparation leaves the agent it queues waiting itself.
+    let waiting = own.map(|own| {
+        let own = launch.is_none().then_some(*own);
+        WaitingAgent::new(own, queue_entry.clone())
+    });
     let mut rest = AfterSetup {
         pr,
         agent: launch.clone(),
@@ -159,9 +163,9 @@ pub(super) async fn add_planned(
     };
     let finished = finish_add_workspace(ctx, started, &mut rest, &agent).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
-    let queue_entry = match rest.waiting {
-        Some(waiting) => waiting.starting,
-        None => queue_entry,
+    let (queue_entry, waits) = match rest.waiting {
+        Some(waiting) => (waiting.starting.clone(), waiting.failed()),
+        None => (queue_entry, false),
     };
     let Some(Prepared {
         workspace,
@@ -176,6 +180,9 @@ pub(super) async fn add_planned(
         }
         return Ok(1);
     };
+    if waits {
+        return report_waiting_in(ctx, &workspace).await;
+    }
     if let Some(entry) = &queue_entry {
         crate::env::launch_queue_entry(entry);
     }
@@ -230,6 +237,19 @@ fn queued_launch(
         env: Some(crate::terminal::start_environment()),
         now,
     })))
+}
+
+/// Report the agent that waited in the queue for the setup of the added
+/// `workspace`, which the queue starts.
+async fn report_waiting_in(ctx: &Context, workspace: &Workspace) -> Result<i32> {
+    let entries = queued_agents::entries(ctx).await?;
+    let waiting = entries
+        .iter()
+        .find(|entry| entry.opens.as_ref() == Some(&workspace.id));
+    match waiting {
+        Some(entry) => report_queued_in(ctx, workspace, entry),
+        None => Ok(0),
+    }
 }
 
 /// Report the agent queued in the added `workspace`.
@@ -363,6 +383,11 @@ async fn finish_add_workspace(
     else {
         return Ok(None);
     };
+    // An agent left waiting by a failed setup starts from the queue.
+    let waits = rest.waiting.as_ref().is_some_and(WaitingAgent::failed);
+    if waits {
+        rest.agent = None;
+    }
     // The post-setup hook may change how the agent launches, so the shell's
     // destination waits for it; a failed hook starts no agent.
     let (prepared, post_setup) = match post_setup {
@@ -385,7 +410,7 @@ async fn finish_add_workspace(
         ),
         workspace,
     )?;
-    let starts = post_setup.is_ok().then_some(agent);
+    let starts = (post_setup.is_ok() && !waits).then_some(agent);
     if enters_added(ctx, workspace, starts).await? {
         shell::navigate(ctx, &workspace.path)?;
     }

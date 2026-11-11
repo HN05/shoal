@@ -217,8 +217,8 @@ pub(in crate::cli::commands) async fn follow_setup(
 /// The workspace a preparation left, once an interactive user decided what
 /// to do with a failed setup. A retry runs `retry`, or else setup alone,
 /// whose caller runs what follows it as after an ignored failure. A retry
-/// or an ignored failure first takes `waiting`, the agent each failure
-/// leaves waiting in the queue, back from it, since the caller starts it.
+/// A failure leaves `waiting`, the agent of the start, waiting in the queue,
+/// which starts it once a setup succeeds, so a retry queues no other.
 pub(in crate::cli::commands) async fn settle_setup(
     ctx: &Context,
     workspace: &Workspace,
@@ -266,17 +266,21 @@ async fn after_setup(ctx: &Context, workspace: &Workspace) -> Result<bool> {
 /// setup failed with `error`; a workspace whose failure is ignored has not
 /// run its post-setup hook, nor has one retried without `retry`, which says
 /// what a retry runs. A setup that did not start leaves nothing to delete or
-/// ignore. The agent `waiting` for the setup waits in the queue while the
-/// user decides, and retrying or ignoring takes it back.
+/// ignore. The agent `waiting` for the setup waits in the queue from now on.
 async fn handle_setup_failure(
     ctx: &Context,
     workspace: &Workspace,
     error: anyhow::Error,
-    retry: Option<Preparation>,
+    mut retry: Option<Preparation>,
     mut waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
     if let Some(waiting) = waiting.as_deref_mut() {
         waiting.park(ctx, workspace).await;
+        if waiting.failed()
+            && let Some(retry) = &mut retry
+        {
+            retry.agent = None;
+        }
     }
     let ran = !matches!(
         error.downcast_ref::<operations::Failed>(),
@@ -303,13 +307,7 @@ async fn handle_setup_failure(
         "{} for {name}: {error}",
         Palette::stderr(ctx.json).paint(Style::Error, failed)
     );
-    let choice = ui::setup_failure_choice(ran)?;
-    if let (ui::SetupFailureChoice::Retry | ui::SetupFailureChoice::Ignore, Some(waiting)) =
-        (&choice, waiting.as_deref_mut())
-    {
-        waiting.withdraw(ctx).await?;
-    }
-    match choice {
+    match ui::setup_failure_choice(ran)? {
         ui::SetupFailureChoice::Retry => return retry_setup(ctx, workspace, retry, waiting).await,
         ui::SetupFailureChoice::Delete => {
             delete_failed_workspace(ctx, workspace).await?;
@@ -332,8 +330,7 @@ async fn handle_setup_failure(
 }
 
 /// Run setup again, with `retry` when given, or else alone, leaving what
-/// follows it to the caller; a failure leaves the agent `waiting` for it in
-/// the queue again.
+/// follows it to the caller, with the agent `waiting` for it.
 async fn retry_setup(
     ctx: &Context,
     workspace: &Workspace,

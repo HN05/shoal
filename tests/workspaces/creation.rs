@@ -776,7 +776,9 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     install_test_script(&setup, "#!/bin/sh\n[ -f fixed ]\n");
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let repo = fixture.repo.to_str().unwrap();
-    let output = fixture.run(&["start", repo, "failing", "--here", "--agent", "waiter"]);
+    // Without a terminal its preparation queues the agent, so no follower
+    // leaves it waiting.
+    let output = fixture.run(&["start", repo, "failing", "--agent", "waiter"]);
     assert!(!output.status.success(), "{output:?}");
     let failed = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(failed["state"], "failed", "{failed}");
@@ -833,6 +835,39 @@ fn a_retry_that_fails_again_keeps_the_agent_waiting() {
 }
 
 #[test]
+fn a_retry_whose_post_setup_hook_fails_keeps_the_agent_waiting() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+    ));
+    // Setup fails once, then succeeds before a hook that fails.
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\n[ -f tried ] && exit 0\n: > tried\nexit 3\n",
+    );
+    install_test_script(fixture.repo.join("post-setup.sh"), "#!/bin/sh\nexit 4\n");
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = fixture.interactive(
+        &["start", repo, "failing", "--here", "--agent", "waiter"],
+        "r\n",
+    );
+    assert!(!output.status.success(), "{transcript}");
+    let ready = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(ready["state"], "ready", "{ready}");
+    let entries = fixture.ok(&["queue"]);
+    assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
+    assert_eq!(
+        entries[0]["blockers"],
+        serde_json::json!(["setup of failing"])
+    );
+    let path = Path::new(ready["path"].as_str().unwrap());
+    assert!(!path.join("agent-started").exists());
+}
+
+#[test]
 fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     let fixture = Fixture::new();
     fixture.add("existing");
@@ -849,6 +884,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         bin.join("codex"),
         "#!/bin/sh\nprintf agent > agent-started\n",
     );
+    install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
     let (ignored, transcript) = fixture.interactive(
         &[
             "start",
@@ -872,9 +908,12 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         .as_str()
         .unwrap()
         .to_owned();
-    // Preparation goes on past the ignored failure, hook first.
+    // Preparation goes on past the ignored failure, hook first, and the
+    // agent the failure left waiting starts from the queue.
     assert!(Path::new(&ignored_path).join("hook-ran").exists());
-    assert!(Path::new(&ignored_path).join("agent-started").exists());
+    wait_until("the waiting agent start", || {
+        Path::new(&ignored_path).join("agent-started").exists()
+    });
     let (deleted, transcript) = fixture.interactive(
         &["start", fixture.repo.to_str().unwrap(), "deleted"],
         "d\ny\n",
