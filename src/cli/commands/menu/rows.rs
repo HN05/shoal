@@ -11,7 +11,7 @@ use anyhow::{Context as _, Result};
 use super::View;
 use crate::cli::commands::{inbox::Inbox, listing::ListFilter};
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{item_numbers::ItemNumber, output::inbox::Item};
 use crate::{
     cli::{
@@ -62,7 +62,7 @@ pub(super) enum Row {
     SyncFailed(RepositoryId),
     Workspace(SpaceId),
     /// A notification, by the name its workspace had, if any.
-    Notification(String),
+    Notification(Option<SpaceName>),
     Add,
 }
 
@@ -124,7 +124,12 @@ impl Row {
             Self::Cleanup => "cleanup:".into(),
             Self::SyncFailed(repository) => format!("sync-failed:{repository}"),
             Self::Workspace(workspace) => workspace.to_string(),
-            Self::Notification(name) => format!("notification:{name}"),
+            Self::Notification(name) => {
+                format!(
+                    "notification:{}",
+                    name.as_ref().map_or("", SpaceName::as_str)
+                )
+            }
             Self::Add => ADD_ENTRY.into(),
         }
     }
@@ -137,7 +142,9 @@ impl Row {
             return Ok(Self::Workspace(SpaceId::from(id)));
         };
         if kind == "notification" {
-            return Ok(Self::Notification(rest.to_owned()));
+            return Ok(Self::Notification(
+                (!rest.is_empty()).then(|| SpaceName::from(rest)),
+            ));
         }
         if kind == "untracked" {
             return Ok(Self::Untracked(decode_path(rest)?));
@@ -193,7 +200,7 @@ impl Row {
                 workspace: space, ..
             }
             | Self::Workspace(space) => Some(SpaceSelector::id(space)),
-            Self::Notification(name) => (!name.is_empty()).then(|| SpaceSelector::parse(name)),
+            Self::Notification(name) => name.as_ref().map(SpaceSelector::from),
             Self::Untracked(_) | Self::Cleanup | Self::SyncFailed(_) | Self::Add => None,
         }
     }
@@ -239,16 +246,7 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
     mark_read(ctx, &notifications).await?;
     Ok(notifications
         .iter()
-        .map(|notification| {
-            Row::Notification(
-                notification
-                    .workspace
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_default(),
-            )
-            .id()
-        })
+        .map(|notification| Row::Notification(notification.workspace.clone()).id())
         .zip(labels)
         .collect())
 }
