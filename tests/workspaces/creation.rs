@@ -803,9 +803,27 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     assert!(!changed.status.success(), "{changed:?}");
     let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(kept["state"], "failed", "{kept}");
-    fixture.ok(&["resume", &fixture.id("failing")]);
-    let ready = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
-    assert_eq!(ready["state"], "ready", "{ready}");
+    // Other spaces beside it are refused before any setup runs.
+    fixture.ok(&["start", repo, "plain", "--skip-setup"]);
+    let mixed = fixture.run(&["resume", &fixture.id("failing"), &fixture.id("plain")]);
+    assert!(!mixed.status.success(), "{mixed:?}");
+    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(kept["state"], "failed", "{kept}");
+
+    // Several failed setups resume together in one result.
+    assert!(!fixture.run(&["start", repo, "second"]).status.success());
+    let second = &fixture.ok(&["status", &fixture.id("second")])["workspace"];
+    fs::write(
+        Path::new(second["path"].as_str().unwrap()).join("fixed"),
+        "",
+    )
+    .unwrap();
+    let resumed = fixture.ok(&["resume", &fixture.id("failing"), &fixture.id("second")]);
+    assert_eq!(resumed.as_array().unwrap().len(), 2, "{resumed}");
+    for name in ["failing", "second"] {
+        let ready = &fixture.ok(&["status", &fixture.id(name)])["workspace"];
+        assert_eq!(ready["state"], "ready", "{ready}");
+    }
     wait_until("the waiting agent start", || {
         path.join("agent-started").exists()
     });

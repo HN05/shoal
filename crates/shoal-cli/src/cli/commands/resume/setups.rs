@@ -3,18 +3,17 @@
 use anyhow::{Result, ensure};
 
 use super::targets::Selected;
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{commands::workspaces, context::Context},
+    cli::{commands::workspaces, context::Context, output::Style},
     model::Workspace,
     state::WorkspaceState,
 };
 
-/// Retry the setup of the selected workspaces whose setup failed, taking
-/// them out of `selected`. Returns the exit code once nothing else is
-/// selected, `None` while something is. A `changing` --permission is
-/// refused, since the agents waiting for those setups keep the permissions
-/// they were started with.
+/// Retry the setup of the selected workspaces whose setup failed, when the
+/// selection names only such workspaces, and report them together; `None`
+/// when it names none. Other spaces beside them, or a `changing`
+/// --permission, which the agents waiting for those setups cannot take, are
+/// refused before any setup runs.
 pub(super) async fn retry_failed(
     ctx: &Context,
     selected: &mut Selected,
@@ -25,16 +24,59 @@ pub(super) async fn retry_failed(
         return Ok(None);
     };
     ensure!(
+        selected.is_empty(),
+        "the setup of {} failed; resume the workspaces whose setup failed apart from other spaces",
+        first.name
+    );
+    ensure!(
         !changing,
         "the setup of {} failed, and the agent waiting for it keeps the permissions it was started with; resume it without --permission",
         first.name
     );
-    let mut code = 0;
-    for workspace in failed {
-        let selector = SpaceSelector::id(&workspace.id);
-        code = code.max(workspaces::setup(ctx, Some(selector)).await?);
+    let mut set_up = Vec::new();
+    let mut errors = Vec::new();
+    for workspace in &failed {
+        match retry(ctx, workspace).await {
+            Ok(Some(workspace)) => set_up.push(workspace),
+            Ok(None) => {}
+            Err(error) => errors.push(error),
+        }
     }
-    Ok(selected.is_empty().then_some(code))
+    report(ctx, set_up, errors, failed.len())
+}
+
+/// Run `workspace`'s setup and its post-setup hook again; `None` when the
+/// user kept or deleted the workspace after it failed again.
+async fn retry(ctx: &Context, workspace: &Workspace) -> Result<Option<Workspace>> {
+    match workspaces::setup_workspace(ctx, workspace, true).await? {
+        Some(set_up) => set_up.finish(ctx).await.map(Some),
+        None => Ok(None),
+    }
+}
+
+/// Report the workspaces `set_up` of the `retried` ones in one result, and
+/// each failure; one that failed alone is the command's error.
+fn report(
+    ctx: &Context,
+    set_up: Vec<Workspace>,
+    mut errors: Vec<anyhow::Error>,
+    retried: usize,
+) -> Result<Option<i32>> {
+    if set_up.is_empty() && errors.len() == 1 {
+        return Err(errors.remove(0));
+    }
+    for error in &errors {
+        eprintln!("warning: {error:#}");
+    }
+    let names: Vec<_> = set_up
+        .iter()
+        .map(|workspace| workspace.name.to_string())
+        .collect();
+    if !names.is_empty() {
+        let text = format!("Set up {}", names.join(", "));
+        ctx.emit_styled(Style::Success, &text, &set_up)?;
+    }
+    Ok(Some(i32::from(set_up.len() < retried)))
 }
 
 /// The selected workspaces whose setup failed, which leave the selection.
