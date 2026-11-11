@@ -202,6 +202,10 @@ impl FakeDaemon {
                     .success()
             );
         }
+        // Commands on a terminal take the picker's path only where they find
+        // fzf, so the runner's must not decide it. These tests refuse before
+        // any picker opens, so one that opens fails.
+        support::install_test_script(root.path().join("bin/fzf"), "#!/bin/sh\nexit 1\n");
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         let socket = root.path().join("state/daemon.sock");
         let repo_path = root.path().to_owned();
