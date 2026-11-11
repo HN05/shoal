@@ -293,27 +293,17 @@ impl Manager {
     }
 
     /// Give the chat `chat` the name `name`, which must be free as a new
-    /// chat's, and move its files to that name.
+    /// chat's.
     pub async fn rename_chat(&self, chat: SpaceId, name: SpaceName) -> Result<RenamedChat> {
-        let (paths, owner) = (self.paths.clone(), self.root_dir_owner());
-        // The store's one thread moves the files after the rename commits,
-        // so no other rename or chat start reaches either name in between.
-        self.store
-            .run(move |db| {
-                let (old, renamed) =
-                    store::write_transaction(db, |tx| rename(tx, &owner, &chat, &name))?;
-                // The chat has its new name even when its files stay behind.
-                if old.name != renamed.name
-                    && let Err(error) = move_chat_files(&paths, &old, &renamed)
-                {
-                    log!("chat {}: {error:#}", renamed.id);
-                }
-                Ok(RenamedChat {
-                    chat: renamed,
-                    previous_name: old.name,
-                })
-            })
-            .await
+        let owner = self.root_dir_owner();
+        let (old, renamed) = self
+            .store
+            .write(move |tx| rename(tx, &owner, &chat, &name))
+            .await?;
+        Ok(RenamedChat {
+            chat: renamed,
+            previous_name: old.name,
+        })
     }
 
     /// Make process `pid` the one whose life a running chat lasts.
@@ -795,16 +785,6 @@ fn rename(
         .find(|running| running.id == *chat)
         .with_context(|| format!("no running chat {chat}"))?;
     if old.name != *name {
-        // The starting chat's files are not open yet under its name.
-        ensure!(
-            !store::exists(
-                tx,
-                "SELECT 1 FROM chats WHERE id=?1 AND starting",
-                [&old.id]
-            )?,
-            "chat {} is still starting; rename it once it runs",
-            old.name
-        );
         store::ensure_name_available(tx, name, None)?;
         tx.execute(
             "UPDATE chats SET name=?2 WHERE id=?1",
@@ -816,21 +796,6 @@ fn rename(
         ..old.clone()
     };
     Ok((old, renamed))
-}
-
-/// Move the files kept under `old`'s name to `renamed`'s, replacing those
-/// a removed chat of that name left. A running session keeps writing to the
-/// log it holds open.
-fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> Result<()> {
-    let (from, to) = (paths.chat_files(old), paths.chat_files(renamed));
-    for extension in [crate::paths::SESSION_LOG, crate::paths::SESSION_PROMPT] {
-        let (from, to) = (from.with_extension(extension), to.with_extension(extension));
-        match std::fs::rename(&from, &to) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            moved => moved.with_context(|| format!("cannot move {}", from.display()))?,
-        }
-    }
-    Ok(())
 }
 
 /// Make `process` the one the running chat `chat` runs as. A stopped
@@ -1005,6 +970,7 @@ fn forget_unstarted(db: &mut Connection, id: &SpaceId, process: &Identity) -> Re
 
 mod agents;
 mod done;
+mod files;
 mod processes;
 mod removal;
 mod removing;

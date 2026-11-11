@@ -1876,8 +1876,8 @@ it in place in this terminal. A Happy chat
 starts detached in the checkout as `shoal happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
-prompts are delivered. Its output and any saved first message replace those of
-an earlier chat with its name, at `<state>/chats/<name>.log` and `.prompt.md`;
+prompts are delivered. Its output and any saved first message are kept at
+`<state>/chats/<id>.log` and `.prompt.md`, named after the chat's ID;
 `--json` reports
 the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 `happy_daemon_recorded`. A chat's agent carries a scope of its own, which
@@ -1947,8 +1947,7 @@ never moves to another directory: one about another workspace is a new chat.
 `shoal rename [chat] NAME` gives a running chat a new name that is free as
 a new chat's would be, and frees the old one. Without a space it gives the
 current workspace a title, else renames the chat it runs in, else the current
-checkout's only running chat, else offers a picker. A Happy chat's log and saved first
-message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
+checkout's only running chat, else offers a picker. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs. The tab,
 window or block the chat runs in takes the new name while it still shows the
 old one; one the user named keeps its label. `shoal rename --request [chat]`

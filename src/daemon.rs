@@ -292,6 +292,10 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     {
         log!("{error:#}");
     }
+    let chat_files = manager.rekey_chat_files();
+    if let Err(error) = startup.step("naming chat files", chat_files).await {
+        log!("{error:#}");
+    }
     let sessions = manager.cleanup_orphan_sessions();
     startup.step("cleaning up orphan sessions", sessions).await;
     Ok(manager)

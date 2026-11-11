@@ -107,9 +107,9 @@ impl Paths {
     }
 
     /// Where a chat started detached keeps its log and first message, named
-    /// after the chat so a later chat with that name replaces them.
+    /// after the chat's ID, without an extension.
     pub fn chat_files(&self, chat: &crate::model::Chat) -> PathBuf {
-        self.state.join("chats").join(&chat.name)
+        self.state.join("chats").join(chat.id.as_str())
     }
 
     /// Where each running review keeps its detached checkout and its
