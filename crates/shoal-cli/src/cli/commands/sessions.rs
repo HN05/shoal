@@ -15,7 +15,7 @@ use crate::{
     },
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
-    sessions::Origin,
+    sessions::{HostName, Origin},
     terminal::Session,
 };
 
@@ -72,21 +72,26 @@ fn chosen_session<'a>(
 
 /// The name of the terminal session `shoal attach` takes in which the
 /// daemon recorded the agent of the workspace with the ID `id` running,
-/// only the session `named` when given.
+/// only the session with `key` when given.
 pub(super) async fn agent_terminal_session(
     ctx: &Context,
     id: &SpaceId,
-    named: Option<&str>,
+    key: Option<(HostName, &str)>,
 ) -> Result<Option<String>> {
     let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
-    Ok((target.sessions(ctx).await?)
-        .into_iter()
-        .find(|session| {
-            session.agent.is_some()
-                && session.stopped.is_none()
-                && named.is_none_or(|named| session.name == named)
-        })
-        .map(|session| session.name))
+    let session = agent_session(target.sessions(ctx).await?, key);
+    Ok(session.map(|session| session.name))
+}
+
+/// The one of `sessions` where an agent runs that Shoal has not stopped,
+/// only the session with `key` when given: its host and the name that host
+/// knows it by, since another host may give a session the same name.
+fn agent_session(sessions: Vec<Session>, key: Option<(HostName, &str)>) -> Option<Session> {
+    sessions.into_iter().find(|session| {
+        session.agent.is_some()
+            && session.stopped.is_none()
+            && key.is_none_or(|key| session.key() == key)
+    })
 }
 
 /// What `shoal attach` returns to.
@@ -190,13 +195,11 @@ impl Target {
                 session.name
             );
         };
-        if !super::queue::resume_stopped(ctx, execution, &session.name).await? {
+        if !super::queue::resume_stopped(ctx, execution, session.key()).await? {
             bail!("{}", stopped_agent(&self, protection));
         }
         let target = Self::inspected(ctx, SpaceSelector::id(&inspection.workspace.id)).await?;
-        let resumed = (target.sessions(ctx).await?)
-            .into_iter()
-            .find(|open| open.name == session.name && open.stopped.is_none())
+        let resumed = agent_session(target.sessions(ctx).await?, Some(session.key()))
             .with_context(|| format!("{} has no session {}", target.name(), session.name))?;
         Ok((target, resumed))
     }
@@ -289,3 +292,6 @@ pub(in crate::cli::commands) async fn checkout_chat(
         _ => None,
     })
 }
+
+#[cfg(test)]
+mod tests;
