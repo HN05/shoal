@@ -8,20 +8,16 @@ use anyhow::Result;
 pub(super) use config::{install_config, packaged_config};
 pub(super) use daemon::status as shoal_status;
 
-use crate::cli::{args::service::DaemonCommand, context::Context};
+use crate::cli::{args::service::DaemonCommand, context::Context, entry::Daemon};
 
-pub(super) async fn run(
-    ctx: Context,
-    command: DaemonCommand,
-    handoff: Option<crate::daemon_handoff::Handoff>,
-) -> Result<i32> {
+pub(super) async fn run(ctx: Context, command: DaemonCommand, daemon: Daemon) -> Result<i32> {
     match command {
         DaemonCommand::Install {
             dry_run,
             executable,
         } => install::install(&ctx, dry_run, executable).await,
         DaemonCommand::Run { managed } => {
-            crate::daemon::run(ctx.paths, managed, handoff).await?;
+            (daemon.run)(ctx.paths, managed, daemon.handoff).await?;
             Ok(0)
         }
         DaemonCommand::Start => daemon::start(&ctx).await,

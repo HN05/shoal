@@ -95,6 +95,7 @@ use crate::{
             workspace::WorkspaceCommand,
         },
         context::Context,
+        entry::{Daemon, RunDaemon},
         output::{Palette, Style},
         shell,
     },
@@ -233,7 +234,7 @@ fn print_help(path: &[&str]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn run(cli: Cli) -> Result<i32> {
+pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
     // The service runs without the user's tool configuration environment, and
     // skill installation does this work itself.
     if !matches!(
@@ -323,7 +324,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Resources(command) => dispatch::resources::run(ctx, command).await,
         Command::Diagnostics(command) => dispatch::diagnostics::run(ctx, command).await,
         Command::Lifecycle(command) => dispatch::lifecycle::run(ctx, command).await,
-        Command::Service(command) => dispatch::service::run(ctx, command, cli.daemon_handoff).await,
+        Command::Service(command) => {
+            let daemon = Daemon {
+                run: daemon,
+                handoff: cli.daemon_handoff,
+            };
+            dispatch::service::run(ctx, command, daemon).await
+        }
     }
 }
 

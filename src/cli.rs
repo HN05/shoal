@@ -7,6 +7,7 @@ pub mod commands;
 pub mod completion;
 pub mod context;
 mod desktop;
+pub(crate) mod entry;
 mod help;
 pub(crate) mod installed;
 pub mod internal;
