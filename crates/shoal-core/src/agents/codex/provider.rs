@@ -30,14 +30,30 @@ pub(super) fn route(
         return Ok(());
     };
     let flags = Flags::of(args);
+    let selected = selected(&flags, codex_home, directory)?;
+    let overrides = overrides(&selected, url)?;
+    place_last(args, at, &flags, overrides);
+    Ok(())
+}
+
+/// The provider a launch with `flags` uses, by the Codex config in
+/// `codex_home` and the projects of its working directory, `directory` or
+/// the one `-C` names from it.
+fn selected(flags: &Flags, codex_home: &Path, directory: &Path) -> Result<Selected> {
     let directory = match &flags.cd {
         Some(cd) => directory.join(cd),
         None => directory.to_owned(),
     };
     let config = super::layers::effective(codex_home, flags.profile().as_deref(), &directory)?;
-    let selected = Selected::of(config, &flags)?;
-    let overrides = overrides(&selected, url)?;
-    place_last(args, at, &flags, overrides);
+    Selected::of(config, flags)
+}
+
+/// An error for a built-in provider other than OpenAI's, whose base URL
+/// Codex does not let config change.
+fn ensure_movable(provider: &str) -> Result<()> {
+    if provider != "openai" && BUILT_IN_PROVIDERS.contains(&provider) {
+        bail!("Codex's built-in provider {provider:?} cannot go through Shoal's proxy");
+    }
     Ok(())
 }
 
@@ -102,9 +118,10 @@ impl Selected {
                 .unwrap_or("openai");
             (provider.to_owned(), vec!["model_provider".into()])
         });
-        let headers = config
+        let table = config
             .get("model_providers")
-            .and_then(|providers| providers.get(&provider))
+            .and_then(|providers| providers.get(&provider));
+        let headers = table
             .and_then(|provider| provider.get("env_http_headers")?.as_table())
             .cloned()
             .unwrap_or_default();
@@ -134,6 +151,7 @@ fn headers(selected: &Selected) -> toml::Value {
 /// change, gives way to Shoal's provider with the same OpenAI login, where
 /// the launch named it. The proxy forwards plain HTTP.
 fn overrides(selected: &Selected, url: &str) -> Result<Vec<OsString>> {
+    ensure_movable(&selected.provider)?;
     let url = toml::Value::String(url.to_owned());
     let headers = headers(selected);
     let overrides = match selected.provider.as_str() {
@@ -145,9 +163,6 @@ fn overrides(selected: &Selected, url: &str) -> Result<Vec<OsString>> {
                  env_http_headers={headers}}}"
             ),
         ],
-        id if BUILT_IN_PROVIDERS.contains(&id) => {
-            bail!("Codex's built-in provider {id:?} cannot go through Shoal's proxy")
-        }
         id => {
             let key = toml_edit::Key::new(id);
             vec![

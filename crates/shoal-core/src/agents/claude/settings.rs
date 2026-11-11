@@ -1,7 +1,8 @@
-//! A proxied Claude Code's `--settings`: Claude Code takes only the last
-//! one it is given, so a user's own would drop Shoal's hooks and proxy URL,
-//! and Shoal's would drop the user's. They become one, which keeps both and
-//! sends the API requests to the proxy.
+//! Claude Code's settings: the user's, and a proxied launch's `--settings`.
+//! Claude Code takes only the last `--settings` it is given, so a user's own
+//! would drop Shoal's hooks and proxy URL, and Shoal's would drop the
+//! user's. They become one, which keeps both and sends the API requests to
+//! the proxy.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
@@ -18,14 +19,34 @@ pub(super) fn merge(args: &mut Vec<OsString>, routing: &super::super::Routing) -
     if found.is_empty() {
         return Ok(());
     }
-    let mut merged = Value::Object(Map::new());
-    for found in &found {
-        merge_into(&mut merged, read(&found.value, routing.directory)?);
-    }
+    let mut merged = join(&found, routing.directory)?;
     set_base_url(&mut merged, routing.url)?;
     let path = write_private(routing.private, &merged)?;
     replace(args, &found, path.as_os_str());
     Ok(())
+}
+
+/// The settings of each of `found` merged in order, with files relative to
+/// `directory`.
+fn join(found: &[Occurrence], directory: &Path) -> Result<Value> {
+    let mut merged = Value::Object(Map::new());
+    for found in found {
+        merge_into(&mut merged, read(&found.value, directory)?);
+    }
+    Ok(merged)
+}
+
+/// The user's Claude settings, under `home` unless `CLAUDE_CONFIG_DIR`,
+/// which `variable` reads, moves them; nothing when they cannot be read.
+pub(super) fn user(variable: &dyn Fn(&str) -> Option<OsString>, home: &Path) -> Value {
+    let directory = variable(crate::env::CLAUDE_CONFIG_DIR)
+        .map(std::path::PathBuf::from)
+        .filter(|directory| directory.is_absolute())
+        .unwrap_or_else(|| home.join(".claude"));
+    std::fs::read(directory.join("settings.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or(Value::Null)
 }
 
 /// Write `settings` to a file in `private` that only the user can read.

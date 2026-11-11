@@ -2,8 +2,6 @@
 //! sources it reads, ranked as it ranks them.
 use std::{ffi::OsString, path::Path, time::Duration};
 
-use serde_json::Value;
-
 const FIVE_MINUTES: Duration = Duration::from_secs(5 * 60);
 const ONE_HOUR: Duration = Duration::from_secs(60 * 60);
 
@@ -25,7 +23,7 @@ const CREDENTIALS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
 /// which Shoal cannot see, so it counts as within them.
 pub(super) fn lifetime(variable: &dyn Fn(&str) -> Option<OsString>, home: &Path) -> Duration {
     let on = |name: &str| variable(name).is_some_and(|value| enabled(&value));
-    let settings = user_settings(variable, home);
+    let settings = super::settings::user(variable, home);
     if on("FORCE_PROMPT_CACHING_5M") {
         return FIVE_MINUTES;
     }
@@ -64,18 +62,6 @@ fn parse(text: &str) -> Option<Duration> {
 fn enabled(value: &OsString) -> bool {
     let value = value.to_string_lossy().to_ascii_lowercase();
     !matches!(value.as_str(), "" | "0" | "false" | "no" | "off")
-}
-
-/// The user's Claude settings, or nothing when they cannot be read.
-fn user_settings(variable: &dyn Fn(&str) -> Option<OsString>, home: &Path) -> Value {
-    let directory = variable(crate::env::CLAUDE_CONFIG_DIR)
-        .map(std::path::PathBuf::from)
-        .filter(|directory| directory.is_absolute())
-        .unwrap_or_else(|| home.join(".claude"));
-    std::fs::read(directory.join("settings.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or(Value::Null)
 }
 
 #[cfg(test)]
