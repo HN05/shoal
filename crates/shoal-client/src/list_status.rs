@@ -80,6 +80,21 @@ impl ListStatus {
         }
     }
 
+    /// [`Self::of_workspace`], or while nothing Shoal started runs in the
+    /// ready workspace, the status of `entry`, an agent queued to start there.
+    pub fn of_listed_workspace(
+        workspace: &Workspace,
+        stopped: bool,
+        entry: Option<&QueueEntry>,
+    ) -> Self {
+        match entry {
+            Some(entry) if workspace.state == WorkspaceState::Ready && !workspace.running => {
+                Self::of_entry(entry)
+            }
+            _ => Self::of_workspace(workspace, stopped),
+        }
+    }
+
     /// A chat is stopped until it is restored, finished when it recorded
     /// completion or blocked while its progress records what blocks it; a
     /// running one needs input while its agent does, is blocked, finished

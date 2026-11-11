@@ -2,13 +2,15 @@
 //! launches and repositories, with their status cells.
 use crate::cli::list_status::ListStatusExt;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::{SpaceId, SpaceNumber};
+use crate::client::space_ids::SpaceNumber;
 use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;
 
+mod statuses;
 mod tree;
 
+pub use statuses::Statuses;
 pub use tree::workspace_tree_rows;
 
 use anyhow::{Context as _, Result};
@@ -55,10 +57,15 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
     (status.label().into(), Some(status.style()))
 }
 
-/// The workspace's status followed by its latest review's, such as
-/// `waiting, review 17 finished: 1 blocker`.
-fn workspace_status_cell(workspace: &Workspace, status: ListStatus) -> Cell {
-    let (label, style) = status_cell(status);
+/// The workspace's status, with the place of `entry`, the agent queued in
+/// it, followed by its latest review's, such as `waiting, review 17
+/// finished: 1 blocker`.
+fn workspace_status_cell(
+    workspace: &Workspace,
+    status: ListStatus,
+    entry: Option<&QueueEntry>,
+) -> Cell {
+    let (label, style) = statuses::place_cell(status, entry);
     match &workspace.latest_review {
         Some(review) => (
             format!("{label}, review {} {}", review.id, review.status),
@@ -111,18 +118,18 @@ pub fn usage_label(usage: &WorkspaceUsage) -> String {
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
-    stopped: &HashSet<SpaceId>,
+    statuses: &Statuses,
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
-    let statuses = workspaces
+    let cells = workspaces
         .iter()
         .map(|w| {
-            let status = ListStatus::of_workspace(w, stopped.contains(&w.id));
-            (status, workspace_status_cell(w, status))
+            let status = statuses.of(w);
+            (status, workspace_status_cell(w, status, statuses.entry(w)))
         })
         .collect();
-    rows_with_status(workspaces, repositories, statuses, palette, width, true)
+    rows_with_status(workspaces, repositories, cells, palette, width, true)
 }
 
 /// `name` at `depth` in a tree, below its parent's row.
@@ -214,16 +221,6 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 8]) 
             ),
         ],
     )
-}
-
-/// Sort `workspaces` as lists show them: by status, then number.
-pub fn sort_workspaces(workspaces: &mut [Workspace], stopped: &HashSet<SpaceId>) {
-    workspaces.sort_by_key(|w| {
-        (
-            ListStatus::of_workspace(w, stopped.contains(&w.id)),
-            w.number,
-        )
-    });
 }
 
 /// `workspace_rows` with a status, which picks the marker, and a status cell

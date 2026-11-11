@@ -39,15 +39,17 @@ impl ListFilter {
         })
     }
 
-    /// `stopped` says whether `shoal stop` saved the workspace's work.
-    pub(super) fn keeps_workspace(&self, workspace: &Workspace, stopped: bool) -> bool {
-        self.keeps_repository(&workspace.repository_id)
-            && self.keeps_status(ListStatus::of_workspace(workspace, stopped))
+    /// `status` is the one lists show for the workspace.
+    pub(super) fn keeps_workspace(&self, workspace: &Workspace, status: ListStatus) -> bool {
+        self.keeps_repository(&workspace.repository_id) && self.keeps_status(status)
     }
 
+    /// An agent queued in a workspace gives the workspace its status, which
+    /// [`Self::keeps_workspace`] filters; one that opens a new workspace is
+    /// kept by its own.
     pub(super) fn keeps_entry(&self, entry: &QueueEntry) -> bool {
         self.keeps_repository(&entry.repository_id)
-            && self.keeps_status(ListStatus::of_entry(entry))
+            && (entry.workspace().is_some() || self.keeps_status(ListStatus::of_entry(entry)))
     }
 
     /// A chat without a repository is in none, which a repository filter

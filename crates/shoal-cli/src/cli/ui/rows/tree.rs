@@ -2,26 +2,30 @@
 use std::collections::HashSet;
 
 use super::{
-    Cell, aligned_to, chat_row, indented, number_cell, progress_cell, title_limit, usage_cell,
-    workspace_mode_cell, workspace_status_cell, workspace_text,
+    Cell, Statuses, aligned_to, chat_row, indented, mode_cell, number_cell, progress_cell,
+    queue_subject, statuses::place_cell, title_limit, usage_cell, workspace_mode_cell,
+    workspace_status_cell, workspace_text,
 };
 use crate::cli::list_status::{ListStatus, ListStatusExt};
 use crate::cli::output::{Palette, Style};
 use crate::client::space_ids::{SpaceId, SpaceNumber};
-use crate::model::{Chat, Workspace};
+use crate::config::modes::ModeName;
+use crate::model::{Chat, QueueEntry, Workspace};
 
-/// `workspace_rows` for workspaces and the running and stopped chats in one
-/// tree: the spaces whose parent is not listed, each followed by the spaces
-/// below it, indented, and spaces under one parent by their status, then
-/// their number. A chat row names the chat, its status and its agent.
+/// `workspace_rows` for workspaces, the running and stopped chats and the
+/// agents queued to start in new workspaces in one tree: the spaces whose
+/// parent is not listed, each followed by the spaces below it, indented, and
+/// spaces under one parent by their status, then their number. A chat row
+/// names the chat, its status and its agent, and a queued agent's row what
+/// it starts.
 pub fn workspace_tree_rows(
     workspaces: &[Workspace],
     chats: &[Chat],
-    stopped: &HashSet<SpaceId>,
+    statuses: &Statuses,
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
-    let tree = SpaceTree::new(workspaces, chats, stopped, palette);
+    let tree = SpaceTree::new(workspaces, chats, statuses, palette);
     let mut rows = Vec::new();
     for root in tree.roots() {
         tree.push(&mut rows, root, 0);
@@ -34,49 +38,57 @@ pub fn workspace_tree_rows(
         .collect()
 }
 
-/// A listed space.
+/// A listed space, or an agent queued to start in a new one.
 #[derive(Clone, Copy)]
 enum Listed<'a> {
     Workspace(&'a Workspace),
     Chat(&'a Chat),
+    Queued(&'a QueueEntry),
 }
 
 impl<'a> Listed<'a> {
-    fn id(&self) -> &'a SpaceId {
+    /// The space's ID; a queued agent's workspace has none yet.
+    fn id(&self) -> Option<&'a SpaceId> {
         match self {
-            Self::Workspace(workspace) => &workspace.id,
-            Self::Chat(chat) => &chat.id,
+            Self::Workspace(workspace) => Some(&workspace.id),
+            Self::Chat(chat) => Some(&chat.id),
+            Self::Queued(_) => None,
         }
     }
 
-    fn number(&self) -> SpaceNumber {
+    fn number(&self) -> Option<SpaceNumber> {
         match self {
-            Self::Workspace(workspace) => workspace.number,
-            Self::Chat(chat) => chat.number,
+            Self::Workspace(workspace) => Some(workspace.number),
+            Self::Chat(chat) => Some(chat.number),
+            Self::Queued(_) => None,
         }
     }
 
     /// The space it lists under: its parent, or for a CI job's workspace,
-    /// which has none, the first space its run is for.
+    /// which has none, and a queued CI job, the first space its run is for.
     fn parent(&self) -> Option<&'a SpaceId> {
         let parent = match self {
             Self::Workspace(workspace) => workspace.parent.as_ref(),
             Self::Chat(chat) => chat.parent.as_ref(),
+            Self::Queued(_) => None,
         };
-        let linked = match self {
-            Self::Workspace(workspace) => {
-                workspace.job.as_ref().and_then(|job| job.space_ids.first())
-            }
+        let job = match self {
+            Self::Workspace(workspace) => workspace.job.as_ref(),
+            Self::Queued(entry) => entry.job.as_ref(),
             Self::Chat(_) => None,
         };
+        let linked = job.and_then(|job| job.space_ids.first());
         parent.map(|parent| &parent.id).or(linked)
     }
 }
 
 /// Listed spaces arranged under their listed parents.
 struct SpaceTree<'a> {
-    /// Every listed space with its status, in the order lists show them.
+    /// Every listed space with its status, in the order lists show them:
+    /// queued agents' new workspaces, which have no number, after the
+    /// numbered spaces of their status.
     spaces: Vec<(Listed<'a>, ListStatus)>,
+    statuses: &'a Statuses,
     palette: Palette,
 }
 
@@ -84,22 +96,29 @@ impl<'a> SpaceTree<'a> {
     fn new(
         workspaces: &'a [Workspace],
         chats: &'a [Chat],
-        stopped: &HashSet<SpaceId>,
+        statuses: &'a Statuses,
         palette: Palette,
     ) -> Self {
-        let workspaces = workspaces.iter().map(|workspace| {
-            let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
-            (Listed::Workspace(workspace), status)
-        });
+        let workspaces = (workspaces.iter())
+            .map(|workspace| (Listed::Workspace(workspace), statuses.of(workspace)));
         let chats = (chats.iter()).map(|chat| (Listed::Chat(chat), ListStatus::of_chat(chat)));
-        let mut spaces: Vec<_> = workspaces.chain(chats).collect();
-        spaces.sort_by_key(|(space, status)| (*status, space.number()));
-        Self { spaces, palette }
+        let queued = (statuses.queued.iter())
+            .filter(|entry| entry.workspace().is_none())
+            .map(|entry| (Listed::Queued(entry), ListStatus::of_entry(entry)));
+        let mut spaces: Vec<_> = workspaces.chain(chats).chain(queued).collect();
+        spaces.sort_by_key(|(space, status)| (*status, space.number().is_none(), space.number()));
+        Self {
+            spaces,
+            statuses,
+            palette,
+        }
     }
 
     /// The spaces whose parent is not listed.
     fn roots(&self) -> Vec<(Listed<'a>, ListStatus)> {
-        let listed: HashSet<&SpaceId> = self.spaces.iter().map(|(space, _)| space.id()).collect();
+        let listed: HashSet<&SpaceId> = (self.spaces.iter())
+            .filter_map(|(space, _)| space.id())
+            .collect();
         (self.spaces.iter().copied())
             .filter(|(space, _)| space.parent().is_none_or(|parent| !listed.contains(parent)))
             .collect()
@@ -114,20 +133,26 @@ impl<'a> SpaceTree<'a> {
     ) {
         rows.push(match space {
             Listed::Workspace(workspace) => {
-                tree_workspace_row(workspace, status, depth, self.palette)
+                let entry = self.statuses.entry(workspace);
+                tree_workspace_row(workspace, (status, entry), depth, self.palette)
             }
             Listed::Chat(chat) => chat_row(chat, depth, self.palette),
+            Listed::Queued(entry) => queued_row(entry, status, depth, self.palette),
         });
+        let Some(id) = space.id() else {
+            return;
+        };
         let children = self.spaces.iter().copied();
-        for child in children.filter(|(child, _)| child.parent() == Some(space.id())) {
+        for child in children.filter(|(child, _)| child.parent() == Some(id)) {
             self.push(rows, child, depth + 1);
         }
     }
 }
 
+/// A workspace's row, with its status and the agent queued in it.
 fn tree_workspace_row(
     workspace: &Workspace,
-    status: ListStatus,
+    (status, entry): (ListStatus, Option<&QueueEntry>),
     depth: usize,
     palette: Palette,
 ) -> (String, [Cell; 8]) {
@@ -139,10 +164,33 @@ fn tree_workspace_row(
             (name, Some(Style::Heading)),
             (String::new(), None),
             workspace_mode_cell(workspace),
-            workspace_status_cell(workspace, status),
+            workspace_status_cell(workspace, status, entry),
             usage_cell(workspace),
             progress_cell(workspace.progress.as_ref()),
             (workspace_text(workspace), None),
+        ],
+    )
+}
+
+/// The row of an agent queued to start in a new workspace: the workspace's
+/// name, the agent's mode, its place in the queue, and what it starts.
+fn queued_row(
+    entry: &QueueEntry,
+    status: ListStatus,
+    depth: usize,
+    palette: Palette,
+) -> (String, [Cell; 8]) {
+    (
+        status.marker(palette),
+        [
+            (String::new(), None),
+            (indented(&entry.name, depth), Some(Style::Heading)),
+            (String::new(), None),
+            mode_cell(entry.mode.as_ref(), &ModeName::DEFAULT),
+            place_cell(status, Some(entry)),
+            (String::new(), None),
+            (String::new(), None),
+            (queue_subject(entry), None),
         ],
     )
 }

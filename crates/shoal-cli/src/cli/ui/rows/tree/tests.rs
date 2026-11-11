@@ -28,7 +28,7 @@ fn tree_rows_list_children_below_their_parent() {
         kind: crate::model::SpaceKind::Workspace,
         branch: Some("unlisted".into()),
     });
-    let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), plain, None);
     let expected = [
         "○ 1  orphan ",
         "○ 1  parent ",
@@ -60,7 +60,7 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
         }))
         .unwrap(),
     ));
-    let rows = workspace_tree_rows(&[job, pull], &[], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&[job, pull], &[], &Statuses::default(), plain, None);
     assert_eq!(rows.len(), 2);
     assert!(rows[0].starts_with("○ 1  pull "), "{rows:?}");
     assert!(rows[1].starts_with("○ 1  └ ci-rust-4 "), "{rows:?}");
@@ -98,12 +98,50 @@ fn spaces_under_one_parent_list_by_status_then_number() {
         numbered("busy-first", 4, true),
     ];
     workspaces[4].state = WorkspaceState::Failed;
-    let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), plain, None);
     let names: Vec<_> = (rows.iter())
         .map(|row| row.split("  ").nth(1).unwrap_or_default().trim())
         .collect();
     assert_eq!(
         names,
         ["busy-first", "busy", "failed", "idle", "parent", "└ child"]
+    );
+}
+
+fn entry(name: &str, position: Option<usize>, workspace: Option<&SpaceId>) -> QueueEntry {
+    serde_json::from_value(serde_json::json!({
+        "id": name, "kind": "launch", "repository_id": "a", "name": name,
+        "agent": "claude", "issue_title": "Add onboarding",
+        "state": if position.is_some() { "queued" } else { "starting" },
+        "position": position, "created_at": 0, "opens": workspace,
+    }))
+    .expect("a queue entry")
+}
+
+#[test]
+fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
+    let plain = Palette::stdout(true);
+    let numbered = |name: &str, number: u32| Workspace {
+        number: number.into(),
+        ..workspace("a", name, name, WorkspaceState::Ready)
+    };
+    let workspaces = [numbered("waits", 2), numbered("idle", 1)];
+    let statuses = Statuses {
+        stopped: HashSet::new(),
+        queued: vec![
+            entry("new", Some(1), None),
+            entry("in-waits", Some(2), Some(&workspaces[0].id)),
+            entry("starts", None, None),
+        ],
+    };
+    let rows = workspace_tree_rows(&workspaces, &[], &statuses, plain, None);
+    assert_eq!(
+        rows,
+        [
+            "◌    starts  starting    Add onboarding",
+            "○ 2  waits   queued (2)",
+            "○    new     queued (1)  Add onboarding",
+            "○ 1  idle    inactive",
+        ]
     );
 }
