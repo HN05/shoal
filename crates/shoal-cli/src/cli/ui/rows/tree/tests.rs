@@ -125,22 +125,26 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
         number: number.into(),
         ..workspace("a", name, name, WorkspaceState::Ready)
     };
-    let workspaces = [numbered("waits", 2), numbered("idle", 1)];
+    let mut runs = numbered("runs", 3);
+    runs.running = true;
+    let workspaces = [numbered("waits", 2), numbered("idle", 1), runs];
     let statuses = Statuses {
         stopped: HashSet::new(),
         queued: vec![
             entry("new", Some(1), None),
             entry("in-waits", Some(2), Some(&workspaces[0].id)),
             entry("starts", None, None),
+            entry("in-runs", Some(3), Some(&workspaces[2].id)),
         ],
     };
     let rows = workspace_tree_rows(&workspaces, &[], &statuses, plain, None);
     assert_eq!(
         rows,
         [
-            "◌    starts  starting    Add onboarding",
+            "◐ 3  runs    process running, queued (3)",
+            "◌    starts  starting                     Add onboarding",
             "○ 2  waits   queued (2)",
-            "○    new     queued (1)  Add onboarding",
+            "○    new     queued (1)                   Add onboarding",
             "○ 1  idle    inactive",
         ]
     );

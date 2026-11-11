@@ -74,7 +74,7 @@ impl Inbox {
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
         let existing: HashSet<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| {
-            filter.keeps_workspace(w, ListStatus::of_workspace(w, stopped.contains(&w.id)))
+            filter.keeps_workspace(w, &[ListStatus::of_workspace(w, stopped.contains(&w.id))])
         });
         // Scoped processes see the chats of their own tree. A stopped chat
         // keeps its open questions.

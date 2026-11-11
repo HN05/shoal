@@ -25,6 +25,16 @@ impl Statuses {
         )
     }
 
+    /// Every status the row of `workspace` shows: its own, and its queued
+    /// agent's when its own wins over it.
+    pub fn shown(&self, workspace: &Workspace) -> Vec<ListStatus> {
+        let status = self.of(workspace);
+        let queued = self.entry(workspace).map(ListStatus::of_entry);
+        std::iter::once(status)
+            .chain(queued.filter(|queued| *queued != status))
+            .collect()
+    }
+
     /// The agent queued to start in `workspace`.
     pub(super) fn entry(&self, workspace: &Workspace) -> Option<&QueueEntry> {
         (self.queued.iter()).find(|entry| entry.workspace() == Some(&workspace.id))
@@ -36,13 +46,24 @@ impl Statuses {
     }
 }
 
-/// The cell of `status`, naming the place of the queued agent `entry` in
-/// the queue: `queued (2)`.
+/// The cell of `status`, naming the queued agent `entry` with its place in
+/// the queue: `queued (2)`, or after a status that wins over it, such as
+/// `process running, queued (2)`.
 pub(super) fn place_cell(status: ListStatus, entry: Option<&QueueEntry>) -> Cell {
     let (label, style) = status_cell(status);
-    let place = entry.and_then(|entry| entry.position);
-    match place.filter(|_| status == ListStatus::Queued) {
-        Some(position) => (format!("{label} ({position})"), style),
+    match entry {
+        Some(entry) if ListStatus::of_entry(entry) == status => (place_label(entry), style),
+        Some(entry) => (format!("{label}, {}", place_label(entry)), style),
         None => (label, style),
+    }
+}
+
+/// A queued agent's status with its place in the queue while it waits:
+/// `queued (2)`, or `starting`.
+fn place_label(entry: &QueueEntry) -> String {
+    let label = ListStatus::of_entry(entry).label();
+    match entry.position {
+        Some(position) => format!("{label} ({position})"),
+        None => label.to_owned(),
     }
 }
