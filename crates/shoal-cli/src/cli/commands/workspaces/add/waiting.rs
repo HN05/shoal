@@ -84,7 +84,7 @@ async fn wait_for_setup(
     match queue_waiting(ctx, workspace, *launch).await {
         Ok(entry) => {
             eprintln!(
-                "{} waits for the setup of {name}; `shoal setup {number}` retries it",
+                "{} waits for the setup of {name}; `shoal resume {number}` retries it",
                 entry.agent
             );
             Some(entry)

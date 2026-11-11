@@ -151,7 +151,8 @@ starts its session again at once; `stop --interrupt` cancels the current
 turn of the child's agent, a workspace's or a chat's, which stays running;
 `resume` continues a turn an interrupt ended, queues the agents the caller
 stopped and restores the chats its restart left stopped in a background
-place, while the user resumes the ones the user stopped.
+place, while the user resumes the ones the user stopped; for a workspace
+whose setup failed, it retries the setup, and the agent waiting for it starts.
 
 A child's approval request comes to its coordinator first.
 `shoal approvals --approve <S.N>` works for a request to hold a workspace

@@ -894,7 +894,7 @@ failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose retry, delete,
 ignore (which repairs verified state first), or keep; a setup that never
 started offers only retry or keep. JSON callers get a nonzero exit.
-`setup` reruns setup explicitly; nothing retries automatically.
+`setup` and `resume` rerun setup explicitly; nothing retries automatically.
 The agent a failed `start` launches waits in the queue for the workspace's
 setup and its post-setup hook instead of holding its slot, so a retried setup
 starts it without the user restating its mode, task or permissions.

@@ -767,7 +767,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
 }
 
 #[test]
-fn a_failed_setup_leaves_its_agent_waiting_until_setup_is_retried() {
+fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     let fixture = Fixture::with_config(Some(
         "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
     ));
@@ -791,7 +791,7 @@ fn a_failed_setup_leaves_its_agent_waiting_until_setup_is_retried() {
 
     let path = Path::new(failed["path"].as_str().unwrap());
     fs::write(path.join("fixed"), "").unwrap();
-    fixture.ok(&["setup", &fixture.id("failing")]);
+    fixture.ok(&["resume", &fixture.id("failing")]);
     let ready = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(ready["state"], "ready", "{ready}");
     wait_until("the waiting agent start", || {

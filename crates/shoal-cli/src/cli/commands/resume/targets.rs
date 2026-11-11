@@ -100,6 +100,13 @@ impl Selected {
         }
     }
 
+    /// Whether nothing is selected, not even every workspace.
+    pub fn is_empty(&self) -> bool {
+        self.chats.is_empty()
+            && self.running.is_empty()
+            && self.workspaces.as_ref().is_some_and(Vec::is_empty)
+    }
+
     /// Refuse the running chats selected, which have nothing to resume.
     pub fn refuse_running(&self) -> Result<()> {
         if let Some(chat) = self.running.first() {

@@ -1,7 +1,8 @@
 //! `shoal resume`: choosing how the selected spaces resume, which the
 //! modules below carry out. Restores use saved agent identity and today's
 //! restore configuration; they queue unless asked to start now, the stopped
-//! chats restore at once, and `--discard` forgets the stopped work instead.
+//! chats restore at once, a workspace whose setup failed retries it, and
+//! `--discard` forgets the stopped work instead.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
 use crate::client::space_names::SpaceSelector;
@@ -50,6 +51,13 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     }
     let named = !targets.space.is_empty();
     let mut selected = Selected::load(ctx, targets).await?;
+    if named
+        && !discard
+        && execution.is_none()
+        && let Some(code) = setups::retry_failed(ctx, &mut selected).await?
+    {
+        return Ok(code);
+    }
     if named
         && !discard
         && execution.is_none()
@@ -192,6 +200,7 @@ pub(super) mod queue;
 pub(super) mod queued;
 pub(super) mod reports;
 mod sessions;
+mod setups;
 mod stale;
 mod targets;
 mod workspace;
