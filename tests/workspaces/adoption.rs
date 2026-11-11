@@ -226,10 +226,15 @@ fn adopt_copy_refuses_a_dangling_symlink_at_the_default_directory() {
     };
     let first = add("copy/first", "first worktree");
     let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
-    let directory = PathBuf::from(output["path"].as_str().unwrap());
-    let directory = directory.parent().unwrap();
+    // The source keeps its branch, whose suffix leaves the copy's name and
+    // directory, which are free, unsuffixed.
+    assert_eq!(output["branch"], "copy/first-2", "{output}");
+    assert_eq!(output["name"], "copy/first", "{output}");
+    let path = PathBuf::from(output["path"].as_str().unwrap());
+    assert_eq!(path.file_name().unwrap(), "copy-first");
+    let directory = path.parent().unwrap();
     let source = add("copy/second", "second worktree");
-    let planted = directory.join("copy-second-2");
+    let planted = directory.join("copy-second");
     std::os::unix::fs::symlink(fixture.root.path().join("missing"), &planted).unwrap();
     let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
     assert!(!output.status.success());

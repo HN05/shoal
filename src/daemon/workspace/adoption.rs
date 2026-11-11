@@ -105,8 +105,10 @@ impl Manager {
         source_branch: &str,
     ) -> Result<Workspace> {
         let branch = self.available_branch(repo, source_branch).await?;
-        let name = SpaceName::derive(&branch, "workspace");
-        let destination = self.new_workspace_path(repo, &branch, None).await?;
+        // A branch's suffix leaves the name and directory, which take the
+        // copied branch's, unsuffixed unless their own are taken.
+        let name = SpaceName::derive(source_branch, "workspace");
+        let destination = self.new_workspace_path(repo, source_branch, None).await?;
         ensure!(
             !destination.starts_with(source) && !source.starts_with(&destination),
             "copied workspace path overlaps the source worktree"
