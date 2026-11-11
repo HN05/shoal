@@ -156,24 +156,38 @@ impl Launch {
     /// Run the chat in a new tab or session in its checkout or worktree,
     /// focused or in the background as its mode says, where Shoal starts it
     /// in place, returning whether it ran there; otherwise it runs here. A
-    /// chat that opens on no task waits for the user to speak first.
+    /// background start waits for its place to report, as
+    /// [`Launch::hand_to_background`] does, since nothing shows it here.
     async fn start_beside(&self, ctx: &Context) -> Result<bool> {
-        let relaunch = self.relaunch(None);
         let chat = &self.chat;
-        let repository = chat.repository.registered();
-        let home = chat.home();
         let waits_for_user = chat.opening.is_none();
         let placement = terminal::Placement::of(&chat.settings, &chat.mode, false, waits_for_user);
-        terminal::start_chat(
+        let handoff = match placement {
+            terminal::Placement::Background => Some(handoff::Handoff::create(None)?),
+            terminal::Placement::Focus => None,
+        };
+        let relaunch = self.relaunch(handoff.as_ref().map(handoff::Handoff::path));
+        let started = terminal::start_chat(
             ctx,
             &chat.settings,
-            repository,
-            home.path(),
+            chat.repository.registered(),
+            chat.home().path(),
             &chat.name,
             placement,
             &relaunch,
         )
-        .await
+        .await?;
+        match (started, handoff) {
+            (terminal::ChatStarted::Here, _) => Ok(false),
+            (terminal::ChatStarted::Shown, _) => Ok(true),
+            (terminal::ChatStarted::Background(report), handoff) => {
+                if let Some(handoff) = handoff {
+                    handoff.wait().await?;
+                }
+                outln!("{report}");
+                Ok(true)
+            }
+        }
     }
 
     /// The `shoal` arguments that start this chat in the place where it

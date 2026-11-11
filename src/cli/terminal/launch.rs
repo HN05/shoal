@@ -547,12 +547,21 @@ fn agent_worker(
     )
 }
 
+/// Where [`start_chat`] started a chat.
+pub(in crate::cli) enum ChatStarted {
+    /// Nowhere: the chat runs in place.
+    Here,
+    /// In a place shown here, or a session this terminal attached to.
+    Shown,
+    /// In a background place, as the words that report it say.
+    Background(String),
+}
+
 /// Run Shoal with `args` for the chat `name` of `repository`, or of none,
 /// in `cwd`, its checkout, worktree or `root_dir`, as `placement` asks: in
 /// a new background place, or focused in a new session this terminal
 /// attaches to, as `run_agent` does for tracked agents, otherwise in a new
 /// focused place, shown here when its host does not serve this terminal.
-/// Returns whether it ran there; `false` means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
@@ -561,10 +570,10 @@ pub(in crate::cli) async fn start_chat(
     name: &SpaceName,
     placement: Placement,
     args: &[OsString],
-) -> Result<bool> {
+) -> Result<ChatStarted> {
     let host = beside(ctx, settings);
     let Some(places) = host.places() else {
-        return Ok(false);
+        return Ok(ChatStarted::Here);
     };
     let repo = groups::Repo::of_chat(repository, cwd);
     let origin = groups::beside(ctx, &host, &repo, cwd).await?;
@@ -592,14 +601,19 @@ pub(in crate::cli) async fn start_chat(
         if report_detach(attaches, name, &session).await? {
             recent::record_chat_attach(ctx, &SpaceSelector::from(name)).await;
         }
-        return Ok(true);
+        return Ok(ChatStarted::Shown);
     }
     let place = places.open(&start).await?;
     match placement {
-        Placement::Focus => show_opened(&host, places, &place, name).await?,
-        Placement::Background => outln!("Started {name} {}", places.background_place(name)),
+        Placement::Focus => {
+            show_opened(&host, places, &place, name).await?;
+            Ok(ChatStarted::Shown)
+        }
+        Placement::Background => Ok(ChatStarted::Background(format!(
+            "Started {name} {}",
+            places.background_place(name)
+        ))),
     }
-    Ok(true)
 }
 
 /// The host that starts work beside this terminal. A place a host opened for
