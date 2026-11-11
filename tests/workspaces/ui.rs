@@ -1075,7 +1075,7 @@ fn interactive_navigation_reports_missing_shell_integration() {
 }
 
 #[test]
-fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
+fn cd_previous_returns_to_the_workspace_left_and_navigates_with_json() {
     let fixture = Fixture::new();
     let first = fixture.add("first");
     let second = fixture.add("second");
@@ -1110,6 +1110,7 @@ fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
         .success()
     );
     for (from, to) in [(&second_path, &first_path), (&first_path, &second_path)] {
+        fs::write(&directive, "").unwrap();
         let output = cd(Path::new(from), &["--json", "cd", "-"]);
         assert!(
             output.status.success(),
@@ -1120,7 +1121,23 @@ fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
             serde_json::from_slice::<Value>(&output.stdout).unwrap()["path"],
             to.as_str()
         );
+        assert_eq!(fs::read_to_string(&directive).unwrap(), format!("{to}\n"));
     }
+    // A scoped process's shell is its agent's, which never moves.
+    fs::write(&directive, "").unwrap();
+    let scoped = fixture
+        .command()
+        .args(["run", "--workspace", &fixture.id("second"), "--"])
+        .args([
+            "sh",
+            "-c",
+            r#"SHOAL_SHELL_DIRECTIVE="$0" "$1" --text cd "$2""#,
+        ])
+        .arg(&directive)
+        .args([support::shoal_binary(), &fixture.id("second")])
+        .output()
+        .unwrap();
+    assert!(scoped.status.success(), "{scoped:?}");
     assert_eq!(fs::read_to_string(&directive).unwrap(), "");
     fixture.ok(&["rm", "--wait", &fixture.id("first")]);
     let removed = cd(Path::new(&second_path), &["cd", "-"]);

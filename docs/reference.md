@@ -5746,8 +5746,8 @@ the next prompt, preserving the exit status. `shoal cd` always opens fzf, `shoal
 <name>` goes directly, and `shoal cd -` switches back to the workspace it last
 left or entered. Scoped agents cannot navigate outside their worktree. Without
 the function, Shoal prints the destination and, in an interactive terminal,
-explains how to load the integration;
-`--json` returns the path without requesting navigation.
+explains how to load the integration; `--json` prints the path and navigates
+alike. A scoped process's shell, its agent's, never moves.
 The wrapper refreshes the Zsh line-editor prompt after navigation; Bash updates
 its prompt through `PROMPT_COMMAND`.
 

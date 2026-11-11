@@ -159,8 +159,11 @@ pub fn completions(shell: clap_complete::Shell) -> Result<String> {
     Ok(script)
 }
 
+/// Ask the calling shell to enter `path`, whatever the output format. A
+/// scoped process's shell is its agent's, which keeps its own working
+/// directory, so it is never moved.
 pub fn navigate(path: &Path, json: bool) -> Result<()> {
-    if json {
+    if crate::env::is_scoped() {
         return Ok(());
     }
     if let Some(destination) = std::env::var_os(crate::env::SHELL_DIRECTIVE) {
