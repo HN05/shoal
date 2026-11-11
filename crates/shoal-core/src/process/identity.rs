@@ -19,7 +19,7 @@ pub use attribution::Unattributed;
 pub(crate) use attribution::stays_unattributed;
 pub use attribution::{Scan, scan, scan_chat, scan_oneshot_runs, scan_workspaces};
 #[cfg(target_os = "linux")]
-pub(super) use linux::{process_record_unavailable, read_process_stat, stat_fields};
+pub(super) use linux::{process_record_unavailable, read_process_stat, stat_fields, sysconf};
 #[cfg(target_os = "macos")]
 pub(super) use macos::{parent, pid_info};
 use marks::left_execution;

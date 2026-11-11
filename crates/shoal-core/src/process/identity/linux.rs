@@ -212,6 +212,14 @@ pub(super) fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
         .collect())
 }
 
+/// The system configuration value `name`.
+pub(in crate::process) fn sysconf(name: libc::c_int) -> Result<u64> {
+    // SAFETY: sysconf reads a configuration value and has no other effects.
+    let value = unsafe { libc::sysconf(name) };
+    ensure!(value > 0, "invalid system configuration value");
+    Ok(value as u64)
+}
+
 /// The PIDs in process group `group`, including zombies. Linux lists
 /// process groups only per process; `getpgid` reads each one without
 /// parsing another process's `/proc` record, which may not parse.

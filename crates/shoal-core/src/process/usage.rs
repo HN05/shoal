@@ -28,20 +28,13 @@ pub fn read(pid: u32) -> Result<Option<Reading>> {
     let Some(stat) = super::identity::read_process_stat(&format!("/proc/{pid}/stat"))? else {
         return Ok(None);
     };
+    let sysconf = super::identity::sysconf;
     linux_reading(
         &stat,
         sysconf(libc::_SC_CLK_TCK)?,
         sysconf(libc::_SC_PAGESIZE)?,
     )
     .map(Some)
-}
-
-#[cfg(target_os = "linux")]
-fn sysconf(name: libc::c_int) -> Result<u64> {
-    // SAFETY: sysconf reads a configuration value and has no other effects.
-    let value = unsafe { libc::sysconf(name) };
-    ensure!(value > 0, "invalid system configuration value");
-    Ok(value as u64)
 }
 
 #[cfg(target_os = "linux")]
