@@ -90,7 +90,7 @@ fn linked_below(root: &Path, dirs: Vec<String>) -> Result<Vec<String>> {
 }
 
 /// The submodules checked out in the worktree.
-async fn initialized_submodules(worktree: &Path) -> Result<Vec<String>> {
+pub(super) async fn initialized_submodules(worktree: &Path) -> Result<Vec<String>> {
     let entries = super::run_isolated(worktree, &["ls-files", "--stage", "-z"]).await?;
     let submodules: Vec<String> = entries
         .split('\0')

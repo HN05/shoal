@@ -95,7 +95,7 @@ async fn resolved(path: &Path) -> PathBuf {
 async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result<()> {
     let mut command = super::isolated_command(repo);
     command.args(["worktree", "remove"]);
-    if matches!(files, FileRemoval::Force) {
+    if matches!(files, FileRemoval::Force) || needs_structural_force(path).await? {
         command.arg("--force");
     }
     command.arg("--").arg(path);
@@ -108,6 +108,33 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
         path.display()
     );
     Ok(())
+}
+
+/// Whether the clean worktree at `path` has checked-out submodules, which
+/// Git refuses to remove without `--force`. That also skips Git's own check
+/// for changes, so this makes it first and fails on any.
+async fn needs_structural_force(path: &Path) -> Result<bool> {
+    if !off_runtime::exists(path).await?
+        || super::copy::initialized_submodules(path).await?.is_empty()
+    {
+        return Ok(false);
+    }
+    let changes = super::run_isolated(
+        path,
+        &[
+            "status",
+            "--porcelain",
+            "--untracked-files=normal",
+            "--ignore-submodules=none",
+        ],
+    )
+    .await?;
+    ensure!(
+        changes.is_empty(),
+        "the worktree at {} has changed or untracked files",
+        path.display()
+    );
+    Ok(true)
 }
 
 /// Delete `branch`, saying why it stayed when Git refused.

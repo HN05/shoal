@@ -223,3 +223,59 @@ async fn a_deleted_worktree_is_unregistered() {
     let listed = git(&repo, &["worktree", "list", "--porcelain"]).await;
     assert!(!listed.contains("topic"), "{listed}");
 }
+
+/// A clean worktree with a checked-out submodule, which Git removes only by
+/// force, goes without one; a change in it still keeps it.
+#[tokio::test]
+async fn a_clean_worktree_with_a_submodule_is_removed() {
+    let root = tempfile::tempdir().unwrap();
+    let library_root = root.path().join("library");
+    std::fs::create_dir(&library_root).unwrap();
+    let library = repository(&library_root, "sha1");
+    let repo = repository(root.path(), "sha1");
+    let file = ["-c", "protocol.file.allow=always"];
+    let library = library.to_str().unwrap();
+    git(
+        &repo,
+        &[&file[..], &["submodule", "add", library, "lib"]].concat(),
+    )
+    .await;
+    let identity = [
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.invalid",
+    ];
+    git(
+        &repo,
+        &[&identity[..], &["commit", "-m", "Add lib"]].concat(),
+    )
+    .await;
+    let workspace = root.path().join("topic");
+    add(&repo, &workspace, "topic", Some("main")).await.unwrap();
+    git(
+        &workspace,
+        &[&file[..], &["submodule", "update", "--init"]].concat(),
+    )
+    .await;
+    std::fs::write(workspace.join("lib").join("scratch"), "notes").unwrap();
+    let refused = remove(
+        &repo,
+        &workspace,
+        FileRemoval::CleanOnly,
+        BranchRemoval::Keep,
+    )
+    .await;
+    assert!(refused.is_err());
+    assert!(workspace.join("lib/scratch").exists());
+    std::fs::remove_file(workspace.join("lib/scratch")).unwrap();
+    remove(
+        &repo,
+        &workspace,
+        FileRemoval::CleanOnly,
+        BranchRemoval::Keep,
+    )
+    .await
+    .unwrap();
+    assert!(!workspace.exists());
+}
