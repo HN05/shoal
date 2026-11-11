@@ -141,3 +141,23 @@ fn a_blocked_workspace_ranks_below_needs_input_and_above_stopped_work() {
         ListStatus::NeedsInput
     );
 }
+
+#[test]
+fn a_queued_agent_gives_its_status_to_a_workspace_where_nothing_runs() {
+    let entry: QueueEntry = serde_json::from_value(serde_json::json!({
+        "id": "entry", "kind": "restore", "repository_id": "repo", "name": "child",
+        "agent": "claude", "state": "queued", "position": 2, "created_at": 0,
+        "workspace_id": "child",
+    }))
+    .expect("a queue entry");
+    let mut workspace = coordinated(AgentState::Idle);
+    let status = |workspace: &Workspace, stopped| {
+        ListStatus::of_listed_workspace(workspace, stopped, Some(&entry))
+    };
+    assert_eq!(status(&workspace, true), ListStatus::Queued);
+    workspace.running = true;
+    assert_eq!(status(&workspace, false), ListStatus::ProcessRunning);
+    workspace.running = false;
+    workspace.state = WorkspaceState::Removing;
+    assert_eq!(status(&workspace, true), ListStatus::Removing);
+}

@@ -796,7 +796,9 @@ processes have waited for, then memory, resident on Linux and the physical
 footprint on macOS. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
-`stopped` when stopped agents or commands wait for `shoal resume` and the
+`queued (N)` while nothing Shoal started runs there and an agent waits at place N in
+the [agent queue](#agent-queue) to start in it, or `starting` once the queue
+admits it, `stopped` when stopped agents or commands wait for `shoal resume` and the
 workspace is neither done nor [blocked](#progress), `needs input`, `blocked`
 while its progress records what blocks it, `finished` after `shoal done` until
 `shoal done --undo` or `shoal resume` withdraws the completion, also while its
@@ -829,7 +831,8 @@ opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal list` with `-p`/`--print`, like a filter, `--json` or output that is not a terminal,
 prints the list instead: workspaces and running [chats](#chats), each chat with its
-agent, and each space followed by the spaces below it; `list --chats`
+agent, and each agent waiting to start in a new workspace with its place in
+the queue and what it starts, each space followed by the spaces below it; `list --chats`
 lists only the chats. `list --repo <repository>`, with or without
 `--chats` or `--status`, lists only that registered repository's workspaces,
 chats and queued agents. `list --status <status>`,

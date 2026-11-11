@@ -121,7 +121,7 @@ fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
     workspaces[0].usage = Some(usage(Some(50.0), 1 << 20));
     workspaces[0].links.issue_title = Some("Title".into());
     workspaces[1].links.issue_title = Some("Title".into());
-    let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), plain, None);
     assert_eq!(
         rows,
         [
@@ -263,7 +263,10 @@ fn workspace_rows_align_status_and_titles() {
         workspace_rows(
             &workspaces,
             &[("a".into(), "shoal".into())],
-            &HashSet::from([workspaces[0].id.clone(), workspaces[1].id.clone()]),
+            &Statuses {
+                stopped: HashSet::from([workspaces[0].id.clone(), workspaces[1].id.clone()]),
+                queued: Vec::new(),
+            },
             plain,
             None,
         ),
@@ -287,7 +290,13 @@ fn workspace_rows_align_status_and_titles() {
         workspace("b", "y", "y", WorkspaceState::Ready),
     ];
     assert_eq!(
-        workspace_rows(&workspaces, &repositories, &HashSet::new(), plain, None),
+        workspace_rows(
+            &workspaces,
+            &repositories,
+            &Statuses::default(),
+            plain,
+            None
+        ),
         [
             "○ 1  fix-login  shoal  inactive",
             "○ 1  y          app    inactive"
@@ -389,7 +398,7 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
     }))
     .unwrap();
     let plain = Palette::stdout(true);
-    let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&[], &[chat], &Statuses::default(), plain, None);
     assert_eq!(
         rows,
         ["◐ 4  worker-chat  in worker  process running  claude"]
@@ -406,7 +415,7 @@ fn a_chat_shows_its_agents_turn_state_with_its_marker() {
         .unwrap()
     };
     let plain = Palette::stdout(true);
-    let row = |chat: Chat| workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
+    let row = |chat: Chat| workspace_tree_rows(&[], &[chat], &Statuses::default(), plain, None);
     let state = |state: &str| serde_json::json!({"state": state, "since": 0});
     let running = serde_json::Value::Null;
     assert_eq!(
@@ -443,7 +452,7 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     let rows = workspace_tree_rows(
         &[worker.clone(), orchestrate],
         &[chat],
-        &HashSet::new(),
+        &Statuses::default(),
         plain,
         None,
     );
@@ -457,7 +466,7 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     );
     // A column no row has a mode for is left out.
     assert_eq!(
-        workspace_tree_rows(&[worker], &[], &HashSet::new(), plain, None),
+        workspace_tree_rows(&[worker], &[], &Statuses::default(), plain, None),
         ["○ 1  worker  inactive"]
     );
 }
@@ -494,7 +503,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
     let rows = workspace_tree_rows(
         &[working, planned],
         &[],
-        &HashSet::new(),
+        &Statuses::default(),
         Palette::stdout(true),
         None,
     );

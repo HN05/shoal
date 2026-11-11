@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context as _, Result};
 
 use super::View;
-use crate::cli::commands::{inbox::Inbox, listing::ListFilter};
+use crate::cli::commands::{inbox::Inbox, listing::ListFilter, queued_agents};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{item_numbers::ItemNumber, output::inbox::Item};
@@ -319,9 +319,12 @@ async fn space_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
     let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let palette = Palette::picker();
-    let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-    ui::sort_workspaces(&mut workspaces, &stopped);
-    let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette, ui::picker_width());
+    let statuses = ui::Statuses {
+        stopped: ui::stopped_workspaces(&ctx.paths, &workspaces),
+        queued: queued_agents::entries(ctx).await?,
+    };
+    statuses.sort(&mut workspaces);
+    let rows = ui::workspace_rows(&workspaces, &repos, &statuses, palette, ui::picker_width());
     let mut entries: Entries = workspaces
         .into_iter()
         .map(|w| w.id.into())

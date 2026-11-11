@@ -1,4 +1,4 @@
-//! Listing workspaces and queued agents.
+//! Listing workspaces, chats and queued agents.
 use anyhow::Result;
 
 use crate::cli::{
@@ -15,19 +15,20 @@ pub(in crate::cli::commands) async fn list(
     // Listing chats first ends finished ones, returning their workspaces to the user.
     let chats = chat::listed(ctx, filter).await?;
     let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-    workspaces
-        .retain(|workspace| filter.keeps_workspace(workspace, stopped.contains(&workspace.id)));
-    let queued = queued_agents::rows(ctx, &queued_agents::listed(ctx, filter).await?).await?;
+    let statuses = ui::Statuses {
+        stopped: ui::stopped_workspaces(&ctx.paths, &workspaces),
+        queued: queued_agents::listed(ctx, filter).await?,
+    };
+    workspaces.retain(|workspace| filter.keeps_workspace(workspace, statuses.of(workspace)));
     let rows = ui::workspace_tree_rows(
         &workspaces,
         &chats,
-        &stopped,
+        &statuses,
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
     );
     ctx.show(&workspaces, |_| {
-        for row in rows.into_iter().chain(queued) {
+        for row in rows {
             outln!("{row}");
         }
     })?;
