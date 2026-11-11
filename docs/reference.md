@@ -5303,7 +5303,8 @@ the space above, add `child` with its `id`, `name`, `kind` and a workspace's
 `branch`.
 `job_ended` events, when Shoal ended a [CI job](#runner) whose runner outlived
 its run, add `job` with the job's `name`, its `run`'s URL and the processes it
-`stopped` before the runner, each with its `pid` and `command`.
+`stopped` before the runner, each with its `pid` and `command`, the first 20
+of them, and `omitted`, how many more, when there were more.
 `demo_started` events, when a [demo](#demos)'s command first runs, and
 `demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,
 `preset` and, for a simulator demo, the device's `udid`.

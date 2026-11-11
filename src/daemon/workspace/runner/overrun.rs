@@ -12,7 +12,7 @@ use super::ends::ClaimedJob;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        events::JobEndedEvent,
+        events::{JobEndedEvent, StoppedProcess},
         space_processes::Selection,
         workspace::{Manager, StopRequest, executions::Save},
     },
@@ -22,6 +22,10 @@ use crate::{
 /// How long a runner may run after the forge finished its job's run, as it
 /// reports the job's end.
 pub(super) const GRACE: Duration = Duration::from_secs(60);
+
+/// The most stopped processes a job's end lists, so its event fits in a
+/// protocol frame; it counts the rest.
+const LISTED: usize = 20;
 
 impl Manager {
     /// End `job`, whose runner still runs, once it has outlived the job's
@@ -35,11 +39,7 @@ impl Manager {
             .stop_workspace_untracked(&workspace, Selection::Processes, None)
             .await?;
         self.stop_job_runner(job).await?;
-        let ended = JobEndedEvent {
-            name: job.job.job.name.clone(),
-            run,
-            stopped,
-        };
+        let ended = ended_job(job.job.job.name.clone(), run, stopped);
         self.record_job_ended(&job.workspace_id, ended).await;
         Ok(true)
     }
@@ -73,3 +73,19 @@ impl Manager {
             .await
     }
 }
+
+/// The event of the job `name` of `run` that Shoal ended after stopping
+/// `stopped`.
+fn ended_job(name: String, run: String, mut stopped: Vec<StoppedProcess>) -> JobEndedEvent {
+    let omitted = stopped.len().saturating_sub(LISTED);
+    stopped.truncate(LISTED);
+    JobEndedEvent {
+        name,
+        run,
+        stopped,
+        omitted,
+    }
+}
+
+#[cfg(test)]
+mod tests;

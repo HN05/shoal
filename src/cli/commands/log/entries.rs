@@ -353,11 +353,13 @@ fn job(event: &EventDetails) -> String {
     if job.stopped.is_empty() {
         return ended;
     }
-    let stopped = (job.stopped.iter())
+    let mut stopped: Vec<_> = (job.stopped.iter())
         .map(|process| format!("{} {}", process.pid, process.command))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("{ended}; stopped {stopped}")
+        .collect();
+    if job.omitted > 0 {
+        stopped.push(format!("{} more", job.omitted));
+    }
+    format!("{ended}; stopped {}", stopped.join(", "))
 }
 
 fn error(event: &EventDetails) -> String {
