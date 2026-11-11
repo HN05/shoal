@@ -278,4 +278,24 @@ async fn a_clean_worktree_with_a_submodule_is_removed() {
     .await
     .unwrap();
     assert!(!workspace.exists());
+    // Git still refuses once the submodule is deinitialized, since its
+    // repository stays in the worktree's Git directory.
+    add(&repo, &workspace, "deinit", Some("main"))
+        .await
+        .unwrap();
+    git(
+        &workspace,
+        &[&file[..], &["submodule", "update", "--init"]].concat(),
+    )
+    .await;
+    git(&workspace, &["submodule", "deinit", "--all"]).await;
+    remove(
+        &repo,
+        &workspace,
+        FileRemoval::CleanOnly,
+        BranchRemoval::Keep,
+    )
+    .await
+    .unwrap();
+    assert!(!workspace.exists());
 }

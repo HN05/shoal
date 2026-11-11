@@ -110,13 +110,12 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
     Ok(())
 }
 
-/// Whether the clean worktree at `path` has checked-out submodules, which
-/// Git refuses to remove without `--force`. That also skips Git's own check
-/// for changes, so this makes it first and fails on any.
+/// Whether the clean worktree at `path` has submodules, which Git refuses
+/// to remove without `--force`: checked out, or deinitialized while their
+/// repositories stay in its own Git directory. The force also skips Git's
+/// own check for changes, so this makes it first and fails on any.
 async fn needs_structural_force(path: &Path) -> Result<bool> {
-    if !off_runtime::exists(path).await?
-        || super::copy::initialized_submodules(path).await?.is_empty()
-    {
+    if !off_runtime::exists(path).await? || !has_submodules(path).await? {
         return Ok(false);
     }
     let changes = super::run_isolated(
@@ -135,6 +134,14 @@ async fn needs_structural_force(path: &Path) -> Result<bool> {
         path.display()
     );
     Ok(true)
+}
+
+/// Git's own test: the worktree's Git directory holds `modules`, or a
+/// submodule is checked out.
+async fn has_submodules(path: &Path) -> Result<bool> {
+    let modules = super::copy::admin_path(path, "modules").await?;
+    Ok(off_runtime::exists(&modules).await?
+        || !super::copy::initialized_submodules(path).await?.is_empty())
 }
 
 /// Delete `branch`, saying why it stayed when Git refused.

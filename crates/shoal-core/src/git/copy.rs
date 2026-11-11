@@ -121,7 +121,7 @@ async fn copy_admin_file(source: &Path, copy: &Path, file: &str) -> Result<()> {
 }
 
 /// Where the worktree keeps `file` of its own Git directory.
-async fn admin_path(worktree: &Path, file: &str) -> Result<std::path::PathBuf> {
+pub(super) async fn admin_path(worktree: &Path, file: &str) -> Result<std::path::PathBuf> {
     let path = super::run_isolated(
         worktree,
         &["rev-parse", "--path-format=absolute", "--git-path", file],
