@@ -143,6 +143,11 @@ pub struct Snapshot {
     /// observation stands beside the failure in `errors`.
     #[serde(skip)]
     pub(crate) unread: bool,
+    /// Whether the user learns of the lookup's failures elsewhere, so a
+    /// source that keeps failing with the error last seen is not reported
+    /// again.
+    #[serde(skip)]
+    pub(crate) failures_shown_elsewhere: bool,
 }
 
 /// A failed job of a run, with the step that failed where its log names one.
@@ -187,6 +192,14 @@ impl Snapshot {
             self.schedule_conflict_reports(previous);
         }
         self.schedule_failure_reports(previous, now);
+    }
+
+    /// Take the lookup's failures as shown to the user elsewhere, as the
+    /// daemon shows a local check that timed out: a source failing with the
+    /// error last seen is not reported again once its interval passes, which
+    /// would only wake an idle agent with nothing new.
+    pub fn shown_elsewhere(&mut self) {
+        self.failures_shown_elsewhere = true;
     }
 
     /// Whether the lookup read nothing of the item, only its failure.
@@ -446,14 +459,24 @@ impl Snapshot {
         self.state = state;
     }
 
-    /// Keeps each source's report time until the interval passes and takes
-    /// `now` for a failing source without one, so `changes` reports a
-    /// source's failures at most once per interval.
+    /// Keeps each source's report time until the interval passes, or while
+    /// it fails with the same error shown elsewhere, and takes `now` for a
+    /// failing source without one, so `changes` reports a source's failures
+    /// at most once per interval.
     fn schedule_failure_reports(&mut self, previous: &Self, now: UnixTime) {
+        let unchanged = |source: &String| {
+            self.failures_shown_elsewhere
+                && self
+                    .errors
+                    .get(source)
+                    .is_some_and(|error| previous.errors.get(source) == Some(error))
+        };
         self.reported = previous
             .reported
             .iter()
-            .filter(|&(_, &at)| now.duration_since(at) < FAILURE_REPORT_INTERVAL)
+            .filter(|&(source, &at)| {
+                now.duration_since(at) < FAILURE_REPORT_INTERVAL || unchanged(source)
+            })
             .map(|(source, &at)| (source.clone(), at))
             .collect();
         for source in self.errors.keys() {

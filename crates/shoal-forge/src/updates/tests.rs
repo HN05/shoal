@@ -129,6 +129,27 @@ fn a_sources_failures_are_reported_once_per_interval() {
 }
 
 #[test]
+fn a_failure_shown_elsewhere_is_reported_again_only_once_its_error_changes() {
+    let start = UnixTime::from_seconds(1000);
+    let poll = |previous: &Snapshot, error: &str, now| {
+        let mut next = Snapshot::default();
+        next.errors.insert("merge conflicts".into(), error.into());
+        next.shown_elsewhere();
+        next.normalize(previous, now);
+        let reported = !previous.changes(&next, "branch").is_empty();
+        (next, reported)
+    };
+    let (first, reported) = poll(&Snapshot::default(), "timed out", start);
+    assert!(reported);
+    let (same, reported) = poll(&first, "timed out", start + FAILURE_REPORT_INTERVAL);
+    assert!(!reported);
+    let (_, reported) = poll(&same, "timed out", start + FAILURE_REPORT_INTERVAL * 3);
+    assert!(!reported);
+    let (_, reported) = poll(&same, "interrupted", start + FAILURE_REPORT_INTERVAL * 3);
+    assert!(reported);
+}
+
+#[test]
 fn an_unread_item_keeps_its_activity_and_reports_its_failure_once() {
     let mut seen = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Open));
     seen.comments.insert("discussion:1".into(), "hello".into());

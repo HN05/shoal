@@ -291,6 +291,12 @@ impl fmt::Display for TimedOut {
 
 impl std::error::Error for TimedOut {}
 
+/// Whether `error` is a check's failure because file access in its
+/// directory timed out.
+pub(crate) fn timed_out(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<TimedOut>().is_some()
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }

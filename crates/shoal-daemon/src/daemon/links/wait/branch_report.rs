@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use crate::{
+    daemon::file_access,
     forge::{
         items::link::{LinkKind, Selection},
         updates::{MergeCheck, Snapshot},
@@ -32,13 +33,19 @@ pub(super) fn branch_report(items: &[(String, LinkKind)]) -> BranchReport {
 }
 
 /// A workspace branch's local merge check as `report` keeps it, observed
-/// like PR mergeability.
+/// like PR mergeability. A check whose file access timed out, which the
+/// daemon shows the user, is not reported again while it keeps timing out.
 pub(super) fn branch_conflicts(check: Result<ConflictCheck>, report: BranchReport) -> Snapshot {
-    Snapshot::merge_check(check.map(|check| MergeCheck {
+    let timed_out = check.as_ref().is_err_and(file_access::timed_out);
+    let mut snapshot = Snapshot::merge_check(check.map(|check| MergeCheck {
         conflict: conflict_message(&check, report),
         head: check.head,
         base: check.target_commit,
-    }))
+    }));
+    if timed_out {
+        snapshot.shown_elsewhere();
+    }
+    snapshot
 }
 
 /// The conflicts `report` keeps of the check, naming the first paths of

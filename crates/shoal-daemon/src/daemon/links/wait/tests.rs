@@ -2407,6 +2407,27 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
 }
 
 #[tokio::test]
+async fn a_branch_check_that_keeps_timing_out_is_reported_once() {
+    let (root, manager) = manager().await;
+    let path = root.path().join("workspace");
+    manager.file_access.stall_rechecking(&path);
+    let observe = async |previous: &Snapshot, now| {
+        let check = manager
+            .check_access(&path, std::future::pending::<Result<_>>())
+            .await;
+        let mut next = branch_conflicts(check, BranchReport::Conflicts);
+        next.normalize(previous, now);
+        let updates = previous.changes(&next, "branch");
+        (next, updates)
+    };
+    let start = UnixTime::from_seconds(1000);
+    let (first, updates) = observe(&Snapshot::default(), start).await;
+    assert_eq!(updates.len(), 1, "{updates:?}");
+    let (_, updates) = observe(&first, start + Duration::from_secs(3600)).await;
+    assert!(updates.is_empty(), "{updates:?}");
+}
+
+#[tokio::test]
 async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

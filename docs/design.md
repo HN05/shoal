@@ -1905,6 +1905,9 @@ The layer sends a read again after a failure that may pass, since reading twice
 changes nothing and one refused connection would otherwise fail a whole poll, and
 a source's lookup failure reaches the agent at most once per report interval,
 since an intermittent failure varies its error and passes between polls. A
+local conflict check whose file access timed out reaches it again only when its
+error changes: the daemon shows the user the timeout, which the agent cannot
+fix, and each repeat would start an idle agent's turn with nothing new. A
 failed read of a linked item itself is such a source: it keeps the item's last
 snapshot and reports `lookup_failed`, so an outage never also fails the watch
 or the Stop hook's wait that reports it. A watch of an item named on the

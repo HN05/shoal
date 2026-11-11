@@ -4966,7 +4966,9 @@ sources such as CI, reports a `lookup_failed` update instead of failing the watc
 and the item's last observation stands until a lookup succeeds. A watch of an item
 named on the command line fails when that item cannot be read. Each
 source's failures are reported at most once every 10 minutes, whatever the error
-and however often a poll in between succeeds. A
+and however often a poll in between succeeds; a branch conflict check whose file
+access timed out, which `shoal status` and an `access_stalled` alert show, is
+reported again only when its error changes. A
 forge that refuses a request for its rate limit (`429`, or `403` with
 `Retry-After` or no requests remaining), or reports no requests remaining, is
 not asked again as that account until its `Retry-After` or reset time, at most
