@@ -320,3 +320,103 @@ fn chosen_held(execution: &ExecutionId, turns_started: u64) -> HashMap<Execution
     };
     HashMap::from([(execution.to_owned(), stop)])
 }
+
+#[tokio::test]
+async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_clear() {
+    use crate::client::progress::ProgressChange;
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let working = Setup {
+        state: AgentState::Working,
+        done: false,
+        held: false,
+        recover: true,
+    };
+    let (workspace, execution) = agent(&manager, &repo.id, "blocked", working).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".into());
+    let change = ProgressChange::AddBlocker {
+        blocker: blocker.clone(),
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    manager.set_progress(&selector, change).await.unwrap();
+    cache_expires_in(&manager, &workspace, 600).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(
+        !*execution.stop.borrow(),
+        "a working agent finishes its turn"
+    );
+
+    manager
+        .set_agent_state(
+            &selector,
+            AgentState::Idle,
+            Some(execution.plan.id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    cache_expires_in(&manager, &workspace, 600).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(
+        *execution.stop.borrow(),
+        "a warm cache keeps no blocked agent"
+    );
+    assert!(manager.restore_waits_for_unblock(&workspace.id, &execution.plan.id));
+    // Its stop notifies no one: the space's blocking does.
+    let notifications = manager.notifications(false, 10).await.unwrap();
+    assert!(
+        !notifications
+            .iter()
+            .any(|event| event.kind == NotificationKind::AgentStopped)
+    );
+    // An update does not make its restore due; the space clearing does.
+    manager.publish_config(crate::daemon::test_support::global_config(
+        "[machine.overload.disk]\nenabled = false",
+    ));
+    manager
+        .queue_agent_message(&workspace.id, "PR activity".into())
+        .await
+        .unwrap();
+    assert!(
+        !manager
+            .restore_due(&workspace.id, &execution.plan.id)
+            .await
+            .unwrap()
+    );
+    // `shoal resume` restores it now, telling it what still blocks it.
+    let agent = crate::agent::Agent::from("claude");
+    manager
+        .queue_restore(&execution.plan.id, &agent, &workspace.id)
+        .await
+        .unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(entries[0].blockers, ["https://github.com/team/app/pull/8"]);
+    manager
+        .queue_stopped_restore(&selector, &execution.plan.id, Default::default())
+        .await
+        .unwrap();
+    let messages = manager.agent_messages(&selector).await.unwrap();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.message.starts_with("Your work is still blocked:")),
+        "{messages:?}"
+    );
+    let remove = ProgressChange::RemoveBlocker {
+        blocker,
+        step: None,
+    };
+    manager.set_progress(&selector, remove).await.unwrap();
+    assert!(
+        manager
+            .restore_due(&workspace.id, &execution.plan.id)
+            .await
+            .unwrap()
+    );
+}

@@ -51,8 +51,10 @@ impl Manager {
         let now = crate::time::UnixTime::now();
         let (closed, progressed) = (self.store)
             .write(move |tx| {
+                // Completion removes what blocked the space.
                 let progressed =
-                    progress::record_status(tx, &id, recorded.summary.as_deref(), now)?;
+                    progress::record_status(tx, &id, recorded.summary.as_deref(), now)?
+                        | progress::remove_blockers(tx, &id, now)?;
                 Ok((
                     record_completion(tx, &id, &recorded, progressed)?,
                     progressed,

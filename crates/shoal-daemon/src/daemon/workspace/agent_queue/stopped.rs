@@ -287,7 +287,8 @@ impl Manager {
     }
 
     /// Queue the restore of the agent stopped as `execution` in
-    /// `workspace`, starting it at once when `now`, and return its entry.
+    /// `workspace`, starting it at once when `now`, and return its entry; an
+    /// agent of a blocked space first reads what still blocks it.
     /// Asking for it says the work is not finished, so it withdraws the
     /// workspace's completion, whichever wrapper restores the agent; only
     /// once the queue's gate is released, since recording a completion takes
@@ -301,6 +302,8 @@ impl Manager {
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
         let id = workspace.id.clone();
+        // Read before the restored agent reads its messages.
+        self.tell_still_blocked(&id).await;
         let entry = (self.record_stopped_restore(workspace, execution, env, now)).await?;
         self.reopen_for_resume(&id).await;
         Ok(entry)

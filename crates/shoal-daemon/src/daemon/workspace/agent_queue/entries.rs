@@ -107,6 +107,25 @@ impl Manager {
         Ok(workspace.id)
     }
 
+    /// What blocks the space of the restore `entry` of an agent Shoal
+    /// stopped because its space was blocked, by name or URL; none for any
+    /// other entry.
+    async fn blocked_restore(&self, entry: &QueueEntry) -> Result<Option<Vec<String>>> {
+        let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
+            return Ok(None);
+        };
+        if !self.restore_waits_for_unblock(workspace, execution) {
+            return Ok(None);
+        }
+        let progress = self.space_progress(&SpaceSelector::id(workspace)).await?;
+        Ok(Some(
+            (progress.iter())
+                .flat_map(|progress| progress.all_blockers())
+                .map(|(_, blocker)| blocker.name.clone())
+                .collect(),
+        ))
+    }
+
     /// Entries in queue order, waiting ones numbered and with what blocks
     /// them and what held them back at the last admission pass.
     pub async fn queue_entries(&self) -> Result<Vec<QueueEntry>> {
@@ -120,6 +139,9 @@ impl Manager {
             entry.waits_for_update = waking.contains(&entry.id);
             if entry.state == QueueState::Queued {
                 entry.held_by = self.agent_queue.held_back(&entry.id);
+            }
+            if let Some(blocked_by) = self.blocked_restore(entry).await? {
+                entry.blockers = blocked_by;
             }
         }
         Ok(entries)

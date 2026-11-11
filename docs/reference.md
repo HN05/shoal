@@ -5172,6 +5172,17 @@ chance to clear it. One lookup of each workflow serves every blocker on it. A
 failed lookup keeps the blocker and shows why as its `lookup_failed` until a
 lookup succeeds.
 
+Once a blocked space's agent ends a turn, with no work of its own still
+running, Shoal stops it as an [idle stop](#agent-queue) does, whatever its
+prompt cache, keeps its session and queues its restore, which waits until
+nothing blocks the space and lists what blocks it in `shoal queue`; updates
+for the agent wait with it. The restored agent's first message is the one
+naming what cleared. `shoal resume` restores the agent at once, telling it
+what still blocks the space; `shoal stop` cancels the waiting restore as it
+cancels other queued restores, and the blockers stay. `shoal done` removes
+the space's blockers and cancels the restore. The waiting restore keeps the
+space from cleanup, as other automatic restores do.
+
 `status` shows a `Progress` section with the status line and the numbered
 steps, marking the current one, and `list` shows how many steps are done with
 the current step, such as `3/5 Fix the timeout`, followed by the status line

@@ -227,6 +227,19 @@ pub(crate) fn record_status(
     Ok(save(tx, id, change, now)?.is_some())
 }
 
+/// Remove every blocker of the space `id` at `now` in the caller's
+/// transaction, as its completion does, journaling each; whether any went.
+pub(crate) fn remove_blockers(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
+    let Some((before, _)) = stored(tx, id)? else {
+        return Ok(false);
+    };
+    let (after, removed) = before.clone().unblocked();
+    let events: Vec<_> = (removed.iter())
+        .map(|stored| (EventKind::BlockerRemoved, before.event(stored, None)))
+        .collect();
+    Ok(write(tx, id, &before, after, &events, now)?.is_some())
+}
+
 /// Refuse a change with a status line or step that is not a valid line.
 fn validate(change: &ProgressChange) -> Result<()> {
     match change {
@@ -289,6 +302,13 @@ impl Manager {
             self.publications.request(&id);
         }
         Ok(progress)
+    }
+
+    /// Whether the space `id` is blocked.
+    pub(crate) async fn space_blocked(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        let progress = self.store.read(move |db| current(db, &id)).await?;
+        Ok(progress.is_some_and(|progress| progress.blocked()))
     }
 
     /// The progress of the space `selector` names.

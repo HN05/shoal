@@ -155,8 +155,10 @@ impl Manager {
             .write(move |tx| {
                 store::require_ready(tx, &id)?;
                 let replaced = record_completion(tx, &id, &completion)?;
+                // Completion removes what blocked the space.
                 let progressed =
-                    progress::record_status(tx, &id, completion.summary.as_deref(), now)?;
+                    progress::record_status(tx, &id, completion.summary.as_deref(), now)?
+                        | progress::remove_blockers(tx, &id, now)?;
                 // Like the continuation it replaced, a hold made from one by
                 // migration 31 ends at the next explicit done.
                 let released = tx.execute(

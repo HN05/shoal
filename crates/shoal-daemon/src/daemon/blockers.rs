@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 
 use crate::{
-    client::{files::Attacher, progress::Progress, space_names::SpaceSelector},
+    client::{files::Attacher, progress::Progress, space_ids::SpaceId, space_names::SpaceSelector},
     daemon::{log, progress::Cleared, workspace::Manager},
     state::BlockerKind,
 };
@@ -44,6 +44,9 @@ impl Manager {
         for space in &cleared {
             self.tell_cleared(space).await;
         }
+        // A restore that waited for the space to stop being blocked may be
+        // due now.
+        self.agent_queue.wake();
         forgotten
     }
 
@@ -60,9 +63,31 @@ impl Manager {
             }
         };
         let text = cleared_message(cleared, progress.as_ref());
-        let sent = self.send_space_message(&selector, text, Vec::new(), &Attacher::User);
+        self.tell(&selector, text).await;
+    }
+
+    /// Tell the agent of the space `id`, restored while the space is still
+    /// blocked, what blocks it.
+    pub(crate) async fn tell_still_blocked(&self, id: &SpaceId) {
+        let selector = SpaceSelector::id(id);
+        let progress = match self.space_progress(&selector).await {
+            Ok(progress) => progress.filter(Progress::blocked),
+            Err(error) => {
+                log!("blockers of {id} unread for its restore: {error:#}");
+                return;
+            }
+        };
+        if let Some(progress) = progress {
+            let text = format!("Your work is still blocked:{}", open_blockers(&progress));
+            self.tell(&selector, text).await;
+        }
+    }
+
+    /// Send the agent of the space `selector` names `text`, from Shoal.
+    async fn tell(&self, selector: &SpaceSelector, text: String) {
+        let sent = self.send_space_message(selector, text, Vec::new(), &Attacher::User);
         if let Err(error) = sent.await {
-            log!("blockers of {} cleared, untold: {error:#}", cleared.space);
+            log!("blockers of {selector} untold: {error:#}");
         }
     }
 }
@@ -80,18 +105,21 @@ fn cleared_message(cleared: &Cleared, progress: Option<&Progress>) -> String {
             event.blocker.reason
         );
     }
-    let open: Vec<String> = (progress.into_iter())
-        .flat_map(Progress::all_blockers)
+    if let Some(progress) = progress.filter(|progress| progress.all_blockers().next().is_some()) {
+        text += "\nStill open:";
+        text += &open_blockers(progress);
+    }
+    text
+}
+
+/// Each blocker of `progress` on a line of its own, with its step and reason.
+fn open_blockers(progress: &Progress) -> String {
+    (progress.all_blockers())
         .map(|(step, blocker)| {
             let step = step.map_or_else(String::new, |step| format!(" (step {})", step.name));
             format!("\n- {}{step}, {}", blocker.cause(), blocker.reason)
         })
-        .collect();
-    if !open.is_empty() {
-        text += "\nStill open:";
-        text.extend(open);
-    }
-    text
+        .collect()
 }
 
 #[cfg(test)]

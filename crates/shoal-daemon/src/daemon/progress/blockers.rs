@@ -93,6 +93,12 @@ impl Plan {
         Ok((self, removed))
     }
 
+    /// The plan without any blocker, and those it had.
+    pub(super) fn unblocked(mut self) -> (Self, Vec<Stored>) {
+        let removed = std::mem::take(&mut self.blockers);
+        (self, removed)
+    }
+
     /// Drop the blockers of the steps the plan no longer has.
     pub(super) fn prune_blockers(&mut self) {
         let steps = &self.steps;

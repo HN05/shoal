@@ -1,6 +1,8 @@
-//! Stop idle agents to free memory, saving each as protection does so that an
-//! update restores it. Only an agent whose prompt cache has expired stops,
-//! since restoring one rewrites its cache.
+//! Stop idle agents, saving each as protection does: to free memory, so
+//! that an update restores it, and whose space is blocked, so that its
+//! restore waits until nothing blocks the space. Only an agent whose prompt
+//! cache has expired stops to free memory, since restoring one rewrites its
+//! cache; a blocked one stops once its turn ends.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
@@ -12,7 +14,7 @@ use anyhow::Result;
 use super::{Manager, Protection, StoppedAgent, Turn, still_idle};
 use crate::state::AgentState;
 
-/// A connected agent idle with no prompt cache left.
+/// A connected idle agent.
 struct Candidate {
     execution: ExecutionId,
     workspace_id: SpaceId,
@@ -28,10 +30,11 @@ struct Chosen {
 }
 
 impl Manager {
-    /// Stop each idle agent whose prompt cache has expired in a done
-    /// workspace whose cleanup is held, which could otherwise run until the
-    /// workspace goes, or in any workspace whose `[idle_stop]` is enabled. A
-    /// failure in one workspace does not skip the others.
+    /// Stop each idle agent whose space is blocked, and each whose prompt
+    /// cache has expired in a done workspace whose cleanup is held, which
+    /// could otherwise run until the workspace goes, or in any workspace
+    /// whose `[idle_stop]` is enabled. A failure in one workspace does not
+    /// skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
@@ -39,8 +42,11 @@ impl Manager {
         let now = crate::time::UnixTime::now();
         let mut chosen = HashMap::new();
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
-        for candidate in self.idle_candidates(&turns, now).await {
-            match self.idle_stop(&candidate).await {
+        for candidate in self.idle_candidates(&turns).await {
+            let cache_expired = turns
+                .get(&candidate.execution)
+                .is_some_and(|turn| turn.idle_without_cache(now));
+            match self.idle_stop(&candidate, cache_expired).await {
                 Ok(Some(protection)) => {
                     let turns_started = candidate.turns_started;
                     let stop = Chosen {
@@ -61,23 +67,14 @@ impl Manager {
         failed.into_result()
     }
 
-    /// The running agents with a restore command that `turns` shows idle
-    /// with no prompt cache left at `now`.
-    async fn idle_candidates(
-        &self,
-        turns: &HashMap<ExecutionId, Turn>,
-        now: crate::time::UnixTime,
-    ) -> Vec<Candidate> {
+    /// The running agents with a restore command that `turns` shows idle.
+    async fn idle_candidates(&self, turns: &HashMap<ExecutionId, Turn>) -> Vec<Candidate> {
         self.executions
             .with_agents(|agents| {
                 agents
                     .iter()
                     .filter(|(id, agent)| {
-                        agent.running()
-                            && agent.recover
-                            && turns
-                                .get(*id)
-                                .is_some_and(|turn| turn.idle_without_cache(now))
+                        agent.running() && agent.recover && turns.get(*id).is_some_and(Turn::idle)
                     })
                     .map(|(id, agent)| Candidate {
                         execution: id.clone(),
@@ -90,9 +87,20 @@ impl Manager {
             .await
     }
 
-    /// Why the `candidate` agent stops, if it does.
-    async fn idle_stop(&self, candidate: &Candidate) -> Result<Option<Protection>> {
+    /// Why the `candidate` agent stops, if it does: its space is blocked,
+    /// or, once its prompt cache expired, to free memory.
+    async fn idle_stop(
+        &self,
+        candidate: &Candidate,
+        cache_expired: bool,
+    ) -> Result<Option<Protection>> {
         let id = &candidate.workspace_id;
+        if self.space_blocked(id).await? {
+            return Ok(Some(Protection::blocked()));
+        }
+        if !cache_expired {
+            return Ok(None);
+        }
         if self.completion(id).await?.is_some() && self.keep_reason(id).await?.is_some() {
             return Ok(Some(Protection::idle_held()));
         }
@@ -102,11 +110,12 @@ impl Manager {
         Ok(settings.idle_stop.enabled.then(Protection::idle_expired))
     }
 
-    /// Stop the `chosen` agents that are still running and idle with no
-    /// prompt cache left at `now`, as `turns` read before taking the agents
-    /// lock and their own reports since show: a turn that came since they
-    /// were chosen renewed the cache, even one that ended while `turns`
-    /// were read.
+    /// Stop the `chosen` agents that are still running and idle, with no
+    /// prompt cache left at `now` unless their space is blocked, as `turns`
+    /// read before taking the agents lock and their own reports since show:
+    /// a turn that came since they were chosen renewed the cache, even one
+    /// that ended while `turns` were read. A blocked agent's stop notifies
+    /// no one; its space's blocking already did.
     async fn stop_idle(
         &self,
         mut turns: HashMap<ExecutionId, Turn>,
@@ -119,10 +128,13 @@ impl Manager {
                 still_idle(&mut turns, agents);
                 chosen
                     .into_iter()
-                    .filter(|(id, _)| {
+                    .filter(|(id, stop)| {
                         turns
                             .get(id)
-                            .is_some_and(|turn| turn.idle_without_cache(now))
+                            .is_some_and(|turn| match stop.protection.is_blocked() {
+                                true => turn.idle(),
+                                false => turn.idle_without_cache(now),
+                            })
                     })
                     .filter_map(|(id, stop)| {
                         let agent = agents.get_mut(&id).filter(|agent| {
@@ -133,7 +145,10 @@ impl Manager {
                     .collect()
             })
             .await;
-        for agent in &stopped {
+        for agent in stopped
+            .iter()
+            .filter(|agent| !agent.protection.is_blocked())
+        {
             self.notify_protection_stop(agent).await;
         }
     }

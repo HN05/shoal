@@ -419,3 +419,28 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
         ]
     );
 }
+
+#[tokio::test]
+async fn completion_removes_the_spaces_blockers() {
+    use crate::{client::assignments::Done, daemon::workspace_files::Attacher, model::Blocker};
+    let (temp, manager) = manager().await;
+    let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
+    let selector = SpaceSelector::id(&blocked.id);
+    let add = ProgressChange::AddBlocker {
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        step: None,
+        reason: "Needs it".into(),
+    };
+    manager.set_progress(&selector, add).await.unwrap();
+    manager
+        .mark_done(&selector, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    assert!(manager.space_progress(&selector).await.unwrap().is_none());
+    let kinds: Vec<_> = blocker_events(&manager)
+        .await
+        .into_iter()
+        .map(|(kind, _)| kind)
+        .collect();
+    assert_eq!(kinds, [EventKind::BlockerAdded, EventKind::BlockerRemoved]);
+}

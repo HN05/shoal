@@ -68,8 +68,16 @@ pub(crate) trait ProtectionExt {
     /// handle it as any protection stop they restore.
     fn idle(reason: &str) -> Self;
 
-    /// Whether Shoal stopped the agent for being idle, not for load.
+    /// An agent whose turn ended while its space is blocked, whose restore
+    /// waits until nothing blocks the space.
+    fn blocked() -> Self;
+
+    /// Whether Shoal stopped the agent between turns, idle or blocked, not
+    /// for load.
     fn is_idle(&self) -> bool;
+
+    /// Whether Shoal stopped the agent for its blocked space.
+    fn is_blocked(&self) -> bool;
 
     /// Whether `[overload.recovery]` decides its restore, as for a stop that
     /// load or disk space caused; `shoal queue move` and idle stops restore
@@ -78,7 +86,8 @@ pub(crate) trait ProtectionExt {
 
     /// Whether a done assignment cancels its restore. An idle stop's restore
     /// waits for an update all the same, since the agent ran until Shoal
-    /// stopped it.
+    /// stopped it; a blocked one's would only restore an agent with nothing
+    /// left to do, since `shoal done` removes the blockers.
     fn ends_with_assignment(&self) -> bool;
 }
 
@@ -127,8 +136,19 @@ impl ProtectionExt for Protection {
         }
     }
 
+    fn blocked() -> Self {
+        Self {
+            reason: BLOCKED_REASON.into(),
+            resumes_when: "nothing blocks its space".into(),
+        }
+    }
+
     fn is_idle(&self) -> bool {
-        [IDLE_HELD_REASON, IDLE_EXPIRED_REASON].contains(&self.reason.as_str())
+        [IDLE_HELD_REASON, IDLE_EXPIRED_REASON, BLOCKED_REASON].contains(&self.reason.as_str())
+    }
+
+    fn is_blocked(&self) -> bool {
+        self.reason == BLOCKED_REASON
     }
 
     fn follows_overload_recovery(&self) -> bool {
@@ -136,7 +156,7 @@ impl ProtectionExt for Protection {
     }
 
     fn ends_with_assignment(&self) -> bool {
-        !self.is_idle()
+        !self.is_idle() || self.is_blocked()
     }
 }
 
@@ -151,6 +171,10 @@ const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";
 
 /// The stop reason of an idle agent `[idle_stop]` stops.
 const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
+
+/// The stop reason of an agent whose turn ended while its space is blocked,
+/// which its recovery record keeps.
+pub(crate) const BLOCKED_REASON: &str = "its space is blocked";
 
 /// The agent a request comes from.
 pub(crate) struct CallerAgent {
@@ -1181,10 +1205,11 @@ pub(crate) struct StoppedAgent {
 }
 
 /// The `protection` an agent stopped in `turn` restores after: one stopped
-/// between turns has nothing to do until an update arrives for it.
+/// between turns has nothing to do until an update arrives for it, unless
+/// it stopped because its space is blocked.
 fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protection {
     match turn {
-        Some(AgentState::Idle) => Protection {
+        Some(AgentState::Idle) if !protection.is_blocked() => Protection {
             reason: protection.reason.clone(),
             resumes_when: "an update arrives for it".into(),
         },

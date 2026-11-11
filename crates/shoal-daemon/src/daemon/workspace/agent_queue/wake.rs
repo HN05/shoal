@@ -1,6 +1,8 @@
 //! What wakes a queued restore: sustained healthy readings for an agent
 //! protection stopped mid-turn, an update for one stopped between turns,
-//! which has nothing to do until then, unless `shoal resume` asked for it.
+//! which has nothing to do until then, and for one stopped because its
+//! space is blocked, nothing blocking the space, unless `shoal resume`
+//! asked for it.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::daemon::workspace::agents::ProtectionExt;
@@ -131,6 +133,7 @@ impl Manager {
         let mut waiting = HashSet::new();
         for row in restores {
             if self.restore_waits_for_update(&row.workspace, &row.execution)
+                && !self.restore_waits_for_unblock(&row.workspace, &row.execution)
                 && !self.moved_in_queue(&row.execution).await
             {
                 waiting.insert(row.id);
@@ -159,7 +162,7 @@ impl Manager {
         if !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Wake::Recovery);
         }
-        let due = waits && self.update_due(workspace_id).await?;
+        let due = waits && self.restore_due(workspace_id, execution).await?;
         Ok(Wake::Update { due })
     }
 
@@ -176,20 +179,29 @@ impl Manager {
         if !automatic || !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Work::Launch);
         }
-        let due = self.update_due(workspace_id).await?;
+        let due = self.restore_due(workspace_id, execution).await?;
         Ok(Work::Restore {
             waiting: true,
             wake: Wake::Update { due },
         })
     }
 
-    /// Whether an update waits for the agent of `workspace_id` and free disk
-    /// space allows restoring it.
-    async fn update_due(&self, workspace_id: &SpaceId) -> Result<bool> {
-        Ok(self.restore_disk_ready()
-            && self
-                .updates_waiting(&SpaceSelector::id(workspace_id))
-                .await?)
+    /// Whether the restore of `execution`, stopped between turns in
+    /// `workspace_id`, is due: once nothing blocks the space for an agent
+    /// stopped because it was blocked, else once an update waits for it,
+    /// and while free disk space allows restoring it.
+    pub(in crate::daemon::workspace) async fn restore_due(
+        &self,
+        workspace_id: &SpaceId,
+        execution: &ExecutionId,
+    ) -> Result<bool> {
+        if !self.restore_disk_ready() {
+            return Ok(false);
+        }
+        if self.restore_waits_for_unblock(workspace_id, execution) {
+            return Ok(!self.space_blocked(workspace_id).await?);
+        }
+        self.updates_waiting(&SpaceSelector::id(workspace_id)).await
     }
 
     /// Whether disk space allows a restore an update woke: with disk
@@ -203,6 +215,24 @@ impl Manager {
         self.agent_overload(execution)
             .await
             .is_some_and(|protection| protection.is_queue_move())
+    }
+
+    /// Whether the recovery record of `execution` says Shoal stopped it
+    /// because its space was blocked, so its restore waits until nothing
+    /// blocks the space.
+    pub(crate) fn restore_waits_for_unblock(
+        &self,
+        workspace_id: &SpaceId,
+        execution: &ExecutionId,
+    ) -> bool {
+        let path = recovery::record_path(&self.paths, workspace_id, execution);
+        recovery::Record::load(&path)
+            .ok()
+            .flatten()
+            .is_some_and(|record| {
+                record.stop_reason.as_deref()
+                    == Some(crate::daemon::workspace::agents::BLOCKED_REASON)
+            })
     }
 
     /// Whether the recovery record of `execution` says it stopped between
