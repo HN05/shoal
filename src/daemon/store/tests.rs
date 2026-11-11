@@ -527,12 +527,24 @@ fn places_a_chat_took_over_become_the_chats() -> Result<()> {
         owned: false,
         ..crate::sessions::Origin::created(crate::sessions::HostName::Rex, id.into())
     };
-    db.execute(
-        "INSERT INTO chats(id,name,agent,pid,birth,started_at,origin)
-         VALUES ('chat','talk','claude',1,'birth',0,?1)",
-        [serde_json::to_string(&block("taken"))?],
-    )?;
-    for (place, owner) in [("kept", Some("workspace")), ("taken", None), ("left", None)] {
+    // A stopped chat keeps the place it ran in, where another chat started.
+    for (chat, place) in [
+        ("chat", "taken"),
+        ("stopped", "shared"),
+        ("later", "shared"),
+    ] {
+        db.execute(
+            "INSERT INTO chats(id,name,agent,pid,birth,started_at,origin)
+             VALUES (?1,?1,'claude',1,'birth',0,?2)",
+            [chat, &serde_json::to_string(&block(place))?],
+        )?;
+    }
+    for (place, owner) in [
+        ("kept", Some("workspace")),
+        ("taken", None),
+        ("left", None),
+        ("shared", None),
+    ] {
         db.execute(
             "INSERT INTO owned_places(host,server,place,workspace_id,origin)
              VALUES ('rex','',?1,?2,?3)",

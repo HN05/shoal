@@ -1,7 +1,9 @@
 //! Give every record of a place Shoal created a space as its owner, a
 //! workspace or a chat, whose removal closes the place. Records a chat took
-//! over had no owner: each goes to the chat recorded running there, and one
-//! whose chat is gone, which nothing would close, is forgotten.
+//! over had no owner: each goes to the one chat recorded there. One whose
+//! chat is gone, which nothing would close, is forgotten, as is one several
+//! chats name, such as a stopped chat's and the chat that started there
+//! after it, since giving it to the wrong one would close another's.
 use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, params};
@@ -44,12 +46,7 @@ pub(super) fn own_by_space(db: &Connection) -> Result<()> {
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (host, server, place, workspace, origin) in records {
         let recorded = serde_json::from_str::<Origin>(&origin)?;
-        let owner = workspace.or_else(|| {
-            chats
-                .iter()
-                .find(|(_, at)| same_place(at, &recorded))
-                .map(|(chat, _)| chat.clone())
-        });
+        let owner = workspace.or_else(|| only_chat_at(&chats, &recorded));
         let Some(owner) = owner else {
             continue;
         };
@@ -78,6 +75,13 @@ fn chat_places(db: &Connection) -> Result<Vec<(String, Origin)>> {
         .into_iter()
         .filter_map(|(chat, origin)| Some((chat, serde_json::from_str(&origin).ok()?)))
         .collect())
+}
+
+/// The one chat of `chats` recorded at `place`, unless several are.
+fn only_chat_at(chats: &[(String, Origin)], place: &Origin) -> Option<String> {
+    let mut there = chats.iter().filter(|(_, at)| same_place(at, place));
+    let (chat, _) = there.next()?;
+    there.next().is_none().then(|| chat.clone())
 }
 
 /// Whether `a` and `b` name one instance of a place on one server.
