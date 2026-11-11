@@ -72,7 +72,7 @@ impl Manager {
             true => "chat finished; cleanup requested",
             false => "chat finished; no cleanup requested",
         });
-        push_completion_details(&mut notice, &chat.name, &completion, &closed);
+        push_completion_details(&mut notice, &chat.number.to_string(), &completion, &closed);
         let about = About::space(&chat.name, &chat.id);
         (self.notify_about(about, NotificationKind::SpaceDone, notice)).await;
         self.signals.wake_cleanup();

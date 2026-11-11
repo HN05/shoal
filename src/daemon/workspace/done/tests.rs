@@ -987,6 +987,26 @@ fn a_notice_names_the_first_results_and_counts_the_rest() {
     assert_eq!(results_preview(&results[..2]), "report.md, repro.sh");
 }
 
+#[test]
+fn a_notice_selects_the_space_whose_results_it_names_by_number() {
+    let completion = Completion {
+        head: "head".into(),
+        cleanup: false,
+        integrated: false,
+        results: vec![HandedBack {
+            id: 1,
+            name: "report.md".into(),
+        }],
+        summary: None,
+        error: None,
+    };
+    let notice = done_notice("7", &completion, &[]);
+    assert!(
+        notice.contains("results in shoal files 7: report.md"),
+        "{notice}"
+    );
+}
+
 #[tokio::test]
 async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     let (_root, manager, parent) = fixture().await;

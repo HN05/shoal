@@ -192,7 +192,7 @@ shoal open 3 --app codex           # Open in the Codex desktop app
 shoal attach 3                 # Reattach to the workspace's agent session; Ctrl-\ detaches
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
-shoal happy-claude fix-login   # Detached Happy session, visible in the Happy app
+shoal happy-claude 3           # Detached Happy session, visible in the Happy app
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
 shoal start --in 3             # Review a workspace's live work in a chat in its worktree, beside its agent
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
@@ -200,13 +200,13 @@ shoal start --mode orchestrate   # Manage the spaces of every repository from on
 shoal rename 5 "Login design"  # Rename a running chat
 shoal rename --request 5        # Ask its agent to choose the name
 shoal diff 3                   # Changes since the branch's fork point
-shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
+shoal conflicts --workspace 3  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
 shoal progress "Reproduced; the cause is the query limit"  # Set the agent's status line
-shoal progress --space fix-login  # Its status line and plan steps
-shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
+shoal progress --space 3  # Its status line and plan steps
+shoal messages send "Stop the dev server" --space 3  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Network is back"  # Message every agent, running or stopped
 shoal log 3              # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
@@ -227,7 +227,7 @@ shoal resume --all            # Queue the restore of stopped agents, restore sto
 shoal resume 3                # Continue its stopped agent, or the turn shoal stop --interrupt ended
 shoal resume 3 --now          # Restore its stopped agent at once in the background
 shoal resume 3 --focus # Restore its stopped agent in this terminal
-shoal resume talk             # Restore a chat Shoal saved, continuing its session
+shoal resume 5                # Restore a chat Shoal saved, continuing its session
 shoal done 3                  # Mark finished and request safe cleanup
 shoal done --cleanup 3 # Request cleanup despite [cleanup.done] enabled = false
 shoal done --attach report.md  # Hand back files, such as an investigation's report
@@ -313,7 +313,7 @@ shoal unmerge                 # Undo your branch's latest merge while it is unpu
 To have an agent review a workspace's committed changes or a PR:
 
 ```sh
-shoal review run fix-login    # Queue a one-shot, read-only review; findings reach the agent
+shoal review run 3            # Queue a one-shot, read-only review; findings reach the agent
 shoal review run <pr-url>     # Review a PR in the workspace that owns its branch
 shoal review ls             # Reviews, newest first, with unresolved findings
 shoal view review             # The latest review in full
@@ -330,11 +330,11 @@ running when you detach with Ctrl-\ or close the terminal; `shoal attach` return
 to one, or to an agent's Herdr tab, by its workspace's or chat's name. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. Codex and Claude run with
 their own sandbox and approval settings; Shoal turns on network access in Codex's
-sandbox so its commands reach the daemon. Use `shoal run --workspace fix-login -- codex`
+sandbox so its commands reach the daemon. Use `shoal run --workspace 3 -- codex`
 for a custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
-Apps that launch their own processes can request `shoal internal env fix-login --json`
+Apps that launch their own processes can request `shoal internal env 3 --json`
 and add the returned variables to each child's environment. Revoke its scope
-with `shoal internal env fix-login --revoke <token>`. See
+with `shoal internal env 3 --revoke <token>`. See
 [workspace scope](docs/reference.md#scoped-workspace-commands) for token lifetime
 and cleanup behavior.
 The agents Shoal starts get JSON from `shoal` without `--json`; give an agent

@@ -141,15 +141,23 @@ pub(super) fn commands_not_told(workspace: &Workspace, commands: &[SavedCommand]
     eprintln!("{}", command_list(workspace, commands));
 }
 
-/// The stopped `commands` of `workspace`, each as the command that reruns it.
+/// The stopped `commands` of `workspace`, each as the command that reruns
+/// it there.
 fn command_list(workspace: &Workspace, commands: &[SavedCommand]) -> String {
-    let mut text = format!("Stopped commands in {}, not restarted:", workspace.name);
+    let mut text = format!("Stopped commands in {}, not restarted:", workspace.label());
     for command in commands {
-        let mut words = vec!["shoal", "run", "--workspace", &workspace.name, "--"];
-        words.extend(command.argv.iter().map(String::as_str));
-        text.push_str(&format!("\n  {}", crate::shell::quote(&words)));
+        text.push_str(&format!("\n  {}", rerun(workspace, &command.argv)));
     }
     text
+}
+
+/// The command that runs `argv` in `workspace` again, selecting it by its
+/// number, since names select nothing.
+fn rerun(workspace: &Workspace, argv: &[String]) -> String {
+    let number = workspace.number.to_string();
+    let mut words = vec!["shoal", "run", "--workspace", &number, "--"];
+    words.extend(argv.iter().map(String::as_str));
+    crate::shell::quote(&words)
 }
 
 #[cfg(test)]

@@ -722,7 +722,7 @@ shoal start https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd 3                               # Enter through the shell function
 shoal cd -                               # Previous directory
-shoal run --workspace fix-login -- cargo test
+shoal run --workspace 3 -- cargo test
 shoal edit 3                             # Open in $VISUAL/$EDITOR or the edit command
 shoal open 3 --app claude                # Claude desktop app (macOS)
 shoal open 3 --app codex                 # Codex desktop app
@@ -730,17 +730,17 @@ shoal open --app t3                      # Running T3 Code desktop app; current 
 shoal open 3                             # app.default, else the only installed app, else a picker
 shoal claude 3 -- --help
 shoal codex                              # Current workspace or picker
-shoal happy-codex fix-login              # Detached Happy session for the Happy app
+shoal happy-codex 3                      # Detached Happy session for the Happy app
 shoal status 3                      # Activity, changes, held resources, issue and PR state
-shoal status planning               # A chat's agent, sessions, issue and PR state
+shoal status 5                      # A chat's agent, sessions, issue and PR state
 shoal status pr 12                  # Workspaces and chats that link PR 12
 shoal status ci 2765                # Workspaces and chats that link CI run 2765
 shoal status resource devices       # Workspaces that hold a devices lease
 shoal stop 3                             # Stop agents and commands until shoal resume
 shoal rm 3                               # Remove; choose what to keep if work differs
 shoal rm 3 6                             # Remove several, confirming once for all
-shoal rm plan-cache                      # Remove a chat and the spaces below it
-shoal rm fix-login --wait                # Return once it is gone, naming a kept branch
+shoal rm 5                               # Remove a chat and the spaces below it
+shoal rm 3 --wait                        # Return once it is gone, naming a kept branch
 ```
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,
@@ -2637,7 +2637,7 @@ records that workspace as the new workspace's base workspace.
 shoal branch base                        # Show the current workspace's base workspace
 shoal branch base set feature-a          # Record it by workspace number, ID or branch
 shoal branch base clear                  # Remove it
-shoal branch base set feature-a --workspace feature-b
+shoal branch base set feature-a --workspace 4
 ```
 
 The base must be another workspace of the same repository and must not create
@@ -2662,7 +2662,7 @@ failed request is reported in the update.
 shoal split fix-typo                 # A child of the current workspace, from the default branch
 shoal split --issue 42               # Branch named after the issue, which it links
 shoal split part-two --base fix-api  # Stacked on the parent's branch
-shoal split fix-typo --workspace fix-api
+shoal split fix-typo --workspace 3
 shoal start --issue 43 --agent claude                  # Inside a workspace: a child with an agent of its own
 shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
 shoal start my-project api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
@@ -2794,10 +2794,10 @@ coordinator answers a question asked below it with
 
 ```sh
 shoal start --copy                       # A copy of the current workspace, with an agent of its own
-shoal start --copy topic --fork -- "Try a queue instead of polling"
-shoal split --copy topic                 # A child copy without an agent
+shoal start --copy 7 --fork -- "Try a queue instead of polling"
+shoal split --copy 7                     # A child copy without an agent
 shoal split --no-branch --copy topic     # A copy at topic's HEAD, without a branch
-shoal start --copy topic --checkpoint 3  # From topic's checkpoint 3, live or removed
+shoal start --copy 7 --checkpoint 3      # From 7's checkpoint 3, live or removed
 ```
 
 `--copy [WORKSPACE]` on `shoal start` and `shoal split` starts a workspace from
@@ -3834,10 +3834,10 @@ archive_max_mb = 50
 
 ```sh
 shoal move export 7 -o topic.shoal             # remove workspace 7 and write it to a file
-shoal move export plan-cache -o plan.shoal     # end the chat plan-cache and write it to a file
+shoal move export 5 -o plan.shoal              # end the chat 5 and write it to a file
 shoal move import topic.shoal                  # continue it in the repository with the same origin
 shoal move export 7 | ssh other shoal move import --resume      # agents continue there
-shoal move ssh other plan-cache                # the same, once ssh reaches Shoal there
+shoal move ssh other 5                         # the same, once ssh reaches Shoal there
 shoal move export --repo app --all -o moving   # end every space of app, a file each
 shoal move export 7 8 -o moving                # remove both, a file each
 shoal move export 7 --keep -o copy.shoal       # keep workspace 7 running and write a copy of it
@@ -4608,7 +4608,7 @@ shoal ci ls --workflow deps.yml        # the newest runs on the workspace's bran
 shoal ci ls --pr 12                    # the runs on PR 12's head commit
 shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
 shoal ci rerun --pr 12 --repo shoal      # in a registered repository, without a workspace
-shoal ci ls --space planning           # a chat's linked PR's runs
+shoal ci ls --space 5                  # a chat's linked PR's runs
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
@@ -5054,7 +5054,7 @@ wherever they run; `--space` selects another one for unscoped callers.
 ```sh
 shoal progress "Reproduced; the cause is the 5-second query limit"  # Set the status line ("" clears it)
 shoal progress                                                     # Show the status line and steps
-shoal progress --space api                                         # Another workspace or chat
+shoal progress --space 4                                           # Another workspace or chat
 shoal progress --steps < plan.md                                   # Replace the steps (empty input clears them)
 shoal done --summary "Fix merged; the timeout is now 30 seconds"   # Completes with this as the status line
 ```
@@ -5680,13 +5680,13 @@ otherwise the current one or a picker); a kind shows only that kind.
 ### Port reservations
 
 ```sh
-shoal acquire port web --workspace fix-login --reason "Frontend dev server"
+shoal acquire port web --workspace 3 --reason "Frontend dev server"
 shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
-shoal catalog port --workspace fix-login # Automatic range, named ports and conflict policy
-shoal leases port --workspace fix-login  # Current reservations
+shoal catalog port --workspace 3 # Automatic range, named ports and conflict policy
+shoal leases port --workspace 3  # Current reservations
 shoal leases port --all                 # Every workspace
-shoal release port web --workspace fix-login
-shoal run --workspace fix-login -- sh -c 'my-server --port "$API_PORT"'
+shoal release port web --workspace 3
+shoal run --workspace 3 -- sh -c 'my-server --port "$API_PORT"'
 ```
 
 Named TCP reservations belong to the worktree, persist across command exits, `stop`,

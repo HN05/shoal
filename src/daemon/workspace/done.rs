@@ -143,7 +143,7 @@ impl Manager {
             &workspace.name,
             &workspace.id,
             NotificationKind::SpaceDone,
-            done_notice(&workspace.name, &completion, &closed),
+            done_notice(&workspace.number.to_string(), &completion, &closed),
         )
         .await;
         if let Some((command, _resources)) = hook {
@@ -380,7 +380,7 @@ fn record_completion(
 }
 
 /// What the user is told about a completion, the questions it closed and
-/// the files it handed back.
+/// the files it handed back, in the workspace numbered `workspace`.
 fn done_notice(workspace: &str, completion: &Completion, closed: &[ItemNumber]) -> String {
     let mut notice = String::from("assignment finished");
     if completion.integrated {
@@ -396,7 +396,8 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[ItemNumber]) 
 }
 
 /// Add the questions a completion closed, the results it handed back and,
-/// last, its summary to the notice of the space `space`.
+/// last, its summary to the notice of the space `space`, a number, which
+/// selects it.
 pub(crate) fn push_completion_details(
     notice: &mut String,
     space: &str,

@@ -210,9 +210,12 @@ impl Manager {
             .await
             .stop(execution, &StopRequest::queue_cancel(), false)
             .await?;
+        // Names select nothing; a restore's workspace is known.
+        let workspace =
+            (entry.workspace()).map_or_else(|| entry.id.to_string(), ToString::to_string);
         ensure!(
             stopped,
-            "the agent of {0} waits to reattach to the daemon; cancel its restore once it has, or stop it with shoal stop {0}",
+            "the agent of {} waits to reattach to the daemon; cancel its restore once it has, or stop it with shoal stop {workspace}",
             entry.name
         );
         Ok(())
