@@ -107,19 +107,25 @@ impl Manager {
     }
 
     /// The chats `shoal stop --all` stops: those that run, come back on
-    /// their own, or start again now, whose stop is refused.
+    /// their own, start again now, whose stop is refused, or have processes
+    /// left running since they stopped.
     pub(crate) async fn chat_stop_targets(&self) -> Result<Vec<Chat>> {
-        let mut chats = self.chats().await?;
-        chats.retain(|chat| {
-            matches!(chat.restore, None | Some(ChatRestore::Automatic))
+        let mut targets = Vec::new();
+        for chat in self.chats().await? {
+            let target = matches!(chat.restore, None | Some(ChatRestore::Automatic))
                 || self.chat_agents.starting_again(&chat.id)
-        });
-        Ok(chats)
+                || !self.chat_survivors(&chat).await?.is_empty();
+            if target {
+                targets.push(chat);
+            }
+        }
+        Ok(targets)
     }
 
     /// [`Self::save_chat`] for `saving`, with no other save, handoff or
     /// automatic restore under way, returning whether the chat ran or its
-    /// automatic restore was pending; either way the processes it owns stop.
+    /// automatic restore was pending. A stop also ends what a stopped chat
+    /// owns that still runs.
     async fn save_running_chat(
         &self,
         id: &SpaceId,
@@ -135,30 +141,31 @@ impl Manager {
         self.stop_finished_chats().await?;
         let chat = id.to_owned();
         let stopped_by = stopped_by.cloned();
-        let (stopping, released) = (self.store)
+        let (saved, stopping, released) = (self.store)
             .write(move |tx| {
                 let held = stop && hold_automatic(tx, &chat, stopped_by.as_ref())?;
                 let Saved { running, released } =
                     save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref())?;
-                // A save an interrupted daemon never stopped may leave the
-                // agent of a held chat running.
+                let saved = held || !running.is_empty();
+                // A save an interrupted daemon never stopped, or a stop that
+                // failed, may leave what a stopped chat owns running.
                 let stopping = match running.into_iter().next() {
                     Some(running) => Some(running),
-                    None if held => Some((chat.clone(), saved_process(tx, &chat)?)),
+                    None if stop => stopped_process(tx, &chat)?.map(|process| (chat, process)),
                     None => None,
                 };
-                Ok((stopping, released))
+                Ok((saved, stopping, released))
             })
             .await?;
         let Some((id, process)) = stopping else {
-            return Ok(false);
+            return Ok(saved);
         };
         let stopped = self.stop_saved(&id, &process).await;
         if stopped.is_err() {
             self.keep_after_failed_stop(id, process).await;
         }
         self.ask_user_about(&released).await;
-        stopped.map(|()| true)
+        stopped.map(|()| saved)
     }
 
     /// Settle the chat `id`, saved while it ran as `process`, after a stop
@@ -373,11 +380,7 @@ impl Manager {
     /// have two agents write one session, and a removal would delete files
     /// they use.
     pub(crate) async fn ensure_ended(&self, chat: &Chat, caller: u32) -> Result<()> {
-        let id = chat.id.clone();
-        let recorded = self.store.run(move |db| saved_process(db, &id)).await?;
-        let wrappers = self.execution_wrappers().await?;
-        let stopped = self.stopped_chat_processes(&chat.id).await?;
-        let mut running = processes::survivors(&chat.id, &recorded, &stopped, &wrappers).await?;
+        let mut running = self.chat_survivors(chat).await?;
         running.retain(|process| process.pid != caller);
         let pids: Vec<String> = running
             .iter()
@@ -391,6 +394,31 @@ impl Manager {
         );
         Ok(())
     }
+
+    /// The processes the stopped `chat` owns that still run, as after a
+    /// stop that did not end them.
+    async fn chat_survivors(&self, chat: &Chat) -> Result<Vec<Identity>> {
+        if chat.restore.is_none() {
+            return Ok(Vec::new());
+        }
+        let id = chat.id.clone();
+        let recorded = self.store.run(move |db| saved_process(db, &id)).await?;
+        let wrappers = self.execution_wrappers().await?;
+        let stopped = self.stopped_chat_processes(&chat.id).await?;
+        processes::survivors(&chat.id, &recorded, &stopped, &wrappers).await
+    }
+}
+
+/// The process the chat `id` ran as while it is stopped.
+fn stopped_process(db: &Connection, id: &SpaceId) -> Result<Option<Identity>> {
+    let stopped = db
+        .query_row(
+            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL",
+            [id],
+            |_| Ok(()),
+        )
+        .optional()?;
+    stopped.map(|()| saved_process(db, id)).transpose()
 }
 
 /// The process the stopped chat `id` ran as.

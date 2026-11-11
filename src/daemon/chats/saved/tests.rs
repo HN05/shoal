@@ -227,6 +227,25 @@ async fn a_stop_ends_the_agent_an_interrupted_save_left_running() {
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
 }
 
+/// A chat saved for `shoal resume` whose stop never ran keeps its agent,
+/// which a later stop ends while the chat keeps its stopper.
+#[tokio::test]
+async fn a_stop_of_a_stopped_chat_ends_what_still_runs() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    mark_saved(&manager).await;
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(manager.chat_stop_targets().await.unwrap().len(), 1);
+
+    let stopped = manager.stop_chat_for_resume(&saved, None).await.unwrap();
+
+    assert!(stopped.already_stopped);
+    assert!(!process.wait().unwrap().success());
+    assert!(manager.chat_stop_targets().await.unwrap().is_empty());
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Resume));
+}
+
 #[tokio::test]
 async fn the_daemon_saves_running_chats_as_it_exits() {
     for (ending, restore) in [
