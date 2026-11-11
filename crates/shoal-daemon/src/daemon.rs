@@ -22,6 +22,7 @@ pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
 mod git_logins;
+pub(crate) mod idle_wakes;
 pub(crate) mod item_numbers;
 mod keep_awake;
 pub mod leftovers;
@@ -171,6 +172,7 @@ pub async fn run(
         workspace_usage::run,
     );
     spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
+    spawn_supervised(&mut background, &manager, "idle wakes", idle_wakes::run);
     spawn_supervised(
         &mut background,
         &manager,

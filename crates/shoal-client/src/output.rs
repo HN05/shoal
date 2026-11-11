@@ -113,6 +113,7 @@ outputs!(
     crate::sim::AuditEntry,
     crate::sim::Simulator,
     crate::sim::SimulatorOverview,
+    crate::sleep::Slept,
     crate::model::AgentStatus,
     crate::model::Chat,
     crate::model::Checkpoint,

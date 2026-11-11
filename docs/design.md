@@ -1958,7 +1958,15 @@ three minutes, longer than the hook waits between attempts, since an idle agent
 whose hook ended for any reason would otherwise wait for the user. The daemon
 logs how a wake hook's wait ends without updates, and the hook reports the
 reasons only it sees, such as its agent's exit or a signal, so a missed wake
-can be traced. Besides that prompt, Shoal writes to an agent's
+can be traced. Since a missed wake, a needless question or a restore can
+still leave an agent idle with work outstanding, a mode's `idle_wake_minutes`
+backs these wakes up: a message wakes an agent idle that long, by the state
+its hooks report rather than separate detection, and again after each further
+period without backoff, so it reaches the agent through the same delivery as
+any update. An agent that legitimately waits says so with `shoal sleep`, until
+its next turn or for good, which keeps the timer from waking it but no update;
+a done space is never woken. Only `worker` sets it: the chats wait for the
+user by design. Besides that prompt, Shoal writes to an agent's
 terminal only the interrupt key `shoal stop --interrupt` sends and the fixed
 prompt with which `shoal resume` continues the interrupted turn: the daemon
 never does, the prompts carry no forge text, and they are appended to anything

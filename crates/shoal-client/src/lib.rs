@@ -51,6 +51,7 @@ pub mod scope_tokens;
 pub mod secrets;
 pub mod sessions;
 pub mod sim;
+pub mod sleep;
 pub mod space_ids;
 pub mod space_names;
 pub mod state;

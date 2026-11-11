@@ -31,6 +31,14 @@ pub enum AgentMethod {
     Progress {
         space: SpaceSelector,
     },
+    /// Let the space's agent sleep as `sleep` says, so Shoal does not wake
+    /// it for having stayed idle, or end its sleep with none; a space whose
+    /// mode never wakes it records none.
+    Sleep {
+        space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sleep: Option<crate::state::Sleep>,
+    },
     /// [`Self::SetAgentState`] working for the turn a wake hook starts with
     /// an update, unless a stop of the caller's agent came first, which
     /// leaves the update for its restore. Answers whether the turn starts.

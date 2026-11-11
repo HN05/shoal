@@ -200,6 +200,11 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    // Agents sleep no more.
+    db.execute_batch(
+        "DROP TRIGGER workspace_sleep_removed; DROP TRIGGER chat_sleep_removed;
+         DROP TABLE space_sleep;",
+    )?;
     db.execute_batch(include_str!("space_completion_undo.sql"))?;
     // Spaces convert no more.
     db.execute_batch(

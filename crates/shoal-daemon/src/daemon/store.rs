@@ -393,6 +393,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         latest_review: None,
         agent_state: None,
         progress: None,
+        sleep: None,
         coordinator_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),

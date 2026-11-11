@@ -12,6 +12,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         latest_review: None,
         agent_state: None,
         progress: None,
+        sleep: None,
         coordinator_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),

@@ -177,7 +177,9 @@ instead of the PR delivery guidance below.
   returned, and it never records completion. Only unscoped callers, and the
   coordinating agents of the workspaces below theirs, queue messages for a workspace's agents, and delivery deletes a message. Agent hooks deliver
   messages and queued item activity, replacing a running watch, and a Claude Code
-  hook wakes the idle agent; a chat's hooks deliver its own queue of its workers'
+  hook wakes the idle agent; an agent idle as long as its mode's
+  `idle_wake_minutes` gets a message asking it to continue, again each period,
+  unless its space is done or `shoal sleep` holds it; a chat's hooks deliver its own queue of its workers'
   events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an

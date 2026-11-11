@@ -116,6 +116,41 @@ impl PresentSpace {
         }
     }
 
+    /// The mode its agent started in; none for a workspace that has had no
+    /// agent.
+    pub fn mode(&self) -> Option<crate::config::permissions::SpaceMode<'_>> {
+        match self {
+            Self::Workspace(workspace) => {
+                (workspace.mode.as_ref()).map(|name| crate::config::permissions::SpaceMode {
+                    name,
+                    kind: SpaceKind::Workspace,
+                    repository: true,
+                })
+            }
+            Self::Chat(chat) => Some(crate::config::permissions::SpaceMode {
+                name: &chat.mode,
+                kind: SpaceKind::Chat,
+                repository: chat.repository_id.is_some(),
+            }),
+        }
+    }
+
+    /// Whether `shoal done` recorded that its work is finished.
+    pub fn done(&self) -> bool {
+        match self {
+            Self::Workspace(workspace) => workspace.done,
+            Self::Chat(chat) => chat.completion.is_some(),
+        }
+    }
+
+    /// How long its agent sleeps.
+    pub fn sleep(&self) -> Option<crate::state::Sleep> {
+        match self {
+            Self::Workspace(workspace) => workspace.sleep,
+            Self::Chat(chat) => chat.sleep,
+        }
+    }
+
     /// What user-facing text calls it: `workspace` or `chat`.
     pub fn kind(&self) -> &'static str {
         self.space_kind().as_str()

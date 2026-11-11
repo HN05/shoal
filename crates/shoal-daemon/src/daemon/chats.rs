@@ -220,6 +220,7 @@ impl Manager {
             completion: None,
             agent_state: None,
             progress: None,
+            sleep: None,
             parent: None,
             children: Vec::new(),
             converted: false,
@@ -874,6 +875,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
                 .and_then(|record| serde_json::from_str(&record).ok()),
             agent_state: None,
             progress: None,
+            sleep: None,
             parent: None,
             children: Vec::new(),
             converted: row.get(18)?,
@@ -888,6 +890,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         chat.children = workspace::children(db, &chat.id)?;
         chat.agent_state = workspace::agent_state::current(db, &chat.id)?;
         chat.progress = crate::daemon::progress::current(db, &chat.id)?;
+        chat.sleep = crate::daemon::idle_wakes::sleep::current(db, &chat.id)?;
         Ok(chat)
     })
     .collect()

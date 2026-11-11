@@ -215,6 +215,7 @@ response_bodies! {
     ReadyOutcomes(Vec<crate::model::ReadyOutcome>),
     AgentStatus(crate::model::AgentStatus),
     Progress(Option<crate::progress::Progress>),
+    Slept(crate::sleep::Slept),
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),

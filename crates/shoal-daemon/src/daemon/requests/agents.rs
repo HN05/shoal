@@ -79,6 +79,7 @@ pub(super) async fn handle(
             Body::Progress(manager.set_progress(&space, change).await?)
         }
         AgentMethod::Progress { space } => Body::Progress(manager.space_progress(&space).await?),
+        AgentMethod::Sleep { space, sleep } => Body::Slept(manager.sleep(&space, sleep).await?),
         AgentMethod::StartWokenTurn { workspace } => Body::WokenTurn(WokenTurn {
             starts: manager
                 .start_woken_turn(&workspace, execution(caller))
@@ -210,6 +211,7 @@ impl Scoped for AgentMethod {
             | AgentMethod::WaitAgentUpdates { space }
             | AgentMethod::ReportWakeEnd { space, .. }
             | AgentMethod::Progress { space }
+            | AgentMethod::Sleep { space, .. }
             | AgentMethod::AcknowledgePrUpdates { space, .. } => Some(space),
             AgentMethod::ReportTurnFailure {
                 execution: Some(_), ..

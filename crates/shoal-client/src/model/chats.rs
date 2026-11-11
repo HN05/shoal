@@ -77,6 +77,10 @@ pub struct Chat {
     /// Where its agent is in its work, as it last reported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<crate::progress::Progress>,
+    /// How long its agent sleeps, which keeps Shoal from waking it for
+    /// having stayed idle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sleep: Option<crate::state::Sleep>,
     /// The space above it.
     #[serde(default)]
     pub parent: Option<SpaceRef>,

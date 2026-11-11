@@ -53,6 +53,21 @@ fn status(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentStatus> {
     })
 }
 
+/// The spaces whose agent is idle while it can still be, as [`current`]
+/// reads it, each with when it went idle.
+pub(crate) fn idle(db: &Connection) -> Result<Vec<(SpaceId, UnixTime)>> {
+    Ok(db
+        .prepare(
+            "SELECT s.space_id,s.since FROM space_agent_state s
+             LEFT JOIN executions e ON e.id=s.execution_id
+             WHERE s.state=?1 AND (s.execution_id IS NULL OR e.state=?2)",
+        )?
+        .query_map(params![AgentState::Idle, ExecutionState::Running], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Every space's last reported state.
 pub(crate) fn all(db: &Connection) -> Result<Vec<(SpaceId, AgentState)>> {
     Ok(db
@@ -405,9 +420,9 @@ struct Report {
     failed: bool,
 }
 
-/// Record `report` with the turn retries it settles, in one transaction:
-/// the state it leaves and whether it changed it, or `None` when its space
-/// takes no report by then.
+/// Record `report` with the turn retries it settles and the sleep a turn it
+/// starts ends, in one transaction: the state it leaves and whether it
+/// changed it, or `None` when its space takes no report by then.
 fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(AgentStatus, bool)>> {
     if !takes_report(tx, &report.space)? {
         return Ok(None);
@@ -415,6 +430,7 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     let previous = get(tx, &report.space)?.map(|status| status.state);
     let changed = write_state(tx, report)?;
     super::turn_retry::follow_state(tx, &report.space, report.state)?;
+    crate::daemon::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
     if !report.failed {
         let execution = report.execution.as_ref();
         super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;

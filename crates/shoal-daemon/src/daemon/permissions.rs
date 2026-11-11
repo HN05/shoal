@@ -253,24 +253,11 @@ type RecordedAgent<'a> = (SpaceMode<'a>, PermissionsConfig);
 /// The mode and narrowing the agent of `space` started with; none for a
 /// workspace that has had no agent.
 fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
-    match space {
-        PresentSpace::Workspace(workspace) => workspace.mode.as_ref().map(|name| {
-            let mode = SpaceMode {
-                name,
-                kind: SpaceKind::Workspace,
-                repository: true,
-            };
-            (mode, workspace.narrowing)
-        }),
-        PresentSpace::Chat(chat) => Some((
-            SpaceMode {
-                name: &chat.mode,
-                kind: SpaceKind::Chat,
-                repository: chat.repository_id.is_some(),
-            },
-            chat.narrowing,
-        )),
-    }
+    let narrowing = match space {
+        PresentSpace::Workspace(workspace) => workspace.narrowing,
+        PresentSpace::Chat(chat) => chat.narrowing,
+    };
+    Some((space.mode()?, narrowing))
 }
 
 #[cfg(test)]

@@ -278,6 +278,16 @@ states!(AgentState: ValueEnum {
     /// The agent finished its turn.
     Idle => "idle",
 });
+states!(
+    /// How long a space's agent sleeps: while it does, Shoal does not wake
+    /// it for having stayed idle, though updates and messages still do.
+    Sleep {
+        /// Until its next turn starts.
+        Turn => "turn",
+        /// Until `shoal sleep --undo`.
+        Permanent => "permanent",
+    }
+);
 states!(TurnFailure {
     /// The API refused the request for a rate or usage limit.
     RateLimited => "rate_limited",
