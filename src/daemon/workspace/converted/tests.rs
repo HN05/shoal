@@ -9,6 +9,7 @@ use crate::{
     },
     model::Repository,
 };
+use std::path::Path;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
@@ -188,4 +189,31 @@ async fn the_chats_open_questions_stay_with_the_space() {
         .map(|question| question.number)
         .collect();
     assert_eq!(numbers, [asked.number]);
+}
+
+#[tokio::test]
+async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
+    let (root, manager) = manager().await;
+    let remote = repository(root.path(), "remote");
+    crate::daemon::test_support::git(&remote, &["branch", "topic"]);
+    let repo = registered(root.path(), &manager).await;
+    let checkout = repo.path.to_str().unwrap();
+    let remote_path = remote.to_str().unwrap();
+    crate::daemon::test_support::git(
+        Path::new(checkout),
+        &["remote", "add", "origin", remote_path],
+    );
+    crate::daemon::test_support::git(Path::new(checkout), &["fetch", "-q", "origin"]);
+    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let converting = Converting {
+        chat: talk,
+        mode: ModeName::DEFAULT,
+    };
+
+    let workspace = manager
+        .create_converted_workspace(converting, "origin/topic".into(), None, Default::default())
+        .await
+        .unwrap();
+
+    assert_eq!(workspace.branch.as_deref(), Some("topic"));
 }

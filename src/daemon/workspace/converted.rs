@@ -30,6 +30,11 @@ impl Manager {
         let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &branch).await?;
         let source = self.converted_source(&repo, &branch, base).await?;
+        // An existing branch goes under its local name, without its remote.
+        let branch = match &source {
+            WorkspaceSource::Existing { branch, .. } => branch.name.clone(),
+            WorkspaceSource::New { .. } => branch,
+        };
         let chat = converting.chat.id.clone();
         let new = NewWorkspace {
             options,
@@ -52,11 +57,7 @@ impl Manager {
         branch: &str,
         base: Option<String>,
     ) -> Result<WorkspaceSource> {
-        if !git::branch::names_in_use(&repo.path)
-            .await?
-            .iter()
-            .any(|name| name == branch)
-        {
+        if !self.branch_exists(repo, branch).await? {
             return Ok(WorkspaceSource::New { base, parent: None });
         }
         match self.open_target(repo, branch, Default::default()).await? {
@@ -72,6 +73,16 @@ impl Manager {
                 )
             }
         }
+    }
+
+    /// Whether `branch` names a local branch, or a remote one by its name or
+    /// with its remote, such as `origin/topic`.
+    async fn branch_exists(&self, repo: &Repository, branch: &str) -> Result<bool> {
+        if git::remote_branch(&repo.path, branch).await?.is_some() {
+            return Ok(true);
+        }
+        let names = git::branch::names_in_use(&repo.path).await?;
+        Ok(names.iter().any(|name| name == branch))
     }
 
     /// Give back the chat `chat` whose workspace failed to be made, removing
