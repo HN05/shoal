@@ -1204,18 +1204,19 @@ the setting does not send to the background, unless `--after` makes it wait for 
 cannot switch the limit off. Commands say only what they
 launch; one terminal layer chooses the placement and the backend that carries
 it out, so focus behaves alike everywhere and another backend plugs in with
-its own primitives without touching commands: Herdr focuses a tab or
-opens it in the background, and outside Herdr zmx attaches the caller or starts
-a detached session running the plan, which it receives in its environment as a
-tab does. A resume takes no new input, so it restores agents where they stopped
+its own primitives without touching commands: a host that opens places, such
+as Herdr, focuses one or opens it in the background, and one that keeps agents
+in sessions the terminal attaches to, such as zmx, attaches the caller or starts
+a detached session running the plan, which it receives in its environment as
+every place does. A resume takes no new input, so it restores agents where they stopped
 or in the background; only `--focus` restores one in the caller's terminal.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
-Herdr tabs remain open after tracked agent exits, and the tab's shell enters the
-workspace through its own exported navigation file, followed once at a prompt
-after the worker writes it. Completion that keeps the workspace closes a place
-Shoal opened for it, a Herdr tab or a zmx session for an addition, an attached
-agent or a background resume, only after tracked executions
+A place that keeps a shell, such as a Herdr tab, remains open after tracked
+agent exits, and its shell enters the workspace through its own exported
+navigation file, followed once at a prompt after the worker writes it.
+Completion that keeps the workspace closes a place Shoal opened for it, for an
+addition, an attached agent or a background resume, only after tracked executions
 have resolved or the agent's turn finished, since interactive agents stay running
 at their prompt, and never while stopped work waits for resume, so the place keeps
 the stop's cause and `shoal resume --all` can restore the agent there; removal
@@ -1337,8 +1338,9 @@ documents these limits rather than working around them. `terminal.tmux.enabled`
 lets tmux serve its panes and, unset, follows whether `terminal.default_host`
 names tmux, so choosing the default host opts in everywhere and tmux users who
 set neither keep zmx. Inherited variables cannot tell which of nested hosts is
-innermost, so hosts claim a terminal in a fixed order, tmux last: a zmx session,
-Herdr pane or Rex block inside tmux keeps its own behavior. A tmux session is a
+innermost, so hosts claim a terminal in a fixed order, the opt-in multiplexers
+last: a place of a host that claims a terminal before tmux, such as a zmx
+session, keeps its own behavior inside tmux. A tmux session is a
 group and a pane a place, as a Rex session and block are: Shoal opens a window
 in the session the caller's pane started in, or splits that pane, runs agents in
 place, and outside tmux opens windows in a configured session of the default
@@ -1414,9 +1416,9 @@ the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions. A detached session that Shoal
 starts labels itself once its workspace exists. A start queued from a zmx
-session joins no group, so it goes to `terminal.default_host`. Launches inside a zmx session, or in
-a Herdr pane with the integration enabled, run in place, since Herdr reads agent
-state from the pane's process. A caller without a terminal, such as an
+session joins no group, so it goes to `terminal.default_host`. Launches in a place of an enabled
+host run in place: a zmx session cannot show another session to its terminal,
+and a host such as Herdr reads agent state from the place's process. A caller without a terminal, such as an
 orchestrating agent's tool call, starts the agents of `start` and `resume --now`
 detached through the daemon, as a scoped caller does: run in place, the agent
 would hold the call until it exits and die with an interrupt of the caller.
@@ -1534,13 +1536,14 @@ the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current
 when it starts. A
 starting entry keeps its slot through setup while the launching CLI holds a
-connection open, with a short grace period for Herdr handoffs and daemon
+connection open, with a short grace period for handoffs to the place a host opens and daemon
 restarts, until its agent registers; setup begins once the daemon holds the slot; a dead launch cannot hold a slot, and setup
 time stays unbounded. The daemon starts admitted entries through a detached CLI
 worker carrying the queuing terminal's origin, since terminal launch logic
-stays in the CLI: a background Herdr tab when queued from Herdr, otherwise
-a detached zmx session whose shell is given the worker, because zmx gives
-commands it runs itself no terminal input. That shell is zmx's bash, so the
+stays in the CLI: a background place in the group of the place it was queued
+from, such as a Herdr tab in its workspace, otherwise one of
+`terminal.default_host`. A detached zmx session there is given a shell that
+runs the worker, because zmx gives commands it runs itself no terminal input. That shell is zmx's bash, so the
 session ends once its agent or workspace shell has run, whatever the exit
 status, and only a failed start replaces it with the user's login shell.
 A queued launch may depend on workspaces, queued launches and issues, including
@@ -1829,8 +1832,8 @@ additions launch only when an agent is named. `start --agent` launches only afte
 creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
-tracking or scope. A host runs Shoal's tracked agents, chats and demos and shows
-them, as zmx, Herdr, Rex, tmux and Zellij do; an external app, such as Quay, is a UI that is
+tracking or scope. A host, such as zmx or Herdr, runs Shoal's tracked agents,
+chats and demos and shows them; an external app, such as Quay, is a UI that is
 not a host and reads and acts on Shoal's state through `shoal_client`. It holds
 a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
@@ -1947,7 +1950,7 @@ tries a failed wait again instead of exiting, because a hook that ends leaves th
 idle agent with no wait until its next turn; waits outlast a daemon restart,
 including the time before the next daemon listens and knows the agent's scope. Codex
 has no hook that can start a turn, so its tracked wrapper types a fixed prompt
-into the zmx session, Rex block or Herdr pane it runs in once Codex is idle with updates, at most once
+into the place it runs in, where its host types into its places, once Codex is idle with updates, at most once
 per idle stretch, and the prompt's hook delivers them. Claude Code's wake hook
 does not run after an interrupted turn, so its wrapper prompts it the same way
 while it idles after one, and also once no wait for its updates has run for

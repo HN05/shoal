@@ -19,7 +19,7 @@ link to `Shoal.app/Contents/MacOS/shoal`, on your `PATH`. macOS keeps the bare
 binary's privacy grants only while it stays at the same path.
 Homebrew installs the additional tools for workspace management and interactive
 menus, but not zmx 1.0.1 or later, the default terminal host: install it with
-`brew install neurosnap/tap/zmx`, or use [Herdr, Rex, tmux or Zellij](docs/reference.md#herdr)
+`brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference.md#agents)
 instead. Upgrading zmx from 0.8 leaves the agents already running in its
 sessions out of Shoal's reach: [stop them first](docs/reference.md#agents). For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
@@ -103,17 +103,14 @@ shoal unlink issue assigned                # Remove the assigned issue
 shoal watch pr 505                         # Watch an explicit PR
 ```
 
-Inside Herdr, `start` opens a new tab after your choices; use `--here`
-to run in the current pane, `--focus` to switch to the new tab, or
-`terminal.herdr.enabled = false` to treat Herdr as a plain terminal. Inside
-[Rex](https://www.superlogical.com/rex), `start` opens a window in the current
-session instead, inside tmux with `terminal.tmux.enabled` a tmux window, and
-inside Zellij with `terminal.zellij.enabled` a Zellij tab.
-`[terminal] default_host = "herdr"`, `"rex"`, `"tmux"` or `"zellij"` sends launches
-from other terminals there too. Elsewhere, an agent that starts with an issue or
-arguments runs in a detached zmx session that `shoal attach` reaches. See
-[Herdr settings](docs/reference.md#herdr), [Rex settings](docs/reference.md#rex),
-[tmux settings](docs/reference.md#tmux) and [Zellij settings](docs/reference.md#zellij).
+Inside a terminal host that config enables, such as Herdr or
+[Rex](https://www.superlogical.com/rex), `start` opens a new tab or window after
+your choices; use `--here` to run in the current pane, `--focus` to switch to
+the new place, or the host's `enabled = false` to treat it as a plain terminal.
+`[terminal] default_host` names the host that launches from other terminals go
+to. With the default, zmx, an agent that starts with an issue or arguments runs
+in a detached zmx session that `shoal attach` reaches. See
+[Agents](docs/reference.md#agents) for each host's settings.
 
 Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for
@@ -323,9 +320,10 @@ With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,
 [local reviews](docs/reference.md#local-reviews) for reviewers, outcomes and the
 [review command](docs/reference.md#configured-commands) for uncommitted review.
 
-CLI agents and chats run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
-running when you detach with Ctrl-\ or close the terminal; `shoal attach` returns
-to one, or to an agent's Herdr tab, by its workspace's or chat's number or ID. Happy sessions run detached, log
+CLI agents and chats run in sessions of a terminal host, by default
+[zmx](https://github.com/neurosnap/zmx), that keep running when you detach with
+Ctrl-\ or close the terminal; `shoal attach` returns to one, such as a zmx
+session or a Herdr tab, by its workspace's or chat's number or ID. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. Codex and Claude run with
 their own sandbox and approval settings; Shoal turns on network access in Codex's
 sandbox so its commands reach the daemon. Use `shoal run --workspace 3 -- codex`

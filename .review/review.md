@@ -574,8 +574,7 @@ configured command for another agent, plus proven child
   give the entire command process group a shared grace period, even after its leader exits.
   Terminal agent launches put the tracked wrapper inside a zmx session, never a
   terminal emulator between agent and terminal; agent shortcuts without a terminal
-  and launches inside zmx, or in an enabled Herdr pane, Rex block, tmux pane or
-  Zellij pane run in place. Shoal closes only zmx sessions
+  and launches in a place of an enabled host run in place. Shoal closes only zmx sessions
   it created, labelled `shoal.created=1` at creation and never by relabelling;
   sessions the user opened stay theirs even after an agent ran in them, and
   sessions without the label have unknown origin and are never closed. Removal

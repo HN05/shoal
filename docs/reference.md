@@ -10,7 +10,7 @@ unset or empty `SHOAL_OUTPUT` means `text`; any other value fails. Errors use th
 selected format on stderr. The agents Shoal starts, including chats and resumed
 sessions, get `SHOAL_OUTPUT=json` unless the command that launches them sets a
 nonempty value, which they keep, also when they start later from the queue or in
-a Herdr tab; the commands and shells Shoal runs only inherit one. An agent Shoal does not start, such as one an
+a place a host opens; the commands and shells Shoal runs only inherit one. An agent Shoal does not start, such as one an
 app launch opens, gets JSON by default only when its own environment sets it.
 
 A JSON error is `{"error": {"code": ..., "message": ...}}`. Programs tell
@@ -489,11 +489,13 @@ restores and restarts keep the completion.
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
-interactive pane or block of an enabled host other than zmx, such as a Herdr pane with
-`terminal.herdr.enabled`, it restores each agent in the pane or block it
-stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal start` does: a tab
-per agent where `terminal.herdr.new_tab` allows, labelled as `shoal start` labels it, or a
-detached zmx session per agent on a terminal outside Herdr. Where nothing can
+interactive place of an enabled host that outlives its agent, such as a Herdr pane with
+`terminal.herdr.enabled`, it restores each agent in the place it
+stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal start` does: a
+background place per agent, labelled as `shoal start` labels it, of the host serving
+this terminal where its config lets it open places, such as `terminal.herdr.new_tab`,
+or of `terminal.default_host` on a terminal no host serves, such as a detached zmx
+session. Where nothing can
 start in the background, it restores a single agent
 here, unless the run also restores a chat or fails for a space, and otherwise lists
 the agents as `shoal resume --focus` commands to run in separate terminals.
@@ -1202,17 +1204,17 @@ after with `shoal resume`. Sessions an older zmx started keep running but are
 unreachable; Shoal reports them where it reads them, in `shoal status` and its
 cleanup notifications, until their processes end, which `shoal stop` does for
 an agent's.
-`terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
-[Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, and a queued
+`terminal.default_host` (`"zmx"` by default) sends these launches to another host
+instead, as each host's section below describes. With that host turned off they run in place, and a queued
 start or a demo that no other host takes fails.
 `-H`/`--here` on `shoal start`, `contribute`, `repo setup` and `config setup`
 runs the launch in this terminal instead of a new tab or detached session,
 whatever the host. An agent that `start` or `contribute` then starts runs as
-these launches do, in a zmx session attached here on a terminal; a chat runs in
+these launches do, such as in a zmx session attached here on a terminal; a chat runs in
 place.
 
-Interactive `shoal start` on a terminal outside Herdr and zmx places its launch
-as a Herdr tab would be: an agent that starts with input runs setup and the
+Interactive `shoal start` on a terminal no host serves, with zmx as
+`terminal.default_host`, places its launch as a tab would be: an agent that starts with input runs setup and the
 agent in a detached zmx session and returns with a `shoal attach` hint, and any
 other launch runs here and attaches its agent's session. `terminal.focus`
 overrides the choice, as it does for tabs, and `--here` keeps the launch
@@ -1234,7 +1236,7 @@ picker of the workspaces and chats with sessions. An agent or chat running in
 a Herdr pane counts as a session named after its tab: attaching focuses the
 tab and, from a terminal outside Herdr, attaches a Herdr client to the tab's
 Herdr session, and inside another Herdr session it is refused. A chat running
-in the Happy app or a terminal outside zmx has no session, and attaching says
+in the Happy app or in a terminal no host serves has no session, and attaching says
 where it runs instead. Attach finds a session where the daemon recorded the
 workspace's agent or the chat running, or one Shoal opened for the workspace,
 such as a detached session left at its shell after a failed setup. The
@@ -1270,7 +1272,7 @@ The `[terminal.herdr]` table in global or repository config uses normal per-opti
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
-`terminal.focus` overrides this for tabs and zmx sessions alike, the
+`terminal.focus` overrides this for every host's places alike, the
 [mode's](#modes-and-rules) `focus` overrides that for its launches, and
 `shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does.
 With `--json`, a start beside the terminal prints the planned `workspace` and
@@ -1308,7 +1310,7 @@ closes the same way; a pane it reuses keeps its tab's behavior. `start`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
-With `[terminal] default_host = "herdr"`, launches from a terminal outside Herdr and Rex
+With `[terminal] default_host = "herdr"`, launches from a terminal no host serves
 open their tabs in the `workspace_name` workspace of the Herdr server the
 terminal's `herdr` reaches, which must be running; `{repo}` is the only
 placeholder, and Shoal reuses the first workspace with that label or creates
@@ -1349,7 +1351,7 @@ session_name = "{repo}" # The session for windows Shoal opens outside one
 # close_when_done = true # Close after done keeps the workspace
 ```
 
-With `[terminal] default_host = "rex"`, launches from a terminal outside Herdr and Rex
+With `[terminal] default_host = "rex"`, launches from a terminal no host serves
 open their windows in the `session_name` session on the local Rex server; `{repo}` is the only
 placeholder, and Shoal reuses the oldest session with that label or creates it;
 with `terminal.rex.enabled = false` these launches run in place, and `new_window = false`
@@ -1385,8 +1387,9 @@ their pane; `placement = "split"` splits your pane instead, as in Rex. The tmux
 server keeps panes running without a client, so detaching (`prefix d`) or
 closing the terminal leaves the agent running. The new window runs the agent
 directly, with nothing typed on screen, then your login shell, which stays
-after the worker exits and enters the workspace as a Herdr tab's shell does. A zmx session, Herdr pane or Rex block inside tmux
-keeps its own behavior, since those hosts claim a terminal first.
+after the worker exits and enters the workspace as a Herdr tab's shell does. A place of a host
+that claims a terminal before tmux, such as a zmx session, keeps its own
+behavior inside tmux.
 
 ```toml
 [terminal.tmux]
@@ -1441,9 +1444,9 @@ labelled as a Herdr tab would be, and agents run in place in their pane;
 panes running without a client, so detaching (`Ctrl o d`) or closing the
 terminal leaves the agent running. The new tab runs the agent directly, with
 nothing typed on screen, then your login shell, which stays after the worker
-exits and enters the workspace as a Herdr tab's shell does. A zmx session,
-Herdr pane, Rex block or tmux pane inside Zellij keeps its own behavior, since
-those hosts claim a terminal first.
+exits and enters the workspace as a Herdr tab's shell does. A place of a host
+that claims a terminal before Zellij, such as a tmux pane, keeps its own
+behavior inside Zellij.
 
 ```toml
 [terminal.zellij]
@@ -1824,18 +1827,18 @@ printing how to open it, and a workspace process also notifies you.
 `shoal demo [NAME] [--workspace W]` opens a demo: a picker of the running demos
 of the current workspace, or of every workspace outside one, or the demo `NAME`.
 Opening runs the demo's `open` command in the workspace with the demo's
-variables, otherwise shows it where it runs: Herdr focuses its tab, attaching its Herdr session
-outside Herdr, Rex its
-window (or selects it in the Mac app), tmux its window and Zellij its tab, attaching outside them, and zmx attaches (Ctrl-\ detaches).
+variables, otherwise shows it where it runs, as `shoal attach` shows a session: its
+host focuses its place inside that host, and from another terminal attaches to it
+or shows it where the host shows its places, such as Rex's Mac app.
 `shoal demo ls` lists the configured and
 running demos, with a running web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
 the screen you are looking at. `shoal demo stop [NAME]` stops one demo, or every
 demo of the workspace.
 
-Each demo runs as a tracked command where queued agents start: a background
-Herdr tab inside Herdr, a background Rex window inside Rex, otherwise a
-detached zmx session
+Each demo runs as a tracked command where queued agents start: in a background
+place of the host it was started from, such as a Herdr tab, otherwise of
+`terminal.default_host`, such as a detached zmx session
 named `<workspace>-<name>`. A demo needs a terminal host: without one, such as
 when zmx is missing from `PATH`, `shoal demo start` fails, saying why, and
 starts nothing. A command that exits runs again; an exit
@@ -1873,14 +1876,14 @@ Every call starts a new chat, focused when its [mode's](#modes-and-rules)
 on no task; otherwise it starts in a background tab or detached session. Its
 name is `--name`, else the default `<repo> <mode>`, such as `shoal chat`,
 without asking; names may repeat, and the agent renames it with `shoal rename`
-once it knows the work. Inside Herdr it
-opens a tab labelled with the name, unless
-`new_tab = false` keeps it in the current pane, and inside Rex it opens a
-window; on a terminal it runs in a zmx
+once it knows the work. Inside a host that opens places beside its own it
+opens one labelled with the name, such as a Herdr tab, unless that host's
+config keeps it in the current place, as `new_tab = false` does; on a terminal
+no host serves it runs where `terminal.default_host` puts it, such as a zmx
 session with an opaque name such as `chat-0b9c3a52`, since nothing is built
 from a chat's name, which [`shoal attach <number>`](#agents)
-returns to; inside a zmx session or a Herdr pane it runs in place. `--here` runs
-it in place in this terminal. A Happy chat
+returns to; in any other place of a host, such as a zmx session, it runs in
+place. `--here` runs it in place in this terminal. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
 starts detached in the checkout as `shoal happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
@@ -2212,9 +2215,10 @@ queue and needs a free slot, or room for its load, as a launch does. A signal
 stop's restore of an idle agent holds no slot and holds nothing back until its
 update arrives; `shoal resume` makes it wait only for a slot, keeping its place.
 The daemon
-starts it as it starts a queued launch: in the Herdr pane or Rex block the agent
-stopped in once that is back at its prompt, otherwise in a background tab or
-window where `terminal.herdr.new_tab` or `terminal.rex.new_window` allows, otherwise where
+starts it as it starts a queued launch: in the place the agent stopped in, where
+its host keeps that place after its agent, once that is back at its prompt,
+otherwise in a background place of the host it stopped in where that host's
+config lets it open places, such as `terminal.herdr.new_tab`, otherwise where
 `terminal.default_host` puts it. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
 and leaves the agent stopped. Stopping the workspace or marking its assignment
@@ -2462,7 +2466,8 @@ first message. Rules and instructions may use `{workspace}`, `{branch}` and
 `{path}` of the space, `{repo}` and `{head}` for a chat, `{workspace_number}`
 for a chat in a workspace's worktree, the number that selects the workspace, `{updates}` saying how
 the agent receives issue and PR activity (delivered by its hooks for
-Claude Code, and for a workspace's Codex in a zmx session, Rex block or Herdr pane, otherwise
+Claude Code, and for a workspace's Codex in a place of a host that types into its places,
+such as a zmx session, otherwise
 by running `shoal watch pr`), `{issue.number}`, `{issue.title}` and
 `{issue.url}` of the subject's issue, and `{relabel}`, the sentence that swaps
 the `[issue]` `plan_label` for `planned_label`. Unknown placeholders stay
@@ -2748,9 +2753,10 @@ usual rules. `work` lists children indented below their parent;
 `--agent` starts an agent of its own in the ready child, prompted with the
 issue or the arguments after `--`. It goes through the [agent queue](#agent-queue)
 like any launch, but the daemon always starts it, detached in a background
-Herdr tab or zmx session, so the agent gets the child's own scope rather than
-the caller's; Codex runs as its CLI. The agent and that launcher, zmx outside a
-Herdr that opens tabs, are checked before the child is created, and the launch
+place where queued agents start, such as a Herdr tab or a zmx session, so the
+agent gets the child's own scope rather than the caller's; Codex runs as its
+CLI. The agent and the program of the first host that would start it are
+checked before the child is created, and the launch
 reopens only the child, failing if it was removed meanwhile. `--json` adds the
 queue entry as `agent`. Since the agent never runs in the caller, `--here` with
 an agent is refused.
@@ -5515,7 +5521,7 @@ passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
 process: Claude Code runs hooks outside its process group, so stopping the
 agent would otherwise leave the hook behind. The daemon's diagnostics record why
 a wake hook ends without starting a turn. Codex cannot
-be woken by a hook: when a Codex in a zmx session, Rex block or Herdr pane reports its turn
+be woken by a hook: when a Codex in a place of a host that types into its places reports its turn
 finished and has undelivered messages or activity, Shoal types `Shoal: new
 messages or activity on this workspace's issues and PRs.` into the session and
 submits it, once until Codex starts another turn, and its prompt hook delivers
