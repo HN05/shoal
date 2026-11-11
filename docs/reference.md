@@ -5148,8 +5148,9 @@ Running/unknown commands, saved stopped work, a chat running in the worktree or
 saved there, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup.
 So does the running agent of the nearest space above with one, in any turn
-state, while no agent of the workspace's own has ever started there, as in a
-child it split for its subagents; once that agent stops, the timer starts over.
+state, while no agent of the space's own works there: none has ever started in
+the workspace, as in a child it split for its subagents, or the chat's agent
+stopped; once that agent stops, the timer starts over.
 Pushed means reachable from locally known remote branches, merged into the
 default branch as removal decides, or with its changes on the branch the
 workspace builds on: its base workspace's branch, otherwise the local branch
