@@ -108,7 +108,7 @@ impl Manager {
     }
 
     /// Entries in queue order, waiting ones numbered and with the work they
-    /// wait for.
+    /// wait for and what held them back at the last admission pass.
     pub async fn queue_entries(&self) -> Result<Vec<QueueEntry>> {
         let mut entries = self.numbered_entries().await?;
         let mut readiness = self.dependency_readiness().await?;
@@ -118,6 +118,9 @@ impl Manager {
                 entry.waiting_for = work;
             }
             entry.waits_for_update = waking.contains(&entry.id);
+            if entry.state == QueueState::Queued {
+                entry.held_by = self.agent_queue.held_back(&entry.id);
+            }
         }
         Ok(entries)
     }

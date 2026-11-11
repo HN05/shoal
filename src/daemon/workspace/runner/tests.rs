@@ -470,14 +470,8 @@ async fn a_job_whose_pr_moved_on_is_passed_over_without_a_workspace() {
     );
 }
 
-#[tokio::test]
-async fn a_job_waits_while_its_permit_pool_is_full() {
-    let fixture = fixture(
-        vec![job("h1", 4, 1)],
-        "unused",
-        "permit = \"builds\"\n[resources.builds]\n",
-    )
-    .await;
+/// A workspace holding the one permit of the fixture's `builds` pool.
+async fn hold_the_builds_permit(fixture: &Fixture) -> crate::model::Workspace {
     let manager = &fixture.manager;
     let other = manager
         .create_workspace(&fixture.repository, "other".into(), None, None, None)
@@ -496,6 +490,19 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
         .acquire_resource(&SpaceSelector::id(&other.id), request, None)
         .await
         .unwrap();
+    other
+}
+
+#[tokio::test]
+async fn a_job_waits_while_its_permit_pool_is_full() {
+    let fixture = fixture(
+        vec![job("h1", 4, 1)],
+        "unused",
+        "permit = \"builds\"\n[resources.builds]\n",
+    )
+    .await;
+    let manager = &fixture.manager;
+    let other = hold_the_builds_permit(&fixture).await;
 
     admit_and_claim(manager).await;
     let waiting = job_entries(manager).await;
@@ -503,9 +510,13 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     assert_eq!(waiting[0].state, QueueState::Queued);
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.workspace(&"ci-rust-4".into()).await.is_err());
-    // It waits a while before admission tries it again.
+    // It waits a while before admission tries it again, held by the pool.
     manager.dispatch_queue().await.unwrap();
     assert!(manager.admitted_jobs().await.unwrap().is_empty());
+    assert_eq!(
+        job_entries(manager).await[0].held_by,
+        Some(crate::model::HeldBy::Permits)
+    );
 
     // Once the pool has a permit, the job holds it while it runs.
     manager.runners.forget_permits_busy();

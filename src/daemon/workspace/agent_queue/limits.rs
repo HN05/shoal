@@ -1,6 +1,6 @@
 //! Admission limits: the machine's and each repository's limits on agents
-//! and CI jobs, as configured and as measured load allows, and which waiting
-//! entries fit them beside the slots in use.
+//! and CI jobs, as configured and as measured memory and disk allow, and
+//! which waiting entries fit them beside the slots in use.
 use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
@@ -15,8 +15,9 @@ use crate::{
     config::{RunLimit, overload::Overload},
     daemon::workspace::{
         Manager,
-        capacity::{self, Activity, Agents},
+        capacity::{self, Activity, Agents, Unfit},
     },
+    model::HeldBy,
     protocol::ConfigTarget,
 };
 
@@ -25,8 +26,9 @@ use crate::{
 pub(crate) struct Limits {
     /// The machine's fixed slot count.
     pub global: Option<u32>,
-    /// How many agents measured load lets start now, under dynamic admission.
-    pub starts: Option<u32>,
+    /// What measured memory and disk leave for an agent's start, under
+    /// dynamic admission.
+    pub room: Option<capacity::Room>,
     pub repositories: HashMap<RepositoryId, Option<u32>>,
     /// The machine-wide limit free disk space sets while a fixed limit applies.
     pub disk: Option<u32>,
@@ -38,10 +40,13 @@ pub(crate) struct Limits {
 pub(crate) struct JobLimits {
     /// The jobs starting or running.
     pub running: u32,
-    /// `machine.max_jobs` when fixed, lowered as free disk space lowers a
-    /// fixed agent limit.
+    /// `machine.max_jobs` when fixed.
     pub fixed: Option<u32>,
-    /// What measured load leaves for a job's start, under dynamic admission.
+    /// The limit free disk space sets while `machine.max_jobs` is fixed, as
+    /// it does beside a fixed agent limit.
+    pub disk: Option<u32>,
+    /// What measured memory and disk leave for a job's start, under dynamic
+    /// admission.
     pub room: Option<capacity::Room>,
 }
 
@@ -51,7 +56,7 @@ impl Limits {
     }
 
     pub(super) fn apply_to(&self, repository: &RepositoryId) -> bool {
-        self.global.is_some() || self.starts.is_some() || self.repository(repository).is_some()
+        self.global.is_some() || self.room.is_some() || self.repository(repository).is_some()
     }
 }
 
@@ -110,25 +115,42 @@ pub(crate) struct Waiting {
     pub work: Work,
 }
 
-/// The waiting entries that fit, in queue order. `occupied` holds one
-/// repository ID per used slot. Under fixed limits a launch, like a restore
-/// an update woke, needs a free slot and another restore takes back its own;
-/// under dynamic admission each needs room for its load. Those other restores,
-/// like one-shot runs protection stopped, start only on sustained healthy
-/// readings (`recovered`), one per healthy interval. A CI job counts only
-/// against the jobs' limits, and under dynamic admission needs room for its
-/// own load and takes the pass's one start, as an agent does. An entry that
-/// waits or does not fit keeps its place and is passed over.
+/// What one admission pass decided.
+#[derive(Debug, Default)]
+pub(crate) struct Admission {
+    /// The waiting entries that fit, in queue order.
+    pub admitted: Vec<QueueEntryId>,
+    /// What held back each other entry the pass could have started.
+    pub held: HashMap<QueueEntryId, HeldBy>,
+}
+
+impl Admission {
+    fn hold(&mut self, entry: &Waiting, held: Unfit) {
+        if let Some(held) = held {
+            self.held.insert(entry.id.clone(), held);
+        }
+    }
+}
+
+/// The waiting entries that fit, in queue order, and what holds back the
+/// others. `occupied` holds one repository ID per used slot. Under fixed
+/// limits a launch, like a restore an update woke, needs a free slot and
+/// another restore takes back its own; under dynamic admission each needs
+/// room for its memory. Those other restores, like one-shot runs protection
+/// stopped, start only on sustained healthy readings (`recovered`), one per
+/// healthy interval. A CI job counts only against the jobs' limits, and under
+/// dynamic admission needs room for its own memory and takes the pass's one
+/// start, as an agent does. An entry that waits or does not fit keeps its
+/// place and is passed over.
 pub(crate) fn admit(
     occupied: &[RepositoryId],
     waiting: &[Waiting],
     limits: &Limits,
     mut recovered: bool,
-) -> Vec<QueueEntryId> {
+) -> Admission {
     let mut total = occupied.len();
-    let mut starts = limits.starts;
-    // Whether an agent or a job was admitted this pass, by measured load or
-    // a fixed limit: measured load admits nothing beside it, since the
+    // Whether an agent or a job was admitted this pass, by measured memory
+    // or a fixed limit: measured memory admits nothing beside it, since the
     // sample predates it.
     let mut started = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
@@ -136,28 +158,20 @@ pub(crate) fn admit(
         *used.entry(repository.as_str()).or_default() += 1;
     }
     let mut jobs = limits.jobs.running;
-    let mut admitted = Vec::new();
+    let mut admission = Admission::default();
     for entry in waiting {
         if let Work::Job { cost } = entry.work {
-            if limits.jobs.fixed.is_some_and(|limit| jobs >= limit) {
+            if let Some(held) = full_job_limit(&limits.jobs, jobs) {
+                admission.hold(entry, Some(held));
                 continue;
             }
-            // `starts` counts what fits an agent's load, which says nothing
-            // of a job's; the room does.
-            if limits
-                .jobs
-                .room
-                .is_some_and(|room| started || !room.fits(cost))
-            {
+            if let Err(held) = measured_fit(limits.jobs.room, started, |room| room.fits_job(cost)) {
+                admission.hold(entry, held);
                 continue;
             }
             started = true;
-            starts = starts.map(|_| 0);
             jobs += 1;
-            admitted.push(entry.id.clone());
-            continue;
-        }
-        if starts == Some(0) {
+            admission.admitted.push(entry.id.clone());
             continue;
         }
         let own = match entry.work {
@@ -177,27 +191,74 @@ pub(crate) fn admit(
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
         };
+        if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
+            admission.hold(entry, held);
+            continue;
+        }
         let used = used.entry(entry.repository.as_str()).or_default();
-        let full = |count: usize, limit: u32| count.saturating_sub(own) >= limit as usize;
-        if [limits.global, limits.disk]
-            .into_iter()
-            .flatten()
-            .any(|limit| full(total, limit))
-            || limits
-                .repository(&entry.repository)
-                .is_some_and(|limit| full(*used, limit))
-        {
+        if let Some(held) = full_limit(limits, &entry.repository, total, *used, own) {
+            admission.hold(entry, Some(held));
             continue;
         }
         *used += 1 - own;
         total += 1 - own;
         started = true;
-        starts = starts.map(|starts| starts - 1);
         // Each healthy interval restarts one stopped agent or one-shot run.
         recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };
-        admitted.push(entry.id.clone());
+        admission.admitted.push(entry.id.clone());
     }
-    admitted
+    admission
+}
+
+/// Whether a start fits what measured memory and disk leave, when `room`
+/// says so under dynamic admission: none does beside one this pass
+/// `started` already.
+fn measured_fit(
+    room: Option<capacity::Room>,
+    started: bool,
+    fits: impl FnOnce(capacity::Room) -> Result<(), Unfit>,
+) -> Result<(), Unfit> {
+    match room {
+        None => Ok(()),
+        Some(_) if started => Err(None),
+        Some(room) => fits(room),
+    }
+}
+
+/// The fixed limit a job's start beside `running` jobs would exceed.
+fn full_job_limit(limits: &JobLimits, running: u32) -> Option<HeldBy> {
+    let full = |limit: Option<u32>| limit.is_some_and(|limit| running >= limit);
+    if full(limits.fixed) {
+        Some(HeldBy::MaxJobs)
+    } else if full(limits.disk) {
+        Some(HeldBy::Disk)
+    } else {
+        None
+    }
+}
+
+/// The fixed limit an agent's start in `repository` would exceed, with
+/// `total` slots used on the machine and `used` in the repository, `own` of
+/// them its own already.
+fn full_limit(
+    limits: &Limits,
+    repository: &RepositoryId,
+    total: usize,
+    used: usize,
+    own: usize,
+) -> Option<HeldBy> {
+    let full = |count: usize, limit: Option<u32>| {
+        limit.is_some_and(|limit| count.saturating_sub(own) >= limit as usize)
+    };
+    if full(total, limits.global) {
+        Some(HeldBy::MaxAgents)
+    } else if full(total, limits.disk) {
+        Some(HeldBy::Disk)
+    } else if full(used, limits.repository(repository)) {
+        Some(HeldBy::RepositoryLimit)
+    } else {
+        None
+    }
 }
 
 /// Whether `limits` admit some job beside the `occupied` slots: one under
@@ -208,13 +269,10 @@ pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool
         id: QueueEntryId::from(String::new()),
         repository: String::new().into(),
         work: Work::Job {
-            cost: capacity::JobCost {
-                cores: 0.0,
-                memory: None,
-            },
+            cost: capacity::JobCost { memory: Some(0) },
         },
     }];
-    !admit(occupied, &probe, limits, false).is_empty()
+    !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
 
 /// A configured value as a slot count. Dynamic admission measures the whole
@@ -252,17 +310,14 @@ impl Manager {
         };
         let mut limits = Limits {
             global: fixed_limit(global),
-            starts: measured
-                .filter(|_| global == RunLimit::Dynamic)
-                .map(|(sample, agents)| capacity::starts(sample, agents, overload)),
+            room: measured.filter(|_| global == RunLimit::Dynamic),
             repositories: HashMap::new(),
             disk: None,
             jobs: JobLimits {
                 running: jobs.len().try_into().unwrap_or(u32::MAX),
                 fixed: fixed_limit(max_jobs),
-                room: measured
-                    .filter(|_| max_jobs == RunLimit::Dynamic)
-                    .map(|(sample, agents)| capacity::room(sample, agents, overload)),
+                disk: None,
+                room: measured.filter(|_| max_jobs == RunLimit::Dynamic),
             },
         };
         for id in repositories {
@@ -280,9 +335,8 @@ impl Manager {
         if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
             limits.disk = self.disk_limit(overload, slots.len()).await?;
         }
-        if let Some(fixed) = limits.jobs.fixed {
-            let disk = self.disk_limit(overload, jobs.len()).await?;
-            limits.jobs.fixed = Some(disk.map_or(fixed, |disk| disk.min(fixed)));
+        if limits.jobs.fixed.is_some() {
+            limits.jobs.disk = self.disk_limit(overload, jobs.len()).await?;
         }
         Ok(limits)
     }
@@ -304,19 +358,19 @@ impl Manager {
         Ok(room_for_a_job(&occupied, &limits))
     }
 
-    /// The machine's load with the slots `activities` use.
+    /// What the machine's memory and disk leave beside the slots
+    /// `activities` use.
     async fn measure(
         &self,
         overload: &Overload,
         activities: &[Activity],
-    ) -> Result<(capacity::HostSample, Agents)> {
+    ) -> Result<capacity::Room> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
-        let now = tokio::time::Instant::now();
-        let cpu = self.usage.with_cpu(|cpu| cpu.admission(now));
-        Ok((
-            capacity::sample(&paths, overload, cpu),
+        Ok(capacity::room(
+            capacity::sample(&paths, overload),
             Agents::count(activities.iter().copied()),
+            overload,
         ))
     }
 

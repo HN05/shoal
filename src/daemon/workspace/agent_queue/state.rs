@@ -1,6 +1,7 @@
 //! What the daemon keeps in memory about the agent queue: who holds starting
 //! entries, which stopped agents wait for their restore, which one-shot runs
-//! wait for or hold a slot, and what wakes the dispatcher.
+//! wait for or hold a slot, what held back waiting entries at the last
+//! admission pass, and what wakes the dispatcher.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use std::{
@@ -16,6 +17,7 @@ use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
 
 use super::Grant;
 use crate::client::queue::QueueEntryId;
+use crate::model::HeldBy;
 
 #[derive(Default)]
 pub(crate) struct AgentQueue {
@@ -27,6 +29,8 @@ pub(crate) struct AgentQueue {
     restore_waiters: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
     /// One-shot runs by request number, so the oldest comes first.
     oneshots: StdMutex<OneShots>,
+    /// What held back each waiting entry at the last admission pass.
+    held_back: StdMutex<HashMap<QueueEntryId, HeldBy>>,
     wake: Notify,
     /// Admission waits while the system shuts down.
     suspended: AtomicBool,
@@ -98,6 +102,16 @@ impl AgentQueue {
     /// The starting entries with an open hold.
     pub(crate) fn held(&self) -> HashSet<QueueEntryId> {
         self.holds.lock().unwrap().keys().cloned().collect()
+    }
+
+    /// Replace what held back waiting entries with the last pass's `held`.
+    pub(crate) fn record_held_back(&self, held: HashMap<QueueEntryId, HeldBy>) {
+        *self.held_back.lock().unwrap() = held;
+    }
+
+    /// What held back the entry `id` at the last admission pass.
+    pub(crate) fn held_back(&self, id: &QueueEntryId) -> Option<HeldBy> {
+        self.held_back.lock().unwrap().get(id).copied()
     }
 
     /// Mark the stopped agent of `execution` as waiting for its restore

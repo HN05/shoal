@@ -55,6 +55,31 @@ pub struct QueueEntry {
     /// The CI job a job's entry claims.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub job: Option<Box<QueuedJob>>,
+    /// What kept a waiting agent or job from starting at the last admission
+    /// pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_by: Option<HeldBy>,
+}
+
+/// What keeps a waiting entry from starting, besides the work it waits for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum HeldBy {
+    /// Memory below the warning threshold has `left` bytes, no more than the
+    /// `needed` bytes the entry is expected to use.
+    Memory { needed: u64, left: u64 },
+    /// Free disk space is below the warning threshold.
+    Disk,
+    /// `machine.max_agents` is reached.
+    MaxAgents,
+    /// `machine.max_jobs` is reached.
+    MaxJobs,
+    /// The repository's `agent.max_running` is reached.
+    RepositoryLimit,
+    /// The repository's `runner.permit` pool has no free permit.
+    Permits,
+    /// A memory or disk reading is critical or missing.
+    Reading,
 }
 
 /// A CI job of a repository's runner, from the forge's queue, with the run

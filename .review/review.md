@@ -442,9 +442,11 @@ instead of the PR delivery guidance below.
   other settings; successful repository removal removes those trust entries while
   preserving other project settings.
 - `max_agents` admission is the daemon's: it defaults to `dynamic`, which starts
-  one agent at a time, staggered, while measured CPU plus the expected load of
-  recently started agents stays below the warning thresholds; critical or
-  failed memory and disk readings start none, and an idle machine starts one.
+  one agent at a time, staggered, while memory below its warning threshold, less
+  what recently started agents and jobs are expected to use, and free disk leave
+  room; CPU never holds back a start. Critical or failed memory and disk
+  readings start none, and an idle machine starts one. Every caller sees the
+  whole queue, each waiting entry with what held it back at the last pass.
   It accepts a positive fixed value or `none`; the global value limits the
   machine while a repository's fixed value limits that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
@@ -456,11 +458,12 @@ instead of the PR delivery guidance below.
   that contains the others; `--now` never waits.
 - A registered repository's CI jobs wait in the same queue and admission while
   `runner.enabled` is on: `machine.max_jobs` counts only jobs, and under
-  `dynamic` a job counts at its recent runs' peak CPU and memory and takes the
-  one staggered start an agent would. A job is claimed only once admitted, runs
+  `dynamic` a job counts at its recent runs' peak memory and takes the one
+  staggered start an agent would. A job is claimed only once admitted, runs
   the forge's runner (`forgejo-runner one-job --handle`, or a GitHub
   just-in-time runner whose workspace moves to the commit of the job it took
-  before that job's first step) as a tracked execution in a disposable
+  before that job's first step) at nice 10, whose time CPU readings count as
+  idle, as a tracked execution in a disposable
   workspace at its commit that starts from the seed, and ends only through the
   forge: stopping it cancels its run there, protection leaves it running, and
   its workspace goes once the execution ends. Forge-specific steps are

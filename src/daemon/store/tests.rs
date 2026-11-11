@@ -467,6 +467,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 145 {
         super::space_names::rename_invalid_copies(&db)?;
     }
+    if version >= 146 {
+        db.execute_batch(CI_JOB_PEAK_CPU_DROPPED)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

@@ -795,28 +795,45 @@ impl Manager {
         Ok(current)
     }
 
-    /// Each tracked agent's execution, workspace and load. One waiting for
-    /// its restore with every process proven stopped runs nothing; until that
+    /// Each tracked agent's execution, workspace and load, with the memory
+    /// its workspace used at the latest usage sample. One waiting for its
+    /// restore with every process proven stopped runs nothing; until that
     /// proof its load may still show.
     pub(super) async fn agent_executions(
         &self,
     ) -> std::collections::HashMap<ExecutionId, (SpaceId, Activity)> {
         let waiting = self.agent_queue.restore_waiters();
-        self.executions
+        let agents: Vec<(ExecutionId, SpaceId, std::time::Duration)> = self
+            .executions
             .with_agents(|agents| {
                 agents
                     .iter()
                     .map(|(id, agent)| {
-                        let activity = if waiting.contains(id) {
-                            Activity::Stopped
-                        } else {
-                            Activity::Running(agent.started.elapsed())
-                        };
-                        (id.clone(), (agent.workspace_id.clone(), activity))
+                        (
+                            id.clone(),
+                            agent.workspace_id.clone(),
+                            agent.started.elapsed(),
+                        )
                     })
                     .collect()
             })
-            .await
+            .await;
+        agents
+            .into_iter()
+            .map(|(id, workspace, age)| {
+                let activity = if waiting.contains(&id) {
+                    Activity::Stopped
+                } else {
+                    Activity::Running {
+                        age,
+                        memory: self
+                            .workspace_usage(&workspace)
+                            .map(|usage| usage.memory_bytes),
+                    }
+                };
+                (id, (workspace, activity))
+            })
+            .collect()
     }
 
     /// A scoped caller as a proposer, naming the agent whose execution it

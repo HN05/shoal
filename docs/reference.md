@@ -270,8 +270,9 @@ sustained_seconds = 60
 `load` says how hard Shoal may load the machine, and sets each CPU and memory
 percentage the file leaves out; the values above are `balanced` without swap.
 Use `light` for a computer you work on and `full` for one that only runs agents.
-The warning levels are also where [dynamic admission](#agent-queue) stops
-starting agents:
+The memory warning level is also where [dynamic admission](#agent-queue)
+stops starting agents and CI jobs; the CPU levels apply only to warnings,
+stops and recovery:
 
 | `load` | CPU warning / stop / recovery | Memory warning / stop / recovery |
 |---|---|---|
@@ -2010,7 +2011,7 @@ planned_label = "planned" # Default: unset
 ### Agent queue
 
 ```sh
-shoal config set machine.max_agents dynamic   # Start agents while measured load allows
+shoal config set machine.max_agents dynamic   # Start agents while memory and disk allow
 shoal config set machine.max_agents 3         # Fixed machine-wide limit
 shoal config set agent.max_running 2 --repo shoal  # And at most two of them in this repository
 shoal config set agent.max_running none --repo docs # No repository limit
@@ -2027,17 +2028,22 @@ shoal queue cancel api                        # Removes a waiting entry; a resto
 ```
 
 `machine.max_agents` limits the agents that run at once. It defaults to `dynamic`,
-which starts one agent at a time, at least 10 seconds apart, while measured load
-leaves room below the [`[machine.overload.warning]`](#overload-protection) CPU, memory
-and disk thresholds, which [`load`](#overload-protection) sets. A new agent
-mostly reads files at first and compiles later, so for its first three minutes
-it counts at the load a settled agent shows: average CPU use over the last five
-minutes divided by the agents that have run longer, at least half a core each,
-or two cores each before any has. A start must fit the last minute's CPU use
-plus every such warming agent. With no agent running, one starts whatever the
-load. Critical memory, disk below `machine.overload.disk.stop_free_gib`, or a failed
-memory or disk reading starts none; a missing CPU reading starts only that first
-agent. Disabled memory or disk protection ignores that signal. Set a positive
+which starts one agent at a time, at least 10 seconds apart, while measured
+memory and disk leave room below the
+[`[machine.overload.warning]`](#overload-protection) memory and disk
+thresholds, which [`load`](#overload-protection) sets. CPU holds back no
+start, since more work on a busy CPU only runs slower. A new agent mostly
+reads files at first and compiles later, so for its first three minutes it
+counts at the memory a settled agent uses: the average resident memory of the
+workspaces of the agents that have run longer, at the latest usage sample, at
+least 1 GiB, or 2 GiB before any has. A start must fit the memory left below
+the warning threshold once every such warming agent and every
+[CI job](#runner) in its first three minutes uses what it is expected to.
+With no agent running, one starts whatever memory and disk read. Critical
+memory, disk below `machine.overload.disk.stop_free_gib`, or a failed memory
+or disk reading starts none, and disk below `[machine.overload.warning]
+disk_free_gib` starts none beside running work. Disabled memory or disk
+protection ignores that signal. Set a positive
 number for a fixed limit or `none` for unlimited admission. While a fixed
 limit applies, so does the disk rule: below `[machine.overload.warning] disk_free_gib`
 an agent starts only when none uses a slot, and below
@@ -3471,10 +3477,10 @@ while a job could start, so an idle runner or a full machine sends no requests,
 and drops the entries of jobs the forge no longer lists. `machine.max_jobs`
 limits jobs as `machine.max_agents` limits agents, counting only jobs. Under
 `dynamic`, agents and jobs start through one admission, one at a time at least
-10 seconds apart, while measured CPU, memory and disk leave room below the
-`[machine.overload.warning]` thresholds: a job counts at the most CPU and
-resident memory its last five runs reached, by repository, workflow and job
-name, or at two cores before it has run, and a job's recent start counts
+10 seconds apart, while measured memory and disk leave room below the
+`[machine.overload.warning]` thresholds: a job counts at the most resident
+memory its last five runs reached, by repository, workflow and job name, or
+as a starting agent before it has run, and a job's recent start counts
 against an agent's as an agent's counts against a job's. With
 `runner.permit`, a job waits until its pool has a free permit and holds one
 while it runs. Until a job is admitted, any other runner may take it. `queue

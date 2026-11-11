@@ -169,5 +169,6 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         waits_for_update: false,
         base: row.get("base_branch")?,
         job: crate::daemon::store::json_column(row, "job")?,
+        held_by: None,
     })
 }

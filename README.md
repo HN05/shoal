@@ -129,9 +129,10 @@ New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `start`. With shell integration, `shoal start` enters the
 workspace unless its agent runs in a zmx session.
 
-Agent admission defaults to starting agents one at a time while measured CPU,
-memory and disk load leaves room; `machine.load = "light"`, `"balanced"` or
-`"full"` says how hard to push the machine. Set a fixed machine-wide limit
+Agent admission defaults to starting agents and CI jobs one at a time while
+measured memory and disk leave room; `machine.load = "light"`, `"balanced"`
+or `"full"` says how hard to push the machine. `shoal queue` shows what holds
+each waiting entry. Set a fixed machine-wide limit
 (`shoal config set machine.max_agents 3`) or `none` to disable queuing, and
 limit one repository's agents with `agent.max_running` (`--repo my-project`). `shoal start` queues agents past the effective
 limit and starts them as slots free; `--now` starts one anyway, and `shoal rm

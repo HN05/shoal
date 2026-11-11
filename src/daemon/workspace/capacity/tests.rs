@@ -1,27 +1,27 @@
 use super::*;
 
-fn sample(cpu: f64) -> HostSample {
+const GIB: u64 = 1 << 30;
+
+fn sample(memory_room: u64) -> HostSample {
     HostSample {
-        parallelism: 16,
-        cpu: Some(CpuSample {
-            recent: cpu,
-            settled: cpu,
-        }),
         memory: MemoryState::Healthy,
-        memory_room: Some(1 << 30),
+        memory_room: Some(memory_room),
         disk_free: Some(u64::MAX),
     }
 }
 
-fn agents(warming: u32, settled: u32, newest: u64) -> Agents {
-    Agents {
-        total: warming + settled,
-        warming,
-        settled,
-        newest: Some(Duration::from_secs(newest)),
-        ..Agents::default()
+fn running(age: Duration, memory: Option<u64>) -> Activity {
+    Activity::Running { age, memory }
+}
+
+fn job(age: Duration, memory: Option<u64>) -> Activity {
+    Activity::Job {
+        age,
+        cost: JobCost { memory },
     }
 }
+
+const MINUTE: Duration = Duration::from_secs(60);
 
 #[test]
 fn disk_pressure_includes_workspaces_and_requires_complete_readings() {
@@ -63,97 +63,173 @@ fn disk_pressure_includes_workspaces_and_requires_complete_readings() {
 }
 
 #[test]
-fn slots_count_by_how_far_their_load_shows() {
-    let minute = Duration::from_secs(60);
+fn slots_count_by_how_far_their_memory_shows() {
     assert_eq!(
         Agents::count([
-            Activity::Starting(minute * 5),
-            Activity::Running(minute),
-            Activity::Running(WARM_UP),
+            Activity::Starting(MINUTE * 5),
+            running(MINUTE, Some(GIB)),
+            running(WARM_UP, Some(3 * GIB)),
+            running(WARM_UP, None),
+            job(MINUTE, Some(GIB)),
+            job(MINUTE, None),
+            job(WARM_UP, Some(GIB)),
             Activity::Stopped,
         ]),
         Agents {
-            total: 4,
+            total: 8,
             warming: 2,
-            settled: 1,
-            newest: Some(minute),
-            ..Agents::default()
+            settled: 2,
+            jobs: 3,
+            settled_memory: 3 * GIB,
+            measured: 1,
+            warming_job_memory: GIB,
+            warming_new_jobs: 1,
+            newest: Some(MINUTE),
         }
     );
     assert_eq!(Agents::count([Activity::Stopped]).newest, None);
 }
 
 #[test]
-fn an_idle_machine_starts_agents_until_warming_ones_fill_the_target() {
+fn a_starting_agent_counts_at_the_memory_settled_agents_use() {
     let settings = Overload::default();
-    // Sixteen cores, two assumed per agent: 12.5% each below an 80% target.
-    let mut warming = 0;
-    while limit(sample(5.0), agents(warming, 0, 60), &settings) > warming {
-        warming += 1;
-    }
-    assert_eq!(warming, 5);
-    // Starts are staggered even with room.
-    assert_eq!(limit(sample(5.0), agents(1, 0, 1), &settings), 1);
-}
-
-#[test]
-fn settled_agents_set_the_load_a_new_agent_is_expected_to_add() {
-    let settings = Overload::default();
-    // Ten mostly idle settled agents at 20%: each counts its 3.125% floor.
-    assert_eq!(limit(sample(20.0), agents(0, 10, 600), &settings), 11);
-    assert_eq!(limit(sample(20.0), agents(15, 10, 60), &settings), 26);
-    assert_eq!(limit(sample(20.0), agents(19, 10, 60), &settings), 29);
-    // Two busy settled agents at 60% leave no room for a third at 30%.
-    assert_eq!(limit(sample(60.0), agents(0, 2, 600), &settings), 2);
-    let mut full = Overload::default();
-    full.warning.cpu_used_percent = 95;
-    assert_eq!(limit(sample(60.0), agents(0, 2, 600), &full), 3);
-}
-
-#[test]
-fn pressure_pauses_starts_and_critical_readings_block_even_the_first() {
-    let settings = Overload::default();
-    let busy = sample(90.0);
-    assert_eq!(limit(busy, Agents::default(), &settings), 1);
-    assert_eq!(limit(busy, agents(0, 1, 600), &settings), 1);
-    let unmeasured = HostSample {
-        cpu: None,
-        ..sample(0.0)
+    let room = |activities: &[Activity]| {
+        room(
+            sample(20 * GIB),
+            Agents::count(activities.iter().copied()),
+            &settings,
+        )
     };
-    assert_eq!(limit(unmeasured, Agents::default(), &settings), 1);
-    // Stopped agents run nothing, so the machine is still idle.
-    let stopped = Agents::count([Activity::Stopped, Activity::Stopped]);
-    assert_eq!(limit(unmeasured, stopped, &settings), 3);
-    assert_eq!(limit(unmeasured, agents(0, 1, 600), &settings), 1);
+    // Before any agent has settled, a warming one counts at 2 GiB.
+    assert_eq!(
+        room(&[Activity::Starting(MINUTE)]),
+        Room::Free {
+            memory: 18 * GIB,
+            agent: 2 * GIB,
+        }
+    );
+    // Settled agents set it: their workspaces' average, here 4 GiB.
+    let learned = [
+        running(WARM_UP, Some(3 * GIB)),
+        running(WARM_UP, Some(5 * GIB)),
+        running(MINUTE, None),
+    ];
+    assert_eq!(
+        room(&learned),
+        Room::Free {
+            memory: 16 * GIB,
+            agent: 4 * GIB,
+        }
+    );
+    // An agent counts at 1 GiB at least.
+    let idle = [running(WARM_UP, Some(GIB / 10)), running(MINUTE, None)];
+    assert_eq!(
+        room(&idle),
+        Room::Free {
+            memory: 19 * GIB,
+            agent: GIB,
+        }
+    );
+    // A job without earlier runs counts as an agent, one with them at what
+    // they reached.
+    let jobs = [job(MINUTE, None), job(MINUTE, Some(3 * GIB))];
+    assert_eq!(
+        room(&jobs),
+        Room::Free {
+            memory: 15 * GIB,
+            agent: 2 * GIB,
+        }
+    );
+}
+
+#[test]
+fn a_job_that_filled_the_cpu_starts_beside_agents_when_memory_allows() {
+    let settings = Overload::default();
+    // Earlier runs used the whole CPU and 6 GiB; idle and busy agents run.
+    let cost = JobCost {
+        memory: Some(6 * GIB),
+    };
+    let agents = Agents::count([
+        running(WARM_UP, Some(GIB)),
+        running(WARM_UP * 4, Some(5 * GIB)),
+    ]);
+    assert_eq!(
+        room(sample(7 * GIB), agents, &settings).fits_job(cost),
+        Ok(())
+    );
+    assert_eq!(
+        room(sample(6 * GIB), agents, &settings).fits_job(cost),
+        Err(Some(HeldBy::Memory {
+            needed: 6 * GIB,
+            left: 6 * GIB,
+        }))
+    );
+    // Agents start beside a settled job that keeps every core busy.
+    let busy = Agents::count([job(WARM_UP, Some(6 * GIB)), running(WARM_UP, Some(GIB))]);
+    assert_eq!(room(sample(2 * GIB), busy, &settings).fits_agent(), Ok(()));
+    assert!(room(sample(GIB), busy, &settings).fits_agent().is_err());
+}
+
+#[test]
+fn memory_disk_and_the_stagger_stop_starts_and_critical_readings_block_even_the_first() {
+    let settings = Overload::default();
+    let one = Agents::count([running(WARM_UP, Some(GIB))]);
+    assert_eq!(room(sample(2 * GIB), one, &settings).fits_agent(), Ok(()));
+    // Memory past its warning leaves no room, whatever is left below it.
     let warning = HostSample {
         memory: MemoryState::Warning,
-        ..sample(0.0)
+        ..sample(20 * GIB)
     };
-    assert_eq!(limit(warning, agents(0, 1, 600), &settings), 1);
+    assert_eq!(
+        room(warning, one, &settings).fits_agent(),
+        Err(Some(HeldBy::Memory {
+            needed: GIB,
+            left: 0,
+        }))
+    );
+    // So does low disk, a missing memory reading and, without a reason to
+    // report, a start just now.
     let low_disk = HostSample {
         disk_free: Some(settings.warning.disk_free_bytes() - 1),
-        ..sample(0.0)
+        ..sample(20 * GIB)
     };
-    assert_eq!(limit(low_disk, agents(0, 1, 600), &settings), 1);
+    assert_eq!(room(low_disk, one, &settings), Room::Held(HeldBy::Disk));
+    let unread = HostSample {
+        memory_room: None,
+        ..sample(0)
+    };
+    assert_eq!(room(unread, one, &settings), Room::Held(HeldBy::Reading));
+    let recent = Agents::count([job(Duration::from_secs(1), None)]);
+    assert_eq!(room(sample(20 * GIB), recent, &settings), Room::Staggered);
+    assert_eq!(Room::Staggered.fits_agent(), Err(None));
+    // An idle machine starts one whatever memory and disk leave, and stopped
+    // agents run nothing.
+    for idle in [Agents::default(), Agents::count([Activity::Stopped])] {
+        assert_eq!(room(warning, idle, &settings), Room::Idle);
+        assert_eq!(room(low_disk, idle, &settings), Room::Idle);
+    }
     for blocked in [
         HostSample {
             memory: MemoryState::Critical,
-            ..sample(0.0)
+            ..sample(0)
         },
         HostSample {
             memory: MemoryState::Unavailable,
-            ..sample(0.0)
+            ..sample(0)
         },
         HostSample {
             disk_free: None,
-            ..sample(0.0)
+            ..sample(0)
         },
         HostSample {
             disk_free: Some(settings.disk.stop_free_bytes() - 1),
-            ..sample(0.0)
+            ..sample(0)
         },
     ] {
-        assert_eq!(limit(blocked, Agents::default(), &settings), 0);
+        assert_eq!(
+            room(blocked, Agents::default(), &settings),
+            Room::Held(HeldBy::Reading)
+        );
     }
 }
 
@@ -167,83 +243,4 @@ fn low_disk_holds_fixed_limits_and_critical_disk_starts_none() {
     assert_eq!(disk_limit(Some(stop), 0, &settings), Some(1));
     assert_eq!(disk_limit(Some(stop - 1), 0, &settings), Some(0));
     assert_eq!(disk_limit(None, 0, &settings), Some(0));
-}
-
-#[test]
-fn jobs_count_at_their_own_load_against_agents_and_each_other() {
-    let settings = Overload::default();
-    let minute = Duration::from_secs(60);
-    let warming_job = |cores| Activity::Job {
-        age: minute,
-        cost: JobCost {
-            cores,
-            memory: None,
-        },
-    };
-    // Sixteen cores: a warming four-core job counts 25% beside the last
-    // minute's 5%, which leaves 50% below the 80% target.
-    let free = room(sample(5.0), Agents::count([warming_job(4.0)]), &settings);
-    assert_eq!(
-        free,
-        Room::Free {
-            percent: 50.0,
-            parallelism: 16,
-            memory: Some(1 << 30),
-        }
-    );
-    let cost = |cores, memory| JobCost { cores, memory };
-    assert!(free.fits(cost(7.0, None)));
-    assert!(!free.fits(cost(8.0, None)));
-    // A job whose runs used more memory than is left waits.
-    assert!(free.fits(cost(1.0, Some(1 << 29))));
-    assert!(!free.fits(cost(1.0, Some(1 << 30))));
-    // Warming jobs' memory counts against the room left.
-    let heavy = Activity::Job {
-        age: minute,
-        cost: cost(1.0, Some(3 << 28)),
-    };
-    let left = room(sample(5.0), Agents::count([heavy]), &settings);
-    assert!(!left.fits(cost(1.0, Some(1 << 29))));
-    // Without a memory reading, only a job whose memory is unknown fits.
-    let unread = room(
-        HostSample {
-            memory_room: None,
-            ..sample(5.0)
-        },
-        Agents::count([warming_job(1.0)]),
-        &settings,
-    );
-    assert!(unread.fits(cost(1.0, None)));
-    assert!(!unread.fits(cost(1.0, Some(1))));
-    // A running job is not an idle machine, and an agent fits beside it only
-    // with room for its own load.
-    let busy = Agents::count([warming_job(10.0)]);
-    assert_eq!(limit(sample(5.0), busy, &settings), 1);
-    // A settled job's load shows in measurements instead.
-    let settled = Agents::count([Activity::Job {
-        age: WARM_UP,
-        cost: JobCost {
-            cores: 10.0,
-            memory: None,
-        },
-    }]);
-    assert_eq!(limit(sample(5.0), settled, &settings), 2);
-    // Starts stay staggered across agents and jobs.
-    let recent = Agents::count([Activity::Job {
-        age: Duration::from_secs(1),
-        cost: JobCost::UNKNOWN,
-    }]);
-    assert_eq!(room(sample(5.0), recent, &settings), Room::None);
-    assert_eq!(room(sample(5.0), Agents::default(), &settings), Room::Idle);
-}
-
-#[test]
-fn critical_readings_start_none_beside_slots_in_use() {
-    let settings = Overload::default();
-    let critical = HostSample {
-        memory: MemoryState::Critical,
-        ..sample(0.0)
-    };
-    assert_eq!(starts(critical, agents(2, 3, 600), &settings), 0);
-    assert_eq!(starts(sample(5.0), agents(0, 1, 600), &settings), 1);
 }

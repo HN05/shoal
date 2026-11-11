@@ -14,12 +14,13 @@ use rusqlite::params;
 
 use super::{
     dependencies, expiry,
-    limits::{Waiting, Wake, Work, admit},
+    limits::{Admission, Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
 };
 use crate::client::{queue::QueueEntryId, time::UnixTime};
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
+    model::HeldBy,
     state::{QueueKind, QueueState},
 };
 
@@ -43,6 +44,9 @@ struct WaitingWork {
     /// The executions of the stopped agents whose restore the daemon starts,
     /// which hold no slot until it is admitted.
     stopped: HashSet<ExecutionId>,
+    /// The jobs left out of `entries` while their repository's permits are
+    /// all held.
+    permits_busy: Vec<QueueEntryId>,
 }
 
 impl WaitingWork {
@@ -110,8 +114,9 @@ impl Manager {
         Ok(())
     }
 
-    /// Admit waiting entries that fit, start launches other than `caller`'s,
-    /// and return whether `caller`'s entry was admitted. An admitted restore
+    /// Admit waiting entries that fit, record what holds back the others,
+    /// start launches other than `caller`'s, and return whether `caller`'s
+    /// entry was admitted. An admitted restore
     /// is left to its waiting agent; nothing is admitted while the system
     /// shuts down. Requires the queue gate.
     pub(super) async fn admit_waiting(&self, caller: Option<&QueueEntryId>) -> Result<bool> {
@@ -120,25 +125,36 @@ impl Manager {
         }
         let mut work = self.waiting_work().await?;
         let bases = self.hold_back_dependents(&mut work.entries).await?;
-        if work.entries.is_empty() {
+        let published = self.overload_recovery.published();
+        let admission = self.fitting_entries(&work, published.is_some()).await?;
+        self.agent_queue.record_held_back(admission.held);
+        if admission.admitted.is_empty() {
             return Ok(false);
         }
-        let published = self.overload_recovery.published();
-        let admitted = self.fitting_entries(&work, published.is_some()).await?;
-        let Some(admitted) = self.grant_admission(&work, admitted, published) else {
+        let Some(admitted) = self.grant_admission(&work, admission.admitted, published) else {
             return Ok(false);
         };
         let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
     }
 
-    /// The entries of `work` that fit beside the slots in use, where
-    /// `recovered` says whether healthy readings are published.
-    async fn fitting_entries(
-        &self,
-        work: &WaitingWork,
-        recovered: bool,
-    ) -> Result<Vec<QueueEntryId>> {
+    /// The entries of `work` that fit beside the slots in use, and what
+    /// holds back the others, its jobs whose permits are all held among
+    /// them, where `recovered` says whether healthy readings are published.
+    async fn fitting_entries(&self, work: &WaitingWork, recovered: bool) -> Result<Admission> {
+        let mut admission = match work.entries.is_empty() {
+            true => Admission::default(),
+            false => self.admission(work, recovered).await?,
+        };
+        let permits = work.permits_busy.iter().cloned();
+        admission
+            .held
+            .extend(permits.map(|id| (id, HeldBy::Permits)));
+        Ok(admission)
+    }
+
+    /// One admission pass over the entries of `work`.
+    async fn admission(&self, work: &WaitingWork, recovered: bool) -> Result<Admission> {
         let repositories = work
             .entries
             .iter()
@@ -194,6 +210,7 @@ impl Manager {
         let waiters = self.agent_queue.restore_waiters();
         let mut restores = HashMap::new();
         let mut stopped = HashSet::new();
+        let mut permits_busy = Vec::new();
         let mut waiting = Vec::new();
         for QueuedRow {
             id,
@@ -208,7 +225,10 @@ impl Manager {
         {
             let work = match (kind, execution, workspace) {
                 // A job waits while its repository's permits are all held.
-                (QueueKind::Job, ..) if self.runners.permits_busy(&repository) => continue,
+                (QueueKind::Job, ..) if self.runners.permits_busy(&repository) => {
+                    permits_busy.push(id);
+                    continue;
+                }
                 (QueueKind::Job, ..) => {
                     let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
                     Work::Job {
@@ -261,6 +281,7 @@ impl Manager {
             entries: waiting,
             restores,
             stopped,
+            permits_busy,
         })
     }
 

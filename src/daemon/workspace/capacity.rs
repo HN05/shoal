@@ -1,31 +1,26 @@
-//! Dynamic agent capacity from the daemon's host measurements.
+//! Dynamic admission from the daemon's memory and disk readings.
 //!
-//! Agents and CI jobs start one at a time while measured load leaves room for
-//! another. An agent first reads files and only later edits and compiles, so
-//! a recent start counts at the load a settled agent shows until it settles
-//! itself; a recent job counts at the load its earlier runs showed. Fixed
-//! limits apply the same free disk space rule.
+//! Agents and CI jobs start one at a time while memory and disk leave room
+//! for another. CPU does not limit them: builds and tests use every core that
+//! is free, and more work on a busy CPU only runs slower, while memory and
+//! disk do not stretch. An agent first reads files and only later edits and
+//! compiles, so a recent start counts at the memory a settled agent's
+//! workspace uses until it settles itself; a recent job counts at the memory
+//! its earlier runs reached. Fixed limits apply the same free disk space rule.
 use std::{path::Path, time::Duration};
 
 pub(crate) use crate::client::executions::STAGGER;
-use crate::{config::overload::Overload, fsutil, process::load};
+use crate::{config::overload::Overload, fsutil, model::HeldBy, process::load};
 
-/// How long a new agent counts at a settled agent's load instead of its own.
+/// How long a new agent counts at a settled agent's memory instead of its own.
 pub(crate) const WARM_UP: Duration = Duration::from_secs(3 * 60);
-/// The window current load is averaged over.
-pub(crate) const RECENT: Duration = Duration::from_secs(60);
-/// The window a settled agent's load is learned over.
-pub(crate) const SETTLED: Duration = Duration::from_secs(5 * 60);
-/// The load assumed for an agent before any has settled, and for a CI job
-/// without earlier runs, in cores.
-pub(crate) const ASSUMED_AGENT_CORES: f64 = 2.0;
-/// The least load an agent is assumed to add, in cores.
-const MIN_AGENT_CORES: f64 = 0.5;
+/// The memory a starting agent counts at before any agent has settled.
+const ASSUMED_AGENT_MEMORY: u64 = 2 << 30;
+/// The least memory a starting agent counts at.
+const MIN_AGENT_MEMORY: u64 = 1 << 30;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct HostSample {
-    pub parallelism: u32,
-    pub cpu: Option<CpuSample>,
     pub memory: MemoryState,
     /// The bytes new work may use before memory reaches its warning
     /// threshold; `None` without a reading.
@@ -33,27 +28,11 @@ pub(crate) struct HostSample {
     pub disk_free: Option<u64>,
 }
 
-/// What a CI job is expected to use: cores, and resident memory once its
-/// earlier runs showed it.
+/// What a CI job is expected to use: the resident memory its earlier runs
+/// reached, `None` before it has run, when it counts as an agent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct JobCost {
-    pub cores: f64,
     pub memory: Option<u64>,
-}
-
-impl JobCost {
-    /// The cost of a job without earlier runs: an agent's assumed load.
-    pub(crate) const UNKNOWN: Self = Self {
-        cores: ASSUMED_AGENT_CORES,
-        memory: None,
-    };
-}
-
-/// Busy percentage across all cores over [`RECENT`] and [`SETTLED`].
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct CpuSample {
-    pub recent: f64,
-    pub settled: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +43,7 @@ pub(crate) enum MemoryState {
     Unavailable,
 }
 
-/// The agents and CI jobs holding slots, by how far their load shows in
+/// The agents and CI jobs holding slots, by how far their memory shows in
 /// measurements.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct Agents {
@@ -76,59 +55,78 @@ pub(crate) struct Agents {
     pub settled: u32,
     /// Jobs starting or running.
     pub jobs: u32,
-    /// The cores the jobs running for less than [`WARM_UP`] are expected to
-    /// use, and the memory they are known to use.
-    pub warming_job_cores: f64,
+    /// The memory the settled agents' workspaces used at the latest sample,
+    /// and how many of them it counts.
+    pub settled_memory: u64,
+    pub measured: u32,
+    /// The memory the jobs running for less than [`WARM_UP`] reached in
+    /// earlier runs, and how many of them have not run before.
     pub warming_job_memory: u64,
+    pub warming_new_jobs: u32,
     /// Time since the newest agent, job or start began.
     pub newest: Option<Duration>,
 }
 
-/// What one used slot does to measured load.
+/// What one used slot does to measured memory.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Activity {
     /// An admitted start whose agent has not registered, since this long.
     Starting(Duration),
-    /// A connected agent, running this long.
-    Running(Duration),
-    /// An agent awaiting reattachment or resume, which runs no load here.
+    /// A connected agent, running for `age`, whose workspace used `memory`
+    /// at the latest usage sample, `None` without one.
+    Running { age: Duration, memory: Option<u64> },
+    /// An agent awaiting reattachment or resume, which runs nothing here.
     Stopped,
     /// A CI job admitted this long ago, expected to use `cost`.
     Job { age: Duration, cost: JobCost },
 }
 
-/// What measured load leaves for one more start.
+/// What measured memory and disk leave for one more start.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Room {
-    /// Nothing starts: a reading is critical or missing, the last start was
-    /// less than [`STAGGER`] ago, or memory or disk is past its warning.
-    None,
-    /// Nothing runs or starts, so one starts whatever the load.
+    /// Nothing starts until the last start is [`STAGGER`] old.
+    Staggered,
+    /// Nothing starts: a reading is critical or missing, or disk is past its
+    /// warning.
+    Held(HeldBy),
+    /// Nothing runs or starts, so one starts whatever memory is in use.
     Idle,
-    /// The busy percentage of all cores left below the warning threshold,
-    /// and the bytes of memory, without a reading `None`.
-    Free {
-        percent: f64,
-        parallelism: u32,
-        memory: Option<u64>,
-    },
+    /// The bytes of memory left below the warning threshold once each
+    /// warming agent and job uses what it is expected to, and what an
+    /// agent's start is expected to use.
+    Free { memory: u64, agent: u64 },
 }
 
+/// Why a start does not fit: what holds it, `None` for the stagger, which is
+/// too brief to report.
+pub(crate) type Unfit = Option<HeldBy>;
+
 impl Room {
+    /// Whether an agent fits.
+    pub(crate) fn fits_agent(self) -> Result<(), Unfit> {
+        self.fits(None)
+    }
+
     /// Whether a job expected to use `cost` fits.
-    pub(crate) fn fits(self, cost: JobCost) -> bool {
+    pub(crate) fn fits_job(self, cost: JobCost) -> Result<(), Unfit> {
+        self.fits(cost.memory)
+    }
+
+    /// Whether a start using `memory`, or an agent's without it, fits.
+    fn fits(self, memory: Option<u64>) -> Result<(), Unfit> {
         match self {
-            Self::None => false,
-            Self::Idle => true,
+            Self::Staggered => Err(None),
+            Self::Held(held) => Err(Some(held)),
+            Self::Idle => Ok(()),
             Self::Free {
-                percent,
-                parallelism,
-                memory,
+                memory: left,
+                agent,
             } => {
-                share(cost.cores, parallelism) < percent
-                    && cost
-                        .memory
-                        .is_none_or(|needed| memory.is_some_and(|free| needed < free))
+                let needed = memory.unwrap_or(agent);
+                match needed < left {
+                    true => Ok(()),
+                    false => Err(Some(HeldBy::Memory { needed, left })),
+                }
             }
         }
     }
@@ -144,19 +142,28 @@ impl Agents {
                     agents.warming += 1;
                     age
                 }
-                Activity::Running(age) if age < WARM_UP => {
+                Activity::Running { age, .. } if age < WARM_UP => {
                     agents.warming += 1;
                     age
                 }
-                Activity::Running(age) => {
+                Activity::Running { age, memory } => {
                     agents.settled += 1;
+                    if let Some(memory) = memory {
+                        agents.settled_memory = agents.settled_memory.saturating_add(memory);
+                        agents.measured += 1;
+                    }
                     age
                 }
                 Activity::Job { age, cost } => {
                     agents.jobs += 1;
                     if age < WARM_UP {
-                        agents.warming_job_cores += cost.cores;
-                        agents.warming_job_memory += cost.memory.unwrap_or_default();
+                        match cost.memory {
+                            Some(memory) => {
+                                agents.warming_job_memory =
+                                    agents.warming_job_memory.saturating_add(memory)
+                            }
+                            None => agents.warming_new_jobs += 1,
+                        }
                     }
                     age
                 }
@@ -166,18 +173,31 @@ impl Agents {
         }
         agents
     }
+
+    /// The memory an agent's start counts at: what the settled agents'
+    /// workspaces use on average, at least [`MIN_AGENT_MEMORY`], or
+    /// [`ASSUMED_AGENT_MEMORY`] before any has settled.
+    pub(crate) fn agent_memory(&self) -> u64 {
+        match self.measured {
+            0 => ASSUMED_AGENT_MEMORY,
+            measured => (self.settled_memory / u64::from(measured)).max(MIN_AGENT_MEMORY),
+        }
+    }
+
+    /// The memory the warming agents and jobs are expected to use, each
+    /// agent and new job at `agent`.
+    fn warming_memory(&self, agent: u64) -> u64 {
+        agent
+            .saturating_mul(u64::from(self.warming + self.warming_new_jobs))
+            .saturating_add(self.warming_job_memory)
+    }
 }
 
 /// Probe the same memory and disk sources used by overload protection. The
 /// first path is daemon state; later paths are workspaces awaiting cleanup.
 /// A failed probe never authorizes more work; deleted workspaces are skipped.
-pub(crate) fn sample(paths: &[&Path], settings: &Overload, cpu: Option<CpuSample>) -> HostSample {
+pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
     HostSample {
-        parallelism: std::thread::available_parallelism()
-            .map(|value| value.get().min(u32::MAX as usize) as u32)
-            .unwrap_or(1)
-            .max(1),
-        cpu,
         memory: sample_memory(settings),
         memory_room: memory_room(settings),
         disk_free: disk_free(paths, settings),
@@ -243,61 +263,36 @@ fn sample_disk(
         .flatten()
 }
 
-/// The machine-wide limit: the slots in use, plus one when another agent may
-/// start now, as [`room`] leaves for an agent's load.
-pub(crate) fn limit(sample: HostSample, agents: Agents, settings: &Overload) -> u32 {
-    if blocked(sample, settings) {
-        return 0;
-    }
-    let start = match room(sample, agents, settings) {
-        Room::None => false,
-        Room::Idle => true,
-        Room::Free { percent, .. } => match sample.cpu {
-            Some(cpu) => agent_load(cpu, agents.settled, sample.parallelism) < percent,
-            None => false,
-        },
-    };
-    agents.total + u32::from(start)
-}
-
-/// How many agents may start beside `agents` now: one when [`room`] leaves
-/// room for an agent's load, else none, also when a blocking reading leaves
-/// the limit below the slots in use.
-pub(crate) fn starts(sample: HostSample, agents: Agents, settings: &Overload) -> u32 {
-    limit(sample, agents, settings).saturating_sub(agents.total)
-}
-
-/// What measured load leaves for one more start beside `agents`, which a
-/// start fits when its expected load stays below the warning threshold once
-/// every warming agent shows a settled agent's load and every warming job
-/// its expected load. Critical or unavailable memory and disk readings leave
-/// none; an idle machine, where nothing runs or starts, always starts one.
+/// What measured memory and disk leave for one more start beside `agents`,
+/// which a start fits when its memory stays below what is left under the
+/// warning threshold once every warming agent and job uses what it is
+/// expected to. Critical or unavailable memory and disk readings leave none;
+/// an idle machine, where nothing runs or starts, always starts one.
 pub(crate) fn room(sample: HostSample, agents: Agents, settings: &Overload) -> Room {
     if blocked(sample, settings) {
-        return Room::None;
+        return Room::Held(HeldBy::Reading);
     }
     if agents.warming + agents.settled + agents.jobs == 0 {
         return Room::Idle;
     }
-    let Some(cpu) = sample.cpu else {
-        return Room::None;
-    };
-    let staggered = agents.newest.is_none_or(|age| age >= STAGGER);
-    let memory = sample.memory == MemoryState::Healthy;
-    let disk = disk(sample.disk_free, settings) == Disk::Healthy;
-    if !(staggered && memory && disk) {
-        return Room::None;
+    if agents.newest.is_some_and(|age| age < STAGGER) {
+        return Room::Staggered;
     }
-    let per_agent = agent_load(cpu, agents.settled, sample.parallelism);
-    let projected = cpu.recent
-        + per_agent * f64::from(agents.warming)
-        + share(agents.warming_job_cores, sample.parallelism);
+    if disk(sample.disk_free, settings) != Disk::Healthy {
+        return Room::Held(HeldBy::Disk);
+    }
+    let Some(free) = sample.memory_room else {
+        return Room::Held(HeldBy::Reading);
+    };
+    // Memory past its warning leaves nothing, whatever the percentage says.
+    let free = match sample.memory {
+        MemoryState::Healthy => free,
+        _ => 0,
+    };
+    let agent = agents.agent_memory();
     Room::Free {
-        percent: f64::from(settings.warning.cpu_used_percent) - projected,
-        parallelism: sample.parallelism,
-        memory: sample
-            .memory_room
-            .map(|free| free.saturating_sub(agents.warming_job_memory)),
+        memory: free.saturating_sub(agents.warming_memory(agent)),
+        agent,
     }
 }
 
@@ -339,22 +334,6 @@ fn blocked(sample: HostSample, settings: &Overload) -> bool {
         sample.memory,
         MemoryState::Critical | MemoryState::Unavailable
     ) || disk(sample.disk_free, settings) == Disk::Critical
-}
-
-/// One agent's share of settled load as a busy percentage, assuming
-/// [`ASSUMED_AGENT_CORES`] until an agent settles. The user's own work counts
-/// toward it, which only makes admission more careful.
-fn agent_load(cpu: CpuSample, settled: u32, parallelism: u32) -> f64 {
-    if settled == 0 {
-        share(ASSUMED_AGENT_CORES, parallelism)
-    } else {
-        (cpu.settled / f64::from(settled)).max(share(MIN_AGENT_CORES, parallelism))
-    }
-}
-
-/// `cores` as a busy percentage of all `parallelism` cores.
-fn share(cores: f64, parallelism: u32) -> f64 {
-    cores * 100.0 / f64::from(parallelism)
 }
 
 #[cfg(test)]

@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 145;
+pub(super) const SCHEMA_VERSION: i64 = 146;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -408,7 +408,40 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (143, PERMISSION_NARROWINGS, None),
     (144, include_str!("spaces.sql"), None),
     (145, "", Some(super::space_names::rename_invalid_copies)),
+    (146, CI_JOB_PEAK_CPU_DROPPED, None),
 ];
+
+/// Admission counts a CI job at its memory alone, so its runs' peak CPU is
+/// no longer kept. Nothing references either table, so each is rebuilt,
+/// which a migration from an earlier version applies again.
+pub(super) const CI_JOB_PEAK_CPU_DROPPED: &str = "CREATE TABLE ci_jobs_memory (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+    execution_id TEXT,
+    job TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    launched_at INTEGER,
+    peak_memory INTEGER,
+    usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1)),
+    runner_id INTEGER
+);
+INSERT INTO ci_jobs_memory(id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_memory,usage_recorded,runner_id)
+    SELECT id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_memory,usage_recorded,runner_id FROM ci_jobs;
+DROP TABLE ci_jobs;
+ALTER TABLE ci_jobs_memory RENAME TO ci_jobs;
+CREATE TABLE ci_job_usage_memory (
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    workflow TEXT NOT NULL,
+    name TEXT NOT NULL,
+    ended_at INTEGER NOT NULL,
+    peak_memory INTEGER NOT NULL
+);
+INSERT INTO ci_job_usage_memory(repository_id,workflow,name,ended_at,peak_memory)
+    SELECT repository_id,workflow,name,ended_at,peak_memory FROM ci_job_usage;
+DROP TABLE ci_job_usage;
+ALTER TABLE ci_job_usage_memory RENAME TO ci_job_usage;
+CREATE INDEX ci_job_usage_jobs ON ci_job_usage(repository_id, workflow, name, ended_at);";
 
 /// The space whose process stopped a stopped chat, such as by a restart
 /// whose restore failed, which may resume it; NULL for a chat the user or
@@ -426,7 +459,8 @@ ALTER TABLE workspaces ADD COLUMN starting_index TEXT;";
 
 /// The runner the forge registered for a claimed job alone, deleted once
 /// the job ends. Nothing references the table, so it is rebuilt, which a
-/// migration from an earlier version applies again.
+/// migration from an earlier version applies again; the peak CPU a later
+/// version drops is left behind.
 pub(super) const CI_JOB_RUNNERS: &str = "CREATE TABLE ci_jobs_runners (
     id TEXT PRIMARY KEY,
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
@@ -440,8 +474,8 @@ pub(super) const CI_JOB_RUNNERS: &str = "CREATE TABLE ci_jobs_runners (
     usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1)),
     runner_id INTEGER
 );
-INSERT INTO ci_jobs_runners(id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_cpu,peak_memory,usage_recorded)
-    SELECT id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_cpu,peak_memory,usage_recorded FROM ci_jobs;
+INSERT INTO ci_jobs_runners(id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_memory,usage_recorded)
+    SELECT id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_memory,usage_recorded FROM ci_jobs;
 DROP TABLE ci_jobs;
 ALTER TABLE ci_jobs_runners RENAME TO ci_jobs;";
 

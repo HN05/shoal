@@ -12,7 +12,6 @@ mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;
 mod connections;
-pub(crate) mod cpu_usage;
 mod disk;
 pub mod environment;
 pub mod events;
@@ -159,7 +158,6 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     );
     spawn_supervised(&mut background, &manager, "overload monitor", overload::run);
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
-    spawn_supervised(&mut background, &manager, "CPU usage", cpu_usage::run);
     spawn_supervised(
         &mut background,
         &manager,

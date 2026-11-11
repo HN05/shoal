@@ -461,7 +461,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
     };
     assert!(matches!(
         activities(manager.occupied_slots(&HashSet::new()).await.unwrap())[..],
-        [Activity::Running(_)]
+        [Activity::Running { .. }]
     ));
     assert!(
         manager
@@ -471,7 +471,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
     // Until its processes are proven stopped the agent's load may still show.
     assert!(matches!(
         activities(manager.occupied_slots(&HashSet::new()).await.unwrap())[..],
-        [Activity::Running(_)]
+        [Activity::Running { .. }]
     ));
     manager.queue_agent_restore(&agent.0).await.unwrap();
     // Without a turn report the agent counts as interrupted.
@@ -819,7 +819,7 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
 }
 
 #[tokio::test]
-async fn dynamic_admission_restores_once_measured_load_has_room() {
+async fn dynamic_admission_restores_beside_a_running_agent() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(
@@ -830,35 +830,13 @@ async fn dynamic_admission_restores_once_measured_load_has_room() {
         create(&manager, &repo, "stopped").await,
     );
     let agents = stopped_agents(&manager, &[&stopped]).await;
-    // A settled agent keeps running beside the stopped one.
+    // A settled agent keeps running beside the stopped one; memory, not
+    // CPU, decides whether the restore fits.
     let _running = connected_agent(&manager, &busy).await;
     let restoring = await_restore(&manager, &agents[0].0).await;
     publish_recovery(&manager);
-    tokio::time::pause();
-    let start = tokio::time::Instant::now();
-    let record = |seconds: u64, busy: u64, total: u64| {
-        manager.usage.with_cpu(|cpu| {
-            cpu.record(
-                start + Duration::from_secs(seconds),
-                Ok(crate::process::load::CpuTicks { busy, total }),
-            )
-        });
-    };
-    // Ninety percent busy leaves no room for the restored agent's load.
-    record(0, 0, 0);
-    record(5, 90, 100);
-    tokio::time::advance(Duration::from_secs(5)).await;
-    manager.dispatch_queue().await.unwrap();
-    assert_eq!(queue(&manager).await[0].2, Queued);
-    // A quiet minute makes room.
-    record(120, 92, 150);
-    record(125, 94, 200);
-    tokio::time::advance(Duration::from_secs(120)).await;
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await[0].2, Starting);
-    // The paused clock would jump to the hang guard's deadline while the
-    // waiter's query runs on the store's thread.
-    tokio::time::resume();
     bounded(restoring).await.unwrap().unwrap();
 }
 

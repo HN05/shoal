@@ -314,9 +314,10 @@ ends again; `shoal resume` continues the interrupted turn, as it continues
 stopped work, so a client pairs one command with each.
 The daemon also samples what each workspace's processes use, attributed by
 the workspace identity in their environment, so the user can see which
-workspace loads the machine; protection, warnings and admission do not use it
-yet. Processes that leave the workspace's environment, such as work handed
-to a shared server or container runtime, count for the machine only.
+workspace loads the machine; admission learns a settled agent's memory from
+it, and protection and warnings do not use it yet. Processes that leave the
+workspace's environment, such as work handed to a shared server or container
+runtime, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents can
 reduce load before anything stops. Warnings repeat per signal and workspace only
@@ -1408,22 +1409,26 @@ processes could not be proven stopped, so no slot outlives a restart. `machine.m
 limits the machine; the repository option `agent.max_running` limits each repository,
 with a global default like any other option, so one name never means both caps.
 The machine setting defaults to `dynamic`, which
-admits from measured load instead of a slot count, so the machine runs as many
-agents as it can without congestion. Agents start one at a time and staggered;
-an agent reads files before it edits and compiles, so a recent start reserves
-the load a settled agent shows, learned from CPU use per settled agent, until
-its own load is measured. The target is the warning thresholds that `load`
-sets, so the user picks how hard to push the machine rather than the
-mechanism's windows and intervals. An idle machine always admits one agent;
-critical readings admit none. Dynamic is machine-wide, so a repository's
-`dynamic` adds no limit. A positive number fixes a limit and `none` disables it
+admits from measured memory and disk instead of a slot count, so the machine
+runs as many agents as it can without running out of either. CPU does not
+count: builds and tests use every core that is free, so a run's peak CPU is
+not its cost, and more work on a busy CPU only runs slower, while memory and
+disk do not stretch and are what break a machine. Agents start one at a time
+and staggered; an agent reads files before it edits and compiles, so a recent
+start reserves the memory a settled agent's workspace uses, learned as their
+average with a floor, until its own is measured. The target is the warning
+thresholds that `load` sets, so the user picks how hard to push the machine
+rather than the mechanism's windows and intervals, and memory protection
+stays the safety net when settled agents grow later. An idle machine always
+admits one agent; critical readings admit none. Dynamic is machine-wide, so a
+repository's `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
 for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent
 memory profiles remain a proposal. CI jobs go through the same admission and
 order: `machine.max_jobs` limits them apart from agents, and under `dynamic` a
-job counts at the CPU and memory its recent runs reached, which a job repeats
-far more closely than an agent, and takes the one staggered start an agent
-would.
+job counts at the memory its recent runs reached, which a job repeats far
+more closely than an agent, or as an agent before it has run, and takes the
+one staggered start an agent would.
 Automatic restores are typed queue entries ordered with launches, queued when
 the stopped agent's processes are proven stopped. A restore of an agent stopped
 between turns waits for an update instead, holding no slot and holding back
@@ -1434,11 +1439,11 @@ admitted like a launch once free disk space has recovered, and an update's
 admission holds through later stops. Any other waiting restore keeps the
 agent's slot, so fixed limits let it take that slot back rather than counting it
 twice, which would deadlock a full machine of stopped agents, while dynamic
-admission measures its load like a new start. Restores also need the recovery
+admission measures its memory like a new start. Restores also need the recovery
 interval's healthy readings, one per interval. An entry waiting for anything
 besides a slot, such as those readings, an update or a dependency, keeps its
 place without holding back work queued behind it: the stopped agent's slot still
-counts and dynamic admission measures load, so the limits, not the order, keep
+counts and dynamic admission measures memory, so the limits, not the order, keep
 new starts from undoing the protection. Admission binds the recovery epoch, which stops, reloads and
 readings turning unsafe advance, so any of them before the agent restarts
 returns the restore to its place. The slot passes to the

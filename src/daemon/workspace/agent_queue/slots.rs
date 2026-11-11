@@ -152,7 +152,10 @@ impl Manager {
         for (repository, held) in self.agent_queue.admitted_oneshots() {
             slots.push(Slot {
                 repository,
-                activity: Activity::Running(held),
+                activity: Activity::Running {
+                    age: held,
+                    memory: None,
+                },
             });
         }
         Ok(slots)

@@ -12,7 +12,7 @@ fn queued(workflow: &str, name: &str) -> QueuedJob {
 }
 
 #[tokio::test]
-async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
+async fn a_job_counts_at_the_peak_memory_of_its_recent_runs() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -22,14 +22,14 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
     let rust = queued("ci.yml", "rust");
     assert_eq!(
         manager.job_cost(&repo.id, &rust).await.unwrap(),
-        JobCost::UNKNOWN
+        JobCost { memory: None }
     );
 
     // Six runs end; the first, the busiest, is older than the recent five.
     let gib = 1_i64 << 30;
-    for (run, (cpu, memory)) in [(900.0, 9 * gib), (300.0, gib), (400.0, 3 * gib)]
+    for (run, memory) in [9 * gib, gib, 3 * gib]
         .into_iter()
-        .chain([(200.0, gib); 3])
+        .chain([gib; 3])
         .enumerate()
     {
         let workspace = manager
@@ -50,9 +50,9 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at,peak_cpu,peak_memory)
-                     VALUES (?1,?2,?3,'{}',0,?4,?5)",
-                    params![row.0, row.1, row.2, cpu, memory],
+                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at,peak_memory)
+                     VALUES (?1,?2,?3,'{}',0,?4)",
+                    params![row.0, row.1, row.2, memory],
                 )?;
                 Ok(())
             })
@@ -65,7 +65,6 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
     assert_eq!(
         manager.job_cost(&repo.id, &rust).await.unwrap(),
         JobCost {
-            cores: 4.0,
             memory: Some(3 << 30),
         }
     );
@@ -75,7 +74,7 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
             .job_cost(&repo.id, &queued("ci.yml", "docs"))
             .await
             .unwrap(),
-        JobCost::UNKNOWN
+        JobCost { memory: None }
     );
     let runs: i64 = manager
         .store
