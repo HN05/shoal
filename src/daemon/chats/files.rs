@@ -21,7 +21,7 @@ impl Manager {
         let legacy = self.store.run(|db| legacy_names(db)).await?;
         let paths = self.paths.clone();
         off_runtime::run(move || rekey(&paths, &chats, &legacy)).await?;
-        self.store.write(|tx| forget_legacy_names(tx)).await
+        self.store.write(forget_legacy_names).await
     }
 }
 
