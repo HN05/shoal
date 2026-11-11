@@ -75,10 +75,16 @@ fn planned_branch(plan: &str) -> Option<String> {
 
 /// Record `launch` unless its repository already queues a launch in the
 /// same workspace, or of the same branch, or is being removed; names repeat,
-/// so they tell no two launches apart. A launch in an existing workspace needs it ready in the same
-/// transaction: removal reserves the workspace before its final checks, so the
-/// launch either precedes them, which keeps the workspace, or is refused here.
-pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> Result<()> {
+/// so they tell no two launches apart. A launch in an existing workspace
+/// needs it ready in the same transaction, and one a space queued needs
+/// that space present and not being removed: removal reserves the space
+/// before its final checks, so the launch either precedes them, which keeps
+/// the space, or is refused here.
+pub(super) fn insert_launch(
+    tx: &rusqlite::Transaction<'_>,
+    launch: &Launch,
+    removing: &crate::daemon::chats::Removing,
+) -> Result<()> {
     ensure!(
         !crate::daemon::store::repository_removing(tx, &launch.repository)?,
         "the repository is being removed"
@@ -86,6 +92,10 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
     if let Some(workspace) = &launch.opens {
         crate::daemon::store::require_ready(tx, workspace)
             .context("start agents in a ready workspace")?;
+    }
+    if let Some(space) = &launch.scope {
+        require_queuing_space(tx, space, removing)
+            .context("the space that queued the launch is being removed")?;
     }
     let request = &launch.request;
     ensure!(
@@ -131,6 +141,21 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
     )?;
     blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
     Ok(())
+}
+
+/// Refuse the space `id` a launch's scope names once it is gone, or while a
+/// removal holds it: a workspace that is not ready, or a chat `removing`
+/// holds.
+fn require_queuing_space(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    removing: &crate::daemon::chats::Removing,
+) -> Result<()> {
+    if crate::daemon::links::space::is_chat(tx, id)? {
+        ensure!(!removing.reserved(id), "a removal holds the chat");
+        return Ok(());
+    }
+    crate::daemon::store::require_ready(tx, id)
 }
 
 /// The restore of a stopped agent whose wrapper waits for it.

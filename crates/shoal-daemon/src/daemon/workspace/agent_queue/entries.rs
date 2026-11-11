@@ -86,8 +86,9 @@ impl Manager {
             scope,
         };
         let now = launch.request.now;
+        let removing = self.chat_removals.clone();
         self.store
-            .write(move |tx| insert_launch(tx, &launch))
+            .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Read the response before a detached worker can take the entry.

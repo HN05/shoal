@@ -1123,6 +1123,44 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
 }
 
 #[tokio::test]
+async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let (chat, _process) =
+        crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let queued_by = |space_id: &crate::client::space_ids::SpaceId| crate::daemon::scope::Caller {
+        space_id: space_id.clone(),
+        execution: None,
+    };
+    let launch = |name: &str| QueueRequest {
+        blockers: vec![crate::model::Blocker::Space(workspace.id.to_string())],
+        ..request(&repo, name, false)
+    };
+    // Removal reserves the space before its final checks; the queue
+    // insertion then refuses the launch in the same transaction.
+    manager
+        .reserve_lifecycle(&workspace.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    let caller = queued_by(&workspace.id);
+    let refused = manager
+        .queue_add_as(launch("below-workspace"), Some(&caller))
+        .await;
+    assert!(refused.is_err());
+    let _reservation = manager.chat_removals.reserve(&chat.id).unwrap();
+    let caller = queued_by(&chat.id);
+    let refused = manager
+        .queue_add_as(launch("below-chat"), Some(&caller))
+        .await;
+    assert!(refused.is_err());
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
