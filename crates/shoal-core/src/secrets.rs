@@ -1,5 +1,6 @@
 //! Secrets that user-configured commands fetch for tracked agents. Shoal keeps
 //! the commands, never the values.
+use crate::client::space_ids::SpaceId;
 use crate::paths::PathsExt;
 use anyhow::{Context, Result, bail, ensure};
 use std::{
@@ -222,7 +223,7 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -
     let workspace = std::env::var(env::WORKSPACE_ID)
         .with_context(|| format!("{tool} needs secrets.{name}, but its workspace is unknown"))?;
     let method = SecretMethod::SecretAcquire {
-        workspace: SpaceSelector::parse(&workspace),
+        workspace: SpaceSelector::Id(SpaceId::from(workspace)),
         name: name.to_owned(),
         request: SecretRequest {
             reason: None,
