@@ -1135,36 +1135,17 @@ async fn a_survivor_that_left_the_group_of_an_exited_agent_holds_the_chat() {
 async fn a_blocked_chat_with_a_background_task_keeps_running() {
     use crate::{client::progress::ProgressChange, model::Blocker, state::AgentState};
     let (root, manager) = manager().await;
-    let checkout = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let started = root.path().join("child");
-    let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
-            .arg("-c")
-            .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
-            .arg(&started),
+    let (_repo, chat, mut agent) = running_chat(root.path(), &manager).await;
+    // A background task its last turn started runs in a group of its own,
+    // carrying the chat's identity. A system binary hides its environment
+    // on macOS, so the test binary stands in for it.
+    let mut task = crate::daemon::test_support::spawn_marked_child(
+        crate::daemon::test_support::marked_child()
+            .env_remove(crate::env::WORKSPACE_ID)
+            .env_remove(crate::env::EXECUTION_ID)
+            .env(crate::env::CHAT, chat.id.as_str())
+            .process_group(0),
     );
-    let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            leader.id(),
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-    let child = wait_for_child(&started).await;
-    // The background task leads a session of its own, out of the agent's
-    // group.
-    let _task = KilledGroup(child);
-    while unsafe { libc::getpgid(child as i32) } != child as i32 {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
     let selector = SpaceSelector::id(&chat.id);
     let add = ProgressChange::AddBlocker {
         blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
@@ -1185,8 +1166,10 @@ async fn a_blocked_chat_with_a_background_task_keeps_running() {
         running.restore, None,
         "its background task is still working"
     );
-    unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
-    leader.wait().unwrap();
+    task.kill().await.unwrap();
+    task.wait().await.unwrap();
+    unsafe { libc::kill(agent.id() as i32, libc::SIGKILL) };
+    agent.wait().unwrap();
 }
 
 #[tokio::test]
