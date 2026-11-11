@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    daemon::{links::actions::Place, workspace::Manager},
+    daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         capability::Capability,
@@ -38,11 +38,11 @@ impl Manager {
         workflow: Option<String>,
         branch: Option<String>,
         inputs: BTreeMap<String, String>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<StartedRun> {
-        let (place, workflow, linked) = self.workflow_place(context, workflow, scoped).await?;
+        let (place, workflow, linked) = self.workflow_place(context, workflow, caller).await?;
         let branch = place.run_branch(branch.or(linked)).await?;
-        if scoped {
+        if caller.is_some() {
             on_own_branch_name(place.own_workspace(), &branch)?;
         }
         let run = NewRun {
@@ -95,17 +95,17 @@ impl Manager {
         input: String,
         action: CiAction,
         failed: bool,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<RunActed> {
         validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, scoped).await?;
+        let place = self.run_input_place(context, &input, caller).await?;
         let (forge, account) = (&place.forge, &place.account);
         let run = forge
             .find_run(account, &input, action)
             .await
             .with_context(|| format!("could not {action} CI run {input}"))?;
         // Scope keeps workspace processes in their workspace.
-        if scoped {
+        if caller.is_some() {
             on_own_branch(place.own_workspace(), &run)?;
         }
         forge
@@ -119,10 +119,10 @@ impl Manager {
         &self,
         context: Option<&ItemContext>,
         input: String,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Run> {
         validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, scoped).await?;
+        let place = self.run_input_place(context, &input, caller).await?;
         place
             .forge
             .view_run(&place.account, &input)
@@ -135,10 +135,10 @@ impl Manager {
         &self,
         context: Option<&ItemContext>,
         input: String,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Vec<RunJob>> {
         validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, scoped).await?;
+        let place = self.run_input_place(context, &input, caller).await?;
         place
             .forge
             .run_jobs(&place.account, &input)
@@ -152,10 +152,10 @@ impl Manager {
         context: Option<&ItemContext>,
         input: String,
         job: JobRef,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<CheckLog> {
         validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, scoped).await?;
+        let place = self.run_input_place(context, &input, caller).await?;
         place
             .forge
             .run_job_log(&place.account, &input, &job)
@@ -177,7 +177,7 @@ impl Manager {
             pr.is_none() || filter.branch.is_none(),
             "list the runs of a branch or of a PR, not both"
         );
-        let place = self.run_place(Some(context), None, false).await?;
+        let place = self.run_place(Some(context), None, None).await?;
         let (forge, account) = (&place.forge, &place.account);
         // Refuse a forge without runs before reading the PR.
         forge.require(Capability::ReadRuns)?;

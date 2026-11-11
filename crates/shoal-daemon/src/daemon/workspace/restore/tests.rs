@@ -482,7 +482,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             "3",
             Relation::Related,
             None,
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -493,7 +493,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             "4",
             Relation::Related,
             None,
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -513,7 +513,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             "7",
             Relation::Assigned,
             None,
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -540,7 +540,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
                 "5",
                 Relation::Related,
                 None,
-                false,
+                None,
             )
             .await
             .is_err()

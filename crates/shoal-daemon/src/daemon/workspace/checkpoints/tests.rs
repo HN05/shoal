@@ -235,7 +235,7 @@ async fn links_cannot_change_while_a_checkpoint_is_restored() {
             "5",
             Relation::Related,
             None,
-            false,
+            None,
         )
         .await
         .unwrap_err();

@@ -34,6 +34,7 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         links::{pr::Action, space::LinkSpace},
+        scope::Caller,
         workspace::{Manager, review},
     },
     forge::items::link::{ItemKind, LinkKind},
@@ -49,7 +50,7 @@ impl Manager {
         input: &str,
         relation: Relation,
         title: Option<String>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<()> {
         match (relation, kind) {
             (Relation::Assigned, LinkKind::Issue) => self.set_issue(selector, input, title).await,
@@ -61,7 +62,7 @@ impl Manager {
                 "a CI run cannot be assigned, because assigned items drive completion \
                  and cleanup; link it as opened or related"
             ),
-            (relation, LinkKind::Ci) => self.record_run(selector, relation, input, scoped).await,
+            (relation, LinkKind::Ci) => self.record_run(selector, relation, input, caller).await,
             (relation, kind) => {
                 self.record_item(selector, relation, kind, input, title)
                     .await
@@ -101,11 +102,11 @@ impl Manager {
         selector: &SpaceSelector,
         relation: Relation,
         input: &str,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
         let context = space.item_context();
-        let place = (self.run_input_place(Some(&context), input, scoped)).await?;
+        let place = (self.run_input_place(Some(&context), input, caller)).await?;
         let (_, url) = place.forge.run(input)?;
         let run = (place.forge.view_run(&place.account, &url).await)
             .with_context(|| format!("could not read CI run {url}"))?;

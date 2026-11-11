@@ -18,9 +18,7 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         CiMethod::CiRunJobs { context, run } => {
-            let listed = manager
-                .ci_run_jobs(context.as_ref(), run, caller.is_some())
-                .await;
+            let listed = manager.ci_run_jobs(context.as_ref(), run, caller).await;
             return Ok(Answer::pages(listed, Body::CiRunJobs));
         }
         CiMethod::ListCiRuns {
@@ -49,20 +47,18 @@ pub(super) async fn handle(
             failed,
         } => Body::CiRunActed(
             manager
-                .ci_run_action(context.as_ref(), run, action, failed, caller.is_some())
+                .ci_run_action(context.as_ref(), run, action, failed, caller)
                 .await?,
         ),
         CiMethod::ApproveCiRuns { context, run, pr } => {
             Body::CiRunsApproved(manager.approve_ci_runs(&context, run, pr).await?)
         }
-        CiMethod::ViewCiRun { context, run } => Body::CiRun(
-            manager
-                .view_ci_run(context.as_ref(), run, caller.is_some())
-                .await?,
-        ),
+        CiMethod::ViewCiRun { context, run } => {
+            Body::CiRun(manager.view_ci_run(context.as_ref(), run, caller).await?)
+        }
         CiMethod::CiRunJobLog { context, run, job } => {
             let log = manager
-                .ci_run_job_log(context.as_ref(), run, job, caller.is_some())
+                .ci_run_job_log(context.as_ref(), run, job, caller)
                 .await
                 .and_then(|log| super::items::json_pieces(&log));
             return Ok(Answer::pages(log, Body::ViewPieces));
@@ -74,7 +70,7 @@ pub(super) async fn handle(
             inputs,
         } => Body::CiRunStarted(
             manager
-                .start_ci_run(context.as_ref(), workflow, branch, inputs, caller.is_some())
+                .start_ci_run(context.as_ref(), workflow, branch, inputs, caller)
                 .await?,
         ),
     }))

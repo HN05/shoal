@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{links::actions::Place, workspace::Manager},
+    daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo, IssueInput,
         account::Account,
@@ -70,13 +70,13 @@ impl RunPlace {
 impl Manager {
     /// Where a request from `context`, if any, acts on the run or workflow
     /// of `named`, the repository its URL names, if any: the repository of
-    /// the workspace or checkout unless `named` is another, which a `scoped`
-    /// caller may not act in.
+    /// the workspace or checkout unless `named` is another, which a scoped
+    /// `caller` may not act in.
     pub(in crate::daemon::links) async fn run_place(
         &self,
         context: Option<&ItemContext>,
         named: Option<ForgeRepo>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<RunPlace> {
         let origin = match context {
             Some(context) => Some(self.place(context).await?),
@@ -94,7 +94,7 @@ impl Manager {
             }
         }
         let forge = named.context("outside a workspace, name it by its URL")?;
-        ensure!(!scoped, ELSEWHERE);
+        ensure!(caller.is_none(), ELSEWHERE);
         Ok(RunPlace {
             origin,
             forge,
@@ -109,10 +109,10 @@ impl Manager {
         &self,
         context: Option<&ItemContext>,
         input: &str,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<RunPlace> {
         let named = self.named_run_forge(input).await?;
-        self.run_place(context, named, scoped).await
+        self.run_place(context, named, caller).await
     }
 
     /// Where a request starts the workflow `input` names, by its file or ID
@@ -121,15 +121,15 @@ impl Manager {
         &self,
         context: Option<&ItemContext>,
         input: Option<String>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<(RunPlace, Option<String>, Option<String>)> {
         let Some(url) = input.as_deref().filter(|input| is_workflow_url(input)) else {
-            let place = self.run_place(context, None, scoped).await?;
+            let place = self.run_place(context, None, caller).await?;
             return Ok((place, input, None));
         };
         let hosts = self.forge_hosts();
         let (named, link) = ForgeRepo::resolve_workflow_url(url, &hosts).await?;
-        let place = self.run_place(context, Some(named), scoped).await?;
+        let place = self.run_place(context, Some(named), caller).await?;
         Ok((place, Some(link.workflow), link.branch))
     }
 

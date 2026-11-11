@@ -59,7 +59,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             "40",
             Relation::Opened,
             None,
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -70,7 +70,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             issue,
             Relation::Opened,
             Some("Follow-up".into()),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -81,7 +81,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             "41",
             Relation::Related,
             None,
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -92,7 +92,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             "40",
             Relation::Related,
             None,
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -122,7 +122,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
                 "https://github.com/other/repo/issues/1",
                 Relation::Related,
                 None,
-                false,
+                None,
             )
             .await
             .is_err()
@@ -181,7 +181,7 @@ async fn assigned_relation_uses_the_issue_link() {
             "7",
             Relation::Assigned,
             Some("Fix".into()),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -226,7 +226,7 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
                 "40",
                 Relation::Related,
                 None,
-                false
+                None
             )
             .await
             .is_err()
