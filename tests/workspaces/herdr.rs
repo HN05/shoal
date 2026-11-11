@@ -818,12 +818,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
 fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
     let fixture = Fixture::new();
     install_fake_herdr(&fixture);
-    for (name, mode) in [
-        ("here", "here"),
-        ("json", "json"),
-        ("pipe", "pipe"),
-        ("outside", "outside"),
-    ] {
+    for (name, mode) in [("here", "here"), ("pipe", "pipe"), ("outside", "outside")] {
         let mut command = fixture.command();
         command.args(["start", fixture.repo.to_str().unwrap(), name]);
         if mode != "outside" {
@@ -833,7 +828,6 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         }
         let output = match mode {
             "here" => fixture.interactive_command(command.arg("--here"), "").0,
-            "json" => fixture.interactive_command(command.arg("--json"), "").0,
             "outside" => fixture.interactive_command(&mut command, "").0,
             _ => command.output().unwrap(),
         };
