@@ -41,10 +41,15 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
         .await
         .unwrap();
     // It leads its process group, as a chat's process does in a terminal.
+    // Its output goes nowhere, so nothing it starts that outlives a killed
+    // test holds the test runner's output open.
     let mut process = unmarked("sh")
         .args(["-c", script])
         .env(crate::env::CHAT, &chat.id)
         .process_group(0)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
     let pid = process.id();
@@ -52,6 +57,10 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
     manager.move_chat(&chat.id, pid).await.unwrap();
     (root, manager, pid)
 }
+
+/// The loop that keeps a chat's script running until the test that started
+/// it ends, also when the test is killed and nothing stops the script.
+const UNTIL_THE_TEST_ENDS: &str = "while kill -0 $PPID 2>/dev/null; do sleep 1; done";
 
 /// The process ID the chat's script writes to `file`, once it has.
 async fn written_pid(file: &Path) -> u32 {
@@ -160,7 +169,7 @@ async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
     // will.
     let script = format!(
         "trap 'sleep 6021 & echo $! > \"{}\"; exit 0' TERM; echo $$ > \"{}\"; \
-         while :; do sleep 1; done",
+         {UNTIL_THE_TEST_ENDS}",
         child.display(),
         ready.display()
     );
@@ -200,7 +209,7 @@ async fn a_chat_ends_without_the_workspace_executions_it_started() {
     // A command in the chat started a workspace's execution, whose wrapper
     // stays among the chat's processes.
     let script = format!(
-        "sleep 6021 & echo $! > '{}'; while :; do sleep 1; done",
+        "sleep 6021 & echo $! > '{}'; {UNTIL_THE_TEST_ENDS}",
         started.display()
     );
     let (root, manager, _) = chat_running("coordinator", &script).await;
