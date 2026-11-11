@@ -896,7 +896,7 @@ fn status_reports_a_session_zmx_cannot_reach_instead_of_dropping_it() {
         "  name=persist\terr=Unexpected\tstatus=unreachable\n",
     )
     .unwrap();
-    let status = fixture.ok(&["status", "persist"]);
+    let status = fixture.ok(&["status", &fixture.id("persist")]);
     assert_eq!(status["sessions"], serde_json::json!([]));
     assert!(status["sessions_error"].is_string(), "{status}");
     fs::write(&sessions, "  name=persist\tpid=1\tclients=0\n").unwrap();
@@ -910,7 +910,7 @@ fn terminal_agent_launches_refuse_a_zmx_older_than_1_0_1_before_opening_a_sessio
     install_fake_agents(&fixture, &["claude"]);
     fs::write(fixture.root.path().join("zmx-version"), "0.8.1").unwrap();
     let (output, transcript) =
-        fixture.terminal_command(fixture.command().args(["claude", "persist"]), "", true);
+        fixture.terminal_command(fixture.command().args(["claude", &fixture.id("persist")]), "", true);
     assert!(!output.status.success(), "{transcript}");
     assert!(
         !zmx_calls(&fixture).iter().any(|call| call[0] == "attach"),
