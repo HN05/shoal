@@ -379,7 +379,7 @@ async fn finish_add_workspace(
     )?;
     let starts = post_setup.is_ok().then_some(agent);
     if enters_added(ctx, workspace, starts).await? {
-        shell::navigate(&workspace.path, ctx.json)?;
+        shell::navigate(ctx, &workspace.path)?;
     }
     post_setup?;
     Ok(Some(prepared))

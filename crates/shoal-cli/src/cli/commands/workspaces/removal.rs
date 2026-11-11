@@ -49,7 +49,7 @@ pub(in crate::cli::commands) async fn leaving<T>(
     if let Some(destination) = escape
         && (result.is_ok() || !std::env::current_dir().is_ok_and(|cwd| cwd.exists()))
     {
-        shell::navigate(&destination, ctx.json)?;
+        shell::navigate(ctx, &destination)?;
     }
     result
 }

@@ -48,7 +48,7 @@ pub(in crate::cli::commands) async fn adopt(
         ),
         &workspace,
     )?;
-    shell::navigate(&workspace.path, ctx.json)?;
+    shell::navigate(ctx, &workspace.path)?;
     Ok(0)
 }
 
@@ -115,7 +115,7 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
             .await?
             .workspace,
     )?;
-    shell::navigate(&workspace.path, ctx.json)?;
+    shell::navigate(ctx, &workspace.path)?;
     Ok(0)
 }
 

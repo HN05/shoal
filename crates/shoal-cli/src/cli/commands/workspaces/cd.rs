@@ -29,5 +29,5 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
         path: path.to_owned(),
     };
     ctx.emit(&path.display().to_string(), directory)?;
-    shell::navigate(path, ctx.json)
+    shell::navigate(ctx, path)
 }

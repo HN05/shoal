@@ -197,7 +197,7 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
         },
     )?;
     if terminal::follows_caller(ctx) && !crate::env::is_scoped() {
-        shell::navigate(&child.path, ctx.json)?;
+        shell::navigate(ctx, &child.path)?;
     }
     Ok(())
 }

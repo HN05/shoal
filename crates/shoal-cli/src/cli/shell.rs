@@ -160,12 +160,13 @@ pub fn completions(shell: clap_complete::Shell) -> Result<String> {
 }
 
 /// Ask the calling shell to enter `path`, whatever the output format. A
-/// scoped process's shell is its agent's, which keeps its own working
-/// directory, so it is never moved.
-pub fn navigate(path: &Path, json: bool) -> Result<()> {
-    if crate::env::is_scoped() {
+/// scoped process's shell, including one that cleared its token, is its
+/// agent's, which keeps its own working directory, so it is never moved.
+pub fn navigate(ctx: &CliContext, path: &Path) -> Result<()> {
+    if crate::env::inherits_scope(&ctx.paths.state) {
         return Ok(());
     }
+    let json = ctx.json;
     if let Some(destination) = std::env::var_os(crate::env::SHELL_DIRECTIVE) {
         let path = path
             .to_str()

@@ -1123,7 +1123,8 @@ fn cd_previous_returns_to_the_workspace_left_and_navigates_with_json() {
         );
         assert_eq!(fs::read_to_string(&directive).unwrap(), format!("{to}\n"));
     }
-    // A scoped process's shell is its agent's, which never moves.
+    // A scoped process's shell is its agent's, which never moves, also
+    // once it clears its scope token.
     fs::write(&directive, "").unwrap();
     let scoped = fixture
         .command()
@@ -1131,7 +1132,7 @@ fn cd_previous_returns_to_the_workspace_left_and_navigates_with_json() {
         .args([
             "sh",
             "-c",
-            r#"SHOAL_SHELL_DIRECTIVE="$0" "$1" --text cd "$2""#,
+            r#"unset SHOAL_SCOPE_TOKEN; SHOAL_SHELL_DIRECTIVE="$0" "$1" --text cd "$2""#,
         ])
         .arg(&directive)
         .args([support::shoal_binary(), &fixture.id("second")])

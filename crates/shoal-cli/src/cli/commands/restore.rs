@@ -180,7 +180,7 @@ pub(super) async fn finish_reopen(
     }
     ctx.emit(&reopened.message(ctx, action), &reopened)?;
     if terminal::follows_caller(ctx) {
-        shell::navigate(&reopened.workspace.path, ctx.json)?;
+        shell::navigate(ctx, &reopened.workspace.path)?;
     }
     if !resume {
         super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
