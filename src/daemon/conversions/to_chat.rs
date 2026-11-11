@@ -24,6 +24,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Workspace> {
         let workspace = self.convertible_workspace(selector, caller).await?;
+        super::ensure_mode(&self.workspace_settings(&workspace).await?, &mode)?;
         let execution = self
             .running_agents()
             .await?

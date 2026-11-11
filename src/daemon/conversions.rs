@@ -51,6 +51,13 @@ impl Converting {
     }
 }
 
+/// Refuse `mode` for the agent of a converted space, unless `settings`, those
+/// of the space's repository, define it and a start may name it.
+pub(super) fn ensure_mode(settings: &crate::config::Effective, mode: &ModeName) -> Result<()> {
+    crate::config::modes::ensure_startable(mode)?;
+    crate::config::modes::get(&settings.modes, mode).map(drop)
+}
+
 /// The conversion of the space `id` whose agent has yet to start in the new
 /// place.
 pub(crate) fn pending(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Pending>> {

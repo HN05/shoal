@@ -41,6 +41,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         let chat = self.convertible_chat(selector, caller).await?;
+        super::ensure_mode(&self.chat_settings(&chat).await?, &conversion.mode)?;
         ensure!(
             !conversion.options.disposable,
             "a converted chat's workspace keeps its work; leave out --disposable"

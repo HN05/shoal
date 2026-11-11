@@ -112,3 +112,25 @@ async fn a_stopped_chat_is_resumed_before_it_converts() {
 
     assert!(refused.contains("is stopped"), "{refused}");
 }
+
+#[tokio::test]
+async fn a_mode_no_config_defines_is_refused_before_anything_changes() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let conversion = WorkspaceConversion {
+        mode: "missing".into(),
+        ..conversion()
+    };
+
+    let refused = manager
+        .convert_to_workspace(&SpaceSelector::id(&talk.id), conversion, None, None)
+        .await
+        .unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("no mode missing"),
+        "{refused:#}"
+    );
+    assert!(manager.chat_by_id(&talk.id).await.unwrap().is_some());
+}
