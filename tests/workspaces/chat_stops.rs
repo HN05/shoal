@@ -12,15 +12,16 @@ fn the_user_stops_a_chat_and_resumes_it() {
     let fixture = parent_fixture();
     let home = fixture.root.path().to_owned();
     run_chat_until_stopped(&fixture, "talk", None, || {
-        let stopped = fixture.ok(&["stop", "talk"]);
+        let stopped = fixture.ok(&["stop", &fixture.id("talk")]);
         assert_eq!(stopped["stopped"], true, "{stopped}");
         assert_eq!(stopped["already_stopped"], Value::Null, "{stopped}");
     });
     assert!(!chat_runs(&fixture, "talk"));
 
-    fixture.ok(&["resume", "talk"]);
+    let talk = fixture.id("talk");
+    fixture.ok(&["resume", &talk]);
     wait_until("chat restored", || home.join("chat-restored").exists());
-    fixture.ok(&["rm", "talk", "--yes"]);
+    fixture.ok(&["rm", &talk, "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 
@@ -61,17 +62,17 @@ fn stopping_a_space_stops_the_chats_below_it() {
     .map(|(name, placement)| SleepingChat::start(&fixture, name, placement));
     let running = || ["below", "under", "beside", "inside"].map(|name| chat_runs(&fixture, name));
 
-    let stopped = fixture.ok(&["stop", "parent", "--skip-children"]);
+    let stopped = fixture.ok(&["stop", &fixture.id("parent"), "--skip-children"]);
     assert_eq!(stopped["stopped"], true, "{stopped}");
     assert_eq!(running(), [true; 4]);
-    let stopped = fixture.ok(&["stop", "below"]);
+    let stopped = fixture.ok(&["stop", &fixture.id("below")]);
     assert_eq!(
         stopped["stopped"],
         serde_json::json!(["below", "under"]),
         "{stopped}"
     );
     assert_eq!(running(), [false, false, true, true]);
-    let stopped = fixture.ok(&["stop", "parent"]);
+    let stopped = fixture.ok(&["stop", &fixture.id("parent")]);
     let mut names: Vec<_> = (stopped["stopped"].as_array().unwrap().iter())
         .map(|name| name.as_str().unwrap())
         .collect();
@@ -92,26 +93,6 @@ fn stop_all_stops_running_chats() {
     assert!(!chat_runs(&fixture, "talk"));
 }
 
-/// A name a chat shares with a queued agent of a new workspace is refused
-/// rather than taken as the queued agent's.
-#[test]
-fn stop_refuses_a_name_a_chat_shares_with_a_queued_agent() {
-    let fixture = Fixture::new();
-    fixture.add("first");
-    let repo = fixture.repo.to_str().unwrap();
-    fixture.ok(&[
-        "start", repo, "talk", "--after", "first", "--agent", "claude",
-    ]);
-    let _chat = SleepingChat::start(&fixture, "talk", serde_json::json!({}));
-
-    let output = fixture.run(&["stop", "talk"]);
-
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("names both a chat"), "{output:?}");
-    assert!(chat_runs(&fixture, "talk"));
-    assert_eq!(fixture.ok(&["queue"]).as_array().unwrap().len(), 1);
-}
-
 /// Stopping the processes of several spaces refuses a stopped chat among
 /// them before stopping any.
 #[test]
@@ -119,9 +100,11 @@ fn stopping_processes_refuses_a_stopped_chat_first() {
     let fixture = Fixture::new();
     fixture.add("planned");
     let _chat = SleepingChat::start(&fixture, "talk", serde_json::json!({}));
-    fixture.ok(&["stop", "talk"]);
+    let talk = fixture.id("talk");
+    fixture.ok(&["stop", &talk]);
 
-    let output = fixture.run(&["stop", "--processes", "planned", "talk"]);
+    let planned = fixture.id("planned");
+    let output = fixture.run(&["stop", "--processes", &planned, &talk]);
 
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("talk stopped"), "{output:?}");
@@ -136,25 +119,26 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     let restored = home.join("chat-restored");
     let (mut other, _) = start_test_chat(fixture, "other");
     for refused in [parent.name(), "other"] {
-        let output = parent.run(fixture, &["stop", refused]);
+        let output = parent.run(fixture, &["stop", &fixture.id(refused)]);
         assert!(!output.status.success(), "{refused}: {output:?}");
     }
     assert!(chat_runs(fixture, "other"));
 
     run_chat_until_stopped(fixture, "talk", Some(parent.name()), || {
-        let stopped = parent.ok(fixture, &["stop", "talk"]);
+        let stopped = parent.ok(fixture, &["stop", &fixture.id("talk")]);
         assert_eq!(stopped["stopped"], true, "{stopped}");
     });
-    parent.ok(fixture, &["resume", "talk"]);
+    let talk = fixture.id("talk");
+    parent.ok(fixture, &["resume", &talk]);
     wait_until("the parent's restore", || restored.exists());
 
-    fixture.ok(&["stop", "talk"]);
-    let stopped = parent.ok(fixture, &["stop", "talk"]);
+    fixture.ok(&["stop", &talk]);
+    let stopped = parent.ok(fixture, &["stop", &talk]);
     assert_eq!(stopped["already_stopped"], true, "{stopped}");
-    let output = parent.run(fixture, &["resume", "talk"]);
+    let output = parent.run(fixture, &["resume", &talk]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
-    fixture.ok(&["rm", "talk", "--yes"]);
+    fixture.ok(&["rm", &talk, "--yes"]);
     other.kill().unwrap();
     other.wait().unwrap();
     wait_zmx_sessions_ended(&home);
@@ -170,10 +154,11 @@ fn run_chat_until_stopped(
 ) {
     let started = fixture.root.path().join("chat-started");
     let _ = fs::remove_file(&started);
+    let parent = parent.map(|parent| fixture.id(parent));
     let mut args = vec![
         "start", "--chat", "--here", "--agent", "claude", "--name", name,
     ];
-    args.extend(parent.iter().flat_map(|parent| ["--parent", *parent]));
+    args.extend(parent.iter().flat_map(|parent| ["--parent", parent]));
     std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture
@@ -199,8 +184,8 @@ struct SleepingChat {
 }
 
 impl SleepingChat {
-    /// Start the chat `name`, placed as `placement`'s `parent` and
-    /// `workspace` say.
+    /// Start the chat `name`, placed below the spaces `placement`'s
+    /// `parent` and `workspace` name.
     fn start(fixture: &Fixture, name: &str, placement: Value) -> Self {
         let repository = fixture.ok(&["repo", "ls"])[0].clone();
         let mut agent = support::isolated(fixture.root.path(), "sleep")
@@ -213,10 +198,9 @@ impl SleepingChat {
         let mut request = serde_json::json!({
             "repository": repository["id"], "name": name, "agent": "claude", "pid": pid
         });
-        request
-            .as_object_mut()
-            .unwrap()
-            .extend(placement.as_object().unwrap().clone());
+        let placement = (placement.as_object().unwrap().iter())
+            .map(|(key, space)| (key.clone(), fixture.id(space.as_str().unwrap()).into()));
+        request.as_object_mut().unwrap().extend(placement);
         let response = fixture.request(serde_json::json!({"start_chat": request}));
         assert_eq!(response["type"], "chat", "{response}");
         Self { pid }

@@ -295,12 +295,10 @@ fn removal_goes_on_in_the_background_once_its_checks_pass() {
     let workspace = fixture.add("dirty");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("untracked"), "keep me").unwrap();
-    assert!(!fixture.run(&["rm", "dirty"]).status.success());
-    assert_eq!(
-        fixture.ok(&["status", "dirty"])["workspace"]["state"],
-        "ready"
-    );
-    let started = fixture.ok(&["rm", "dirty", "--yes"]);
+    let id = workspace["id"].as_str().unwrap();
+    assert!(!fixture.run(&["rm", id]).status.success());
+    assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "ready");
+    let started = fixture.ok(&["rm", id, "--yes"]);
     assert_eq!(started["background"]["children"], serde_json::json!([]));
     assert!(started.get("removed").is_none(), "{started}");
     wait_removed(&fixture, "dirty");
@@ -1131,8 +1129,10 @@ fn a_named_child_its_failed_parent_took_is_not_removed_again() {
     );
     commit_resource_config(&fixture.repo, "");
     fixture.add("parent");
-    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
-    let output = fixture.run(&["--json", "rm", "--wait", "child", "parent", "--yes"]);
+    let parent = fixture.id("parent");
+    let child = fixture.ok(&["split", "child", "--workspace", &parent]);
+    let child_id = child["id"].as_str().unwrap();
+    let output = fixture.run(&["--json", "rm", "--wait", child_id, &parent, "--yes"]);
     assert!(!output.status.success());
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     // The parent's removal took the child before its own hook failed.
