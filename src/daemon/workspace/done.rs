@@ -13,8 +13,7 @@ use crate::{
         questions, spaces::removal_notices::Cleanup, store, workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
-    model::{Completion, HandedBack, Workspace},
-    state::WorkspaceState,
+    model::{Completion, HandedBack, PresentSpace, Workspace},
 };
 
 impl Manager {
@@ -238,69 +237,91 @@ impl Manager {
     }
 
     /// Each space's PR gate is held only while that space is handled. A
-    /// workspace below a completed one goes by that completion.
+    /// space below a completed one goes by that completion.
     pub async fn sweep_completed(&self) -> Result<()> {
         // A failure in one space, such as an unreadable completion of its
         // ancestor, does not skip the others.
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
-        for listed in self.list_workspaces().await? {
-            if let Err(error) = self.sweep_completed_workspace(&listed).await {
-                failed.push(&listed.id, &listed.name, &error);
+        for listed in self.present_spaces().await? {
+            if let Err(error) = self.sweep_completed_space(&listed).await {
+                failed.push(listed.id(), listed.name(), &error);
             }
         }
-        self.sweep_completed_chats(&mut failed).await?;
         failed.into_result()
     }
 
     /// Remove `listed` for its own completion or a completed ancestor's.
-    async fn sweep_completed_workspace(&self, listed: &Workspace) -> Result<()> {
-        if self.sweep_skips(&listed.path).await {
+    async fn sweep_completed_space(&self, listed: &PresentSpace) -> Result<()> {
+        if let Some(workspace) = listed.worktree()
+            && self.sweep_skips(&workspace.path).await
+        {
             return Ok(());
         }
-        // An ancestor's completion that takes the workspace changes under
-        // the ancestor's gate, so that one is held too.
-        let gated = self.completed_ancestor(&listed.id).await?;
-        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| a.id()));
+        // An ancestor's completion that takes the space changes under the
+        // ancestor's gate, so that one is held too.
+        let gated = self.completed_ancestor(listed.id()).await?;
+        let gates = std::iter::once(listed.id()).chain(gated.as_ref().map(|a| &a.id));
         let _guard = self.gates.lock_prs(gates).await;
-        let Some(workspace) = self.find_workspace(&listed.id).await? else {
+        let Some(space) = self.find_space(listed.id()).await? else {
             return Ok(());
         };
-        if workspace.state != WorkspaceState::Ready {
+        if space.worktree().and_then(super::not_ready).is_some() {
             return Ok(());
         }
-        if let Some(ancestor) = self.completed_ancestor(&workspace.id).await? {
+        if let Some(ancestor) = self.completed_ancestor(space.id()).await? {
             // Another ancestor's completion waits for the next sweep, which
             // holds its gate.
-            if gated.is_some_and(|gated| gated.id() == ancestor.id()) {
-                self.sweep_under_completed(&workspace, &ancestor).await?;
+            if gated.is_some_and(|gated| gated.id == ancestor.id) {
+                self.sweep_under_completed(&space, &ancestor).await?;
             }
             return Ok(());
         }
-        let removal = self.cleanup_completed(&workspace).await;
+        let removal = self.cleanup_completed(&space).await;
         if matches!(removal, Ok(false)) {
             return Ok(());
         }
-        (self.announce_removal(&workspace, Cleanup::Completion, &removal)).await?;
+        (self.announce_removal(&space, Cleanup::Completion, &removal)).await?;
         if let Err(error) = &removal {
-            self.record_completion_error(&workspace.id, error).await?;
+            self.record_completion_error(space.id(), error).await?;
         }
         Ok(())
     }
 
-    async fn cleanup_completed(&self, workspace: &Workspace) -> Result<bool> {
-        let Some(completion) = self.completion(&workspace.id).await? else {
+    async fn cleanup_completed(&self, space: &PresentSpace) -> Result<bool> {
+        let Some(completion) = self.completion(space.id()).await? else {
             return Ok(false);
         };
-        if !completion.cleanup || self.keep_reason(&workspace.id).await?.is_some() {
+        if !completion.cleanup || self.keep_reason(space.id()).await?.is_some() {
             return Ok(false);
         }
-        // A pre-existing PR registration keeps its own merge requirements.
-        if self.pr_registration(&workspace.id).await?.is_some() {
+        // A pre-existing PR registration keeps its own merge requirements
+        // where the space has a worktree, whose branch the PR carries.
+        if space.worktree().is_some() && self.pr_registration(space.id()).await?.is_some() {
             return Ok(false);
         }
-        let cause = self.completion_cause(&workspace.id).await?;
-        self.remove_completed(&SpaceSelector::id(&workspace.id), &completion, cause)
-            .await
+        let cause = self.completion_cause(space.id()).await?;
+        self.remove_completed(space, &completion, cause).await
+    }
+
+    /// Remove `space` for its completed `ancestor` once its grace period
+    /// ends, unless something keeps it or spaces below it remain, which go
+    /// first under the same completion.
+    async fn sweep_under_completed(
+        &self,
+        space: &PresentSpace,
+        ancestor: &CompletedAncestor,
+    ) -> Result<()> {
+        if !self.children(space.id()).await?.is_empty()
+            || self.keep_reason(space.id()).await?.is_some()
+        {
+            return Ok(());
+        }
+        let removal = self.remove_under_completed(space, ancestor).await;
+        if matches!(removal, Ok(false)) {
+            return Ok(());
+        }
+        let cleanup = Cleanup::AncestorCompletion(&ancestor.name);
+        self.announce_removal(space, cleanup, &removal).await
     }
 
     pub(crate) async fn completion_cause(&self, id: &SpaceId) -> Result<EventCause> {
@@ -319,6 +340,8 @@ impl Manager {
             .await
     }
 
+    /// Record that cleanup after the space `id`'s completion failed with
+    /// `error`.
     async fn record_completion_error(&self, id: &SpaceId, error: &anyhow::Error) -> Result<()> {
         let id = id.to_owned();
         let error = format!("{error:#}");

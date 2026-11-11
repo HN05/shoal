@@ -9,7 +9,7 @@ use crate::daemon::test_support::{commit, git, manager, repository};
 use crate::{
     daemon::{notifications::NotificationKind, workspace_files::Attacher},
     execution::recovery,
-    model::CleanupReason,
+    model::{CleanupReason, Workspace},
 };
 
 const HOUR: Duration = Duration::from_secs(3600);

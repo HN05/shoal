@@ -1,8 +1,9 @@
 //! Removal of spaces whose work merged into the default branch once nothing
 //! has used them for the configured idle period, whether or not their
-//! assignment was marked done. Idle time comes from recorded activity and file
-//! change times, so it survives daemon restarts. A chat has no branch, so it
-//! goes once its agent has been stopped for that period.
+//! assignment was marked done. Idle time comes from recorded activity, the
+//! agent's last stop and a worktree's file change times, so it survives
+//! daemon restarts. A space without a worktree has no branch, so it goes
+//! once nothing has used it for that period.
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
@@ -15,12 +16,14 @@ use anyhow::Result;
 use tokio::time::Instant;
 
 use super::{Rule, Snapshot, Tree, change_time};
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{events::EventCause, spaces::removal_notices::Cleanup, workspace::Manager},
-    model::{Chat, Workspace},
+    daemon::{
+        events::EventCause,
+        spaces::removal_notices::Cleanup,
+        workspace::{Manager, not_ready},
+    },
+    model::PresentSpace,
     process::DirectoryUsers,
-    state::WorkspaceState,
     time::UnixTime,
 };
 
@@ -63,18 +66,15 @@ impl State {
         self.changed.insert(id.to_owned(), changed.min(now));
     }
 
-    fn forget_removed(&mut self, workspaces: &[Workspace], chats: &[Chat]) {
-        let present = |id: &SpaceId| {
-            workspaces.iter().any(|workspace| &workspace.id == id)
-                || chats.iter().any(|chat| &chat.id == id)
-        };
+    fn forget_removed(&mut self, spaces: &[PresentSpace]) {
+        let present = |id: &SpaceId| spaces.iter().any(|space| space.id() == id);
         self.retained.retain(|id, _| present(id));
         self.changed.retain(|id, _| present(id));
     }
 }
 
-/// One pass over every ready workspace, reading the processes in each from
-/// `users`, and every chat; a failure in one does not skip the others.
+/// One pass over every space, reading the processes in each worktree from
+/// `users`; a failure in one does not skip the others.
 pub async fn sweep(manager: &Manager, state: &mut State, users: &DirectoryUsers) -> Result<()> {
     sweep_at(manager, state, UnixTime::now(), users).await
 }
@@ -86,157 +86,110 @@ async fn sweep_at(
     now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<()> {
-    let workspaces = manager.list_workspaces().await?;
-    let chats = manager.chats().await?;
-    state.forget_removed(&workspaces, &chats);
+    let spaces = manager.present_spaces().await?;
+    state.forget_removed(&spaces);
     let mut failed = super::SpaceFailures::default();
-    for workspace in workspaces {
-        if workspace.state != WorkspaceState::Ready || manager.sweep_skips(&workspace.path).await {
+    for space in spaces {
+        if let Some(workspace) = space.worktree()
+            && (not_ready(workspace).is_some() || manager.sweep_skips(&workspace.path).await)
+        {
             continue;
         }
-        if let Err(error) = sweep_workspace(manager, state, &workspace, now, users).await {
-            failed.push(&workspace.id, &workspace.name, &error);
-        }
-    }
-    for chat in chats {
-        if let Err(error) = sweep_chat(manager, state, &chat, now).await {
-            failed.push(&chat.id, &chat.name, &error);
+        if let Err(error) = sweep_space(manager, state, &space, now, users).await {
+            failed.push(space.id(), space.name(), &error);
         }
     }
     failed.into_result()
 }
 
-/// Remove `chat` once its agent has been stopped for the merged idle period
-/// and nothing keeps it.
-async fn sweep_chat(
+async fn sweep_space(
     manager: &Manager,
     state: &mut State,
-    chat: &Chat,
-    now: UnixTime,
-) -> Result<()> {
-    let settings = manager.chat_settings(chat).await?;
-    let Some(delay) = settings.cleanup.merged.delay() else {
-        return Ok(());
-    };
-    let idle = (manager.chat_stopped_at(&chat.id).await?)
-        .is_some_and(|stopped_at| stopped_at <= now - delay);
-    if !idle {
-        return Ok(());
-    }
-    let Some(snapshot) = manager
-        .chat_cleanup_snapshot(chat, super::Rule::Merged)
-        .await?
-    else {
-        return Ok(());
-    };
-    if state.waits(&chat.id, snapshot.signals) {
-        return Ok(());
-    }
-    let removal = (manager.remove_unused_chat(chat, snapshot, EventCause::Merged)).await;
-    match &removal {
-        Ok(false) => return Ok(()),
-        Ok(true) => {
-            state.retained.remove(&chat.id);
-        }
-        Err(_) => {
-            state
-                .retained
-                .insert(chat.id.clone(), (snapshot.signals, Instant::now()));
-        }
-    }
-    manager
-        .announce_removal(chat, Cleanup::Merged, &removal)
-        .await
-}
-
-async fn sweep_workspace(
-    manager: &Manager,
-    state: &mut State,
-    workspace: &Workspace,
+    space: &PresentSpace,
     now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<()> {
-    let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await? else {
+    let Some(snapshot) = idle_candidate(manager, state, space, now, users).await? else {
         return Ok(());
     };
-    let removal = manager
-        .remove_merged_idle(&SpaceSelector::id(&workspace.id), snapshot)
-        .await;
+    let removal = (manager.remove_unused(space, snapshot, EventCause::Merged)).await;
     match &removal {
         Ok(false) => return Ok(()),
         Ok(true) => {
-            state.retained.remove(&workspace.id);
+            state.retained.remove(space.id());
         }
         Err(_) => {
             state
                 .retained
-                .insert(workspace.id.clone(), (snapshot.signals, Instant::now()));
+                .insert(space.id().clone(), (snapshot.signals, Instant::now()));
         }
     }
-    (manager.announce_removal(workspace, Cleanup::Merged, &removal)).await
+    (manager.announce_removal(space, Cleanup::Merged, &removal)).await
 }
 
-/// The snapshot of a merged workspace idle for its configured period, or
+/// The snapshot of a merged space idle for its configured period, or
 /// `None`. Cheap checks come first: recorded activity and the change time the
 /// last walk saw, then Git and process state and the failed-removal backoff,
 /// and only then one walk of the worktree's files.
 async fn idle_candidate(
     manager: &Manager,
     state: &mut State,
-    workspace: &Workspace,
+    space: &PresentSpace,
     now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<Option<Snapshot>> {
-    let Some(deadline) = idle_deadline(manager, workspace, now).await? else {
+    let Some(deadline) = idle_deadline(manager, space, now).await? else {
         return Ok(None);
     };
-    if state.changed_after(&workspace.id, deadline)
-        || !manager.default_branch_fresh(&workspace.repository_id).await
+    if state.changed_after(space.id(), deadline) {
+        return Ok(None);
+    }
+    if let Some(workspace) = space.worktree()
+        && !manager.default_branch_fresh(&workspace.repository_id).await
     {
         return Ok(None);
     }
-    let Some((path, signals)) = manager.merged_signals(&workspace.id, users).await? else {
+    let signals = manager.candidate_signals(space, Rule::Merged, &[], users);
+    let Some(signals) = signals.await? else {
         return Ok(None);
     };
-    if state.waits(&workspace.id, signals) {
+    if state.waits(space.id(), signals) {
         return Ok(None);
     }
-    let (snapshot, changed) = walked_snapshot(path, workspace.git_dir.clone(), signals).await?;
-    state.remember_change(&workspace.id, changed, now);
-    Ok((changed <= deadline).then_some(snapshot))
-}
-
-/// The time after which any use keeps the workspace as of
-/// `now`, or `None` when merged cleanup is disabled for it or recorded
-/// activity already keeps it.
-async fn idle_deadline(
-    manager: &Manager,
-    workspace: &Workspace,
-    now: UnixTime,
-) -> Result<Option<UnixTime>> {
-    let settings = manager.workspace_settings(workspace).await?;
-    let Some(delay) = settings.cleanup.merged.delay() else {
-        return Ok(None);
-    };
-    let deadline = now - delay;
-    Ok((manager.active_at(&workspace.id).await? <= deadline).then_some(deadline))
-}
-
-/// The snapshot of a merged candidate at `path` with `signals`, and the
-/// newest change its walk saw.
-async fn walked_snapshot(
-    path: PathBuf,
-    git_dir: Option<PathBuf>,
-    signals: u64,
-) -> Result<(Snapshot, UnixTime)> {
-    let tree = tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref()))
-        .await??;
+    let tree = walk(space).await?;
+    state.remember_change(space.id(), tree.changed, now);
     let snapshot = Snapshot {
         rule: Rule::Merged,
         signals,
         tree: tree.fingerprint,
     };
-    Ok((snapshot, tree.changed))
+    Ok((tree.changed <= deadline).then_some(snapshot))
+}
+
+/// The time after which any use keeps the space as of `now`, or `None`
+/// when merged cleanup is disabled for it or its last use already keeps it.
+async fn idle_deadline(
+    manager: &Manager,
+    space: &PresentSpace,
+    now: UnixTime,
+) -> Result<Option<UnixTime>> {
+    let settings = manager.present_space_settings(space).await?;
+    let Some(delay) = settings.cleanup.merged.delay() else {
+        return Ok(None);
+    };
+    let deadline = now - delay;
+    let used = manager.last_used(space).await?;
+    Ok((used.is_some_and(|used| used <= deadline)).then_some(deadline))
+}
+
+/// One walk of the files of `space`, whose worktree's newest change also
+/// covers its Git state; none for a space without one.
+async fn walk(space: &PresentSpace) -> Result<Tree> {
+    let Some(workspace) = space.worktree() else {
+        return Ok(Tree::EMPTY);
+    };
+    let (path, git_dir) = (workspace.path.clone(), workspace.git_dir.clone());
+    tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref())).await?
 }
 
 /// One walk of the worktree, whose newest change also covers the

@@ -4,7 +4,6 @@
 use super::super::Manager;
 use super::Removal;
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{approvals::ApprovalRequest, conversions::record::ConvertedChat},
     removal::RemovalResult,
@@ -20,8 +19,7 @@ impl Manager {
         id: &SpaceId,
         chat: &ConvertedChat,
     ) -> Result<RemovalResult> {
-        self.remove(&SpaceSelector::id(id), Removal::Converted { chat })
-            .await
+        (self.remove_space(id, Removal::Converted { chat }).await?).workspace_result()
     }
 
     /// Replace the workspace `id`, whose worktree is gone, with the stopped

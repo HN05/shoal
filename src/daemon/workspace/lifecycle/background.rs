@@ -3,7 +3,8 @@
 //! asked learns of a failure later.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use tokio::sync::oneshot;
 
 use super::Removal;
 use crate::client::space_ids::SpaceId;
@@ -36,22 +37,39 @@ impl Manager {
         requester: Option<SpaceId>,
     ) -> Result<Workspace> {
         let operation = self.gates.owned_operation().await;
-        let removal = manual(&unsaved, release_holds);
-        let reserved = self.reserve_removal(selector, removal).await?;
-        self.check_reserved_removal(&reserved, removal).await?;
-        let workspace = reserved.workspace.clone();
+        let id = self.workspace(selector).await?.id;
+        let (checked, passed) = oneshot::channel();
         let manager = self.clone();
+        // The reservation lives in the task, which reports the first checks'
+        // outcome and goes on after them.
         tokio::spawn(async move {
             let _operation = operation;
-            let workspace = reserved.workspace.clone();
             let removal = manual(&unsaved, release_holds);
-            if let Err(error) = manager.remove_reserved(reserved, removal).await {
-                manager
-                    .report_failed_removal(&workspace, requester.as_ref(), &error)
-                    .await;
+            let mut checked = Some(checked);
+            let mut workspace = None;
+            let removed = manager.remove_space_checked(&id, removal, |space| {
+                workspace = Some(space.worktree().context("no longer a workspace")?.clone());
+                if let (Some(checked), Some(workspace)) = (checked.take(), &workspace) {
+                    let _ = checked.send(Ok(workspace.clone()));
+                }
+                Ok(())
+            });
+            let Err(error) = removed.await else {
+                return;
+            };
+            match (checked, workspace) {
+                (Some(checked), _) => {
+                    let _ = checked.send(Err(error));
+                }
+                (None, Some(workspace)) => {
+                    manager
+                        .report_failed_removal(&workspace, requester.as_ref(), &error)
+                        .await;
+                }
+                (None, None) => log!("removal of {id} failed: {error:#}"),
             }
         });
-        Ok(workspace)
+        passed.await.context("the removal ended before its checks")?
     }
 
     /// Tell the agent of `requester`, or else the user, that removing

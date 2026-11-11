@@ -1,34 +1,19 @@
-//! Removing a workspace: reserving it, the steps that remove its worktree
-//! and the spaces below it, and committing the removal.
-use super::super::{Manager, StopRequest, done::CompletedAncestor, reservation::RemovalRules};
+//! Removing a space, whichever removes it: reserving it, checking it again
+//! at each step, stopping its agent, removing the spaces below it, then its
+//! worktree where it has one, and deleting its record.
+use super::super::{Manager, StopRequest, done::CompletedAncestor};
+use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{SpaceName, SpaceSelector};
-use crate::daemon::space_processes::WorktreeTies;
 use crate::{
-    daemon::{
-        cleanup::Snapshot,
-        events::{self, EventCause, EventKind},
-    },
-    fsutil::off_runtime,
-    git::{
-        self,
-        worktree::{BranchRemoval, FileRemoval},
-    },
-    hooks::{self, Hook, HookKind},
-    model::{RemovedWorkspace, SpaceKind, SpaceRef, Workspace},
-    removal::{
-        self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck,
-        RemovalResult, UnsavedWork,
-    },
-    state::WorkspaceState,
+    client::output::chat::RemovedChat,
+    daemon::{cleanup::Snapshot, events::EventCause},
+    model::{Completion, PresentSpace, SpaceRef},
+    process::DirectoryUsers,
+    removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
 };
 use anyhow::{Context, Result, bail, ensure};
-use std::{
-    collections::BTreeMap,
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
 
 /// Refuse to remove any of `children`, those the removal of the space named
 /// `parent` takes first, when the user confirmed `removal` without one of
@@ -40,87 +25,43 @@ fn ensure_confirmed(parent: &str, children: &[SpaceRef], removal: Removal<'_>) -
     let Some(late) = children.iter().find(|child| !confirmed.contains(&child.id)) else {
         return Ok(());
     };
-    let started = match late.kind {
-        SpaceKind::Workspace => "opened below",
-        SpaceKind::Chat => "started in",
-    };
     bail!(
-        "{} was {started} {parent} after the removal was confirmed; retaining both",
+        "{} joined {parent} after the removal was confirmed; retaining both",
         late.name
     )
 }
 
-/// A workspace reserved for removal: its record, whether its directory
-/// existed, and the state the reservation replaced.
-pub(super) struct Reserved {
-    pub(super) workspace: Workspace,
-    present: bool,
-    replaced: WorkspaceState,
+/// What removing a space did.
+pub(crate) struct SpaceRemoval {
+    /// The spaces below it the removal took first, each after those below
+    /// it.
+    pub(crate) children: Vec<SpaceName>,
+    /// What removing its worktree did; none for a space without one.
+    pub(crate) worktree: Option<WorktreeRemoval>,
 }
 
-/// A post-remove hook resolved while the workspace record still exists.
-struct PostRemoveHook {
-    command: PathBuf,
-    checkout: PathBuf,
-    env: BTreeMap<String, OsString>,
+impl SpaceRemoval {
+    /// The protocol's result of removing a workspace.
+    pub(super) fn workspace_result(self) -> Result<RemovalResult> {
+        let worktree = self.worktree.context("the space has no worktree")?;
+        Ok(worktree.with_children(self.children))
+    }
 }
 
 impl Manager {
-    /// What removing the workspace at the user's request would do, with the
-    /// spaces it takes first, deepest first, and its changed files and whether
-    /// removal archives them when `include_changes` is set and it has any.
-    pub async fn check_manual_removal(
-        &self,
-        selector: &SpaceSelector,
-        include_changes: bool,
-    ) -> Result<RemovalCheck> {
-        let mut check = self
-            .check_removal(selector, InspectionPolicy::GitOnly)
-            .await?
-            .check;
-        check.children = self.spaces_taken_with(&check.workspace.id).await?;
-        check.children.reverse();
-        for child in &check.children {
-            if child.kind == crate::model::SpaceKind::Workspace
-                && self.workspace_by_id(&child.id).await?.disposable
-            {
-                check.disposable_children.push(child.id.clone());
-            }
-        }
-        if include_changes && check.dirty {
-            removal::load_changed_files(&mut check).await?;
-            check.unsaved_files_archived = self.archives_unsaved_files(&check.workspace).await?;
-        }
-        Ok(check)
-    }
-
-    pub async fn check_removal(
-        &self,
-        selector: &SpaceSelector,
-        policy: InspectionPolicy,
-    ) -> Result<Inspection> {
-        let workspace = self.workspace(selector).await?;
-        let executions = self.cleanup_executions(&workspace.id, &[]).await?;
-        self.inspect_removal(workspace, policy, executions).await
-    }
-
     pub async fn remove_workspace(
         &self,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
-        let unsaved = &unsaved;
-        self.remove(
-            selector,
-            Removal::Manual {
-                unsaved,
-                inspection,
-                release_holds: true,
-                taking: None,
-            },
-        )
-        .await
+        let removal = Removal::Manual {
+            unsaved: &unsaved,
+            inspection,
+            release_holds: true,
+            taking: None,
+        };
+        self.remove_selected_workspace(selector, removal).await
     }
 
     /// Remove the workspace as [`Self::remove_workspace`] does, taking only
@@ -133,17 +74,13 @@ impl Manager {
         inspection: InspectionPolicy,
         taking: &[SpaceId],
     ) -> Result<RemovalResult> {
-        let unsaved = &unsaved;
-        self.remove(
-            selector,
-            Removal::Manual {
-                unsaved,
-                inspection,
-                release_holds: true,
-                taking: Some(taking),
-            },
-        )
-        .await
+        let removal = Removal::Manual {
+            unsaved: &unsaved,
+            inspection,
+            release_holds: true,
+            taking: Some(taking),
+        };
+        self.remove_selected_workspace(selector, removal).await
     }
 
     /// Remove the workspace as [`Self::remove_workspace`] does, refusing it
@@ -154,80 +91,80 @@ impl Manager {
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
-        let unsaved = &unsaved;
-        self.remove(
-            selector,
-            Removal::Manual {
-                unsaved,
-                inspection,
-                release_holds: false,
-                taking: None,
-            },
-        )
-        .await
+        let removal = Removal::Manual {
+            unsaved: &unsaved,
+            inspection,
+            release_holds: false,
+            taking: None,
+        };
+        self.remove_selected_workspace(selector, removal).await
     }
 
-    /// `Ok(false)` while the grace period runs, as for every unattended removal.
-    pub async fn remove_idle(&self, selector: &SpaceSelector, snapshot: Snapshot) -> Result<bool> {
-        self.remove_unused(selector, snapshot, EventCause::Idle)
-            .await
-    }
-
-    pub async fn remove_merged_idle(
+    async fn remove_selected_workspace(
         &self,
         selector: &SpaceSelector,
-        snapshot: Snapshot,
-    ) -> Result<bool> {
-        self.remove_unused(selector, snapshot, EventCause::Merged)
-            .await
+        removal: Removal<'_>,
+    ) -> Result<RemovalResult> {
+        let workspace = self.workspace(selector).await?;
+        (self.remove_space(&workspace.id, removal).await?).workspace_result()
     }
 
-    /// Remove an idle cleanup candidate without waiting for its idle delay.
-    pub async fn remove_for_disk_space(
+    /// Remove the chat `selector` names, by ID or name, at the user's
+    /// request, stopping its agent: first the spaces below it, of which
+    /// `children`, when given, are the IDs the user saw and the only ones it
+    /// takes. Returns the chat and the names of the spaces it took.
+    pub async fn remove_chat(
         &self,
         selector: &SpaceSelector,
-        snapshot: Snapshot,
-    ) -> Result<()> {
-        self.remove_unused(selector, snapshot, EventCause::DiskSpace)
-            .await
-            .map(|_| ())
+        children: Option<Vec<SpaceId>>,
+    ) -> Result<RemovedChat> {
+        let chat = self.chat(selector).await?;
+        let unsaved = UnsavedWork::Confirmed {
+            files: false,
+            detached_head: None,
+            files_restorable: false,
+            children,
+        };
+        let removal = Removal::Manual {
+            unsaved: &unsaved,
+            inspection: InspectionPolicy::GitOnly,
+            release_holds: true,
+            taking: None,
+        };
+        let removed = self.remove_space(&chat.id, removal).await?;
+        Ok(RemovedChat {
+            chat,
+            children: removed.children,
+        })
     }
 
-    /// Remove an idle cleanup candidate on the user's request, without
-    /// waiting for its idle delay.
-    pub async fn remove_on_request(
+    /// Remove `space`, which idle or merged cleanup found unchanged as
+    /// `snapshot`, for `cause`, once its grace period ends, which disk space
+    /// and the user's request do not wait for; `Ok(false)` while it runs.
+    pub(crate) async fn remove_unused(
         &self,
-        selector: &SpaceSelector,
-        snapshot: Snapshot,
-    ) -> Result<()> {
-        self.remove_unused(selector, snapshot, EventCause::Manual)
-            .await
-            .map(|_| ())
-    }
-
-    async fn remove_unused(
-        &self,
-        selector: &SpaceSelector,
+        space: &PresentSpace,
         snapshot: Snapshot,
         cause: EventCause,
     ) -> Result<bool> {
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
-        self.remove_after_grace(
-            &SpaceSelector::id(&workspace.id),
-            Removal::Automatic { snapshot, cause },
-        )
-        .await
+        // Under the PR gate link changes take, so no link appears while the
+        // spaces below it go.
+        let _gate = self.gates.lock_prs([space.id()]).await;
+        (self.remove_after_grace(space, Removal::Automatic { snapshot, cause })).await
     }
 
     pub async fn remove_merged(&self, selector: &SpaceSelector, head: &str) -> Result<bool> {
-        self.remove_after_grace(selector, Removal::Merged { head })
+        let space = PresentSpace::Workspace(self.workspace(selector).await?);
+        self.remove_after_grace(&space, Removal::Merged { head })
             .await
     }
 
+    /// Remove `space` for its `completion` with cleanup, which `cause`
+    /// recorded, once its grace period ends; `Ok(false)` while it runs.
     pub(in crate::daemon::workspace) async fn remove_completed(
         &self,
-        selector: &SpaceSelector,
-        completion: &crate::model::Completion,
+        space: &PresentSpace,
+        completion: &Completion,
         cause: EventCause,
     ) -> Result<bool> {
         let removal = Removal::Completed {
@@ -235,575 +172,297 @@ impl Manager {
             integrated: completion.integrated,
             cause,
         };
-        self.remove_after_grace(selector, removal).await
+        self.remove_after_grace(space, removal).await
     }
 
-    /// Remove the workspace below `ancestor`, whose completion with cleanup
-    /// stands, after the grace period.
+    /// Remove `space` below `ancestor`, whose completion with cleanup
+    /// stands, once its grace period ends; `Ok(false)` while it runs.
     pub(in crate::daemon::workspace) async fn remove_under_completed(
         &self,
-        selector: &SpaceSelector,
+        space: &PresentSpace,
         ancestor: &CompletedAncestor,
     ) -> Result<bool> {
-        // A chat's workspaces could leave it, and the workspace with them,
-        // after the rechecks found it below the chat.
-        let _held = match ancestor {
-            CompletedAncestor::Chat(chat) => Some(self.chat_owners.reserve(&chat.id)?),
-            CompletedAncestor::Workspace(_) => None,
-        };
-        self.remove_after_grace(selector, Removal::UnderCompleted { ancestor })
+        // The sweep holds the PR gates of the space and the ancestor; the
+        // ancestor's own spaces are held too, since a chat's workspaces
+        // could leave it, and the space with them, after the rechecks found
+        // it below the ancestor.
+        let _held = self.completed_owners.reserve(&ancestor.id)?;
+        self.remove_after_grace(space, Removal::UnderCompleted { ancestor })
             .await
     }
 
-    /// Remove the workspace unless its grace period is still running.
-    async fn remove_after_grace(
-        &self,
-        selector: &SpaceSelector,
-        removal: Removal<'_>,
-    ) -> Result<bool> {
-        let workspace = self.workspace(selector).await?;
-        if self.grace_running(&workspace, removal).await? {
+    /// Forget a workspace whose directory was deleted outside Shoal.
+    pub async fn remove_deleted(&self, id: &SpaceId) -> Result<SpaceRemoval> {
+        self.remove_space(id, Removal::Deleted).await
+    }
+
+    /// Remove `space` for `removal` unless its grace period still runs.
+    async fn remove_after_grace(&self, space: &PresentSpace, removal: Removal<'_>) -> Result<bool> {
+        if self.grace_running(space, removal).await? {
             return Ok(false);
         }
-        self.remove(selector, removal).await.map(|_| true)
+        self.remove_space(space.id(), removal).await.map(|_| true)
     }
 
     /// The first attempt that passes removal's initial checks starts the
-    /// grace period, so it never runs while the workspace could not go. A
+    /// grace period, so it never runs while the space could not go. A
     /// failing check fails the attempt: removal would check again, and pass
     /// without any grace period once the work had changed in between.
-    async fn grace_running(&self, workspace: &Workspace, removal: Removal<'_>) -> Result<bool> {
+    async fn grace_running(&self, space: &PresentSpace, removal: Removal<'_>) -> Result<bool> {
         if !removal.waits_for_grace() {
             return Ok(false);
         }
-        let checked = self.recheck_removal(workspace, removal, Stage::Initial, &[]);
-        self.check_access(&workspace.path, checked).await?;
-        let grace = self.workspace_settings(workspace).await?.cleanup.grace();
-        let cleanup_at = self.claim_grace(&workspace.id, grace).await?;
+        self.check_space_removal(space.id(), removal, Stage::Initial, &[])
+            .await?;
+        if let Some(workspace) = space.worktree() {
+            let checked = self.check_worktree(workspace, removal, Stage::Initial, &[]);
+            self.check_access(&workspace.path, checked).await?;
+        }
+        let grace = self.present_space_settings(space).await?.cleanup.grace();
+        let cleanup_at = self.claim_grace(space.id(), grace).await?;
         Ok(crate::time::UnixTime::now() < cleanup_at)
     }
 
-    /// Forget a workspace whose directory was deleted outside Shoal.
-    pub async fn remove_deleted(&self, selector: &SpaceSelector) -> Result<RemovalResult> {
-        self.remove(selector, Removal::Deleted).await
+    /// Remove the space `id` for `removal`: reserve it, so nothing restores
+    /// or changes it meanwhile, carry the removal out, and on failure give
+    /// the reservation up.
+    pub(in crate::daemon::workspace) async fn remove_space(
+        &self,
+        id: &SpaceId,
+        removal: Removal<'_>,
+    ) -> Result<SpaceRemoval> {
+        self.remove_space_checked(id, removal, |_| Ok(())).await
     }
 
-    pub(super) async fn remove(
+    /// Remove the space `id` as [`Self::remove_space`] does, calling
+    /// `checked` with the reserved space once it passes removal's first
+    /// checks, before the removal changes anything; its failure fails the
+    /// removal.
+    pub(super) async fn remove_space_checked(
         &self,
-        selector: &SpaceSelector,
+        id: &SpaceId,
         removal: Removal<'_>,
-    ) -> Result<RemovalResult> {
-        let reserved = self.reserve_removal(selector, removal).await?;
-        self.remove_reserved(reserved, removal).await
-    }
-
-    /// Refuse now what removing the `reserved` workspace would refuse
-    /// before it changes anything, retaining the workspace, so a removal that
-    /// goes on in the background fails only on what changes meanwhile.
-    pub(super) async fn check_reserved_removal(
-        &self,
-        reserved: &Reserved,
-        removal: Removal<'_>,
-    ) -> Result<()> {
-        let workspace = &reserved.workspace;
-        let checked = async {
-            ensure_confirmed(
-                &workspace.name,
-                &self.taken_first(&workspace.id).await?,
-                removal,
-            )?;
-            if !reserved.present {
-                ensure!(
-                    self.missing_worktree(workspace).await?.is_none(),
-                    "worktree was moved; restore its recorded path before removing it"
-                );
-                return Ok(());
-            }
-            self.ensure_no_pending_rename(&workspace.id).await?;
-            self.recheck_removal(workspace, removal, Stage::Initial, &[])
-                .await
-                .map(drop)
-        }
-        .await;
-        if let Err(error) = &checked {
-            self.retain_workspace(&workspace.id, reserved.replaced, removal.cause(), error)
-                .await?;
-        }
-        checked
-    }
-
-    /// Remove the workspace `reserved` holds for `removal`, retaining it
-    /// when a step fails.
-    pub(super) async fn remove_reserved(
-        &self,
-        reserved: Reserved,
-        removal: Removal<'_>,
-    ) -> Result<RemovalResult> {
-        let Reserved {
-            workspace,
-            present,
-            replaced: reserved_state,
-        } = reserved;
-        // Checked again after the reservation, so a worktree restored meanwhile
-        // cannot be deleted by an unattended removal.
-        let result = async {
-            // Its reviews go with its record.
-            self.stop_workspace_review(&workspace.id).await;
-            // A CI job ends through its forge, before its runner is stopped.
-            self.cancel_job_before_stopping(&workspace.id).await;
-            let present = off_runtime::try_exists(&workspace.path).await?;
-            let post_remove = if present {
-                self.ensure_no_pending_rename(&workspace.id).await?;
-                self.prepare_post_remove_hook(&workspace).await?
-            } else {
-                None
-            };
-            let xcode = self.xcode_settings(&workspace, present).await;
-            let outcome = match removal {
-                Removal::Deleted if present => bail!("workspace directory exists"),
-                _ if present => self.remove_present_worktree(&workspace, removal).await?,
-                _ => self.remove_missing_worktree(&workspace, removal).await?,
-            };
-            // While the record still reserves the path: a workspace created
-            // there gets the same DerivedData.
-            if let Some(settings) = xcode {
-                self.delete_xcode_data(&workspace, &settings).await;
-            }
-            let released = self.commit_removal(&workspace.id, removal, present).await?;
-            Ok((outcome, post_remove, released))
-        }
-        .await;
-        match result {
-            Ok((outcome, post_remove, released)) => {
-                self.ask_user_about(&released).await;
-                Ok(self
-                    .complete_workspace_removal(&workspace, outcome, post_remove, removal)
-                    .await)
+        checked: impl FnOnce(&PresentSpace) -> Result<()> + Send,
+    ) -> Result<SpaceRemoval> {
+        let reservation = self.reserve_space(id, removal).await?;
+        let space = reservation.space.clone();
+        match self.remove_reserved(&space, removal, checked).await {
+            Ok((children, worktree)) => {
+                self.forget_removed_space(&space).await;
+                // The chat a conversion makes keeps the space's temporary
+                // directory and attached files.
+                if !removal.converts() {
+                    self.delete_space_files(&space).await;
+                }
+                let worktree = match worktree {
+                    Some((stage, removed)) => {
+                        Some(self.complete_worktree_removal(stage, removed).await)
+                    }
+                    None => None,
+                };
+                drop(reservation);
+                Ok(SpaceRemoval { children, worktree })
             }
             Err(error) => {
-                // A deleted directory can no longer be ready.
-                let state = match removal {
-                    Removal::Deleted if !present => WorkspaceState::Failed,
-                    _ => reserved_state,
+                let unready = match space.worktree() {
+                    Some(workspace) => self.unready_after(workspace, removal).await,
+                    None => false,
                 };
-                self.retain_workspace(&workspace.id, state, removal.cause(), &error)
-                    .await?;
+                (self.release_space(reservation, unready, removal.cause(), &error)).await?;
                 Err(error)
             }
         }
     }
 
-    /// Reserve the workspace `selector` names for `removal`. A manual removal
-    /// also takes one whose setup never started, as when the command creating
-    /// it was interrupted; it waits on the repository's Git gate for that
-    /// creation to end and reads the workspace again, which creation has
-    /// since finished recording.
-    pub(super) async fn reserve_removal(
+    /// Carry out `removal` of the reserved `space`: check it, stop its agent
+    /// and commands, check it again, remove the spaces below it, then its
+    /// worktree where it has one, once a last check passes, and delete its
+    /// record, or for a conversion replace it with the chat's. Checked again
+    /// after the reservation, so a space restored meanwhile cannot go by an
+    /// unattended removal; `checked` learns that the first checks passed.
+    async fn remove_reserved(
         &self,
-        selector: &SpaceSelector,
+        space: &PresentSpace,
         removal: Removal<'_>,
-    ) -> Result<Reserved> {
-        let manual = matches!(removal, Removal::Manual { .. });
-        let mut workspace = self.workspace(selector).await?;
-        let _created = if manual && workspace.state == WorkspaceState::Preparing {
-            let created = self.gates.lock_git(&workspace.repository_id).await;
-            workspace = self.workspace_by_id(&workspace.id).await?;
-            Some(created)
-        } else {
-            None
+        checked: impl FnOnce(&PresentSpace) -> Result<()>,
+    ) -> Result<(Vec<SpaceName>, Option<(WorktreeStage, WorktreeRemoval)>)> {
+        let worktree = match space.worktree() {
+            Some(workspace) => Some(self.begin_worktree_removal(workspace, removal).await?),
+            None => None,
         };
-        let present = off_runtime::try_exists(&workspace.path).await?;
-        let rules = RemovalRules {
-            allow_pending_rename: !present,
-            awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,
-            refuse_holds: removal.refuses_holds(),
-        };
-        let replaced = self
-            .reserve_lifecycle_for_removal(&workspace.id, rules)
+        let id = space.id();
+        let initial =
+            (self.check_space_and_worktree(id, removal, Stage::Initial, worktree.as_ref(), &[]))
+                .await?;
+        checked(space)?;
+        // Stopping cancels the restores of idle agents that wrappers wait to
+        // carry out, which exit on their own, and the others go with the
+        // space; the removal record keeps the agents.
+        let cancelled = initial.map(|check| check.idle_restores).unwrap_or_default();
+        self.stop_for_removal(space, removal, worktree.as_ref())
             .await?;
-        Ok(Reserved {
-            workspace,
-            present,
-            replaced,
-        })
-    }
-
-    /// The removal hook `kind` of `workspace`; none for one whose setup was
-    /// skipped, since they tear down what setup made.
-    async fn removal_hook(
-        &self,
-        workspace: &Workspace,
-        kind: HookKind,
-    ) -> Result<Option<std::path::PathBuf>> {
-        if workspace.setup_skipped {
-            return Ok(None);
+        self.check_space_and_worktree(id, removal, Stage::AfterStop, worktree.as_ref(), &cancelled)
+            .await?;
+        let below = self.taken_with(id, removal).await?;
+        let children = self.remove_children(space.name(), below, removal).await?;
+        if let Some(worktree) = &worktree {
+            self.run_removal_hooks(worktree, removal).await?;
         }
-        self.workspace_hook(workspace, kind).await
+        let last = self
+            .check_space_and_worktree(id, removal, Stage::Final, worktree.as_ref(), &cancelled)
+            .await?;
+        let worktree = match worktree {
+            Some(stage) => {
+                let removed = self.delete_worktree(&stage, removal, last.as_ref()).await?;
+                Some((stage, removed))
+            }
+            None => None,
+        };
+        if let Removal::Converted { chat } = removal {
+            let released = self.commit_conversion(id, chat).await?;
+            self.ask_user_about(&released).await;
+        } else {
+            let cause =
+                (worktree.as_ref()).map_or(removal.cause(), |(stage, _)| stage.cause(removal));
+            self.delete_space_record(space, cause).await?;
+        }
+        Ok((children, worktree))
     }
 
-    async fn prepare_post_remove_hook(
+    /// The spaces `removal` of the space `id` takes first: those below it,
+    /// or for a conversion, which keeps them, the chats in its worktree.
+    async fn taken_with(&self, id: &SpaceId, removal: Removal<'_>) -> Result<Vec<SpaceRef>> {
+        match removal.converts() {
+            true => self.chats_in(id).await,
+            false => self.taken_first(id).await,
+        }
+    }
+
+    /// Stop the agent of `space` and its commands for `removal`, with what
+    /// else runs in its worktree.
+    async fn stop_for_removal(
         &self,
-        workspace: &Workspace,
-    ) -> Result<Option<PostRemoveHook>> {
-        match self.removal_hook(workspace, HookKind::PostRemove).await? {
-            Some(command) => Ok(Some(PostRemoveHook {
-                command,
-                checkout: self.repository(&workspace.repository_id).await?.path,
-                env: self.removed_workspace_environment(workspace).await?,
-            })),
+        space: &PresentSpace,
+        removal: Removal<'_>,
+        worktree: Option<&WorktreeStage>,
+    ) -> Result<()> {
+        let request = match worktree {
+            Some(worktree) => {
+                self.stop_worktree_work(worktree).await;
+                worktree.stop_request()
+            }
+            None => StopRequest::removal(),
+        };
+        (self.stop_space_agent(space, removal.stop_policy(), &request)).await
+    }
+
+    /// Apply every check `removal` needs at `stage` of the space `id`, then
+    /// of its `worktree`, after stopping the `cancelled` restores, returning
+    /// the worktree's inspection removal proceeds with.
+    async fn check_space_and_worktree(
+        &self,
+        id: &SpaceId,
+        removal: Removal<'_>,
+        stage: Stage,
+        worktree: Option<&WorktreeStage>,
+        cancelled: &[IdleRestore],
+    ) -> Result<Option<Inspection>> {
+        self.check_space_removal(id, removal, stage, cancelled)
+            .await?;
+        match worktree {
+            Some(worktree) => {
+                (self.check_worktree_removal(worktree, removal, stage, cancelled)).await
+            }
             None => Ok(None),
         }
     }
 
-    /// Commit `removal` of the workspace `id`, whose directory was
-    /// `present`: delete its record, or for a conversion replace it with
-    /// the chat's; the requests it decided, given back to the user.
-    async fn commit_removal(
+    /// Refuse `removal` of the space `id` as it is now at `stage`: an
+    /// unattended one while something keeps it; any while processes of its
+    /// stopped agent run on, or, first, while a space below it is in a
+    /// stalled directory a sweep skips; automatic cleanup once it changed
+    /// from its snapshot; completion cleanup once the completion changed;
+    /// and an ancestor's completion while spaces remain below it, which go
+    /// first under the same completion, or once that completion no longer
+    /// takes it.
+    async fn check_space_removal(
         &self,
         id: &SpaceId,
-        removal: Removal<'_>,
-        present: bool,
-    ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
-        if let Removal::Converted { chat } = removal {
-            return self.commit_conversion(id, chat).await;
-        }
-        let cause = match present {
-            true => removal.cause(),
-            false => EventCause::MissingDirectory,
-        };
-        self.commit_workspace_removal(id, cause).await
-    }
-
-    /// Release ownership and cascading resource leases in one transaction,
-    /// giving the requests the workspace decides, such as an issue proposal
-    /// that outlives its workspace, back to the user; those given back.
-    pub(super) async fn commit_workspace_removal(
-        &self,
-        id: &SpaceId,
-        cause: EventCause,
-    ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
-        let id = id.to_owned();
-        self.store
-            .write(move |tx| {
-                // Children go first; none may outlive its parent.
-                ensure!(
-                    !crate::daemon::store::exists(
-                        tx,
-                        "SELECT 1 FROM space_parents WHERE parent_id=?1",
-                        [&id],
-                    )?,
-                    "spaces were opened below it during removal; retaining it"
-                );
-                events::record(tx, &id, EventKind::Removed, cause, None)?;
-                tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
-                crate::daemon::workspace_files::forget_removed(tx, &id)?;
-                let released = crate::daemon::approvals::release_decided_by(tx, &id)?;
-                tx.execute("DELETE FROM workspaces WHERE id=?1", [&id])?;
-                Ok(released)
-            })
-            .await
-    }
-
-    /// Best-effort cleanup after ownership is released cannot fail removal.
-    async fn complete_workspace_removal(
-        &self,
-        workspace: &Workspace,
-        mut outcome: RemovalResult,
-        post_remove: Option<PostRemoveHook>,
-        removal: Removal<'_>,
-    ) -> RemovalResult {
-        self.close_space_places(&workspace.id, &workspace.name)
-            .await;
-        self.forget_workspace(&workspace.id).await;
-        if let Err(error) = self.remember_kept_branch(workspace, &outcome).await {
-            crate::daemon::log!(
-                "kept branch of {} not remembered: {error:#}",
-                workspace.name
-            );
-        }
-        self.delete_session_logs(&workspace.id);
-        // The chat a conversion makes keeps the space's temporary directory
-        // and attached files.
-        if !removal.converts() {
-            self.delete_space_files(workspace).await;
-        }
-        if let Some(hook) = post_remove {
-            outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
-            // The hook runs with the workspace identity after removal's sweep.
-            if let Err(error) = self
-                .stop_removed_processes(workspace, WorktreeTies::None)
-                .await
-            {
-                crate::daemon::log!(
-                    "processes left by the post-remove hook of {} not stopped: {error:#}",
-                    workspace.name
-                );
-            }
-        }
-        outcome
-    }
-
-    /// Delete the temporary directory and attached files of the removed
-    /// `workspace`.
-    async fn delete_space_files(&self, workspace: &Workspace) {
-        if let Err(error) = self
-            .delete_tmp_dir(&workspace.repository_id, &workspace.id)
-            .await
-        {
-            crate::daemon::log!(
-                "temporary directory of {} not deleted: {error:#}",
-                workspace.name
-            );
-        }
-        if let Err(error) = self.delete_workspace_files(workspace).await {
-            crate::daemon::log!(
-                "files attached to messages of {} not deleted: {error:#}",
-                workspace.name
-            );
-        }
-    }
-
-    /// Session logs are run data owned by the record just deleted.
-    fn delete_session_logs(&self, id: &SpaceId) {
-        let _ = std::fs::remove_dir_all(self.paths.workspace_state(id));
-    }
-
-    /// Run the post-remove hook, notifying and returning its failure.
-    async fn run_post_remove_hook(
-        &self,
-        workspace: &Workspace,
-        hook: &PostRemoveHook,
-    ) -> Option<String> {
-        let error = hooks::run_detached(
-            Hook::PostRemove(&hook.checkout),
-            workspace,
-            &hook.command,
-            &self.paths,
-            &hook.env,
-        )
-        .await
-        .err()?;
-        let message = format!("workspace removed; {error:#}");
-        self.notify_space(
-            &workspace.name,
-            &workspace.id,
-            crate::daemon::notifications::NotificationKind::HookFailed,
-            &message,
-        )
-        .await;
-        Some(message)
-    }
-
-    /// Remove an existing worktree after a checkpoint keeps its HEAD and
-    /// unsaved files.
-    async fn remove_present_worktree(
-        &self,
-        workspace: &Workspace,
-        removal: Removal<'_>,
-    ) -> Result<RemovalResult> {
-        let repo = self.repository(&workspace.repository_id).await?;
-        let initial = self
-            .recheck_removal(workspace, removal, Stage::Initial, &[])
-            .await?;
-        // Stopping cancels the restores of idle agents that wrappers wait to
-        // carry out, which exit on their own, and the others go with the
-        // workspace; the removal record keeps the agents.
-        let cancelled = initial.idle_restores;
-        self.stop_executions(
-            &workspace.id,
-            removal.stop_policy(),
-            &StopRequest::restorable_removal(),
-        )
-        .await?;
-        self.recheck_removal(workspace, removal, Stage::AfterStop, &cancelled)
-            .await?;
-        let children = self.remove_workspace_children(workspace, removal).await?;
-        self.run_pre_remove_hook(workspace).await?;
-        self.run_resource_release_hooks(workspace).await?;
-        // Processes can write files as they stop, which the final inspection
-        // and the checkpoint must include.
-        self.stop_removed_processes(workspace, removal.worktree_ties())
-            .await?;
-        let check = self
-            .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)
-            .await?;
-        let removed = self
-            .delete_checkpointed_worktree(&repo.path, workspace, removal, &check)
-            .await?;
-        Ok(RemovalResult {
-            children,
-            ..removed
-        })
-    }
-
-    /// Run the pre-remove hook, which sees the worktree intact; a failing
-    /// hook retains the workspace.
-    async fn run_pre_remove_hook(&self, workspace: &Workspace) -> Result<()> {
-        let Some(command) = self.removal_hook(workspace, HookKind::PreRemove).await? else {
-            return Ok(());
-        };
-        let configured_env = self.configured_workspace_environment(workspace).await?;
-        hooks::run_detached(
-            Hook::PreRemove,
-            workspace,
-            &command,
-            &self.paths,
-            &configured_env,
-        )
-        .await
-    }
-
-    /// Run the pre-resource-release hook for each resource lease of the
-    /// workspace, which committing the removal releases. The hook is resolved
-    /// only for leases to release, since it fails while the worktree's config
-    /// file is rejected.
-    async fn run_resource_release_hooks(&self, workspace: &Workspace) -> Result<()> {
-        let leases = self
-            .list_resources(Some(&SpaceSelector::id(&workspace.id)))
-            .await?;
-        if leases.is_empty() {
-            return Ok(());
-        }
-        let release_hook = self
-            .workspace_hook(workspace, HookKind::PreResourceRelease)
-            .await?;
-        for lease in leases {
-            self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
-                .await?;
-        }
-        Ok(())
-    }
-
-    /// Delete the worktree as the final inspection `check` decides, once a
-    /// checkpoint keeps its HEAD and the unsaved files `removal` discards or
-    /// promises to keep. A failed deletion may have deleted some files, so
-    /// its checkpoint stays; the next attempt takes another, and both expire
-    /// as usual.
-    async fn delete_checkpointed_worktree(
-        &self,
-        repo: &Path,
-        workspace: &Workspace,
-        removal: Removal<'_>,
-        check: &Inspection,
-    ) -> Result<RemovalResult> {
-        let record = self.save_restore_record(workspace, removal).await?;
-        ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
-        let (files, branch) = removal_options(check, removal);
-        self.remove_worktree(repo, workspace, files, branch, true)
-            .await
-    }
-
-    /// The record that restores the workspace, with a checkpoint of its HEAD
-    /// and unsaved files; a disposable workspace keeps nothing to restore.
-    async fn save_restore_record(
-        &self,
-        workspace: &Workspace,
-        removal: Removal<'_>,
-    ) -> Result<Option<RemovedWorkspace>> {
-        if workspace.disposable {
-            return Ok(None);
-        }
-        let carried_on = match removal {
-            Removal::Converted { chat } => Some(&chat.execution),
-            _ => None,
-        };
-        self.save_removal_record(workspace, removal.cause(), carried_on)
-            .await
-            .map(Some)
-    }
-
-    /// Inspect the workspace again and apply every check `removal` needs at
-    /// `stage`, after stopping the `cancelled` restores, returning the
-    /// inspection removal proceeds with.
-    async fn recheck_removal(
-        &self,
-        workspace: &Workspace,
         removal: Removal<'_>,
         stage: Stage,
         cancelled: &[IdleRestore],
-    ) -> Result<Inspection> {
-        let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
-        let check = self
-            .inspect_removal(
-                self.workspace_by_id(&workspace.id).await?,
-                removal.inspection(),
-                executions,
-            )
-            .await?;
+    ) -> Result<()> {
+        let space = (self.find_space(id).await?).context("the space was removed meanwhile")?;
         // The reservation refuses new questions and PR proposals, so this
         // covers those made after the sweep's own check.
         if removal.unattended()
-            && let Some(retention) = self.keep_reason(&workspace.id).await?
+            && let Some(retention) = self.keep_reason(id).await?
         {
-            bail!("{retention}; retaining workspace");
+            bail!("{retention}; retaining the {}", space.kind());
         }
+        self.ensure_agent_ended(&space).await?;
         if matches!(stage, Stage::Initial) {
-            let below = self.taken_first(&workspace.id).await?;
+            let below = self.taken_with(id, removal).await?;
+            ensure_confirmed(space.name(), &below, removal)?;
             self.ensure_none_stalled_below(below, removal).await?;
         }
-        removal.verify(&check, stage)?;
+        let changed = || format!("{} changed {}", space.kind(), stage.change());
         match (removal, stage) {
-            (Removal::Merged { head } | Removal::Completed { head, .. }, _) => ensure!(
-                crate::daemon::links::pr::current_head(workspace).await? == head,
-                "HEAD changed {}",
-                stage.change()
-            ),
             // Later stages compare against the sweep's snapshot, so they also
             // cover changes made before removal started.
             (Removal::Automatic { .. }, Stage::Initial) => {}
-            (Removal::Automatic { snapshot, .. }, Stage::AfterStop) => ensure!(
-                self.automatic_signals(&workspace.id, snapshot.rule, cancelled)
-                    .await?
-                    == Some(snapshot.signals),
-                "workspace changed {}",
-                stage.change()
+            (Removal::Automatic { snapshot, .. }, Stage::AfterStop) => {
+                let users = DirectoryUsers::default();
+                let signals =
+                    (self.candidate_signals(&space, snapshot.rule, cancelled, &users)).await?;
+                ensure!(signals == Some(snapshot.signals), changed());
+            }
+            // The tree is compared only at the last stage: change times only
+            // move forward, so that also covers changes made before it.
+            (Removal::Automatic { snapshot, .. }, Stage::Final) => {
+                let users = DirectoryUsers::default();
+                let now =
+                    (self.candidate_snapshot(&space, snapshot.rule, cancelled, &users)).await?;
+                ensure!(now == Some(snapshot), changed());
+            }
+            (Removal::Completed { head, .. }, _) => ensure!(
+                (self.completion(id).await?)
+                    .is_some_and(|completion| completion.cleanup && completion.head == head),
+                "the completion was withdrawn or changed since; retaining the {}",
+                space.kind()
             ),
-            // The tree is compared only after the hooks: change times only
-            // move forward, so that also covers changes made before them.
-            (Removal::Automatic { snapshot, .. }, Stage::AfterHooks) => ensure!(
-                self.automatic_snapshot(&workspace.id, snapshot.rule, cancelled)
-                    .await?
-                    == Some(snapshot),
-                "workspace changed {}",
-                stage.change()
-            ),
-            // The workspaces below go first, under the same completion, so
-            // none that something keeps goes with this one.
             (Removal::UnderCompleted { ancestor }, _) => {
                 ensure!(
-                    check.workspace.children.is_empty(),
+                    self.children(id).await?.is_empty(),
                     "spaces below it remain; retaining it until they go"
                 );
                 // A chat's worker may have been opened elsewhere since; the
                 // reservation keeps it where it is from here on.
-                let nearest = self.completed_ancestor(&check.workspace.id).await?;
+                let nearest = self.completed_ancestor(id).await?;
                 ensure!(
-                    nearest.is_some_and(|nearest| nearest.id() == ancestor.id()),
-                    "{} withdrew its completion, changed or no longer has the workspace below it; retaining workspace",
-                    ancestor.name()
+                    nearest.is_some_and(|nearest| nearest.id == ancestor.id),
+                    "{} withdrew its completion, changed or no longer has the {} below it; retaining it",
+                    ancestor.name,
+                    space.kind()
                 );
             }
-            // Its record stays, as a chat's, so nothing may build on its
-            // branch, which goes with the worktree, whenever that began.
-            (Removal::Converted { .. }, _) => {
-                if let Some(stacked) = check.workspace.stacked_workspaces.first() {
-                    bail!(
-                        "workspace {} builds on its branch; retaining workspace",
-                        stacked.name
-                    );
-                }
-            }
-            (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}
+            (
+                Removal::Manual { .. }
+                | Removal::Merged { .. }
+                | Removal::Deleted
+                | Removal::Parent { .. }
+                | Removal::Converted { .. },
+                _,
+            ) => {}
         }
-        Ok(check)
+        Ok(())
     }
 
-    /// Refuse a removal that [skips stalled](Removal::skips_stalled)
-    /// workspaces while one of the `children` of the space it removes, or
-    /// one below them, which may be in another directory, is in a directory
-    /// whose file access stalled. The sweep's own pass of that workspace
-    /// rechecks it.
-    pub(super) async fn ensure_none_stalled_below(
+    /// Refuse a removal that [skips stalled](Removal::skips_stalled) spaces
+    /// while one of the `children` of the space it removes, or one below
+    /// them, has a worktree in a directory whose file access stalled. The
+    /// sweep's own pass of that space rechecks it.
+    async fn ensure_none_stalled_below(
         &self,
         children: Vec<SpaceRef>,
         removal: Removal<'_>,
@@ -813,85 +472,16 @@ impl Manager {
         }
         let mut pending = children;
         while let Some(child) = pending.pop() {
-            // A chat has no directory of its own; those below it may.
-            if child.kind == SpaceKind::Workspace {
-                let workspace = self.workspace_by_id(&child.id).await?;
-                ensure!(
-                    self.file_access.stalled(&workspace.path).is_none(),
-                    "file access stalled in the directory of {}, below it; retaining workspace",
-                    child.name
-                );
+            // A space without a worktree has no directory of its own; those
+            // below it may.
+            if let Some(space) = self.find_space(&child.id).await?
+                && let Some(workspace) = space.worktree()
+            {
+                self.ensure_worktree_answers(workspace)?;
             }
             pending.extend(self.taken_first(&child.id).await?);
         }
         Ok(())
-    }
-
-    /// The directory is gone: a worktree that was deleted rather than moved is
-    /// forgotten, and its branch is always retained.
-    async fn remove_missing_worktree(
-        &self,
-        workspace: &Workspace,
-        removal: Removal<'_>,
-    ) -> Result<RemovalResult> {
-        let repo = self.repository(&workspace.repository_id).await?;
-        ensure!(
-            !matches!(removal, Removal::Automatic { .. }),
-            "workspace directory disappeared during automatic cleanup"
-        );
-        ensure!(
-            self.missing_worktree(workspace).await?.is_none(),
-            "worktree was moved; restore its recorded path before removing it"
-        );
-        if matches!(removal, Removal::Deleted) {
-            ensure!(
-                !self.workspace_has_executions(&workspace.id).await?,
-                "commands are recorded; stop them with shoal stop or shoal rm"
-            );
-        }
-        let below = self.taken_first(&workspace.id).await?;
-        self.ensure_none_stalled_below(below, removal).await?;
-        self.stop_executions(
-            &workspace.id,
-            removal.stop_policy(),
-            &StopRequest::removal(),
-        )
-        .await?;
-        self.stop_removed_processes(workspace, WorktreeTies::None)
-            .await?;
-        let children = self.remove_workspace_children(workspace, removal).await?;
-        // Prune only this owned registration, and retain its branch because
-        // the contents cannot be inspected.
-        let registered = self.is_registered_worktree(workspace).await?;
-        let removed = self
-            .remove_worktree(
-                &repo.path,
-                workspace,
-                FileRemoval::Force,
-                BranchRemoval::Keep,
-                registered,
-            )
-            .await?;
-        Ok(RemovalResult {
-            children,
-            ..removed
-        })
-    }
-
-    /// [`Self::remove_children`] for the chats in the worktree of
-    /// `workspace` and the spaces below it, listed once it was reserved, so
-    /// no chat starts there and no child follows.
-    async fn remove_workspace_children(
-        &self,
-        workspace: &Workspace,
-        removal: Removal<'_>,
-    ) -> Result<Vec<SpaceName>> {
-        let children = match removal.converts() {
-            true => self.chats_in(&workspace.id).await?,
-            false => self.taken_first(&workspace.id).await?,
-        };
-        self.remove_children(&workspace.name, children, removal)
-            .await
     }
 
     /// Remove `children`, the spaces the removal of the space named `parent`
@@ -900,7 +490,7 @@ impl Manager {
     /// rest and retains the parent, so no space outlives its parent. Each
     /// reservation refuses children below its space and chats in its
     /// worktree, so none appears in one whose children were listed.
-    pub(super) async fn remove_children(
+    async fn remove_children(
         &self,
         parent: &str,
         children: Vec<SpaceRef>,
@@ -909,20 +499,16 @@ impl Manager {
         ensure_confirmed(parent, &children, removal)?;
         let mut removed = Vec::new();
         for child in children {
-            let below = match child.kind {
-                SpaceKind::Workspace => {
-                    Box::pin(self.remove(&SpaceSelector::id(&child.id), removal.of_child()))
-                        .await
-                        .map(|result| result.children)
-                }
-                SpaceKind::Chat => match self.chat_by_id(&child.id).await? {
-                    Some(chat) => Box::pin(self.remove_chat_for(&chat, removal.of_child())).await,
-                    None => continue,
-                },
-            };
-            let below = below.with_context(|| {
-                format!("{} below it was retained, so {parent} is too", child.name)
-            })?;
+            // One gone meanwhile leaves nothing to take.
+            if self.find_space(&child.id).await?.is_none() {
+                continue;
+            }
+            let below = Box::pin(self.remove_space(&child.id, removal.of_child()))
+                .await
+                .map(|removed| removed.children)
+                .with_context(|| {
+                    format!("{} below it was retained, so {parent} is too", child.name)
+                })?;
             removed.extend(below);
             if removal.announces_children() {
                 let cleanup = crate::daemon::spaces::removal_notices::Cleanup::Parent(parent);
@@ -932,87 +518,4 @@ impl Manager {
         }
         Ok(removed)
     }
-
-    /// Release live resources immediately before removing the worktree. Failed
-    /// cleanup retains their ownership records so removal can be retried.
-    async fn remove_worktree(
-        &self,
-        repo: &Path,
-        workspace: &Workspace,
-        files: FileRemoval,
-        branch: BranchRemoval,
-        registered: bool,
-    ) -> Result<RemovalResult> {
-        self.remove_simulators(&workspace.id).await?;
-        if registered {
-            git::worktree::remove(repo, &workspace.path, files, branch).await
-        } else {
-            Ok(RemovalResult {
-                removed: true,
-                branch: workspace.branch.clone(),
-                branch_outcome: BranchOutcome::Retained,
-                hook_error: None,
-                children: Vec::new(),
-            })
-        }
-    }
-}
-
-/// Refuse to delete the unsaved files of the worktree `check` inspected
-/// when `removal` discards them or promises to keep them restorable, unless
-/// the checkpoint of `record` keeps them.
-fn ensure_checkpoint_keeps_files(
-    check: &Inspection,
-    removal: Removal<'_>,
-    record: Option<&RemovedWorkspace>,
-) -> Result<()> {
-    if check.dirty
-        && (removal.discards_archived_files() || removal.unsaved().promises_restorable_files())
-    {
-        ensure!(
-            record.is_some_and(|record| !record.checkpoint.files_omitted),
-            "a checkpoint cannot keep the unsaved files; retaining the workspace"
-        );
-    }
-    Ok(())
-}
-
-/// What removal takes with the worktree the final inspection `check` saw.
-/// A branch goes when its commits are all preserved, except the default
-/// branch, which an unresolved default branch could be; files go by force
-/// only once `removal` may discard unsaved work, or discards unsaved files a
-/// checkpoint keeps. A workspace at a commit owns no branch to delete,
-/// whichever its worktree is on. A disposable workspace's branch counts as
-/// preserved while the worktree is still on it, and its files always go by
-/// force.
-pub(super) fn removal_options(
-    check: &Inspection,
-    removal: Removal<'_>,
-) -> (FileRemoval, BranchRemoval) {
-    let own_branch = check.workspace.branch.is_some()
-        && (!check.workspace.disposable || check.branch == check.workspace.branch);
-    let branch = if own_branch
-        && !removal.converts()
-        && check.branch_preserved()
-        && check
-            .default_branch
-            .as_deref()
-            .is_some_and(|default| check.branch.as_deref() != Some(default))
-    {
-        BranchRemoval::Delete
-    } else {
-        BranchRemoval::Keep
-    };
-    // Git refuses a changed worktree unless forced, even when the changes
-    // are only what a copy started with.
-    let files = if check.workspace.disposable
-        || removal.unsaved().deletes_unsaved()
-        || check.starting_files
-        || (check.dirty && removal.discards_archived_files())
-    {
-        FileRemoval::Force
-    } else {
-        FileRemoval::CleanOnly
-    };
-    (files, branch)
 }

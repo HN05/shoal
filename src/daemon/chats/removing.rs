@@ -21,7 +21,7 @@ impl Removing {
     pub(crate) fn reserve(&self, id: &SpaceId) -> Result<Reservation<'_>> {
         ensure!(
             self.lock().insert(id.to_owned()),
-            "another removal holds the chat"
+            "another removal holds the space"
         );
         Ok(Reservation {
             removing: self,

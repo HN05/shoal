@@ -10,15 +10,18 @@ use crate::{
         notifications::{About, NotificationKind},
         workspace::Manager,
     },
-    model::{Chat, SpaceKind, SpaceRef, Workspace},
+    model::{PresentSpace, SpaceKind, SpaceRef, Workspace},
 };
 
 /// A space a cleanup removed or retained.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Announced<'a> {
+    /// What notices call it.
     kind: SpaceKind,
     id: &'a SpaceId,
     name: &'a SpaceName,
+    /// Whether it has a worktree, whose checkpoint restores it.
+    worktree: bool,
 }
 
 impl<'a> From<&'a Workspace> for Announced<'a> {
@@ -27,16 +30,18 @@ impl<'a> From<&'a Workspace> for Announced<'a> {
             kind: SpaceKind::Workspace,
             id: &workspace.id,
             name: &workspace.name,
+            worktree: true,
         }
     }
 }
 
-impl<'a> From<&'a Chat> for Announced<'a> {
-    fn from(chat: &'a Chat) -> Self {
+impl<'a> From<&'a PresentSpace> for Announced<'a> {
+    fn from(space: &'a PresentSpace) -> Self {
         Self {
-            kind: SpaceKind::Chat,
-            id: &chat.id,
-            name: &chat.name,
+            kind: space.space_kind(),
+            id: space.id(),
+            name: space.name(),
+            worktree: space.worktree().is_some(),
         }
     }
 }
@@ -47,21 +52,22 @@ impl<'a> From<&'a SpaceRef> for Announced<'a> {
             kind: space.kind,
             id: &space.id,
             name: &space.name,
+            worktree: space.kind.has_worktree(),
         }
     }
 }
 
 impl Announced<'_> {
-    /// The notice that `cleanup` removed the space. A workspace's says how
-    /// to restore it, unless the cleanup forgot it without a checkpoint.
+    /// The notice that `cleanup` removed the space. One with a worktree says
+    /// how to restore it, unless the cleanup forgot it without a checkpoint.
     fn removal_notice(self, cleanup: Cleanup<'_>) -> String {
         let removal = cleanup.removal();
-        match self.kind {
-            SpaceKind::Chat => format!("chat {removal}"),
-            SpaceKind::Workspace if matches!(cleanup, Cleanup::DeletedWorktree) => removal,
-            SpaceKind::Workspace => {
-                format!("{removal}; restore it with shoal restore {}", self.id)
-            }
+        if !self.worktree {
+            format!("{} {removal}", self.kind)
+        } else if matches!(cleanup, Cleanup::DeletedWorktree) {
+            removal
+        } else {
+            format!("{removal}; restore it with shoal restore {}", self.id)
         }
     }
 }
@@ -126,7 +132,7 @@ impl Cleanup<'_> {
         }
     }
 
-    /// The cause the journal records for the workspace `id` the cleanup
+    /// The cause the journal records for the space `id` the cleanup
     /// retained.
     async fn cause(self, manager: &Manager, id: &SpaceId) -> Result<EventCause> {
         Ok(match self {
@@ -144,7 +150,7 @@ impl Cleanup<'_> {
 
 impl Manager {
     /// Tell the user that `cleanup` removed `space`, or, when `removal`
-    /// failed, that it retained it, which a workspace's journal records.
+    /// failed, that it retained it, which the space's journal records.
     /// The notice goes out even when recording fails, whose error is
     /// returned.
     pub(crate) async fn announce_removal<T>(
@@ -178,14 +184,14 @@ impl Manager {
     }
 
     /// Record in the journal that `cleanup` retained `space` with `error`.
-    /// A chat's journal records no retention.
+    /// A space without a worktree records no retention.
     async fn record_retention(
         &self,
         space: Announced<'_>,
         cleanup: Cleanup<'_>,
         error: &anyhow::Error,
     ) -> Result<()> {
-        if space.kind == SpaceKind::Chat {
+        if !space.worktree {
             return Ok(());
         }
         let cause = cleanup.cause(self, space.id).await?;

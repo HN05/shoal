@@ -436,7 +436,9 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     let again = open(first).await.unwrap();
     assert!(again.reused);
     assert_eq!(again.workspace.id, opened.workspace.id);
-    assert!(manager.active_at(&again.workspace.id).await.unwrap() > UnixTime::from_seconds(1));
+    assert!(
+        manager.active_at(&again.workspace.id).await.unwrap() > Some(UnixTime::from_seconds(1))
+    );
 
     let second = push_head("second");
     let moved = open(second.clone()).await.unwrap();

@@ -27,6 +27,33 @@ impl Manager {
         space.ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
     }
 
+    /// Every space: the workspaces in listing order, then the chats in
+    /// start order.
+    pub(crate) async fn present_spaces(&self) -> Result<Vec<PresentSpace>> {
+        let workspaces = self.list_workspaces().await?;
+        let chats = self.chats().await?;
+        Ok((workspaces.into_iter().map(PresentSpace::Workspace))
+            .chain(chats.into_iter().map(PresentSpace::Chat))
+            .collect())
+    }
+
+    /// The workspace or chat, running or stopped, with the ID `id`, while
+    /// it exists.
+    pub(crate) async fn find_space(&self, id: &SpaceId) -> Result<Option<PresentSpace>> {
+        let owned = id.to_owned();
+        let kind = self
+            .store
+            .run(move |db| super::space_kind(db, &owned))
+            .await?;
+        Ok(match kind {
+            Some(SpaceKind::Workspace) => {
+                self.find_workspace(id).await?.map(PresentSpace::Workspace)
+            }
+            Some(SpaceKind::Chat) => self.chat_by_id(id).await?.map(PresentSpace::Chat),
+            None => None,
+        })
+    }
+
     /// The ID of the space `selector` names, when it names one.
     pub(crate) async fn space_id(
         &self,

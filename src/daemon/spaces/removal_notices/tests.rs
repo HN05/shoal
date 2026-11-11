@@ -54,14 +54,12 @@ async fn a_retained_workspace_records_its_cleanup_as_the_cause() {
 #[tokio::test]
 async fn a_retained_chat_records_no_retention() {
     let (_root, manager) = manager().await;
-    let chat = Announced {
-        kind: SpaceKind::Chat,
-        id: &SpaceId::from("chat-id"),
-        name: &"notes".into(),
-    };
+    let (chat, _process) =
+        crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
 
     let removal: Result<bool> = Err(anyhow::anyhow!("agent running"));
-    (manager.announce_removal(chat, Cleanup::Idle, &removal))
+    let space = PresentSpace::Chat(chat);
+    (manager.announce_removal(&space, Cleanup::Idle, &removal))
         .await
         .unwrap();
 
@@ -75,10 +73,11 @@ async fn a_retained_chat_records_no_retention() {
 #[test]
 fn only_a_workspace_with_a_checkpoint_is_restorable() {
     let (id, name) = (SpaceId::from("id"), SpaceName::from("topic"));
-    let space = |kind| Announced {
+    let space = |kind: SpaceKind| Announced {
         kind,
         id: &id,
         name: &name,
+        worktree: kind.has_worktree(),
     };
     let restorable =
         |kind, cleanup| (space(kind).removal_notice(cleanup)).contains("shoal restore id");

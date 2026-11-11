@@ -1,5 +1,5 @@
-//! Removal policy: who removes a workspace and what that removal checks at
-//! each stage, and what retains a workspace from every unattended removal.
+//! Removal policy: who removes a space and what that removal checks at each
+//! stage, and what retains a space from every unattended removal.
 use super::super::{done::CompletedAncestor, executions::StopPolicy};
 use crate::client::space_ids::SpaceId;
 use crate::daemon::space_processes::WorktreeTies;
@@ -14,8 +14,9 @@ use crate::{
 };
 use anyhow::{Result, ensure};
 
-/// What keeps a workspace from every unattended removal. Sweeps report it
-/// as a cleanup reason, and removal refuses with it at every stage.
+/// What keeps a space from every unattended removal. Sweeps report it as a
+/// cleanup reason, and removal refuses with it at every stage. A space that
+/// cannot have the item, such as a chat a hold, never has the retention.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Retention {
     Held,
@@ -24,7 +25,8 @@ pub(crate) enum Retention {
     PrProposal,
     /// A push waits for the user's approval.
     PushRequest,
-    /// An agent launch in the workspace waits in the agent queue or is starting.
+    /// The space's agent waits to start: a launch in the agent queue or
+    /// starting, or a chat's restore once the daemon starts agents again.
     QueuedAgent,
     /// A chat runs in the workspace's worktree.
     ChatRunning,
@@ -51,20 +53,20 @@ impl From<Retention> for CleanupReason {
 impl std::fmt::Display for Retention {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::Held => "workspace is held",
+            Self::Held => "the space is held",
             Self::Question => "a question waits for the user",
             Self::PrProposal => "a PR proposal waits for approval",
             Self::PushRequest => "a push waits for approval",
-            Self::QueuedAgent => "an agent launch in it waits in the agent queue",
+            Self::QueuedAgent => "its agent waits to start",
             Self::ChatRunning => "a chat runs in it",
             Self::Converting => "its agent restarts after a conversion",
         })
     }
 }
 
-/// Who is removing the workspace, which decides how strict the checks are.
+/// Who is removing the space, which decides how strict the checks are.
 #[derive(Clone, Copy)]
-pub(super) enum Removal<'a> {
+pub(in crate::daemon::workspace) enum Removal<'a> {
     /// Explicit merge completion stops tracked agents without waiting for idle.
     Merged { head: &'a str },
     /// An assignment finished; all commits must already be kept, unless
@@ -84,7 +86,8 @@ pub(super) enum Removal<'a> {
         /// narrows what `unsaved` confirms.
         taking: Option<&'a [SpaceId]>,
     },
-    /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
+    /// Idle, merged or disk-space cleanup, or the user's request to clean up;
+    /// only safe, unchanged spaces may go.
     Automatic {
         snapshot: Snapshot,
         cause: EventCause,
@@ -93,13 +96,13 @@ pub(super) enum Removal<'a> {
     /// release what it owned, retaining its branch.
     Deleted,
     /// An ancestor finished its assignment with cleanup, which takes the
-    /// workspace whatever its own work: it goes with its unsaved files once
-    /// a checkpoint keeps them, while the ancestor's completion stands.
+    /// space whatever its own work: a worktree goes with its unsaved files
+    /// once a checkpoint keeps them, while the ancestor's completion stands.
     UnderCompleted { ancestor: &'a CompletedAncestor },
-    /// The workspace's parent is being removed, which nothing about the
-    /// workspace keeps: it goes with its unsaved files once a checkpoint
-    /// keeps them. `cause`, `refuse_holds` and the `confirmed` IDs of the
-    /// workspaces it may take below it are the parent removal's.
+    /// The space's parent is being removed, which nothing about the space
+    /// keeps: a worktree goes with its unsaved files once a checkpoint keeps
+    /// them. `cause`, `refuse_holds` and the `confirmed` IDs of the spaces
+    /// it may take below it are the parent removal's.
     Parent {
         cause: EventCause,
         refuse_holds: bool,
@@ -211,7 +214,7 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// Unattended removals retain a workspace that is held or has an open
+    /// Unattended removals retain a space that is held or has an open
     /// question, whenever it was recorded; a user's request and its parent's
     /// removal override them.
     pub(super) fn unattended(self) -> bool {
@@ -230,15 +233,15 @@ impl<'a> Removal<'a> {
         matches!(self, Removal::Converted { .. })
     }
 
-    /// Whether the removal leaves alone the workspaces below that are in a
+    /// Whether the removal leaves alone the spaces below that are in a
     /// stalled directory, as the cleanup sweep, which makes it, skips them.
     pub(super) fn skips_stalled(self) -> bool {
         self.unattended() || matches!(self, Removal::Deleted)
     }
 
     /// A workspace process's manual removal leaves the user's holds in
-    /// place, below the workspace too.
-    pub(super) fn refuses_holds(self) -> bool {
+    /// place, below the space too.
+    pub(in crate::daemon::workspace) fn refuses_holds(self) -> bool {
         match self {
             Removal::Manual { release_holds, .. } => !release_holds,
             Removal::Parent { refuse_holds, .. } => refuse_holds,
@@ -247,8 +250,8 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// The removal of a child of the workspace this removes. A removal the
-    /// user asked for is theirs, not the parent's, whatever its children.
+    /// The removal of a child of the space this removes. A removal the user
+    /// asked for is theirs, not the parent's, whatever its children.
     pub(super) fn of_child(self) -> Removal<'a> {
         Removal::Parent {
             cause: match self {
@@ -260,7 +263,7 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// The IDs of the workspaces below the workspace that a manual removal
+    /// The IDs of the spaces below the space that a manual removal
     /// confirmed, the only ones it takes; `None` takes whatever is below.
     pub(super) fn confirmed_children(self) -> Option<&'a [SpaceId]> {
         match self {
@@ -281,8 +284,8 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// Automatic removal needs a safe workspace; manual removal needs consent
-    /// to delete unsaved work.
+    /// What the worktree's state must be: automatic removal needs a safe
+    /// worktree, manual removal consent to delete unsaved work.
     pub(super) fn verify(self, check: &RemovalCheck, stage: Stage) -> Result<()> {
         match (self, stage) {
             (Removal::Completed { integrated, .. }, _) => {
@@ -342,13 +345,14 @@ impl<'a> Removal<'a> {
     }
 }
 
-/// Recheck safety after operations that can change the worktree.
+/// Recheck safety after operations that can change the space.
 #[derive(Clone, Copy)]
 pub(super) enum Stage {
     Initial,
     AfterStop,
-    /// Hooks run in the worktree.
-    AfterHooks,
+    /// Once the spaces below are gone and, in a worktree, its hooks ran,
+    /// just before the space goes.
+    Final,
 }
 
 impl Stage {
@@ -357,7 +361,7 @@ impl Stage {
         match self {
             Stage::Initial => "before removal",
             Stage::AfterStop => "while stopping commands",
-            Stage::AfterHooks => "during removal hooks",
+            Stage::Final => "during removal",
         }
     }
 }

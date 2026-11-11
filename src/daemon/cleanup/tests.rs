@@ -3,6 +3,7 @@ use crate::client::assignments::Done;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
+use crate::model::PresentSpace;
 
 #[test]
 fn changed_signals_restart_timer_and_expiry_returns_its_snapshot() {
@@ -1282,16 +1283,10 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
     );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     // A running chat is in use.
-    assert_eq!(
-        manager
-            .chat_cleanup_snapshot(&chat, Rule::Idle)
-            .await
-            .unwrap(),
-        None
-    );
+    assert_eq!(manager.cleanup_snapshot(&chat.id).await.unwrap(), None);
     process.kill();
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
+    let snapshot = (manager.cleanup_snapshot(&stopped.id))
         .await
         .unwrap()
         .unwrap();
@@ -1306,7 +1301,7 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
         })
         .await
         .unwrap();
-    let restarted = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
+    let restarted = (manager.cleanup_snapshot(&stopped.id))
         .await
         .unwrap()
         .unwrap();
@@ -1342,13 +1337,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
         .save_chats(crate::state::ChatRestore::Automatic)
         .await;
     let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    assert_eq!(
-        manager
-            .chat_cleanup_snapshot(&saved, Rule::Idle)
-            .await
-            .unwrap(),
-        None
-    );
+    assert_eq!(manager.cleanup_snapshot(&saved.id).await.unwrap(), None);
     // Saved for `shoal resume`, it is kept as a workspace's saved agent
     // keeps it.
     let id = chat.id.clone();
@@ -1362,7 +1351,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
         .unwrap();
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let idle = async || {
-        (manager.chat_cleanup_candidacy(&stopped, Rule::Idle))
+        (manager.cleanup_candidacy(&stopped.id))
             .await
             .unwrap()
             .unwrap_err()
@@ -1382,7 +1371,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     assert_eq!(idle().await, CleanupReason::Completed { integrated: false });
     assert!(
         manager
-            .chat_cleanup_snapshot(&stopped, Rule::Merged)
+            .merged_snapshot(&stopped.id)
             .await
             .unwrap()
             .is_some()
@@ -1461,12 +1450,12 @@ async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
         .await
         .unwrap();
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Merged))
+    let snapshot = (manager.merged_snapshot(&stopped.id))
         .await
         .unwrap()
         .unwrap();
     let removed = manager
-        .remove_unused_chat(&stopped, snapshot, EventCause::Merged)
+        .remove_unused(&PresentSpace::Chat(stopped), snapshot, EventCause::Merged)
         .await;
     assert!(removed.is_err());
     assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
@@ -1500,14 +1489,14 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
         .unwrap();
     let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     manager.file_access.stall_rechecking(&opened.path);
-    let removed = manager.remove_completed_chat(&chat, &completion).await;
+    let removed = manager.remove_completed_by(&chat.id, &completion).await;
     assert!(removed.is_err());
     assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
     // Once access recovers, the grace period starts, and only then runs.
     manager.file_access.recover_at(&opened.path);
     assert!(
         !manager
-            .remove_completed_chat(&chat, &completion)
+            .remove_completed_by(&chat.id, &completion)
             .await
             .unwrap()
     );
@@ -1612,15 +1601,14 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
         .unwrap();
     process.kill();
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    for rule in [Rule::Idle, Rule::Merged] {
-        assert_eq!(
-            (manager.chat_cleanup_candidacy(&stopped, rule))
-                .await
-                .unwrap()
-                .unwrap_err(),
-            CleanupReason::Question
-        );
-    }
+    assert_eq!(
+        (manager.cleanup_candidacy(&stopped.id))
+            .await
+            .unwrap()
+            .unwrap_err(),
+        CleanupReason::Question
+    );
+    assert_eq!(manager.merged_snapshot(&stopped.id).await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -1632,7 +1620,7 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     process.kill();
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
+    let snapshot = (manager.cleanup_snapshot(&stopped.id))
         .await
         .unwrap()
         .unwrap();
@@ -1640,7 +1628,8 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
     let gate = manager.gates.lock_prs([&chat.id]).await;
     let removal = tokio::spawn({
         let (manager, stopped) = (manager.clone(), stopped.clone());
-        async move { (manager.remove_unused_chat(&stopped, snapshot, EventCause::Idle)).await }
+        let stopped = PresentSpace::Chat(stopped);
+        async move { (manager.remove_unused(&stopped, snapshot, EventCause::Idle)).await }
     });
     // ...and records the issue before it lets the removal go on.
     let id = chat.id.clone();

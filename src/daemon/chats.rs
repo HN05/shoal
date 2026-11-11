@@ -502,6 +502,21 @@ impl Manager {
             .await
     }
 
+    /// Whether the space `id` is a chat whose restore waits to run its
+    /// agent once the daemon starts agents again.
+    pub(crate) async fn restore_waits(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM chats WHERE id=?1 AND restore=?2",
+                    params![id, ChatRestore::Automatic],
+                )
+            })
+            .await
+    }
+
     /// When the chat `id`'s agent stopped, while it is stopped.
     pub(crate) async fn chat_stopped_at(
         &self,
@@ -968,7 +983,7 @@ mod stopped;
 mod stopping;
 
 pub(crate) use agents::{ChatAgents, listed_execution};
-pub(crate) use removing::Removing;
+pub(crate) use removing::{Removing, Reservation};
 pub(crate) use stopping::Stopping;
 
 #[cfg(test)]

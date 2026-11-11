@@ -1,14 +1,14 @@
 //! The end of a removed chat's record, once the spaces below it and its
 //! agent are gone: the user gets the messages it had not read and the
 //! approval requests it had not decided, its attached files stay for the
-//! retention period, and its record and temporary directory go.
+//! retention period, and its record goes.
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
-        chat_messages, log, store,
+        chat_messages, store,
         workspace::Manager,
         workspace_files,
     },
@@ -24,12 +24,6 @@ impl Manager {
             .store
             .write(move |tx| delete(tx, &id, expires_at))
             .await?;
-        if let Err(error) = self.delete_chat_tmp_dir(chat).await {
-            log!(
-                "chat {}: temporary directory not deleted: {error:#}",
-                chat.id
-            );
-        }
         self.ask_user_about(&deleted.released).await;
         if let Some(id) = deleted.notification {
             self.signals.notification_recorded(id);

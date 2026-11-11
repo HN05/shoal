@@ -24,6 +24,13 @@ crate::state::states!(
     }
 );
 
+impl SpaceKind {
+    /// Whether a space of the kind has a worktree, as a workspace does.
+    pub fn has_worktree(self) -> bool {
+        matches!(self, Self::Workspace)
+    }
+}
+
 /// Something a space links or a workspace holds, for finding that space.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -101,11 +108,23 @@ impl PresentSpace {
         }
     }
 
+    /// Its worktree, which only a workspace has: the workspace's record.
+    pub fn worktree(&self) -> Option<&Workspace> {
+        match self {
+            Self::Workspace(workspace) => Some(workspace),
+            Self::Chat(_) => None,
+        }
+    }
+
     /// What user-facing text calls it: `workspace` or `chat`.
     pub fn kind(&self) -> &'static str {
+        self.space_kind().as_str()
+    }
+
+    pub fn space_kind(&self) -> SpaceKind {
         match self {
-            Self::Workspace(_) => "workspace",
-            Self::Chat(_) => "chat",
+            Self::Workspace(_) => SpaceKind::Workspace,
+            Self::Chat(_) => SpaceKind::Chat,
         }
     }
 }

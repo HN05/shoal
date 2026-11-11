@@ -1,20 +1,17 @@
 //! A chat's `shoal done`: it records the chat's work as finished, while its
 //! agent and session keep running until completion cleanup, when requested,
-//! removes the chat as it removes a workspace.
+//! removes the chat as it removes any space.
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     client::assignments::Done,
     daemon::{
-        cleanup::SpaceFailures,
         notifications::{About, NotificationKind},
-        progress, questions,
-        spaces::removal_notices::Cleanup,
-        store,
+        progress, questions, store,
         workspace::{
             Manager,
-            done::{self, CompletedAncestor, push_completion_details},
+            done::{self, push_completion_details},
         },
         workspace_files::Attacher,
     },
@@ -77,72 +74,6 @@ impl Manager {
         (self.notify_about(about, NotificationKind::SpaceDone, notice)).await;
         self.signals.wake_cleanup();
         Ok(completion)
-    }
-
-    /// Remove each chat whose completion requested cleanup once its grace
-    /// period ends, unless something keeps it. A PR it watches does not: a
-    /// chat has no branch whose work an unmerged PR would keep. A failure in
-    /// one chat does not skip the others.
-    pub(crate) async fn sweep_completed_chats(&self, failed: &mut SpaceFailures) -> Result<()> {
-        for listed in self.chats().await? {
-            if let Err(error) = self.sweep_completed_chat(&listed).await {
-                failed.push(&listed.id, &listed.name, &error);
-            }
-        }
-        Ok(())
-    }
-
-    /// Remove `listed` for its own completion or a completed ancestor's,
-    /// under its PR gate, which a completion changes under.
-    async fn sweep_completed_chat(&self, listed: &Chat) -> Result<()> {
-        // An ancestor's completion that takes the chat changes under the
-        // ancestor's gate, so that one is held too.
-        let gated = self.completed_ancestor(&listed.id).await?;
-        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| a.id()));
-        let _guard = self.gates.lock_prs(gates).await;
-        let Some(chat) = self.chat_by_id(&listed.id).await? else {
-            return Ok(());
-        };
-        if let Some(ancestor) = self.completed_ancestor(&chat.id).await? {
-            // Another ancestor's completion waits for the next sweep, which
-            // holds its gate.
-            if gated.is_some_and(|gated| gated.id() == ancestor.id()) {
-                self.sweep_chat_under_completed(&chat, &ancestor).await?;
-            }
-            return Ok(());
-        }
-        let Some(completion) = chat.completion.clone() else {
-            return Ok(());
-        };
-        if !completion.cleanup || self.chat_keep_reason(&chat).await?.is_some() {
-            return Ok(());
-        }
-        let removal = self.remove_completed_chat(&chat, &completion).await;
-        if matches!(removal, Ok(false)) {
-            return Ok(());
-        }
-        (self.announce_removal(&chat, Cleanup::Completion, &removal)).await
-    }
-
-    /// Remove `chat` for its completed `ancestor` once its grace period
-    /// ends, unless something keeps it or spaces below it remain, which go
-    /// first under the same completion.
-    async fn sweep_chat_under_completed(
-        &self,
-        chat: &Chat,
-        ancestor: &CompletedAncestor,
-    ) -> Result<()> {
-        if !self.children(&chat.id).await?.is_empty()
-            || self.chat_keep_reason(chat).await?.is_some()
-        {
-            return Ok(());
-        }
-        let removal = self.remove_chat_under_completed(chat, ancestor).await;
-        if matches!(removal, Ok(false)) {
-            return Ok(());
-        }
-        let cleanup = Cleanup::AncestorCompletion(ancestor.name());
-        self.announce_removal(chat, cleanup, &removal).await
     }
 
     /// Withdraw the completion the chat `id` recorded.

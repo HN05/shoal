@@ -18,6 +18,7 @@ use tokio::time::Instant;
 
 use super::{
     caches::Emptying,
+    events::EventCause,
     notifications::NotificationKind,
     spaces::removal_notices::Cleanup,
     warnings::{self, Signal, Warnings},
@@ -28,7 +29,7 @@ use crate::daemon::log;
 use crate::{
     caches::Layout,
     config::overload::Disk,
-    model::{Repository, Workspace},
+    model::{PresentSpace, Repository, Workspace},
 };
 
 /// Each pass inspects every workspace, so a pass that could not free enough
@@ -287,7 +288,8 @@ async fn free_space(
         {
             continue;
         }
-        let snapshot = match super::cleanup::candidate(manager, workspace, &users).await {
+        let space = PresentSpace::Workspace(workspace.clone());
+        let snapshot = match super::cleanup::candidate(manager, &space, &users).await {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => continue,
             Err(error) => {
@@ -295,9 +297,7 @@ async fn free_space(
                 continue;
             }
         };
-        let removal = manager
-            .remove_for_disk_space(&SpaceSelector::id(&workspace.id), snapshot)
-            .await;
+        let removal = (manager.remove_unused(&space, snapshot, EventCause::DiskSpace)).await;
         let described = filesystem.describe();
         let cleanup = Cleanup::DiskSpace(&described);
         // A full disk can fail recording the retention; the notice still goes out.

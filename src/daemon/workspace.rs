@@ -52,6 +52,7 @@ pub(crate) mod runner;
 mod sessions;
 mod shutdown_stop;
 mod signals;
+mod space_kinds;
 pub(crate) mod spotlight;
 mod stack;
 mod status;
@@ -73,6 +74,7 @@ pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
 pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
 pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use imported_sessions::kept_session_sources;
+pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;
@@ -153,9 +155,9 @@ pub struct Manager {
     pub(crate) chat_agents: crate::daemon::chats::ChatAgents,
     /// The chats a removal holds, which no restore runs again.
     pub(crate) chat_removals: crate::daemon::chats::Removing,
-    /// The chats whose workspaces a removal under their completion takes,
-    /// which keep the workspaces below them meanwhile.
-    pub(crate) chat_owners: crate::daemon::chats::Removing,
+    /// The completed spaces whose completion a removal of a space below
+    /// them goes by, which keep the workspaces below them meanwhile.
+    pub(crate) completed_owners: crate::daemon::chats::Removing,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
@@ -213,7 +215,7 @@ impl Manager {
             chat_stops: Default::default(),
             chat_agents: Default::default(),
             chat_removals: Default::default(),
-            chat_owners: Default::default(),
+            completed_owners: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),
@@ -459,9 +461,9 @@ impl Manager {
         }
     }
 
-    /// When the workspace was last recorded active; one without any starts
-    /// its idle period now.
-    pub(crate) async fn active_at(&self, id: &SpaceId) -> Result<crate::time::UnixTime> {
+    /// When the space `id` was last recorded active: a workspace without
+    /// any starts its idle period now, while a chat records no such time.
+    pub(crate) async fn active_at(&self, id: &SpaceId) -> Result<Option<crate::time::UnixTime>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -469,11 +471,13 @@ impl Manager {
                     "UPDATE workspaces SET active_at=unixepoch() WHERE id=?1 AND active_at IS NULL",
                     [&id],
                 )?;
-                Ok(db.query_row(
-                    "SELECT active_at FROM workspaces WHERE id=?1",
-                    [&id],
-                    |row| row.get(0),
-                )?)
+                Ok(db
+                    .query_row(
+                        "SELECT active_at FROM workspaces WHERE id=?1",
+                        [&id],
+                        |row| row.get(0),
+                    )
+                    .optional()?)
             })
             .await
     }

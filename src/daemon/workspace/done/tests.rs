@@ -775,7 +775,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     // A question asked after a sweep checked for one still stops its removal.
     manager
         .remove_completed(
-            &SpaceSelector::id(&workspace.id),
+            &PresentSpace::Workspace(workspace.clone()),
             &completion,
             EventCause::Completion,
         )
@@ -1314,12 +1314,12 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(ancestor.id(), &chat.id);
+    assert_eq!(ancestor.id, chat.id);
 
     // The user opens it outside the chat before the removal reserves it.
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
-        .remove_under_completed(&SpaceSelector::id(&worker.id), &ancestor)
+        .remove_under_completed(&PresentSpace::Workspace(worker.clone()), &ancestor)
         .await
         .unwrap_err();
     assert!(manager.workspace_by_id(&worker.id).await.is_ok());
@@ -1383,15 +1383,15 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(ancestor.id(), &chat.id);
+    assert_eq!(ancestor.id, chat.id);
 
     // While a removal under the chat holds its workspaces, the root that
     // puts the split child below the chat stays there...
-    let held = manager.chat_owners.reserve(&chat.id).unwrap();
+    let held = manager.completed_owners.reserve(&chat.id).unwrap();
     manager.assign_parent(&root.id, None).await.unwrap_err();
     // ...and the removal takes that hold itself, so another one waits.
     manager
-        .remove_under_completed(&SpaceSelector::id(&split.id), &ancestor)
+        .remove_under_completed(&PresentSpace::Workspace(split.clone()), &ancestor)
         .await
         .unwrap_err();
     assert!(manager.workspace_by_id(&split.id).await.is_ok());

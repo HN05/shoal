@@ -1,5 +1,5 @@
 use super::super::Manager;
-use super::remove::removal_options;
+use super::worktree::removal_options;
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::space_ids::SpaceId;
@@ -166,9 +166,7 @@ async fn deleted_removal_checks_executions_without_inspection_details() {
                 .unwrap();
         }
         fs::remove_dir_all(&workspace.path).unwrap();
-        let result = manager
-            .remove_deleted(&SpaceSelector::id(&workspace.id))
-            .await;
+        let result = manager.remove_deleted(&workspace.id).await;
         if has_executions {
             assert!(result.is_err());
             assert!(
@@ -178,7 +176,7 @@ async fn deleted_removal_checks_executions_without_inspection_details() {
                     .unwrap()
             );
         } else {
-            let result = result.unwrap();
+            let result = result.unwrap().worktree.unwrap();
             assert!(result.removed);
             assert!(!result.branch_outcome.is_deleted());
         }
