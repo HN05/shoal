@@ -20,15 +20,17 @@ pub enum Call {
 
 /// Plain directories standing in for subvolumes: creating one makes a
 /// directory, a snapshot copies one, and destroying one deletes it where
-/// [`Self::destroys`] allows.
+/// the fake allows.
 #[derive(Default)]
 pub struct FakeSubvolumes {
     roots: Mutex<HashSet<PathBuf>>,
     calls: Mutex<Vec<Call>>,
     /// Whether destroying succeeds, as for root.
-    pub destroys: bool,
+    destroys: bool,
     /// Whether creating and snapshotting fail, as on another filesystem.
-    pub unsupported: bool,
+    unsupported: bool,
+    /// Whether snapshots fail where creating succeeds.
+    failing_snapshots: bool,
 }
 
 impl FakeSubvolumes {
@@ -44,6 +46,14 @@ impl FakeSubvolumes {
     pub fn unsupported() -> Self {
         Self {
             unsupported: true,
+            ..Self::default()
+        }
+    }
+
+    /// A fake whose snapshots fail.
+    pub fn failing_snapshots() -> Self {
+        Self {
+            failing_snapshots: true,
             ..Self::default()
         }
     }
@@ -86,7 +96,8 @@ impl Subvolumes for FakeSubvolumes {
     fn snapshot(&self, source: &Path, destination: &Path) -> io::Result<()> {
         self.record(Call::Snapshot(source.to_owned(), destination.to_owned()));
         self.supported()?;
-        if !self.is_root(source) || destination.symlink_metadata().is_ok() {
+        if self.failing_snapshots || !self.is_root(source) || destination.symlink_metadata().is_ok()
+        {
             return Err(io::ErrorKind::InvalidInput.into());
         }
         let copied = Command::new("cp")

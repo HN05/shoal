@@ -1,5 +1,8 @@
 use super::*;
-use crate::test_support::native_cloning;
+use crate::test_support::{
+    native_cloning,
+    subvolumes::{Call, FakeSubvolumes},
+};
 
 fn set_time(path: &Path, seconds: u64) {
     fs::File::options()
@@ -34,15 +37,31 @@ fn copier(root: &Path) -> impl AsyncFn(&Path, &Path) -> Result<()> {
     }
 }
 
+/// `cp -pPR`, which fills an existing directory as [`clone_tree`] does.
 async fn copy(source: &Path, destination: &Path) -> Result<()> {
+    let source = match destination.is_dir() {
+        true => source.join("."),
+        false => source.to_owned(),
+    };
     let status = tokio::process::Command::new("cp")
         .args(["-pPR", "--"])
-        .arg(source)
+        .arg(&source)
         .arg(destination)
         .status()
         .await?;
     anyhow::ensure!(status.success(), "copy {} failed", source.display());
     Ok(())
+}
+
+/// [`copy`], snapshotting the subvolumes of `volumes` as [`clone_tree`]
+/// snapshots btrfs ones.
+fn snapshotting(volumes: &FakeSubvolumes) -> impl AsyncFn(&Path, &Path) -> Result<()> {
+    async move |source: &Path, destination: &Path| {
+        if volumes.is_root(source) && volumes.snapshot(source, destination).is_ok() {
+            return Ok(());
+        }
+        copy(source, destination).await
+    }
 }
 
 /// Stage, install and retire a snapshot as a seed build does.
@@ -53,9 +72,169 @@ async fn freeze(
     paths: &[String],
     files: Vec<String>,
 ) -> Result<()> {
-    let staged = Snapshot::stage_with(copy, layout, paths).await?;
+    freeze_with(copy, &Btrfs, layout, commit, paths, files).await
+}
+
+/// [`freeze`], making subvolumes with `volumes`.
+async fn freeze_with(
+    copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+    volumes: &impl Subvolumes,
+    layout: &Layout,
+    commit: &str,
+    paths: &[String],
+    files: Vec<String>,
+) -> Result<()> {
+    let staged = Snapshot::stage_with(copy, volumes, layout, paths).await?;
     staged.install(layout, commit.into(), "s".into(), files)?;
     layout.remove_retired()
+}
+
+/// A seed whose worktree built `files`, each holding its own path.
+fn built(root: &Path, files: &[&str]) -> Layout {
+    let layout = Layout::new(root, &"repo".into());
+    layout.claim().unwrap();
+    for file in files {
+        let path = layout.worktree().join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, file).unwrap();
+    }
+    layout
+}
+
+#[tokio::test]
+async fn a_plain_output_becomes_a_subvolume_that_later_freezes_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = built(root.path(), &["target/app"]);
+    let volumes = FakeSubvolumes::default();
+    let copy = snapshotting(&volumes);
+    let paths = vec!["target".to_owned()];
+    freeze_with(&copy, &volumes, &layout, "c1", &paths, Vec::new())
+        .await
+        .unwrap();
+
+    let output = layout.worktree().join("target");
+    let staged = layout.staging().join(OUTPUTS).join("target");
+    let probe = layout.subvolume_probe();
+    assert_eq!(
+        volumes.calls(),
+        [
+            Call::Create(probe.clone()),
+            Call::Destroy(probe),
+            Call::Create(staged.clone()),
+            Call::Snapshot(staged.clone(), output.clone()),
+        ]
+    );
+    assert!(volumes.is_root(&output));
+    assert_eq!(
+        fs::read_to_string(output.join("app")).unwrap(),
+        "target/app"
+    );
+    let frozen = layout.snapshot().join(OUTPUTS).join("target/app");
+    assert_eq!(fs::read_to_string(frozen).unwrap(), "target/app");
+    assert!(!layout.converted().exists());
+
+    freeze_with(&copy, &volumes, &layout, "c2", &paths, Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(volumes.calls()[4..], [Call::Snapshot(output, staged)]);
+}
+
+#[tokio::test]
+async fn a_failed_conversion_keeps_the_plain_output_and_copies_it() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = built(root.path(), &["target/app"]);
+    let volumes = FakeSubvolumes::failing_snapshots();
+    let paths = vec!["target".to_owned()];
+    freeze_with(
+        &snapshotting(&volumes),
+        &volumes,
+        &layout,
+        "c1",
+        &paths,
+        Vec::new(),
+    )
+    .await
+    .unwrap();
+
+    let output = layout.worktree().join("target");
+    assert!(!volumes.is_root(&output));
+    assert_eq!(
+        fs::read_to_string(output.join("app")).unwrap(),
+        "target/app"
+    );
+    let frozen = layout.snapshot().join(OUTPUTS).join("target/app");
+    assert_eq!(fs::read_to_string(frozen).unwrap(), "target/app");
+    assert!(!layout.converted().exists());
+}
+
+#[tokio::test]
+async fn outputs_stay_plain_where_the_probe_cannot_make_a_subvolume() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = built(root.path(), &["target/app", "web/node_modules/lib"]);
+    let volumes = FakeSubvolumes::unsupported();
+    let paths = vec!["target".to_owned(), "web/node_modules".to_owned()];
+    freeze_with(
+        &snapshotting(&volumes),
+        &volumes,
+        &layout,
+        "c1",
+        &paths,
+        Vec::new(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(volumes.calls(), [Call::Create(layout.subvolume_probe())]);
+    let frozen = layout.snapshot().join(OUTPUTS);
+    let lib = fs::read_to_string(frozen.join("web/node_modules/lib")).unwrap();
+    assert_eq!(lib, "web/node_modules/lib");
+}
+
+/// The real ioctls, where the temporary directory is on btrfs.
+#[tokio::test]
+async fn on_btrfs_each_copy_after_the_first_freeze_is_a_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    if !subvolume::removable_at(&Btrfs, &root.path().join("probe")) {
+        return;
+    }
+    let layout = built(root.path(), &["target/app"]);
+    let paths = vec!["target".to_owned()];
+    freeze(&clone_tree, &layout, "c1", &paths, Vec::new())
+        .await
+        .unwrap();
+    assert!(Btrfs.is_root(&layout.worktree().join("target")));
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
+    snapshot.refill_spare(&layout).await.unwrap();
+    assert!(Btrfs.is_root(&layout.spare().join("target")));
+
+    let (taker, cloner) = (root.path().join("taker"), root.path().join("cloner"));
+    fs::create_dir_all(&taker).unwrap();
+    fs::create_dir_all(&cloner).unwrap();
+    assert!(
+        snapshot
+            .take_spare(&layout, &taker, &paths)
+            .unwrap()
+            .is_some()
+    );
+    snapshot
+        .clone_outputs(&layout, &cloner, &paths)
+        .await
+        .unwrap();
+    for workspace in [&taker, &cloner] {
+        assert!(Btrfs.is_root(&workspace.join("target")));
+        let app = fs::read_to_string(workspace.join("target/app")).unwrap();
+        assert_eq!(app, "target/app");
+    }
+
+    snapshot.refill_spare(&layout).await.unwrap();
+    freeze(&clone_tree, &layout, "c2", &paths, Vec::new())
+        .await
+        .unwrap();
+    assert!(Btrfs.is_root(&layout.snapshot().join(OUTPUTS).join("target")));
+    layout.destroy_worktree_outputs();
+    fs::remove_dir_all(layout.worktree()).unwrap();
+    layout.remove_owned().unwrap();
+    assert!(!layout.root().exists());
 }
 
 #[tokio::test]

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::fsutil::{
     copy::clone_tree,
     marked_dirs::{OWNER_MARKER, create_marked_dir, is_marked_dir},
-    subvolume::{self, Btrfs},
+    subvolume::{self, Btrfs, Subvolumes},
 };
 
 pub mod build;
@@ -105,6 +105,9 @@ impl Layout {
         for directory in [self.snapshot(), self.staging(), self.retired()] {
             remove_snapshot_dir(&directory, &[])?;
         }
+        for directory in [self.converted(), self.subvolume_probe()] {
+            remove_tree(&directory, &[])?;
+        }
         for file in [self.log(), self.root.join(OWNER_MARKER)] {
             match fs::remove_file(&file) {
                 Err(error) if error.kind() != ErrorKind::NotFound => {
@@ -143,9 +146,22 @@ impl Layout {
         self.root.join("snapshot.old")
     }
 
-    /// Delete the snapshot a new one replaced.
+    /// Where a freeze moves the plain output directories it replaced with
+    /// subvolumes.
+    fn converted(&self) -> PathBuf {
+        self.root.join("converted")
+    }
+
+    /// Where a freeze tries whether it can make and remove subvolumes.
+    fn subvolume_probe(&self) -> PathBuf {
+        self.root.join("subvolume.probe")
+    }
+
+    /// Delete the snapshot a new one replaced, and the output directories
+    /// subvolumes replaced.
     pub fn remove_retired(&self) -> Result<()> {
-        remove_snapshot_dir(&self.retired(), &[])
+        remove_snapshot_dir(&self.retired(), &[])?;
+        remove_tree(&self.converted(), &[])
     }
 
     /// Destroy the subvolumes among the seed worktree's outputs that the
@@ -207,15 +223,18 @@ impl Snapshot {
     }
 
     /// Clone the seed worktree's outputs among `paths` for the next
-    /// snapshot, while the current one stays in use. Callers exclude other
-    /// changes to the snapshot.
+    /// snapshot, while the current one stays in use. On a filesystem with
+    /// subvolumes, each output becomes one, so this and later freezes take
+    /// snapshots of it. Callers exclude other changes to the snapshot.
     pub async fn stage(layout: &Layout, paths: &[String]) -> Result<Staged> {
-        Self::stage_with(&clone_tree, layout, paths).await
+        Self::stage_with(&clone_tree, &Btrfs, layout, paths).await
     }
 
-    /// [`Self::stage`], copying each output tree with `copy`.
+    /// [`Self::stage`], copying each output tree with `copy` and making
+    /// subvolumes with `volumes`.
     async fn stage_with(
         copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+        volumes: &impl Subvolumes,
         layout: &Layout,
         paths: &[String],
     ) -> Result<Staged> {
@@ -225,6 +244,11 @@ impl Snapshot {
         layout.remove_retired()?;
         fs::create_dir_all(staging.join(OUTPUTS))?;
         let worktree = layout.worktree();
+        let mut conversion = Conversion {
+            volumes,
+            layout,
+            usable: None,
+        };
         let mut staged = Vec::new();
         for path in paths {
             let source = worktree.join(path);
@@ -235,7 +259,8 @@ impl Snapshot {
             if let Some(parent) = destination.parent() {
                 fs::create_dir_all(parent)?;
             }
-            copy(&source, &destination).await?;
+            let aside = conversion.aside(&source, path);
+            stage_output(copy, volumes, &source, &destination, aside.as_deref()).await?;
             staged.push(path.clone());
         }
         Ok(Staged { paths: staged })
@@ -417,6 +442,77 @@ impl Staged {
         fs::rename(&staging, &current)?;
         Ok(())
     }
+}
+
+/// Which of the seed worktree's outputs a freeze turns into subvolumes:
+/// plain directories, where the probe, run once the first needs it, shows
+/// that Shoal can remove the subvolumes it makes.
+struct Conversion<'a, V> {
+    volumes: &'a V,
+    layout: &'a Layout,
+    usable: Option<bool>,
+}
+
+impl<V: Subvolumes> Conversion<'_, V> {
+    /// Where the output `path` at `source` moves when it becomes a
+    /// subvolume, or `None` when it stays as it is.
+    fn aside(&mut self, source: &Path, path: &str) -> Option<PathBuf> {
+        let plain = source
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+            && !self.volumes.is_root(source);
+        let usable = plain
+            && *self.usable.get_or_insert_with(|| {
+                subvolume::removable_at(self.volumes, &self.layout.subvolume_probe())
+            });
+        usable.then(|| self.layout.converted().join(path))
+    }
+}
+
+/// Stage the seed worktree's output `source` at `destination` with `copy`,
+/// which snapshots a subvolume. Given `aside`, the plain directory `source`
+/// becomes a subvolume first, its tree moved there; when that fails, it
+/// stays as it was.
+async fn stage_output(
+    copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+    volumes: &impl Subvolumes,
+    source: &Path,
+    destination: &Path,
+    aside: Option<&Path>,
+) -> Result<()> {
+    if let Some(aside) = aside {
+        if convert_output(copy, volumes, source, destination, aside)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+        remove_tree(destination, &[])?;
+    }
+    copy(source, destination).await
+}
+
+/// Make `destination` a subvolume holding a clone of the plain directory
+/// `source`, then replace `source` with a writable snapshot of it, moving
+/// the plain directory to `aside`. A failed snapshot moves it back.
+async fn convert_output(
+    copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+    volumes: &impl Subvolumes,
+    source: &Path,
+    destination: &Path,
+    aside: &Path,
+) -> Result<()> {
+    volumes.create(destination)?;
+    copy(source, destination).await?;
+    if let Some(parent) = aside.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(source, aside)?;
+    if let Err(error) = volumes.snapshot(destination, source) {
+        fs::rename(aside, source)?;
+        return Err(error.into());
+    }
+    Ok(())
 }
 
 /// Copy the snapshot's `outputs` among `paths` into `staging` with `copy`.
