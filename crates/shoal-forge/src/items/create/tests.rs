@@ -81,6 +81,49 @@ async fn an_issue_whose_finish_fails_comes_back_with_the_labels_the_forge_kept()
     );
 }
 
+#[tokio::test]
+async fn an_issue_labeled_with_a_label_the_repository_lacks_names_it_unknown() {
+    // Forgejo adds the labels it has and leaves out the one it lacks.
+    let server = Server::start(|request| {
+        let line = request.line.split('?').next().unwrap_or_default();
+        let body = match line {
+            "POST /api/v1/repos/team/repo/issues" => json!({"number": 7}),
+            "GET /api/v1/repos/team/repo/issues/7" => json!({
+                "number": 7, "title": "Flaky", "state": "open",
+                "labels": [{"name": "area/cli"}, {"name": "complexity/small"}],
+                "assignees": [],
+            }),
+            "GET /api/v1/repos/team/repo/labels" => {
+                json!([{"name": "area/cli"}, {"name": "complexity/small"}, {"name": "type/bug"}])
+            }
+            "GET /api/v1/orgs/team" => return (404, Vec::new(), "{}".into()),
+            _ => json!([]),
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    let account = agent_on(&server, "agent");
+    let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+    let issue = NewIssue {
+        title: "Flaky".into(),
+        body: "Seen twice".into(),
+        labels: vec![
+            "area/cli".into(),
+            "type/enhancement".into(),
+            "complexity/small".into(),
+        ],
+        assignees: Vec::new(),
+        milestone: None,
+        attachments: Vec::new(),
+    };
+    let created = forgejo.create_issue(&account, &issue).await.unwrap();
+    assert_eq!(created.item.labels, ["area/cli", "complexity/small"]);
+    let unfinished = created.unfinished.unwrap();
+    assert!(
+        unfinished.contains("has no label type/enhancement;"),
+        "{unfinished}"
+    );
+}
+
 #[test]
 fn issues_carry_labels_on_github_and_label_afterwards_on_forgejo() {
     let issue = NewIssue {

@@ -352,7 +352,7 @@ impl Action {
             "labels",
             &item.labels,
             labels,
-            |name, label| name == label || (fold_case && name.eq_ignore_ascii_case(label)),
+            |name, label| same_label(name, label, fold_case),
         )?;
         // Logins name the same user whatever their case.
         let assignees = [
@@ -368,6 +368,29 @@ impl Action {
         )?;
         edit.ensure_milestone_applied(item)
     }
+
+    /// The labels the action adds that `item` lacks.
+    fn unadded_labels(&self, item: &Item, fold_case: bool) -> Vec<&str> {
+        let Self::Edit(edit) = self else {
+            return Vec::new();
+        };
+        edit.add_labels
+            .iter()
+            .map(String::as_str)
+            .filter(|added| {
+                !item
+                    .labels
+                    .iter()
+                    .any(|has| same_label(has, added, fold_case))
+            })
+            .collect()
+    }
+}
+
+/// Whether label names `a` and `b` name the same label; `fold_case` is
+/// whether names that differ only in case do.
+fn same_label(a: &str, b: &str, fold_case: bool) -> bool {
+    a == b || (fold_case && a.eq_ignore_ascii_case(b))
 }
 
 /// Refuse the changes to `set`, item `number`'s `noun` as the forge reports
@@ -546,8 +569,50 @@ impl ForgeRepo {
                 .context("the comment was posted, but attaching its files failed")?;
         }
         let current = self.read(account, kind, number).await?;
-        action.ensure_applied(&current.item, self.kind.label_names_fold_case())?;
+        self.ensure_applied(account, action, &current.item).await?;
         Ok(current)
+    }
+
+    /// Refuse `item` when it does not show `action`, naming the labels the
+    /// action failed to add that the repository does not have.
+    async fn ensure_applied(&self, account: &Account, action: &Action, item: &Item) -> Result<()> {
+        let fold_case = self.kind.label_names_fold_case();
+        let Err(error) = action.ensure_applied(item, fold_case) else {
+            return Ok(());
+        };
+        let unadded = action.unadded_labels(item, fold_case);
+        let unknown = self.unknown_labels(account, unadded, fold_case).await;
+        if unknown.is_empty() {
+            return Err(error);
+        }
+        Err(error.context(format!(
+            "the repository has no label {}; shoal repo labels lists its labels",
+            unknown.join(", ")
+        )))
+    }
+
+    /// The `names` no label of the repository has; none when its labels
+    /// cannot be read, since the refusal stands without them.
+    async fn unknown_labels<'a>(
+        &self,
+        account: &Account,
+        names: Vec<&'a str>,
+        fold_case: bool,
+    ) -> Vec<&'a str> {
+        if names.is_empty() {
+            return names;
+        }
+        let Ok(labels) = self.labels(account).await else {
+            return Vec::new();
+        };
+        names
+            .into_iter()
+            .filter(|name| {
+                !labels
+                    .iter()
+                    .any(|label| same_label(&label.name, name, fold_case))
+            })
+            .collect()
     }
 
     /// `action` with its attachments uploaded and embedded in its body, and

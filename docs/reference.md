@@ -4245,7 +4245,8 @@ and `--draft` or `--no-draft`. Both kinds take repeated `--add-assignee` and
 and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name, an added exclusive label replacing the item's
 label of its scope, and an edit whose added labels the item then lacks,
-or whose removed labels it still has, fails naming them and the item's labels;
+or whose removed labels it still has, fails naming them and the item's labels,
+and those added that the repository has no label for;
 Forgejo's draft state is the title's `WIP: ` prefix,
 and GitLab's its `Draft: ` prefix. Assignees are replaced as a set by login,
 and a milestone is named by its exact title, open or closed, including a GitLab

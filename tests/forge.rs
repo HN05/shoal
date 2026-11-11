@@ -376,20 +376,28 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
         "{keys:?}"
     );
 
-    // A label the forge leaves out fails the edit, naming the item's labels.
+    // A label the forge leaves out fails the edit, naming the item's labels
+    // and the added ones the repository lacks.
     fixture.respond(json!({
         endpoint: {"body": pull(8, "open", "Fix", &["bug"])},
+        labels: {"body": [{"name": "bug"}]},
         put: {"body": []},
     }));
     let response = edit("missing");
     assert_eq!(response["type"], "error", "{response}");
-    // An item without a label of the added one's scope lists no labels.
     assert!(
-        fixture
-            .requests()
-            .iter()
-            .all(|request| request[0] != labels)
+        response.to_string().contains("has no label missing"),
+        "{response}"
     );
+    // An item without a label of the added one's scope lists no labels
+    // before changing them, only to name those the repository lacks.
+    let keys: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|request| request[0].clone())
+        .collect();
+    let put_at = keys.iter().position(|key| key == put).unwrap();
+    assert!(keys[..put_at].iter().all(|key| key != labels), "{keys:?}");
 }
 
 /// Forgejo's answer to a list of the teams of a repository a user owns.
