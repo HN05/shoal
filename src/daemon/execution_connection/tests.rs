@@ -341,3 +341,75 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     ));
     bounded(executing).await.unwrap().unwrap();
 }
+
+#[tokio::test]
+async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    // Its agent stopped, and the relocation has yet to make it the chat.
+    let chat = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution: crate::client::execution_ids::ExecutionId::generate(),
+        session: Some("s1".into()),
+        origin: None,
+        process: wrapper.clone(),
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    let pending = crate::daemon::conversions::Pending::Chat {
+        chat: Box::new(chat),
+        held: true,
+    };
+    let id = workspace.id.clone();
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
+        .await
+        .unwrap();
+    let (client, server) = UnixStream::pair().unwrap();
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.clone(),
+        ExecutionContext {
+            workspace: SpaceSelector::id(&workspace.id),
+            wrapper,
+            kind: ExecutionKind::Command,
+            agent: Some(crate::execution::TrackedAgent::named("claude")),
+            recover: true,
+            reattach: false,
+            caller: None,
+            queue_entry: None,
+            demo: None,
+            origin: None,
+            merge: None,
+        },
+        manager.gates.owned_operation().await,
+    ));
+
+    let response: Response = read(&mut BufReader::new(client)).await;
+    bounded(executing).await.unwrap().unwrap();
+
+    let Body::Error { message, .. } = response.body else {
+        panic!("the agent was admitted: {:?}", response.body);
+    };
+    assert!(message.contains("becomes a chat"), "{message}");
+    let selector = SpaceSelector::id(&workspace.id);
+    let executions = manager
+        .inspect_workspace(&selector)
+        .await
+        .unwrap()
+        .executions;
+    assert!(executions.is_empty(), "{executions:?}");
+}

@@ -147,6 +147,10 @@ pub struct Manager {
     /// Held while a converted space's agent is handed over to the new place,
     /// so a stop and the relocation never both hand it over.
     pub(crate) conversion_handovers: crate::daemon::conversions::Handovers,
+    /// Held while an agent is admitted to a workspace, until it is tracked,
+    /// and while a workspace's conversion into a chat is recorded, so no
+    /// agent starts in a workspace that becomes a chat.
+    pub(crate) agent_admissions: tokio::sync::Mutex<()>,
     pub(crate) chat_stops: crate::daemon::chats::Stopping,
     /// The restarts of chats' agents.
     pub(crate) chat_agents: crate::daemon::chats::ChatAgents,
@@ -211,6 +215,7 @@ impl Manager {
             chat_handoffs: Default::default(),
             chat_saves: Default::default(),
             conversion_handovers: Default::default(),
+            agent_admissions: Default::default(),
             chat_stops: Default::default(),
             chat_agents: Default::default(),
             chat_removals: Default::default(),

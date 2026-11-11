@@ -29,6 +29,9 @@ impl Manager {
         // The chat runs in the checkout, under its settings, not the worktree's.
         let settings = (self.repository_settings_with_templates(&workspace.repository_id)).await?;
         super::ensure_mode(&settings, &mode)?;
+        // No agent starts in the workspace from when the one that carries on
+        // is chosen.
+        let _admissions = self.agent_admissions.lock().await;
         let execution = self
             .running_agents()
             .await?
@@ -50,6 +53,26 @@ impl Manager {
         // have already.
         self.signals.agent_changed();
         Ok(workspace)
+    }
+
+    /// Admit an agent to the workspace `selector` names, unless it becomes a
+    /// chat, whose agent carries on there: the guard, held until the agent
+    /// is tracked, keeps it from becoming one meanwhile.
+    pub(crate) async fn admit_agent(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
+        let admitted = self.agent_admissions.lock().await;
+        let workspace = self.workspace(selector).await?;
+        let id = workspace.id.clone();
+        let pending = self.store.run(move |db| super::pending(db, &id)).await?;
+        if let Some(super::Pending::Chat { .. }) = pending {
+            bail!(
+                "workspace {} becomes a chat once its agent's turn ends; resume the agent in the chat then",
+                workspace.name
+            );
+        }
+        Ok(admitted)
     }
 
     /// The stopped chat the workspace `id` becomes in `mode`, whose agent
