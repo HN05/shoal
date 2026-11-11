@@ -23,9 +23,7 @@ const POLL: Duration = Duration::from_millis(200);
 /// which has no session, before anything starts it.
 pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()> {
     let entries = queued_agents::entries(ctx).await?;
-    let job = entries.iter().find(|entry| {
-        entry.kind == QueueKind::Job && (entry.id == selector || entry.name == selector)
-    });
+    let job = (entries.iter()).find(|entry| entry.kind == QueueKind::Job && entry.id == selector);
     match job {
         Some(job) => bail!("{} is a CI job, which has no session to attach", job.name),
         None => Ok(()),
@@ -48,6 +46,10 @@ pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
 async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().cloned();
+    let existing: Vec<SpaceId> = (crate::client::workspaces::list(&ctx.paths).await?)
+        .into_iter()
+        .map(|workspace| workspace.id)
+        .collect();
     loop {
         let current = (queued_agents::entries(ctx).await?)
             .into_iter()
@@ -56,7 +58,8 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
             workspace = Some(opened.to_owned());
         }
         if workspace.is_none() && current.is_none() {
-            workspace = opened_workspace(ctx, entry).await?;
+            let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+            workspace = opened_workspace(workspaces, entry, &existing)?;
         }
         match &workspace {
             Some(id) => {
@@ -85,15 +88,34 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
     }
 }
 
-/// The ID of the workspace the launch `entry` opened, found by its name in
-/// its repository once its agent took the entry out of the queue before a
-/// poll saw the workspace it recorded.
-async fn opened_workspace(ctx: &Context, entry: &QueueEntry) -> Result<Option<SpaceId>> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    Ok(workspaces
-        .into_iter()
-        .find(|workspace| {
-            workspace.repository_id == entry.repository_id && workspace.name == entry.name
+/// The ID of the workspace the launch `entry` opened, once its agent took
+/// the entry out of the queue before a poll saw the workspace it recorded:
+/// the one of `workspaces` in its repository with its name that was not
+/// among the `existing` ones when the wait began. Names repeat, so several
+/// such workspaces are refused rather than guessed between.
+fn opened_workspace(
+    workspaces: Vec<crate::model::Workspace>,
+    entry: &QueueEntry,
+    existing: &[SpaceId],
+) -> Result<Option<SpaceId>> {
+    let opened: Vec<_> = (workspaces.into_iter())
+        .filter(|workspace| {
+            workspace.repository_id == entry.repository_id
+                && workspace.name == entry.name
+                && !existing.contains(&workspace.id)
         })
-        .map(|workspace| workspace.id))
+        .collect();
+    ensure!(
+        opened.len() <= 1,
+        "workspaces {} opened as {} meanwhile; attach to {}'s with shoal attach <number>",
+        (opened.iter().map(|workspace| workspace.number.to_string()))
+            .collect::<Vec<_>>()
+            .join(", "),
+        entry.name,
+        entry.name
+    );
+    Ok(opened.into_iter().next().map(|workspace| workspace.id))
 }
+
+#[cfg(test)]
+mod tests;
