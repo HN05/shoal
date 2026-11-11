@@ -106,6 +106,9 @@ impl Manager {
         place: &Origin,
     ) -> Result<PlaceClose> {
         let _ownership = self.place_ownership.lock().await;
+        if self.place_runs_elsewhere(place, space).await? {
+            return Ok(PlaceClose::OwnedElsewhere);
+        }
         let Some((owner, origin)) = self.place_owner(place).await? else {
             return self.close_labelled_session(space, place).await;
         };
@@ -180,24 +183,32 @@ impl Manager {
             .await
     }
 
-    /// Close the session a host labelled as `space`'s, unless the daemon
-    /// records it as another space's: a chat or agent that took the session
-    /// over records it before it relabels the session. The record is read
+    /// Close the session a host labelled as `space`'s, unless another space
+    /// took it over: a chat or agent that starts in a session is recorded
+    /// there, and records the session, before it relabels it. Both are read
     /// under the lock takeovers hold.
     async fn close_session(&self, host: &dyn crate::sessions::Host, name: &str, space: SpaceId) {
         let place = Origin::created(host.name(), name.to_owned());
         let _ownership = self.place_ownership.lock().await;
-        let closed = match self.place_owner(&place).await {
-            Ok(Some((owner, _))) if owner != space => return,
-            Ok(_) => {
-                host.close(&self.paths.state, &place, &Owner::Space(space))
-                    .await
-            }
-            Err(error) => Err(error),
-        };
-        if let Err(error) = closed {
+        if let Err(error) = self.close_labelled(host, &place, space).await {
             self.session_cleanup_failed(None, &error).await;
         }
+    }
+
+    /// [`Self::close_session`] once its caller holds the ownership lock.
+    async fn close_labelled(
+        &self,
+        host: &dyn crate::sessions::Host,
+        place: &Origin,
+        space: SpaceId,
+    ) -> Result<()> {
+        let recorded_elsewhere =
+            (self.place_owner(place).await?).is_some_and(|(owner, _)| owner != space);
+        if recorded_elsewhere || self.place_runs_elsewhere(place, &space).await? {
+            return Ok(());
+        }
+        host.close(&self.paths.state, place, &Owner::Space(space))
+            .await
     }
 
     async fn session_cleanup_failed(&self, workspace: Option<&SpaceName>, error: &anyhow::Error) {

@@ -926,3 +926,57 @@ async fn a_session_a_chat_recorded_taking_over_stays_open_until_it_relabels_it()
     assert_eq!(manager.owned_places(None).await?.len(), 2);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_labelled_session_a_chat_runs_in_stays_open_before_it_is_recorded() -> Result<()> {
+    let (_root, manager, workspace, host) = fixture().await?;
+    // Each chat started in place in a session no record names, which still
+    // shows the workspace's label or a removed space's.
+    host.add("labelled", workspace.id.as_str())?;
+    host.add("orphaned", "gone")?;
+    let mut chats = Vec::new();
+    for (name, session) in [("guest", "labelled"), ("stray", "orphaned")] {
+        let place = Origin {
+            owned: false,
+            ..Origin::created(HostName::Zmx, session.into())
+        };
+        chats.push(chat_in(&manager, &workspace, name, place).await?);
+    }
+    manager
+        .close_space_places(&workspace.id, &workspace.name)
+        .await;
+    manager.cleanup_orphan_sessions().await;
+    assert!(host.closed()?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_chat_that_fails_to_start_leaves_its_place_as_it_found_it() -> Result<()> {
+    let (_root, manager, workspace, host) = rex_fixture(&["taken"]).await?;
+    host.add("taken", workspace.id.as_str())?;
+    host.add("opened", workspace.id.as_str())?;
+    // A temporary directory Shoal does not own keeps chats from starting.
+    let directory = (manager.repository(&workspace.repository_id).await?)
+        .workspaces_dir
+        .context("the repository has no workspaces directory")?
+        .join(".tmp");
+    if directory.exists() {
+        std::fs::remove_dir_all(&directory)?;
+    }
+    std::fs::create_dir_all(&directory)?;
+    for (name, block, owned) in [("taker", "taken", false), ("opener", "opened", true)] {
+        let place = Origin {
+            owned,
+            ..Origin::created(HostName::Rex, block.into())
+        };
+        assert!(chat_in(&manager, &workspace, name, place).await.is_err());
+    }
+    manager.cleanup_orphan_sessions().await;
+    assert!(host.closed()?.is_empty());
+    let owners: Vec<_> = (manager.owned_places(None).await?)
+        .into_iter()
+        .map(|(owner, place)| (owner, place.place))
+        .collect();
+    assert_eq!(owners, [(workspace.id.clone(), Some("taken".to_owned()))]);
+    Ok(())
+}

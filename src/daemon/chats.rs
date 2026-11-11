@@ -224,15 +224,13 @@ impl Manager {
         };
         let (recorded, removing) = (process.clone(), self.chat_removals.clone());
         let below = parent.map(|parent| (parent, removing));
-        // The chat takes its place under the lock place closes hold.
-        let ownership = self.place_ownership.lock().await;
         let chat = self
             .store
             .write(move |tx| insert(tx, chat, &recorded, hands_over, below))
             .await?;
-        drop(ownership);
-        self.give_tmp_dir(chat, home.repository.as_ref(), process)
-            .await
+        let chat = (self.give_tmp_dir(chat, home.repository.as_ref(), process)).await?;
+        self.take_chat_place(&chat).await?;
+        Ok(chat)
     }
 
     /// Where a new chat of `repository` keeps its temporary directory: the
@@ -689,9 +687,6 @@ fn insert(
     chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {
         row.get(0)
     })?;
-    if let Some(origin) = &chat.origin {
-        workspace::places::record_chat_place(tx, &chat.id, origin)?;
-    }
     // Checked with the record, so a removal that began while the start
     // waited finds the chat below the parent or refuses it.
     if let Some((parent, removing)) = &parent {

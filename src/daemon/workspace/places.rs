@@ -9,7 +9,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
-use crate::sessions::{Origin, PlaceOwnership};
+use crate::{
+    model::Chat,
+    sessions::{Origin, PlaceOwnership},
+};
 
 /// Where an execution runs in a terminal host, as its wrapper reports it.
 pub(crate) struct ExecutionPlace {
@@ -38,15 +41,37 @@ pub(super) fn record_execution_place(
     Ok(())
 }
 
-/// Record `place`, where the chat `chat` starts, as the chat's: a place
+/// Record `place`, where the chat `chat` runs, as the chat's: a place
 /// Shoal created for another space passes to it, as to an agent that
 /// starts there, and one Shoal opened for the chat is recorded, so the
 /// chat's removal closes either.
-pub(crate) fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<()> {
+fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<()> {
     if place.owned && place.place.is_some() {
         insert_owned(db, chat, place)?;
     }
     take_over(db, chat, place)
+}
+
+/// Whether a running chat or an agent of a space other than `space` is
+/// recorded at `place`, which it took over even before a record or label
+/// of the place says so; a nested command takes nothing.
+pub(super) fn runs_elsewhere(db: &Connection, place: &Origin, space: &SpaceId) -> Result<bool> {
+    let mut statement = db.prepare(
+        "SELECT origin FROM chats WHERE restore IS NULL AND id IS NOT ?1
+           AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3
+         UNION ALL
+         SELECT origin FROM executions WHERE workspace_id IS NOT ?1 AND agent IS NOT NULL
+           AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3",
+    )?;
+    let origins = statement.query_map(params![space, place.host, place.id()], |row| {
+        row.get::<_, String>(0)
+    })?;
+    for origin in origins {
+        if serde_json::from_str::<Origin>(&origin?)?.server() == place.server() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Make `space` the owner of `place` when the daemon records it.
@@ -79,6 +104,33 @@ impl Manager {
         let _ownership = self.place_ownership.lock().await;
         self.store
             .run(move |db| insert_owned(db, &workspace.id, &origin))
+            .await
+    }
+
+    /// Record the place the started `chat` runs in as the chat's, under the
+    /// lock place closes hold. Only a chat that started takes it, so a
+    /// start that fails leaves the place as it found it.
+    pub(crate) async fn take_chat_place(&self, chat: &Chat) -> Result<()> {
+        let Some(place) = chat.origin.clone() else {
+            return Ok(());
+        };
+        let id = chat.id.clone();
+        let _ownership = self.place_ownership.lock().await;
+        (self.store)
+            .run(move |db| record_chat_place(db, &id, &place))
+            .await
+    }
+
+    /// Whether a running chat or an agent of a space other than `space` is
+    /// recorded at `place`, which no removal of `space` closes.
+    pub(super) async fn place_runs_elsewhere(
+        &self,
+        place: &Origin,
+        space: &SpaceId,
+    ) -> Result<bool> {
+        let (place, space) = (place.clone(), space.clone());
+        self.store
+            .run(move |db| runs_elsewhere(db, &place, &space))
             .await
     }
 
