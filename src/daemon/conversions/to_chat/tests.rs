@@ -193,3 +193,44 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         record.last_sessions
     );
 }
+
+#[tokio::test]
+async fn a_converted_workspace_restores_beside_the_chat_it_became() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    std::fs::write(workspace.path.join("notes.txt"), "unsaved").unwrap();
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        session: None,
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+    };
+    (manager.convert_worktree_to_chat(&workspace.id, &chat))
+        .await
+        .unwrap();
+
+    let restored = manager
+        .restore_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+
+    let reopened = restored.opened.workspace;
+    assert_ne!(reopened.name, workspace.name);
+    assert_eq!(reopened.branch.as_deref(), Some("fix-login"));
+    assert!(reopened.path.join("notes.txt").exists());
+    assert!(manager.chat_by_id(&workspace.id).await.unwrap().is_some());
+}

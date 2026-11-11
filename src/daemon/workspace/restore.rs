@@ -177,14 +177,12 @@ impl Manager {
     ) -> Result<OpenedWorkspace> {
         let branch = self.restore_branch(removed).await?;
         let base = self.restore_base(removed).await?;
+        let new = super::NewWorkspace {
+            name: self.restored_name(removed, &branch).await?,
+            ..Default::default()
+        };
         let opened = self
-            .open_branch_restoring(
-                &removed.repository_id,
-                &branch,
-                base,
-                Default::default(),
-                files,
-            )
+            .open_branch_restoring(&removed.repository_id, &branch, base, new, files)
             .await?;
         // The branch check released the repository gate, so another request
         // may have opened the branch meanwhile; that workspace got no files.
@@ -391,6 +389,22 @@ impl Manager {
             .with_context(|| {
                 format!("no restorable workspace {selector}; shoal restore lists them")
             })
+    }
+
+    /// The name a restore of `removed` on `branch` takes in place of the one
+    /// its branch gives, while the chat the workspace became holds that: a
+    /// free variant of it.
+    async fn restored_name(
+        &self,
+        removed: &RemovedWorkspace,
+        branch: &str,
+    ) -> Result<Option<SpaceName>> {
+        let converted = self.chat_by_id(&removed.workspace_id).await?;
+        let derived = SpaceName::derive(SpaceKind::Workspace, branch);
+        match converted {
+            Some(chat) if chat.name == derived => Ok(Some(self.free_workspace_name(branch).await?)),
+            _ => Ok(None),
+        }
     }
 
     /// The branch to open: one at the removed HEAD, or at a later commit when

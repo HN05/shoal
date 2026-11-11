@@ -30,6 +30,8 @@ pub(crate) struct NewWorkspace<'a> {
     /// The chat it replaces, taking its ID, number, name and place in the
     /// tree, instead of going below `parent`.
     pub converts: Option<crate::daemon::conversions::Converting>,
+    /// Its name and directory's name, in place of those its branch gives.
+    pub name: Option<SpaceName>,
 }
 
 pub(super) enum WorkspaceSource {
@@ -136,6 +138,7 @@ impl Manager {
             options,
             parent: below,
             converts,
+            name: given_name,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),
@@ -158,7 +161,7 @@ impl Manager {
             WorkspaceSource::Existing { .. } => None,
         }
         .or(below);
-        let name = SpaceName::derive(SpaceKind::Workspace, &name);
+        let name = given_name.unwrap_or_else(|| SpaceName::derive(SpaceKind::Workspace, &name));
         let path = self.new_workspace_path(repo, &name, path).await?;
         let workspace = Workspace {
             setup_skipped: options.skip_setup,
