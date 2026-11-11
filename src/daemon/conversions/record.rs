@@ -75,10 +75,22 @@ const CHAT_COLUMNS: &[&str] = &[
 ];
 
 /// A chat's row, as a JSON object of its columns, with what restarting its
-/// agent reads from it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// agent reads from it. Its `Debug` leaves out the scope token.
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub(crate) struct ChatRow(serde_json::Map<String, serde_json::Value>);
+
+impl std::fmt::Debug for ChatRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut shown = self.0.clone();
+        if let Some(token) = shown.get_mut("scope_token")
+            && !token.is_null()
+        {
+            *token = serde_json::Value::String("<redacted>".into());
+        }
+        f.debug_tuple("ChatRow").field(&shown).finish()
+    }
+}
 
 /// What a converted chat's agent ran as and with.
 #[derive(Debug, Deserialize)]
@@ -448,3 +460,6 @@ fn insert_chat_row(tx: &Transaction<'_>, row: &ChatRow) -> Result<()> {
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
