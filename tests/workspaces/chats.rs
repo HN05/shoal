@@ -1270,13 +1270,24 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     let lines: Vec<_> = started.lines().collect();
     assert_eq!(lines[0], worker["workspace"]["path"], "{started}");
     assert_eq!(lines.last(), Some(&"Take the part"), "{started}");
-    // An agent that would wait for other work, whose branch a workspace
-    // created later builds on, or start at once, ignoring the queue, is
-    // refused before its workspace exists.
+    // A blocked agent queues whole, as the chat's, and its workspace opens
+    // once its blockers clear.
+    let error = fs::read_to_string(home.join("later.err")).unwrap();
+    let code = fs::read_to_string(home.join("later")).unwrap();
+    assert_eq!(code.trim(), "0", "{error}");
+    let queue = fixture.ok(&["queue"]);
+    let later = (queue.as_array().unwrap().iter())
+        .find(|entry| entry["name"] == "later")
+        .unwrap_or_else(|| panic!("{queue}"));
+    let chat = &fixture.ok(&["list", "--chats"])[0];
+    assert!(chat["id"].is_string(), "{chat}");
+    assert_eq!(later["queued_by"], chat["id"], "{later} {chat}");
+    // One that would start at once, ignoring the queue, is refused before
+    // its workspace exists.
+    let error = fs::read_to_string(home.join("now.err")).unwrap();
+    let code = fs::read_to_string(home.join("now")).unwrap();
+    assert_eq!(code.trim(), "1", "{error}");
     for name in ["later", "now"] {
-        let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
-        let code = fs::read_to_string(home.join(name)).unwrap();
-        assert_eq!(code.trim(), "1", "{error}");
         assert!(!fixture.run(&["status", &fixture.id(name)]).status.success());
     }
     // The chat's own session is not relabelled as the worker's.

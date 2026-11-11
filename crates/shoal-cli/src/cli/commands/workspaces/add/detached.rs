@@ -2,6 +2,7 @@
 //! ones without a terminal do: the daemon starts it outside the caller, so
 //! interrupting the caller leaves it running. A scoped caller's preparation
 //! queues the agent; the user's is placed once its workspace is set up.
+//! A blocked launch queues whole.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -43,8 +44,7 @@ pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOption
 
 /// Open the planned workspace and start its agent detached. A scoped
 /// caller's preparation queues the agent. The user's agent is placed once
-/// setup ends. A launch of the user's that waits for other work queues
-/// whole, as from a terminal.
+/// setup ends. A blocked launch queues whole, as from a terminal.
 pub(super) async fn add_detached(
     ctx: &Context,
     mut plan: AddPlan,
@@ -64,11 +64,7 @@ pub(super) async fn add_detached(
         };
         return add_planned(ctx, plan, target, issue, start).await;
     }
-    ensure!(
-        !crate::env::is_scoped(),
-        "scoped processes add a workspace at once, so its agent cannot be blocked; add it once {} clears",
-        blocked_by(&blockers)
-    );
+    // The daemon starts a scoped caller's launch itself, in its scope.
     if let Some(queued) =
         admit_launch(ctx, &target, &mut plan, issue.as_ref(), false, blockers).await?
     {
@@ -117,19 +113,6 @@ pub(super) async fn ensure_detachable(
 /// only they can tell; the set-up workspace's settings decide a placed agent.
 fn runs_its_own_way(settings: &Effective, plan: &AddPlan) -> bool {
     (plan.agent.agent.as_ref()).is_some_and(|agent| agents::runs_its_own_way(agent, settings))
-}
-
-/// The names of what `blockers` lists.
-fn blocked_by(blockers: &[Blocker]) -> String {
-    let names: Vec<_> = (blockers.iter())
-        .map(|blocker| match blocker {
-            Blocker::Space(name)
-            | Blocker::Issue(name)
-            | Blocker::Pr(name)
-            | Blocker::CiRun(name) => name.as_str(),
-        })
-        .collect();
-    names.join(", ")
 }
 
 /// Start the `plan` the queue admitted at once, since its blockers already

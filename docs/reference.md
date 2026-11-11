@@ -2004,9 +2004,9 @@ workspace is opened outside a chat, which returns it to you. The chat opens
 workspaces only in its own repository; one in another repository is refused.
 With `--agent`, the agent is queued once the workspace is set up, and the
 daemon starts it with the workspace's own scope when a slot is free, as for
-any agent a workspace process starts. Since the workspace is created at once, an agent that
-would wait for `--add-blocker` or the issue's open blockers is refused there, as are
-`--now` and `--focus`. While it runs, or waits to come back on its own, the chat
+any agent a workspace process starts. An agent that `--add-blocker` or the
+issue's open blockers block queues with its workspace, which opens below the
+chat once they clear; `--now` and `--focus` are refused. While it runs, or waits to come back on its own, the chat
 [coordinates](#child-workspaces) the spaces below it and receives the activity
 of those without an agent of their own; while it is otherwise stopped, their
 events go on up, to you at the top, and one removed before receiving their
@@ -2205,7 +2205,9 @@ daemon starts a queued agent, and the call returns reporting the entry
 regardless of the limits, which a scoped caller cannot ask, and `--focus` is
 refused. A detached start that waits for other work queues as a whole as from
 a terminal, starting in the background once the work is complete; a scoped
-caller's is refused. The daemon starts waiting entries
+caller's opens its workspace below the caller, or the space `--parent` names,
+with the checks the caller's own start would meet, and queue `--json` names
+the caller's space in its `queued_by`. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
 records a `queue_started` notification. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where

@@ -237,6 +237,48 @@ fn a_scoped_start_refuses_to_run_its_agent_here() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
+/// A scoped caller's blocked agent queues whole: the workspace opens below
+/// the caller once its blockers clear.
+#[test]
+fn a_scoped_start_queues_a_blocked_agent() {
+    let fixture = Fixture::with_config(Some("[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fixture.add("parent");
+    fixture.add("blocker");
+    let parent = &fixture.ok(&["status", &fixture.id("parent")])["workspace"];
+    let blocker = fixture.id("blocker");
+    let repo = fixture.repo.to_str().unwrap();
+    let start = [
+        "start",
+        repo,
+        "child",
+        "--agent",
+        "waiter",
+        "--add-blocker",
+        &blocker,
+    ];
+    let output = scoped_command(&fixture, "parent", &start);
+    assert!(output.status.success(), "{output:?}");
+    let queue = fixture.ok(&["queue"]);
+    let [entry] = queue.as_array().unwrap().as_slice() else {
+        panic!("{queue}");
+    };
+    assert_eq!(entry["name"], "child", "{entry}");
+    assert_eq!(entry["blockers"], serde_json::json!(["blocker"]), "{entry}");
+    assert!(parent["id"].is_string(), "{parent}");
+    assert_eq!(entry["queued_by"], parent["id"], "{entry}");
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+    fixture.ok(&["done", &blocker]);
+    wait_until("the child's creation", || {
+        fixture
+            .run(&["status", &fixture.id("child")])
+            .status
+            .success()
+    });
+    let child = &fixture.ok(&["status", &fixture.id("child")])["workspace"];
+    assert_eq!(child["parent"]["id"], parent["id"], "{child}");
+}
+
 #[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
     let fixture = Fixture::with_config(Some("machine.max_agents = 'none'"));
