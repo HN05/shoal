@@ -145,3 +145,35 @@ fn a_converted_chat_whose_agent_takes_rules_in_its_prompt_gets_its_new_rules() {
     // The converted one's session has the workspace's, which changed.
     assert!(told.system.contains("/repos/shoal"), "{}", told.system);
 }
+
+#[test]
+fn a_chat_with_forwarded_arguments_does_not_wait_for_the_user() {
+    let repo = repository();
+    let topic = Topic::repository(&repo, &crate::config::modes::ModeName::ORCHESTRATE);
+    let agent: Agent = "codex".parse().unwrap();
+    let settings = || {
+        crate::config::Config::default()
+            .resolve(&Default::default())
+            .unwrap()
+    };
+    let launch = |options: &Options| {
+        let repo = ChatRepository::Registered(repo.clone());
+        chat_launch(
+            settings(),
+            &agent,
+            repo,
+            &topic,
+            options,
+            "shoal-chat".into(),
+        )
+        .unwrap()
+    };
+    let mut start = crate::cli::args::create::StartArgs::default();
+    let bare = Options::taken_from(&mut start);
+    assert!(waits_for_user(&launch(&bare), &bare));
+    let forwarded = Options {
+        args: vec!["coordinate this work".into()],
+        ..bare
+    };
+    assert!(!waits_for_user(&launch(&forwarded), &forwarded));
+}

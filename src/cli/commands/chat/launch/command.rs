@@ -55,6 +55,13 @@ pub(super) fn chat_launch(
     })
 }
 
+/// Whether `chat`, started with `options`, waits for the user to speak
+/// first: it opens on no task, and its agent receives no forwarded
+/// arguments.
+pub(super) fn waits_for_user(chat: &ChatLaunch, options: &Options) -> bool {
+    chat.opening.is_none() && options.args.is_empty()
+}
+
 /// The session a chat's agent continues, or starts in `directory` from a
 /// fork of when `fork`.
 struct SessionArgs<'a> {

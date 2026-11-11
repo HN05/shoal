@@ -160,7 +160,7 @@ impl Launch {
     /// [`Launch::hand_to_background`] does, since nothing shows it here.
     async fn start_beside(&self, ctx: &Context) -> Result<bool> {
         let chat = &self.chat;
-        let waits_for_user = chat.opening.is_none();
+        let waits_for_user = command::waits_for_user(chat, &self.options);
         let placement = terminal::Placement::of(&chat.settings, &chat.mode, false, waits_for_user);
         let handoff = match placement {
             terminal::Placement::Background => Some(handoff::Handoff::create(None)?),
