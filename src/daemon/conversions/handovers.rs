@@ -1,7 +1,9 @@
 //! The hand-overs of converted spaces' agents: one at a time, held by the
 //! relocation, the stops of a converting workspace's agents and the making
 //! of a chat's workspace, and held again by nothing within one of them, as
-//! a relocation's removal stops the agents of the spaces below it.
+//! a relocation's removal stops the agents of the spaces below it. They come
+//! before a repository's gates: whatever takes both, such as a conversion,
+//! a repository's removal or a repair, takes them first.
 use std::future::Future;
 
 tokio::task_local! {

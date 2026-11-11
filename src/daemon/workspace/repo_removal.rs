@@ -50,15 +50,22 @@ impl Manager {
         &self,
         selector: impl Into<crate::repository::Selector>,
     ) -> Result<RepositoryRemoval> {
-        // Registration cannot adopt or allocate a path during removal. The Git
-        // gate also serializes with workspace creation, branch refresh, and reconciliation.
-        let _registry = self.gates.lock_registry().await;
-        let repo = self.repository(selector).await?;
-        let _seed = self.stop_seed_build(&repo.id).await;
-        self.stop_repository_reviews(&repo.id).await;
-        let _fetch = self.gates.lock_fetch(&repo.id).await;
-        let _git = self.gates.lock_git(&repo.id).await;
-        self.remove_locked_repository(repo).await
+        let selector = selector.into();
+        // Removing a workspace hands over the agent of a chat that became it,
+        // so the hand-overs come first, before the gates, as a conversion
+        // takes them before the Git gate.
+        let removal = async {
+            // Registration cannot adopt or allocate a path during removal. The Git
+            // gate also serializes with workspace creation, branch refresh, and reconciliation.
+            let _registry = self.gates.lock_registry().await;
+            let repo = self.repository(selector).await?;
+            let _seed = self.stop_seed_build(&repo.id).await;
+            self.stop_repository_reviews(&repo.id).await;
+            let _fetch = self.gates.lock_fetch(&repo.id).await;
+            let _git = self.gates.lock_git(&repo.id).await;
+            self.remove_locked_repository(repo).await
+        };
+        self.conversion_handovers.hold(removal).await
     }
 
     /// Remove a contribution repository nothing of which is left, checked
@@ -69,19 +76,23 @@ impl Manager {
         &self,
         id: &RepositoryId,
     ) -> Result<Option<RepositoryRemoval>> {
-        let _registry = self.gates.lock_registry().await;
-        let repo = self.repository(id).await?;
-        let _seed = self.stop_seed_build(&repo.id).await;
-        self.stop_repository_reviews(&repo.id).await;
-        let _fetch = self.gates.lock_fetch(&repo.id).await;
-        let _git = self.gates.lock_git(&repo.id).await;
-        if !repo.contribution
-            || self.checkout_has_work(&repo).await?
-            || !self.begin_contribution_removal(&repo).await?
-        {
-            return Ok(None);
-        }
-        self.remove_locked_repository(repo).await.map(Some)
+        // The hand-overs first, as [`Self::remove_repository`] takes them.
+        let removal = async {
+            let _registry = self.gates.lock_registry().await;
+            let repo = self.repository(id).await?;
+            let _seed = self.stop_seed_build(&repo.id).await;
+            self.stop_repository_reviews(&repo.id).await;
+            let _fetch = self.gates.lock_fetch(&repo.id).await;
+            let _git = self.gates.lock_git(&repo.id).await;
+            if !repo.contribution
+                || self.checkout_has_work(&repo).await?
+                || !self.begin_contribution_removal(&repo).await?
+            {
+                return Ok(None);
+            }
+            self.remove_locked_repository(repo).await.map(Some)
+        };
+        self.conversion_handovers.hold(removal).await
     }
 
     /// Remove the repository; the caller holds its registry and Git gates.

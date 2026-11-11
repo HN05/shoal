@@ -79,6 +79,20 @@ impl Manager {
     ) -> Result<Report> {
         Self::validate_reconcile_options(options)?;
         let queued = self.workspace(selector).await?;
+        // A repair's stop hands over the agent of a chat that became the
+        // workspace, so the hand-overs come before the Git gate, as a
+        // conversion takes them.
+        let handovers = &self.conversion_handovers;
+        handovers.hold(self.reconcile_queued(queued, options)).await
+    }
+
+    /// [`Self::reconcile`] of the workspace `queued` once the hand-overs are
+    /// held.
+    async fn reconcile_queued(
+        &self,
+        queued: Workspace,
+        options: ReconcileOptions,
+    ) -> Result<Report> {
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
         let _guard = self.gates.lock_git(&queued.repository_id).await;

@@ -318,3 +318,62 @@ async fn a_mode_the_branch_does_not_define_gives_the_chat_back() {
     let kinds = kinds(&manager, &talk.id).await;
     assert!(!kinds.contains(&EventKind::Ready.to_string()), "{kinds:?}");
 }
+
+#[tokio::test]
+async fn a_conversion_during_the_repositorys_removal_waits_for_it() {
+    let (root, manager) = manager().await;
+    let manager = std::sync::Arc::new(manager);
+    let repo = registered(root.path(), &manager).await;
+    let (first, _first) = chat(&manager, "first", "worker", Some(&repo), None).await;
+    let (second, _second) = chat(&manager, "second", "worker", Some(&repo), None).await;
+    let converting = Converting {
+        chat: first,
+        mode: ModeName::DEFAULT,
+    };
+    // Its agent waits to be handed over, which the removal does.
+    manager
+        .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
+        .await
+        .unwrap();
+    let git = manager.gates.lock_git(&repo.id).await;
+    let removing = tokio::spawn({
+        let (manager, id) = (manager.clone(), repo.id.clone());
+        async move { manager.remove_repository(&id).await }
+    });
+    let converting = tokio::spawn({
+        let manager = manager.clone();
+        let converting = Converting {
+            chat: second,
+            mode: ModeName::DEFAULT,
+        };
+        async move {
+            (manager.create_converted_workspace(
+                converting,
+                "other".into(),
+                None,
+                Default::default(),
+            ))
+            .await
+        }
+    });
+    // Whichever comes second waits for the other's hand-overs.
+    let bound = std::time::Duration::from_secs(30);
+    let waiting = crate::daemon::conversions::handovers::WAITING.notified();
+    tokio::time::timeout(bound, waiting)
+        .await
+        .expect("the removal and the conversion both take the hand-overs first");
+    drop(git);
+
+    let removed = tokio::time::timeout(bound, removing).await;
+    let converted = tokio::time::timeout(bound, converting).await;
+
+    removed
+        .expect("the removal waits on the conversion")
+        .unwrap()
+        .unwrap();
+    converted
+        .expect("the conversion waits on the removal")
+        .unwrap()
+        .ok();
+    assert!(manager.repository(&repo.id).await.is_err());
+}
