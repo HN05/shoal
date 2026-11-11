@@ -27,6 +27,18 @@ pub(crate) fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output 
     }
 }
 
+/// Replace the fixture's global config with `text`, keeping admission off
+/// the host's readings: under the default measured limit, critical memory
+/// or disk on the machine running the tests holds a restore back for as
+/// long as it lasts.
+pub(crate) async fn configure_fixture(manager: &Manager, text: &str) {
+    super::configure(
+        manager,
+        &format!("{text}\n[machine]\nmax_agents = 'none'\n"),
+    )
+    .await;
+}
+
 pub(crate) struct FixtureRoot {
     _root: tempfile::TempDir,
     _process_file_guard: std::fs::File,
@@ -59,6 +71,7 @@ pub(crate) async fn fixture() -> (
     .await
     .unwrap();
     let (root, manager) = manager().await;
+    configure_fixture(&manager, "[cleanup]\ngrace_minutes = 0").await;
     let repo = repository(root.path(), "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)

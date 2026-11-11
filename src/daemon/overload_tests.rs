@@ -7,8 +7,8 @@ use crate::daemon::{
     test_support::{
         install_test_script,
         overload::{
-            bounded, child_command, fixture, launch, launch_child, report_session, run_child,
-            serve_fixture, wait_launched, wait_paused, wait_started,
+            bounded, child_command, configure_fixture, fixture, launch, launch_child,
+            report_session, run_child, serve_fixture, wait_launched, wait_paused, wait_started,
         },
     },
     workspace::StopRequest,
@@ -1317,7 +1317,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
 }
 
 async fn set_recovery(manager: &Manager, enabled: bool) {
-    crate::daemon::test_support::configure(
+    configure_fixture(
         manager,
         &format!("[machine.overload.recovery]\nenabled = {enabled}\n"),
     )
