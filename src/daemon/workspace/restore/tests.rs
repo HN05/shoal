@@ -748,3 +748,47 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
     kept.sort();
     assert_eq!(checkpoint_refs(&checkout), kept);
 }
+
+#[tokio::test]
+async fn restore_cuts_a_name_an_older_shoal_recorded_to_fit() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    manager
+        .remove_workspace(
+            &selector,
+            UnsavedWork::All,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+    // Names were up to 64 characters before; an older export holds one.
+    let legacy = format!("legacy-{}", "x".repeat(57));
+    let (id, name) = (workspace.id.clone(), legacy.clone());
+    manager
+        .store
+        .write(move |tx| {
+            tx.execute(
+                "UPDATE removed_workspaces SET name=?2, record=json_set(record,'$.name',?2)
+                    WHERE workspace_id=?1",
+                rusqlite::params![id, name],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let restored = manager.restore_workspace(&selector).await.unwrap();
+
+    let name = restored.opened.workspace.name;
+    assert_eq!(name, SpaceName::derive(&legacy, "workspace"));
+    assert_eq!(name.as_str().chars().count(), 40);
+}

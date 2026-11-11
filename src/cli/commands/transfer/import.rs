@@ -233,7 +233,12 @@ impl Package {
             narrowing: chat::Narrowing::Recorded(packaged.narrowing),
             agent: Some(packaged.agent.name().parse()?),
             place,
-            name: Some(packaged.name.clone()),
+            // An older Shoal's export may hold a longer name than one set
+            // now allows.
+            name: Some(crate::client::space_names::SpaceName::derive(
+                packaged.name.as_str(),
+                "chat",
+            )),
             model: Default::default(),
             args: Vec::new(),
             session,
