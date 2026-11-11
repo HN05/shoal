@@ -92,6 +92,21 @@ fn stop_all_stops_running_chats() {
     assert!(!chat_runs(&fixture, "talk"));
 }
 
+/// Stopping the processes of several spaces refuses a stopped chat among
+/// them before stopping any.
+#[test]
+fn stopping_processes_refuses_a_stopped_chat_first() {
+    let fixture = Fixture::new();
+    fixture.add("planned");
+    let _chat = SleepingChat::start(&fixture, "talk", serde_json::json!({}));
+    fixture.ok(&["stop", "talk"]);
+
+    let output = fixture.run(&["stop", "--processes", "planned", "talk"]);
+
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("talk stopped"), "{output:?}");
+}
+
 /// `parent` is refused its own space and the chat `other` outside its tree,
 /// stops the chat `talk` below it and resumes it, and once the user stopped
 /// `talk`, stops it again without taking it over, so its resume of it is

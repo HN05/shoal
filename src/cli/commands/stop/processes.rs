@@ -1,6 +1,6 @@
 //! Stopping the processes Shoal does not track, which are not saved for
 //! `shoal resume`.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use crate::client::output::agents::StoppedProcesses;
 use crate::client::space_names::SpaceSelector;
@@ -45,10 +45,21 @@ pub(in crate::cli::commands) async fn processes(
     })
 }
 
-/// Refuse `selectors` before any stops when one names no space, or a
-/// workspace that stopping would refuse now.
+/// Refuse `selectors` before any stops when one names no space, a stopped
+/// chat, or a workspace that stopping would refuse now.
 async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()> {
     let spaces = super::resolve(ctx, selectors.to_vec(), false).await?;
+    let stopped: Vec<_> = (spaces.iter())
+        .filter_map(|space| match space {
+            PresentSpace::Chat(chat) if chat.restore.is_some() => Some(chat.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    ensure!(
+        stopped.is_empty(),
+        "{} stopped, so no processes were stopped",
+        stopped.join(", ")
+    );
     let workspaces: Vec<_> = (spaces.into_iter())
         .filter(|space| matches!(space, PresentSpace::Workspace(_)))
         .collect();
