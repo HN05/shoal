@@ -198,7 +198,7 @@ impl Package {
     }
 
     /// Put the packaged chat's session files in place, then start the chat
-    /// in its repository's checkout at `place`, under a free name, resuming
+    /// in its repository's checkout at `place`, under its name, resuming
     /// the session its agent keeps here.
     async fn start_chat(self, ctx: &Context, place: ChatPlace) -> Result<Started> {
         let Space::Chat(packaged) = &self.space else {

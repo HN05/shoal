@@ -3923,8 +3923,7 @@ resume` does, under the importing machine's agent limits. Every reopen, by impor
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
 its `resume_command`. An imported chat starts in the repository's checkout as
-a chat starts, in the mode it ran in, under its name or the lowest free `-2`, `-3`, ...
-variant, with its agent's `resume` arguments for its session, or as a new
+a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
 session for an agent without them or a session not kept. A single chat imported
 on a terminal opens beside it; with `--resume`, without a terminal, or among
 several files, it starts in a background place of the host that starts queued

@@ -469,7 +469,7 @@ fn confirm_ending(ctx: &Context, yes: bool, heading: String, checks: &[&Checked]
     Ok(())
 }
 
-/// The spaces of `repository`, by name: its workspaces and running chats.
+/// The spaces of `repository`: its workspaces and running chats.
 pub(super) async fn repository_spaces(
     ctx: &Context,
     repository: String,
