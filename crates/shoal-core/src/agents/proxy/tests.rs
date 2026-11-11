@@ -282,19 +282,30 @@ fn default_upstream(
 
 #[test]
 fn claude_goes_to_the_base_url_its_settings_or_environment_name_else_anthropics() {
-    let home = tempfile::tempdir().unwrap();
+    let (project, user) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let url = |args: &[&str], variables: &[(&str, &str)]| {
-        default_upstream(IntegrationKind::Claude, args, home.path(), variables)
+        default_upstream(IntegrationKind::Claude, args, project.path(), variables)
     };
-    let set = [("ANTHROPIC_BASE_URL", "http://environment")];
     assert_eq!(url(&["claude"], &[]), "https://api.anthropic.com");
+    let user_dir = user.path().to_str().unwrap();
+    let set = [
+        ("ANTHROPIC_BASE_URL", "http://environment"),
+        ("CLAUDE_CONFIG_DIR", user_dir),
+    ];
     assert_eq!(url(&["claude"], &set), "http://environment");
-    let user = r#"{"env":{"ANTHROPIC_BASE_URL":"http://user"}}"#;
-    fs::create_dir(home.path().join(".claude")).unwrap();
-    fs::write(home.path().join(".claude/settings.json"), user).unwrap();
+    // Each settings file wins over the environment and those before it: the
+    // user's, the project's shared, its local, then the launch's own.
+    let base_url = |url: &str| format!(r#"{{"env":{{"ANTHROPIC_BASE_URL":"{url}"}}}}"#);
+    fs::write(user.path().join("settings.json"), base_url("http://user")).unwrap();
     assert_eq!(url(&["claude"], &set), "http://user");
-    let given = r#"{"env":{"ANTHROPIC_BASE_URL":"http://given"}}"#;
-    assert_eq!(url(&["claude", "--settings", given], &set), "http://given");
+    let claude = project.path().join(".claude");
+    fs::create_dir(&claude).unwrap();
+    fs::write(claude.join("settings.json"), base_url("http://shared")).unwrap();
+    assert_eq!(url(&["claude"], &set), "http://shared");
+    fs::write(claude.join("settings.local.json"), base_url("http://local")).unwrap();
+    assert_eq!(url(&["claude"], &set), "http://local");
+    let given = base_url("http://given");
+    assert_eq!(url(&["claude", "--settings", &given], &set), "http://given");
 }
 
 #[test]

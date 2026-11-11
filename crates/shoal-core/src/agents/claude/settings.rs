@@ -49,7 +49,19 @@ pub(super) fn user(variable: &dyn Fn(&str) -> Option<OsString>, home: &Path) -> 
         .map(std::path::PathBuf::from)
         .filter(|directory| directory.is_absolute())
         .unwrap_or_else(|| home.join(".claude"));
-    std::fs::read(directory.join("settings.json"))
+    read_file(&directory.join("settings.json"))
+}
+
+/// The settings of the project in `directory`, its local ones first, which
+/// win over its shared ones; nothing for a file that cannot be read.
+pub(super) fn project(directory: &Path) -> [Value; 2] {
+    let settings = directory.join(".claude");
+    ["settings.local.json", "settings.json"].map(|name| read_file(&settings.join(name)))
+}
+
+/// The settings in the file at `path`, or nothing when it cannot be read.
+fn read_file(path: &Path) -> Value {
+    std::fs::read(path)
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or(Value::Null)

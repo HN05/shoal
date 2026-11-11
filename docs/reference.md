@@ -1683,8 +1683,10 @@ from the environment the agent runs with, its tool's `env_remove` included:
 proxy = "retry"
 ```
 
-- Claude Code: the `ANTHROPIC_BASE_URL` of the `--settings` the launch has, else
-  of its user settings, else of its environment, else `https://api.anthropic.com`.
+- Claude Code: the `ANTHROPIC_BASE_URL` of the first of its settings that sets
+  one, as it ranks them (the `--settings` the launch has, the workspace's
+  `.claude/settings.local.json`, then `.claude/settings.json`, then the user's),
+  else of its environment, else `https://api.anthropic.com`.
 - Codex on a provider of the user's: that provider's `base_url`.
 - Codex on its built-in OpenAI provider: `OPENAI_BASE_URL` when its environment
   sets it, else `https://api.openai.com/v1` when the `auth.json` under its
