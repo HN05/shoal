@@ -64,7 +64,7 @@ impl Manager {
     /// settings of its worktree, which may differ from the checkout's on its
     /// branch, define it.
     async fn ensure_worktree_mode(&self, workspace: &Workspace, mode: &ModeName) -> Result<()> {
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self.workspace_settings_with_templates(workspace).await?;
         crate::daemon::conversions::ensure_mode(&settings, mode)
     }
 

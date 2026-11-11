@@ -4,7 +4,7 @@
 use crate::client::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use super::Converting;
 use crate::client::space_names::SpaceSelector;
@@ -41,7 +41,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         let chat = self.convertible_chat(selector, caller).await?;
-        super::ensure_mode(&self.chat_settings(&chat).await?, &conversion.mode)?;
+        let repository = (chat.repository_id.clone()).context("the chat has no repository")?;
+        let settings = self.repository_settings_with_templates(&repository).await?;
+        super::ensure_mode(&settings, &conversion.mode)?;
         ensure!(
             !conversion.options.disposable,
             "a converted chat's workspace keeps its work; leave out --disposable"
