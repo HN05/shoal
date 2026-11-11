@@ -2109,7 +2109,7 @@ shoal start <issue-url> --agent claude --now    # Starts now regardless of the l
 shoal start <issue-url> --agent claude --after <id> --after 12  # Starts once that workspace and #12 are done
 shoal resume -A                               # Queues the restore of every stopped agent
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
-shoal queue start <entry>                     # Starts a waiting entry now regardless of the limits
+shoal queue start <entry>                     # Starts a waiting entry, or a space's queued restore, now regardless of the limits
 shoal queue start --attach <entry>            # Starts it and attaches this terminal to its agent's session
 shoal queue move <entry> 1                    # Moves an entry to position 1; without a position, pick its place
 shoal queue move 5 last                       # Stops workspace 5's running agent and queues its restore last
@@ -2255,8 +2255,8 @@ a list of workspaces. Entries are named as listed, by workspace name or by ID
 when several share one. On a terminal, `shoal queue` picks a waiting entry and
 then starts it, with or without attaching, moves or cancels it.
 
-`queue start` starts a waiting entry now regardless of the limits, as `--now`
-does, or restores an idle agent waiting for an update; it refuses a launch
+`queue start` starts a waiting entry, by its ID or, for a queued restore, by
+its space's number or ID, now regardless of the limits, as `--now` does, or restores an idle agent waiting for an update; it refuses a launch
 still waiting for work, whose branch it builds on, and a restore whose agent's
 processes have not stopped yet. With `--attach` on a terminal it then waits, up
 to ten minutes since setup comes first, for the session the agent runs in and
