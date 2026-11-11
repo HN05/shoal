@@ -162,6 +162,44 @@ pub(crate) fn all_pending(db: &Connection) -> Result<Vec<(SpaceId, Pending)>> {
         .collect()
 }
 
+/// The processes the hand-overs of the conversion of the space `id` have
+/// signalled, which a hand-over that was interrupted goes on stopping.
+pub(crate) fn stopped_processes(db: &Connection, id: &SpaceId) -> Result<Vec<Identity>> {
+    let stopped: Option<String> = db
+        .query_row(
+            "SELECT json_extract(record,'$.stopped') FROM space_conversions WHERE space_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(stopped
+        .map(|stopped| serde_json::from_str(&stopped))
+        .transpose()?
+        .unwrap_or_default())
+}
+
+/// Keep `signalled` among the processes the hand-overs of the conversion of
+/// the space `id` have signalled, before a hand-over signals them.
+pub(crate) fn record_stopped(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    signalled: &[Identity],
+) -> Result<()> {
+    let mut stopped = stopped_processes(tx, id)?;
+    for process in signalled {
+        if !stopped.contains(process) {
+            stopped.push(process.clone());
+        }
+    }
+    tx.execute(
+        "UPDATE space_conversions SET record=json_set(record,'$.stopped',json(?2))
+         WHERE space_id=?1",
+        params![id, serde_json::to_string(&stopped)?],
+    )?;
+    Ok(())
+}
+
 /// Forget the conversion of the space `id`, once its agent started in the
 /// new place.
 pub(crate) fn forget(db: &Connection, id: &SpaceId) -> Result<()> {

@@ -259,3 +259,38 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         Some("s2".into())
     );
 }
+
+#[tokio::test]
+async fn the_processes_a_hand_over_signalled_outlive_it() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+    let identity = |pid: u32| crate::process::identity::Identity {
+        pid,
+        birth: format!("birth-{pid}"),
+        unique: None,
+    };
+    let id = workspace.id.clone();
+    let (first, second) = (
+        vec![identity(1), identity(2)],
+        vec![identity(2), identity(3)],
+    );
+
+    let stopped = (manager.store)
+        .write(move |tx| {
+            crate::daemon::conversions::record::record_stopped(tx, &id, &first)?;
+            crate::daemon::conversions::record::record_stopped(tx, &id, &second)?;
+            crate::daemon::conversions::record::stopped_processes(tx, &id)
+        })
+        .await
+        .unwrap();
+
+    let pids: Vec<_> = stopped.iter().map(|process| process.pid).collect();
+    assert_eq!(pids, [1, 2, 3]);
+    // The conversion itself reads as it did.
+    let id = workspace.id.clone();
+    let pending = (manager.store)
+        .run(move |db| crate::daemon::conversions::pending(db, &id))
+        .await
+        .unwrap();
+    assert!(pending.is_some());
+}

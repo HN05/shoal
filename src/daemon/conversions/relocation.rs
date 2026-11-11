@@ -152,7 +152,9 @@ impl Manager {
     /// Keep the session of the agent of the chat that became the workspace
     /// `id`, whose row was `chat`, as the workspace's last session under
     /// `execution`, marked converted, in `mode`, then stop the agent where it
-    /// ran and forget the conversion and the scope the agent carried there.
+    /// ran, keeping what each round signals for a hand-over that was
+    /// interrupted to go on stopping, and forget the conversion and the
+    /// scope the agent carried there.
     async fn hand_over(
         &self,
         id: &SpaceId,
@@ -176,7 +178,16 @@ impl Manager {
             narrowing: agent.narrowing()?,
         };
         last.write(&self.paths, id)?;
-        self.stop_converted_chat(id, &agent.process()?).await?;
+        let space = id.to_owned();
+        let stopped = (self.store)
+            .run(move |db| super::record::stopped_processes(db, &space))
+            .await?;
+        let record = |signalled: Vec<_>| {
+            let space = id.to_owned();
+            self.store
+                .write(move |tx| super::record::record_stopped(tx, &space, &signalled))
+        };
+        (self.stop_converted_chat(id, &agent.process()?, stopped, record)).await?;
         let (space, token) = (id.to_owned(), agent.scope_token.clone());
         self.store
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))

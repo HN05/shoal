@@ -379,14 +379,23 @@ impl Manager {
     }
 
     /// Stop the processes of the chat `id` that became a workspace, whose
-    /// agent ran as `process`, as ending a chat stops them; its record is
-    /// gone, so nothing records what each round signals.
-    pub(crate) async fn stop_converted_chat(&self, id: &SpaceId, process: &Identity) -> Result<()> {
-        let unrecorded = |_| async { anyhow::Ok(()) };
+    /// agent ran as `process`, as ending a chat stops them, after the stops
+    /// that signalled `stopped`, with `record` keeping what each round
+    /// signals before it does.
+    pub(crate) async fn stop_converted_chat<R>(
+        &self,
+        id: &SpaceId,
+        process: &Identity,
+        stopped: Vec<Identity>,
+        record: impl Fn(Vec<Identity>) -> R,
+    ) -> Result<()>
+    where
+        R: Future<Output = Result<()>>,
+    {
         let wrappers = self.execution_wrappers().await?;
         match processes::ChatProcesses::of(id, process, wrappers.clone())? {
-            Some(processes) => processes.stop(Vec::new(), unrecorded).await,
-            None => processes::stop_owned(id, process, Vec::new(), &wrappers, unrecorded).await,
+            Some(processes) => processes.stop(stopped, record).await,
+            None => processes::stop_owned(id, process, stopped, &wrappers, record).await,
         }
     }
 
