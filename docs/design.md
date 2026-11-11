@@ -895,6 +895,9 @@ blocking evidence. Other failures let interactive callers choose retry, delete,
 ignore (which repairs verified state first), or keep; a setup that never
 started offers only retry or keep. JSON callers get a nonzero exit.
 `setup` reruns setup explicitly; nothing retries automatically.
+The agent a failed `start` launches waits in the queue for the workspace's
+setup and its post-setup hook instead of holding its slot, so a retried setup
+starts it without the user restating its mode, task or permissions.
 While the daemon registers an execution it sends the wrapper keepalives, and
 the wrapper's limit bounds the daemon's silence rather than the whole wait, so
 setups queued behind each other's Git gate never fail for being slow; a

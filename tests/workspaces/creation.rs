@@ -767,6 +767,39 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
 }
 
 #[test]
+fn a_failed_setup_leaves_its_agent_waiting_until_setup_is_retried() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let setup = fixture.repo.join("setup.sh");
+    install_test_script(&setup, "#!/bin/sh\n[ -f fixed ]\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+    let repo = fixture.repo.to_str().unwrap();
+    let output = fixture.run(&["start", repo, "failing", "--here", "--agent", "waiter"]);
+    assert!(!output.status.success(), "{output:?}");
+    let failed = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(failed["state"], "failed", "{failed}");
+    // The agent waits for a retried setup without holding a slot.
+    let entries = fixture.ok(&["queue"]);
+    assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
+    assert_eq!(entries[0]["state"], "queued", "{entries}");
+    assert_eq!(
+        entries[0]["blockers"],
+        serde_json::json!(["setup of failing"])
+    );
+
+    let path = Path::new(failed["path"].as_str().unwrap());
+    fs::write(path.join("fixed"), "").unwrap();
+    fixture.ok(&["setup", &fixture.id("failing")]);
+    let ready = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(ready["state"], "ready", "{ready}");
+    wait_until("the waiting agent start", || {
+        path.join("agent-started").exists()
+    });
+}
+
+#[test]
 fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     let fixture = Fixture::new();
     fixture.add("existing");

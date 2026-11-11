@@ -10,6 +10,7 @@ mod plan;
 mod queue;
 mod source;
 mod target;
+mod waiting;
 
 use crate::client::space_names::SpaceSelector;
 pub(in crate::cli::commands) use agent::AgentLaunch;

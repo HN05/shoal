@@ -9,6 +9,7 @@ use super::{
     queue::failing_entry,
     source::load_add_issue,
     target::AddTarget,
+    waiting::{AfterSetup, follow_add_setup},
 };
 use crate::client::operations::NewWorkspace;
 use crate::client::space_names::SpaceSelector;
@@ -16,10 +17,7 @@ use crate::client::{agent::AgentSessionId, queue::QueueEntryId};
 use crate::{
     cli::{
         agents,
-        commands::{
-            issues, operations, queued_agents,
-            workspaces::{SetUp, follow_setup},
-        },
+        commands::{issues, operations, queued_agents, workspaces::SetUp},
         context::Context,
         output::{Palette, Style},
         shell, terminal,
@@ -112,6 +110,8 @@ pub(super) async fn add_planned(
     // A queued agent starts detached, so the caller's terminal, such as a
     // chat's session, stays its own.
     let told = (&prompt, args.as_slice(), &fork);
+    // The agent a failed setup leaves waiting for its retry.
+    let waiting = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, false)?;
     let (launch, placed) = match start {
         AgentStart::Queued { now } => (
             queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?,
@@ -148,11 +148,15 @@ pub(super) async fn add_planned(
     let (name, number) = (started.workspace.name.clone(), started.workspace.number);
     let subject = (issue.as_ref().map(issues::Issue::subject))
         .or(prompt.map(crate::config::templates::Subject::told));
-    let rest = AfterSetup {
+    let mut rest = AfterSetup {
         pr,
         agent: launch.clone(),
+        waiting,
+        entry: queue_entry,
     };
-    let finished = finish_add_workspace(ctx, started, rest, &agent).await?;
+    let finished = finish_add_workspace(ctx, started, &mut rest, &agent).await?;
+    // A failed setup frees the entry's slot, leaving the agent waiting.
+    let queue_entry = rest.entry;
     let Some(Prepared {
         workspace,
         agent: entry,
@@ -335,20 +339,13 @@ async fn start_add_workspace(
     ctx.progress("Opening workspace", started).await
 }
 
-/// What preparing the added workspace does after setup: linking `pr`, then
-/// the post-setup hook, then queuing `agent`.
-struct AfterSetup {
-    pr: Option<String>,
-    agent: Option<Box<QueuedLaunch>>,
-}
-
 /// Follow the preparation of the started workspace, which sets it up, links
 /// its PR and queues its agent, before reporting it and entering it unless
 /// `agent` takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
     started: StartedWorkspace,
-    rest: AfterSetup,
+    rest: &mut AfterSetup,
     agent: &ResolvedAddAgent,
 ) -> Result<Option<Prepared>> {
     let reused = started.reused;
@@ -356,7 +353,7 @@ async fn finish_add_workspace(
         workspace,
         post_setup,
         agent: entry,
-    }) = follow_setup(ctx, started).await?
+    }) = follow_add_setup(ctx, started, rest).await?
     else {
         return Ok(None);
     };
@@ -398,8 +395,9 @@ async fn prepare_after_setup(
     ctx: &Context,
     workspace: Workspace,
     reused: bool,
-    AfterSetup { pr, agent }: AfterSetup,
+    rest: &mut AfterSetup,
 ) -> Result<(Prepared, Result<()>)> {
+    let (pr, agent) = (rest.pr.take(), rest.agent.take());
     let spec = OperationSpec::Prepare {
         workspace: SpaceSelector::id(&workspace.id),
         steps: Preparation {
