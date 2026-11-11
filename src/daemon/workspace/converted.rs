@@ -31,7 +31,19 @@ impl Manager {
         };
         // Held until the worktree is checked or the chat given back, so no
         // relocation hands the chat's agent over to a workspace that goes.
-        let _handovers = self.conversion_handovers.lock().await;
+        let handovers = &self.conversion_handovers;
+        (handovers.hold(self.create_converted(converting, repository, branch, base, options))).await
+    }
+
+    /// [`Self::create_converted_workspace`] once the hand-overs are held.
+    async fn create_converted(
+        &self,
+        converting: Converting,
+        repository: crate::client::repository_ids::RepositoryId,
+        branch: String,
+        base: Option<String>,
+        options: CreationOptions,
+    ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &branch).await?;
         let source = self.converted_source(&repo, &branch, base).await?;

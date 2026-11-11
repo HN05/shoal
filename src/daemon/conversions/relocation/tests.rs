@@ -409,7 +409,20 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         stopped_by: None,
     };
     record_chat_conversion(&manager, &workspace, chat).await;
-    let handovers = manager.conversion_handovers.lock().await;
+    // A stop holds the hand-overs until released.
+    let (held, holding) = tokio::sync::oneshot::channel();
+    let (release, released) = tokio::sync::oneshot::channel::<()>();
+    let stop = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            let stopping = async {
+                held.send(()).unwrap();
+                released.await.ok();
+            };
+            manager.conversion_handovers.hold(stopping).await;
+        }
+    });
+    holding.await.unwrap();
     let relocating = tokio::spawn({
         let manager = manager.clone();
         async move { manager.relocate_finished_turns().await }
@@ -422,7 +435,8 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         .run(move |db| crate::daemon::conversions::record::hold_chat(db, &id, None))
         .await
         .unwrap();
-    drop(handovers);
+    release.send(()).unwrap();
+    stop.await.unwrap();
 
     relocating.await.unwrap().unwrap();
 
@@ -453,4 +467,76 @@ async fn the_hand_over_continues_the_session_reported_after_the_conversion() {
         .map(|last| last.session.as_ref().map(ToString::to_string))
         .collect();
     assert_eq!(reported, [Some("s3".to_owned())]);
+}
+
+#[tokio::test]
+async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "base".into(), None, None, None)
+        .await
+        .unwrap();
+    // A chat in its worktree, below which a chat became a workspace whose
+    // agent has yet to restart there.
+    let inside_process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let inside = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "inside".into(),
+            "claude".into(),
+            inside_process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let (below, mut below_process) = crate::daemon::test_support::chat(
+        &manager,
+        "below",
+        "worker",
+        Some(&repo),
+        Some(&inside.id),
+    )
+    .await;
+    let converting = Converting {
+        chat: below,
+        mode: ModeName::DEFAULT,
+    };
+    let converted = manager
+        .create_converted_workspace(converting, "part".into(), None, Default::default())
+        .await
+        .unwrap();
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution: crate::client::execution_ids::ExecutionId::generate(),
+        session: Some("s1".into()),
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    record_chat_conversion(&manager, &workspace, chat).await;
+
+    let relocated = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        manager.relocate_finished_turns(),
+    )
+    .await
+    .expect("the relocation's removal takes the hand-overs it holds");
+
+    relocated.unwrap();
+    below_process.wait().unwrap();
+    assert!(manager.chat_by_id(&workspace.id).await.unwrap().is_some());
+    assert!(manager.workspace_by_id(&converted.id).await.is_err());
 }

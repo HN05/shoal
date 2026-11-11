@@ -66,26 +66,33 @@ impl Manager {
         tests::LISTED.notify_one();
         for id in pending.into_iter().map(|(id, _)| id) {
             let _operation = self.gates.operation().await;
-            let _handovers = self.conversion_handovers.lock().await;
-            let space = id.clone();
-            let pending = self.store.run(move |db| super::pending(db, &space)).await?;
-            let Some(pending) = pending else {
-                continue;
-            };
-            if !self.turn_ended(&id, &pending).await? {
-                continue;
-            }
-            let relocated = match pending.clone() {
-                Pending::Workspace {
-                    mode,
-                    chat,
-                    execution,
-                } => self.relocate_to_workspace(&id, mode, chat, execution).await,
-                Pending::Chat { chat, held } => self.relocate_to_chat(&id, *chat, held).await,
-            };
-            if let Err(error) = relocated {
-                self.report_failed_relocation(&id, &pending, &error).await;
-            }
+            let handovers = &self.conversion_handovers;
+            handovers.hold(self.relocate(&id)).await?;
+        }
+        Ok(())
+    }
+
+    /// Restart the agent of the conversion of the space `id`, read again
+    /// under the hand-overs, once its turn ended.
+    async fn relocate(&self, id: &SpaceId) -> Result<()> {
+        let space = id.clone();
+        let pending = self.store.run(move |db| super::pending(db, &space)).await?;
+        let Some(pending) = pending else {
+            return Ok(());
+        };
+        if !self.turn_ended(id, &pending).await? {
+            return Ok(());
+        }
+        let relocated = match pending.clone() {
+            Pending::Workspace {
+                mode,
+                chat,
+                execution,
+            } => self.relocate_to_workspace(id, mode, chat, execution).await,
+            Pending::Chat { chat, held } => self.relocate_to_chat(id, *chat, held).await,
+        };
+        if let Err(error) = relocated {
+            self.report_failed_relocation(id, &pending, &error).await;
         }
         Ok(())
     }
@@ -148,7 +155,12 @@ impl Manager {
         id: &SpaceId,
         stop: ConversionStop<'_>,
     ) -> Result<bool> {
-        let _handovers = self.conversion_handovers.lock().await;
+        let handovers = &self.conversion_handovers;
+        handovers.hold(self.settle_for_stop(id, stop)).await
+    }
+
+    /// [`Self::stop_converting_agent`] once the hand-overs are held.
+    async fn settle_for_stop(&self, id: &SpaceId, stop: ConversionStop<'_>) -> Result<bool> {
         if stop.holds {
             self.hold_converting_chat(id, stop.stopped_by).await?;
         }
@@ -168,9 +180,8 @@ impl Manager {
     }
 
     /// Hand over the agent of a chat that became the workspace `id` ahead of
-    /// its removal, as [`Self::stop_converting_agent`] does. A workspace
-    /// that becomes a chat is removed by its own relocation, which holds the
-    /// hand-overs and has no such agent.
+    /// its removal, as [`Self::stop_converting_agent`] does, also within a
+    /// relocation's removal of the spaces above it.
     pub(crate) async fn hand_over_before_removal(&self, id: &SpaceId) -> Result<()> {
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;

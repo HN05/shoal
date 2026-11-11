@@ -146,7 +146,7 @@ pub struct Manager {
     pub(crate) chat_saves: tokio::sync::Mutex<()>,
     /// Held while a converted space's agent is handed over to the new place,
     /// so a stop and the relocation never both hand it over.
-    pub(crate) conversion_handovers: tokio::sync::Mutex<()>,
+    pub(crate) conversion_handovers: crate::daemon::conversions::Handovers,
     pub(crate) chat_stops: crate::daemon::chats::Stopping,
     /// The restarts of chats' agents.
     pub(crate) chat_agents: crate::daemon::chats::ChatAgents,
