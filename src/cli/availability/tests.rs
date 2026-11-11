@@ -134,12 +134,13 @@ fn agent_places_set_stopped_agents_apart() {
         agent("w3", Some(&gone), None),
         agent("w4", None, Some("codex")),
     ];
+    let [w1, w2, w3] = ["w1", "w2", "w3"].map(SpaceId::from);
     assert_eq!(
         agent_places(&agents),
         AgentPlaces {
-            connected: vec![("w1", &running)],
-            stopped: vec![("w2", &stopped)],
-            unknown: vec![("w3", &gone)],
+            connected: vec![(&w1, &running)],
+            stopped: vec![(&w2, &stopped)],
+            unknown: vec![(&w3, &gone)],
         }
     );
 }

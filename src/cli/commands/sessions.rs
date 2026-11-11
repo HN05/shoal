@@ -124,7 +124,7 @@ impl Target {
         let attachable = terminal::session_owners(&chat_places(&chats));
         let chats: Vec<_> = chats
             .into_iter()
-            .filter(|chat| attachable.contains(chat.id.as_str()))
+            .filter(|chat| attachable.contains(&chat.id))
             .collect();
         let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
@@ -218,10 +218,10 @@ fn stopped_agent(name: &str, protection: &Protection) -> String {
 }
 
 /// Where the daemon recorded `chats` running, by chat ID.
-pub(in crate::cli) fn chat_places(chats: &[Chat]) -> Vec<(&str, &Origin)> {
+pub(in crate::cli) fn chat_places(chats: &[Chat]) -> Vec<(&SpaceId, &Origin)> {
     chats
         .iter()
-        .filter_map(|chat| Some((chat.id.as_str(), chat.origin.as_ref()?)))
+        .filter_map(|chat| Some((&chat.id, chat.origin.as_ref()?)))
         .collect()
 }
 

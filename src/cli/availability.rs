@@ -131,27 +131,23 @@ async fn session_workspaces(paths: &Paths) -> HashSet<SpaceId> {
     let recorded: Vec<_> = places
         .unknown
         .into_iter()
-        .chain(
-            owned
-                .iter()
-                .map(|place| (place.space_id.as_str(), &place.origin)),
-        )
+        .chain(owned.iter().map(|place| (&place.space_id, &place.origin)))
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
     let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
     owners.extend(terminal::open_session_owners(&recorded, &places.stopped, &settings).await);
-    owners.into_iter().map(SpaceId::from).collect()
+    owners
 }
 
 /// Where agents were recorded running, as (workspace ID, place) pairs.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct AgentPlaces<'a> {
     /// Connected agents, which run in their places.
-    connected: Vec<(&'a str, &'a Origin)>,
+    connected: Vec<(&'a SpaceId, &'a Origin)>,
     /// Connected agents Shoal stopped there to restore later.
-    stopped: Vec<(&'a str, &'a Origin)>,
+    stopped: Vec<(&'a SpaceId, &'a Origin)>,
     /// Executions whose wrapper is gone, whose record outlives the session.
-    unknown: Vec<(&'a str, &'a Origin)>,
+    unknown: Vec<(&'a SpaceId, &'a Origin)>,
 }
 
 /// Sort the places of `agents` by what runs in them; an agent without a
@@ -167,7 +163,7 @@ fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
             (Some(_), Some(_)) => &mut places.stopped,
             (Some(_), None) => &mut places.connected,
         };
-        kind.push((agent.space_id.as_str(), place));
+        kind.push((&agent.space_id, place));
     }
     places
 }
@@ -176,8 +172,8 @@ fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
 /// its places; one whose settings cannot be read is left out.
 async fn workspace_settings<'a>(
     paths: &Paths,
-    workspaces: impl Iterator<Item = &'a str>,
-) -> HashMap<String, crate::config::Effective> {
+    workspaces: impl Iterator<Item = &'a SpaceId>,
+) -> HashMap<SpaceId, crate::config::Effective> {
     let mut settings = HashMap::new();
     let Ok(config) = crate::config::Config::load_with_templates(paths) else {
         return settings;
@@ -186,10 +182,10 @@ async fn workspace_settings<'a>(
         if settings.contains_key(workspace) {
             continue;
         }
-        let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::parse(workspace));
+        let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(workspace));
         let layers = crate::client::workspaces::config_layers(paths, target).await;
         if let Ok(resolved) = layers.and_then(|layers| config.resolve(&layers)) {
-            settings.insert(workspace.to_owned(), resolved);
+            settings.insert(workspace.clone(), resolved);
         }
     }
     settings

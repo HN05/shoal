@@ -1,5 +1,6 @@
 //! The agent sessions hosts keep: finding them where the daemon recorded a
 //! workspace's or chat's agents, and attaching this terminal to one.
+use crate::client::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
@@ -191,11 +192,11 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
 
 /// The IDs of the owners with an agent session: those of `places`, recorded
 /// for owners by ID, whose hosts keep sessions.
-pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
+pub(in crate::cli) fn session_owners(places: &[(&SpaceId, &Origin)]) -> HashSet<SpaceId> {
     places
         .iter()
         .filter(|(_, place)| named(place.host).sessions().is_some())
-        .map(|(owner, _)| (*owner).to_owned())
+        .map(|(owner, _)| (*owner).clone())
         .collect()
 }
 
@@ -205,10 +206,10 @@ pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<Stri
 /// counts as closed, as does one whose session is that of an agent stopped
 /// at one of `stopped`, recorded the same way.
 pub(in crate::cli) async fn open_session_owners(
-    places: &[(&str, &Origin)],
-    stopped: &[(&str, &Origin)],
-    settings: &HashMap<String, Effective>,
-) -> HashSet<String> {
+    places: &[(&SpaceId, &Origin)],
+    stopped: &[(&SpaceId, &Origin)],
+    settings: &HashMap<SpaceId, Effective>,
+) -> HashSet<SpaceId> {
     let places = enabled_places(places, settings);
     let stopped = enabled_places(stopped, settings);
     let origins: Vec<&Origin> = places
@@ -227,16 +228,16 @@ pub(in crate::cli) async fn open_session_owners(
                 .as_ref()
                 .is_some_and(|session| !stopped.contains(&session.key()))
         })
-        .map(|((owner, _), _)| (*owner).to_owned())
+        .map(|((owner, _), _)| (*owner).clone())
         .collect()
 }
 
 /// Those of `places`, recorded for owners by ID, in a host their owner's
 /// `settings` enable.
 fn enabled_places<'a>(
-    places: &[(&'a str, &'a Origin)],
-    settings: &HashMap<String, Effective>,
-) -> Vec<(&'a str, &'a Origin)> {
+    places: &[(&'a SpaceId, &'a Origin)],
+    settings: &HashMap<SpaceId, Effective>,
+) -> Vec<(&'a SpaceId, &'a Origin)> {
     places
         .iter()
         .filter(|(owner, place)| {

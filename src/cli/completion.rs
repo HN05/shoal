@@ -626,7 +626,7 @@ async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidat
     let attachable = terminal::session_owners(&places);
     Ok(chats
         .into_iter()
-        .filter(|chat| attachable.contains(chat.id.as_str()))
+        .filter(|chat| attachable.contains(&chat.id))
         .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
         .collect())
 }
