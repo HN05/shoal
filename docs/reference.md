@@ -4095,7 +4095,8 @@ apply only to a new PR. Its JSON adds
 `created` (false for a PR it found), `linked`, and the `warnings` it prints on
 stderr: [convention](#repository-conventions) warnings, and a failure to label,
 request reviews, assign, set the milestone, attach files or read a new PR once
-the forge opened it, which still records and links the PR as posted.
+the forge opened it, which still records and links the PR with the labels and
+details the forge reports it has, or as posted when it cannot be read.
 
 ```toml
 [pr]
@@ -4277,7 +4278,8 @@ refuses `--link`. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
 [convention](#repository-conventions) warnings, a failure to label, assign, set
 the milestone, attach files or read the issue once the forge opened it, which
-still records it as posted,
+still records it with the labels and details the forge reports it has, or as
+posted when it cannot be read,
 and when removal started before the workspace could record and link the new
 issue.
 

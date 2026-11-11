@@ -112,8 +112,8 @@ fn assignment_needs(
     assignees.into_iter().chain(milestone)
 }
 
-/// An item Shoal opened, as the forge reports it once finished, or as it
-/// was posted when finishing it failed.
+/// An item Shoal opened, as the forge reports it once finished, or after
+/// finishing it failed, which leaves it as posted when it cannot be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Created {
     pub item: Item,
@@ -234,9 +234,9 @@ impl ForgeRepo {
         Ok(self.finish_posted(account, posted, &follow_up).await)
     }
 
-    /// Finish the item that was just posted, keeping it as posted when that
-    /// fails: it exists, so the caller records it instead of failing, and a
-    /// retry cannot open another.
+    /// Finish the item that was just posted, keeping it as the forge then
+    /// reports it when that fails: it exists, so the caller records it
+    /// instead of failing, and a retry cannot open another.
     pub(crate) async fn finish_posted(
         &self,
         account: &Account,
@@ -249,9 +249,22 @@ impl ForgeRepo {
                 unfinished: None,
             },
             Err(error) => Created {
-                item: posted,
+                item: self.after_failed_finish(account, posted, follow_up).await,
                 unfinished: Some(format!("{error:#}")),
             },
+        }
+    }
+
+    /// The `posted` item as the forge reports it after `follow_up` failed
+    /// part way, such as with the labels it did add; as posted when the
+    /// follow-up was only the read that failed, or reading it fails again.
+    async fn after_failed_finish(&self, account: &Account, posted: Item, follow_up: &Edit) -> Item {
+        if *follow_up == Edit::default() {
+            return posted;
+        }
+        match self.read(account, posted.kind, posted.number).await {
+            Ok(read) => read.item,
+            Err(_) => posted,
         }
     }
 

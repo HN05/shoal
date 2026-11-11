@@ -47,6 +47,40 @@ async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
     assert_eq!(server.received().len(), 1);
 }
 
+#[tokio::test]
+async fn an_issue_whose_finish_fails_comes_back_with_the_labels_the_forge_kept() {
+    // The forge keeps one of the two labels and drops the assignee.
+    let server = Server::start(|request| {
+        match request.line.as_str() {
+        "POST /api/v3/repos/team/repo/issues" => (201, Vec::new(), r#"{"number":7}"#.into()),
+        _ => (
+            200,
+            Vec::new(),
+            r#"{"number":7,"title":"Flaky","state":"open","labels":[{"name":"bug"}],"assignees":[]}"#
+                .into(),
+        ),
+    }
+    });
+    let account = agent_on(&server, "agent");
+    let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
+    let issue = NewIssue {
+        title: "Flaky".into(),
+        body: "Seen twice".into(),
+        labels: vec!["bug".into(), "missing".into()],
+        assignees: vec!["someone".into()],
+        milestone: None,
+        attachments: Vec::new(),
+    };
+    let created = github.create_issue(&account, &issue).await.unwrap();
+    assert_eq!(created.item.labels, ["bug"]);
+    assert!(
+        created
+            .unfinished
+            .unwrap()
+            .contains("did not assign someone")
+    );
+}
+
 #[test]
 fn issues_carry_labels_on_github_and_label_afterwards_on_forgejo() {
     let issue = NewIssue {
