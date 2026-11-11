@@ -217,3 +217,27 @@ async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
 
     assert_eq!(workspace.branch.as_deref(), Some("topic"));
 }
+
+#[tokio::test]
+async fn a_branch_only_the_remote_has_opens_without_a_fetch() {
+    let (root, manager) = manager().await;
+    let remote = repository(root.path(), "remote");
+    crate::daemon::test_support::git(&remote, &["branch", "topic"]);
+    let repo = registered(root.path(), &manager).await;
+    let remote_path = remote.to_str().unwrap();
+    crate::daemon::test_support::git(&repo.path, &["remote", "add", "origin", remote_path]);
+    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let converting = Converting {
+        chat: talk,
+        mode: ModeName::DEFAULT,
+    };
+
+    let workspace = manager
+        .create_converted_workspace(converting, "topic".into(), None, Default::default())
+        .await
+        .unwrap();
+
+    let remote_head = crate::daemon::test_support::git(&remote, &["rev-parse", "topic"]);
+    let head = crate::daemon::test_support::git(&workspace.path, &["rev-parse", "HEAD"]);
+    assert_eq!(head, remote_head);
+}

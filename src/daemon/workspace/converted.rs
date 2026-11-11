@@ -4,6 +4,7 @@
 use anyhow::{Result, bail};
 
 use super::{Manager, NewWorkspace, branches::OpenTarget, creation::WorkspaceSource};
+use crate::git::existing_branch::BranchExt;
 use crate::{
     daemon::conversions::Converting,
     git::{self, worktrunk},
@@ -75,13 +76,36 @@ impl Manager {
         }
     }
 
-    /// Whether `branch` names a local branch, or a remote one by its name or
-    /// with its remote, such as `origin/topic`.
+    /// Whether `branch` names a local branch, or a branch a remote
+    /// advertises, by its name or with its remote, such as `origin/topic`,
+    /// as opening an existing branch finds them; without the remotes, as
+    /// offline, only the local and fetched ones count.
     async fn branch_exists(&self, repo: &Repository, branch: &str) -> Result<bool> {
-        if git::remote_branch(&repo.path, branch).await?.is_some() {
-            return Ok(true);
-        }
-        let names = git::branch::names_in_use(&repo.path).await?;
+        let names = match git::existing_branch::list(&repo.path).await {
+            Ok(branches) => (branches.iter())
+                .flat_map(|existing| {
+                    let remote = (existing.remote.as_ref())
+                        .map(|remote| format!("{remote}/{}", existing.name));
+                    [
+                        Some(existing.name.clone()),
+                        remote,
+                        Some(existing.selector()),
+                    ]
+                })
+                .flatten()
+                .collect(),
+            Err(error) => {
+                crate::daemon::log!(
+                    "remote branches of {} not listed: {error:#}",
+                    repo.path.display()
+                );
+                let mut names = git::branch::names_in_use(&repo.path).await?;
+                if git::remote_branch(&repo.path, branch).await?.is_some() {
+                    names.push(branch.to_owned());
+                }
+                names
+            }
+        };
         Ok(names.iter().any(|name| name == branch))
     }
 
