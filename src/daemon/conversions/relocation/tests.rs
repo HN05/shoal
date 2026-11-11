@@ -615,3 +615,34 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     assert_eq!(sessions.len(), 1, "{sessions:?}");
 }
+
+#[tokio::test]
+async fn a_failed_hook_outlasts_its_operations_record() {
+    let (root, manager) = manager().await;
+    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    // An operation the daemon no longer follows, as after its retention or
+    // a restart, whose end the conversion kept.
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| {
+            crate::daemon::conversions::record::record_preparation(db, &id, "gone")?;
+            crate::daemon::conversions::record::record_prepared(
+                db,
+                &id,
+                "gone",
+                Some("hook exited 1"),
+            )
+        })
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    process.wait().unwrap();
+    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(!manager.converting(&workspace.id).await.unwrap());
+}

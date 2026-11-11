@@ -35,6 +35,13 @@ pub(crate) enum Pending {
         /// hook included, the agent waits for.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preparation: Option<String>,
+        /// Whether that preparation reported its end, kept beyond the
+        /// operation's own record.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        prepared: bool,
+        /// Why its post-setup hook failed, when it did.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hook_failure: Option<String>,
     },
     /// A workspace that becomes the chat `chat` once the agent it carries on
     /// stopped, with what its agent ran as and with, which outlives the
@@ -239,6 +246,23 @@ pub(crate) fn record_preparation(db: &Connection, id: &SpaceId, operation: &str)
         "UPDATE space_conversions SET record=json_set(record,'$.preparation',?2)
          WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'",
         params![id, operation],
+    )?;
+    Ok(())
+}
+
+/// Keep that the preparation `operation` of the workspace `id` a chat became
+/// ended, with why its post-setup hook failed when it did.
+pub(crate) fn record_prepared(
+    db: &Connection,
+    id: &SpaceId,
+    operation: &str,
+    hook_failure: Option<&str>,
+) -> Result<()> {
+    db.execute(
+        "UPDATE space_conversions
+         SET record=json_set(record,'$.prepared',json('true'),'$.hook_failure',?3)
+         WHERE space_id=?1 AND json_extract(record,'$.preparation')=?2",
+        params![id, operation, hook_failure],
     )?;
     Ok(())
 }

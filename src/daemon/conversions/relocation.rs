@@ -89,8 +89,9 @@ impl Manager {
                 mode,
                 chat,
                 execution,
-                preparation,
-            } => match self.failed_hook(preparation.as_deref()).await {
+                hook_failure,
+                ..
+            } => match hook_failure {
                 Some(failure) => {
                     (self.stop_after_failed_hook(id, mode, chat, execution, &failure)).await
                 }
@@ -117,12 +118,15 @@ impl Manager {
         let idle = state.is_some_and(|status| status.state == AgentState::Idle);
         match pending {
             Pending::Workspace {
-                chat, preparation, ..
+                chat,
+                preparation,
+                prepared,
+                ..
             } => {
                 // A setup that failed waits for its repair, which readies it.
                 let workspace = self.workspace_by_id(id).await?;
                 if workspace.state != WorkspaceState::Ready
-                    || !self.preparation_over(preparation.as_deref()).await
+                    || !(*prepared || self.preparation_over(preparation.as_deref()).await)
                 {
                     return Ok(false);
                 }
@@ -148,13 +152,21 @@ impl Manager {
         }
     }
 
-    /// Why the post-setup hook of the preparation `operation` of a chat's new
-    /// workspace failed, after which a start runs no agent there either.
-    async fn failed_hook(&self, operation: Option<&str>) -> Option<String> {
-        let entry = self.operation(operation?, None).await.ok()?;
-        match entry.events_from(u64::MAX).1 {
-            Some(Ended::Failed(Failure::HookFailed { message })) => Some(message),
+    /// Keep with the conversion of the workspace `id` that its preparation
+    /// `operation` reported it `ended`, beyond the operation's own record,
+    /// which goes some time after it ends and with the daemon. A workspace
+    /// without such a conversion keeps nothing.
+    pub(crate) async fn keep_preparation_end(&self, id: &SpaceId, operation: &str, ended: &Ended) {
+        let hook_failure = match ended {
+            Ended::Failed(Failure::HookFailed { message }) => Some(message.clone()),
             _ => None,
+        };
+        let (space, operation) = (id.to_owned(), operation.to_owned());
+        let kept = (self.store).run(move |db| {
+            super::record::record_prepared(db, &space, &operation, hook_failure.as_deref())
+        });
+        if let Err(error) = kept.await {
+            log!("preparation end of {id} not kept: {error:#}");
         }
     }
 

@@ -50,6 +50,8 @@ impl Converting {
             chat,
             execution: crate::client::execution_ids::ExecutionId::generate(),
             preparation: None,
+            prepared: false,
+            hook_failure: None,
         };
         record::record(tx, &self.chat.id, &pending)
     }

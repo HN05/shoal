@@ -267,7 +267,11 @@ impl Manager {
         let entry = self.operation(id, caller).await?;
         match report {
             Report::Step(step) => entry.push(Progress::Step { step }),
-            Report::Ended(ended) => entry.update(|state| state.reported = Some(ended)),
+            Report::Ended(ended) => {
+                self.keep_preparation_end(&entry.workspace, id, &ended)
+                    .await;
+                entry.update(|state| state.reported = Some(ended));
+            }
         }
         Ok(())
     }
