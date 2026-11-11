@@ -83,7 +83,9 @@ jobs:
           else
             python3 scripts/release.py run
           fi
-          tag=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          # release.py leaves the tagged commit checked out. A resumed release
+          # checks out its tag, whose scripts may predate these, so Git names it.
+          tag=$(git describe --exact-match --match 'v[0-9]*' HEAD)
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
   update-tap:
