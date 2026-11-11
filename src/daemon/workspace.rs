@@ -14,6 +14,7 @@ mod commits;
 mod config_state;
 pub(crate) mod conflicts;
 mod contributions;
+mod converted;
 mod coordinated;
 mod copies;
 mod creation;

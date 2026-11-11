@@ -12,6 +12,7 @@ mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;
 mod connections;
+pub(crate) mod conversions;
 mod disk;
 pub mod environment;
 pub mod events;

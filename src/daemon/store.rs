@@ -210,7 +210,11 @@ fn name_holder(
     if exists(db, "SELECT 1 FROM workspace_renames WHERE name=?1", [name])? {
         return Ok(Some(NameHolder::Rename));
     }
-    if exists(db, "SELECT 1 FROM chats WHERE name=?1", [name])? {
+    if exists(
+        db,
+        "SELECT 1 FROM chats WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
+        rusqlite::params![name, except_id],
+    )? {
         return Ok(Some(NameHolder::Chat));
     }
     Ok(None)

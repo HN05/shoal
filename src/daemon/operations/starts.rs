@@ -209,7 +209,7 @@ impl Manager {
     /// its setup while it is preparing, linking the PR, the post-setup hook
     /// of a new workspace, then queuing the agent. A new workspace whose
     /// issue cannot be assigned is removed, since nothing ran in it yet.
-    async fn prepare_new(
+    pub(crate) async fn prepare_new(
         self: &Arc<Self>,
         OpenedWorkspace { workspace, reused }: OpenedWorkspace,
         issue: Option<OpenIssue>,

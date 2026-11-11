@@ -248,6 +248,7 @@ const REQUESTS: &[&str] = &[
     // Operations that create a workspace.
     r#"{"start_workspace":{"repository":"app","name":"fix","issue":"42","agent":{"agent":"claude","prompt":null}}}"#,
     r#"{"start_split":{"workspace":"fix","name":"part","base":"HEAD"}}"#,
+    r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"42"}}"#,
 ];
 
 #[test]

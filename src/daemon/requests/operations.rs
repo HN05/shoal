@@ -7,6 +7,7 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
+    conversions::WorkspaceConversion,
     operations::{
         Entry,
         starts::{Opening, Preparing, Split},
@@ -104,6 +105,28 @@ pub(super) async fn handle(
                     .await?,
             )
         }
+        OperationMethod::ConvertToWorkspace {
+            chat,
+            branch,
+            issue,
+            base,
+            options,
+            mode,
+            env,
+        } => {
+            let conversion = WorkspaceConversion {
+                branch,
+                issue,
+                base,
+                options,
+                mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
+            };
+            Body::WorkspaceStarted(
+                manager
+                    .convert_to_workspace(&chat, conversion, env, caller)
+                    .await?,
+            )
+        }
         OperationMethod::CancelOperation { id } => {
             manager.operation(&id, caller).await?.interrupt();
             Body::Ok
@@ -148,6 +171,9 @@ impl Scoped for OperationMethod {
                 }
                 None
             }
+            // An agent converts only its own space, which the conversion
+            // checks.
+            OperationMethod::ConvertToWorkspace { chat, .. } => Some(chat),
             OperationMethod::FollowOperation { id, .. }
             | OperationMethod::CancelOperation { id }
             | OperationMethod::ReportProgress { id, .. } => {

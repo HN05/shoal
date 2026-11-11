@@ -28,6 +28,9 @@ pub(crate) enum Retention {
     QueuedAgent,
     /// A chat runs in the workspace's worktree.
     ChatRunning,
+    /// A conversion's agent restarts in or from the workspace once its turn
+    /// ends.
+    Converting,
 }
 
 impl From<Retention> for CleanupReason {
@@ -39,6 +42,7 @@ impl From<Retention> for CleanupReason {
             Retention::PushRequest => Self::PushRequest,
             Retention::QueuedAgent => Self::QueuedAgent,
             Retention::ChatRunning => Self::ChatRunning,
+            Retention::Converting => Self::Converting,
         }
     }
 }
@@ -53,6 +57,7 @@ impl std::fmt::Display for Retention {
             Self::PushRequest => "a push waits for approval",
             Self::QueuedAgent => "an agent launch in it waits in the agent queue",
             Self::ChatRunning => "a chat runs in it",
+            Self::Converting => "its agent restarts after a conversion",
         })
     }
 }

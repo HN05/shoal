@@ -27,6 +27,9 @@ pub(crate) struct NewWorkspace<'a> {
     /// The space it goes below, a chat or a workspace, recorded with it so
     /// that one whose creation fails is still there.
     pub parent: Option<SpaceId>,
+    /// The chat it replaces, taking its ID, number, name and place in the
+    /// tree, instead of going below `parent`.
+    pub converts: Option<crate::daemon::conversions::Converting>,
 }
 
 pub(super) enum WorkspaceSource {
@@ -132,6 +135,7 @@ impl Manager {
             path,
             options,
             parent: below,
+            converts,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),
@@ -167,8 +171,12 @@ impl Manager {
                 WorkspaceState::Preparing,
             )
         };
+        let placement = match converts {
+            Some(converting) => Placement::Replacing(Box::new(converting)),
+            None => Placement::Below(parent),
+        };
         let workspace = self
-            .insert_workspace(workspace, base_branch, parent)
+            .insert_workspace_as(workspace, base_branch, placement)
             .await?;
         let result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
@@ -213,6 +221,22 @@ impl Manager {
         base_branch: Option<String>,
         parent: Option<SpaceId>,
     ) -> Result<Workspace> {
+        self.insert_workspace_as(record, base_branch, Placement::Below(parent))
+            .await
+    }
+
+    /// Record a new workspace as [`Self::insert_workspace`] does, below a
+    /// parent or in place of the chat it converts, as `placement` says.
+    async fn insert_workspace_as(
+        &self,
+        record: Workspace,
+        base_branch: Option<String>,
+        placement: Placement,
+    ) -> Result<Workspace> {
+        let record = match &placement {
+            Placement::Replacing(converting) => converting.workspace(record),
+            Placement::Below(_) => record,
+        };
         let marker = match record.git_dir.clone() {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
             None => None,
@@ -220,12 +244,16 @@ impl Manager {
         let removing = self.chat_removals.clone();
         self.store
             .write(move |tx| {
+                let replaced = match &placement {
+                    Placement::Replacing(_) => Some(&record.id),
+                    Placement::Below(_) => None,
+                };
                 store::ensure_name_and_branch_available(
                     tx,
                     &record.repository_id,
                     &record.name,
                     record.branch.as_deref(),
-                    None,
+                    replaced,
                 )?;
                 store::ensure_path_unrecorded(tx, &record.path)?;
                 store::ensure_path_outside_moves(tx, &record.path)?;
@@ -250,7 +278,7 @@ impl Manager {
                     None => None,
                 };
                 // Recorded first, so the workspace's creation names it.
-                if let Some(parent) = &parent {
+                if let Placement::Below(Some(parent)) = &placement {
                     ensure!(
                         !removing.reserved(parent),
                         "the chat the workspace would go below is being removed"
@@ -259,7 +287,7 @@ impl Manager {
                     tree::set_parent(tx, &record.id, Some(parent))?;
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,number,mode,narrowing) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16,NULLIF(?17,0),?18,?19)",
                     params![
                         record.id,
                         record.repository_id,
@@ -277,8 +305,14 @@ impl Manager {
                         record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
                         record.setup_skipped,
                         record.disposable,
+                        record.number,
+                        record.mode,
+                        store::narrowing_column(&record.narrowing)?,
                     ],
                 )?;
+                if let Placement::Replacing(converting) = &placement {
+                    converting.replace_chat(tx)?;
+                }
                 tx.execute(
                     "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
                     [&record.repository_id],
@@ -469,6 +503,14 @@ impl Manager {
             })
             .await
     }
+}
+
+/// Where a new workspace's record goes.
+enum Placement {
+    /// Below the space it names, or at the top.
+    Below(Option<SpaceId>),
+    /// In place of the chat it converts.
+    Replacing(Box<crate::daemon::conversions::Converting>),
 }
 
 /// Refuse a disposable workspace on the `existing` branch, which its removal

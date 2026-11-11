@@ -23,6 +23,9 @@ pub enum CleanupReason {
     AgentRunning,
     /// A chat runs in the workspace's worktree.
     ChatRunning,
+    /// The space was converted, and its agent restarts in the new place
+    /// once its turn ends.
+    Converting,
     PrWatch,
     /// An ancestor finished its assignment with cleanup, which takes this
     /// workspace too.
@@ -70,6 +73,7 @@ impl std::fmt::Display for CleanupReason {
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::AgentRunning => f.write_str("Agent running"),
             Self::ChatRunning => f.write_str("Chat running"),
+            Self::Converting => f.write_str("Agent restarting after a conversion"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::AncestorCompleted { workspace } => {
                 write!(f, "{workspace} done; completion cleanup pending")

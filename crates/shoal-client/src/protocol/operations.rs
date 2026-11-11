@@ -88,6 +88,24 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
+    /// Turn the chat `chat` into a workspace on `branch`, an existing branch
+    /// or a new one from `base`, linked to `issue` when given, and start
+    /// preparing it; its agent restarts there in `mode`, `worker` by
+    /// default, once its turn ends.
+    ConvertToWorkspace {
+        chat: SpaceSelector,
+        branch: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        issue: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<String>,
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
+        options: CreationOptions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<crate::config::modes::ModeName>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        env: Option<BTreeMap<String, String>>,
+    },
     /// The worker's report of a step of operation `id`, or of its end.
     ReportProgress { id: String, report: Report },
 }

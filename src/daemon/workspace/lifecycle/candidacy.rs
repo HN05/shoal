@@ -478,6 +478,9 @@ impl Manager {
         if self.chat_runs_in(id).await? {
             return Ok(Some(Retention::ChatRunning));
         }
+        if self.converting(id).await? {
+            return Ok(Some(Retention::Converting));
+        }
         Ok(self
             .has_queued_launch(id)
             .await?
