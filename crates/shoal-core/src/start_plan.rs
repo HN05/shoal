@@ -79,16 +79,18 @@ pub struct ResolvedAddAgent {
 
 /// The queue request of `launch` in `workspace`, which the agent queue
 /// starts detached, beside the caller's terminal when the launch names it
-/// or else in the default host.
+/// or else in the default host, linking `pr` as it starts.
 pub fn queued_agent_request(
     workspace: &Workspace,
     mut launch: QueuedLaunch,
+    pr: Option<String>,
 ) -> Result<QueueRequest> {
     let env =
         (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
     let (agent, now) = (launch.agent.clone(), launch.now);
-    let plan = AddPlan::agent_in(workspace, launch)?;
+    let mut plan = AddPlan::agent_in(workspace, launch)?;
+    plan.creation.pr = pr;
     Ok(QueueRequest {
         repository: (&workspace.repository_id).into(),
         name: workspace.name.clone(),

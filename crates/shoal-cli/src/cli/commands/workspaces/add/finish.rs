@@ -154,7 +154,7 @@ pub(super) async fn add_planned(
     // Preparation leaves the agent it queues waiting itself.
     let waiting = own.map(|own| {
         let own = launch.is_none().then_some(*own);
-        WaitingAgent::new(own, queue_entry.clone())
+        WaitingAgent::new(own, queue_entry.clone(), pr.clone())
     });
     let mut rest = AfterSetup {
         pr,

@@ -38,13 +38,10 @@ pub(in crate::cli::commands) async fn prepare(
         workspace = match run_setup(ctx, &workspace).await {
             Ok(set_up) => set_up,
             Err(error) => {
-                // The workspace stays for a retried setup, with its PR and
-                // the agent that waits for it.
-                if let Some(pr) = &steps.pr {
-                    link_or_warn(ctx, &workspace.id, pr).await;
-                }
+                // The workspace stays for a retried setup, with the agent
+                // that waits for it and links its PR once it starts.
                 if let Some(launch) = steps.agent {
-                    leave_waiting(ctx, &workspace, *launch).await;
+                    leave_waiting(ctx, &workspace, *launch, steps.pr).await;
                 }
                 return Err(error);
             }
@@ -177,14 +174,19 @@ async fn queue_agent(
     )
     .await?;
     reporter.ensure_running()?;
-    queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch).await
+    queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch, None).await
 }
 
 /// Leave `launch` waiting in the queue of `workspace`, whose setup failed,
-/// to start once a retried setup readies it, and say so; a refusal only
-/// warns.
-pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) {
-    let queued = queued_launches::queue_for_setup(&ctx.paths, workspace, launch);
+/// to start once a retried setup readies it, linking `pr` then, and say so;
+/// a refusal only warns.
+pub(super) async fn leave_waiting(
+    ctx: &Context,
+    workspace: &Workspace,
+    launch: QueuedLaunch,
+    pr: Option<String>,
+) {
+    let queued = queued_launches::queue_for_setup(&ctx.paths, workspace, launch, pr);
     let (name, number) = (&workspace.name, workspace.number);
     match queued.await {
         Ok(entry) => eprintln!(

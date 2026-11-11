@@ -3455,8 +3455,8 @@ workspace, and sends setup output to stderr. The agent `shoal start` or an app
 launches there waits in the [agent queue](#agent-queue) for the setup,
 holding no slot; once a retried or ignored setup gets past the post-setup
 hook, from the prompt, `shoal setup` or `shoal resume <workspace>`, the queue
-starts it with its mode, task and permissions, and a failed hook keeps it
-waiting. Then choose explicitly; `--skip`
+starts it with its mode, task and permissions, linking the PR a start from a
+PR names, and a failed hook keeps it waiting. Then choose explicitly; `--skip`
 leaves what setup did and is not available to workspace processes:
 
 ```sh

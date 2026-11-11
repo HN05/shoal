@@ -14,15 +14,16 @@ use crate::{
 };
 
 /// Queue `launch` in `workspace`, whose effective `settings` must let it
-/// run, for the agent queue to start detached.
+/// run, for the agent queue to start detached, linking `pr` as it starts.
 pub async fn queue_in_workspace(
     paths: &CommandPaths,
     workspace: &Workspace,
     settings: &Effective,
     launch: QueuedLaunch,
+    pr: Option<String>,
 ) -> Result<QueueEntry> {
     check_queued_launch(&launch, settings)?;
-    let request = queued_agent_request(workspace, launch)?;
+    let request = queued_agent_request(workspace, launch, pr)?;
     let admission = crate::client::queue::add(paths, request).await?;
     admission
         .entry
@@ -30,15 +31,16 @@ pub async fn queue_in_workspace(
 }
 
 /// Queue `launch` in `workspace`, whose setup failed, to start once a
-/// preparation there gets past its post-setup hook. It waits even when it
-/// was to start at once.
+/// preparation there gets past its post-setup hook, then linking `pr`, the
+/// PR its start was to link. It waits even when it was to start at once.
 pub async fn queue_for_setup(
     paths: &CommandPaths,
     workspace: &Workspace,
     mut launch: QueuedLaunch,
+    pr: Option<String>,
 ) -> Result<QueueEntry> {
     launch.now = false;
     let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
     let settings = crate::client::workspaces::settings(paths, target).await?;
-    queue_in_workspace(paths, workspace, &settings, launch).await
+    queue_in_workspace(paths, workspace, &settings, launch, pr).await
 }

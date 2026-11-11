@@ -23,7 +23,7 @@ impl Manager {
             ..QueuedLaunch::new(agent)
         };
         check_queued_launch(&launch, &self.workspace_settings(&workspace).await?)?;
-        let request = queued_agent_request(&workspace, launch)?;
+        let request = queued_agent_request(&workspace, launch, None)?;
         self.queue_add(request)
             .await?
             .entry

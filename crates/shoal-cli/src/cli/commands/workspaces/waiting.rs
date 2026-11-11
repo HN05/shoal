@@ -17,20 +17,24 @@ pub(in crate::cli::commands) struct WaitingAgent {
     /// The starting queue entry whose slot the launch holds, until a failed
     /// setup frees it.
     pub starting: Option<QueueEntryId>,
+    /// The PR the start links, which the caller's agent links once it starts.
+    pr: Option<String>,
     /// A setup failed, so the agent waits in the queue.
     failed: bool,
 }
 
 impl WaitingAgent {
-    /// The agent of a start that holds the slot of `starting`, `launch` when
-    /// the caller starts it itself.
+    /// The agent of a start that holds the slot of `starting` and links
+    /// `pr`, `launch` when the caller starts it itself.
     pub(in crate::cli::commands) fn new(
         launch: Option<QueuedLaunch>,
         starting: Option<QueueEntryId>,
+        pr: Option<String>,
     ) -> Self {
         Self {
             launch,
             starting,
+            pr,
             failed: false,
         }
     }
@@ -52,7 +56,7 @@ impl WaitingAgent {
             queued_agents::fail(ctx, &entry, &error).await;
         }
         if let Some(launch) = self.launch.take() {
-            super::prepare::leave_waiting(ctx, workspace, launch).await;
+            super::prepare::leave_waiting(ctx, workspace, launch, self.pr.take()).await;
         }
     }
 }

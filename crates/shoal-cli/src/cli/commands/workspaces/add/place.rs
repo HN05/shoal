@@ -96,7 +96,7 @@ async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Re
     }
     terminal::ensure_background(&settings)?;
     let entry =
-        queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch).await?;
+        queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch, None).await?;
     Ok(Placement::Queued(Box::new(entry)))
 }
 
