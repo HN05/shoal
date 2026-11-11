@@ -597,9 +597,7 @@ async fn remove_on_request(
                 report.removed_ids.push(space.id().clone());
             }
             Err(error) => {
-                if space.worktree().is_some() {
-                    (manager.record_retained(space.id(), EventCause::Manual, &error)).await?;
-                }
+                (manager.record_retained(space.id(), EventCause::Manual, &error)).await?;
                 log!("manual cleanup retained {name}: {error:#}");
                 report.retain(name, &error);
             }

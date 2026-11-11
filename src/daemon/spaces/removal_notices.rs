@@ -184,16 +184,12 @@ impl Manager {
     }
 
     /// Record in the journal that `cleanup` retained `space` with `error`.
-    /// A space without a worktree records no retention.
     async fn record_retention(
         &self,
         space: Announced<'_>,
         cleanup: Cleanup<'_>,
         error: &anyhow::Error,
     ) -> Result<()> {
-        if !space.worktree {
-            return Ok(());
-        }
         let cause = cleanup.cause(self, space.id).await?;
         self.record_retained(space.id, cause, error).await
     }

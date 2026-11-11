@@ -52,7 +52,7 @@ async fn a_retained_workspace_records_its_cleanup_as_the_cause() {
 }
 
 #[tokio::test]
-async fn a_retained_chat_records_no_retention() {
+async fn a_retained_chat_records_its_cleanup_as_the_cause() {
     let (_root, manager) = manager().await;
     let (chat, _process) =
         crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
@@ -63,7 +63,7 @@ async fn a_retained_chat_records_no_retention() {
         .await
         .unwrap();
 
-    assert!(retentions(&manager).await.is_empty());
+    assert_eq!(retentions(&manager).await, [Some(EventCause::Idle)]);
     assert_eq!(
         notices(&manager).await,
         [(NotificationKind::CleanupFailed, Some("notes".to_owned()))]
