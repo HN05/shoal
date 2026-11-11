@@ -179,16 +179,21 @@ impl Manager {
     }
 
     /// Record the turn a wake hook starts for the agent `execution` runs,
-    /// unless a stop of the agent came first: the hook then keeps the update
-    /// for the agent's restore. Whether the turn starts.
+    /// or a chat's agent without one, unless a stop of the agent came first:
+    /// the hook then keeps the update for the agent's restore. Whether the
+    /// turn starts.
     pub(crate) async fn start_woken_turn(
         &self,
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
     ) -> Result<bool> {
-        if let Some(id) = &execution
-            && !self.claim_woken_turn(id).await
-        {
+        let claimed = match &execution {
+            Some(id) => self.claim_woken_turn(id).await,
+            // The save of a blocked chat leaves a message, which waits for
+            // its restore when its stop comes before its hook's wake.
+            None => !self.chat_saved(self.space(selector).await?.id()).await?,
+        };
+        if !claimed {
             return Ok(false);
         }
         self.record_agent_state(

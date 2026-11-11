@@ -216,6 +216,9 @@ async fn a_blocked_chat_stops_after_its_turn_and_restores_once_unblocked() {
     assert_eq!(restore_saved(&manager).await, 0, "it waits while blocked");
     // A message waits for the restore, however the space clears, so the
     // restore starts a turn.
+    // The old agent's wake hook, which the message wakes before the stop
+    // ends it, starts no turn, and the message keeps waiting.
+    assert!(!manager.start_woken_turn(&selector, None).await.unwrap());
     let waiting = manager.space_messages(&selector).await.unwrap();
     assert!(
         waiting
