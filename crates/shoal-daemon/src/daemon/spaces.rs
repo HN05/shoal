@@ -80,6 +80,15 @@ impl Manager {
         }
     }
 
+    /// Wake the waits for the messages of a space of `kind`, after the
+    /// transaction that queued one with [`queue_shoal_message`] commits.
+    pub(crate) fn space_message_queued(&self, kind: SpaceKind) {
+        match kind {
+            SpaceKind::Workspace => self.signals.agent_message_queued(),
+            SpaceKind::Chat => self.signals.chat_message_queued(),
+        }
+    }
+
     /// The space `about` names, by number and name while it has a number,
     /// since names repeat.
     async fn about_label(&self, about: About<'_>) -> Result<String> {
@@ -112,6 +121,25 @@ impl Manager {
             PresentSpace::Chat(chat) => self.undo_chat_done(&chat.id).await,
         }
     }
+}
+
+/// Queue `message` from Shoal, about no other space, for the agent of the
+/// space `id` in the caller's transaction, as
+/// [`Manager::queue_space_message`] queues one, for a caller that decides
+/// in the same transaction whether to send it: the kind of the space, whose
+/// waits [`Manager::space_message_queued`] wakes after committing, or `None`
+/// when an identical message is unread.
+pub(crate) fn queue_shoal_message(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    message: &str,
+) -> Result<Option<SpaceKind>> {
+    let kind = space_kind(tx, id)?.with_context(|| format!("no space {id}"))?;
+    let queued = match kind {
+        SpaceKind::Workspace => super::agent_messages::insert(tx, id, message, &[])?,
+        SpaceKind::Chat => super::chat_messages::insert_from_user(tx, id, message)?,
+    };
+    Ok(queued.map(|_| kind))
 }
 
 /// The kind of the space `id`, while it exists.

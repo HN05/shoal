@@ -5,10 +5,12 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
+use rusqlite::Connection;
 
-use super::{log, workspace::Manager};
+use super::{log, spaces, workspace::Manager};
 use crate::{
-    client::space_ids::SpaceId, daemon::workspace::agent_state, model::PresentSpace, time::UnixTime,
+    client::space_ids::SpaceId, daemon::workspace::agent_state, model::PresentSpace,
+    state::AgentState, time::UnixTime,
 };
 
 pub(crate) mod sleep;
@@ -59,7 +61,9 @@ impl Manager {
 
     /// Wake the agent of the space `id`, idle since `since`, when its mode
     /// wakes it and it is due at `now`, unless the space is done or the
-    /// agent sleeps.
+    /// agent sleeps. The transaction that queues the wake checks all of
+    /// that again, since a turn, a sleep or `shoal done` may have come while
+    /// the mode's settings were read.
     async fn wake_if_due(
         &self,
         id: &SpaceId,
@@ -77,7 +81,16 @@ impl Manager {
         if !woken.due(id, since, Duration::from_secs(minutes * 60), now) {
             return Ok(());
         }
-        (self.queue_space_message(id, None, wake_message(minutes), Vec::new())).await?;
+        let (space, message) = (id.to_owned(), wake_message(minutes));
+        let queued = (self.store)
+            .write(move |tx| match still_idle(tx, &space, since)? {
+                true => spaces::queue_shoal_message(tx, &space, &message),
+                false => Ok(None),
+            })
+            .await?;
+        if let Some(kind) = queued {
+            self.space_message_queued(kind);
+        }
         woken.0.insert(id.to_owned(), now);
         Ok(())
     }
@@ -94,6 +107,24 @@ impl Manager {
             .await?
             .idle_wake_minutes(mode))
     }
+}
+
+/// Whether the agent of the space `id` is still idle since `since`, neither
+/// sleeping nor in a space whose work is done.
+fn still_idle(db: &Connection, id: &SpaceId, since: UnixTime) -> Result<bool> {
+    let idle = agent_state::current(db, id)?
+        .is_some_and(|status| status.state == AgentState::Idle && status.since == since);
+    Ok(idle && sleep::current(db, id)?.is_none() && !done(db, id)?)
+}
+
+/// Whether `shoal done` recorded that the work of the space `id` is
+/// finished, as its record reads it.
+fn done(db: &Connection, id: &SpaceId) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM space_completion WHERE space_id=?1)",
+        [id],
+        |row| row.get(0),
+    )?)
 }
 
 /// What a wake tells an agent idle for `minutes`.

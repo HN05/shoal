@@ -177,3 +177,25 @@ async fn a_chat_sleeps_only_in_a_mode_that_wakes_it() {
     let wake = messages(&manager, &plans.id).await;
     assert!(wake[0].contains("idle for 30 minutes"), "{wake:?}");
 }
+
+#[tokio::test]
+async fn a_wake_read_before_the_agent_worked_again_is_not_queued() {
+    let (temp, manager) = manager().await;
+    let (_, [worked]) = idle_workers(&manager, &temp, ["worked"]).await;
+    let selector = SpaceSelector::id(&worked.id);
+    let read = manager.workspace(&selector).await.unwrap();
+    let since = read.agent_state.unwrap().since;
+    // Before the wake is queued, the agent works and goes idle again.
+    (manager.store)
+        .write(|tx| {
+            tx.execute("UPDATE space_agent_state SET since=since+1", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let later = UnixTime::now() + HOUR * 2;
+    (manager.wake_if_due(&worked.id, since, &mut Woken::default(), later))
+        .await
+        .unwrap();
+    assert!(messages(&manager, &worked.id).await.is_empty());
+}
