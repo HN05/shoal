@@ -49,6 +49,31 @@ fn a_command_line_splits_at_each_nul() {
 }
 
 #[test]
+fn tty_nr_names_pseudo_terminals_and_consoles() {
+    let tty_nr = |major: u32, minor: u32| (major << 8) | (minor & 0xff) | ((minor & !0xff) << 12);
+    assert_eq!(
+        terminal_device(tty_nr(136, 3)),
+        Some(PathBuf::from("/dev/pts/3"))
+    );
+    assert_eq!(
+        terminal_device(tty_nr(136, 300)),
+        Some(PathBuf::from("/dev/pts/300"))
+    );
+    assert_eq!(
+        terminal_device(tty_nr(137, 2)),
+        Some(PathBuf::from("/dev/pts/258"))
+    );
+    assert_eq!(
+        terminal_device(tty_nr(4, 1)),
+        Some(PathBuf::from("/dev/tty1"))
+    );
+    // A serial port, the console and no terminal at all.
+    assert_eq!(terminal_device(tty_nr(4, 64)), None);
+    assert_eq!(terminal_device(tty_nr(5, 1)), None);
+    assert_eq!(terminal_device(0), None);
+}
+
+#[test]
 fn elapsed_time_counts_from_the_start_tick() {
     let uptime = Duration::from_secs(10);
     assert_eq!(

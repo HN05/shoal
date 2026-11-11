@@ -373,7 +373,7 @@ async fn run_at_prompt(
     let Some(pane) = server.pane(place.id(), Some(instance)).await? else {
         return Ok(false);
     };
-    if pane.in_mode || !server.at_prompt(&pane).await {
+    if pane.in_mode || !server.at_prompt(&pane) {
         return Ok(false);
     }
     let typed = typed(state, argv, env, &[], false)?;

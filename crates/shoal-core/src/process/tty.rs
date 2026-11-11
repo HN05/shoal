@@ -5,24 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::tools::Tool;
-
-/// The terminal `pid` runs on, or `None` for a process without one or that
-/// `ps` cannot read.
-pub(crate) async fn of(pid: u32) -> Option<PathBuf> {
-    let mut command = tokio::process::Command::new(Tool::Ps.program());
-    command
-        .args(["-o", "tty=", "-p", &pid.to_string()])
-        .env("LC_ALL", "C");
-    let output = crate::subprocess::Run::new(command).checked().await.ok()?;
-    device(&String::from_utf8_lossy(&output.stdout))
-}
-
-/// The device of the terminal `ps` names `name`, as `ttys004` or `pts/3`;
-/// it shows a process without one as `?` or `??`.
-fn device(name: &str) -> Option<PathBuf> {
-    let name = name.trim();
-    (!name.is_empty() && !name.starts_with('?')).then(|| Path::new("/dev").join(name))
+/// The terminal `pid` runs on, or `None` for a process without one or whose
+/// records cannot be read.
+pub(crate) fn of(pid: u32) -> Option<PathBuf> {
+    super::identity::details::terminal(pid).ok().flatten()
 }
 
 /// Whether `tty` takes input a line at a time, as a terminal does until a

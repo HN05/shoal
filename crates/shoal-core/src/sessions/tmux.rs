@@ -368,12 +368,9 @@ impl Tmux {
 
     /// Whether `pane`'s shell is back at its prompt: nothing runs in the
     /// foreground of its terminal but the process tmux started there.
-    pub(crate) async fn at_prompt(&self, pane: &Pane) -> bool {
-        let mut ps = Command::new(Tool::Ps.program());
-        ps.args(["-o", "tpgid=", "-p", &pane.pid.to_string()]);
-        Run::new(ps).checked().await.is_ok_and(|output| {
-            String::from_utf8_lossy(&output.stdout).trim() == pane.pid.to_string()
-        })
+    pub(crate) fn at_prompt(&self, pane: &Pane) -> bool {
+        crate::process::identity::details::foreground_group(pane.pid)
+            .is_ok_and(|group| group == Some(pane.pid))
     }
 
     /// Close `pane` on the server instance `instance` and nothing else:

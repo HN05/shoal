@@ -1,9 +1,10 @@
 //! What the kernel shows about a process beyond its identity: the command
-//! line a person recognizes it by, and how long it has run. A process that
-//! has exited, or whose records the kernel refuses, shows none of it.
+//! line a person recognizes it by, how long it has run, and its terminal
+//! with that terminal's foreground process group. A process that has
+//! exited, or whose records the kernel refuses, shows none of it.
 use super::platform;
 use anyhow::Result;
-use std::{ffi::OsString, os::unix::ffi::OsStringExt, time::Duration};
+use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf, time::Duration};
 
 /// The arguments `pid` runs with.
 pub(crate) fn arguments(pid: u32) -> Option<Vec<OsString>> {
@@ -14,6 +15,16 @@ pub(crate) fn arguments(pid: u32) -> Option<Vec<OsString>> {
 /// How long `pid` has run.
 pub(crate) fn elapsed(pid: u32) -> Result<Option<Duration>> {
     valid(pid).map_or(Ok(None), platform::elapsed)
+}
+
+/// The device of `pid`'s controlling terminal.
+pub(crate) fn terminal(pid: u32) -> Result<Option<PathBuf>> {
+    valid(pid).map_or(Ok(None), platform::terminal)
+}
+
+/// The foreground process group of `pid`'s controlling terminal.
+pub(crate) fn foreground_group(pid: u32) -> Result<Option<u32>> {
+    valid(pid).map_or(Ok(None), platform::foreground_group)
 }
 
 /// `pid` when it can name a process other than the kernel's.

@@ -419,6 +419,57 @@ pub(super) fn elapsed(pid: u32) -> Result<Option<Duration>> {
     ))
 }
 
+/// The device of `pid`'s controlling terminal, `None` without one.
+pub(super) fn terminal(pid: u32) -> Result<Option<PathBuf>> {
+    Ok(bsd_info(pid, false)?.and_then(|info| device_path(info.bsd.e_tdev)))
+}
+
+/// The foreground process group of `pid`'s controlling terminal, `None`
+/// without one.
+pub(super) fn foreground_group(pid: u32) -> Result<Option<u32>> {
+    Ok(bsd_info(pid, false)?
+        .filter(|info| info.bsd.e_tdev != NODEV)
+        .map(|info| info.bsd.e_tpgid)
+        .filter(|group| *group > 0))
+}
+
+/// `NODEV` in sys/types.h: a process without a controlling terminal.
+const NODEV: u32 = u32::MAX;
+
+/// The path in `/dev` of the character device `device`.
+fn device_path(device: u32) -> Option<PathBuf> {
+    // libc does not bind the reentrant form of `devname`.
+    unsafe extern "C" {
+        fn devname_r(
+            dev: libc::dev_t,
+            kind: libc::mode_t,
+            buf: *mut libc::c_char,
+            len: libc::c_int,
+        ) -> *mut libc::c_char;
+    }
+    if device == NODEV {
+        return None;
+    }
+    let mut name = [0 as libc::c_char; 128];
+    // SAFETY: devname_r writes at most the buffer's length, terminated.
+    let named = unsafe {
+        devname_r(
+            device as libc::dev_t,
+            libc::S_IFCHR,
+            name.as_mut_ptr(),
+            name.len() as libc::c_int,
+        )
+    };
+    if named.is_null() {
+        return None;
+    }
+    // SAFETY: devname_r returned a terminated string in the buffer.
+    let name = unsafe { std::ffi::CStr::from_ptr(named) }.to_bytes();
+    // A device `/dev` does not list is named by its numbers after `#`.
+    (!name.is_empty() && !name.starts_with(b"#") && !name.starts_with(b"?"))
+        .then(|| std::path::Path::new("/dev").join(OsStr::from_bytes(name)))
+}
+
 /// The PIDs in process group `group`, including zombies.
 pub(super) fn group_members(group: u32) -> Result<Vec<u32>> {
     // PROC_PGRP_ONLY in sys/proc_info.h.

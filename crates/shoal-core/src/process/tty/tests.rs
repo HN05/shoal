@@ -5,6 +5,7 @@ use std::{
 };
 
 use super::*;
+use crate::process::identity::details::foreground_group;
 
 /// A new terminal's master and slave, which keep its device while open,
 /// and the device.
@@ -57,11 +58,44 @@ fn a_missing_terminal_has_no_mode() {
     assert_eq!(canonical(Path::new("/dev/shoal-no-such-tty")), None);
 }
 
+/// A `sleep` that leads a session of its own, controlling `terminal` when
+/// one is given.
+fn session_leader(terminal: Option<&File>) -> std::process::Child {
+    use std::os::unix::process::CommandExt;
+    let mut command = std::process::Command::new("sleep");
+    command.arg("300");
+    let controls = terminal.is_some();
+    if let Some(terminal) = terminal {
+        command.stdin(terminal.try_clone().unwrap());
+    }
+    // SAFETY: setsid and ioctl are async-signal-safe.
+    unsafe {
+        command.pre_exec(move || {
+            if libc::setsid() < 0 || (controls && libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0) {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    command.spawn().unwrap()
+}
+
 #[test]
-fn ps_names_a_terminal_by_its_device() {
-    assert_eq!(device("ttys004\n"), Some(PathBuf::from("/dev/ttys004")));
-    assert_eq!(device(" pts/3"), Some(PathBuf::from("/dev/pts/3")));
-    assert_eq!(device("??"), None);
-    assert_eq!(device("?"), None);
-    assert_eq!(device(""), None);
+fn a_process_runs_on_the_terminal_it_controls() {
+    let (_master, slave, device) = terminal();
+    let mut leader = session_leader(Some(&slave));
+    let mut detached = session_leader(None);
+
+    let found = (of(leader.id()), of(detached.id()));
+    let groups = (
+        foreground_group(leader.id()).unwrap(),
+        foreground_group(detached.id()).unwrap(),
+    );
+    for child in [&mut leader, &mut detached] {
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    assert_eq!(found, (Some(device), None));
+    assert_eq!(groups, (Some(leader.id()), None));
 }

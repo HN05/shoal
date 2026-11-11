@@ -258,6 +258,48 @@ fn elapsed_since(started: u64, ticks_per_second: u64, uptime: Duration) -> Durat
     ))
 }
 
+/// The device of `pid`'s controlling terminal, `None` without one.
+pub(super) fn terminal(pid: u32) -> Result<Option<PathBuf>> {
+    let Some(fields) = live_stat(pid)? else {
+        return Ok(None);
+    };
+    Ok(terminal_device(
+        fields[4].parse().context("invalid process terminal")?,
+    ))
+}
+
+/// The path in `/dev` of a pseudo-terminal or virtual console that `stat`'s
+/// `tty_nr` encodes; other devices count as no terminal.
+fn terminal_device(tty_nr: u32) -> Option<PathBuf> {
+    // UNIX98_PTY_SLAVE_MAJOR and TTY_MAJOR in linux/major.h.
+    const PTY_SLAVE_MAJORS: std::ops::RangeInclusive<u32> = 136..=143;
+    const TTY_MAJOR: u32 = 4;
+    // Virtual consoles take the tty major's first 64 minors, serial ports the rest.
+    const CONSOLES: u32 = 64;
+    let major = (tty_nr >> 8) & 0xfff;
+    let minor = (tty_nr & 0xff) | ((tty_nr >> 12) & 0xfff00);
+    if PTY_SLAVE_MAJORS.contains(&major) {
+        let number = (major - PTY_SLAVE_MAJORS.start()) * 256 + minor;
+        Some(PathBuf::from(format!("/dev/pts/{number}")))
+    } else if major == TTY_MAJOR && minor < CONSOLES {
+        Some(PathBuf::from(format!("/dev/tty{minor}")))
+    } else {
+        None
+    }
+}
+
+/// The foreground process group of `pid`'s controlling terminal, `None`
+/// without one.
+pub(super) fn foreground_group(pid: u32) -> Result<Option<u32>> {
+    let Some(fields) = live_stat(pid)? else {
+        return Ok(None);
+    };
+    let group: i32 = fields[5]
+        .parse()
+        .context("invalid foreground process group")?;
+    Ok(u32::try_from(group).ok().filter(|group| *group > 0))
+}
+
 /// The `stat` fields of `pid`, from its state on, `None` once it has exited.
 fn live_stat(pid: u32) -> Result<Option<Vec<String>>> {
     let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {

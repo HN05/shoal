@@ -280,7 +280,7 @@ async fn await_prompt(origin: &Origin, pane: &str) {
 /// The terminal of `pane`'s shell, when Herdr names the shell's process.
 async fn shell_terminal(origin: &Origin, pane: &str) -> Option<PathBuf> {
     let shell = processes(origin, pane).await?.shell_pid?;
-    tty::of(u32::try_from(shell).ok()?).await
+    tty::of(u32::try_from(shell).ok()?)
 }
 
 /// The processes of `pane`, `None` when it is gone or unreadable.
