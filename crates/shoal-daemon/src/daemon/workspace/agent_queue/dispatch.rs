@@ -25,7 +25,8 @@ use crate::{
 };
 
 /// How long a starting entry keeps its slot without a holder: long enough for
-/// a launch to hand over to a Herdr tab or reconnect after a daemon restart.
+/// a launch to hand over to the place a host opens or reconnect after a
+/// daemon restart.
 pub(super) const START_GRACE: Duration = Duration::from_secs(120);
 
 /// An admitted entry the daemon starts itself.

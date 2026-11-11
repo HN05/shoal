@@ -10,8 +10,8 @@ pub const PREFIX: &str = "SHOAL_";
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
-/// Resolved launch plan a new Herdr tab or zmx session hands its worker;
-/// removed at startup.
+/// Resolved launch plan the place a host opens for an addition hands its
+/// worker; removed at startup.
 pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.

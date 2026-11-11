@@ -113,8 +113,8 @@ pub struct AddPlan {
     /// The name of the place a host opens for the addition.
     #[serde(default)]
     pub place_name: Option<PlaceName>,
-    /// The found issue's URL; its body can exceed what a Herdr tab's
-    /// environment carries, so the worker looks it up again.
+    /// The found issue's URL; its body can exceed what the environment of
+    /// the place a host opens carries, so the worker looks it up again.
     pub issue: Option<String>,
     pub agent: ResolvedAddAgent,
     pub args: Vec<OsString>,

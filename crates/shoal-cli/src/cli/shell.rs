@@ -41,8 +41,9 @@ fn is_init_line(line: &str) -> bool {
 
 /// Directory changes use a private data file, never shell code evaluated from
 /// a repository path or command output. The wrapper works in Bash and Zsh. A
-/// Herdr tab Shoal opens exports its file, which the tab's shell follows once
-/// at a prompt after the worker writes it.
+/// place Shoal opens that keeps a shell, such as a Herdr tab, exports its
+/// file, which the place's shell follows once at a prompt after the worker
+/// writes it.
 pub const INIT: &str = r#"_shoal_enter_tab_workspace() {
   local shoal_destination
   { [ -n "${SHOAL_SHELL_DIRECTIVE-}" ] && [ -s "$SHOAL_SHELL_DIRECTIVE" ]; } || return 0
