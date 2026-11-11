@@ -127,15 +127,17 @@ fn a_workspace_records_where_a_stopped_agent_waits() {
 }
 
 #[test]
-fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() {
+fn every_record_of_a_stopped_agents_place_reports_the_stop_and_its_execution() {
     let execution = Origin::created(HostName::Zmx, "work".to_owned());
     let created = Origin {
         instance: Some("1:10".into()),
         ..execution.clone()
     };
     let other = Origin::created(HostName::Zmx, "other".to_owned());
-    // A host may give another agent's place the same name; it keeps its own state.
+    // A host may give other places the same name, such as tmux panes named
+    // after their windows: another agent's and a shell keep their own state.
     let running = Origin::created(HostName::Zmx, "running".to_owned());
+    let shell = Origin::created(HostName::Zmx, "shell".to_owned());
     let mut sessions = vec![
         Session::open("work".into(), 0, &created),
         Session {
@@ -148,6 +150,7 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() 
             execution: Some("running".into()),
             ..Session::open("work".into(), 0, &running)
         },
+        Session::open("work".into(), 0, &shell),
     ];
     mark_stopped(&mut sessions);
     let stopped: Vec<_> = sessions
@@ -161,7 +164,8 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() 
             (true, stopped_execution.clone()),
             (true, stopped_execution),
             (false, None),
-            (false, Some(ExecutionId::from("running")))
+            (false, Some(ExecutionId::from("running"))),
+            (false, None)
         ]
     );
 }

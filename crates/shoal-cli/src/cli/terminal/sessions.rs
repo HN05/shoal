@@ -93,18 +93,18 @@ pub(in crate::cli) async fn sessions(
     Ok(sessions)
 }
 
-/// Mark every one of `sessions` that is the session of a stopped agent,
-/// which another place, such as the one Shoal created for the agent, may
-/// have found too, with why it stopped and its execution. A session with an
-/// execution of its own keeps its own state, since a host may give the
-/// places of several agents one name.
+/// Mark every one of `sessions` found at the place of a stopped agent, which
+/// another record of that place, such as the one Shoal created for the
+/// agent, may have found too, with why it stopped and its execution. A
+/// session with an execution of its own keeps its own state, and another
+/// place keeps its own however its host names it, since a host may give
+/// several places one name.
 fn mark_stopped(sessions: &mut [Session]) {
     let stopped: Vec<_> = sessions
         .iter()
         .filter_map(|session| {
             Some((
-                session.place.host,
-                session.name.clone(),
+                session.place.clone(),
                 session.stopped.clone()?,
                 session.execution.clone(),
             ))
@@ -114,14 +114,24 @@ fn mark_stopped(sessions: &mut [Session]) {
         .iter_mut()
         .filter(|session| session.execution.is_none())
     {
-        if let Some((.., protection, execution)) = stopped
+        if let Some((_, protection, execution)) = stopped
             .iter()
-            .find(|(host, name, ..)| (*host, name.as_str()) == session.key())
+            .find(|(place, ..)| one_place(place, &session.place))
         {
             session.stopped = Some(protection.clone());
             session.execution = execution.clone();
         }
     }
+}
+
+/// Whether `a` and `b` name one place, whichever instance of it each
+/// record found.
+fn one_place(a: &Origin, b: &Origin) -> bool {
+    let any_instance = |place: &Origin| Origin {
+        instance: None,
+        ..place.clone()
+    };
+    any_instance(a).same_place(&any_instance(b))
 }
 
 /// The session open at each of `places`, in order, asking each host that
