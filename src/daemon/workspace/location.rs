@@ -11,19 +11,23 @@ use std::{
 };
 
 impl Manager {
-    /// Choose a new workspace's directory: a validated explicit path, or its
-    /// name inside the repository's reserved directory, resolved so overlap
-    /// checks compare real locations. Any existing entry, including a
-    /// dangling symlink, or a directory the daemon cannot write is refused.
+    /// Choose a new workspace's directory: a validated explicit path, or one
+    /// named after `from`, such as its branch, inside the repository's
+    /// reserved directory, resolved so overlap checks compare real
+    /// locations. Any existing entry, including a dangling symlink, or a
+    /// directory the daemon cannot write is refused.
     pub(super) async fn new_workspace_path(
         &self,
         repo: &Repository,
-        name: &str,
+        from: &str,
         path: Option<PathBuf>,
     ) -> Result<PathBuf> {
         let path = match path {
             Some(path) => self.workspace_location(repo, &path).await?,
-            None => canonical_with_missing_tail(&self.workspaces_dir(repo).await?)?.join(name),
+            None => {
+                let directory = canonical_with_missing_tail(&self.workspaces_dir(repo).await?)?;
+                directory.join(self.free_directory(from).await?)
+            }
         };
         ensure_unused(&path)?;
         crate::daemon::access::ensure_writable(&path).await?;
@@ -31,31 +35,42 @@ impl Manager {
     }
 
     /// Refuse what [`Self::new_workspace_path`] and recording the workspace
-    /// would refuse for the workspace `name`, without reserving the
+    /// would refuse for a workspace named after `from`, without reserving the
     /// repository's directory, which holds nothing before it is reserved.
-    /// Without a name, an explicit path may still reopen the workspace already
-    /// there, so only its location is checked.
+    /// Without `from`, an explicit path may still reopen the workspace
+    /// already there, so only its location is checked.
     pub(super) async fn check_new_workspace_path(
         &self,
         repo: &Repository,
-        name: Option<&str>,
+        from: Option<&str>,
         path: Option<&Path>,
     ) -> Result<()> {
         let explicit = match path {
             Some(path) => Some(self.workspace_location(repo, path).await?),
             None => None,
         };
-        let Some(name) = name else {
+        let Some(from) = from else {
             return Ok(());
         };
         let path = match (explicit, &repo.workspaces_dir) {
             (Some(path), _) => path,
-            (None, Some(directory)) => canonical_with_missing_tail(directory)?.join(name),
+            (None, Some(directory)) => {
+                canonical_with_missing_tail(directory)?.join(self.free_directory(from).await?)
+            }
             (None, None) => return Ok(()),
         };
         ensure_unused(&path)?;
         self.store
             .run(move |db| store::ensure_path_unrecorded(db, &path))
+            .await
+    }
+
+    /// The name of a new workspace's directory made from `from`, such as
+    /// its branch, that no workspace's directory has.
+    async fn free_directory(&self, from: &str) -> Result<String> {
+        let base = crate::client::space_names::directory_name(from);
+        self.store
+            .run(move |db| store::free_directory(db, &base))
             .await
     }
 

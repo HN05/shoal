@@ -10,7 +10,6 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use tokio::{process::Command, sync::watch};
 
-use crate::client::space_names::SpaceName;
 use crate::{
     config::Effective,
     daemon::{
@@ -32,7 +31,6 @@ use crate::{
         Layout, Snapshot, Staged,
         build::{self, Build, Step},
     },
-    state::WorkspaceState,
 };
 
 /// How often the daemon looks for a default branch that moved.
@@ -58,23 +56,15 @@ impl Plan {
         };
         let branch = default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         // Builds see the workspaces' [env], so their outputs stay reusable.
-        let identity = Workspace::new_record(
-            repo.id.clone(),
-            SpaceName::seed(),
-            layout.worktree(),
-            Some(branch.clone()),
-            WorkspaceState::Ready,
-        );
         Ok(Some(Self {
             build,
             paths: build::outputs(&settings.setup.seed, presets),
-            environment: crate::env::render_configured_environment(
+            environment: crate::env::render_seed_environment(
                 &settings.env,
-                &identity,
+                &layout.worktree(),
+                &branch,
                 crate::repository::name(repo),
-                &[],
                 &crate::caches::locate(repo, &settings.caches),
-                None,
             ),
             caches: settings.caches.clone(),
             branch,

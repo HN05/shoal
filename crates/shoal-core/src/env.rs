@@ -46,16 +46,12 @@ pub fn render_configured_environment(
     caches: &BTreeMap<String, PathBuf>,
     tmp_dir: Option<&Path>,
 ) -> BTreeMap<String, OsString> {
-    let mut fields = vec![
-        ("{workspace}", std::ffi::OsStr::new(&workspace.name)),
-        ("{workspace_path}", workspace.path.as_os_str()),
-        ("{path}", workspace.path.as_os_str()),
-        ("{repo}", std::ffi::OsStr::new(repository_name)),
-        (
-            "{branch}",
-            std::ffi::OsStr::new(workspace.branch.as_deref().unwrap_or_default()),
-        ),
-    ];
+    let mut fields = workspace_fields(
+        workspace.directory_name(),
+        &workspace.path,
+        workspace.branch.as_deref(),
+        repository_name,
+    );
     let mut port_values = Vec::new();
     for port in ports {
         port_values.push((format!("{{port.{}}}", port.name), port.port.to_string()));
@@ -66,6 +62,37 @@ pub fn render_configured_environment(
             .map(|(name, value)| (name.as_str(), std::ffi::OsStr::new(value))),
     );
     render_environment(values, fields, caches, tmp_dir)
+}
+
+/// [`render_configured_environment`] for the seed build of `branch` in
+/// `worktree`, whose `{workspace}` is `.seed`, a name no workspace's
+/// directory has, so what `[env]` derives from it never clashes with a
+/// workspace's.
+pub fn render_seed_environment(
+    values: &BTreeMap<String, String>,
+    worktree: &Path,
+    branch: &str,
+    repository_name: &str,
+    caches: &BTreeMap<String, PathBuf>,
+) -> BTreeMap<String, OsString> {
+    let fields = workspace_fields(".seed", worktree, Some(branch), repository_name);
+    render_environment(values, fields, caches, None)
+}
+
+/// The placeholders of a workspace whose directory is named `directory`.
+fn workspace_fields<'a>(
+    directory: &'a str,
+    path: &'a Path,
+    branch: Option<&'a str>,
+    repository_name: &'a str,
+) -> Vec<(&'a str, &'a OsStr)> {
+    vec![
+        ("{workspace}", OsStr::new(directory)),
+        ("{workspace_path}", path.as_os_str()),
+        ("{path}", path.as_os_str()),
+        ("{repo}", OsStr::new(repository_name)),
+        ("{branch}", OsStr::new(branch.unwrap_or_default())),
+    ]
 }
 
 /// [`render_configured_environment`] for a chat, which runs in the
@@ -254,7 +281,7 @@ fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, 
     BTreeMap::from([
         (WORKSPACE_ID.into(), workspace.id.clone().into()),
         (RUN_ID.into(), workspace.id.clone().into()),
-        (WORKSPACE_NAME.into(), workspace.name.clone().into()),
+        (WORKSPACE_NAME.into(), workspace.directory_name().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ])
 }

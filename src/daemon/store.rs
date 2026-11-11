@@ -152,6 +152,23 @@ pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result
     Ok(())
 }
 
+/// The first of `base`, `base-2`, `base-3`, ... that no workspace of any
+/// repository has as its directory's name, each cut to the longest name
+/// allowed.
+pub fn free_directory(db: &Connection, base: &str) -> Result<String> {
+    let recorded = db
+        .prepare("SELECT path FROM workspaces")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let taken: std::collections::HashSet<&std::ffi::OsStr> = (recorded.iter())
+        .filter_map(|path| std::path::Path::new(path).file_name())
+        .collect();
+    let free = (1_u64..)
+        .map(|suffix| crate::client::space_names::suffixed_directory(base, suffix))
+        .find(|candidate| !taken.contains(std::ffi::OsStr::new(candidate)));
+    Ok(free.expect("an unused suffix exists"))
+}
+
 /// A recorded checkout or workspace that lies in `directory`.
 pub fn checkout_within(
     db: &Connection,

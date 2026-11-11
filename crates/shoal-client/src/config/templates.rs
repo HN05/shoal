@@ -322,7 +322,7 @@ impl Fields {
                 workspace,
                 delivery,
             } => vec![
-                ("{workspace}", workspace.name.to_string()),
+                ("{workspace}", workspace.directory_name().to_owned()),
                 ("{branch}", workspace.branch.clone().unwrap_or_default()),
                 ("{path}", workspace.path.to_string_lossy().into_owned()),
                 ("{updates}", delivery.description().to_owned()),
@@ -339,7 +339,7 @@ impl Fields {
                 fields.extend(repo.map(|repo| ("{repo}", repo.to_owned())));
                 if let Some(workspace) = home.workspace() {
                     fields.extend([
-                        ("{workspace}", workspace.name.to_string()),
+                        ("{workspace}", workspace.directory_name().to_owned()),
                         ("{branch}", workspace.branch.clone().unwrap_or_default()),
                         ("{head}", head_label(workspace)),
                     ]);

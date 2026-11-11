@@ -350,7 +350,7 @@ impl Manager {
         let instructions = templates::review_instructions(
             (settings.rules.get(crate::config::modes::REVIEW_RULE)).map(|rule| rule.text.as_str()),
             &templates::ReviewFields {
-                workspace: &workspace.name,
+                workspace: workspace.directory_name(),
                 branch: workspace.branch.as_deref().unwrap_or_default(),
                 path: &checkout.to_string_lossy(),
                 base: &commits.base,

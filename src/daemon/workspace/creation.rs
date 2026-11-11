@@ -113,8 +113,8 @@ impl Manager {
             };
             check_base(&repo, base, source).await?;
         }
-        let name = name.map(|name| SpaceName::derive(SpaceKind::Workspace, &name));
-        if let Some(name) = name.clone() {
+        if let Some(name) = &name {
+            let name = SpaceName::derive(SpaceKind::Workspace, name);
             self.store
                 .run(move |db| store::ensure_name_available(db, &name, None))
                 .await?;
@@ -161,8 +161,8 @@ impl Manager {
             WorkspaceSource::Existing { .. } => None,
         }
         .or(below);
-        let name = given_name.unwrap_or_else(|| SpaceName::derive(SpaceKind::Workspace, &name));
         let path = self.new_workspace_path(repo, &name, path).await?;
+        let name = given_name.unwrap_or_else(|| SpaceName::derive(SpaceKind::Workspace, &name));
         let workspace = Workspace {
             setup_skipped: options.skip_setup,
             disposable: options.disposable,

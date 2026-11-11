@@ -106,7 +106,7 @@ impl Manager {
     ) -> Result<Workspace> {
         let branch = self.available_branch(repo, source_branch).await?;
         let name = SpaceName::derive(SpaceKind::Workspace, &branch);
-        let destination = self.new_workspace_path(repo, &name, None).await?;
+        let destination = self.new_workspace_path(repo, &branch, None).await?;
         ensure!(
             !destination.starts_with(source) && !source.starts_with(&destination),
             "copied workspace path overlaps the source worktree"

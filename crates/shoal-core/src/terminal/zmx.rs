@@ -597,10 +597,12 @@ fn replacement_labels(owner: Owner<'_>) -> String {
     format!("{} {obsolete}= shoal.demo=", owner_label(owner))
 }
 
-/// The workspace's or chat's name, shortened to fit a socket path, then
-/// suffixed `-2`, `-3`, ... past sessions that already use it.
-fn free_name(owner: &str, taken: &HashSet<String>) -> String {
-    let base: String = owner.chars().take(MAX_NAME_LEN).collect();
+/// `label`, a workspace's directory name or a chat's name, cleaned up as a
+/// directory's name is and shortened to fit a socket path, then suffixed
+/// `-2`, `-3`, ... past sessions that already use it.
+fn free_name(label: &str, taken: &HashSet<String>) -> String {
+    let base = crate::client::space_names::directory_name(label);
+    let base: String = base.chars().take(MAX_NAME_LEN).collect();
     std::iter::once(base.clone())
         .chain((2..).map(|n| format!("{base}-{n}")))
         .find(|name| !taken.contains(name))

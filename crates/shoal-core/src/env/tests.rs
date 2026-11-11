@@ -107,7 +107,7 @@ fn configured_values_render_identity_and_only_reserved_ports_once() {
     );
     assert_eq!(
         rendered["SESSION"],
-        "project-{workspace}:task:feature/session"
+        "project-{workspace}:$(false) 日本語:feature/session"
     );
     assert_eq!(
         rendered["PROFILE"],

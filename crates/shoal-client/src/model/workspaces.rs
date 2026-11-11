@@ -248,6 +248,14 @@ impl Workspace {
         self.branch.as_deref().unwrap_or(&self.name)
     }
 
+    /// Its worktree directory's name, the last part of its path, which
+    /// `{workspace}` and its terminal session take since it never changes.
+    pub fn directory_name(&self) -> &str {
+        (self.path.file_name())
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or_default()
+    }
+
     /// True when `path` (canonical) lies inside this worktree.
     pub fn contains(&self, path: &Path) -> bool {
         std::fs::canonicalize(&self.path).is_ok_and(|root| path.starts_with(root))

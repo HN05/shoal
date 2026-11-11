@@ -1235,7 +1235,8 @@ such as a detached session left at its shell after a failed setup. The
 session of an agent Shoal stopped, such as for memory pressure, while it waits
 for its automatic restore is not offered: attaching to it says why the agent
 stopped, what restores it, and that `shoal queue start --attach <workspace>`
-restores it now and attaches. Sessions are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
+restores it now and attaches. Sessions are named after the workspace's directory, or the
+chat's name as it starts with the characters a directory's name leaves out as `-`, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
 Sessions Shoal creates are also labelled `shoal.created=1`. Removing a
@@ -2556,7 +2557,9 @@ leading `-_`, truncates to 64 characters, and falls back to `workspace`; a name
 that would be all digits takes the prefix `workspace-`, as a branch `123` gives
 `workspace-123`, since a number selects a space. A name given with `--name` or
 `shoal rename` cannot be all digits. Globally colliding names fail. Commands
-use this name, the space's number or its ID. Directories default to the repository's
+use this name, the space's number or its ID. The worktree directory is named from the
+branch the same way, suffixed `-2`, `-3`, ... while another workspace of any
+repository has a directory of that name, and never moves. Directories default to the repository's
 Shoal workspace directory;
 `start --path <dir>` selects an exact new directory for this workspace only (relative
 to the current directory; `~/` allowed). Existing paths and overlaps with Shoal
@@ -3346,7 +3349,7 @@ still happens. `status` shows `Setup: skipped` and `--json` `setup_skipped`;
 `shoal setup` runs the full setup later and clears it.
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
-without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
+without `_cmd`), `SHOAL_WORKSPACE` (the workspace's `{workspace}`), `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
 and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `hooks.post_setup` runs without a terminal
 after `start` or `setup` has a ready workspace and before any `--agent`; a
@@ -5828,7 +5831,8 @@ to strings, using the same workspace identity and current port exports as tracke
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
 The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
 and this exported environment. Values resolve from local config, the
-worktree file, global config, then the default, and substitute `{workspace}`,
+worktree file, global config, then the default, and substitute `{workspace}`, the
+name of the workspace's directory, the last part of `{path}`, which never changes,
 `{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, reserved `{port.NAME}` and
 [`{cache.NAME}`](#shared-caches) fields once. Unknown fields remain literal, inserted values are not expanded, and
 `SHOAL_*` names are reserved for Shoal. Names must be ASCII identifiers; values

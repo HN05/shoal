@@ -65,7 +65,7 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
     if names_places(host) {
         format!("{} demo {name}", workspace.name)
     } else {
-        format!("{}-{name}", workspace.name)
+        format!("{}-{name}", workspace.directory_name())
     }
 }
 

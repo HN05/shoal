@@ -244,8 +244,9 @@ impl Manager {
                 (name, None)
             }
         };
+        let from = branch.as_deref().unwrap_or(&name);
         let path = self
-            .new_workspace_path(repo, &name, new.path.clone())
+            .new_workspace_path(repo, from, new.path.clone())
             .await?;
         let at = branch.is_none().then(|| StartingCommit {
             commit: source.head.clone(),

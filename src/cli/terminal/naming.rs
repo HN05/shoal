@@ -55,8 +55,9 @@ pub(super) async fn name_plan(
 }
 
 /// The label of the place `host` opens for `workspace`, from its name
-/// `template`, or the workspace's name when the host shows no names and
-/// names its places after it. A failed lookup falls back to the branch.
+/// `template`, or the workspace's directory name when the host shows no
+/// names and names its places after it. A failed lookup falls back to the
+/// branch.
 pub(super) async fn workspace_label(
     ctx: &Context,
     template: Option<String>,
@@ -64,7 +65,7 @@ pub(super) async fn workspace_label(
     workspace: &Workspace,
 ) -> String {
     if !names_places(host) {
-        return workspace.name.to_string();
+        return workspace.directory_name().to_owned();
     }
     if let (None, Some(title)) = (&template, &workspace.title) {
         return title.clone();

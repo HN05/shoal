@@ -8,6 +8,10 @@ fn names_fit_the_socket_path_and_skip_taken_ones() {
     assert_eq!(free_name("fix", &taken), "fix-3");
     assert_eq!(free_name("other", &taken), "other");
     assert_eq!(free_name(&"x".repeat(40), &taken), "x".repeat(MAX_NAME_LEN));
+    assert_eq!(
+        free_name("Fix login: 2 tests", &taken),
+        "Fix-login--2-tests"
+    );
 }
 
 #[test]

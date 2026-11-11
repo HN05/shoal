@@ -89,7 +89,9 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         .unwrap();
     let output = fixture.run(&["run", "--workspace", "explicit", "--", "/usr/bin/env"]);
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("SHOAL_WORKSPACE=explicit\n"));
+    // The workspace keeps the directory it was created in, after its
+    // first branch.
+    assert!(String::from_utf8_lossy(&output.stdout).contains("SHOAL_WORKSPACE=original\n"));
 }
 
 #[test]

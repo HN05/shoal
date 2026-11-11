@@ -61,12 +61,39 @@ impl SpaceName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
 
-    /// The name of the seed build's identity, `.seed`, which no space can
-    /// hold, so what `[env]` derives from it never clashes with a space's.
-    pub fn seed() -> Self {
-        Self(".seed".to_owned())
+/// The name of a directory or terminal session made from `text`, such as a
+/// branch: ASCII letters, digits, `-` and `_`, with every other character
+/// `-`, never starting with `-` or `_`, cut to the longest name allowed;
+/// `workspace` when nothing is left.
+pub fn directory_name(text: &str) -> String {
+    let mapped: String = text
+        .chars()
+        .map(
+            |c| match c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                true => c,
+                false => '-',
+            },
+        )
+        .collect();
+    match mapped.trim_start_matches(['-', '_']) {
+        "" => "workspace".to_owned(),
+        name => name.chars().take(MAX_NAME_LEN).collect(),
     }
+}
+
+/// `name`, or with `-<suffix>` from 2 on, cut to fit the longest name
+/// allowed.
+pub fn suffixed_directory(name: &str, suffix: u64) -> String {
+    let suffix = match suffix {
+        1 => String::new(),
+        n => format!("-{n}"),
+    };
+    let kept = MAX_NAME_LEN.saturating_sub(suffix.len());
+    let mut name: String = name.chars().take(kept).collect();
+    name.push_str(&suffix);
+    name
 }
 
 /// `names` joined by `separator`, as a message lists them.

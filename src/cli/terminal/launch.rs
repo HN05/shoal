@@ -507,6 +507,11 @@ pub(in crate::cli) async fn run_agent(
     let left_running = match run {
         AgentRun::Session(attaches) => {
             let owner = Owner::Workspace(&workspace.id);
+            // A session is named after the directory, which never changes.
+            let start = Start {
+                label: workspace.directory_name(),
+                ..start
+            };
             let session = attaches.run_agent(&start, owner, &agent.name).await?;
             report_detach(attaches, &workspace.name, &session).await?
         }

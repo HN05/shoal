@@ -79,3 +79,18 @@ fn digits_select_a_number_and_other_text_an_id_or_name() {
         parse("3")
     );
 }
+
+#[test]
+fn a_directory_name_keeps_portable_characters() {
+    assert_eq!(directory_name("feature/login"), "feature-login");
+    assert_eq!(directory_name("rust (fmt, test)"), "rust--fmt--test-");
+    assert_eq!(directory_name("123"), "123");
+    assert_eq!(directory_name("/_x"), "x");
+    assert_eq!(directory_name("Ünïcode"), "n-code");
+    assert_eq!(directory_name("//"), "workspace");
+    assert_eq!(directory_name(&"a".repeat(80)).len(), MAX_NAME_LEN);
+    assert_eq!(suffixed_directory("fix", 1), "fix");
+    let cut = suffixed_directory(&"a".repeat(MAX_NAME_LEN), 12);
+    assert_eq!(cut.len(), MAX_NAME_LEN);
+    assert!(cut.ends_with("-12"));
+}
