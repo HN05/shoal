@@ -375,6 +375,22 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .iter()
             .any(|event| event.kind == NotificationKind::AgentStopped)
     );
+    // Its waiting restore keeps the workspace from cleanup, unlike an idle
+    // agent's.
+    let agent = crate::agent::Agent::from("claude");
+    manager
+        .queue_restore(&execution.plan.id, &agent, &workspace.id)
+        .await
+        .unwrap();
+    let waiter = manager.agent_queue.wait_for_restore(&execution.plan.id);
+    assert!(
+        manager
+            .idle_restores(&workspace.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(waiter);
     // An update does not make its restore due; the space clearing does.
     manager.publish_config(crate::daemon::test_support::global_config(
         "[machine.overload.disk]\nenabled = false",
@@ -390,11 +406,6 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .unwrap()
     );
     // `shoal resume` restores it now, telling it what still blocks it.
-    let agent = crate::agent::Agent::from("claude");
-    manager
-        .queue_restore(&execution.plan.id, &agent, &workspace.id)
-        .await
-        .unwrap();
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries[0].blockers, ["https://github.com/team/app/pull/8"]);
     manager

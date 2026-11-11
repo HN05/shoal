@@ -93,6 +93,7 @@ impl Manager {
     /// with every process, waits in the queue for an update, in its wrapper
     /// or for the daemon to start it, while none is recorded for it. Disk
     /// space may still hold back one that is, which has work all the same.
+    /// An agent stopped because its space is blocked is not idle.
     pub(crate) async fn idle_restores(
         &self,
         workspace_id: &SpaceId,
@@ -116,7 +117,11 @@ impl Manager {
             } else {
                 continue;
             };
-            if matches!(wake, Wake::Update { .. }) {
+            // A blocked agent's restore keeps the workspace, which still
+            // has work to do once nothing blocks it.
+            if matches!(wake, Wake::Update { .. })
+                && !self.restore_waits_for_unblock(workspace_id, &restore.execution)
+            {
                 idle.insert(restore.execution);
             }
         }
