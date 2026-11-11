@@ -791,6 +791,16 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
 
     let path = Path::new(failed["path"].as_str().unwrap());
     fs::write(path.join("fixed"), "").unwrap();
+    // The waiting agent keeps the permissions it was started with.
+    let changed = fixture.run(&[
+        "resume",
+        &fixture.id("failing"),
+        "--permission",
+        "push=deny",
+    ]);
+    assert!(!changed.status.success(), "{changed:?}");
+    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(kept["state"], "failed", "{kept}");
     fixture.ok(&["resume", &fixture.id("failing")]);
     let ready = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(ready["state"], "ready", "{ready}");

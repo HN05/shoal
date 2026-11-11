@@ -1,6 +1,6 @@
 //! A workspace whose setup failed resumes by retrying its setup, after which
 //! the agent waiting in the queue for it starts.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::targets::Selected;
 use crate::client::space_names::SpaceSelector;
@@ -12,12 +12,23 @@ use crate::{
 
 /// Retry the setup of the selected workspaces whose setup failed, taking
 /// them out of `selected`. Returns the exit code once nothing else is
-/// selected, `None` while something is.
-pub(super) async fn retry_failed(ctx: &Context, selected: &mut Selected) -> Result<Option<i32>> {
+/// selected, `None` while something is. A `changing` --permission is
+/// refused, since the agents waiting for those setups keep the permissions
+/// they were started with.
+pub(super) async fn retry_failed(
+    ctx: &Context,
+    selected: &mut Selected,
+    changing: bool,
+) -> Result<Option<i32>> {
     let failed = take_failed(ctx, selected).await?;
-    if failed.is_empty() {
+    let Some(first) = failed.first() else {
         return Ok(None);
-    }
+    };
+    ensure!(
+        !changing,
+        "the setup of {} failed, and the agent waiting for it keeps the permissions it was started with; resume it without --permission",
+        first.name
+    );
     let mut code = 0;
     for workspace in failed {
         let selector = SpaceSelector::id(&workspace.id);
