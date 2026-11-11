@@ -3,7 +3,9 @@
 //! showed it, cut to the longest name allowed; a removed workspace's record
 //! takes its issue's title the same way, and a chat's name is cut to fit.
 //! The migration renames without journal events, and a workspace's
-//! `renamed` event then records a new name or a branch rename.
+//! `renamed` event then records a new name or a branch rename. A cut chat
+//! keeps its name before the cut in `chat_legacy_names`, which its files
+//! were named after until the daemon moves them.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
 
@@ -14,6 +16,7 @@ pub(super) fn names_from_titles(db: &Connection) -> Result<()> {
     let titled = has_titles(db)?;
     rename_workspaces(db, titled)?;
     rename_removed_workspaces(db)?;
+    create_legacy_chat_names(db)?;
     cut_chat_names(db)?;
     if titled {
         drop_titles(db)?;
@@ -135,6 +138,19 @@ fn rename_removed_workspaces(db: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// The names chats had before the cut, which their files were named
+/// after; the daemon empties it once it has moved them.
+fn create_legacy_chat_names(db: &Connection) -> Result<()> {
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS chat_legacy_names (
+            chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+            name TEXT NOT NULL
+        );",
+    )?;
+    Ok(())
+}
+
+/// Cut each chat's name to fit, recording the name it had.
 fn cut_chat_names(db: &Connection) -> Result<()> {
     let chats = db
         .prepare("SELECT id,name FROM chats")?
@@ -145,6 +161,10 @@ fn cut_chat_names(db: &Connection) -> Result<()> {
     for (id, name) in chats {
         let cut = SpaceName::derive(&name, "chat");
         if cut != name {
+            db.execute(
+                "INSERT OR REPLACE INTO chat_legacy_names(chat_id,name) VALUES (?1,?2)",
+                params![id, name],
+            )?;
             db.execute("UPDATE chats SET name=?2 WHERE id=?1", params![id, cut])?;
         }
     }

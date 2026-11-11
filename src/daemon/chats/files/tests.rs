@@ -48,7 +48,7 @@ async fn chat_files_move_from_the_chat_name_to_its_id_and_others_go() {
 }
 
 #[tokio::test]
-async fn files_of_a_name_the_upgrade_cut_move_unless_chats_share_it() {
+async fn files_of_a_name_the_upgrade_cut_go_to_the_chat_it_recorded_alone() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -70,23 +70,43 @@ async fn files_of_a_name_the_upgrade_cut_move_unless_chats_share_it() {
             .unwrap()
         }
     };
-    // Its name as the upgrade cut it from the one its files took.
-    let long = "x".repeat(64);
-    let cut = start(crate::client::space_names::SpaceName::derive(&long, "chat")).await;
+    // The upgrade cut the chat's name, recording the one its files took;
+    // an ended chat's name cuts to the same.
+    let (kept, ended) = (
+        format!("{}a", "x".repeat(63)),
+        format!("{}b", "x".repeat(63)),
+    );
+    let cut = start(crate::client::space_names::SpaceName::derive(&kept, "chat")).await;
+    let (id, name) = (cut.id.clone(), kept.clone());
+    (manager.store)
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO chat_legacy_names(chat_id,name) VALUES (?1,?2)",
+                rusqlite::params![id, name],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     // Two chats that share a name, as names now may.
     start("shared".into()).await;
     start("shared".into()).await;
     let directory = manager.paths.state.join("chats");
     std::fs::create_dir_all(&directory).unwrap();
-    std::fs::write(directory.join(format!("{long}.log")), "long").unwrap();
-    std::fs::write(directory.join("shared.log"), "shared").unwrap();
+    let write = |file: &str, text: &str| std::fs::write(directory.join(file), text).unwrap();
+    write(&format!("{kept}.log"), "kept");
+    write(&format!("{ended}.log"), "ended");
+    write("shared.log", "shared");
+    // A file the chat has under its ID already is not replaced.
+    let files = manager.paths.chat_files(&cut);
+    std::fs::write(files.with_extension("prompt.md"), "current").unwrap();
+    write(&format!("{kept}.prompt.md"), "earlier");
     manager.rekey_chat_files().await.unwrap();
 
-    let files = manager.paths.chat_files(&cut);
-    assert_eq!(
-        std::fs::read_to_string(files.with_extension("log")).unwrap(),
-        "long"
-    );
+    let read = |extension: &str| std::fs::read_to_string(files.with_extension(extension)).unwrap();
+    assert_eq!(read("log"), "kept");
+    assert_eq!(read("prompt.md"), "current");
+    assert!(!directory.join(format!("{ended}.log")).exists());
     // Neither chat sharing the name is its owner for sure, so it stays.
     assert!(directory.join("shared.log").exists());
 }

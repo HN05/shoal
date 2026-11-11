@@ -859,6 +859,11 @@ fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> 
         name("SELECT name FROM chats")?,
         format!("{}…", "x".repeat(39))
     );
+    // The cut chat's files keep the name it had until the daemon moves them.
+    assert_eq!(
+        name("SELECT name FROM chat_legacy_names WHERE chat_id='chat'")?,
+        "x".repeat(64)
+    );
     assert_eq!(
         name(
             "SELECT name || ' ' || json_extract(record,'$.name') FROM removed_workspaces

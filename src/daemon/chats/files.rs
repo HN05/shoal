@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result};
 use std::{collections::HashMap, path::Path};
 
-use crate::client::space_names::SpaceName;
+use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::workspace::Manager,
     fsutil::off_runtime,
@@ -14,30 +14,39 @@ use crate::{
 
 impl Manager {
     /// Name the files each chat kept under its name after its ID instead,
-    /// and delete the files no chat owns, which ended chats left.
+    /// and delete the files no chat owns, which ended chats left. A chat
+    /// whose name the upgrade cut owns those named as it was before.
     pub(crate) async fn rekey_chat_files(&self) -> Result<()> {
         let chats = self.chats().await?;
+        let legacy = self.store.run(|db| legacy_names(db)).await?;
         let paths = self.paths.clone();
-        off_runtime::run(move || rekey(&paths, &chats)).await
+        off_runtime::run(move || rekey(&paths, &chats, &legacy)).await?;
+        self.store.write(|tx| forget_legacy_names(tx)).await
     }
 }
 
+/// Each cut chat with the name it had before the upgrade cut it.
+fn legacy_names(db: &rusqlite::Connection) -> Result<Vec<(SpaceId, String)>> {
+    Ok(db
+        .prepare("SELECT chat_id,name FROM chat_legacy_names")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Forget the names before the cut once the files named after them moved.
+fn forget_legacy_names(tx: &rusqlite::Transaction<'_>) -> Result<()> {
+    tx.execute("DELETE FROM chat_legacy_names", [])?;
+    Ok(())
+}
+
 /// [`Manager::rekey_chat_files`] over the files in the chats' directory.
-fn rekey(paths: &Paths, chats: &[Chat]) -> Result<()> {
+fn rekey(paths: &Paths, chats: &[Chat], legacy: &[(SpaceId, String)]) -> Result<()> {
     let directory = paths.state.join("chats");
     let entries = match std::fs::read_dir(&directory) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         entries => entries.with_context(|| format!("cannot read {}", directory.display()))?,
     };
-    // Names were unique while files took them; a name the upgrade cut to
-    // fit may now be another chat's too, which leaves its files unowned.
-    let mut owners: HashMap<&str, Option<&Chat>> = HashMap::new();
-    for chat in chats {
-        owners.insert(chat.id.as_str(), Some(chat));
-        (owners.entry(chat.name.as_str()))
-            .and_modify(|owner| *owner = None)
-            .or_insert(Some(chat));
-    }
+    let owners = owners(chats, legacy);
     for entry in entries {
         let entry = entry?;
         if !entry.file_type()?.is_file() {
@@ -47,7 +56,8 @@ fn rekey(paths: &Paths, chats: &[Chat]) -> Result<()> {
         match owner(&path, &owners) {
             Owner::Chat(chat, extension) => {
                 let named = paths.chat_files(chat).with_extension(extension);
-                if named != path {
+                // A file the chat has under its ID already stays its own.
+                if named != path && !named.exists() {
                     std::fs::rename(&path, &named)
                         .with_context(|| format!("cannot move {}", path.display()))?;
                 }
@@ -60,6 +70,37 @@ fn rekey(paths: &Paths, chats: &[Chat]) -> Result<()> {
     Ok(())
 }
 
+/// The chat each file stem names: its ID, its name, or its name before the
+/// upgrade cut it. Names repeat now, so a stem several chats have names
+/// none for sure.
+fn owners<'a>(
+    chats: &'a [Chat],
+    legacy: &[(SpaceId, String)],
+) -> HashMap<String, Option<&'a Chat>> {
+    let mut owners: HashMap<String, Option<&Chat>> = HashMap::new();
+    let mut add = |stem: &str, chat: &'a Chat| {
+        (owners.entry(stem.to_owned()))
+            .and_modify(|owner| {
+                if owner.is_some_and(|owner| owner.id != chat.id) {
+                    *owner = None;
+                }
+            })
+            .or_insert(Some(chat));
+    };
+    for chat in chats {
+        add(chat.name.as_str(), chat);
+    }
+    for (id, name) in legacy {
+        if let Some(chat) = chats.iter().find(|chat| chat.id == *id) {
+            add(name, chat);
+        }
+    }
+    for chat in chats {
+        owners.insert(chat.id.to_string(), Some(chat));
+    }
+    owners
+}
+
 /// Who owns one of a chat's files.
 enum Owner<'a> {
     /// The chat, and the file's extension.
@@ -70,9 +111,8 @@ enum Owner<'a> {
     None,
 }
 
-/// The chat whose ID or name `path`, one of a chat's files, is named after,
-/// as the upgrade cut a long name to fit.
-fn owner<'a>(path: &Path, owners: &HashMap<&str, Option<&'a Chat>>) -> Owner<'a> {
+/// The chat whose ID or name `path`, one of a chat's files, is named after.
+fn owner<'a>(path: &Path, owners: &HashMap<String, Option<&'a Chat>>) -> Owner<'a> {
     let Some(file) = path.file_name().and_then(|file| file.to_str()) else {
         return Owner::None;
     };
@@ -80,9 +120,7 @@ fn owner<'a>(path: &Path, owners: &HashMap<&str, Option<&'a Chat>>) -> Owner<'a>
         .into_iter()
         .find_map(|extension| {
             let stem = file.strip_suffix(extension)?.strip_suffix('.')?;
-            let cut = SpaceName::derive(stem, "chat");
-            let owner = (owners.get(stem)).or_else(|| owners.get(cut.as_str()))?;
-            Some((*owner, extension))
+            Some((*owners.get(stem)?, extension))
         });
     match found {
         Some((Some(chat), extension)) => Owner::Chat(chat, extension),
