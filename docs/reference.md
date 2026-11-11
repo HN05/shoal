@@ -2256,16 +2256,17 @@ and leaves the agent stopped. Stopping the workspace or marking its assignment
 done cancels a pending one, and resuming or discarding the agent another way
 removes it.
 
-`--add-blocker` names what blocks the launch: a workspace of the
+`--add-blocker` names what blocks the launch: a workspace or chat of the
 repository by ID, a queued agent by its entry's ID, or an issue number or URL,
-so a bare number is an issue; repeat it for more. An issue launch is also blocked by the open issues
-its forge records as blocking it: Forgejo and GitHub issue dependencies and
-GitLab "is blocked by" links; when the forge cannot list them, such as with
-that feature turned off, Shoal warns and they do not block the agent. Such a
-launch queues even without a limit and starts once every workspace blocking it
-is done at its current HEAD, every queued agent has opened its workspace and
-that workspace is, and every issue is closed or done in a workspace of the
-repository that links it; a removed workspace or queued agent no longer blocks.
+so a bare number is an issue; repeat it for more. An issue launch is also
+blocked by the open issues its forge records as blocking it: Forgejo and GitHub
+issue dependencies and GitLab "is blocked by" links; when the forge cannot list
+them, such as with that feature turned off, Shoal warns and they do not block
+the agent. Such a launch queues even without a limit and starts once every
+workspace blocking it is done at its current HEAD, every chat is done, every
+queued agent has opened its workspace and that workspace is, and every issue is
+closed or done in a workspace of the repository that links it; a removed space
+or queued agent no longer blocks.
 A commit after `shoal done` blocks the launch again; issue state is read every
 30 seconds. A new branch then starts from the done blocker's branch and is
 stacked on that workspace, as with `--base`, so the agent builds on the
@@ -5123,7 +5124,7 @@ shoal progress                                                     # Show the st
 shoal progress --space 4                                           # Another workspace or chat
 shoal progress --steps < plan.md                                   # Replace the steps (empty input clears them)
 shoal progress --add-blocker 1468 --reason "CI runner is down"     # Record what blocks the space
-shoal progress --add-blocker api --step 3 --reason "Needs the API" # Record what blocks step 3
+shoal progress --add-blocker <id> --step 3 --reason "Needs the API" # Record what blocks step 3
 shoal progress --remove-blocker 1468 [--step 3]                    # Remove one
 shoal done --summary "Fix merged; the timeout is now 30 seconds"   # Completes with this as the status line
 ```

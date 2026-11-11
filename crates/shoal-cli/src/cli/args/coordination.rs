@@ -61,7 +61,7 @@ pub enum CoordinationCommand {
         #[arg(long)]
         steps: bool,
         /// Record what blocks the space, or with --step one step: an issue
-        /// number or URL, a PR or CI run URL, or a space's name or ID.
+        /// number or URL, a PR or CI run URL, or a space's ID.
         #[arg(
             long,
             value_name = "BLOCKER",

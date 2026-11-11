@@ -216,7 +216,7 @@ pub struct StartArgs {
     /// Start the agent now even when max_agents is reached, instead of queuing it.
     #[arg(long)]
     pub now: bool,
-    /// Queue the agent until this workspace, queued agent or issue is complete;
+    /// Queue the agent until this space, queued agent or issue is complete;
     /// repeat for more. An issue's agent is also blocked by the issues the
     /// forge records as blocking it.
     #[arg(long, value_name = "BLOCKER", conflicts_with_all = ["now", "focus"])]
