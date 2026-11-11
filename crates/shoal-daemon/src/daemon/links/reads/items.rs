@@ -7,6 +7,7 @@ use super::ReadPlace;
 use crate::{
     daemon::{
         links::{actions::NOTHING_LINKED, space::LinkSpace},
+        scope::Caller,
         workspace::Manager,
     },
     forge::{
@@ -35,7 +36,7 @@ impl Manager {
         context: &ItemContext,
         selection: &Selection,
         elsewhere: bool,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Selected> {
         match context {
             ItemContext::Workspace(_) | ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
@@ -44,7 +45,7 @@ impl Manager {
             }
             ItemContext::Checkout(selector) => {
                 let checkout = self.repository(selector).await?;
-                let account = self.read_account(scoped);
+                let account = self.read_account(caller);
                 let item = (self.checkout_item(&checkout, selection, elsewhere, &account)).await?;
                 Ok(Selected {
                     path: checkout.path,
@@ -91,9 +92,9 @@ impl Manager {
         &self,
         context: &ItemContext,
         number: u64,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<LinkKind> {
-        let account = self.read_account(scoped);
+        let account = self.read_account(caller);
         match self.read_place(context).await? {
             ReadPlace::Space(space) => self.space_number_kind(&space, number, &account).await,
             ReadPlace::Checkout(checkout) => {
@@ -126,10 +127,10 @@ impl Manager {
         &self,
         context: &ItemContext,
         item: &str,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<IssueDetails> {
         let forge = self.context_forge(context).await?;
-        forge.read_issue(&self.read_account(scoped), item).await
+        forge.read_issue(&self.read_account(caller), item).await
     }
 
     /// The open issues the forge records as blocking the issue `item` names
@@ -138,11 +139,11 @@ impl Manager {
         &self,
         context: &ItemContext,
         item: &str,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Vec<Blocker>> {
         let forge = self.context_forge(context).await?;
         let (number, _) = forge.issue(item)?;
-        let account = self.read_account(scoped);
+        let account = self.read_account(caller);
         let mut blockers = Vec::new();
         for url in forge.open_issue_blockers(&account, number).await? {
             let (_, url) = ForgeRepo::from_issue_url(&url)?.issue(&url)?;
@@ -157,10 +158,10 @@ impl Manager {
         &self,
         context: &ItemContext,
         item: &str,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<PullRequest> {
         let forge = self.context_forge(context).await?;
-        forge.pull_request(&self.read_account(scoped), item).await
+        forge.pull_request(&self.read_account(caller), item).await
     }
 
     /// Who the PR `item` names in the repository of `context`, or the
@@ -169,13 +170,13 @@ impl Manager {
         &self,
         context: &ItemContext,
         item: Option<String>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
         let place = self.read_place(context).await?;
         let input = self.place_item(item, &place, ItemKind::Pr).await?;
         let forge = self.read_place_forge(&place).await?;
         let (number, _) = forge.pull(&input)?;
-        forge.reviewers(&self.read_account(scoped), number).await
+        forge.reviewers(&self.read_account(caller), number).await
     }
 
     /// The review thread of `comment` on the PR `item` names in the
@@ -186,7 +187,7 @@ impl Manager {
         context: &ItemContext,
         item: Option<String>,
         comment: CommentId,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Thread> {
         let place = self.read_place(context).await?;
         let input = self.place_item(item, &place, ItemKind::Pr).await?;
@@ -194,7 +195,7 @@ impl Manager {
         forge.require(Capability::ResolveThreads)?;
         let (number, _) = forge.pull(&input)?;
         forge
-            .thread(&self.read_account(scoped), number, comment)
+            .thread(&self.read_account(caller), number, comment)
             .await
     }
 }

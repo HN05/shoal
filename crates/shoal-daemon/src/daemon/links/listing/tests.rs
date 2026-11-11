@@ -1,6 +1,9 @@
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::test_support::{configure, git, manager, repository},
+    daemon::{
+        scope::Caller,
+        test_support::{configure, git, manager, repository},
+    },
     forge::{
         items::{
             link::ItemKind,
@@ -58,9 +61,13 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
         text: None,
         limit: 1,
     };
-    for scoped in [true, false] {
+    let agent = Caller {
+        space_id: chat.id.clone(),
+        execution: None,
+    };
+    for caller in [Some(&agent), None] {
         manager
-            .list_items(&context, ItemKind::Issue, &search, None, scoped)
+            .list_items(&context, ItemKind::Issue, &search, None, caller)
             .await
             .unwrap();
     }

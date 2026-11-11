@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{scope::Caller, workspace::Manager},
     forge::items::{item::Item, link::ItemKind, list::Search},
     protocol::ItemContext,
 };
@@ -12,7 +12,7 @@ use crate::{
 impl Manager {
     /// Issues or PRs that `search` matches in the repository of `context`,
     /// or the one `repository` names, read as the agent account for a
-    /// `scoped` caller and as the user's own logins otherwise. Only
+    /// scoped `caller` and as the user's own logins for the user. Only
     /// unscoped callers list from a registered checkout.
     pub async fn list_items(
         &self,
@@ -20,10 +20,10 @@ impl Manager {
         kind: ItemKind,
         search: &Search,
         repository: Option<&str>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Vec<Item>> {
         let forge = self.repository_forge(context, repository).await?;
-        forge.list(&self.read_account(scoped), kind, search).await
+        forge.list(&self.read_account(caller), kind, search).await
     }
 }
 

@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 
 use super::{actions::NOTHING_LINKED, space::LinkSpace};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{scope::Caller, workspace::Manager},
     forge::{ForgeRepo, account::Account, items::link::ItemKind},
     model::Repository,
     protocol::ItemContext,
@@ -26,13 +26,12 @@ pub(in crate::daemon::links) enum ReadPlace {
 }
 
 impl Manager {
-    /// The account a read goes out as: the agent account for a `scoped`
-    /// caller and the user's own logins otherwise.
-    pub(in crate::daemon::links) fn read_account(&self, scoped: bool) -> Account {
-        if scoped {
-            self.agent_account()
-        } else {
-            self.user_account()
+    /// The account `caller`'s read goes out as: the agent account for a
+    /// scoped caller and the user's own logins for the user.
+    pub(in crate::daemon::links) fn read_account(&self, caller: Option<&Caller>) -> Account {
+        match caller {
+            Some(_) => self.agent_account(),
+            None => self.user_account(),
         }
     }
 

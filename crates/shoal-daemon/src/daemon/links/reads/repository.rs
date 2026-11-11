@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{scope::Caller, workspace::Manager},
     forge::{
         capability::Capabilities, conventions::labels::Label,
         items::reaction::allowed::AllowedReactions,
@@ -18,10 +18,10 @@ impl Manager {
         &self,
         context: &ItemContext,
         repository: Option<&str>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Capabilities> {
         let forge = self.repository_forge(context, repository).await?;
-        forge.server_capabilities(&self.read_account(scoped)).await
+        forge.server_capabilities(&self.read_account(caller)).await
     }
 
     /// The reactions the forge of the repository of `context`, or of the
@@ -30,10 +30,10 @@ impl Manager {
         &self,
         context: &ItemContext,
         repository: Option<&str>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<AllowedReactions> {
         let forge = self.repository_forge(context, repository).await?;
-        forge.allowed_reactions(&self.read_account(scoped)).await
+        forge.allowed_reactions(&self.read_account(caller)).await
     }
 
     /// The labels of the repository of `context`, or of the one
@@ -42,9 +42,9 @@ impl Manager {
         &self,
         context: &ItemContext,
         repository: Option<&str>,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Vec<Label>> {
         let forge = self.repository_forge(context, repository).await?;
-        forge.labels(&self.read_account(scoped)).await
+        forge.labels(&self.read_account(caller)).await
     }
 }

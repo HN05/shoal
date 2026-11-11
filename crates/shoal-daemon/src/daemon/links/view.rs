@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::{reads::ReadPlace, space::LinkSpace};
 use crate::{
     client::views::Viewed,
-    daemon::workspace::Manager,
+    daemon::{scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         account::Account,
@@ -18,16 +18,16 @@ use crate::{
 
 impl Manager {
     /// The items `selection` names in `context`, each issue and PR among
-    /// them read as a `scoped` caller's agent account or the user's own
-    /// logins, in selection order.
+    /// them read as the account of `caller`, a scoped caller's agent
+    /// account or the user's own logins, in selection order.
     pub async fn view_items(
         &self,
         context: &ItemContext,
         selection: &Selection,
         comments: bool,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Viewed> {
-        let account = self.read_account(scoped);
+        let account = self.read_account(caller);
         let place = self.read_place(context).await?;
         let items = self.view_selection(&place, selection, &account).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
@@ -41,7 +41,7 @@ impl Manager {
         let mut views = self.read_views(&own, &account, &items, comments).await;
         // Logs are read as the agent account, whose token is the reading
         // one's for a scoped caller and the user's without one of its own.
-        let own_token = !scoped && self.config().machine.forges.has_agent_token(&own.host);
+        let own_token = caller.is_none() && self.config().machine.forges.has_agent_token(&own.host);
         let agent = own_token.then(|| self.agent_account());
         own.read_failed_logs(agent.as_ref().unwrap_or(&account), &mut views)
             .await;

@@ -58,7 +58,7 @@ async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
     };
 
     let selected = manager
-        .select_context_items(&ItemContext::Checkout(repo.id), &selection, true, false)
+        .select_context_items(&ItemContext::Checkout(repo.id), &selection, true, None)
         .await
         .unwrap();
     assert_eq!(selected.items.len(), 1);

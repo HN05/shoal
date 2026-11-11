@@ -52,13 +52,7 @@ pub(super) async fn handle(
             repository,
         } => {
             let listed = manager
-                .list_items(
-                    &context,
-                    kind,
-                    &search,
-                    repository.as_deref(),
-                    caller.is_some(),
-                )
+                .list_items(&context, kind, &search, repository.as_deref(), caller)
                 .await;
             return Ok(Answer::pages(listed, Body::Items));
         }
@@ -67,12 +61,12 @@ pub(super) async fn handle(
             repository,
         } => {
             let labels = manager
-                .labels(&context, repository.as_deref(), caller.is_some())
+                .labels(&context, repository.as_deref(), caller)
                 .await;
             return Ok(Answer::pages(labels, Body::Labels));
         }
         ItemMethod::Reviewers { context, item } => {
-            let reviewers = manager.reviewers(&context, item, caller.is_some()).await;
+            let reviewers = manager.reviewers(&context, item, caller).await;
             return Ok(Answer::pages(reviewers, Body::Reviewers));
         }
         ItemMethod::Capabilities {
@@ -80,7 +74,7 @@ pub(super) async fn handle(
             repository,
         } => Body::Capabilities(
             manager
-                .capabilities(&context, repository.as_deref(), caller.is_some())
+                .capabilities(&context, repository.as_deref(), caller)
                 .await?,
         ),
         ItemMethod::Reactions {
@@ -88,7 +82,7 @@ pub(super) async fn handle(
             repository,
         } => Body::Reactions(
             manager
-                .reactions(&context, repository.as_deref(), caller.is_some())
+                .reactions(&context, repository.as_deref(), caller)
                 .await?,
         ),
         ItemMethod::ReviewThread {
@@ -97,39 +91,33 @@ pub(super) async fn handle(
             comment,
         } => Body::Thread(
             manager
-                .review_thread(&context, item, comment, caller.is_some())
+                .review_thread(&context, item, comment, caller)
                 .await?,
         ),
-        ItemMethod::NumberKind { context, number } => Body::LinkKind(
-            manager
-                .number_kind(&context, number, caller.is_some())
-                .await?,
-        ),
+        ItemMethod::NumberKind { context, number } => {
+            Body::LinkKind(manager.number_kind(&context, number, caller).await?)
+        }
         ItemMethod::IssueDetails { context, item } => {
             let issue = manager
-                .issue_details(&context, &item, caller.is_some())
+                .issue_details(&context, &item, caller)
                 .await
                 .and_then(|issue| json_pieces(&issue));
             return Ok(Answer::pages(issue, Body::ViewPieces));
         }
         ItemMethod::IssueBlockers { context, item } => {
-            let blockers = manager
-                .issue_blockers(&context, &item, caller.is_some())
-                .await;
+            let blockers = manager.issue_blockers(&context, &item, caller).await;
             return Ok(Answer::pages(blockers, Body::Blockers));
         }
-        ItemMethod::PullRequest { context, item } => Body::PullRequest(
-            manager
-                .pull_request(&context, &item, caller.is_some())
-                .await?,
-        ),
+        ItemMethod::PullRequest { context, item } => {
+            Body::PullRequest(manager.pull_request(&context, &item, caller).await?)
+        }
         ItemMethod::ViewItems {
             context,
             selection,
             comments,
         } => {
             let viewed = manager
-                .view_items(&context, &selection, comments, caller.is_some())
+                .view_items(&context, &selection, comments, caller)
                 .await
                 .and_then(|viewed| json_pieces(&viewed));
             return Ok(Answer::pages(viewed, Body::ViewPieces));
@@ -203,7 +191,7 @@ pub(super) async fn handle(
             elsewhere,
         } => Body::SelectedItems(
             manager
-                .select_context_items(&context, &selection, elsewhere, caller.is_some())
+                .select_context_items(&context, &selection, elsewhere, caller)
                 .await?,
         ),
         ItemMethod::SetIssue {
