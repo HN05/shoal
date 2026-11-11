@@ -950,10 +950,21 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
     fixture
 }
 
+/// A process a test started that no process of the test waits for, killed
+/// when the test ends however it ends.
+struct Leftover(crate::process::identity::Identity);
+
+impl Drop for Leftover {
+    fn drop(&mut self) {
+        let _ = crate::process::identity::signal(&self.0, libc::SIGKILL);
+    }
+}
+
 #[tokio::test]
 async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     use crate::{
         daemon::events::{EventItem, EventKind},
+        process::identity,
         protocol::{self, Control, ExecutionEvent},
     };
 
@@ -970,21 +981,24 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
         executing,
     } = connect_runner(manager, &workspace.id).await;
     // What a cancelled step left behind, holding the runner's output open:
-    // in a process group of its own, as a test's script runs.
-    let mut left = tokio::process::Command::from(crate::daemon::test_support::unmarked("sleep"));
-    let mut left = left
-        .arg("600")
+    // its parent gone, in a process group of its own, as a test's script
+    // runs once the test is killed.
+    let started = crate::daemon::test_support::unmarked("sh")
+        .args(["-c", "sleep 600 >/dev/null 2>&1 & echo $!"])
         .current_dir(&workspace.path)
         .process_group(0)
-        .kill_on_drop(true)
-        .spawn()
+        .output()
         .unwrap();
-    let pid = left.id().unwrap();
+    let pid: u32 = String::from_utf8_lossy(&started.stdout)
+        .trim()
+        .parse()
+        .unwrap();
+    let left = Leftover(identity::capture(pid).unwrap().unwrap());
 
     // The forge cancelled run 6, but the runner gets its grace period.
     manager.finish_ended_jobs().await.unwrap();
     assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
-    assert!(left.try_wait().unwrap().is_none());
+    assert!(identity::alive(&left.0).unwrap());
 
     manager
         .runners
@@ -996,7 +1010,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
     // The runner is stopped only once the processes its steps left are.
-    assert!(left.try_wait().unwrap().is_some());
+    assert!(!identity::alive(&left.0).unwrap());
     let event = ExecutionEvent::Finished { exit_code: 143 };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;
