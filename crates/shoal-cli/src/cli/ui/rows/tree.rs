@@ -7,13 +7,13 @@ use super::{
 };
 use crate::cli::list_status::{ListStatus, ListStatusExt};
 use crate::cli::output::{Palette, Style};
-use crate::client::space_ids::SpaceId;
+use crate::client::space_ids::{SpaceId, SpaceNumber};
 use crate::model::{Chat, Workspace};
 
 /// `workspace_rows` for workspaces and the running and stopped chats in one
-/// tree: the spaces whose parent is not listed, workspaces first, each
-/// followed by the spaces below it, indented. A chat row names the chat, its
-/// status and its agent.
+/// tree: the spaces whose parent is not listed, each followed by the spaces
+/// below it, indented, and spaces under one parent by their status, then
+/// their number. A chat row names the chat, its status and its agent.
 pub fn workspace_tree_rows(
     workspaces: &[Workspace],
     chats: &[Chat],
@@ -21,12 +21,7 @@ pub fn workspace_tree_rows(
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
-    let tree = SpaceTree {
-        workspaces,
-        chats,
-        stopped,
-        palette,
-    };
+    let tree = SpaceTree::new(workspaces, chats, stopped, palette);
     let mut rows = Vec::new();
     for root in tree.roots() {
         tree.push(&mut rows, root, 0);
@@ -54,6 +49,13 @@ impl<'a> Listed<'a> {
         }
     }
 
+    fn number(&self) -> SpaceNumber {
+        match self {
+            Self::Workspace(workspace) => workspace.number,
+            Self::Chat(chat) => chat.number,
+        }
+    }
+
     /// The space it lists under: its parent, or for a CI job's workspace,
     /// which has none, the first space its run is for.
     fn parent(&self) -> Option<&'a SpaceId> {
@@ -73,39 +75,51 @@ impl<'a> Listed<'a> {
 
 /// Listed spaces arranged under their listed parents.
 struct SpaceTree<'a> {
-    workspaces: &'a [Workspace],
-    chats: &'a [Chat],
-    stopped: &'a HashSet<SpaceId>,
+    /// Every listed space with its status, in the order lists show them.
+    spaces: Vec<(Listed<'a>, ListStatus)>,
     palette: Palette,
 }
 
 impl<'a> SpaceTree<'a> {
-    /// Every listed space, workspaces first.
-    fn spaces(&self) -> impl Iterator<Item = Listed<'a>> + use<'a> {
-        let workspaces = self.workspaces.iter().map(Listed::Workspace);
-        workspaces.chain(self.chats.iter().map(Listed::Chat))
+    fn new(
+        workspaces: &'a [Workspace],
+        chats: &'a [Chat],
+        stopped: &HashSet<SpaceId>,
+        palette: Palette,
+    ) -> Self {
+        let workspaces = workspaces.iter().map(|workspace| {
+            let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
+            (Listed::Workspace(workspace), status)
+        });
+        let chats = (chats.iter()).map(|chat| (Listed::Chat(chat), ListStatus::of_chat(chat)));
+        let mut spaces: Vec<_> = workspaces.chain(chats).collect();
+        spaces.sort_by_key(|(space, status)| (*status, space.number()));
+        Self { spaces, palette }
     }
 
     /// The spaces whose parent is not listed.
-    fn roots(&self) -> Vec<Listed<'a>> {
-        let listed: HashSet<&SpaceId> = self.spaces().map(|space| space.id()).collect();
-        (self.spaces())
-            .filter(|space| space.parent().is_none_or(|parent| !listed.contains(parent)))
+    fn roots(&self) -> Vec<(Listed<'a>, ListStatus)> {
+        let listed: HashSet<&SpaceId> = self.spaces.iter().map(|(space, _)| space.id()).collect();
+        (self.spaces.iter().copied())
+            .filter(|(space, _)| space.parent().is_none_or(|parent| !listed.contains(parent)))
             .collect()
     }
 
     /// The row of `space` at `depth`, then those of the spaces below it.
-    fn push(&self, rows: &mut Vec<(String, [Cell; 8])>, space: Listed<'a>, depth: usize) {
+    fn push(
+        &self,
+        rows: &mut Vec<(String, [Cell; 8])>,
+        (space, status): (Listed<'a>, ListStatus),
+        depth: usize,
+    ) {
         rows.push(match space {
             Listed::Workspace(workspace) => {
-                tree_workspace_row(workspace, depth, self.stopped, self.palette)
+                tree_workspace_row(workspace, status, depth, self.palette)
             }
             Listed::Chat(chat) => chat_row(chat, depth, self.palette),
         });
-        for child in self
-            .spaces()
-            .filter(|child| child.parent() == Some(space.id()))
-        {
+        let children = self.spaces.iter().copied();
+        for child in children.filter(|(child, _)| child.parent() == Some(space.id())) {
             self.push(rows, child, depth + 1);
         }
     }
@@ -113,12 +127,11 @@ impl<'a> SpaceTree<'a> {
 
 fn tree_workspace_row(
     workspace: &Workspace,
+    status: ListStatus,
     depth: usize,
-    stopped: &HashSet<SpaceId>,
     palette: Palette,
 ) -> (String, [Cell; 8]) {
     let name = indented(&workspace.name, depth);
-    let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
     (
         status.marker(palette),
         [

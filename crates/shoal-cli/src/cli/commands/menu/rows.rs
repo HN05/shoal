@@ -313,12 +313,14 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
         .collect())
 }
 
-/// Every workspace, then an entry that adds one unless workspace processes ask.
+/// Every workspace by status, then number, then an entry that adds one
+/// unless workspace processes ask.
 async fn space_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let palette = Palette::picker();
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
+    ui::sort_workspaces(&mut workspaces, &stopped);
     let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette, ui::picker_width());
     let mut entries: Entries = workspaces
         .into_iter()

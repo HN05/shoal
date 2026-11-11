@@ -72,3 +72,38 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
         "{rows:?}"
     );
 }
+
+#[test]
+fn spaces_under_one_parent_list_by_status_then_number() {
+    let plain = Palette::stdout(true);
+    let numbered = |name: &str, number: u32, running: bool| Workspace {
+        number: number.into(),
+        running,
+        ..workspace("a", name, name, WorkspaceState::Ready)
+    };
+    let mut child = numbered("child", 2, false);
+    let parent = numbered("parent", 5, false);
+    child.parent = Some(crate::model::SpaceRef {
+        id: parent.id.clone(),
+        name: parent.name.clone(),
+        kind: crate::model::SpaceKind::Workspace,
+        branch: parent.branch.clone(),
+    });
+    let mut workspaces = vec![
+        numbered("idle", 3, false),
+        child,
+        parent,
+        numbered("busy", 7, true),
+        numbered("failed", 1, false),
+        numbered("busy-first", 4, true),
+    ];
+    workspaces[4].state = WorkspaceState::Failed;
+    let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
+    let names: Vec<_> = (rows.iter())
+        .map(|row| row.split("  ").nth(1).unwrap_or_default().trim())
+        .collect();
+    assert_eq!(
+        names,
+        ["busy-first", "busy", "failed", "idle", "parent", "└ child"]
+    );
+}

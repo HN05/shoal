@@ -450,9 +450,9 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     assert_eq!(
         rows,
         [
+            "◐ 4  repo-plan-7  in worker  plan         process running  claude",
             "○ 1  worker                               inactive",
             "○ 1  orchestrate             orchestrate  inactive",
-            "◐ 4  repo-plan-7  in worker  plan         process running  claude",
         ]
     );
     // A column no row has a mode for is left out.
