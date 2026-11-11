@@ -16,6 +16,13 @@ const BUILT_IN_PROVIDERS: [&str; 4] = ["openai", "oss", "ollama", "lmstudio"];
 /// which uses the same login.
 const PROXY_PROVIDER: &str = "shoal-proxy";
 
+/// The variable that moves the built-in OpenAI provider's base URL.
+const OPENAI_BASE_URL: &str = "OPENAI_BASE_URL";
+
+/// Where Codex sends a ChatGPT login's requests, and an API key's.
+const CHATGPT_API: &str = "https://chatgpt.com/backend-api/codex";
+const OPENAI_API: &str = "https://api.openai.com/v1";
+
 /// Turn the [`PROVIDER`] placeholder in `args` into the overrides that send
 /// the provider the launch uses, by the Codex config in `codex_home` and the
 /// projects of the working directory, `directory` or the one `-C` names
@@ -34,6 +41,41 @@ pub(super) fn route(
     let overrides = overrides(&selected, url)?;
     place_last(args, at, &flags, overrides);
     Ok(())
+}
+
+/// Where the provider a launch with `args` uses, as [`route`] finds it,
+/// sends its requests: its `base_url`, or for the built-in OpenAI provider
+/// `OPENAI_BASE_URL`, which `variable` reads, else Codex's own for the login
+/// `auth.json` in `codex_home` records.
+pub(super) fn base_url(
+    args: &[OsString],
+    codex_home: &Path,
+    directory: &Path,
+    variable: &dyn Fn(&str) -> Option<OsString>,
+) -> Result<String> {
+    let selected = selected(&Flags::of(args), codex_home, directory)?;
+    ensure_movable(&selected.provider)?;
+    let configured = match selected.provider.as_str() {
+        "openai" => variable(OPENAI_BASE_URL).and_then(|url| url.into_string().ok()),
+        _ => selected.base_url,
+    };
+    let configured = configured.filter(|url| !url.trim().is_empty());
+    Ok(configured.unwrap_or_else(|| login_base_url(codex_home).to_owned()))
+}
+
+/// Codex's own base URL for the login `auth.json` in `codex_home` records:
+/// OpenAI's API for an API key, else ChatGPT's. A file without a login mode
+/// holds an API key when it names one, as Codex reads it.
+fn login_base_url(codex_home: &Path) -> &'static str {
+    let auth: serde_json::Value = std::fs::read(codex_home.join("auth.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let api_key = match auth["auth_mode"].as_str() {
+        Some(mode) => mode.eq_ignore_ascii_case("apikey"),
+        None => auth["OPENAI_API_KEY"].is_string(),
+    };
+    if api_key { OPENAI_API } else { CHATGPT_API }
 }
 
 /// The provider a launch with `flags` uses, by the Codex config in
@@ -80,6 +122,8 @@ struct Selected {
     /// The headers its config fills from the environment, which Shoal's
     /// key joins.
     headers: toml::Table,
+    /// The base URL its config gives it.
+    base_url: Option<String>,
 }
 
 impl Selected {
@@ -125,10 +169,14 @@ impl Selected {
             .and_then(|provider| provider.get("env_http_headers")?.as_table())
             .cloned()
             .unwrap_or_default();
+        let base_url = table
+            .and_then(|provider| provider.get("base_url")?.as_str())
+            .map(str::to_owned);
         Ok(Self {
             provider,
             key,
             headers,
+            base_url,
         })
     }
 }

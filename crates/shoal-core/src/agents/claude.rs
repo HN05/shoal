@@ -34,6 +34,24 @@ impl Integration for Claude {
         settings::merge(args, routing)
     }
 
+    /// The `ANTHROPIC_BASE_URL` it would use: in the `--settings` the
+    /// wrapper merges, which win over its user settings, which win over its
+    /// environment; Anthropic's API without one.
+    fn default_upstream(
+        &self,
+        args: &[OsString],
+        directory: &Path,
+        environment: &AgentEnvironment,
+    ) -> anyhow::Result<String> {
+        let variable = |name: &str| environment.variable(name);
+        let in_settings = |settings: Value| settings["env"][BASE_URL].as_str().map(str::to_owned);
+        let url = in_settings(settings::given(args, directory)?)
+            .or_else(|| in_settings(settings::user(&variable, environment.home)))
+            .or_else(|| variable(BASE_URL)?.into_string().ok())
+            .filter(|url| !url.is_empty());
+        Ok(url.unwrap_or_else(|| ANTHROPIC_API.to_owned()))
+    }
+
     /// Claude Code adds `ANTHROPIC_CUSTOM_HEADERS`, one per line, to each
     /// request, so the key joins those the agent has.
     fn proxy_environment(
@@ -268,6 +286,13 @@ fn wake_hooks(shoal: &str) -> [(&'static str, Value); 2] {
     }]});
     [("Stop", group.clone()), ("StopFailure", group)]
 }
+
+/// The variable, or setting in its settings' `env`, that names the URL
+/// Claude Code sends its API requests to.
+const BASE_URL: &str = "ANTHROPIC_BASE_URL";
+
+/// Where Claude Code sends its API requests without [`BASE_URL`].
+const ANTHROPIC_API: &str = "https://api.anthropic.com";
 
 /// The variable whose lines Claude Code adds to each request as headers.
 const CUSTOM_HEADERS: &str = "ANTHROPIC_CUSTOM_HEADERS";

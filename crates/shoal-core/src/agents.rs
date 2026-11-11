@@ -37,7 +37,7 @@ pub use checks::{
 };
 pub(crate) use proxy::{
     Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
-    route_through_proxy, with_proxy_args,
+    route_through_proxy, upstream, with_proxy_args,
 };
 pub use trust::forget_repository_trust;
 
@@ -89,6 +89,19 @@ pub trait Integration: Sync {
     /// names `/v1` in each request's own path, Codex in its base URL.
     fn api_path(&self) -> &'static str {
         ""
+    }
+
+    /// Where its API requests go without a proxy, which a proxy without an
+    /// `upstream` forwards them to, its full base URL: by `args`, a launch's
+    /// arguments with the placeholders of [`Self::hook_args`], running in
+    /// `directory` with `environment`.
+    fn default_upstream(
+        &self,
+        _args: &[OsString],
+        _directory: &Path,
+        _environment: &AgentEnvironment,
+    ) -> Result<String> {
+        anyhow::bail!("Shoal does not know where its API requests go")
     }
 
     /// Arguments that only send its API requests to Shoal's proxy, for a

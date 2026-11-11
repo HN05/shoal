@@ -217,10 +217,14 @@ impl TrackedLaunch {
                 ports,
                 record,
             } => {
-                // The restore command may name another proxy, or none; what
-                // the old one reported goes with it.
+                // The restore command may name another proxy, or none, or
+                // send its requests elsewhere; what the old one reported goes
+                // with it.
+                let (directory, environment) = (&self.plan.workspace.path, &self.plan.environment);
                 if let Some(auth) = self.auth.as_mut()
-                    && auth.restart_proxy(proxy, &self.plan.environment).await?
+                    && auth
+                        .restart_proxy(proxy, &command, directory, environment)
+                        .await?
                 {
                     let (workspace, execution) = (&self.plan.workspace.id, &self.plan.id);
                     crate::proxy::forget_reports(paths, workspace, execution).await;
@@ -441,7 +445,8 @@ async fn ready_command(
     auth: Option<&mut AgentLaunch>,
 ) -> Result<Vec<OsString>> {
     if let Some(auth) = auth {
-        auth.start_proxy(&plan.environment).await?;
+        auth.start_proxy(&command, &plan.workspace.path, &plan.environment)
+            .await?;
         auth.report_proxy(paths, &plan.workspace.id, &plan.id);
     }
     execution_command(paths, plan, command, mode)

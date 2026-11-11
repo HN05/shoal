@@ -1655,7 +1655,10 @@ moment its turn ends.
 
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
-`[machine.proxies.<name>]`, the base URL the agent would otherwise use:
+`[machine.proxies.<name>]`. `upstream` is a gateway's server root, which Claude
+Code and Codex share: Claude Code names `/v1` in each request's path, and Codex
+gets the proxy's URL with `/v1` as its base URL, as gateways such as
+CLIProxyAPI, LiteLLM and OpenRouter serve the OpenAI API:
 
 ```toml
 [machine.proxies.cliproxy]
@@ -1664,7 +1667,35 @@ key = { env = "CLIPROXY_API_KEY" }   # or "<the key itself>", or { cmd = ["bw", 
 
 [machine.agents.claude]
 proxy = "cliproxy"
+
+[machine.agents.codex]
+proxy = "cliproxy"
 ```
+
+A proxy without `upstream` only adds the retries, sending each agent's requests
+where they would go without it, which Shoal finds when the agent launches:
+
+```toml
+[machine.proxies.retry]
+
+[machine.agents.claude]
+proxy = "retry"
+```
+
+- Claude Code: the `ANTHROPIC_BASE_URL` of the `--settings` the launch has, else
+  of its user settings, else of its environment, else `https://api.anthropic.com`.
+- Codex on a provider of the user's: that provider's `base_url`.
+- Codex on its built-in OpenAI provider: `OPENAI_BASE_URL` when its environment
+  sets it, else `https://api.openai.com/v1` when the `auth.json` under its
+  `CODEX_HOME` records an API key, and `https://chatgpt.com/backend-api/codex`
+  otherwise, as for a ChatGPT login. A provider of the user's without a
+  `base_url` goes there too.
+
+Codex then gets the proxy's URL itself as its base URL. A `key` needs an
+`upstream`, since without one it would reach Anthropic or OpenAI in place of
+the agent's login. A proxy that a Codex tool, or a launch profile of one, names
+fails validation when its `upstream` ends in `/v1` or is on `chatgpt.com`:
+change it to the server root or remove it.
 
 A launch profile inherits its base's `proxy`, and its `env` cannot take it off,
 so a profile such as `claude-direct` above would go through the proxy too. To
@@ -1694,10 +1725,7 @@ of a trusted project from its root (by `project_root_markers`, `.git` by
 default) down to the working directory, which `-C` may move, then the `-c`
 overrides it is launched with. Shoal's own overrides come after the launch's, so
 they win. On its built-in
-OpenAI provider, through a provider Shoal defines with the same login. `upstream`
-is a server root for both tools: Claude Code names `/v1` in each request's path,
-and Codex gets the proxy's URL with `/v1`, so a proxy that a Codex tool names
-whose `upstream` ends in `/v1` or is on `chatgpt.com` fails validation. The proxy forwards each request with
+OpenAI provider, through a provider Shoal defines with the same login. The proxy forwards each request with
 the agent's own credentials, or, with a `key`, sends the upstream that key as
 `Authorization: Bearer` in their place, so an agent on its own login can reach
 an upstream such as CLIProxyAPI that wants its own key. `key` is the key itself,
@@ -1725,7 +1753,7 @@ settings. Claude Code keeps its prompt cache for an hour only on a claude.ai
 login within its usage limits, and for 5 minutes with an API key or auth token,
 so a proxied Claude agent gets `ENABLE_PROMPT_CACHING_1H=1` unless the
 environment it runs with sets that variable; a lifetime in
-`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it.
+`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key, or another default for a proxy without one, replaces it, and one removed since stops. Chats and desktop apps run without it.
 
 `instructions` passes the rendered system text apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;

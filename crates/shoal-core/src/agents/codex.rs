@@ -39,6 +39,19 @@ impl Integration for Codex {
         provider::route(args, routing.url, codex_home, routing.directory)
     }
 
+    /// The base URL of the provider the launch uses.
+    fn default_upstream(
+        &self,
+        args: &[OsString],
+        directory: &std::path::Path,
+        environment: &AgentEnvironment,
+    ) -> Result<String> {
+        let config = super::trust::codex_config(environment)?;
+        let codex_home = config.parent().unwrap_or(directory);
+        let variable = |name: &str| environment.variable(name);
+        provider::base_url(args, codex_home, directory, &variable)
+    }
+
     /// Codex fires no hook after a failed turn, so the proxy's failure
     /// stream, which ends it, is the only word of it.
     fn proxy_ends_turns(&self) -> bool {

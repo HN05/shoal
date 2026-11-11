@@ -88,7 +88,7 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
     // Every launch, a resumed one included, prepares its proxy this way.
     assert!(launch_proxy(&settings, &"pi".into()).is_err());
     let claude = launch_proxy(&settings, &"claude".into()).unwrap().unwrap();
-    assert_eq!(claude.upstream, "http://127.0.0.1:8317");
+    assert_eq!(claude.upstream.as_deref(), Some("http://127.0.0.1:8317"));
     assert!(launch_proxy(&settings, &"codex".into()).unwrap().is_none());
     // Claude can; whether it is installed is another matter.
     if let Err(error) = ensure_available(&"claude".into(), &settings) {
@@ -162,63 +162,176 @@ fn base_url(command: &[OsString]) -> String {
     provider.unwrap()["base_url"].as_str().unwrap().to_owned()
 }
 
-/// The path at the upstream of a request to `path` from the agent `name`,
-/// launched as `command` with Codex's config in `home`, through `running`,
+/// How an agent is launched: its name, its command and the path of its
+/// request, relative to its base URL.
+type Launch<'a> = (&'a str, &'a [&'a str], &'a str);
+
+/// The path at the upstream of a request from `launch` in `home`, running
+/// with `configured`, through a proxy started as its wrapper starts one,
 /// whose upstream sends each request line to `received`.
 async fn reached(
     settings: &crate::config::Effective,
-    running: &crate::proxy::Running,
-    received: &mut tokio::sync::mpsc::UnboundedReceiver<String>,
-    (name, command, path): (&str, &[&str], &str),
+    (name, command, path): Launch<'_>,
     home: &Path,
+    configured: &BTreeMap<String, OsString>,
+    received: &mut tokio::sync::mpsc::UnboundedReceiver<String>,
 ) -> String {
     let kind = settings.integration(&name.into());
+    let proxy = launch_proxy(settings, &name.into()).unwrap().unwrap();
     let mut command: Vec<OsString> = command.iter().map(Into::into).collect();
     with_proxy_args(settings, &name.into(), &mut command);
-    let url = agent_url(kind, &running.url);
+    let upstream = upstream(kind, proxy, &command, home, home, configured).unwrap();
+    let key = match &proxy.key {
+        Some(key) => Some(key.resolve(|_| None).await.unwrap()),
+        None => None,
+    };
+    let running = crate::proxy::start(&upstream, key.as_deref())
+        .await
+        .unwrap();
+    let url = agent_url(kind, &running.url, proxy);
     let routing = Routing {
         url: &url,
         directory: home,
         private: running.private_dir(),
     };
-    let configured = BTreeMap::from([("CODEX_HOME".to_owned(), home.into())]);
-    let routed = route_through_proxy(kind, command, &routing, home, &configured).unwrap();
+    let routed = route_through_proxy(kind, command, &routing, home, configured).unwrap();
     post(&format!("{}{path}", base_url(&routed)), &running.key).await;
     let line = received.recv().await.unwrap();
     line.split(' ').nth(1).unwrap().to_owned()
 }
 
+/// Settings in which Claude and Codex go through one proxy, with `table`.
+fn one_proxy(table: &str) -> crate::config::Effective {
+    let config = crate::config::Config::from_toml(&format!(
+        "[machine.proxies.cliproxy]\n{table}\n\
+         [machine.agents.claude]\nproxy = 'cliproxy'\n[machine.agents.codex]\nproxy = 'cliproxy'"
+    ))
+    .unwrap();
+    config.resolve(&Default::default()).unwrap()
+}
+
+/// Claude, Codex on its built-in OpenAI provider, and Codex on a provider
+/// of the user's, `gateway`.
+const CLAUDE: Launch<'static> = ("claude", &["claude"], "/v1/messages");
+const CODEX: Launch<'static> = ("codex", &["codex"], "/responses");
+const GATEWAY: Launch<'static> = (
+    "codex",
+    &["codex", "-c", "model_provider=gateway"],
+    "/responses",
+);
+
 #[tokio::test]
 async fn claude_and_codex_reach_their_apis_under_the_upstream_of_one_proxy() {
     let (upstream, mut received) = fake_upstream().await;
-    let config = crate::config::Config::from_toml(&format!(
-        "[machine.proxies.cliproxy]\nupstream = '{upstream}'\nkey = 'sk-gateway'\n\
-         \n[machine.agents.claude]\nproxy = 'cliproxy'\n[machine.agents.codex]\nproxy = 'cliproxy'"
-    ))
-    .unwrap();
-    let settings = config.resolve(&Default::default()).unwrap();
-    let proxy = launch_proxy(&settings, &"codex".into()).unwrap().unwrap();
-    let running = crate::proxy::start(proxy, Some("sk-gateway"))
-        .await
-        .unwrap();
+    let settings = one_proxy(&format!("upstream = '{upstream}'\nkey = 'sk-gateway'"));
     let home = tempfile::tempdir().unwrap();
     fs::write(
         home.path().join("config.toml"),
         "[model_providers.gateway]\nname = 'Gateway'\nbase_url = 'http://127.0.0.1:9/v1'\n",
     )
     .unwrap();
+    let configured = BTreeMap::from([("CODEX_HOME".to_owned(), home.path().into())]);
     let mut reach =
-        async |launch| reached(&settings, &running, &mut received, launch, home.path()).await;
+        async |launch| reached(&settings, launch, home.path(), &configured, &mut received).await;
     // Claude names the API's version in each request, Codex in its base URL,
     // on the built-in OpenAI provider and on one of the user's.
-    let claude = ("claude", &["claude"][..], "/v1/messages");
-    assert_eq!(reach(claude).await, "/v1/messages");
-    let codex = ("codex", &["codex"][..], "/responses");
-    assert_eq!(reach(codex).await, "/v1/responses");
-    let gateway = (
-        "codex",
-        &["codex", "-c", "model_provider=gateway"][..],
-        "/responses",
-    );
-    assert_eq!(reach(gateway).await, "/v1/responses");
+    assert_eq!(reach(CLAUDE).await, "/v1/messages");
+    assert_eq!(reach(CODEX).await, "/v1/responses");
+    assert_eq!(reach(GATEWAY).await, "/v1/responses");
+}
+
+#[tokio::test]
+async fn a_proxy_without_an_upstream_forwards_where_each_agent_would_send_its_requests() {
+    let (upstream, mut received) = fake_upstream().await;
+    let settings = one_proxy("");
+    let home = tempfile::tempdir().unwrap();
+    fs::write(
+        home.path().join("config.toml"),
+        format!("[model_providers.gateway]\nname = 'Gateway'\nbase_url = '{upstream}/v1'\n"),
+    )
+    .unwrap();
+    let configured = BTreeMap::from([
+        ("CODEX_HOME".to_owned(), home.path().into()),
+        ("CLAUDE_CONFIG_DIR".to_owned(), home.path().into()),
+        ("ANTHROPIC_BASE_URL".to_owned(), upstream.into()),
+    ]);
+    let mut reach =
+        async |launch| reached(&settings, launch, home.path(), &configured, &mut received).await;
+    assert_eq!(reach(CLAUDE).await, "/v1/messages");
+    assert_eq!(reach(GATEWAY).await, "/v1/responses");
+}
+
+/// Where an agent with integration `kind` launched as `args` in `home`
+/// sends its requests without a proxy, with only `variables` set.
+fn default_upstream(
+    kind: IntegrationKind,
+    args: &[&str],
+    home: &Path,
+    variables: &[(&str, &str)],
+) -> String {
+    let configured = variables
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), (*value).into()))
+        .collect();
+    let environment = AgentEnvironment {
+        home,
+        configured: &configured,
+        inherited: |_| None,
+    };
+    let args: Vec<OsString> = args.iter().map(Into::into).collect();
+    integration(kind)
+        .default_upstream(&args, home, &environment)
+        .unwrap()
+}
+
+#[test]
+fn claude_goes_to_the_base_url_its_settings_or_environment_name_else_anthropics() {
+    let home = tempfile::tempdir().unwrap();
+    let url = |args: &[&str], variables: &[(&str, &str)]| {
+        default_upstream(IntegrationKind::Claude, args, home.path(), variables)
+    };
+    let set = [("ANTHROPIC_BASE_URL", "http://environment")];
+    assert_eq!(url(&["claude"], &[]), "https://api.anthropic.com");
+    assert_eq!(url(&["claude"], &set), "http://environment");
+    let user = r#"{"env":{"ANTHROPIC_BASE_URL":"http://user"}}"#;
+    fs::create_dir(home.path().join(".claude")).unwrap();
+    fs::write(home.path().join(".claude/settings.json"), user).unwrap();
+    assert_eq!(url(&["claude"], &set), "http://user");
+    let given = r#"{"env":{"ANTHROPIC_BASE_URL":"http://given"}}"#;
+    assert_eq!(url(&["claude", "--settings", given], &set), "http://given");
+}
+
+#[test]
+fn codex_goes_to_its_providers_base_url_else_the_one_its_login_uses() {
+    let home = tempfile::tempdir().unwrap();
+    let codex_home = home.path().join(".codex");
+    fs::create_dir(&codex_home).unwrap();
+    let url = |args: &[&str], variables: &[(&str, &str)]| {
+        default_upstream(IntegrationKind::Codex, args, home.path(), variables)
+    };
+    let login = |auth: &str| fs::write(codex_home.join("auth.json"), auth).unwrap();
+    let chatgpt = "https://chatgpt.com/backend-api/codex";
+    let api = "https://api.openai.com/v1";
+    assert_eq!(url(&["codex"], &[]), chatgpt);
+    login(r#"{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{}}"#);
+    assert_eq!(url(&["codex"], &[]), chatgpt);
+    login(r#"{"auth_mode":"apikey","OPENAI_API_KEY":"sk-test"}"#);
+    assert_eq!(url(&["codex"], &[]), api);
+    // A file from before Codex recorded the mode.
+    login(r#"{"OPENAI_API_KEY":"sk-test"}"#);
+    assert_eq!(url(&["codex"], &[]), api);
+    login(r#"{"OPENAI_API_KEY":null,"tokens":{}}"#);
+    assert_eq!(url(&["codex"], &[]), chatgpt);
+    let moved = [("OPENAI_BASE_URL", "http://moved/v1")];
+    assert_eq!(url(&["codex"], &moved), "http://moved/v1");
+    // A provider of the user's goes to its own base URL, else the login's.
+    fs::write(
+        codex_home.join("config.toml"),
+        "[model_providers.gateway]\nname = 'Gateway'\nbase_url = 'http://gateway/v1'\n\
+         [model_providers.bare]\nname = 'Bare'\n",
+    )
+    .unwrap();
+    let gateway = ["codex", "-c", "model_provider=gateway"];
+    assert_eq!(url(&gateway, &moved), "http://gateway/v1");
+    assert_eq!(url(&["codex", "-c", "model_provider=bare"], &[]), chatgpt);
 }

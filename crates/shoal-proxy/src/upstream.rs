@@ -15,7 +15,8 @@ pub struct Upstream {
 }
 
 impl Upstream {
-    /// An `http` or `https` URL such as `http://127.0.0.1:8317` or
+    /// An `http` or `https` URL, such as a gateway's server root
+    /// `http://127.0.0.1:8317` or an agent's own base URL
     /// `https://chatgpt.com/backend-api/codex`.
     pub fn parse(url: &str) -> Result<Self> {
         let uri: Uri = url

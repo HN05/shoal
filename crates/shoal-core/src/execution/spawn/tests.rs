@@ -7,6 +7,11 @@ fn proxy(upstream: &str, key: Option<&str>) -> crate::proxy::Proxy {
     toml::from_str(&format!("upstream = '{upstream}'\n{key}")).unwrap()
 }
 
+/// A Claude agent's command.
+fn claude() -> Vec<OsString> {
+    vec!["claude".into()]
+}
+
 /// A Claude launch with no proxy running yet.
 fn launch(home: &std::path::Path) -> AgentLaunch {
     AgentLaunch {
@@ -33,7 +38,7 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
     let first = proxy("http://127.0.0.1:9", None);
     assert!(
         launch
-            .restart_proxy(Some(first.clone()), &environment)
+            .restart_proxy(Some(first.clone()), &claude(), Path::new("/"), &environment)
             .await
             .unwrap()
     );
@@ -41,7 +46,7 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
     // The same proxy keeps running.
     assert!(
         !launch
-            .restart_proxy(Some(first), &environment)
+            .restart_proxy(Some(first), &claude(), Path::new("/"), &environment)
             .await
             .unwrap()
     );
@@ -50,7 +55,7 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
     let moved = proxy("http://127.0.0.1:10", Some("PROXY_KEY"));
     assert!(
         launch
-            .restart_proxy(Some(moved.clone()), &environment)
+            .restart_proxy(Some(moved.clone()), &claude(), Path::new("/"), &environment)
             .await
             .unwrap()
     );
@@ -58,7 +63,7 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
     assert!(launch.proxy.is_some());
     let missing = proxy("http://127.0.0.1:10", Some("MISSING_PROXY_KEY"));
     let error = launch
-        .restart_proxy(Some(missing), &environment)
+        .restart_proxy(Some(missing), &claude(), Path::new("/"), &environment)
         .await
         .unwrap_err();
     assert!(
@@ -66,9 +71,44 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
         "{error:#}"
     );
     // Removing it stops it, which changes it too.
-    assert!(launch.restart_proxy(None, &environment).await.unwrap());
+    assert!(
+        launch
+            .restart_proxy(None, &claude(), Path::new("/"), &environment)
+            .await
+            .unwrap()
+    );
     assert!(launch.proxy.is_none());
-    assert!(!launch.restart_proxy(None, &environment).await.unwrap());
+    assert!(
+        !launch
+            .restart_proxy(None, &claude(), Path::new("/"), &environment)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn a_restore_whose_requests_go_elsewhere_replaces_a_proxy_without_an_upstream() {
+    let home = tempfile::tempdir().unwrap();
+    let mut launch = launch(home.path());
+    let environment = BTreeMap::new();
+    let retrying: crate::proxy::Proxy = toml::from_str("").unwrap();
+    let sent_to = |url: &str| -> Vec<OsString> {
+        let settings = format!(r#"{{"env":{{"ANTHROPIC_BASE_URL":"{url}"}}}}"#);
+        vec!["claude".into(), "--settings".into(), settings.into()]
+    };
+    let mut restart = async |command: Vec<OsString>| {
+        let directory = home.path();
+        let proxy = Some(retrying.clone());
+        launch
+            .restart_proxy(proxy, &command, directory, &environment)
+            .await
+            .unwrap()
+    };
+    assert!(restart(sent_to("http://127.0.0.1:9")).await);
+    assert!(!restart(sent_to("http://127.0.0.1:9")).await);
+    assert!(restart(sent_to("http://127.0.0.1:10")).await);
+    let running = launch.proxy.as_ref().unwrap();
+    assert_eq!(running.upstream, "http://127.0.0.1:10");
 }
 
 #[tokio::test]
@@ -87,7 +127,7 @@ async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered()
     launch.fetched_key = Some((failing.key.clone().unwrap(), "sk-fetched".to_owned()));
     assert!(
         launch
-            .restart_proxy(Some(failing), &BTreeMap::new())
+            .restart_proxy(Some(failing), &claude(), Path::new("/"), &BTreeMap::new())
             .await
             .unwrap()
     );
@@ -109,7 +149,7 @@ async fn a_restore_that_runs_a_key_command_stops_it_at_the_limit() {
         toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['sleep', '86400'] }")
             .unwrap();
     let error = launch
-        .restart_proxy(Some(hanging), &BTreeMap::new())
+        .restart_proxy(Some(hanging), &claude(), Path::new("/"), &BTreeMap::new())
         .await
         .unwrap_err();
     assert!(
@@ -149,7 +189,12 @@ async fn prompt_cache_child() {
     let unset = BTreeMap::new();
     assert_eq!(prompt_cache_1h(&launch, &unset), None);
     launch
-        .restart_proxy(Some(proxy("http://127.0.0.1:9", None)), &unset)
+        .restart_proxy(
+            Some(proxy("http://127.0.0.1:9", None)),
+            &claude(),
+            Path::new("/"),
+            &unset,
+        )
         .await
         .unwrap();
     assert_eq!(prompt_cache_1h(&launch, &unset), Some(Some("1".into())));

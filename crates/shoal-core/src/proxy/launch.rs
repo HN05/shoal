@@ -18,6 +18,9 @@ pub(crate) const KEY_VARIABLE: &str = "SHOAL_PROXY_KEY";
 /// The proxy a tracked agent's wrapper runs while the agent does, at `url`.
 pub(crate) struct Running {
     pub(crate) url: String,
+    /// Where it forwards requests, which a restore compares with where its
+    /// command's would go.
+    pub(crate) upstream: String,
     /// The key the agent names in [`KEY_HEADER`], which the proxy answers
     /// only with.
     pub(crate) key: String,
@@ -370,10 +373,11 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
     }
 }
 
-/// Start `proxy` on a free loopback port, serving on this process's
-/// runtime, sending the upstream `key`, the value of the proxy's own.
-pub(crate) async fn start(proxy: &super::Proxy, key: Option<&str>) -> Result<Running> {
-    let mut upstream = shoal_proxy::Upstream::parse(&proxy.upstream)?;
+/// Start a proxy that forwards to `upstream` on a free loopback port,
+/// serving on this process's runtime, sending the upstream `key`, the value
+/// of the proxy's own.
+pub(crate) async fn start(upstream_url: &str, key: Option<&str>) -> Result<Running> {
+    let mut upstream = shoal_proxy::Upstream::parse(upstream_url)?;
     if let Some(key) = key {
         upstream = upstream.with_key(key)?;
     }
@@ -389,6 +393,7 @@ pub(crate) async fn start(proxy: &super::Proxy, key: Option<&str>) -> Result<Run
         .context("make the proxy's private directory")?;
     Ok(Running {
         url,
+        upstream: upstream_url.to_owned(),
         key,
         private,
         serving: tokio::spawn(proxy.serve()),

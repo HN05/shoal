@@ -26,6 +26,12 @@ pub(super) fn merge(args: &mut Vec<OsString>, routing: &super::super::Routing) -
     Ok(())
 }
 
+/// What every `--settings` before a `--` in `args` gives, joined as
+/// [`merge`] joins them, with files relative to `directory`.
+pub(super) fn given(args: &[OsString], directory: &Path) -> Result<Value> {
+    join(&occurrences(args), directory)
+}
+
 /// The settings of each of `found` merged in order, with files relative to
 /// `directory`.
 fn join(found: &[Occurrence], directory: &Path) -> Result<Value> {
@@ -73,7 +79,7 @@ fn set_base_url(settings: &mut Value, url: &str) -> Result<()> {
     let Some(env) = env.as_object_mut() else {
         anyhow::bail!("Claude settings' env is not a JSON object");
     };
-    env.insert("ANTHROPIC_BASE_URL".into(), Value::String(url.to_owned()));
+    env.insert(super::BASE_URL.into(), Value::String(url.to_owned()));
     Ok(())
 }
 

@@ -1784,7 +1784,10 @@ and depends on no Shoal crate but `shoal-time`, as `shoal-forge` depends only on
 leaf crates such as `shoal-subprocess` and `shoal-time`. Each tracked agent that names one gets its
 own, run by its wrapper, so a daemon restart never cuts a stream and the proxy
 ends with the agent; Shoal points the agent at it through the integration, which
-knows how that agent takes a base URL. All its requests share one outage budget,
+knows how that agent takes a base URL. An upstream is a server root that every
+tool shares, each integration naming where its API is under it; a proxy without
+one forwards to the base URL the agent would use without it, which the
+integration reads from the launch, so it only adds the retries. All its requests share one outage budget,
 so the agent's own retries never multiply the proxy's. Claude Code keeps its prompt cache for 5 minutes outside
 a claude.ai login within its usage limits, while an agent waiting for CI or a
 review idles longer, so a proxied Claude agent gets the 1-hour cache unless its

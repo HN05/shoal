@@ -3,7 +3,7 @@
 use crate::agent::Agent;
 use std::{collections::BTreeMap, ffi::OsString, path::Path};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 
 use super::{AgentEnvironment, args::insert_options, integration};
 use crate::{ai::IntegrationKind, config::Effective};
@@ -39,11 +39,36 @@ pub(crate) fn proxy_defaults(
         .collect()
 }
 
-/// The URL an agent with integration `kind` takes for its proxy at `url`,
-/// which forwards to its `upstream`, a server root, so the agent's API is
-/// under the path it names its own.
-pub(crate) fn agent_url(kind: IntegrationKind, url: &str) -> String {
-    format!("{url}{}", integration(kind).api_path())
+/// The URL an agent with integration `kind` takes for `proxy`, running at
+/// `url`: under the path of its API when the proxy forwards to an
+/// `upstream`, a server root, and `url` itself when it forwards to the
+/// agent's own base URL.
+pub(crate) fn agent_url(kind: IntegrationKind, url: &str, proxy: &crate::proxy::Proxy) -> String {
+    match proxy.upstream {
+        Some(_) => format!("{url}{}", integration(kind).api_path()),
+        None => url.to_owned(),
+    }
+}
+
+/// Where `proxy` forwards the requests of an agent with integration `kind`
+/// launched as `command` in `directory`, running with `configured` added to
+/// this process's environment: its `upstream`, else where the agent's
+/// requests go without it.
+pub(crate) fn upstream(
+    kind: IntegrationKind,
+    proxy: &crate::proxy::Proxy,
+    command: &[OsString],
+    directory: &Path,
+    home: &Path,
+    configured: &BTreeMap<String, OsString>,
+) -> Result<String> {
+    if let Some(upstream) = &proxy.upstream {
+        return Ok(upstream.clone());
+    }
+    let environment = AgentEnvironment::new(home, configured);
+    integration(kind)
+        .default_upstream(command, directory, &environment)
+        .context("find where the agent's API requests go without its proxy")
 }
 
 /// Whether an agent with integration `kind` can go through Shoal's proxy.

@@ -12,11 +12,14 @@ pub type Proxies = BTreeMap<String, Proxy>;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Proxy {
-    /// The `http` or `https` URL requests go to, the agent's own API base
-    /// URL such as CLIProxyAPI's.
-    pub upstream: String,
+    /// The `http` or `https` server root requests go to, such as
+    /// CLIProxyAPI's; without one, each agent's go where they would without
+    /// the proxy.
+    #[serde(default)]
+    pub upstream: Option<String>,
     /// The key the upstream gets instead of the agent's own credentials;
-    /// without one, the agent's pass through.
+    /// without one, the agent's pass through. Only an `upstream` takes one,
+    /// so an agent's own API never gets a gateway's key.
     #[serde(default)]
     pub key: Option<Value>,
 }
@@ -24,8 +27,14 @@ pub struct Proxy {
 pub fn validate(proxies: &Proxies) -> Result<()> {
     for (name, proxy) in proxies {
         crate::validate::name("proxy", name)?;
-        validate_upstream(&proxy.upstream)
-            .with_context(|| format!("machine.proxies.{name}.upstream"))?;
+        if let Some(upstream) = &proxy.upstream {
+            validate_upstream(upstream)
+                .with_context(|| format!("machine.proxies.{name}.upstream"))?;
+        }
+        ensure!(
+            proxy.key.is_none() || proxy.upstream.is_some(),
+            "machine.proxies.{name}.key needs an upstream"
+        );
         if let Some(key) = &proxy.key {
             key.validate(&format!("machine.proxies.{name}.key"))?;
         }
@@ -72,7 +81,7 @@ pub fn validate_routes(tools: &crate::ai::Tools, proxies: &Proxies) -> Result<()
         .values()
         .filter(|tool| tool.integration == crate::ai::IntegrationKind::Codex);
     for proxy in codex.filter_map(|tool| tool.proxy.as_ref()) {
-        let Some(upstream) = proxies.get(proxy).map(|proxy| &proxy.upstream) else {
+        let Some(upstream) = proxies.get(proxy).and_then(|proxy| proxy.upstream.as_ref()) else {
             continue;
         };
         ensure!(

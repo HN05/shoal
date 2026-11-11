@@ -2,7 +2,12 @@
 //! Git profile and output streams its mode gives it.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
-use std::{collections::BTreeMap, ffi::OsString, path::PathBuf, process::Stdio};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 
 use anyhow::{Context, Result};
 use tokio::process::{Child, Command};
@@ -56,21 +61,53 @@ pub(super) async fn fetch_command_key(
 }
 
 impl AgentLaunch {
-    /// Start the agent's proxy, which may take its key from the environment
-    /// the agent runs with.
+    /// Start the agent's proxy for its launch as `command` in `directory`,
+    /// with the workspace's `environment`, which its key may come from.
     pub(super) async fn start_proxy(
         &mut self,
+        command: &[OsString],
+        directory: &Path,
         environment: &BTreeMap<String, OsString>,
     ) -> Result<()> {
         let Some(routed) = &self.routed else {
             return Ok(());
         };
-        let key = match &routed.key {
+        let upstream = self.upstream(routed, command, directory, environment)?;
+        self.run_proxy(&upstream, environment).await
+    }
+
+    /// Run the agent's proxy, forwarding to `upstream`.
+    async fn run_proxy(
+        &mut self,
+        upstream: &str,
+        environment: &BTreeMap<String, OsString>,
+    ) -> Result<()> {
+        let key = match self.routed.as_ref().and_then(|routed| routed.key.as_ref()) {
             Some(key) => Some(self.proxy_key(key, environment).await?),
             None => None,
         };
-        self.proxy = Some(crate::proxy::start(routed, key.as_deref()).await?);
+        self.proxy = Some(crate::proxy::start(upstream, key.as_deref()).await?);
         Ok(())
+    }
+
+    /// Where `proxy` forwards the requests of the agent launched as
+    /// `command` in `directory` with the workspace's `environment`.
+    fn upstream(
+        &self,
+        proxy: &crate::proxy::Proxy,
+        command: &[OsString],
+        directory: &Path,
+        environment: &BTreeMap<String, OsString>,
+    ) -> Result<String> {
+        let configured = self.configured_environment(environment);
+        crate::agents::upstream(
+            self.kind(),
+            proxy,
+            command,
+            directory,
+            &self.home,
+            &configured,
+        )
     }
 
     /// The value of the proxy's `key`: the one fetched before the launch
@@ -102,21 +139,31 @@ impl AgentLaunch {
             .context("the proxy's key")
     }
 
-    /// Run the restored agent, with the workspace's `environment`, through
-    /// `proxy`, which its restore command was resolved with: the one running
-    /// when it is the same, otherwise a new one, or none. Whether it changed,
-    /// so what the old one reported no longer holds.
+    /// Run the restored agent, launched as `command` in `directory` with the
+    /// workspace's `environment`, through `proxy`, which its restore command
+    /// was resolved with: the one running when it is the same and forwards
+    /// where this launch's requests go, otherwise a new one, or none. Whether
+    /// it changed, so what the old one reported no longer holds.
     pub(super) async fn restart_proxy(
         &mut self,
         proxy: Option<crate::proxy::Proxy>,
+        command: &[OsString],
+        directory: &Path,
         environment: &BTreeMap<String, OsString>,
     ) -> Result<bool> {
-        if self.routed == proxy {
+        let upstream = match &proxy {
+            Some(proxy) => Some(self.upstream(proxy, command, directory, environment)?),
+            None => None,
+        };
+        let running = self.proxy.as_ref().map(|running| running.upstream.as_str());
+        if self.routed == proxy && running == upstream.as_deref() {
             return Ok(false);
         }
         self.routed = proxy;
         self.proxy = None;
-        self.start_proxy(environment).await?;
+        if let Some(upstream) = upstream {
+            self.run_proxy(&upstream, environment).await?;
+        }
         Ok(true)
     }
 
@@ -170,11 +217,11 @@ impl AgentLaunch {
         environment: &BTreeMap<String, OsString>,
         directory: &std::path::Path,
     ) -> Result<Vec<OsString>> {
-        let Some(proxy) = &self.proxy else {
+        let (Some(proxy), Some(routed)) = (&self.proxy, &self.routed) else {
             return Ok(command.to_vec());
         };
         let configured = self.configured_environment(environment);
-        let url = crate::agents::agent_url(self.kind(), &proxy.url);
+        let url = crate::agents::agent_url(self.kind(), &proxy.url, routed);
         let routing = crate::agents::Routing {
             url: &url,
             directory,

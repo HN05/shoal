@@ -19,12 +19,19 @@ fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
     )
     .unwrap();
     let routes = routes(&config.tools().unwrap(), &config.machine.proxies);
-    assert_eq!(routes["claude"].upstream, "http://127.0.0.1:8317");
-    assert_eq!(routes["claude-fast"].upstream, "http://127.0.0.1:8317");
+    let upstream = |name: &str| routes[name].upstream.clone();
+    assert_eq!(upstream("claude").as_deref(), Some("http://127.0.0.1:8317"));
+    assert_eq!(
+        upstream("claude-fast").as_deref(),
+        Some("http://127.0.0.1:8317")
+    );
+    // A proxy without an upstream only retries.
+    assert!(parse("[machine.proxies.retry]\n[machine.agents.codex]\nproxy = 'retry'\n").is_ok());
     assert!(!routes.contains_key("codex"));
     for text in [
         "[machine.agents.claude]\nproxy = 'missing'\n",
         "[machine.proxies.local]\nupstream = 'ftp://host'\n",
+        "[machine.proxies.local]\nkey = 'sk-gateway'\n",
         "[machine.proxies.local]\nupstream = 'http://host'\nkey = 'two words'\n",
         "[machine.proxies.local]\nupstream = 'http://host'\nkey = { env = 'A-B' }\n",
         "[machine.proxies.local]\nupstream = 'http://host'\nkey = { cmd = [] }\n",
