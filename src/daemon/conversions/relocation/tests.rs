@@ -377,3 +377,57 @@ async fn the_processes_a_hand_over_signalled_outlive_it() {
         .unwrap();
     assert!(pending.is_some());
 }
+
+#[tokio::test]
+async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution: crate::client::execution_ids::ExecutionId::generate(),
+        session: Some("s1".into()),
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    record_chat_conversion(&manager, &workspace, chat).await;
+    let handovers = manager.conversion_handovers.lock().await;
+    let relocating = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.relocate_finished_turns().await }
+    });
+    // The relocation lists the conversion, then waits for the hand-overs,
+    // which a stop holds while it holds the conversion.
+    tokio::task::yield_now().await;
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| crate::daemon::conversions::record::hold_chat(db, &id, None))
+        .await
+        .unwrap();
+    drop(handovers);
+
+    relocating.await.unwrap().unwrap();
+
+    let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
+    assert!(chat.restore.is_some());
+    let resumed = crate::daemon::chats::restores::tests::RESUMED
+        .lock()
+        .unwrap()
+        .clone();
+    assert!(!resumed.contains(&workspace.id));
+}
