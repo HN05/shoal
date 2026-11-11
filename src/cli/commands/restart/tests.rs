@@ -112,6 +112,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
         stopped: None,
         restarted_from: Vec::new(),
     };
+    let number = workspace.number;
     let mut restarts = vec![Restart {
         space: PresentSpace::Workspace(workspace),
         agent: agent.clone(),
@@ -126,5 +127,6 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
     };
     let skipped = refresh(&mut restarts, &[stopped], "run");
     assert!(restarts.is_empty());
-    assert!(skipped[0].reason.contains("shoal queue start docs"));
+    let start = format!("shoal queue start {number}");
+    assert!(skipped[0].reason.contains(&start), "{}", skipped[0].reason);
 }

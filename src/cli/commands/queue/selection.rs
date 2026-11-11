@@ -11,7 +11,7 @@ use crate::{
         ui,
     },
     model::{QueueEntry, QueuePlace},
-    state::QueueState,
+    state::{QueueKind, QueueState},
 };
 
 /// The waiting entries in queue order.
@@ -39,13 +39,34 @@ pub(super) async fn selected_among(
     offered: impl Fn(&QueueEntry) -> bool,
 ) -> Result<String> {
     if let Some(selector) = selector {
-        return Ok(selector);
+        return named(ctx, selector).await;
     }
     let mut waiting = waiting(ctx).await?;
     waiting.retain(|entry| offered(entry));
     ensure!(!waiting.is_empty(), "no agents wait in the queue");
     ui::require_argument(ctx, "queue entry", "entry")?;
     Ok(pick_entry(ctx, &waiting, prompt).await?.id.into())
+}
+
+/// The entry `selector` names: an entry by its ID, else a space by its number
+/// or ID, for its queued restore, as the notices of a stopped agent name it.
+/// Anything else is left for the daemon to refuse.
+async fn named(ctx: &Context, selector: String) -> Result<String> {
+    let entries = queued_agents::entries(ctx).await?;
+    if entries.iter().any(|entry| entry.id == selector) {
+        return Ok(selector);
+    }
+    let Ok(space) = SpaceSelector::parse(&selector) else {
+        return Ok(selector);
+    };
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let Some(space) = spaces.find(&space) else {
+        return Ok(selector);
+    };
+    let restore = entries.iter().find(|entry| {
+        entry.kind == QueueKind::Restore && entry.workspace_id.as_ref() == Some(space.id())
+    });
+    Ok(restore.map_or(selector, |entry| entry.id.to_string()))
 }
 
 /// Pick one of `entries`.

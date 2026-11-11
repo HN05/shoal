@@ -44,8 +44,9 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
     let message = match entry.kind {
         QueueKind::Launch => format!("Removed {} from the agent queue", entry.name),
         QueueKind::Restore => format!(
-            "Removed the restore of {0} from the agent queue; restore it with shoal resume {0}",
-            entry.name
+            "Removed the restore of {} from the agent queue; restore it with shoal resume {}",
+            entry.name,
+            (entry.workspace_id.as_ref()).map_or("", |id| id.as_str())
         ),
         QueueKind::Job => format!(
             "Passed over {}; the forge keeps it for other runners",

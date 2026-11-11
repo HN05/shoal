@@ -339,7 +339,7 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> 
             continue;
         };
         let restarted = restart.joins.is_none() && current.restarted_by.iter().any(|by| by == run);
-        let reason = stopped_reason(restart.space.name(), current)
+        let reason = stopped_reason(&restart.space.number().to_string(), current)
             .or_else(|| space_skip_reason(&restart.space, current));
         match reason {
             Some(reason) => ended.push(restart.skipped(reason)),

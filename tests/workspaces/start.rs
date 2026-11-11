@@ -2717,9 +2717,10 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
-    let mut paths = Vec::new();
+    let (mut paths, mut numbers) = (Vec::new(), Vec::new());
     for name in ["first", "second", "third", "finished"] {
         let workspace = fixture.add(name);
+        numbers.push(workspace["number"].to_string());
         let state = fixture
             .root
             .path()
@@ -2763,6 +2764,10 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         sent[2].contains(" --execution first-agent --focus --queue-entry "),
         "{sent:?}"
     );
+    // A space's number starts its queued restore now, as the notices of a
+    // stopped agent name it.
+    fixture.ok(&["queue", "start", &numbers[1]]);
+    wait_until("the second restore", || paths[1].join("restored").exists());
 
     fixture.ok(&["stop", &fixture.id("first")]);
     fixture.ok(&["rm", "--wait", &fixture.id("first"), "--yes"]);

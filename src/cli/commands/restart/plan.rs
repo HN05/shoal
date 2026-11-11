@@ -115,7 +115,7 @@ impl Selection {
                 plan.skipped.push(Skipped {
                     space: space.name().clone(),
                     agent: agent.cloned(),
-                    reason: absent_reason(space.name(), agent, &stopped),
+                    reason: absent_reason(&space.number().to_string(), agent, &stopped),
                 });
             }
             for running in agents {
@@ -235,7 +235,7 @@ pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) ->
     }
 }
 
-/// Why the named `space` restarts no agent named `agent`, when the only ones
+/// Why `space`, a number, restarts no agent named `agent`, when the only ones
 /// it has are those of `stopped`, which protection stopped.
 fn absent_reason(
     space: &str,
@@ -276,7 +276,7 @@ pub(in crate::cli::commands) fn skip_reason(
     workspace: &Workspace,
     running: &RunningAgent,
 ) -> Option<String> {
-    let manual = format!("use shoal stop {0} and shoal resume {0}", workspace.name);
+    let manual = format!("use shoal stop {0} and shoal resume {0}", workspace.number);
     match &running.agent {
         None => Some(format!(
             "execution {} is disconnected; {manual}",

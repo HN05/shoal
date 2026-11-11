@@ -150,7 +150,8 @@ pub enum SessionsCommand {
 pub enum QueueCommand {
     /// Start a waiting entry now, regardless of the agent limits.
     Start {
-        /// Entry by its ID; omit to choose one.
+        /// Entry by its ID, or a space by number or ID for its queued
+        /// restore; omit to choose one.
         entry: Option<String>,
         /// Attach this terminal to the agent's session once it has one, as
         /// shoal attach does.

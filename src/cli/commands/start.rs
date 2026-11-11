@@ -98,7 +98,7 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
     .collect()
 }
 
-/// The ID of the space `selector` names, by number, ID or name.
+/// The ID of the space `selector` names, by number or ID.
 async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
     let space = crate::client::workspaces::spaces(&ctx.paths)
         .await?
