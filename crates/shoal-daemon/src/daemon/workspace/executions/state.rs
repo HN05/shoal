@@ -126,7 +126,7 @@ impl Executions {
         self.closed.store(true, Ordering::Relaxed);
         self.shutting_down.store(true, Ordering::Relaxed);
         for id in connections.senders.keys() {
-            let _ = connections.stop(id, &request, false).await;
+            let _ = connections.stop(id, &request).await;
         }
     }
 
@@ -313,31 +313,16 @@ impl Connections<'_> {
     }
 
     /// Ask the connected wrapper of `id` to stop for `request`, cancelling
-    /// its agent's automatic restore. With `spare_protected`, an agent that
-    /// protection stopped keeps waiting for its restore instead; returns
-    /// whether the wrapper was asked.
-    pub(crate) async fn stop(
-        &self,
-        id: &ExecutionId,
-        request: &StopRequest,
-        spare_protected: bool,
-    ) -> Result<bool> {
+    /// what its agent's connection keeps for an automatic restore; the
+    /// request cancels its recorded stop. Returns whether the wrapper was
+    /// asked.
+    pub(crate) async fn stop(&self, id: &ExecutionId, request: &StopRequest) -> Result<bool> {
         let Some(sender) = self.senders.get(id).filter(|sender| !sender.is_closed()) else {
             return Ok(false);
         };
-        let spared = self
-            .executions
-            .with_agent(id, |agent| {
-                if spare_protected && agent.protected() {
-                    return true;
-                }
-                agent.cancel_recovery();
-                false
-            })
+        self.executions
+            .with_agent(id, |agent| agent.cancel_recovery())
             .await;
-        if spared == Some(true) {
-            return Ok(false);
-        }
         self.executions
             .stop_requests
             .lock()

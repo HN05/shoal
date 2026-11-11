@@ -1,6 +1,7 @@
 //! Stopping executions: the stop policy and requests, and the operations
 //! that stop a workspace's executions, connected or disconnected.
 use super::super::{Manager, stopped_work::Stopper};
+use super::Connections;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
@@ -550,8 +551,8 @@ impl Manager {
             for execution in executions {
                 if !connections.is_connected(&execution.id) {
                     disconnected.push(execution);
-                } else if connections
-                    .stop(&execution.id, request, protected == Protected::Keep)
+                } else if self
+                    .stop_connected(&connections, &execution.id, request, protected)
                     .await?
                 {
                     waiting.push(execution);
@@ -579,6 +580,26 @@ impl Manager {
             );
             sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
+    }
+
+    /// Ask the connected wrapper of `id` to stop for `request`, cancelling
+    /// its agent's automatic restore, unless `protected` keeps an agent that
+    /// protection stopped waiting for its restore. Returns whether the
+    /// wrapper was asked.
+    async fn stop_connected(
+        &self,
+        connections: &Connections<'_>,
+        id: &ExecutionId,
+        request: &StopRequest,
+        protected: Protected,
+    ) -> Result<bool> {
+        if self.agent_overload(id).await.is_some() {
+            if protected == Protected::Keep {
+                return Ok(false);
+            }
+            self.forget_agent_stop(id).await;
+        }
+        connections.stop(id, request).await
     }
 
     /// How far a connected execution got towards stopping, so a stop that

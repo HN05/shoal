@@ -205,8 +205,11 @@ impl Manager {
             .executions
             .connections()
             .await
-            .stop(execution, &StopRequest::queue_cancel(), false)
+            .stop(execution, &StopRequest::queue_cancel())
             .await?;
+        if stopped {
+            self.forget_agent_stop(execution).await;
+        }
         // Names select nothing; a restore's workspace is known.
         let workspace =
             (entry.workspace()).map_or_else(|| entry.id.to_string(), ToString::to_string);

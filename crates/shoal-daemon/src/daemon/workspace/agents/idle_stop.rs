@@ -122,7 +122,7 @@ impl Manager {
         chosen: HashMap<ExecutionId, Chosen>,
         now: crate::time::UnixTime,
     ) {
-        let stopped: Vec<StoppedAgent> = self
+        let still: Vec<(ExecutionId, Protection)> = self
             .executions
             .with_agents(|agents| {
                 still_idle(&mut turns, agents);
@@ -136,15 +136,20 @@ impl Manager {
                                 false => turn.idle_without_cache(now),
                             })
                     })
-                    .filter_map(|(id, stop)| {
-                        let agent = agents.get_mut(&id).filter(|agent| {
+                    .filter(|(id, stop)| {
+                        agents.get(id).is_some_and(|agent| {
                             agent.running() && agent.turns_started == stop.turns_started
-                        })?;
-                        self.protect(&id, agent, &stop.protection, Some(AgentState::Idle))
+                        })
                     })
+                    .map(|(id, stop)| (id, stop.protection))
                     .collect()
             })
             .await;
+        let mut stopped: Vec<StoppedAgent> = Vec::new();
+        for (id, protection) in still {
+            let turn = Some(AgentState::Idle);
+            stopped.extend(self.protect(&id, &protection, turn).await);
+        }
         for agent in &stopped {
             match agent.protection.is_blocked() {
                 true => self.leave_blocked_message(agent).await,

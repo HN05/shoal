@@ -142,7 +142,7 @@ impl Manager {
         let mut disconnected = Vec::new();
         for id in executions {
             if connections.is_connected(&id) {
-                let _ = connections.stop(&id, &request, false).await;
+                let _ = connections.stop(&id, &request).await;
             } else {
                 disconnected.push(id);
             }

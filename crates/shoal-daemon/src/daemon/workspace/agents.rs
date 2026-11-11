@@ -34,6 +34,7 @@ mod forks;
 mod idle_stop;
 mod interrupts;
 mod restart;
+mod stops;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Outcome, Renewals, Restart, Restarts, forget_ended_renewals, restarted};
 
@@ -174,8 +175,6 @@ pub(crate) struct Agent {
     started: Instant,
     recover: bool,
     stop: watch::Sender<bool>,
-    /// Set while an overload stop awaits automatic recovery.
-    overload: Option<Protection>,
     /// Holds back a daemon update from the stop until the execution's
     /// connection takes over, so an update waits for the restore.
     update_hold: Option<OwnedRwLockReadGuard<()>>,
@@ -203,21 +202,17 @@ impl Agent {
         }
     }
 
+    /// Cancel what the agent's connection keeps for its restore; the
+    /// caller forgets its recorded stop.
     pub(super) fn cancel_recovery(&mut self) {
-        self.overload = None;
         self.update_hold = None;
         self.restarts.cancel();
     }
 
-    /// Whether protection stopped the agent and it awaits automatic recovery.
-    pub(super) fn protected(&self) -> bool {
-        self.overload.is_some()
-    }
-
-    /// Refuse another stop of the agent: protection stopped it and it waits
-    /// for its restore, or a stop of it is in progress.
-    fn ensure_not_stopped(&self) -> anyhow::Result<()> {
-        if let Some(protection) = &self.overload {
+    /// Refuse another stop of the agent: protection `stopped` it and it
+    /// waits for its restore, or a stop of it is in progress.
+    fn ensure_not_stopped(&self, stopped: Option<&Protection>) -> anyhow::Result<()> {
+        if let Some(protection) = stopped {
             anyhow::bail!(
                 "{} is stopped ({}) and resumes once {}; restore it now with shoal queue start {}",
                 self.name,
@@ -464,7 +459,6 @@ impl Manager {
                 .unwrap_or_else(Instant::now),
             recover,
             stop: stop.clone(),
-            overload: None,
             update_hold: None,
             restarts: Default::default(),
             turn: None,
@@ -636,6 +630,11 @@ impl Manager {
     ) -> anyhow::Result<bool> {
         let _gate = self.agent_queue.lock_admission().await;
         anyhow::ensure!(!self.agent_queue.suspended(), "the system is shutting down");
+        // The agent's turns count again before it runs.
+        let protected = self.agent_overload(id).await.is_some();
+        if protected {
+            self.forget_agent_stop(id).await;
+        }
         let connections = self.executions.connections().await;
         let stop = connections
             .stop_channel(id)
@@ -651,11 +650,10 @@ impl Manager {
                     .as_mut()
                     .map(restart::Restart::resume)
                     .is_some();
-                if agent.overload.is_none() && !restarting {
+                if !protected && !restarting {
                     return Ok(None);
                 }
                 stop.send(false)?;
-                agent.overload = None;
                 agent.update_hold = None;
                 agent.started = Instant::now();
                 // The resumed agent reports its own turns.
@@ -690,29 +688,6 @@ impl Manager {
         Ok(true)
     }
 
-    /// Restore the protection stop of an agent whose wrapper reattached
-    /// while waiting for its automatic restore. A restart continues without
-    /// the request that asked for it, which ended with the previous daemon,
-    /// in a new wrapper.
-    pub(crate) async fn await_agent_restore(&self, id: &ExecutionId, protection: Protection) {
-        self.executions
-            .with_agent(id, |agent| {
-                if protection.is_restart() {
-                    agent.restarts.current = Some(restart::Restart::unanswered(None, false));
-                } else {
-                    agent.overload = Some(protection);
-                }
-            })
-            .await;
-    }
-
-    pub(crate) async fn agent_overload(&self, id: &ExecutionId) -> Option<Protection> {
-        self.executions
-            .with_agent(id, |agent| agent.overload.clone())
-            .await
-            .flatten()
-    }
-
     /// The guard a protection stop took for the execution's connection.
     pub(crate) async fn take_update_hold(
         &self,
@@ -722,18 +697,6 @@ impl Manager {
             .with_agent(id, |agent| agent.update_hold.take())
             .await
             .flatten()
-    }
-
-    /// Mark each of `executions` whose agent protection stopped while its
-    /// wrapper waits to restore it.
-    pub(crate) async fn annotate_stops(&self, executions: &mut [crate::model::Execution]) {
-        for execution in executions {
-            execution.stopped = self.agent_overload(&execution.id).await;
-        }
-    }
-
-    pub(crate) async fn agent_was_overloaded(&self, id: &ExecutionId) -> bool {
-        self.agent_overload(id).await.is_some()
     }
 
     /// Queue the automatic restore of the protection-stopped agent `id`.
@@ -980,7 +943,7 @@ impl Manager {
         select: Select,
         mut turns: HashMap<ExecutionId, Turn>,
     ) -> Vec<StoppedAgent> {
-        let stopped: Vec<_> = self
+        let selected: Vec<(ExecutionId, Option<AgentState>)> = self
             .executions
             .with_agents(|agents| {
                 still_idle(&mut turns, agents);
@@ -1002,13 +965,17 @@ impl Manager {
                 };
                 selected
                     .into_iter()
-                    .filter_map(|id| {
+                    .map(|id| {
                         let turn = turns.get(&id).map(|turn| turn.state);
-                        self.protect(&id, agents.get_mut(&id)?, protection, turn)
+                        (id, turn)
                     })
                     .collect()
             })
             .await;
+        let mut stopped = Vec::new();
+        for (id, turn) in selected {
+            stopped.extend(self.protect(&id, protection, turn).await);
+        }
         if !stopped.is_empty() {
             self.overload_recovery.reset();
         }
@@ -1018,20 +985,35 @@ impl Manager {
         stopped
     }
 
-    /// Save the recovery handoff before delivering the stop, so a wrapper
-    /// terminated under pressure can still be resumed.
-    fn protect(
+    /// Stop the agent of `id`, chosen in `turn`, for `protection`: save the
+    /// recovery handoff, so a wrapper terminated under pressure can still be
+    /// resumed, then record the stop and deliver it. A stop recorded or
+    /// delivered meanwhile keeps the agent from this one.
+    async fn protect(
         &self,
         id: &ExecutionId,
-        agent: &mut Agent,
         protection: &Protection,
         turn: Option<AgentState>,
     ) -> Option<StoppedAgent> {
+        let (tracked, mut stopped) = (self.executions)
+            .with_agent(id, |agent| {
+                let stopped = StoppedAgent {
+                    id: id.clone(),
+                    name: agent.name.clone(),
+                    workspace: agent.workspace.clone(),
+                    workspace_id: agent.workspace_id.clone(),
+                    recover: agent.recover,
+                    handoff_saved: false,
+                    protection: restored_after(protection, turn),
+                };
+                (agent.tracked(), stopped)
+            })
+            .await?;
         let handoff = crate::execution::recovery::save_record(
             &self.paths,
-            &agent.workspace_id,
+            &stopped.workspace_id,
             id,
-            &agent.tracked(),
+            &tracked,
             Some(&protection.reason),
             turn,
         );
@@ -1043,20 +1025,37 @@ impl Manager {
                 return None;
             }
         }
-        let protection = restored_after(protection, turn);
-        agent.overload = Some(protection.clone());
-        // The monitor holds an operation, so no update can take the lock.
-        agent.update_hold = self.gates.try_owned_operation();
-        agent.stop.send(true).ok()?;
-        Some(StoppedAgent {
-            id: id.clone(),
-            name: agent.name.clone(),
-            workspace: agent.workspace.clone(),
-            workspace_id: agent.workspace_id.clone(),
-            recover: agent.recover,
-            handoff_saved: handoff.is_ok(),
-            protection,
-        })
+        stopped.handoff_saved = handoff.is_ok();
+        match self.decide_stop(id, &stopped.protection).await {
+            Ok(()) => Some(stopped),
+            Err(error) => {
+                log!(
+                    "{} not stopped for {}: {error:#}",
+                    stopped.name,
+                    protection.reason
+                );
+                if let Ok(handoff) = &handoff
+                    && let Err(error) = crate::execution::recovery::consume(handoff)
+                {
+                    log!("unused recovery handoff not removed: {error:#}");
+                }
+                None
+            }
+        }
+    }
+
+    /// Record that `protection` stops the agent of `id` and deliver the
+    /// stop, forgetting the record when it cannot be delivered.
+    async fn decide_stop(&self, id: &ExecutionId, protection: &Protection) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.record_agent_stop(id, protection).await?,
+            "a stop of it is recorded already"
+        );
+        let delivered = self.deliver_stop(id).await;
+        if delivered.is_err() {
+            self.forget_agent_stop(id).await;
+        }
+        delivered
     }
 
     /// Whether `shoal done` finished the workspace's assignment, which leaves

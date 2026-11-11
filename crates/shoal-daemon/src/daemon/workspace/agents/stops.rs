@@ -1,0 +1,170 @@
+//! The protection stops Shoal decides for agents, which the store keeps by
+//! the execution that runs each, beside the turn state the agent reports;
+//! the tracked agent only carries a stop to its wrapper.
+use crate::client::execution_ids::ExecutionId;
+use anyhow::{Context, Result};
+use rusqlite::{Connection, OptionalExtension, params};
+use std::collections::HashMap;
+
+use super::{Manager, Protection, ProtectionExt, restart};
+use crate::daemon::log;
+
+/// The stop recorded for execution `id`.
+fn get(db: &Connection, id: &ExecutionId) -> Result<Option<Protection>> {
+    Ok(db
+        .query_row(
+            "SELECT reason,resumes_when FROM agent_stops WHERE execution_id=?1",
+            [id],
+            |row| {
+                Ok(Protection {
+                    reason: row.get(0)?,
+                    resumes_when: row.get(1)?,
+                })
+            },
+        )
+        .optional()?)
+}
+
+/// Every recorded stop, by execution.
+pub(super) fn all(db: &Connection) -> Result<HashMap<ExecutionId, Protection>> {
+    Ok(db
+        .prepare("SELECT execution_id,reason,resumes_when FROM agent_stops")?
+        .query_map([], |row| {
+            let protection = Protection {
+                reason: row.get(1)?,
+                resumes_when: row.get(2)?,
+            };
+            Ok((row.get(0)?, protection))
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Record that `protection` stops the agent of execution `id` at its
+/// space's current turn generation, unless a stop of it is recorded
+/// already. Whether it was recorded.
+pub(super) fn insert(db: &Connection, id: &ExecutionId, protection: &Protection) -> Result<bool> {
+    let inserted = db.execute(
+        "INSERT INTO agent_stops(execution_id,reason,resumes_when,turn)
+         VALUES (?1,?2,?3,(SELECT turn FROM space_agent_state WHERE execution_id=?1))
+         ON CONFLICT(execution_id) DO NOTHING",
+        params![id, protection.reason, protection.resumes_when],
+    )?;
+    Ok(inserted > 0)
+}
+
+/// Record that `protection` stopped the agent of execution `id`, as its
+/// reattaching wrapper reports it, in place of the stop recorded before.
+fn set(db: &Connection, id: &ExecutionId, protection: &Protection) -> Result<()> {
+    db.execute(
+        "INSERT INTO agent_stops(execution_id,reason,resumes_when,turn)
+         VALUES (?1,?2,?3,(SELECT turn FROM space_agent_state WHERE execution_id=?1))
+         ON CONFLICT(execution_id) DO UPDATE SET
+             reason=excluded.reason,resumes_when=excluded.resumes_when",
+        params![id, protection.reason, protection.resumes_when],
+    )?;
+    Ok(())
+}
+
+/// Forget the stop recorded for execution `id`.
+pub(super) fn delete(db: &Connection, id: &ExecutionId) -> Result<()> {
+    db.execute("DELETE FROM agent_stops WHERE execution_id=?1", [id])?;
+    Ok(())
+}
+
+impl Manager {
+    /// The protection stop whose restore the tracked agent of `id` awaits:
+    /// a stop request, as from `shoal stop` or a daemon shutdown, cancels
+    /// it, and one of an execution no agent connected for authorizes
+    /// nothing.
+    pub(crate) async fn agent_overload(&self, id: &ExecutionId) -> Option<Protection> {
+        if (self.executions.with_agent(id, |_| ()).await).is_none()
+            || self.executions.stop_request(id).await.is_some()
+        {
+            return None;
+        }
+        let execution = id.to_owned();
+        let recorded = self.store.run(move |db| get(db, &execution)).await;
+        recorded.unwrap_or_else(|error| {
+            log!("stop of execution {id} unreadable: {error:#}");
+            None
+        })
+    }
+
+    pub(crate) async fn agent_was_overloaded(&self, id: &ExecutionId) -> bool {
+        self.agent_overload(id).await.is_some()
+    }
+
+    /// Mark each of `executions` whose agent protection stopped while its
+    /// wrapper waits to restore it.
+    pub(crate) async fn annotate_stops(&self, executions: &mut [crate::model::Execution]) {
+        for execution in executions {
+            execution.stopped = self.agent_overload(&execution.id).await;
+        }
+    }
+
+    /// Record that `protection` stops the agent of `id`, unless a stop of it
+    /// is recorded already. Whether it was recorded.
+    pub(super) async fn record_agent_stop(
+        &self,
+        id: &ExecutionId,
+        protection: &Protection,
+    ) -> Result<bool> {
+        let (execution, protection) = (id.to_owned(), protection.clone());
+        self.store
+            .write(move |tx| insert(tx, &execution, &protection))
+            .await
+    }
+
+    /// Forget the stop of the agent of `id`, as when it runs again or its
+    /// restore is cancelled.
+    pub(crate) async fn forget_agent_stop(&self, id: &ExecutionId) {
+        let execution = id.to_owned();
+        if let Err(error) = self.store.run(move |db| delete(db, &execution)).await {
+            log!("stop of execution {id} not forgotten: {error:#}");
+        }
+    }
+
+    /// Send the stop recorded for the agent of `id` to its wrapper, unless
+    /// something else stops it meanwhile, such as `shoal restart`, holding
+    /// back a daemon update until the wrapper's connection takes over.
+    pub(super) async fn deliver_stop(&self, id: &ExecutionId) -> Result<()> {
+        self.executions
+            .with_agent(id, |agent| {
+                anyhow::ensure!(
+                    agent.running() && agent.restarts.current.is_none(),
+                    "{} is already stopping",
+                    agent.name
+                );
+                // The monitor holds an operation, so no update can take the lock.
+                agent.update_hold = self.gates.try_owned_operation();
+                (agent.stop.send(true)).with_context(|| format!("{} disconnected", agent.name))
+            })
+            .await
+            .context("the agent disconnected")?
+    }
+
+    /// Restore the protection stop of an agent whose wrapper reattached
+    /// while waiting for its automatic restore. A restart continues without
+    /// the request that asked for it, which ended with the previous daemon,
+    /// in a new wrapper.
+    pub(crate) async fn await_agent_restore(&self, id: &ExecutionId, protection: Protection) {
+        if protection.is_restart() {
+            self.executions
+                .with_agent(id, |agent| {
+                    agent.restarts.current = Some(restart::Restart::unanswered(None, false));
+                })
+                .await;
+            return;
+        }
+        let execution = id.to_owned();
+        let recorded = (self.store)
+            .run(move |db| set(db, &execution, &protection))
+            .await;
+        if let Err(error) = recorded {
+            log!("stop of reattached execution {id} not recorded: {error:#}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

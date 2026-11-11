@@ -9,7 +9,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use std::collections::HashSet;
 use tokio::sync::oneshot;
 
-use super::{Agent, Manager};
+use super::{Agent, Manager, stops};
 use crate::daemon::log;
 use crate::{
     config::permissions::PermissionChange, daemon::store, execution::recovery, model::RunningAgent,
@@ -27,8 +27,11 @@ impl Manager {
     /// may have run one, and every agent a restart starts in a new wrapper,
     /// by the execution it ran as; connected commands are left out.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
-        let (executions, interrupted) = (self.store)
-            .read(|db| Ok((store::all_executions(db)?, interrupted_executions(db)?)))
+        let (executions, interrupted, stops) = (self.store)
+            .read(|db| {
+                let executions = store::all_executions(db)?;
+                Ok((executions, interrupted_executions(db)?, stops::all(db)?))
+            })
             .await?;
         let connections = self.executions.connections().await;
         Ok(connections
@@ -52,7 +55,7 @@ impl Manager {
                                 .map(|agent| agent.restarts.restarted_by())
                                 .unwrap_or_default(),
                             restart: agent.and_then(|agent| agent.restarts.pending()),
-                            stopped: agent.and_then(|agent| agent.overload.clone()),
+                            stopped: agent.and(stops.get(&execution.id).cloned()),
                             restarted_from: renewal::earlier(renewals, &execution.id),
                             execution: execution.id,
                             space_id: execution.workspace_id,
@@ -159,20 +162,27 @@ impl Manager {
             !(in_place && change.is_some()),
             "--permission restarts an agent in a new wrapper, which starts it with the permissions given; leave out --in-place"
         );
+        let current = (self.executions)
+            .with_restarts(|_, renewals| renewal::current(renewals, id))
+            .await;
+        let stopped = self.agent_overload(&current).await;
         self.executions
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);
                 if let Some(Renewal::Starting(handover)) = renewals.get_mut(&id) {
                     return handover.answer_changing(run, change.as_ref());
                 }
-                let agent = agents.get_mut(&id);
+                // A stop of an agent that runs again meanwhile shows only on
+                // its stop channel.
+                let stopped = stopped.filter(|_| id == current);
+                let agent = agents.get_mut(&id).map(|agent| (agent, stopped));
                 self.stop_for_restart(&id, agent, run, in_place, stopped_by, change)
             })
             .await
     }
 
-    /// Save the handoff of `agent`, the agent of `id`, then stop it for a
-    /// restart, `in_place` or in a new wrapper, which starts it with `change`
+    /// Save the handoff of `agent`, the agent of `id` with the protection
+    /// stop that stopped it if any, then stop it for a restart, `in_place` or in a new wrapper, which starts it with `change`
     /// made when given, or join the restart already in progress as
     /// it was asked. The handoff names the space `stopped_by`, whose process
     /// asked for the restart, so it may resume an agent the restart leaves
@@ -180,13 +190,14 @@ impl Manager {
     fn stop_for_restart(
         &self,
         id: &ExecutionId,
-        agent: Option<&mut Agent>,
+        agent: Option<(&mut Agent, Option<Protection>)>,
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
-        let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
+        let (agent, stopped) =
+            agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
         // even if another run restarts it since.
         if let Some(place) = agent.restarts.restarted_for(&run) {
@@ -203,7 +214,7 @@ impl Manager {
             "{} has no command to resume its session; configure its [agents.<name>] resume_command",
             agent.name
         );
-        agent.ensure_not_stopped()?;
+        agent.ensure_not_stopped(stopped.as_ref())?;
         // Save the handoff before the stop, so a wrapper that dies stopping
         // the agent leaves it for `shoal resume`.
         let handoff = recovery::save_record_stopped_by(

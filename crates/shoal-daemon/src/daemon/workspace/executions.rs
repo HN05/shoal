@@ -43,7 +43,7 @@ mod state;
 mod tests;
 
 pub use crate::client::executions::ExecutionKind;
-pub(crate) use state::{Completing, Executions};
+pub(crate) use state::{Completing, Connections, Executions};
 pub(super) use stopping::StopPolicy;
 pub use stopping::{Save, StopRequest, UnprovenStop};
 
@@ -717,6 +717,7 @@ impl Manager {
         // stopped before removing it.
         if request.awaiting_restore.is_none() {
             self.remove_restore(&request.execution).await;
+            self.forget_agent_stop(&request.execution).await;
         }
         if let Some(name) = &request.agent {
             let agent = crate::execution::TrackedAgent {
