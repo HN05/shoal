@@ -10,7 +10,7 @@ use crate::{
 
 /// Runs the daemon in this process, given its state, whether its service
 /// manager started it and the handoff from the daemon it replaces. The
-/// `shoal` command, which builds the daemon, passes it to [`run`].
+/// `shoal` command passes the daemon crate's `run` to [`run`].
 pub type RunDaemon =
     fn(Paths, bool, Option<Handoff>) -> LocalBoxFuture<'static, anyhow::Result<()>>;
 

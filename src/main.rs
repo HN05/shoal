@@ -2,5 +2,5 @@
 //! [`shoal_daemon`] for `shoal daemon run`.
 
 fn main() {
-    shoal_cli::run(|paths, managed, handoff| Box::pin(shoal_daemon::run(paths, managed, handoff)));
+    shoal_cli::run(shoal_daemon::run);
 }
