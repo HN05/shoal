@@ -1239,8 +1239,8 @@ such as a detached session left at its shell after a failed setup. The
 session of an agent Shoal stopped, such as for memory pressure, while it waits
 for its automatic restore is not offered: attaching to it says why the agent
 stopped, what restores it, and that `shoal queue start --attach <workspace>`
-restores it now and attaches. Sessions are named after the workspace's directory, or the
-chat's name as it starts with the characters a directory's name leaves out as `-`, suffixed `-2`, `-3`, ... when the name
+restores it now and attaches. Sessions are named after the workspace's directory, or for a
+chat opaquely, such as `chat-0b9c3a52`, since nothing is built from its name, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
 Sessions Shoal creates are also labelled `shoal.created=1`. Removing a
