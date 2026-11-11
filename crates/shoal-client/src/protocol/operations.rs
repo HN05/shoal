@@ -396,6 +396,11 @@ pub enum Failure {
     SetupFailed {
         message: String,
     },
+    /// Setup never ran, as when the daemon refused or did not register it;
+    /// the workspace is kept as failed.
+    SetupNotStarted {
+        message: String,
+    },
     /// The setup command exited with `exit_code`, but Shoal could not verify
     /// that its processes ended; the workspace is kept.
     SetupUnverified {
@@ -427,7 +432,9 @@ impl Failure {
     /// The code a caller acts on.
     pub fn code(&self) -> ErrorCode {
         match self {
-            Self::SetupFailed { .. } | Self::SetupUnverified { .. } => ErrorCode::SetupFailed,
+            Self::SetupFailed { .. }
+            | Self::SetupNotStarted { .. }
+            | Self::SetupUnverified { .. } => ErrorCode::SetupFailed,
             Self::HookFailed { .. } => ErrorCode::HookFailed,
             Self::PushFailed { .. } => ErrorCode::PushFailed,
             Self::Approval { request } if request.status == DecisionStatus::Denied => {

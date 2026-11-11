@@ -29,6 +29,7 @@ impl std::fmt::Display for Failed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             Failure::SetupFailed { message }
+            | Failure::SetupNotStarted { message }
             | Failure::HookFailed { message }
             | Failure::PushFailed { message }
             | Failure::Refused { message, .. }

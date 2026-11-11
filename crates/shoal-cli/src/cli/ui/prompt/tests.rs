@@ -56,3 +56,21 @@ fn refusals_name_the_argument_a_prompt_asks_for() {
         assert_eq!(prompted_argument(prompt), argument, "{prompt:?}");
     }
 }
+
+#[test]
+fn a_setup_that_did_not_start_offers_only_a_retry() {
+    for (ran, answers, expected) in [
+        (true, "\n", SetupFailureChoice::Cancel),
+        (true, "r\n", SetupFailureChoice::Retry),
+        (true, "d\n", SetupFailureChoice::Delete),
+        (true, "i\n", SetupFailureChoice::Ignore),
+        (false, "\n", SetupFailureChoice::Cancel),
+        (false, "retry\n", SetupFailureChoice::Retry),
+        // Nothing ran to delete or ignore, so it asks again.
+        (false, "d\ni\nr\n", SetupFailureChoice::Retry),
+    ] {
+        let mut output = Vec::new();
+        let choice = setup_failure_with_io(ran, &mut answers.as_bytes(), &mut output).unwrap();
+        assert_eq!(choice, expected, "{ran} {answers:?}");
+    }
+}

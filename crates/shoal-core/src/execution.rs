@@ -21,7 +21,7 @@ mod wake;
 
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::{env, paths::CommandPaths};
@@ -218,8 +218,24 @@ pub async fn unmerge(
 /// What an unmerge worker writes: what it undid, or why it could not.
 pub type UnmergeResult = std::result::Result<crate::model::Unmerged, String>;
 
+/// Run the workspace's setup command. An error from before it ran, as when
+/// the daemon refused it or did not register it, carries [`SetupNotStarted`]
+/// as its context.
 pub async fn setup(paths: &CommandPaths, workspace: SpaceSelector) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Setup, None).await
+    let launch = launch::prepare_tracked_launch(paths, workspace, vec![], &Mode::Setup, None)
+        .await
+        .context(SetupNotStarted)?;
+    launch.run_to_end(paths, &Mode::Setup).await
+}
+
+/// The context of an error that kept setup from starting.
+#[derive(Debug)]
+pub struct SetupNotStarted;
+
+impl std::fmt::Display for SetupNotStarted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("setup did not start")
+    }
 }
 
 #[cfg(test)]

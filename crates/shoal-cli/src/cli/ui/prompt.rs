@@ -135,30 +135,43 @@ fn ask_yes_no(
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SetupFailureChoice {
+    Retry,
     Delete,
     Ignore,
     Cancel,
 }
 
-pub fn setup_failure_choice() -> Result<SetupFailureChoice> {
-    setup_failure_with_io(&mut io::stdin().lock(), &mut io::stderr().lock())
+/// What to do with a workspace whose setup failed, or did not start unless
+/// `ran`, which leaves nothing to delete or ignore.
+pub fn setup_failure_choice(ran: bool) -> Result<SetupFailureChoice> {
+    setup_failure_with_io(ran, &mut io::stdin().lock(), &mut io::stderr().lock())
 }
 
 fn setup_failure_with_io(
+    ran: bool,
     input: &mut impl io::BufRead,
     output: &mut impl Write,
 ) -> Result<SetupFailureChoice> {
     loop {
-        write!(
-            output,
-            "Setup failed: [d]elete workspace, [i]gnore and continue, or [c]ancel (keep for inspection) [c]: "
-        )?;
+        if ran {
+            write!(
+                output,
+                "Setup failed: [r]etry, [d]elete workspace, [i]gnore and continue, or [c]ancel (keep for inspection) [c]: "
+            )?;
+        } else {
+            write!(
+                output,
+                "Setup did not start: [r]etry or [c]ancel (keep the workspace) [c]: "
+            )?;
+        }
         output.flush()?;
         match read_answer(input)?.as_deref() {
             None | Some("" | "c" | "cancel") => return Ok(SetupFailureChoice::Cancel),
-            Some("d" | "delete") => return Ok(SetupFailureChoice::Delete),
-            Some("i" | "ignore") => return Ok(SetupFailureChoice::Ignore),
-            Some(_) => writeln!(output, "Please enter d, i, or c.")?,
+            Some("r" | "retry") => return Ok(SetupFailureChoice::Retry),
+            Some("d" | "delete") if ran => return Ok(SetupFailureChoice::Delete),
+            Some("i" | "ignore") if ran => return Ok(SetupFailureChoice::Ignore),
+            Some(_) if ran => writeln!(output, "Please enter r, d, i, or c.")?,
+            Some(_) => writeln!(output, "Please enter r or c.")?,
         }
     }
 }

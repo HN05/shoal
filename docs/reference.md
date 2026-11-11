@@ -3442,9 +3442,10 @@ and interrupting the command interrupts them, while they go on when the command 
 otherwise, such as when its terminal closes. `shoal start` waits for setup before
 entering the worktree or launching an agent; the workspace stays `preparing` until it exits 0 with no
 surviving processes. When that command is interrupted before setup starts,
-`shoal setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to delete the
+`shoal setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to retry setup, delete the
 new workspace and branch, ignore the failure and continue, or keep it for
-inspection (default). JSON/noninteractive mode returns nonzero, keeps the
+inspection (default); a setup that never started, which the daemon refused,
+offers only retry or keep. JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. Then choose explicitly; `--skip`
 leaves what setup did and is not available to workspace processes:
 

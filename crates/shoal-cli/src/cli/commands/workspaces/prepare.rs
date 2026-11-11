@@ -71,13 +71,19 @@ pub(in crate::cli::commands) async fn prepare(
 }
 
 /// Run the setup command as a tracked execution; a setup whose processes
-/// Shoal could not verify keeps its own error.
+/// Shoal could not verify, or that never started, keeps its own error.
 async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
     let failure = match execution::setup(&ctx.paths, SpaceSelector::Id(workspace.id.clone())).await
     {
         Ok(0) => None,
         Ok(code) => Some(format!("setup command exited with status {code}")),
         Err(error) if error.is::<execution::SetupVerificationFailure>() => return Err(error),
+        Err(error) if error.is::<execution::SetupNotStarted>() => {
+            // Why it did not start, below the context that says so.
+            let causes: Vec<_> = error.chain().skip(1).map(ToString::to_string).collect();
+            let message = causes.join(": ");
+            return Err(Failed(Failure::SetupNotStarted { message }).into());
+        }
         Err(error) => Some(format!("{error:#}")),
     };
     if let Some(message) = failure {

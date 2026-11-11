@@ -35,7 +35,7 @@ use crate::{
 
 /// A tracked execution the daemon recorded, with the command it runs next and
 /// what that command receives.
-struct TrackedLaunch {
+pub(super) struct TrackedLaunch {
     link: Link,
     plan: ExecutionPlan,
     command: Vec<OsString>,
@@ -70,7 +70,7 @@ pub(super) async fn run_taken_over(paths: &CommandPaths, taken: super::TakenOver
 
 impl TrackedLaunch {
     /// Run the command until the execution ends, then report its end.
-    async fn run_to_end(mut self, paths: &CommandPaths, mode: &Mode) -> Result<i32> {
+    pub(super) async fn run_to_end(mut self, paths: &CommandPaths, mode: &Mode) -> Result<i32> {
         let wake = self.wake_session(mode);
         let mut restarts = demo::Restarts::default();
         let result = loop {
@@ -304,7 +304,7 @@ async fn roll_back_failed_merge(plan: &ExecutionPlan, result: Result<i32>) -> Re
     result
 }
 
-async fn prepare_tracked_launch(
+pub(super) async fn prepare_tracked_launch(
     paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,

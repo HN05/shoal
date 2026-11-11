@@ -1,7 +1,7 @@
 //! Workspace setup: starting it, handling its failure and starting the post-setup hook.
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 
 use super::recovery::{issues, reconcile};
 use crate::client::space_names::SpaceSelector;
@@ -177,34 +177,49 @@ pub(in crate::cli::commands) async fn setup_workspace(
     workspace: &Workspace,
     post_setup: bool,
 ) -> Result<Option<SetUp>> {
+    let steps = Preparation {
+        setup: true,
+        post_setup,
+        ..Default::default()
+    };
+    prepare_settled(ctx, workspace, steps).await
+}
+
+/// Run `steps`, setup among them, in one operation the daemon starts, then
+/// settle a failed setup as [`setup_workspace`] does, a retry running
+/// `steps` again.
+async fn prepare_settled(
+    ctx: &Context,
+    workspace: &Workspace,
+    steps: Preparation,
+) -> Result<Option<SetUp>> {
     let spec = OperationSpec::Prepare {
         workspace: SpaceSelector::id(&workspace.id),
-        steps: Preparation {
-            setup: true,
-            post_setup,
-            ..Default::default()
-        },
+        steps: steps.clone(),
     };
     let prepared = operations::run::<Prepared>(ctx, spec).await;
-    settle_setup(ctx, workspace, prepared).await
+    settle_setup(ctx, workspace, prepared, Some(steps)).await
 }
 
 /// Follow the preparation the daemon started for the workspace a request
-/// opened, and settle it as [`setup_workspace`] does.
+/// opened, and settle it as [`setup_workspace`] does; a retried setup runs
+/// alone, leaving what follows it to the caller.
 pub(in crate::cli::commands) async fn follow_setup(
     ctx: &Context,
     started: StartedWorkspace,
 ) -> Result<Option<SetUp>> {
     let prepared = operations::follow_started::<Prepared>(ctx, started.operation).await;
-    settle_setup(ctx, &started.workspace, prepared).await
+    settle_setup(ctx, &started.workspace, prepared, None).await
 }
 
 /// The workspace a preparation left, once an interactive user decided what
-/// to do with a failed setup.
+/// to do with a failed setup. A retry runs `retry`, or else setup alone,
+/// whose caller runs what follows it as after an ignored failure.
 async fn settle_setup(
     ctx: &Context,
     workspace: &Workspace,
     prepared: Result<Prepared>,
+    retry: Option<Preparation>,
 ) -> Result<Option<SetUp>> {
     match prepared {
         Ok(prepared) => Ok(Some(SetUp {
@@ -229,7 +244,7 @@ async fn settle_setup(
                 }))
             }
             Err(error) if after_setup(ctx, workspace).await? => Err(error),
-            Err(error) => handle_setup_failure(ctx, workspace, error).await,
+            Err(error) => handle_setup_failure(ctx, workspace, error, retry).await,
         },
     }
 }
@@ -242,25 +257,44 @@ async fn after_setup(ctx: &Context, workspace: &Workspace) -> Result<bool> {
     Ok(inspection.workspace.state == WorkspaceState::Ready)
 }
 
-/// Let an interactive user delete, ignore or keep the workspace whose setup
-/// failed with `error`; a workspace whose failure is ignored has not run
-/// its post-setup hook.
+/// Let an interactive user retry, delete, ignore or keep the workspace whose
+/// setup failed with `error`; a workspace whose failure is ignored has not
+/// run its post-setup hook, nor has one retried without `retry`, which says
+/// what a retry runs. A setup that did not start leaves nothing to delete or
+/// ignore.
 async fn handle_setup_failure(
     ctx: &Context,
     workspace: &Workspace,
     error: anyhow::Error,
+    retry: Option<Preparation>,
 ) -> Result<Option<SetUp>> {
+    let ran = !matches!(
+        error.downcast_ref::<operations::Failed>(),
+        Some(operations::Failed(Failure::SetupNotStarted { .. }))
+    );
     let error = format!("{error:#}");
     let (name, number) = (&workspace.name, workspace.number);
-    ensure!(
-        ctx.interactive(),
-        "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {number}`, skip it with `shoal setup {number} --skip`, or delete with `shoal rm {number} --yes`"
-    );
+    let failed = if ran {
+        "Setup failed"
+    } else {
+        "Setup did not start"
+    };
+    if !ctx.interactive() {
+        match ran {
+            true => bail!(
+                "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {number}`, skip it with `shoal setup {number} --skip`, or delete with `shoal rm {number} --yes`"
+            ),
+            false => bail!(
+                "setup of {name} did not start: {error}; workspace retained. Retry with `shoal setup {number}`"
+            ),
+        }
+    }
     eprintln!(
         "{} for {name}: {error}",
-        Palette::stderr(ctx.json).paint(Style::Error, "Setup failed")
+        Palette::stderr(ctx.json).paint(Style::Error, failed)
     );
-    match ui::setup_failure_choice()? {
+    match ui::setup_failure_choice(ran)? {
+        ui::SetupFailureChoice::Retry => return retry_setup(ctx, workspace, retry).await,
         ui::SetupFailureChoice::Delete => {
             delete_failed_workspace(ctx, workspace).await?;
             return Ok(None);
@@ -278,6 +312,24 @@ async fn handle_setup_failure(
         workspace: inspection.workspace,
         post_setup: None,
         agent: None,
+    }))
+}
+
+/// Run setup again, with `retry` when given, or else alone, leaving what
+/// follows it to the caller.
+async fn retry_setup(
+    ctx: &Context,
+    workspace: &Workspace,
+    retry: Option<Preparation>,
+) -> Result<Option<SetUp>> {
+    let steps = retry.clone().unwrap_or(Preparation {
+        setup: true,
+        ..Default::default()
+    });
+    let retried = Box::pin(prepare_settled(ctx, workspace, steps)).await?;
+    Ok(retried.map(|set_up| SetUp {
+        post_setup: set_up.post_setup.filter(|_| retry.is_some()),
+        ..set_up
     }))
 }
 

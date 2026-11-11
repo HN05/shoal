@@ -891,8 +891,9 @@ records, and `start` keeps the workspace preparing until setup exits cleanly wit
 survivors; manual removal also takes a preparing workspace with no execution, whose
 setup an interrupted command never started. Failures preserve files, branches, and leases; process-verification
 failures retain the workspace and report the command's exit status and the
-blocking evidence. Other failures let interactive callers choose delete, ignore
-(which repairs verified state first), or keep. JSON callers get a nonzero exit.
+blocking evidence. Other failures let interactive callers choose retry, delete,
+ignore (which repairs verified state first), or keep; a setup that never
+started offers only retry or keep. JSON callers get a nonzero exit.
 `setup` reruns setup explicitly; nothing retries automatically.
 While the daemon registers an execution it sends the wrapper keepalives, and
 the wrapper's limit bounds the daemon's silence rather than the whole wait, so
