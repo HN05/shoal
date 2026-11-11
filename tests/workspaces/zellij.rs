@@ -466,12 +466,14 @@ fn without_escapes(text: &str) -> String {
     plain
 }
 
-/// The end of Zellij's log, which every session of this user writes.
+/// The end of Zellij's log, which every session of this user writes in the
+/// temporary directory the test's Zellij inherits. One in `/tmp` can be
+/// another run's, so it counts only where that directory has none.
 fn zellij_log() -> String {
     // SAFETY: getuid has no preconditions.
     let uid = unsafe { libc::getuid() };
     let file = format!("zellij-{uid}/zellij-log/zellij.log");
-    [PathBuf::from("/tmp"), std::env::temp_dir()]
+    [std::env::temp_dir(), PathBuf::from("/tmp")]
         .iter()
         .find_map(|dir| fs::read_to_string(dir.join(&file)).ok())
         .map_or_else(
