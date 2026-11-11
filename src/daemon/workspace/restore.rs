@@ -401,9 +401,10 @@ impl Manager {
     async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<String> {
         let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
         let checkpoint = &removed.checkpoint;
-        // A detached HEAD reopens on a branch named as its directory would be.
+        // A detached HEAD reopens on a branch named after its short commit,
+        // since nothing is built from the workspace's name.
         let branch = (checkpoint.branch.clone())
-            .unwrap_or_else(|| crate::client::space_names::directory_name(&removed.name));
+            .unwrap_or_else(|| checkpoint.head[..checkpoint.head.len().min(7)].to_owned());
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
         }) {

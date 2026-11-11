@@ -118,6 +118,19 @@ pub struct StartingCommit {
 }
 
 impl StartingCommit {
+    /// What a directory for a workspace started here is named after,
+    /// whatever the workspace's name: the ref it was made for with the
+    /// short commit, such as `main-84d4405`, a PR's number, such as `pr-7`,
+    /// or the short commit alone.
+    pub fn directory_seed(&self) -> String {
+        let short = &self.commit[..self.commit.len().min(7)];
+        match &self.made_for {
+            Some(MadeFor::Ref(reference)) => format!("{reference}-{short}"),
+            Some(MadeFor::Pr(number)) => format!("pr-{number}"),
+            None => short.to_owned(),
+        }
+    }
+
     /// The commit as `3f2a9c1`, or `3f2a9c1 (v1.4.0)` with what it was made
     /// for.
     pub fn label(&self) -> String {

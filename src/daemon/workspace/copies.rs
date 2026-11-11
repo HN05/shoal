@@ -59,11 +59,12 @@ enum SourceFiles {
 }
 
 impl Source {
-    /// The name a copy takes when none is given: the copied branch's, or
-    /// for a workspace at a commit its name's, with `-copy` added.
+    /// The branch a copy takes when none is given: the copied branch's, or
+    /// for a workspace at a commit its short HEAD, with `-copy` added;
+    /// nothing is built from the copied workspace's name.
     fn copy_name(&self) -> String {
-        let directory = crate::client::space_names::directory_name(&self.name);
-        format!("{}-copy", self.branch.as_deref().unwrap_or(&directory))
+        let short = &self.head[..self.head.len().min(7)];
+        format!("{}-copy", self.branch.as_deref().unwrap_or(short))
     }
 
     /// The copied workspace's checkpoint the copy starts from.

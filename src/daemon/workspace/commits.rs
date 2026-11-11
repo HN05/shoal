@@ -335,10 +335,12 @@ impl Manager {
     ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
         let diff_ref = surviving_ref(&repo, removed.base_ref.as_deref()).await?;
+        // Its directory comes from where it started, never its name.
+        let directory = at.directory_seed();
         let workspace = self
             .record_commit_workspace(
                 &repo,
-                (removed.name.as_str(), removed.name.clone()),
+                (&directory, removed.name.clone()),
                 at,
                 diff_ref,
                 None,

@@ -336,6 +336,11 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     commit(&workspace.path, "later");
     let removed_head = head(&workspace.path).0;
     std::fs::write(workspace.path.join("draft"), "draft\n").unwrap();
+    // Its name, which nothing is built from, changes before it goes.
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.set_workspace_name(&selector, &"Try the cache".parse().unwrap()))
+        .await
+        .unwrap();
     manager
         .remove_workspace(
             &SpaceSelector::id(&workspace.id),
@@ -354,6 +359,8 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     let reopened = restored.opened.workspace;
     assert_eq!(reopened.branch, None);
     assert_eq!(reopened.at, workspace.at);
+    assert_eq!(reopened.name, "Try the cache");
+    assert_eq!(reopened.path.file_name(), workspace.path.file_name());
     assert_eq!(head(&reopened.path), (removed_head, String::new()));
     assert_eq!(
         std::fs::read_to_string(reopened.path.join("draft")).unwrap(),

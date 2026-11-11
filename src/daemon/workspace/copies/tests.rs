@@ -445,3 +445,39 @@ async fn removal_keeps_starting_files_above_the_archive_limit() {
         .unwrap();
     assert!(!removed.checkpoint.files_omitted);
 }
+
+#[tokio::test]
+async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
+    let f = Fixture::new().await;
+    let detached = f
+        .manager
+        .create_commit_workspace(
+            (&f.source.repository_id).into(),
+            None,
+            crate::protocol::CommitStart::Revision(None),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&detached.id);
+    (f.manager
+        .set_workspace_name(&selector, &"Try the cache".parse().unwrap()))
+    .await
+    .unwrap();
+    let source = CopySource {
+        workspace: selector,
+        checkpoint: None,
+    };
+
+    let copy = (f.manager.create_copy(
+        (&f.source.repository_id).into(),
+        &source,
+        CopyPlace::Branch(None),
+        NewWorkspace::default(),
+    ))
+    .await
+    .unwrap();
+
+    let head = git(&detached.path, &["rev-parse", "--short=7", "HEAD"]);
+    assert_eq!(copy.branch, Some(format!("{}-copy", head.trim())));
+}

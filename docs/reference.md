@@ -2796,7 +2796,7 @@ coordinator answers a question asked below it with
 shoal start --copy                       # A copy of the current workspace, with an agent of its own
 shoal start --copy 7 --fork -- "Try a queue instead of polling"
 shoal split --copy 7                     # A child copy without an agent
-shoal split --no-branch --copy topic     # A copy at topic's HEAD, without a branch
+shoal split --no-branch --copy 7         # A copy at 7's HEAD, without a branch
 shoal start --copy 7 --checkpoint 3      # From 7's checkpoint 3, live or removed
 ```
 
@@ -2813,7 +2813,7 @@ debugging a workspace's live state without touching it, and handing the same
 state to a second agent.
 
 A copy goes on a new branch at the copied HEAD: the branch given, else the
-copied branch's name, or a workspace at a commit's name, with `-copy` added,
+copied branch's name, or for a workspace at a commit its short HEAD, with `-copy` added,
 suffixed as usual when taken. `shoal split --no-branch` makes it a workspace at
 a commit instead. A copy of current files is a linked worktree that Git creates
 without checking anything out; Shoal copies the source's index and worktree Git
