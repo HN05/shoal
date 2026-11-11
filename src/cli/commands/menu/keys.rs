@@ -135,9 +135,17 @@ async fn chat_name(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Optio
     )
 }
 
-/// What `action` does to the chat `chat`: only attaching, viewing its items
-/// and removing it act on a chat.
+/// What `action` does to the chat `chat`: only attaching, viewing its items,
+/// stopping and removing it act on a chat.
 async fn chat_command(ctx: &Context, action: Action, chat: SpaceSelector) -> Result<Command> {
+    match action {
+        Action::View => view_command(ctx, Some(chat)).await,
+        action => chat_action(action, chat),
+    }
+}
+
+/// [`chat_command`] for the actions that read nothing of the chat.
+fn chat_action(action: Action, chat: SpaceSelector) -> Result<Command> {
     let chat = Some(chat);
     Ok(match action {
         Action::Delete => Command::Lifecycle(LifecycleCommand::Rm {
@@ -148,7 +156,7 @@ async fn chat_command(ctx: &Context, action: Action, chat: SpaceSelector) -> Res
             target: chat,
             session: None,
         }),
-        Action::View => view_command(ctx, chat).await?,
+        Action::Stop => stop(chat),
         _ => anyhow::bail!("this action acts only on workspaces"),
     })
 }
@@ -245,6 +253,21 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     })))
 }
 
+/// `shoal stop` of `space` and the spaces below it.
+fn stop(space: Option<SpaceSelector>) -> Command {
+    Command::Lifecycle(LifecycleCommand::Stop {
+        targets: SpaceTargets {
+            space: space.into_iter().collect(),
+            all: false,
+        },
+        yes: false,
+        skip_children: false,
+        interrupt: false,
+        processes: false,
+        leftovers: false,
+    })
+}
+
 /// “+ Add workspace” starts a worker in a new workspace.
 fn add() -> Command {
     Command::Create(CreateCommand::Start(Box::new(StartArgs {
@@ -269,17 +292,7 @@ async fn workspace_command(
             space: workspace,
             item: None,
         }),
-        Action::Stop => Command::Lifecycle(LifecycleCommand::Stop {
-            targets: SpaceTargets {
-                space: workspace.into_iter().collect(),
-                all: false,
-            },
-            yes: false,
-            skip_children: false,
-            interrupt: false,
-            processes: false,
-            leftovers: false,
-        }),
+        Action::Stop => stop(workspace),
         Action::Attach => Command::Sessions(SessionsCommand::Attach {
             target: workspace,
             session: None,
@@ -290,3 +303,6 @@ async fn workspace_command(
         Action::Add => add(),
     })
 }
+
+#[cfg(test)]
+mod tests;
