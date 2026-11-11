@@ -2020,7 +2020,10 @@ does, where the agent ran when the terminal host still has that place, else in
 a background place. Its first message says what the space is now, with its path,
 and its branch for a workspace, followed by the mode's instructions. A restart
 that fails leaves the agent for `shoal resume` and records a `recovery_blocked`
-notification. A space's agent converts only its own space; your terminal
+notification. A stop of the agent before then, such as `shoal stop`, keeps it
+down until the space that stopped it, or you, resume it: the space still
+converts, a workspace becoming a chat that stays stopped, and a chat's agent
+keeping its session as the workspace's last session. A space's agent converts only its own space; your terminal
 converts any space, by `--space` with its number or ID, or the current
 workspace, else a picker.
 
