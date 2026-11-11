@@ -1,12 +1,15 @@
-//! Running an agent, a desktop app or a shell command in a workspace, as
-//! chosen.
+//! Starting a workspace's agent, or running a desktop app or a shell
+//! command in it, as chosen.
 use anyhow::{Context as _, Result};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         Command, agents,
-        args::workspace::{DesktopApp, WorkspaceCommand},
+        args::{
+            create::{CreateCommand, StartArgs},
+            workspace::{DesktopApp, WorkspaceCommand},
+        },
         context::Context,
         ui,
     },
@@ -15,7 +18,8 @@ use crate::{
 
 #[derive(Clone)]
 enum ExecuteChoice {
-    /// An agent, run as `shoal run <name>`.
+    /// An agent, started as the workspace's worker here, as
+    /// `shoal start --in <workspace> --mode worker --agent <name> --here`.
     Agent(crate::agent::Agent),
     /// A desktop app, opened as `shoal open --app <app>`.
     App(DesktopApp),
@@ -58,11 +62,13 @@ pub(super) async fn execute_command(
         .collect();
     let choice = ui::pick_choice(ctx, "Execute> ", &choices)?;
     Ok(match choice {
-        ExecuteChoice::Agent(name) => Command::Run {
-            name: Some(name.into()),
-            workspace,
-            args: vec![],
-        },
+        ExecuteChoice::Agent(name) => Command::Create(CreateCommand::Start(Box::new(StartArgs {
+            in_workspace: Some(workspace),
+            mode: Some(crate::config::modes::ModeName::DEFAULT),
+            agent: Some(name),
+            here: true,
+            ..Default::default()
+        }))),
         ExecuteChoice::App(app) => Command::Workspace(WorkspaceCommand::Open {
             workspace,
             app: Some(app),

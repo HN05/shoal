@@ -1,6 +1,7 @@
 //! `shoal start`: plan a workspace, then open it here or hand it to a terminal host.
 mod agent;
 mod detached;
+mod existing;
 mod finish;
 mod handoff;
 pub(in crate::cli::commands) mod link;
@@ -14,6 +15,7 @@ mod waiting;
 
 use crate::client::space_names::SpaceSelector;
 pub(in crate::cli::commands) use agent::AgentLaunch;
+pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
 pub(in crate::cli) use plan::item_context;
@@ -128,8 +130,39 @@ pub(in crate::cli::commands) async fn add(
         options.blockers.is_empty() || plan.agent_name().is_some(),
         "--add-blocker queues an agent; name one with --agent"
     );
+    let planned = Planned {
+        plan,
+        target,
+        issue,
+        blockers,
+    };
+    start_planned(ctx, planned, &settings, options).await
+}
+
+/// An addition planned and checked, with what it starts on and what blocks it.
+struct Planned {
+    plan: AddPlan,
+    target: target::AddTarget,
+    issue: Option<crate::cli::commands::issues::Issue>,
+    blockers: Vec<crate::model::Blocker>,
+}
+
+/// Start the `planned` addition's agent as `options` say: detached, from the
+/// agent queue, beside this terminal or here.
+async fn start_planned(
+    ctx: &Context,
+    planned: Planned,
+    settings: &AddSettings<'_>,
+    options: AddOptions,
+) -> Result<i32> {
+    let Planned {
+        mut plan,
+        target,
+        issue,
+        blockers,
+    } = planned;
     if starts_detached(ctx, &plan, &options)? {
-        ensure_detachable(&settings, &plan, &options).await?;
+        ensure_detachable(settings, &plan, &options).await?;
         // Boxed, as are the launches below it: the start path's futures
         // nest deep enough to overflow the main thread's stack in debug
         // builds on Linux.
@@ -138,7 +171,7 @@ pub(in crate::cli::commands) async fn add(
     if let Some(queued) = admit(
         ctx,
         &target,
-        &settings,
+        settings,
         &mut plan,
         issue.as_ref(),
         &options,
@@ -148,7 +181,7 @@ pub(in crate::cli::commands) async fn add(
     {
         return Ok(queued);
     }
-    let handoff = start_beside(ctx, &target, &settings, &mut plan, issue.as_ref(), options).await;
+    let handoff = start_beside(ctx, &target, settings, &mut plan, issue.as_ref(), options).await;
     if failing_entry(ctx, plan.queue_entry.as_ref(), handoff).await? {
         return Ok(0);
     }

@@ -8,13 +8,14 @@ use anyhow::{Context as _, Result, ensure};
 use super::{
     AddOptions,
     agent::AddSettings,
-    finish::{AgentStart, add_planned, execute_add_with_target},
+    finish::{AgentStart, add_planned, execute_add_with_target, report_queued_in},
     handoff::start_queued,
     plan::planned_workspace_name,
     queue::{admit_launch, failing_entry, launch_blockers},
     target::AddTarget,
 };
 use crate::client::queue::QueueEntryId;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -57,6 +58,10 @@ pub(super) async fn add_detached(
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     }
     let blockers = launch_blockers(ctx, &target, issue.as_ref(), options.now, blockers).await?;
+    if plan.workspace.is_some() {
+        return queue_in_existing(ctx, &target, plan, issue.as_ref(), (options.now, blockers))
+            .await;
+    }
     if blockers.is_empty() {
         let start = match crate::env::is_scoped() {
             true => AgentStart::Queued { now: options.now },
@@ -76,6 +81,44 @@ pub(super) async fn add_detached(
         return execute_add_with_target(ctx, plan, target, issue).await;
     }
     start_admitted(ctx, &target, plan).await
+}
+
+/// Queue the agent of the existing workspace `plan` opens, which the daemon
+/// starts detached once admitted, at once regardless of the limits when
+/// `now` and once what `blockers` names clears, and report the workspace and the
+/// entry. Nothing reopens the workspace here, so a scoped caller, which may
+/// not, starts the worker of a workspace below its own space this way.
+async fn queue_in_existing(
+    ctx: &Context,
+    target: &AddTarget,
+    plan: AddPlan,
+    issue: Option<&issues::Issue>,
+    (now, blockers): (bool, Vec<Blocker>),
+) -> Result<i32> {
+    let workspace = plan
+        .workspace
+        .clone()
+        .context("the plan opens no workspace")?;
+    let agent = plan.agent_name().context("the plan starts no agent")?;
+    let launch = queued_agents::Launch {
+        agent,
+        name: planned_workspace_name(ctx, target, &plan.creation).await?,
+        issue_title: issue.map(|issue| issue.title.clone()),
+        now,
+        blockers,
+        caller_starts: false,
+    };
+    let entry = match queued_agents::admit(ctx, &plan, launch).await? {
+        queued_agents::Admission::Queued(entry, _) => entry,
+        queued_agents::Admission::Start { .. } => {
+            anyhow::bail!("the daemon left the agent of an existing workspace to this caller")
+        }
+    };
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::Id(workspace))
+        .await?
+        .workspace;
+    ctx.show(&workspace, |_| ())?;
+    report_queued_in(ctx, &workspace, &entry)
 }
 
 /// Refuse, before any work is created, a detached start of the plan's

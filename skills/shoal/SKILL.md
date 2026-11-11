@@ -29,7 +29,7 @@ workspace has no number and is selected by its ID. Approval
 requests and questions are numbered `S.N`: the number of the space that asked,
 then the item's own, such as `3.2`.
 
-A chat in a workspace's worktree (`shoal start --in <workspace>`) reads that
+A chat in a workspace's worktree (`shoal start --in <workspace> -m chat`) reads that
 workspace and changes nothing there: `shoal diff`, `shoal conflicts`,
 `shoal status` and `shoal branch base` act on the workspace, the commands that
 also act on chats act on the chat, and `--space <workspace>` reads the
@@ -45,7 +45,7 @@ shoal start my-project fix-ui --base fix-login --agent claude
 shoal start my-project --mode plan --issue 42 --agent claude
 shoal start --issue 43 --agent claude
 shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
-shoal run claude -w 3
+shoal start --in 3 --agent claude
 shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 
@@ -58,7 +58,11 @@ the new space; without it, it takes the issue's or PR's title, else its
 branch. `--base` naming another workspace's branch stacks the new workspace on
 it. A start that names no branch, issue, PR, existing branch or copy begins as
 a chat in its mode, `worker` by default, which `shoal convert workspace` makes
-a workspace once the work is known. `contribute` takes
+a workspace once the work is known. `--in <workspace>` starts that existing
+workspace's own agent instead of a new space, on the task after `--`, else its
+issue, or a chat in its worktree in a chat mode such as `-m chat`; a workspace
+has one agent of its own, so starting another is refused while one runs,
+waits in the queue or is stopped there. `contribute` takes
 the same URLs for a repository the user does not maintain: it clones it, forks
 it when the user cannot push there, and removes the clone once nothing of it is
 left.

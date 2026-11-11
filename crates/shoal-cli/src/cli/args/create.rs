@@ -18,9 +18,10 @@ use crate::{
 pub enum CreateCommand {
     /// Start an agent in a mode, in a new or reopened workspace or in a chat.
     ///
-    /// The mode decides what the agent is told and, unless --chat, --worktree
-    /// or --in says otherwise, the kind of space it starts in. Run inside a
-    /// space, the new space goes below it.
+    /// The mode decides what the agent is told and, unless --chat or
+    /// --worktree says otherwise, the kind of space it starts in; with --in,
+    /// whether it is the workspace's worker or a chat in its worktree. Run
+    /// inside a space, a new space goes below it.
     Start(Box<StartArgs>),
     /// Create a workspace in someone else's repository for a PR.
     ///
@@ -133,7 +134,7 @@ pub struct StartArgs {
     /// The mode the agent starts in; on a terminal, a picker, which an issue
     /// labelled [issue] planned_label or plan_label answers with worker or
     /// plan when the arguments ask for neither kind of space; else chat with
-    /// --chat or --in, else worker.
+    /// --chat, else worker.
     #[arg(short = 'm', long)]
     pub mode: Option<crate::config::modes::ModeName>,
     /// Set a permission of the agent, as KEY=VALUE such as push=propose or
@@ -151,13 +152,14 @@ pub struct StartArgs {
     /// Start in a workspace with a worktree, whatever the mode's kind.
     #[arg(long, conflicts_with = "in_workspace")]
     pub worktree: bool,
-    /// Run the chat in this ready workspace's worktree; without a value, the
-    /// current workspace, else a picker.
+    /// Start in this ready workspace instead of a new space: its worker in a
+    /// mode that starts in a workspace, else a chat in its worktree; without
+    /// a value, the current workspace, else a picker.
     #[arg(
         long = "in",
         num_args = 0..=1,
         value_name = "WORKSPACE",
-        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"]
+        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
     pub in_workspace: Option<Option<SpaceSelector>>,
     /// The space the new one goes below, by number or ID; defaults to the

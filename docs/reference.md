@@ -1100,6 +1100,23 @@ exits; an agent in a zmx session leaves it where it was.
 `--json` emits the workspace record first, then the agent's unmodified output,
 or for an agent that starts detached its queue entry.
 
+`shoal start --in [WORKSPACE]` in a mode that starts in a workspace, `worker`
+without a terminal, starts the agent of that existing, ready workspace instead
+of a new space: the named workspace, by number, name or ID, else the current
+one, else a picker. Nothing is created: the workspace keeps its place in the
+tree, its name and its links, whose activity reaches the new agent, and the
+start reports its record and the agent's queue entry as a new workspace's
+does. The agent starts on the text after `--`, else the workspace's issue,
+followed by the mode's instructions, and without either waits for you; it sees
+the branch's commits and continues from them. The flags that start, queue and
+place an agent apply as to any start, while one that names what a new space
+starts as or on, such as `--parent`, `--name`, a repository or `--issue`, is
+refused; the issue's names `shoal link issue <number> assigned --space
+<workspace>`. A workspace has one such agent, which the [agent
+queue](#agent-queue) enforces, and a workspace's agent starts this way only the
+agent of a workspace below its own space. The workspace menu's agent choice
+runs `shoal start --in <workspace> --mode worker --agent <name> --here`.
+
 On a terminal, CLI agent launches (`shoal run claude`, `shoal run codex`, other
 AI tools, `start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
 session, so the agent keeps running when you detach with Ctrl-\ or close the
@@ -1634,7 +1651,7 @@ other commands do. Failed session closes notify and retry at startup or with
 starts a new chat with an agent about a repository, to discuss it, its issues
 and plans, or to coordinate work, without changing code; so does `shoal start`
 in a [mode](#modes-and-rules) whose kind is `chat`. Without `--mode`, `--chat`
-and `--in` start in the `chat` mode, or one picked on a terminal. The
+starts in the `chat` mode, or one picked on a terminal. The
 repository is the named one, else the issue URL's, else the current
 checkout's or workspace's, else a picker. The
 agent is `--agent`, else `agent.default`, else a picker of the installed ones.
@@ -1706,10 +1723,13 @@ first removes the spaces below it and stops its agent, by
 A chat's name is a label like a workspace's: chats and workspaces may share one,
 and commands select a chat by its number or ID.
 
-`shoal start --in [WORKSPACE]` starts the chat in a ready workspace's
+`shoal start --in [WORKSPACE]` in a mode whose kind is `chat`, such as
+`-m chat`, starts the chat in a ready workspace's
 worktree instead of the checkout, to debug, audit or review its work, committed
-and uncommitted: the named workspace, else the current one, else a picker of the
-ready workspaces. The repository is the workspace's, the default name
+and uncommitted, whatever the workspace's own agent is doing: the named
+workspace, else the current one, else a picker of the ready workspaces; in a
+mode that starts in a workspace, it starts [the workspace's own
+agent](#agents) instead. The repository is the workspace's, the default name
 `<workspace name> chat`, and a workspace that is not ready or whose worktree is
 missing is refused. The chat is not the workspace's agent: it runs as any chat
 does, with its own identity, scope, `TMPDIR` and messages, without the
@@ -1832,8 +1852,7 @@ starts a chat without a repository, a master session whose agent manages the
 spaces of every registered repository; any mode with `repository = false`
 starts its chat the same way. It runs in `root_dir`, with its `TMPDIR` in
 `root_dir`'s `.tmp`, and its settings come from the global config alone; a
-repository, `--repo` or `--issue` is refused, and `--in` starts the mode's
-chat in that workspace's worktree, in its repository, instead. The agent waits for you
+repository, `--repo`, `--issue` or `--in` is refused. The agent waits for you
 to speak first, as in any chat. `shoal list` and `--json` list it with a null
 `repository_id` and the `root_dir` it started in, where it resumes and keeps its
 `TMPDIR` however `root_dir` changes later, and it is stopped, resumed and removed
@@ -1960,7 +1979,7 @@ makes it wait for work.
 
 A workspace has one agent of its own. The daemon refuses a launch in an
 existing workspace, from any caller, while that workspace's agent runs, waits
-in the queue, including for `--after`, or is stopped awaiting `shoal resume`;
+in the queue, including while a blocker holds it back, or is stopped awaiting `shoal resume`;
 the refusal names `shoal attach`, `shoal restart`, `shoal queue` or `shoal
 resume` as fits. A last session, whose agent exited on its own, does not
 count: the new agent replaces it. Chats in the workspace's worktree never
@@ -2180,11 +2199,13 @@ cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
 errors that ask for another name, and `shoal start --mode setup` is refused.
 
 `shoal start` starts every new agent, in the mode `-m`/`--mode` names, and in the
-kind of space the mode names unless `--chat`, `--in` or `--worktree` says
-otherwise; `worker` always starts in a workspace, and config that gives it
+kind of space the mode names unless `--chat` or `--worktree` says
+otherwise; with `--in`, the mode's kind decides whether the agent is the
+workspace's own or a chat in its worktree, and a mode without a repository is
+refused. `worker` always starts in a workspace, and config that gives it
 another kind is refused. Without `--mode`, a terminal offers the modes in a
 picker with the kind of space each starts in, and without one the start takes
-`worker`, or `chat` with `--chat` or `--in`, which the picker lists first.
+`worker`, or `chat` with `--chat`, which the picker lists first.
 `--permission KEY=VALUE`, repeatable, gives that agent a
 [permission](#mode-permissions) whatever its mode allows. The picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,

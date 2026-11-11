@@ -36,6 +36,52 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
 }
 
 #[test]
+fn a_workspaces_worker_refuses_what_only_a_new_space_takes() {
+    let worker = |args: &[&str]| {
+        let args = ["--in", "3"]
+            .iter()
+            .chain(args)
+            .copied()
+            .collect::<Vec<_>>();
+        ensure_fits(&start(&args), SpaceKind::Workspace, Some(&"worker".into()))
+    };
+    worker(&["--add-blocker", "12", "--fork"]).unwrap();
+    worker(&["--now", "--here"]).unwrap();
+    // The issue's refusal names the command that links it to the workspace.
+    let error = worker(&["--issue", "7"]).unwrap_err().to_string();
+    assert!(
+        error.contains("shoal link issue 7 assigned --space 3"),
+        "{error}"
+    );
+    for (args, flag) in [
+        (&["--parent", "2"][..], "--parent"),
+        (&["--name", "Login"], "--name"),
+        (&["repo"], "<repository>"),
+    ] {
+        let error = worker(args).unwrap_err().to_string();
+        assert!(error.starts_with(&format!("{flag} ")), "{error}");
+    }
+    // A chat in the worktree may take its own issue and name.
+    let reader = start(&["--in", "3", "--issue", "7", "--name", "Review"]);
+    ensure_fits(&reader, SpaceKind::Chat, Some(&"chat".into())).unwrap();
+}
+
+#[test]
+fn a_start_in_a_workspace_refuses_what_no_role_takes_before_its_picker() {
+    let fits = |args: &[&str]| ensure_in_fits(&start(args));
+    fits(&["--in", "--mode", "chat", "--issue", "7"]).unwrap();
+    for args in [
+        &["--in", "--mode", "setup"][..],
+        &["repo", "--in"],
+        &["--in", "--repo", "repo"],
+    ] {
+        assert!(fits(args).is_err(), "{args:?}");
+    }
+    // Without --in, the start's own checks decide.
+    fits(&["repo", "--mode", "setup"]).unwrap();
+}
+
+#[test]
 fn a_chat_takes_a_positional_issue_as_its_issue() {
     let target = |positional: &str, repository: Option<&str>, issue: Option<Option<&str>>| {
         chat_target(

@@ -1679,7 +1679,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .env("ZMX_SESSION", "outer")
             .env("SHOAL_WORKSPACE_ID", "worker-id")
             .env("SHOAL_WORKSPACE", "worker")
-            .args(["start", "--in", "--agent", "claude"]),
+            .args(["start", "--in", "--mode", "chat", "--agent", "claude"]),
         "\n",
         true,
     );

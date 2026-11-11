@@ -2,6 +2,7 @@
 //! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it.
 use crate::client::queue::QueueEntryId;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -10,6 +11,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agents::check_queued_launch,
+    config::Effective,
     daemon::{
         links::issue::OpenIssue,
         log,
@@ -86,7 +88,7 @@ impl Manager {
                 !matches!(opening.start, WorkspaceStart::PullHead { .. }),
                 "a PR's head opens in a workspace at a commit, which holds no agent of its own"
             );
-            let settings = self.repository_settings_with_templates(&repo.id).await?;
+            let settings = self.start_settings(&repo.id, &opening.start).await?;
             check_queued_launch(agent, &settings)?;
         }
         let issue = match &preparing.issue {
@@ -102,6 +104,23 @@ impl Manager {
         }
         let opened = (self.open_for_start(repository, opening, caller)).await?;
         self.prepare_new(opened, issue, preparing, caller).await
+    }
+
+    /// The settings the agent of a start that opens `start` in `repository`
+    /// launches with: those of the workspace it names, its worktree's file
+    /// included, or else the repository's.
+    async fn start_settings(
+        &self,
+        repository: &RepositoryId,
+        start: &WorkspaceStart,
+    ) -> Result<Effective> {
+        match start {
+            WorkspaceStart::Workspace(workspace) => {
+                let workspace = self.workspace(workspace).await?;
+                self.workspace_settings_with_templates(&workspace).await
+            }
+            _ => self.repository_settings_with_templates(repository).await,
+        }
     }
 
     /// The title of the PR a start opens at its head or links, which names

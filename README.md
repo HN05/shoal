@@ -189,7 +189,8 @@ shoal demo                     # Pick a running demo an agent started and open i
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal run happy-claude -w 3    # Detached Happy session, visible in the Happy app
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
-shoal start --in 3             # Review a workspace's live work in a chat in its worktree, beside its agent
+shoal start --in 3 -m chat     # Review a workspace's live work in a chat in its worktree, beside its agent
+shoal start --in 3 -a claude   # Start workspace 3's own agent, on its issue
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
 shoal start --mode orchestrate   # Manage the spaces of every repository from one chat
 shoal rename 5 "Login design"  # Rename a running chat

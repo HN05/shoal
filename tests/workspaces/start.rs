@@ -499,6 +499,86 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
+fn start_in_starts_an_existing_workspaces_worker_on_its_task() {
+    let fixture = Fixture::new();
+    fixture.add("existing");
+    let bin = fixture.root.path().join("stub-bin");
+    install_test_script_with_mode(
+        bin.join("claude"),
+        "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\n",
+        0o700,
+    );
+    let start = |args: &[&str]| {
+        fixture
+            .command()
+            .args([
+                "start",
+                "--in",
+                &fixture.id("existing"),
+                "--agent",
+                "claude",
+            ])
+            .args(args)
+            .env("PATH", fixture.restricted_path(&bin))
+            .output()
+            .unwrap()
+    };
+    let output = start(&["--here", "--", "Fix the login", "retries"]);
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let launched = strip_shoal_arguments(&stdout, '\n');
+    // The agent runs in the workspace, told the task first.
+    let mut lines = launched.lines().skip_while(|line| *line != "existing");
+    assert_eq!(lines.next(), Some("existing"), "{launched}");
+    assert!(
+        lines
+            .next()
+            .is_some_and(|prompt| prompt.starts_with("Fix the login retries")),
+        "{launched}"
+    );
+    // No space was created.
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    // A new space's flags are refused before anything starts.
+    let refused = start(&["--here", "--name", "Other"]);
+    assert!(!refused.status.success(), "{refused:?}");
+}
+
+#[test]
+fn start_in_refuses_a_second_worker_beside_a_running_one() {
+    let fixture = Fixture::new();
+    fixture.add("busy");
+    let bin = fixture.root.path().join("stub-bin");
+    let release = fixture.root.path().join("release");
+    install_test_script_with_mode(
+        bin.join("claude"),
+        &format!(
+            "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.1; done\n",
+            release.display()
+        ),
+        0o700,
+    );
+    let start = || {
+        let mut command = fixture.command();
+        command
+            .args(["start", "--in", &fixture.id("busy"), "--agent", "claude"])
+            .args(["--here"])
+            .env("PATH", fixture.restricted_path(&bin));
+        command
+    };
+    let mut first = start().spawn().unwrap();
+    wait_until("the first worker's execution", || {
+        let status = fixture.ok(&["status", &fixture.id("busy")]);
+        !status["executions"].as_array().unwrap().is_empty()
+    });
+    let second = start().output().unwrap();
+    fs::write(&release, "").unwrap();
+    assert!(first.wait().unwrap().success());
+    assert!(!second.status.success(), "{second:?}");
+    let error = String::from_utf8(second.stderr).unwrap();
+    assert!(error.contains("shoal attach"), "{error}");
+}
+
+#[test]
 fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prompt() {
     let fixture = Fixture::new();
     // Every agent gets the configured agent directories.

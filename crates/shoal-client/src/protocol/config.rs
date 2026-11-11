@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Whose repository config: a workspace's worktree file under the saved
 /// config, the registered checkout's before a workspace exists, or none,
 /// for the global config alone.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigTarget {
     Workspace(crate::space_names::SpaceSelector),

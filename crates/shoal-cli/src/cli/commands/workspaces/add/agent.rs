@@ -18,18 +18,28 @@ pub(in crate::cli::commands) enum AgentLaunch {
     IssueDefault(Option<Agent>),
 }
 
-/// The repository's effective settings, loaded on first use.
+/// The effective settings of the repository a workspace is added in, or of
+/// the existing workspace a launch goes to, loaded on first use.
 pub(super) struct AddSettings<'a> {
     ctx: &'a Context,
-    repository: &'a crate::repository::Selector,
+    target: ConfigTarget,
     effective: tokio::sync::OnceCell<crate::config::Effective>,
 }
 
 impl<'a> AddSettings<'a> {
-    pub(super) fn new(ctx: &'a Context, repository: &'a crate::repository::Selector) -> Self {
+    pub(super) fn new(ctx: &'a Context, repository: &crate::repository::Selector) -> Self {
+        Self::of(ctx, ConfigTarget::Repository(repository.into()))
+    }
+
+    /// The settings of the existing workspace `id`.
+    pub(super) fn workspace(ctx: &'a Context, id: &crate::client::space_ids::SpaceId) -> Self {
+        Self::of(ctx, ConfigTarget::Workspace(id.into()))
+    }
+
+    fn of(ctx: &'a Context, target: ConfigTarget) -> Self {
         Self {
             ctx,
-            repository,
+            target,
             effective: tokio::sync::OnceCell::new(),
         }
     }
@@ -37,10 +47,7 @@ impl<'a> AddSettings<'a> {
     pub(super) async fn get(&self) -> Result<&crate::config::Effective> {
         self.effective
             .get_or_try_init(|| {
-                crate::client::workspaces::settings(
-                    &self.ctx.paths,
-                    ConfigTarget::Repository(self.repository.into()),
-                )
+                crate::client::workspaces::settings(&self.ctx.paths, self.target.clone())
             })
             .await
     }
