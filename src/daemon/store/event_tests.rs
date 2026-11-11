@@ -200,6 +200,9 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // One transaction syncs the whole removal once instead of every statement.
+    let tx = db.unchecked_transaction()?;
+    let db: &Connection = &tx;
     // Spaces keep no progress again.
     db.execute_batch(
         "DROP TRIGGER workspace_progress_removed; DROP TRIGGER chat_progress_removed;
@@ -349,6 +352,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch(
         "ALTER TABLE workspaces DROP COLUMN mode; ALTER TABLE executions DROP COLUMN mode;",
     )?;
+    tx.commit()?;
     Ok(())
 }
 
