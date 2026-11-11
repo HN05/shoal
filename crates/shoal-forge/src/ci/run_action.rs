@@ -38,6 +38,19 @@ pub struct Run {
     pub(crate) waiting: bool,
 }
 
+impl Run {
+    /// Whether it started after `other`: forges number runs in the order
+    /// they start.
+    pub fn started_after(&self, other: &Run) -> bool {
+        self.id > other.id
+    }
+
+    /// Whether it finished and passed.
+    pub fn passed(&self) -> bool {
+        !self.waiting && self.state == JobState::Finished
+    }
+}
+
 /// The requests that apply an action to a run.
 pub(crate) enum RunOperation {
     /// POST to this endpoint under the repository's.

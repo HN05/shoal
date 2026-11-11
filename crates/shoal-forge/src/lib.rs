@@ -279,6 +279,21 @@ impl ForgeRepo {
         self.checkout_details(number, url, pull)
     }
 
+    /// The state of the PR at `url`, in this repository.
+    pub async fn pull_url_state(
+        &self,
+        account: &account::Account,
+        url: &str,
+    ) -> Result<items::item::ItemState> {
+        let (number, _) = self.pull(url)?;
+        Ok(self
+            .kind
+            .pull_details(self, account, number)
+            .await?
+            .item
+            .state)
+    }
+
     /// The PR `pull`, read as `number` at `url`, with where its head is.
     fn checkout_details(
         &self,

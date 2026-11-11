@@ -17,10 +17,12 @@ use crate::client::{
 use crate::time::UnixTime;
 
 mod blockers;
+mod clearing;
 mod naming;
 mod publish;
 pub(crate) mod section;
 
+pub(crate) use clearing::Cleared;
 pub(crate) use publish::{Publications, run};
 
 /// What a space keeps of its agent's reports.
@@ -178,10 +180,24 @@ fn save(
 ) -> Result<Option<Progress>> {
     let before = stored(tx, id)?.map(|(plan, _)| plan).unwrap_or_default();
     let (after, events) = before.clone().applied(change)?;
-    if after == before {
+    write(tx, id, &before, after, &events, now)
+}
+
+/// Replace the plan `before` of the space `id` with `after` at `now` in the
+/// caller's transaction, journaling it with the blocker `events`; `None`
+/// when it changes nothing.
+fn write(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    before: &Plan,
+    after: Plan,
+    events: &[(EventKind, BlockerEvent)],
+    now: UnixTime,
+) -> Result<Option<Progress>> {
+    if after == *before {
         return Ok(None);
     }
-    for (kind, event) in &events {
+    for (kind, event) in events {
         super::events::record_blocker(tx, id, *kind, event)?;
     }
     tx.execute(

@@ -9,6 +9,7 @@ use crate::client::{
     events::BlockerEvent,
     progress::{PlanStep, RecordedBlocker, Step},
 };
+use crate::daemon::blockers::{Lookup, Lookups, Target};
 use crate::state::BlockerKind;
 
 /// A blocker as the space's progress keeps it, with the step it blocks.
@@ -98,6 +99,37 @@ impl Plan {
         self.blockers.retain(|stored| {
             (stored.step.as_ref()).is_none_or(|step| steps.iter().any(|known| step.names(known)))
         });
+    }
+
+    /// The plan without the blockers `found` says cleared, and with each
+    /// failed lookup recorded on its blocker, and the journal records of
+    /// those it removed.
+    pub(super) fn cleared(mut self, found: &Lookups) -> (Self, Vec<BlockerEvent>) {
+        let mut cleared = Vec::new();
+        let mut kept = Vec::new();
+        for mut stored in std::mem::take(&mut self.blockers) {
+            let target = (stored.blocker.kind, stored.blocker.target.clone());
+            match found.get(&target) {
+                Some(Lookup::Cleared(how)) => {
+                    cleared.push((stored, how.clone()));
+                    continue;
+                }
+                Some(Lookup::Failed(error)) => stored.blocker.lookup_failed = Some(error.clone()),
+                Some(Lookup::Open) => stored.blocker.lookup_failed = None,
+                None => {}
+            }
+            kept.push(stored);
+        }
+        self.blockers = kept;
+        let events = (cleared.into_iter())
+            .map(|(stored, how)| self.event(&stored, Some(how)))
+            .collect();
+        (self, events)
+    }
+
+    /// Every blocker's kind and target.
+    pub(super) fn targets(&self) -> impl Iterator<Item = Target> + '_ {
+        (self.blockers.iter()).map(|stored| (stored.blocker.kind, stored.blocker.target.clone()))
     }
 
     /// The step the step numbered `step` from 1 names, or none for the space.

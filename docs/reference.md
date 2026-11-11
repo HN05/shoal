@@ -5157,6 +5157,18 @@ blocker of its own, or while every step that is not done has one. Adding and
 removing a blocker are `blocker_added` and `blocker_removed` events, which
 `shoal log` shows.
 
+Every 30 seconds Shoal removes the blockers that cleared, each a
+`blocker_cleared` event naming what cleared it, and tells the space's agent
+what cleared and what still blocks it. An issue clears once it closes or a
+workspace of the space's repository that links it is done, a PR once it
+merges or closes, a space once it is done at its current HEAD or removed, and
+a CI run once it passes, as after a rerun, or once the newest finished run of
+its workflow on the default branch passes and started after it, whatever
+branch the blocking run was on, so each merge into the default branch is a new
+chance to clear it. One lookup of each workflow serves every blocker on it. A
+failed lookup keeps the blocker and shows why as its `lookup_failed` until a
+lookup succeeds.
+
 `status` shows a `Progress` section with the status line and the numbered
 steps, marking the current one, and `list` shows how many steps are done with
 the current step, such as `3/5 Fix the timeout`, followed by the status line

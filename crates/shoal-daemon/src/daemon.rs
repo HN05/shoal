@@ -6,6 +6,7 @@ pub mod allocation;
 mod answer;
 pub mod approvals;
 mod auto_update;
+pub(crate) mod blockers;
 pub(crate) mod caches;
 pub mod chat_messages;
 mod chats;
@@ -368,11 +369,9 @@ async fn poll_item_activity(manager: Arc<Manager>) {
     loop {
         interval.tick().await;
         let _operation = manager.gates.operation().await;
-        // Blockers are unrelated issues; a slow item sweep must not delay them.
-        let (items, blockers) = tokio::join!(
-            manager.poll_linked_item_activity(),
-            manager.poll_blocker_issues(),
-        );
+        // Blockers are unrelated items; a slow item sweep must not delay them.
+        let (items, blockers) =
+            tokio::join!(manager.poll_linked_item_activity(), manager.poll_blockers(),);
         if let Err(error) = items {
             log!("item activity: {error:#}");
         }

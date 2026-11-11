@@ -5,19 +5,18 @@
 //! branch of the done blocker that contains the others.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceSelector};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     daemon::{
-        forge_hosts::ForgeHosts,
+        blockers,
         links::pr::current_head,
         store::{self, WORKSPACE_COLUMNS},
         workspace::Manager,
     },
-    forge::{ForgeRepo, account::Account},
     git,
     model::{Blocker, SpaceKind, Workspace},
     state::{BlockerKind, QueueKind, QueueState},
@@ -205,13 +204,15 @@ impl Manager {
                 Ok(name.map_or(Progress::Complete, Progress::Waiting))
             }
             BlockerKind::Space => {
+                let id = SpaceId::from(target);
+                let query = id.clone();
                 match self
                     .store
-                    .run(move |db| workspace_by_id(db, &SpaceId::from(target)))
+                    .run(move |db| workspace_by_id(db, &query))
                     .await?
                 {
                     Some(workspace) => self.workspace_progress(workspace).await,
-                    None => Ok(Progress::Complete),
+                    None => self.chat_progress(&id).await,
                 }
             }
             BlockerKind::Issue => {
@@ -222,7 +223,7 @@ impl Manager {
                     .await?;
                 self.issue_progress(target, linked).await
             }
-            // Only the forge says when these clear; the poll forgets them then.
+            // Only the forge says when these clear; its poll forgets them then.
             BlockerKind::Pr | BlockerKind::CiRun => Ok(Progress::Waiting(target)),
         }
     }
@@ -242,6 +243,42 @@ impl Manager {
         } else {
             waiting.join(" or ")
         }))
+    }
+
+    /// A chat is done once it records completion; one removed leaves
+    /// nothing to wait for.
+    async fn chat_progress(&self, id: &SpaceId) -> Result<Progress> {
+        Ok(match self.chat_by_id(id).await? {
+            Some(chat) if chat.completion.is_some() => Progress::Complete,
+            Some(chat) => Progress::Waiting(chat.name.into()),
+            None => Progress::Complete,
+        })
+    }
+
+    /// What cleared the space or issue blocker `target` of a space in
+    /// `repository`, as admission decides for a launch: a space done at its
+    /// current HEAD or removed, or an issue done in a workspace that links
+    /// it; none while it blocks, or for the other kinds, which only the
+    /// forge clears.
+    pub(crate) async fn cleared_locally(
+        &self,
+        repository: Option<&RepositoryId>,
+        kind: BlockerKind,
+        target: &str,
+    ) -> Result<Option<String>> {
+        let (Some(repository), BlockerKind::Space | BlockerKind::Issue) = (repository, kind) else {
+            return Ok(None);
+        };
+        let recorded = Recorded {
+            repository: repository.to_owned(),
+            kind,
+            target: target.to_owned(),
+        };
+        Ok(match self.progress(&recorded).await? {
+            Progress::Complete => Some("it is done or removed".into()),
+            Progress::Done(done) => Some(format!("{} is done", done.name)),
+            Progress::Waiting(_) => None,
+        })
     }
 
     /// A workspace is done while its completion holds at its current HEAD.
@@ -264,34 +301,24 @@ impl Manager {
         }
     }
 
-    /// Forget the issue blockers that have closed.
-    pub(crate) async fn poll_blocker_issues(&self) -> Result<()> {
-        let urls = self.store.run(issue_blockers).await?;
-        let account = self.user_account();
-        let hosts = self.forge_hosts();
-        let mut failure = None;
-        for url in urls {
-            match issue_closed(&hosts, &account, &url).await {
-                Ok(true) => self.forget_issue(url).await?,
-                Ok(false) => {}
-                Err(error) => {
-                    failure.get_or_insert(error.context(format!("look up issue {url}")));
-                }
-            }
-        }
-        failure.map_or(Ok(()), Err)
+    /// The issues, PRs and CI runs queued launches wait for.
+    pub(crate) async fn queued_forge_blockers(&self) -> Result<HashSet<blockers::Target>> {
+        self.store.run(forge_blockers).await
     }
 
-    async fn forget_issue(&self, url: String) -> Result<()> {
+    /// Forget the queued launches' blockers that `lookups` says cleared.
+    pub(crate) async fn forget_cleared_launch_blockers(
+        &self,
+        lookups: &blockers::Lookups,
+    ) -> Result<()> {
+        let cleared: Vec<blockers::Target> = (lookups.iter())
+            .filter(|(_, lookup)| matches!(lookup, blockers::Lookup::Cleared(_)))
+            .map(|(target, _)| target.clone())
+            .collect();
         self.store
-            .run(move |db| forget_issue_blocker(db, &url))
+            .run(move |db| forget_blockers(db, &cleared))
             .await
     }
-}
-
-async fn issue_closed(hosts: &ForgeHosts<'_>, account: &Account, url: &str) -> Result<bool> {
-    let forge = ForgeRepo::resolve_issue_url(url, hosts).await?;
-    forge.issue_url_closed(account, url).await
 }
 
 /// Each blocker of the waiting launches with its entry, in queue order.
@@ -357,19 +384,24 @@ fn recorded_workspace<P: rusqlite::Params>(
         .optional()?)
 }
 
-/// The URLs of the issues queued launches wait for.
-fn issue_blockers(db: &mut Connection) -> Result<Vec<String>> {
+/// The issues, PRs and CI runs queued launches wait for.
+fn forge_blockers(db: &mut Connection) -> Result<HashSet<blockers::Target>> {
     Ok(db
-        .prepare("SELECT DISTINCT target FROM agent_queue_blockers WHERE kind=?1")?
-        .query_map([BlockerKind::Issue], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<String>>>()?)
+        .prepare("SELECT DISTINCT kind,target FROM agent_queue_blockers WHERE kind IN (?1,?2,?3)")?
+        .query_map(
+            params![BlockerKind::Issue, BlockerKind::Pr, BlockerKind::CiRun],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
-fn forget_issue_blocker(db: &Connection, url: &str) -> Result<()> {
-    db.execute(
-        "DELETE FROM agent_queue_blockers WHERE kind=?1 AND target=?2",
-        params![BlockerKind::Issue, url],
-    )?;
+fn forget_blockers(db: &mut Connection, cleared: &[blockers::Target]) -> Result<()> {
+    for (kind, target) in cleared {
+        db.execute(
+            "DELETE FROM agent_queue_blockers WHERE kind=?1 AND target=?2",
+            params![kind, target],
+        )?;
+    }
     Ok(())
 }
 
