@@ -432,6 +432,7 @@ impl Isolated {
             "show_startup_tips false\nshow_release_notes false\nsession_serialization false\n",
         )
         .unwrap();
+        crate::test_support::decline_zellij_setup(dir.path());
         Self::share_home(dir.path());
         // Named after its directory, so no other server shares the name.
         let session = dir.path().file_name().unwrap().to_str().unwrap().to_owned();

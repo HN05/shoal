@@ -528,3 +528,21 @@ pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
 pub fn zellij_sessions(socket_dir: &Path) -> std::io::Result<Vec<String>> {
     crate::sessions::zellij::served_in(socket_dir).map_err(std::io::Error::other)
 }
+
+/// Decline Zellij's setup in `home`: from 0.46 a new home opens a floating
+/// setup wizard where Zellij finds a desktop, which refuses splits while it
+/// shows and keeps a session whose panes have closed.
+pub fn decline_zellij_setup(home: &Path) {
+    for data in [
+        ".local/share/zellij",
+        "Library/Application Support/org.Zellij-Contributors.Zellij",
+    ] {
+        let data = home.join(data);
+        fs::create_dir_all(&data).unwrap();
+        fs::write(
+            data.join("desktop_integration.json"),
+            r#"{"flags": ["SetupNeverShow"]}"#,
+        )
+        .unwrap();
+    }
+}

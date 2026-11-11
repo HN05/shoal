@@ -59,20 +59,7 @@ impl ZellijServer {
             "show_startup_tips false\nshow_release_notes false\nsession_serialization false\n",
         )
         .unwrap();
-        // Zellij 0.46 opens a floating setup wizard on a new home, and
-        // refuses to split a pane while it shows.
-        for data in [
-            ".local/share/zellij",
-            "Library/Application Support/org.Zellij-Contributors.Zellij",
-        ] {
-            let data = root.join(data);
-            fs::create_dir_all(&data).unwrap();
-            fs::write(
-                data.join("desktop_integration.json"),
-                r#"{"flags": ["SetupNeverShow"]}"#,
-            )
-            .unwrap();
-        }
+        shoal_core::test_support::decline_zellij_setup(&root);
         let sockets = tempfile::Builder::new()
             .prefix("z")
             .tempdir_in("/tmp")
