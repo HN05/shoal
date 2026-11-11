@@ -83,7 +83,7 @@ pub enum HeldBy {
 }
 
 /// A CI job of a repository's runner, from the forge's queue, with the run
-/// it belongs to and the workspace that run's PR or branch links.
+/// it belongs to and the spaces that run's PR or branch links.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueuedJob {
     pub job: crate::forge::ci::runner::WaitingJob,
@@ -91,6 +91,17 @@ pub struct QueuedJob {
     /// The workspace that links the run's PR, or owns the branch it ran on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<SpaceId>,
+    /// The chats that link the run's PR.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chat_ids: Vec<SpaceId>,
+}
+
+impl QueuedJob {
+    /// Whether its run is for the space `id`: the workspace or a chat its
+    /// run links.
+    pub fn is_for(&self, id: &SpaceId) -> bool {
+        self.workspace_id.as_ref() == Some(id) || self.chat_ids.contains(id)
+    }
 }
 
 impl QueueEntry {

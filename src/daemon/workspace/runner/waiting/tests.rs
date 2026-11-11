@@ -1,5 +1,8 @@
 use crate::client::space_ids::SpaceId;
-use crate::forge::numbers::PullNumber;
+use crate::forge::{
+    ci::runner::{JobRun, Trigger},
+    numbers::PullNumber,
+};
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
@@ -205,6 +208,7 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
             reference: None,
         },
         workspace_id: workspace,
+        chat_ids: Vec::new(),
     };
     let (unlinked, linked) = (queued("unlinked", None), queued("linked", Some(topic.id)));
     let id = repo.id.clone();

@@ -238,7 +238,7 @@ impl Manager {
     }
 
     /// Record the job of `entry` as claimed in `workspace`, with the
-    /// workspace its run links now. Its entry keeps the job's slot until
+    /// spaces its run links now. Its entry keeps the job's slot until
     /// [`Self::take_over_entry`], so a claim that cannot go on puts the job
     /// back.
     pub(super) async fn record_claim(
@@ -249,12 +249,14 @@ impl Manager {
         job: &QueuedJob,
     ) -> Result<()> {
         let linked = self
-            .run_workspace(forge, &entry.repository_id, &job.run)
+            .link_job(
+                forge,
+                &entry.repository_id,
+                job.job.clone(),
+                job.run.clone(),
+            )
             .await?;
-        let job = serde_json::to_string(&QueuedJob {
-            workspace_id: linked,
-            ..job.clone()
-        })?;
+        let job = serde_json::to_string(&linked)?;
         let (id, repository, workspace) = (
             entry.id.clone(),
             entry.repository_id.clone(),

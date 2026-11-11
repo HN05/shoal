@@ -1,6 +1,6 @@
 //! What lists and status show of the runner's jobs: each claimed job's
-//! workspace names its job, and the workspace its run's PR or branch links
-//! lists the jobs that run or wait for it.
+//! workspace names its job, and the spaces its run's PR or branch links
+//! list the jobs that run or wait for it.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
@@ -33,12 +33,12 @@ impl Manager {
             .map(|job| Box::new(job.job)))
     }
 
-    /// The workspaces of the jobs running for the PR or branch the
-    /// workspace `id` links, with their job and what they use.
+    /// The workspaces of the jobs running for the PR, or a workspace's
+    /// branch, the space `id` links, with their job and what they use.
     pub(crate) async fn linked_job_workspaces(&self, id: &SpaceId) -> Result<Vec<Workspace>> {
         let mut workspaces = Vec::new();
         for job in self.claimed_jobs().await? {
-            if job.job.workspace_id.as_ref() != Some(id) {
+            if !job.job.is_for(id) {
                 continue;
             }
             // A job that ended meanwhile is gone with its workspace.
@@ -52,18 +52,15 @@ impl Manager {
         Ok(workspaces)
     }
 
-    /// The entries of the jobs waiting to start for the PR or branch the
-    /// workspace `id` links, with what held each back at the last admission
-    /// pass.
+    /// The entries of the jobs waiting to start for the PR, or a
+    /// workspace's branch, the space `id` links, with what held each back
+    /// at the last admission pass.
     pub(crate) async fn linked_waiting_jobs(&self, id: &SpaceId) -> Result<Vec<QueueEntry>> {
         let mut entries = self.queue_entries().await?;
         entries.retain(|entry| {
             entry.kind == QueueKind::Job
                 && entry.state == QueueState::Queued
-                && entry
-                    .job
-                    .as_ref()
-                    .is_some_and(|job| job.workspace_id.as_ref() == Some(id))
+                && entry.job.as_ref().is_some_and(|job| job.is_for(id))
         });
         Ok(entries)
     }

@@ -62,17 +62,13 @@ impl Manager {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         let taken_run = self.taken_run(&forge, job, took.run).await?;
-        let linked = self
-            .run_workspace(&forge, &job.repository_id, &taken_run)
-            .await?;
-        let mut record = QueuedJob {
-            job: WaitingJob {
-                run: took.run,
-                ..job.job.job.clone()
-            },
-            run: taken_run,
-            workspace_id: linked,
+        let taken_job = WaitingJob {
+            run: took.run,
+            ..job.job.job.clone()
         };
+        let mut record = self
+            .link_job(&forge, &job.repository_id, taken_job, taken_run)
+            .await?;
         // Recorded first, so stopping the job cancels the run it belongs
         // to whatever fails next.
         self.record_taken_job(&job.id, &record).await?;

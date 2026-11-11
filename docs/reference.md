@@ -3647,11 +3647,11 @@ runner. A job that cannot start is passed over with a
 
 `shoal list` shows a running job's workspace below the workspace that links its
 run's PR, or owns the branch it ran on, with the job and what its processes
-use, and that workspace's `shoal status` lists the job under `CI jobs`,
-and each job still waiting to start under `Waiting jobs` with what holds it
-back, as `shoal queue` shows it. The job
-is not that workspace's child: it starts from the seed rather than the
-workspace's build, and the workspace's agent's scope does not reach it.
+use. That workspace's `shoal status`, and that of every chat that links the
+run's PR, lists the job under `CI jobs`, and each job still waiting to start
+under `Waiting jobs` with what holds it back, as `shoal queue` shows it. The
+job is not a child of either: it starts from the seed rather than the
+workspace's build, and neither agent's scope reaches it.
 
 `forgejo-runner`'s host backend starts each step in a directory of its own,
 not the job's workspace, so a job for this runner names the workspace as its

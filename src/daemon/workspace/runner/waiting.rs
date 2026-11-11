@@ -1,9 +1,9 @@
 //! The forge's waiting jobs as entries of the agent queue. Each poll adds
 //! the jobs a repository's runner may take, with the run each belongs to and
-//! the workspace that run links, and drops the entries of jobs the forge no
+//! the spaces that run links, and drops the entries of jobs the forge no
 //! longer lists as waiting, which another runner took or a cancel ended.
+use crate::client::queue::QueueEntryId;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -13,10 +13,7 @@ use super::{Registration, runner_labels};
 use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, workspace::Manager},
-    forge::{
-        ForgeRepo,
-        ci::runner::{JobRun, Trigger},
-    },
+    forge::ForgeRepo,
     model::{QueuePlace, QueuedJob, Repository},
     state::{QueueKind, QueueState},
 };
@@ -82,44 +79,11 @@ impl Manager {
                 continue;
             }
             let run = forge.job_run(&account, job.run).await?;
-            let workspace_id = self.run_workspace(&forge, &repository.id, &run).await?;
-            let job = QueuedJob {
-                job,
-                run,
-                workspace_id,
-            };
+            let job = self.link_job(&forge, &repository.id, job, run).await?;
             let id = repository.id.clone();
             self.store.write(move |tx| queue_job(tx, &id, &job)).await?;
         }
         Ok(())
-    }
-
-    /// The workspace of `repository_id` that links the PR `run` ran for, or
-    /// owns the branch it ran on.
-    pub(super) async fn run_workspace(
-        &self,
-        forge: &ForgeRepo,
-        repository_id: &RepositoryId,
-        run: &JobRun,
-    ) -> Result<Option<SpaceId>> {
-        let workspaces = self.list_workspaces().await?;
-        let mut own = workspaces
-            .into_iter()
-            .filter(|workspace| workspace.repository_id == *repository_id);
-        Ok(match &run.trigger {
-            Trigger::Pull { number } => own.find(|workspace| {
-                workspace
-                    .links
-                    .prs
-                    .iter()
-                    .any(|url| forge.pull(url).is_ok_and(|(linked, _)| linked == *number))
-            }),
-            Trigger::Branch(branch) => {
-                own.find(|workspace| workspace.branch.as_deref() == Some(branch.as_str()))
-            }
-            Trigger::Other => None,
-        }
-        .map(|workspace| workspace.id))
     }
 }
 
