@@ -7,7 +7,7 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 
 use super::{Pending, record::ChatRow, record::ConvertedChat};
 use crate::protocol::operations::{Ended, Failure};
@@ -81,14 +81,7 @@ impl Manager {
         let Some(pending) = pending else {
             return Ok(());
         };
-        let ended = match self.turn_ended(id, &pending).await {
-            Ok(ended) => ended,
-            Err(error) => {
-                self.report_failed_relocation(id, &pending, &error).await;
-                return Ok(());
-            }
-        };
-        if !ended {
+        if !self.turn_ended(id, &pending).await? {
             return Ok(());
         }
         let relocated = match pending.clone() {
@@ -96,8 +89,13 @@ impl Manager {
                 mode,
                 chat,
                 execution,
-                ..
-            } => self.relocate_to_workspace(id, mode, chat, execution).await,
+                preparation,
+            } => match self.failed_hook(preparation.as_deref()).await {
+                Some(failure) => {
+                    (self.stop_after_failed_hook(id, mode, chat, execution, &failure)).await
+                }
+                None => self.relocate_to_workspace(id, mode, chat, execution).await,
+            },
             Pending::Chat { chat, held } => self.relocate_to_chat(id, *chat, held).await,
         };
         if let Err(error) = relocated {
@@ -124,7 +122,7 @@ impl Manager {
                 // A setup that failed waits for its repair, which readies it.
                 let workspace = self.workspace_by_id(id).await?;
                 if workspace.state != WorkspaceState::Ready
-                    || !self.preparation_over(preparation.as_deref()).await?
+                    || !self.preparation_over(preparation.as_deref()).await
                 {
                     return Ok(false);
                 }
@@ -139,23 +137,47 @@ impl Manager {
     }
 
     /// Whether the preparation `operation` of a chat's new workspace is over,
-    /// post-setup hook included, refusing one whose hook failed, after which
-    /// a start runs no agent there either. One no longer followed ended long
-    /// before.
-    async fn preparation_over(&self, operation: Option<&str>) -> Result<bool> {
+    /// post-setup hook included. One no longer followed ended long before.
+    async fn preparation_over(&self, operation: Option<&str>) -> bool {
         let Some(operation) = operation else {
-            return Ok(true);
+            return true;
         };
-        let Ok(entry) = self.operation(operation, None).await else {
-            return Ok(true);
-        };
-        match entry.events_from(u64::MAX).1 {
-            None => Ok(false),
-            Some(Ended::Failed(Failure::HookFailed { message })) => {
-                bail!("the workspace's post-setup hook failed: {message}")
-            }
-            Some(_) => Ok(true),
+        match self.operation(operation, None).await {
+            Ok(entry) => entry.events_from(u64::MAX).1.is_some(),
+            Err(_) => true,
         }
+    }
+
+    /// Why the post-setup hook of the preparation `operation` of a chat's new
+    /// workspace failed, after which a start runs no agent there either.
+    async fn failed_hook(&self, operation: Option<&str>) -> Option<String> {
+        let entry = self.operation(operation?, None).await.ok()?;
+        match entry.events_from(u64::MAX).1 {
+            Some(Ended::Failed(Failure::HookFailed { message })) => Some(message),
+            _ => None,
+        }
+    }
+
+    /// Stop the agent of the chat that became the workspace `id`, whose row
+    /// was `chat`, as a stop of the workspace's agents does, keeping its
+    /// session as `execution` for `shoal resume` in `mode`, since the
+    /// workspace's post-setup hook failed with `failure`, and tell the user.
+    async fn stop_after_failed_hook(
+        &self,
+        id: &SpaceId,
+        mode: ModeName,
+        chat: ChatRow,
+        execution: ExecutionId,
+        failure: &str,
+    ) -> Result<()> {
+        self.hand_over(id, mode, &chat, execution, None).await?;
+        let name = self.workspace_by_id(id).await?.name;
+        let message = format!(
+            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {name} continues it once the hook is repaired"
+        );
+        let about = About::space(&name, id);
+        (self.notify_about(about, NotificationKind::RecoveryBlocked, message)).await;
+        Ok(())
     }
 
     /// Restart the agent of the chat that became the workspace `id`, whose

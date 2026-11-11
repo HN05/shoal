@@ -583,10 +583,10 @@ async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
 }
 
 #[tokio::test]
-async fn a_failed_post_setup_hook_leaves_the_agent_where_it_runs() {
+async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
     use crate::protocol::operations::{Ended, Failure, Report};
     let (root, manager) = manager().await;
-    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, token) = converted(root.path(), &manager).await;
     let (operation, worker) = record_preparation(&manager, &workspace).await;
     let failed = Ended::Failed(Failure::HookFailed {
         message: "hook exited 1".into(),
@@ -607,7 +607,11 @@ async fn a_failed_post_setup_hook_leaves_the_agent_where_it_runs() {
 
     manager.relocate_finished_turns().await.unwrap();
 
+    // Stopped with its session kept for shoal resume, not restarted.
+    process.wait().unwrap();
     assert!(RESUMED.lock().unwrap().is_empty());
-    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(manager.caller(&token).await.unwrap().is_none());
     assert!(!manager.converting(&workspace.id).await.unwrap());
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    assert_eq!(sessions.len(), 1, "{sessions:?}");
 }
