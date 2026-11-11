@@ -29,6 +29,9 @@ impl Manager {
         let Some(repository) = converting.chat.repository_id.clone() else {
             bail!("a chat without a repository cannot become a workspace");
         };
+        // Held until the worktree is checked or the chat given back, so no
+        // relocation hands the chat's agent over to a workspace that goes.
+        let _handovers = self.conversion_handovers.lock().await;
         let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &branch).await?;
         let source = self.converted_source(&repo, &branch, base).await?;
