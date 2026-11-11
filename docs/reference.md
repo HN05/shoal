@@ -395,23 +395,25 @@ starts detached, and restore with
 or a space below it stopped, or whose restart by one of them left them stopped. An agent or chat the user
 or Shoal stopped, or that exited on its own, is the user's to resume.
 
-`shoal stop --interrupt [workspace...]` cancels the current turn of each agent
-in the selected workspaces and keeps the agent running with its background
-shells and subagents, ready for the next message. Shoal types the agent's own
-interrupt key, Esc for Claude Code and Ctrl-C for Codex, into the terminal
-session it runs in through that session's terminal host, as `shoal demo send`
-types into demos, and records the agent idle. An agent without a running turn,
-including one whose turn Shoal has not heard of since a daemon restart, is left
-alone. An agent that runs outside a terminal host, such as in Happy, or that
-Shoal knows no interrupt key for fails the command. Messages and item activity
-reach an interrupted agent as they reach any idle one, and
-`shoal resume <workspace>` continues its turn: it submits `Continue where you
-left off.` in the session, until the agent starts another turn. A resume that
-names workspaces with interrupted turns and others with stopped work refuses
-both; resume them separately. Several workspaces are interrupted or continued
-together, reporting each failure without keeping the others from it. A workspace
-process interrupts and continues only the agents of the workspaces below its
-own.
+`shoal stop --interrupt [space...]` cancels the current turn of each agent
+in the selected workspaces and running chats and keeps the agent running with
+its background shells and subagents, ready for the next message. Shoal types
+the agent's own interrupt key, Esc for Claude Code and Ctrl-C for Codex, into
+the terminal session the daemon recorded for it through that session's
+terminal host, as `shoal demo send` types into demos, and records the agent
+idle. An agent without a running turn, including one whose turn Shoal has not
+heard of since a daemon restart, is left alone. An agent that runs outside a
+terminal host, such as in Happy, or that Shoal knows no interrupt key for
+fails the command. Messages and item activity reach an interrupted
+workspace's agent as they reach any idle one; a chat's interrupted agent
+receives them with its next turn. `shoal resume <space>` continues the turn:
+it submits `Continue where you left off.` in the session, until the agent
+starts another turn. A resume that names spaces with interrupted turns and
+others with stopped work refuses both; resume them separately, and one that
+names a running chat without an interrupted turn has nothing to resume.
+Several spaces are interrupted or continued together, reporting each failure
+without keeping the others from it. A scoped process interrupts and continues
+only the agents of the spaces below its own.
 
 `shoal restart [space...]` restarts running agents in new wrappers: it
 stops the agent, its wrapper finishes and its terminal closes, and the agent

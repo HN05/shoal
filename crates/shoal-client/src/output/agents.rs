@@ -10,11 +10,11 @@ use crate::{
     processes::Stopped,
 };
 
-/// An agent, by its workspace's name and its own, which is unknown for an
-/// execution whose wrapper is gone.
+/// An agent, by the name of its space, a workspace or a chat, and its own,
+/// which is unknown for an execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Agent {
-    pub workspace: SpaceName,
+    pub space: SpaceName,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<crate::agent::Agent>,
 }

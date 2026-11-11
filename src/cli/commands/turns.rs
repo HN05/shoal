@@ -12,21 +12,21 @@ use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{agents, context::Context, terminal, ui},
-    config::Effective,
-    model::{RunningAgent, Workspace},
+    model::{PresentSpace, RunningAgent},
     protocol::ConfigTarget,
     sessions::Origin,
     state::AgentState,
 };
 
 /// `shoal stop --interrupt`: cancel the running turns of the agents in the
-/// `selected` workspaces, leaving agents without one alone.
+/// `selected` spaces, workspaces or chats, leaving agents without one alone.
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
-    let selected = ui::select_workspaces(ctx, selected).await?;
+    let selected = ui::select_spaces(ctx, selected, false).await?;
+    let spaces = super::stop::resolve(ctx, selected, false).await?;
     if crate::env::inherits_scope(&ctx.paths.state) {
-        super::stop::ensure_below(&super::stop::resolve(ctx, selected.clone(), false).await?)?;
+        super::stop::ensure_below(&spaces)?;
     }
-    let interruptions = running_turns(ctx, selected).await?;
+    let interruptions = running_turns(ctx, &spaces).await?;
     let mut report = ui::Report::new("interrupt");
     for interruption in &interruptions {
         let target = &interruption.target;
@@ -36,7 +36,7 @@ pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Re
                 &format!("Interrupted the turn of {}", target.described()),
                 target.output(),
             ),
-            Err(error) => report.failed(ctx, &target.workspace, &error),
+            Err(error) => report.failed(ctx, &target.space, &error),
         }
     }
     let summary = if interruptions.is_empty() {
@@ -56,15 +56,16 @@ struct Interruption {
     key: &'static str,
 }
 
-/// The running turns of the agents in the workspaces `selected` names,
-/// refusing them all when Shoal cannot interrupt one.
-async fn running_turns(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<Vec<Interruption>> {
+/// The running turns of the agents in `spaces`, refusing them all when
+/// Shoal cannot interrupt one.
+async fn running_turns(ctx: &Context, spaces: &[PresentSpace]) -> Result<Vec<Interruption>> {
     let mut interruptions = Vec::new();
-    for selector in selected {
-        let (workspace, agents) = agents_of(ctx, selector).await?;
-        let settings = settings(ctx, &workspace).await?;
+    for space in spaces {
+        let agents = agents_in(ctx, space).await?;
+        let settings =
+            crate::client::workspaces::settings(&ctx.paths, ConfigTarget::space(space)).await?;
         for agent in agents.into_iter().filter(|agent| runs_turn(agent.state)) {
-            let target = Target::of(&workspace, agent)?;
+            let target = Target::of(space, agent)?;
             let key = (target.agent.as_ref())
                 .and_then(|agent| agents::interrupt_key(&settings, agent))
                 .with_context(|| {
@@ -83,9 +84,8 @@ async fn running_turns(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<Ve
 async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()> {
     let target = &interruption.target;
     crate::terminal::send_keys(&target.place, interruption.key).await?;
-    let (workspace, execution) = (target.workspace_id.clone(), target.execution.clone());
-    crate::client::agents::interrupt_turn(&ctx.paths, SpaceSelector::id(&workspace), execution)
-        .await?;
+    let (space, execution) = (target.space_id.clone(), target.execution.clone());
+    crate::client::agents::interrupt_turn(&ctx.paths, SpaceSelector::id(&space), execution).await?;
     Ok(())
 }
 
@@ -93,24 +93,28 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
 pub(super) struct Continuation(Vec<Target>);
 
 impl Continuation {
-    /// The turns an interrupt ended of the agents in the workspaces
-    /// `selectors` name, each once, with the selectors of the workspaces
-    /// without one.
-    pub(super) async fn plan(
+    /// The turns an interrupt ended of the agents in the spaces `selected`
+    /// names, each once, by the selector `space` gives each, with those of
+    /// `selected` without one.
+    pub(super) async fn plan<T>(
         ctx: &Context,
-        selectors: Vec<SpaceSelector>,
-    ) -> Result<(Self, Vec<SpaceSelector>)> {
+        selected: Vec<T>,
+        space: impl Fn(&T) -> SpaceSelector,
+    ) -> Result<(Self, Vec<T>)> {
+        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
         let mut targets = Vec::new();
         let mut rest = Vec::new();
-        for selector in selectors {
-            let (workspace, agents) = agents_of(ctx, selector.clone()).await?;
-            let interrupted: Vec<_> = agents
+        for item in selected {
+            let selector = space(&item);
+            let found = (spaces.find(&selector)).with_context(|| format!("no space {selector}"))?;
+            let interrupted: Vec<_> = agents_in(ctx, &found)
+                .await?
                 .into_iter()
                 .filter(idles_interrupted)
-                .map(|agent| Target::of(&workspace, agent))
+                .map(|agent| Target::of(&found, agent))
                 .collect::<Result<_>>()?;
             if interrupted.is_empty() {
-                rest.push(selector);
+                rest.push(item);
             }
             targets.extend(interrupted);
         }
@@ -119,6 +123,11 @@ impl Continuation {
 
     pub(super) fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Continue the turns `other` plans too.
+    pub(super) fn extend(&mut self, other: Self) {
+        self.0.extend(other.0);
     }
 
     /// Submit the prompt that continues each turn, returning the exit code.
@@ -131,7 +140,7 @@ impl Continuation {
                     &format!("Continued the turn of {}", target.described()),
                     target.output(),
                 ),
-                Err(error) => report.failed(ctx, &target.workspace, &error),
+                Err(error) => report.failed(ctx, &target.space, &error),
             }
         }
         report.finish(ctx, "", |continued, failed| Continued { continued, failed })
@@ -149,26 +158,9 @@ fn runs_turn(state: Option<AgentState>) -> bool {
     matches!(state, Some(AgentState::Working | AgentState::Waiting))
 }
 
-/// The workspace `selector` names and its connected agents.
-pub(super) async fn agents_of(
-    ctx: &Context,
-    selector: SpaceSelector,
-) -> Result<(Workspace, Vec<RunningAgent>)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-        .await?
-        .workspace;
-    let agents =
-        crate::client::agents::running(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
-    Ok((workspace, agents))
-}
-
-/// The settings that choose the integration of each agent of `workspace`.
-async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
-    crate::client::workspaces::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
-    )
-    .await
+/// The connected agents of `space`.
+async fn agents_in(ctx: &Context, space: &PresentSpace) -> Result<Vec<RunningAgent>> {
+    crate::client::agents::running(&ctx.paths, SpaceSelector::id(space.id())).await
 }
 
 /// `agent`'s name, or a stand-in for one whose wrapper is gone.
@@ -176,31 +168,31 @@ fn name(agent: Option<&crate::agent::Agent>) -> &str {
     agent.map_or("the agent", |agent| agent.name())
 }
 
-/// An agent Shoal types into, by workspace and name as output shows it, with
+/// An agent Shoal types into, by space and name as output shows it, with
 /// its execution and the place it runs in.
 #[derive(Debug)]
 struct Target {
-    workspace: SpaceName,
+    space: SpaceName,
     agent: Option<crate::agent::Agent>,
-    workspace_id: SpaceId,
+    space_id: SpaceId,
     execution: ExecutionId,
     place: Origin,
 }
 
 impl Target {
-    /// `agent` of `workspace`, refusing one that runs in no terminal host.
-    fn of(workspace: &Workspace, agent: RunningAgent) -> Result<Self> {
+    /// `agent` of `space`, refusing one that runs in no terminal host.
+    fn of(space: &PresentSpace, agent: RunningAgent) -> Result<Self> {
         let place = agent.origin.with_context(|| {
             format!(
                 "{} in {} runs in no terminal session Shoal can type into",
                 name(agent.agent.as_ref()),
-                workspace.name
+                space.name()
             )
         })?;
         Ok(Self {
-            workspace: workspace.name.clone(),
+            space: space.name().clone(),
             agent: agent.agent,
-            workspace_id: workspace.id.clone(),
+            space_id: space.id().clone(),
             execution: agent.execution,
             place,
         })
@@ -209,14 +201,14 @@ impl Target {
     /// The agent as output names it.
     fn output(&self) -> Agent {
         Agent {
-            workspace: self.workspace.clone(),
+            space: self.space.clone(),
             agent: self.agent.clone(),
         }
     }
 
-    /// The agent and its workspace, as messages name them.
+    /// The agent and its space, as messages name them.
     fn described(&self) -> String {
-        format!("{} in {}", name(self.agent.as_ref()), self.workspace)
+        format!("{} in {}", name(self.agent.as_ref()), self.space)
     }
 }
 

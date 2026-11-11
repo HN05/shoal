@@ -4,6 +4,7 @@
 //! chats restore at once, and `--discard` forgets the stopped work instead.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context},
     config::permissions::PermissionChange,
@@ -56,6 +57,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     {
         return Ok(code);
     }
+    selected.refuse_running()?;
     if let Some(change) = change {
         permission_change::check(ctx, &selected, execution.as_ref(), change).await?;
     }
@@ -92,25 +94,33 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
 }
 
 /// Continue the turns an interrupt ended of the agents in the `selected`
-/// workspaces, which keeps the workspaces without one, refusing those and
-/// selected chats, which a request that also resumes stopped work would
-/// report apart from it, and a `changing` --permission, which a running
-/// agent cannot take. `None` when no turn ended so.
+/// workspaces and running chats, which keeps the workspaces without one,
+/// refusing those, the running chats without one and the selected stopped
+/// chats, which a request that also resumes stopped work would report apart
+/// from it, and a `changing` --permission, which a running agent cannot
+/// take. `None` when no turn ended so.
 async fn continue_turns(
     ctx: &Context,
     selected: &mut Selected,
     changing: bool,
 ) -> Result<Option<i32>> {
-    let Some(workspaces) = &mut selected.workspaces else {
+    let Some(workspaces) = selected.workspaces.take() else {
         return Ok(None);
     };
-    let (continuation, rest) = Continuation::plan(ctx, std::mem::take(workspaces)).await?;
-    *workspaces = rest;
+    let (mut continuation, rest) = Continuation::plan(ctx, workspaces, Clone::clone).await?;
+    let workspaces_left = !rest.is_empty();
+    selected.workspaces = Some(rest);
+    let running = std::mem::take(&mut selected.running);
+    let (chats, idle) =
+        Continuation::plan(ctx, running, |chat| SpaceSelector::id(&chat.id)).await?;
+    selected.running = idle;
+    continuation.extend(chats);
     if continuation.is_empty() {
         return Ok(None);
     }
+    selected.refuse_running()?;
     ensure!(
-        workspaces.is_empty() && selected.chats.is_empty(),
+        !workspaces_left && selected.chats.is_empty(),
         "resume interrupted turns and stopped work separately"
     );
     ensure!(

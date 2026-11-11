@@ -5,7 +5,6 @@ use anyhow::{Result, ensure};
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{
-        commands::turns,
         context::Context,
         terminal,
         ui::{self, Fallback},
@@ -67,7 +66,11 @@ pub(in crate::cli::commands) async fn request_name(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let selector = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let (workspace, agents) = turns::agents_of(ctx, selector).await?;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector)
+        .await?
+        .workspace;
+    let agents =
+        crate::client::agents::running(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     ensure!(
         !agents.is_empty(),
         "{} has no running agent to ask; set its name with shoal rename {} <NAME>",

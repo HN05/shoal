@@ -21,4 +21,14 @@ impl ConfigTarget {
             None => Self::Global,
         }
     }
+
+    /// The config of `space`: a workspace's own, or a chat's.
+    pub fn space(space: &crate::model::PresentSpace) -> Self {
+        match space {
+            crate::model::PresentSpace::Workspace(workspace) => {
+                Self::Workspace(crate::space_names::SpaceSelector::id(&workspace.id))
+            }
+            crate::model::PresentSpace::Chat(chat) => Self::chat(chat),
+        }
+    }
 }

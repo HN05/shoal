@@ -1,5 +1,6 @@
-//! What `shoal resume` acts on: workspaces with stopped work and the chats
-//! Shoal saved, which share one namespace of names.
+//! What `shoal resume` acts on: workspaces with stopped work, the chats
+//! Shoal saved, and the running spaces whose agents an interrupt left idle,
+//! which one lookup finds by number or ID.
 use anyhow::{Result, bail, ensure};
 
 use crate::client::space_names::SpaceSelector;
@@ -18,21 +19,24 @@ use crate::{
 pub(super) enum Target {
     /// A stopped chat, which restores at once.
     Chat(Chat),
+    /// A running chat, whose agent may continue the turn an interrupt
+    /// ended.
+    Running(Chat),
     /// A workspace by ID, or a selector no space has, which the daemon
     /// refuses.
     Workspace(SpaceSelector),
 }
 
-/// The space `selector` names among `spaces`: a stopped chat or a workspace.
-/// A running chat has nothing to resume.
-pub(super) fn resolve(spaces: &Spaces, selector: SpaceSelector) -> Result<Target> {
+/// The space `selector` names among `spaces`: a stopped or running chat or
+/// a workspace.
+pub(super) fn resolve(spaces: &Spaces, selector: SpaceSelector) -> Target {
     match spaces.find(&selector) {
         Some(PresentSpace::Workspace(workspace)) => {
-            Ok(Target::Workspace(SpaceSelector::Id(workspace.id)))
+            Target::Workspace(SpaceSelector::Id(workspace.id))
         }
-        Some(PresentSpace::Chat(chat)) if chat.restore.is_some() => Ok(Target::Chat(chat)),
-        Some(PresentSpace::Chat(chat)) => bail!("chat {} is running; nothing to resume", chat.name),
-        None => Ok(Target::Workspace(selector)),
+        Some(PresentSpace::Chat(chat)) if chat.restore.is_some() => Target::Chat(chat),
+        Some(PresentSpace::Chat(chat)) => Target::Running(chat),
+        None => Target::Workspace(selector),
     }
 }
 
@@ -40,6 +44,9 @@ pub(super) fn resolve(spaces: &Spaces, selector: SpaceSelector) -> Result<Target
 #[derive(Debug, Default)]
 pub(super) struct Selected {
     pub chats: Vec<Chat>,
+    /// The running chats named, which have nothing to resume but a turn an
+    /// interrupt ended.
+    pub running: Vec<Chat>,
     /// By ID, or by a selector the daemon refuses; every workspace with
     /// stopped work for `None`.
     pub workspaces: Option<Vec<SpaceSelector>>,
@@ -57,7 +64,7 @@ impl Selected {
             return Ok(Self::every(saved));
         }
         match ui::select_stopped_spaces(ctx, targets.space, &saved).await? {
-            Some(selectors) => Self::resolved(&spaces, selectors),
+            Some(selectors) => Ok(Self::resolved(&spaces, selectors)),
             None => Ok(Self::every(saved)),
         }
     }
@@ -72,23 +79,33 @@ impl Selected {
     }
 
     /// The spaces `selectors` name among `spaces`, each once.
-    fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Result<Self> {
+    fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Self {
         let mut selected = Self {
             chats: Vec::new(),
+            running: Vec::new(),
             workspaces: Some(Vec::new()),
         };
         for selector in selectors {
-            selected.add(resolve(spaces, selector)?);
+            selected.add(resolve(spaces, selector));
         }
-        Ok(selected)
+        selected
     }
 
     /// The `saved` chats and every workspace.
     fn every(saved: Vec<Chat>) -> Self {
         Self {
             chats: saved,
+            running: Vec::new(),
             workspaces: None,
         }
+    }
+
+    /// Refuse the running chats selected, which have nothing to resume.
+    pub fn refuse_running(&self) -> Result<()> {
+        if let Some(chat) = self.running.first() {
+            bail!("chat {} is running; nothing to resume", chat.name);
+        }
+        Ok(())
     }
 
     /// Add `target` unless it is already selected.
@@ -96,6 +113,8 @@ impl Selected {
         match target {
             Target::Chat(chat) if !self.chats.contains(&chat) => self.chats.push(chat),
             Target::Chat(_) => {}
+            Target::Running(chat) if !self.running.contains(&chat) => self.running.push(chat),
+            Target::Running(_) => {}
             Target::Workspace(workspace) => {
                 let workspaces = self.workspaces.get_or_insert_default();
                 if !workspaces.contains(&workspace) {

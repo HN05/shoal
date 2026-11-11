@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::{model::Workspace, sessions::HostName};
+use crate::sessions::HostName;
 
 fn agent(origin: Option<Origin>) -> RunningAgent {
     RunningAgent {
@@ -19,16 +19,18 @@ fn agent(origin: Option<Origin>) -> RunningAgent {
     }
 }
 
-fn workspace() -> Workspace {
-    serde_json::from_value(json!({
-        "id": "w1",
-        "repository_id": "r1",
-        "name": "fix",
-        "path": "/work/fix",
-        "branch": "fix",
-        "state": "ready",
-    }))
-    .unwrap()
+fn workspace() -> PresentSpace {
+    PresentSpace::Workspace(
+        serde_json::from_value(json!({
+            "id": "w1",
+            "repository_id": "r1",
+            "name": "fix",
+            "path": "/work/fix",
+            "branch": "fix",
+            "state": "ready",
+        }))
+        .unwrap(),
+    )
 }
 
 #[test]
@@ -71,6 +73,6 @@ fn an_agent_outside_any_terminal_host_takes_no_keys() {
     );
     assert_eq!(
         serde_json::to_value(target.output()).unwrap(),
-        json!({"workspace": "fix", "agent": "claude"})
+        json!({"space": "fix", "agent": "claude"})
     );
 }

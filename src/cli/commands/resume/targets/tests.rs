@@ -49,9 +49,9 @@ fn spaces() -> Spaces {
 }
 
 #[test]
-fn a_target_resolves_to_a_saved_chat_or_a_workspace() {
+fn a_target_resolves_to_a_saved_or_running_chat_or_a_workspace() {
     let spaces = spaces();
-    let resolved = |selector: &str| resolve(&spaces, SpaceSelector::from(selector)).unwrap();
+    let resolved = |selector: &str| resolve(&spaces, SpaceSelector::from(selector));
     assert_eq!(
         resolved("3"),
         Target::Workspace(SpaceSelector::id(&"w1".into()))
@@ -59,13 +59,13 @@ fn a_target_resolves_to_a_saved_chat_or_a_workspace() {
     assert!(matches!(resolved("c2"), Target::Chat(chat) if chat.name == "talk"));
     // A selector no space answers stays for the daemon to refuse.
     assert_eq!(resolved("missing"), Target::Workspace("missing".into()));
-    assert!(resolve(&spaces, "c1".into()).is_err());
+    assert!(matches!(resolved("c1"), Target::Running(chat) if chat.name == "running"));
 }
 
 #[test]
 fn a_space_named_twice_is_selected_once() {
     let selectors = ["c2", "3", "2", "w1"].map(SpaceSelector::from).to_vec();
-    let selected = Selected::resolved(&spaces(), selectors).unwrap();
+    let selected = Selected::resolved(&spaces(), selectors);
     assert_eq!(selected.chats.len(), 1);
     assert_eq!(
         selected.workspaces,
