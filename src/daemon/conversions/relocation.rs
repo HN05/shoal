@@ -62,6 +62,8 @@ impl Manager {
     /// new agent runs, which it stops.
     pub(crate) async fn relocate_finished_turns(&self) -> Result<()> {
         let pending = self.store.run(|db| super::record::all_pending(db)).await?;
+        #[cfg(test)]
+        tests::LISTED.notify_one();
         for id in pending.into_iter().map(|(id, _)| id) {
             let _operation = self.gates.operation().await;
             let _handovers = self.conversion_handovers.lock().await;

@@ -4,6 +4,9 @@ use std::sync::Mutex;
 /// The workspaces whose last session a relocation continued.
 pub(crate) static RESUMED: Mutex<Vec<SpaceId>> = Mutex::new(Vec::new());
 
+/// Notified once a relocation pass has listed the pending conversions.
+pub(crate) static LISTED: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::modes::ModeName,
@@ -413,7 +416,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     });
     // The relocation lists the conversion, then waits for the hand-overs,
     // which a stop holds while it holds the conversion.
-    tokio::task::yield_now().await;
+    LISTED.notified().await;
     let id = workspace.id.clone();
     (manager.store)
         .run(move |db| crate::daemon::conversions::record::hold_chat(db, &id, None))
