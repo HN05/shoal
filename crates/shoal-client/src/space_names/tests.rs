@@ -22,9 +22,18 @@ fn a_derived_name_that_would_be_all_digits_takes_its_kind() {
     assert_eq!(derive(SpaceKind::Workspace, "feature/123"), "feature-123");
     assert_eq!(derive(SpaceKind::Workspace, "/1"), "workspace-1");
     assert_eq!(derive(SpaceKind::Chat, "//"), "chat");
+    assert_eq!(derive(SpaceKind::Workspace, "@"), "workspace");
     let long = derive(SpaceKind::Workspace, &"9".repeat(80));
     assert_eq!(long.len(), MAX_NAME_LEN);
     assert!(long.starts_with("workspace-9"));
+}
+
+#[test]
+fn a_derived_name_starts_with_a_letter_or_digit() {
+    let derive = |text| SpaceName::derive(SpaceKind::Workspace, text).to_string();
+    assert_eq!(derive("_private"), "private");
+    assert_eq!(derive("+special"), "special");
+    assert_eq!(derive("-_-leaf"), "leaf");
 }
 
 #[test]
