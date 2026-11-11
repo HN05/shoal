@@ -99,7 +99,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap()
@@ -110,7 +110,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .mark_ready(
                 &SpaceSelector::id(&workspace.id),
                 select(Some(LinkKind::Pr), None),
-                false
+                None
             )
             .await
             .is_err()
@@ -136,7 +136,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap()
@@ -161,7 +161,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .mark_ready(
                 &SpaceSelector::id(&workspace.id),
                 select(Some(LinkKind::Pr), Some("13")),
-                false
+                None
             )
             .await
             .is_err(),
@@ -188,13 +188,13 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     // The PR is marked only once its head on the forge is HEAD.
     assert!(
         manager
-            .mark_ready(&SpaceSelector::id(&workspace.id), pr_only(), false)
+            .mark_ready(&SpaceSelector::id(&workspace.id), pr_only(), None)
             .await
             .is_err()
     );
     github.push(&later);
     manager
-        .mark_ready(&SpaceSelector::id(&workspace.id), pr_only(), false)
+        .mark_ready(&SpaceSelector::id(&workspace.id), pr_only(), None)
         .await
         .unwrap();
     let inspection = manager
@@ -284,7 +284,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -335,7 +335,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -350,7 +350,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -362,7 +362,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         select(Some(LinkKind::Pr), None),
     ] {
         let marked = manager
-            .mark_ready(&SpaceSelector::id(&workspace.id), selection, false)
+            .mark_ready(&SpaceSelector::id(&workspace.id), selection, None)
             .await;
         assert!(marked.is_err());
     }
@@ -450,7 +450,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -517,7 +517,7 @@ async fn a_chats_post_ready_hook_gets_the_configured_environment() {
         .await
         .unwrap();
     manager
-        .mark_ready(&SpaceSelector::id(&chat.id), Selection::default(), false)
+        .mark_ready(&SpaceSelector::id(&chat.id), Selection::default(), None)
         .await
         .unwrap();
     let recorded = std::fs::read_to_string(&record).unwrap();
@@ -657,7 +657,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap()
@@ -670,7 +670,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -700,7 +700,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -729,7 +729,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -745,7 +745,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -767,7 +767,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
             .mark_ready(
                 &SpaceSelector::id(&workspace.id),
                 Selection::default(),
-                false
+                None
             )
             .await
             .is_err()
@@ -786,7 +786,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -823,7 +823,7 @@ async fn listings_leave_staleness_unknown_where_file_access_stalls() {
         .mark_ready(
             &SpaceSelector::id(&workspace.id),
             Selection::default(),
-            false,
+            None,
         )
         .await
         .unwrap();

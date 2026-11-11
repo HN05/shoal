@@ -895,8 +895,16 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .await
         .unwrap();
     // A workspace process's mark checks the HEAD it records.
+    let caller = crate::daemon::scope::Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+    };
     let marks = manager
-        .mark_ready(&SpaceSelector::id(&workspace.id), Default::default(), true)
+        .mark_ready(
+            &SpaceSelector::id(&workspace.id),
+            Default::default(),
+            Some(&caller),
+        )
         .await
         .unwrap()
         .marks;

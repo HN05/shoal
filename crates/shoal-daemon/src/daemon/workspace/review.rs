@@ -19,6 +19,7 @@ use crate::{
         },
         notifications::NotificationKind,
         reviews::gate::Gate,
+        scope::Caller,
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind, HookSpace},
@@ -76,14 +77,14 @@ impl Manager {
     /// the mark to the current HEAD and reruns `hooks.post_ready`. With
     /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs;
     /// marked PRs lose their progress section, which Shoal stops updating;
-    /// a failure there keeps the marks and runs the hook. With `gated`, as for
-    /// a workspace process, `[review] require_for_ready` applies to the HEAD
-    /// the marks record.
+    /// a failure there keeps the marks and runs the hook. For a scoped
+    /// `caller`, `[review] require_for_ready` applies to the HEAD the marks
+    /// record.
     pub async fn mark_ready(
         &self,
         selector: &SpaceSelector,
         selection: Selection,
-        gated: bool,
+        caller: Option<&Caller>,
     ) -> Result<ReadyMarks> {
         if let space @ LinkSpace::Chat { .. } = self.link_space(selector).await? {
             return self.mark_chat_ready(&space, selection).await;
@@ -106,7 +107,7 @@ impl Manager {
         };
         self.verify_worktree(&workspace).await?;
         let head = current_head(&workspace).await?;
-        if gated {
+        if caller.is_some() {
             self.require_review(&workspace, Gate::Ready, &head).await?;
         }
         let kind = marked_kind(&selection)?;

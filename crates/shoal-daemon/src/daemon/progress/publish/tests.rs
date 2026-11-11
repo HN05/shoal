@@ -166,7 +166,7 @@ async fn open_prs_show_the_progress_until_marked_ready() {
 
     // Ready removes the section, and later progress leaves the PR alone.
     manager
-        .mark_ready(&selector, Selection::default(), false)
+        .mark_ready(&selector, Selection::default(), None)
         .await
         .unwrap();
     assert_eq!(pull.body(), "Closes #3\n");

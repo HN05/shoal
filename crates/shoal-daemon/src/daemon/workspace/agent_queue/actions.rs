@@ -269,9 +269,7 @@ impl Manager {
             "{} is already starting",
             entry.name
         );
-        let position = self
-            .place_entry(entry.id.clone(), place, caller.is_some())
-            .await?;
+        let position = self.place_entry(entry.id.clone(), place, caller).await?;
         self.agent_queue.wake();
         Ok(MovedEntry {
             entry: QueueEntry {
@@ -294,14 +292,15 @@ impl Manager {
             .await
     }
 
-    /// Place the waiting entry `id` at `place`, only further back when
-    /// `back_only`, returning its new position.
+    /// Place the waiting entry `id` at `place`, only further back for a
+    /// scoped `caller`, returning its new position.
     async fn place_entry(
         &self,
         id: QueueEntryId,
         place: QueuePlace,
-        back_only: bool,
+        caller: Option<&Caller>,
     ) -> Result<usize> {
+        let back_only = caller.is_some();
         self.store
             .write(move |tx| {
                 let moved = order::place(tx, id.as_str(), &place)?;

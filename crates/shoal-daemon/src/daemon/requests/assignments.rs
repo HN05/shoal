@@ -34,9 +34,7 @@ pub(super) async fn handle(
             Body::Ok
         }
         AssignmentMethod::MarkReady { space, selection } => {
-            // Only a workspace process's mark waits for a review.
-            let gated = caller.is_some();
-            Body::ReadyOutcomes(manager.mark_ready(&space, selection, gated).await?.into())
+            Body::ReadyOutcomes(manager.mark_ready(&space, selection, caller).await?.into())
         }
         AssignmentMethod::ClearReady {
             space,
