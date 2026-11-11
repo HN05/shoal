@@ -195,9 +195,10 @@ impl Manager {
             log!("agent of {id} not handed over yet: {error:#}");
             return Ok(());
         }
-        let name = self.workspace_by_id(id).await?.name;
+        let workspace = self.workspace_by_id(id).await?;
+        let (name, number) = (workspace.name, workspace.number);
         let message = format!(
-            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {name} continues it once the hook is repaired"
+            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {number} continues it once the hook is repaired"
         );
         let about = About::space(&name, id);
         (self.notify_about(about, NotificationKind::RecoveryBlocked, message)).await;
@@ -400,24 +401,26 @@ impl Manager {
         {
             log!("conversion of {id} not forgotten: {error:#}");
         }
-        let name = match self
+        // The hints select the space by its number, which it keeps as the
+        // other kind, since names select nothing.
+        let (name, number) = match self
             .space(&crate::client::space_names::SpaceSelector::id(id))
             .await
         {
-            Ok(space) => space.name().clone(),
+            Ok(space) => (space.name().clone(), space.number()),
             Err(_) => return,
         };
         let message = match pending {
             Pending::Workspace { .. } => format!(
-                "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal resume {name}"
+                "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal resume {number}"
             ),
             Pending::Chat { .. } if self.chat_by_id(id).await.is_ok_and(|chat| chat.is_some()) => {
                 format!(
-                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal resume {name}"
+                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal resume {number}"
                 )
             }
             Pending::Chat { .. } => format!(
-                "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {name} continues"
+                "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {number} continues"
             ),
         };
         self.notify_about(

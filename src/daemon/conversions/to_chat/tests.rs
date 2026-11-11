@@ -230,8 +230,9 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
         .await
         .unwrap();
 
+    // Names repeat, so it keeps its name beside the chat that has it too.
     let reopened = restored.opened.workspace;
-    assert_ne!(reopened.name, workspace.name);
+    assert_eq!(reopened.name, workspace.name);
     assert_eq!(reopened.branch.as_deref(), Some("fix-login"));
     assert!(reopened.path.join("notes.txt").exists());
     assert!(manager.chat_by_id(&workspace.id).await.unwrap().is_some());

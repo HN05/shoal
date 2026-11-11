@@ -170,7 +170,7 @@ fn menu_workers_round_trip_their_view() {
 
 #[test]
 fn approval_workers_round_trip_their_space_and_decision() {
-    for space in [None, Some(SpaceSelector::from("agent"))] {
+    for space in [None, Some(SpaceSelector::from("3"))] {
         let InternalCommand::ApprovalRows { space: parsed } = parse(
             Worker::ApprovalRows {
                 space: space.as_ref(),

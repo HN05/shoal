@@ -1510,7 +1510,8 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
         "{rows:?}"
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Stopped commands in second"),
+        String::from_utf8_lossy(&output.stdout)
+            .contains(&format!("Stopped commands in {} second", second["number"])),
         "{output:?}"
     );
     // A current workspace without stopped work falls back to the picker.
@@ -1519,7 +1520,8 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 3, "{rows}");
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Stopped commands in first"),
+        String::from_utf8_lossy(&output.stdout)
+            .contains(&format!("Stopped commands in {} first", first["number"])),
         "{output:?}"
     );
     // Several workspaces resume together, each with stopped work.
@@ -1543,9 +1545,14 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     let (output, _) = fixture.pick(&["resume"], &picked, "");
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for name in ["first", "second"] {
+    for workspace in [&first, &second] {
+        let label = format!(
+            "{} {}",
+            workspace["number"],
+            workspace["name"].as_str().unwrap()
+        );
         assert!(
-            stdout.contains(&format!("Stopped commands in {name}")),
+            stdout.contains(&format!("Stopped commands in {label}")),
             "{stdout}"
         );
     }
