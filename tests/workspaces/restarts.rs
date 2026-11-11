@@ -16,11 +16,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let workspace = fixture.add("renewed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    fs::write(
-        path.join("agent.sh"),
-        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
+    install_fake_agent(&path);
     fs::write(
         path.join("resume.sh"),
         "if [ -n \"$BROKEN_TREE\" ]; then exit 1; fi\n\
@@ -530,16 +526,8 @@ impl<'a> Running<'a> {
     /// `resume.sh` restores, once it runs.
     fn start(fixture: &'a Fixture, workspace: &'a str, started: &Value) -> Self {
         let path = PathBuf::from(started["path"].as_str().unwrap());
-        fs::write(
-            path.join("agent.sh"),
-            "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
-        )
-        .unwrap();
-        fs::write(
-            path.join("resume.sh"),
-            "trap 'exit 0' TERM\ntouch restored\nwhile :; do sleep 1; done\n",
-        )
-        .unwrap();
+        install_fake_agent(&path);
+        fs::write(path.join("resume.sh"), fake_agent_script("restored")).unwrap();
         let agent = fixture
             .command()
             .args(["claude", &fixture.id(workspace)])

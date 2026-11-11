@@ -46,9 +46,10 @@ mod support;
 use support::{
     cli,
     daemon::DaemonGuard,
+    fake_agent_script,
     fixture::Base,
     git::{configure_identity, git, git_with_identity, init_repo},
-    install_test_script, install_test_script_with_mode, ports, prompt, pty,
+    install_fake_agent, install_test_script, install_test_script_with_mode, ports, prompt, pty,
     wait::{try_wait_for, try_wait_within, wait_for, wait_until},
 };
 

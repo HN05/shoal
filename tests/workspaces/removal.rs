@@ -185,11 +185,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     ));
     let workspace = fixture.add("removed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    fs::write(
-        path.join("agent.sh"),
-        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
+    install_fake_agent(&path);
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
     let spawn = |args: &[&str]| {
         fixture

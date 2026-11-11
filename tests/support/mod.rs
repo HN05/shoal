@@ -61,6 +61,17 @@ pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<
     fs::rename(&destination, path).unwrap();
 }
 
+/// A fake agent's script: it touches `marker` in its directory, then runs
+/// until it is terminated.
+pub fn fake_agent_script(marker: &str) -> String {
+    format!("trap 'exit 0' TERM\ntouch {marker}\nwhile :; do sleep 1; done\n")
+}
+
+/// Install `agent.sh` in `dir`, a fake agent that touches `agent-started`.
+pub fn install_fake_agent(dir: &Path) {
+    fs::write(dir.join("agent.sh"), fake_agent_script("agent-started")).unwrap();
+}
+
 /// Keep commands and their descendants in a temporary home, state and cwd.
 /// Preserve PATH for test tooling, preferring executables in the fixture's bin.
 pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {

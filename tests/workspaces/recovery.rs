@@ -61,11 +61,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("restarted");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    fs::write(
-        path.join("agent.sh"),
-        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
+    install_fake_agent(&path);
     let spawn = |args: &[&str]| {
         fixture
             .command()
@@ -155,11 +151,7 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
         Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    fs::write(
-        path.join("agent.sh"),
-        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
+    install_fake_agent(&path);
     let state = fixture
         .root
         .path()

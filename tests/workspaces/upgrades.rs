@@ -8,16 +8,8 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     ));
     let workspace = fixture.add("upgraded");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    fs::write(
-        path.join("agent.sh"),
-        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
-    fs::write(
-        path.join("resume.sh"),
-        "trap 'exit 0' TERM\ntouch restored\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
+    install_fake_agent(&path);
+    fs::write(path.join("resume.sh"), fake_agent_script("restored")).unwrap();
     // The wrapper starts from an installed link to an earlier release, a copy
     // of the daemon's binary in the target directory, where it may be cloned.
     // A child copies it, so parallel spawns cannot inherit its writable
