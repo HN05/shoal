@@ -19,12 +19,16 @@ use serde::{Deserialize, Serialize};
 use crate::fsutil::{
     copy::clone_tree,
     marked_dirs::{OWNER_MARKER, create_marked_dir, is_marked_dir},
+    subvolume::{self, Btrfs},
 };
 
 pub mod build;
 
 const MANIFEST: &str = "manifest.json";
 const OUTPUTS: &str = "outputs";
+const SPARE: &str = "spare";
+const SPARE_STAGING: &str = "spare.new";
+const SPARE_TAKEN: &str = "spare.taken";
 
 /// Where one repository's seed lives, beside its workspaces.
 #[derive(Debug, Clone)]
@@ -99,7 +103,7 @@ impl Layout {
         }
         self.ensure_owned()?;
         for directory in [self.snapshot(), self.staging(), self.retired()] {
-            remove_dir(&directory)?;
+            remove_snapshot_dir(&directory, &[])?;
         }
         for file in [self.log(), self.root.join(OWNER_MARKER)] {
             match fs::remove_file(&file) {
@@ -141,12 +145,20 @@ impl Layout {
 
     /// Delete the snapshot a new one replaced.
     pub fn remove_retired(&self) -> Result<()> {
-        remove_dir(&self.retired())
+        remove_snapshot_dir(&self.retired(), &[])
+    }
+
+    /// Destroy the subvolumes among the seed worktree's outputs that the
+    /// snapshot records, so removing the worktree need not delete their
+    /// files one by one.
+    pub fn destroy_worktree_outputs(&self) {
+        let outputs = recorded_outputs(&self.snapshot());
+        subvolume::destroy_outputs(&Btrfs, &self.worktree(), &outputs);
     }
 
     /// A ready clone of the snapshot's outputs, which goes with the snapshot.
     fn spare(&self) -> PathBuf {
-        self.snapshot().join("spare")
+        self.snapshot().join(SPARE)
     }
 
     /// Whether the snapshot has a spare ready.
@@ -155,13 +167,13 @@ impl Layout {
     }
 
     fn spare_staging(&self) -> PathBuf {
-        self.snapshot().join("spare.new")
+        self.snapshot().join(SPARE_STAGING)
     }
 
     /// Where a new worktree moves the spare before taking its outputs, so a
     /// refill can replace it meanwhile.
     fn spare_taken(&self) -> PathBuf {
-        self.snapshot().join("spare.taken")
+        self.snapshot().join(SPARE_TAKEN)
     }
 }
 
@@ -179,7 +191,12 @@ pub struct Snapshot {
 impl Snapshot {
     /// The current snapshot, if a seed build has completed.
     pub fn open(layout: &Layout) -> Result<Option<Self>> {
-        let path = layout.snapshot().join(MANIFEST);
+        Self::read(&layout.snapshot())
+    }
+
+    /// The manifest of the snapshot directory `dir`, live or retired.
+    fn read(dir: &Path) -> Result<Option<Self>> {
+        let path = dir.join(MANIFEST);
         match fs::read(&path) {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .map(Some)
@@ -204,7 +221,7 @@ impl Snapshot {
     ) -> Result<Staged> {
         layout.ensure_owned()?;
         let staging = layout.staging();
-        remove_dir(&staging)?;
+        remove_snapshot_dir(&staging, paths)?;
         layout.remove_retired()?;
         fs::create_dir_all(staging.join(OUTPUTS))?;
         let worktree = layout.worktree();
@@ -253,7 +270,7 @@ impl Snapshot {
             }
             if let Err(error) = ensure_no_symlink(worktree, path) {
                 for path in &cloned {
-                    remove_output(&worktree.join(path))?;
+                    remove_tree(&worktree.join(path), &[])?;
                 }
                 return Err(error);
             }
@@ -268,7 +285,7 @@ impl Snapshot {
             if let Err(error) = result {
                 // A worktree starts with the whole seed or none of it.
                 for path in &cloned {
-                    remove_output(&worktree.join(path))?;
+                    remove_tree(&worktree.join(path), &[])?;
                 }
                 return Err(error);
             }
@@ -295,10 +312,10 @@ impl Snapshot {
             return Ok(false);
         }
         let staging = layout.spare_staging();
-        remove_dir(&staging)?;
+        remove_tree(&staging, &self.paths)?;
         let outputs = layout.snapshot().join(OUTPUTS);
         if let Err(error) = clone_spare(copy, &outputs, &staging, &self.paths).await {
-            remove_dir(&staging)?;
+            remove_tree(&staging, &self.paths)?;
             return Err(error);
         }
         fs::rename(&staging, layout.spare())
@@ -323,7 +340,7 @@ impl Snapshot {
         if !fits {
             return Ok(None);
         }
-        let Some(taken) = claim_spare(layout)? else {
+        let Some(taken) = claim_spare(layout, &self.paths)? else {
             return Ok(None);
         };
         let mut moved = Vec::new();
@@ -331,12 +348,12 @@ impl Snapshot {
             // The clone that follows meets the same problem and reports it.
             if move_output(&taken, worktree, path).is_err() {
                 return_outputs(worktree, &taken, &moved)?;
-                return put_back(layout, &taken).map(|()| None);
+                return put_back(layout, &taken, &self.paths).map(|()| None);
             }
             moved.push(path.clone());
         }
         // What is left are the outputs' empty parent directories.
-        remove_dir(&taken)?;
+        remove_tree(&taken, &[])?;
         Ok(Some(moved))
     }
 
@@ -393,7 +410,7 @@ impl Staged {
         fs::write(staging.join(MANIFEST), serde_json::to_vec(&snapshot)?)?;
         let current = layout.snapshot();
         let retired = layout.retired();
-        remove_dir(&retired)?;
+        remove_snapshot_dir(&retired, &[])?;
         if current.exists() {
             fs::rename(&current, &retired)?;
         }
@@ -421,10 +438,11 @@ async fn clone_spare(
 }
 
 /// Move the spare out of the way of refills and return where it went, or
-/// `None` when no spare is ready.
-fn claim_spare(layout: &Layout) -> Result<Option<PathBuf>> {
+/// `None` when no spare is ready. A spare an earlier taker left, of the
+/// outputs among `paths`, goes first.
+fn claim_spare(layout: &Layout, paths: &[String]) -> Result<Option<PathBuf>> {
     let taken = layout.spare_taken();
-    remove_dir(&taken)?;
+    remove_tree(&taken, paths)?;
     match fs::rename(layout.spare(), &taken) {
         Ok(()) => Ok(Some(taken)),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
@@ -453,12 +471,12 @@ fn move_output(taken: &Path, worktree: &Path, path: &str) -> Result<()> {
         .with_context(|| format!("move {}", destination.display()))
 }
 
-/// Make the spare `taken` the spare again, or delete it when a refill has
-/// made another meanwhile.
-fn put_back(layout: &Layout, taken: &Path) -> Result<()> {
+/// Make the spare `taken`, of the outputs among `paths`, the spare again,
+/// or delete it when a refill has made another meanwhile.
+fn put_back(layout: &Layout, taken: &Path, paths: &[String]) -> Result<()> {
     match fs::rename(taken, layout.spare()) {
         Ok(()) => Ok(()),
-        Err(_) => remove_dir(taken),
+        Err(_) => remove_tree(taken, paths),
     }
 }
 
@@ -502,22 +520,33 @@ fn ensure_no_symlink(worktree: &Path, path: &str) -> Result<()> {
     Ok(())
 }
 
-fn remove_output(path: &Path) -> Result<()> {
-    let removed = match path.symlink_metadata() {
-        Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path),
-        Ok(_) => fs::remove_file(path),
-        Err(_) => Ok(()),
-    };
-    removed.with_context(|| format!("remove {}", path.display()))
+/// Delete the snapshot directory `dir`, live, staged or retired, destroying
+/// first the subvolumes its outputs and spares hold of the outputs among
+/// `paths` and those its manifest records.
+fn remove_snapshot_dir(dir: &Path, paths: &[String]) -> Result<()> {
+    let mut recorded = recorded_outputs(dir);
+    recorded.extend_from_slice(paths);
+    let outputs: Vec<String> = [OUTPUTS, SPARE, SPARE_STAGING, SPARE_TAKEN]
+        .iter()
+        .flat_map(|holder| recorded.iter().map(move |path| format!("{holder}/{path}")))
+        .collect();
+    remove_tree(dir, &outputs)
 }
 
-fn remove_dir(path: &Path) -> Result<()> {
-    match fs::remove_dir_all(path) {
-        Err(error) if error.kind() != ErrorKind::NotFound => {
-            Err(error).with_context(|| format!("remove {}", path.display()))
-        }
-        _ => Ok(()),
+/// The outputs the manifest of the snapshot directory `dir` records; none
+/// when it has no readable one.
+fn recorded_outputs(dir: &Path) -> Vec<String> {
+    match Snapshot::read(dir) {
+        Ok(Some(snapshot)) => snapshot.paths,
+        _ => Vec::new(),
     }
+}
+
+/// Delete the file or tree at `path`, if any, destroying first the
+/// subvolumes at `outputs` below it and `path` itself when it is one.
+fn remove_tree(path: &Path, outputs: &[String]) -> Result<()> {
+    subvolume::remove_tree(&Btrfs, path, outputs)
+        .with_context(|| format!("remove {}", path.display()))
 }
 
 #[cfg(test)]

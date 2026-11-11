@@ -500,6 +500,7 @@ impl Manager {
     ) -> Result<WorktreeRemoval> {
         self.remove_simulators(&workspace.id).await?;
         if registered {
+            self.destroy_seed_outputs(workspace).await;
             let removed = git::worktree::remove(repo, &workspace.path, files, branch).await?;
             Ok(removed.into())
         } else {

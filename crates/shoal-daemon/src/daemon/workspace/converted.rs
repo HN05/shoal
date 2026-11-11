@@ -168,6 +168,7 @@ impl Manager {
                 crate::daemon::log!("worktree of {} kept: {error:#}", workspace.name);
                 return;
             }
+            self.destroy_seed_outputs(&workspace).await;
             let removed = git::worktree::remove(
                 &repo.path,
                 &workspace.path,

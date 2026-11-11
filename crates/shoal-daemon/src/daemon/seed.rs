@@ -21,7 +21,10 @@ use crate::{
             identity,
         },
     },
-    fsutil::off_runtime,
+    fsutil::{
+        off_runtime,
+        subvolume::{self, Btrfs},
+    },
     git::{
         self,
         default_branch::{self, DefaultBranchLookup},
@@ -388,9 +391,33 @@ impl Manager {
         let worktree = layout.worktree();
         if worktree.symlink_metadata().is_ok() {
             ensure_seed_worktree(repo, &layout).await?;
+            let outputs = layout.clone();
+            off_runtime::run(move || {
+                outputs.destroy_worktree_outputs();
+                Ok(())
+            })
+            .await?;
             git::seed::remove_worktree(&repo.path, &worktree).await?;
         }
         tokio::task::spawn_blocking(move || layout.remove_owned()).await?
+    }
+
+    /// Destroy the subvolumes among the seed outputs `workspace`'s settings
+    /// name, which a worktree started from the seed holds, so removing the
+    /// worktree need not delete their files one by one. Settings it cannot
+    /// read leave them to that delete.
+    pub(super) async fn destroy_seed_outputs(&self, workspace: &Workspace) {
+        let Ok(settings) = self.workspace_settings(workspace).await else {
+            return;
+        };
+        let presets = settings.setup.presets.as_deref().unwrap_or_default();
+        let outputs = build::outputs(&settings.setup.seed, presets);
+        let root = workspace.path.clone();
+        let destroyed = off_runtime::run(move || {
+            subvolume::destroy_outputs(&Btrfs, &root, &outputs);
+            Ok(())
+        });
+        let _ = destroyed.await;
     }
 
     /// Whether memory and disk space are clear of their overload warning
