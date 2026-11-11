@@ -22,6 +22,7 @@ pub(crate) use dispatch::Start;
 pub(crate) use state::{AgentQueue, OneShotSlot, OneShotStop, Serving};
 pub(crate) use store::last_seq;
 pub(crate) use wake::Grant;
+pub(crate) use worker::HasAgent;
 
 #[cfg(test)]
 mod tests;

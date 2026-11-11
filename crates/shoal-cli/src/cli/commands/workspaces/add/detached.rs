@@ -106,6 +106,7 @@ async fn queue_in_existing(
         issue_title: issue.map(|issue| issue.title.clone()),
         now,
         blockers,
+        opens: Some(workspace.clone()),
         caller_starts: false,
     };
     let entry = match queued_agents::admit(ctx, &plan, launch).await? {

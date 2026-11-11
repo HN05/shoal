@@ -5,6 +5,7 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::{AddOptions, target::AddTarget};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -79,20 +80,58 @@ pub(super) async fn planned_workspace_name(
     if let Some(name) = &creation.options.name {
         return Ok(name.clone());
     }
-    let branch = match (&creation.branch, &creation.existing) {
+    let branch = match (
+        &creation.branch,
+        opened_branch(ctx, target, creation).await?,
+    ) {
         (Some(branch), _) => branch.clone(),
-        (None, Some(selector)) => match git::strip_local(selector) {
-            Some(local) => local.to_owned(),
-            None => {
-                let repo = target.repository(ctx).await?;
-                git::remote_branch(&repo.path, selector)
-                    .await?
-                    .map_or_else(|| selector.clone(), |(_, branch)| branch)
-            }
-        },
+        (None, Some(local)) => local,
         (None, None) => (creation.copy.as_ref()).map_or_else(String::new, |copy| copy.name.clone()),
     };
     Ok(SpaceName::derive(&branch, "workspace"))
+}
+
+/// The local name of the existing branch `creation` opens, if any.
+async fn opened_branch(
+    ctx: &Context,
+    target: &AddTarget,
+    creation: &Creation,
+) -> Result<Option<String>> {
+    let Some(selector) = &creation.existing else {
+        return Ok(None);
+    };
+    if let Some(local) = git::strip_local(selector) {
+        return Ok(Some(local.to_owned()));
+    }
+    let repo = target.repository(ctx).await?;
+    let remote = git::remote_branch(&repo.path, selector).await?;
+    Ok(Some(
+        remote.map_or_else(|| selector.clone(), |(_, branch)| branch),
+    ))
+}
+
+/// The existing workspace `plan` reopens: the one it names, else the one on
+/// the branch it opens. A launch there is that workspace's agent, which the
+/// daemon admits only while the workspace has none.
+pub(super) async fn reopened_workspace(
+    ctx: &Context,
+    target: &AddTarget,
+    plan: &AddPlan,
+) -> Result<Option<SpaceId>> {
+    if plan.workspace.is_some() {
+        return Ok(plan.workspace.clone());
+    }
+    let Some(branch) = opened_branch(ctx, target, &plan.creation).await? else {
+        return Ok(None);
+    };
+    let repo = target.repository(ctx).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    Ok(workspaces
+        .into_iter()
+        .find(|workspace| {
+            workspace.repository_id == repo.id && workspace.branch.as_deref() == Some(&branch)
+        })
+        .map(|workspace| workspace.id))
 }
 
 /// Agent arguments as a queued launch carries them, refusing one that is

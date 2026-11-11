@@ -4,6 +4,7 @@
 use anyhow::Result;
 
 use super::listing::ListFilter;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{
     queue::{self, QueueEntryId},
@@ -36,8 +37,10 @@ pub(super) struct Launch {
     pub issue_title: Option<String>,
     pub now: bool,
     pub blockers: Vec<Blocker>,
+    /// The existing workspace the launch reopens, whose agent it becomes.
+    pub opens: Option<SpaceId>,
     /// The caller starts the launch once admitted, even in the existing
-    /// workspace `plan` opens, which the daemon otherwise starts.
+    /// workspace it opens, which the daemon otherwise starts.
     pub caller_starts: bool,
 }
 
@@ -53,7 +56,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         plan: serde_json::to_string(plan)?,
         env: terminal::start_environment(),
         now: launch.now,
-        workspace: plan.workspace.clone().map(SpaceSelector::Id),
+        workspace: launch.opens.map(SpaceSelector::Id),
         starts_in_caller: launch.caller_starts,
         blockers: launch.blockers,
     };

@@ -197,14 +197,20 @@ impl AddPlan {
     }
 
     /// Whether the plan opens `workspace`'s branch in its repository without
-    /// creating anything.
+    /// creating anything: the workspace it names, or without one the branch
+    /// it opens, local or as a remote's.
     pub fn opens(&self, workspace: &Workspace) -> bool {
-        self.workspace.as_ref() == Some(&workspace.id)
+        let (Some(branch), Some(existing)) = (&workspace.branch, &self.creation.existing) else {
+            return false;
+        };
+        let names_branch = existing == branch
+            || crate::git::strip_local(existing) == Some(branch.as_str())
+            || existing.ends_with(&format!("/{branch}"));
+        self.workspace.as_ref().is_none_or(|id| *id == workspace.id)
             && self.repository.value() == workspace.repository_id
             && self.creation.branch.is_none()
             && self.creation.path.is_none()
-            && workspace.branch.is_some()
-            && self.creation.existing == workspace.branch
+            && names_branch
     }
 
     /// The agent's name, when the addition starts one.

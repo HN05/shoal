@@ -115,6 +115,7 @@ async fn admit_here(
         issue_title: launch.issue.as_ref().map(|issue| issue.title.clone()),
         now: launch.now,
         blockers: Vec::new(),
+        opens: Some(workspace.id.clone()),
         caller_starts: true,
     };
     let plan = AddPlan::agent_in(workspace, launch)?;

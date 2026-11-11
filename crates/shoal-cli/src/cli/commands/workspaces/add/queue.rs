@@ -3,7 +3,12 @@ use anyhow::Result;
 
 use crate::client::queue::QueueEntryId;
 
-use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target::AddTarget};
+use super::{
+    AddOptions,
+    agent::AddSettings,
+    plan::{planned_workspace_name, reopened_workspace},
+    target::AddTarget,
+};
 use crate::{
     cli::{
         client::{self},
@@ -77,12 +82,16 @@ pub(super) async fn admit_launch(
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
     };
+    // The plan names its repository by ID, as the workspace it may reopen
+    // does, however the start named it.
+    plan.repository = (&target.repository(ctx).await?.id).into();
     let launch = queued_agents::Launch {
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
         now,
         blockers,
+        opens: reopened_workspace(ctx, target, plan).await?,
         // The daemon starts a scoped caller's agents.
         caller_starts: !crate::env::is_scoped(),
     };

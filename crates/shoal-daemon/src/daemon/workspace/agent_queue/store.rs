@@ -111,6 +111,13 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
     )
 }
 
+/// Whether the launch `plan` opens an existing branch, whose workspace it
+/// reopens should the branch have one by then.
+pub(super) fn opens_existing_branch(plan: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(plan)
+        .is_ok_and(|plan| plan["creation"]["existing"].is_string())
+}
+
 /// The branch the launch `plan` creates or opens, if it names one.
 fn planned_branch(plan: &str) -> Option<String> {
     let plan: serde_json::Value = serde_json::from_str(plan).ok()?;

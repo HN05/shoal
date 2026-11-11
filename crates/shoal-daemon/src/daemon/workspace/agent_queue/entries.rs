@@ -12,7 +12,7 @@ use super::{
     blockers,
     dispatch::Start,
     rank::Ranked,
-    store::{ENTRY_COLUMNS, Launch, entry, insert_launch},
+    store::{ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
 use crate::client::{
     queue::QueueEntryId,
@@ -68,8 +68,10 @@ impl Manager {
             .await?;
         let detached = (target.is_some() && !request.starts_in_caller) || scope.is_some();
         // A launch in an existing workspace keeps its entry, which holds the
-        // workspace's one agent until it registers.
-        let opens_new = target.is_none() && scope.is_none();
+        // workspace's one agent until it registers, as does one on an
+        // existing branch, which may reopen the branch's workspace.
+        let opens_new =
+            target.is_none() && scope.is_none() && !opens_existing_branch(&request.plan);
         if opens_new && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
@@ -282,10 +284,17 @@ impl Manager {
 
     /// Record the workspace a starting entry opened, or the existing one a
     /// waiting launch opens once admitted, which the daemon then starts as
-    /// it starts any launch in an existing workspace.
+    /// it starts any launch in an existing workspace. A launch that did not
+    /// name the workspace when it was admitted, such as one on a branch that
+    /// gained a workspace while it waited, takes it only while the workspace
+    /// has no agent of its own.
     pub async fn queue_attach(&self, id: &QueueEntryId, workspace: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(workspace).await?;
         let opens = Self::ensure_holds_agents(&workspace).is_ok();
+        let _gate = self.agent_queue.lock_admission().await;
+        if !self.entry_opens(id, &workspace.id).await? {
+            self.ensure_takes_worker(&workspace).await?;
+        }
         let id = id.to_owned();
         let attached = self
             .store
@@ -322,6 +331,21 @@ impl Manager {
             "queue entry no longer starts or waits, or starts its agent in another workspace"
         );
         Ok(())
+    }
+
+    /// Whether the entry `id` was admitted to open `workspace`, which its
+    /// admission checked for the workspace's one agent.
+    async fn entry_opens(&self, id: &QueueEntryId, workspace: &SpaceId) -> Result<bool> {
+        let (id, workspace) = (id.to_owned(), workspace.to_owned());
+        self.store
+            .read(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM agent_queue WHERE id=?1 AND opens_workspace_id=?2",
+                    params![id, workspace],
+                )
+            })
+            .await
     }
 
     /// Whether an agent launch in the space, or one its scoped process

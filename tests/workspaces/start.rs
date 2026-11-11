@@ -650,6 +650,51 @@ fn start_branch_opens_or_creates_its_branch_as_typed() {
 }
 
 #[test]
+fn an_issue_start_reopening_a_busy_workspace_is_refused() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
+    let repo = fixture.repo.to_str().unwrap();
+    let bin = fixture.root.path().join("stub-bin");
+    let claude = bin.join("claude");
+    let start = |args: &[&str]| {
+        let mut command = fixture.command();
+        command
+            .args(args)
+            .args(["--here", "--agent", "claude"])
+            .env("PATH", fixture.restricted_path(&bin));
+        command
+    };
+    // The issue's workspace, whose first agent has exited.
+    install_test_script_with_mode(&claude, "#!/bin/sh\n", 0o700);
+    let opened = start(&["--json", "start", "37", "--repo", repo])
+        .output()
+        .unwrap();
+    assert!(opened.status.success(), "{opened:?}");
+    let id = fixture.ok(&["list"])[0]["id"].as_str().unwrap().to_owned();
+    let release = fixture.root.path().join("release");
+    install_test_script_with_mode(
+        &claude,
+        format!(
+            "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.1; done\n",
+            release.display()
+        ),
+        0o700,
+    );
+    let mut first = start(&["start", "--in", &id]).spawn().unwrap();
+    wait_until("the worker's execution", || {
+        let status = fixture.ok(&["status", &id]);
+        !status["executions"].as_array().unwrap().is_empty()
+    });
+    // Starting on the issue again reopens its workspace, as its worker.
+    let second = start(&["start", "37", "--repo", repo]).output().unwrap();
+    fs::write(&release, "").unwrap();
+    assert!(first.wait().unwrap().success());
+    let error = String::from_utf8(second.stderr).unwrap();
+    assert!(error.contains("shoal attach"), "{error}");
+}
+
+#[test]
 fn start_in_refuses_a_second_worker_beside_a_running_one() {
     let fixture = Fixture::new();
     fixture.add("busy");
@@ -2814,6 +2859,56 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
+}
+
+/// A queued start on an issue, which reopens the issue's workspace, opens it
+/// once its slot frees, whichever way the start named the repository.
+#[test]
+fn a_queued_issue_start_reopens_its_workspace_by_any_repository_name() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.counter]\ncommand = ['sh', '-c', 'echo run >> \"$HOME/counted\"']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
+    let repo = fixture.repo.to_str().unwrap();
+    let runs = || {
+        fs::read_to_string(fixture.root.path().join("counted"))
+            .map_or(0, |runs| runs.lines().count())
+    };
+    // The issue's workspace, whose first agent has exited.
+    fixture.ok(&[
+        "start", "37", "--repo", repo, "--here", "--agent", "counter",
+    ]);
+    assert_eq!(runs(), 1);
+    let mut first = fixture
+        .command()
+        .args([
+            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        (fixture.ok(&["list"]).as_array().unwrap().iter())
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["queue"]) == serde_json::json!([])
+    });
+    // The start names the repository by its path.
+    let queued = fixture.ok(&[
+        "start", "37", "--repo", repo, "--here", "--agent", "counter",
+    ]);
+    assert_eq!(queued["state"], "queued", "{queued}");
+    fixture.ok(&["stop", &fixture.id("first")]);
+    first.wait().unwrap();
+    let failed = || {
+        (fixture.ok(&["alerts", "--all"]).as_array().unwrap().iter())
+            .any(|alert| alert["kind"] == "queue_failed")
+    };
+    wait_until("the queued start's outcome", || runs() == 2 || failed());
+    assert!(!failed(), "{}", fixture.ok(&["alerts", "--all"]));
 }
 
 /// `queue start --attach` starts a waiting agent and attaches this terminal
