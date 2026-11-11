@@ -214,16 +214,27 @@ impl Manager {
         materialized: Result<Configured>,
         git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
-        let _creation = self.gates.lock_creation(&workspace.id).await;
-        // Other starts' Git operations need not wait for this clone.
-        drop(git);
+        let _creation = self.hold_creation(workspace, git).await;
         let materialized = self.seed_worktree(repo, workspace, materialized).await;
         self.record_creation(workspace, materialized).await
     }
 
+    /// Hold the creation gate of the new `workspace` in place of the
+    /// repository's Git gate `git`, so other starts' Git operations need not
+    /// wait for its seed clone while removal and setup still do.
+    pub(super) async fn hold_creation(
+        &self,
+        workspace: &Workspace,
+        git: OwnedMutexGuard<()>,
+    ) -> OwnedMutexGuard<()> {
+        let creation = self.gates.lock_creation(&workspace.id).await;
+        drop(git);
+        creation
+    }
+
     /// Start the `materialized` worktree of `workspace` from the seed build
     /// when it takes one, returning whether setup is still needed.
-    async fn seed_worktree(
+    pub(super) async fn seed_worktree(
         &self,
         repo: &Repository,
         workspace: &Workspace,
@@ -238,7 +249,7 @@ impl Manager {
 
     /// Record how materializing the recorded `workspace` went: ready, or
     /// preparing while it needs setup, or failed.
-    async fn record_creation(
+    pub(super) async fn record_creation(
         &self,
         workspace: &Workspace,
         materialized: Result<bool>,

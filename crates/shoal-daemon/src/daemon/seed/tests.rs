@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{
     commit, git, install_test_script, manager, native_cloning, repository,
 };
@@ -473,4 +474,46 @@ async fn a_start_clones_while_a_refill_reads_the_snapshot() {
         fs::read_to_string(workspace.path.join("out/built")).unwrap(),
         "built\n"
     );
+}
+
+#[tokio::test]
+async fn a_copy_s_starting_checkpoint_holds_the_seed_it_started_with() {
+    let (temp, manager) = manager().await;
+    configure(&manager, NO_PRESSURE).await;
+    // The output is not ignored, so a checkpoint keeps it.
+    let (_, repo) = seeded(
+        &manager,
+        temp.path(),
+        "#!/bin/sh\nmkdir -p out\necho built > out/built\n",
+    )
+    .await;
+    let source = manager
+        .create_workspace(&repo.id, "source".into(), None, None, None)
+        .await
+        .unwrap();
+    // Taken before the first build, so it holds no output.
+    let checkpoint = manager
+        .take_checkpoint(&SpaceSelector::id(&source.id), None)
+        .await
+        .unwrap();
+    manager.refresh_seeds().await;
+    let layout = Layout::of(&repo).unwrap();
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
+    }
+    let request = crate::protocol::CopySource {
+        workspace: SpaceSelector::id(&source.id),
+        checkpoint: Some(checkpoint.number),
+    };
+    let copy = manager
+        .create_copy(
+            (&repo.id).into(),
+            &request,
+            crate::daemon::workspace::CopyPlace::Branch(None),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    assert!(copy.path.join("out/built").is_file());
+    assert!(crate::removal::holds_starting_files(&copy).await.unwrap());
 }

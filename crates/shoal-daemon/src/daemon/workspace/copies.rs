@@ -100,7 +100,10 @@ impl Manager {
         let result = self
             .materialize_copy_worktree(&repo, &workspace, &source, new.git_profile)
             .await;
-        self.settle_creation(&repo, &workspace, result, git).await
+        let _creation = self.hold_creation(&workspace, git).await;
+        let seeded = self.seed_worktree(&repo, &workspace, result).await;
+        let started = self.record_copy_start(&workspace, &source, seeded).await;
+        self.record_creation(&workspace, started).await
     }
 
     /// The workspace `request` names, live, or removed when it names a
@@ -273,8 +276,7 @@ impl Manager {
             .await
     }
 
-    /// Create the copy's worktree with its source's files, then take its
-    /// starting checkpoint.
+    /// Create the copy's worktree with its source's files.
     async fn materialize_copy_worktree(
         &self,
         repo: &Repository,
@@ -282,10 +284,10 @@ impl Manager {
         source: &Source,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
-        let configured = match &source.files {
+        match &source.files {
             SourceFiles::Worktree(path) => {
                 self.clone_source(repo, workspace, path, &source.head, git_profile)
-                    .await?
+                    .await
             }
             SourceFiles::Checkpoint { commit, .. } => {
                 let files = RestoredFiles {
@@ -293,16 +295,28 @@ impl Manager {
                     snapshot: commit.clone(),
                 };
                 self.check_out_copy(repo, workspace, &files, git_profile)
-                    .await?
+                    .await
             }
-        };
+        }
+    }
+
+    /// Take the `seeded` copy's starting checkpoint, which then holds the
+    /// seed's outputs as the copy started with them, and record what it was
+    /// made from, returning whether setup is still needed.
+    async fn record_copy_start(
+        &self,
+        workspace: &Workspace,
+        source: &Source,
+        seeded: Result<bool>,
+    ) -> Result<bool> {
+        let needs_setup = seeded?;
         let starting = self
             .checkpoint(workspace, CheckpointCause::Start, None)
             .await?;
         let index = git::checkpoint::index_tree(&workspace.path).await?;
         self.record_copied_from(&workspace.id, source, starting.number, index)
             .await?;
-        Ok(configured)
+        Ok(needs_setup)
     }
 
     /// Give the new worktree the index, worktree config and files of the
