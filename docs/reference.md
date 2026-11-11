@@ -2447,8 +2447,9 @@ or a [chat without a repository](../crates/shoal-client/src/config/templates/fac
 which describe the space and state no practices; then the
 [space rules](../crates/shoal-client/src/config/templates/space_rules.md), to load the
 `shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` only when it has no
-further work to do and it and its work are completely finished, to name its space with `shoal rename`, and to run each `shoal`
-command as its own shell call, writing the files it reads with file tools. Its
+further work to do and it and its work are completely finished, to name its space with `shoal rename`, and,
+when a call that combines a `shoal` command with other commands is refused, to
+run the `shoal` command on its own before treating the action as refused. Its
 mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
 message is its subject, an issue or the prompt it was given, worded the same in
 every mode, followed by its mode's instructions; without a subject it has no
