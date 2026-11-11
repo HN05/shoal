@@ -67,7 +67,6 @@ def validate():
     run("cargo", "nextest", "run", "--locked", "--profile", "ci")
     run("cargo", "test", "--locked", "--doc")
     run("python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py")
-    run("cargo", "build", "--locked", "--release")
 
 
 def api(path, data=None, authenticated=True):
@@ -116,14 +115,14 @@ def prepare(requested, dry_run, automated=False):
         repository = os.environ["RELEASE_REPOSITORY"]
         return api(f"/repos/{repository}/pulls", {
             "title": f"Release v{version}", "base": "main", "head": branch,
-            "body": f"Prepare Shoal {version}. Validated formatting, Clippy, tests, and release build. "
+            "body": f"Prepare Shoal {version}. Validated formatting, Clippy and tests. "
                     "The Release workflow will merge this version change and publish it automatically.",
         })
     repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
     shoal_api(f"/repos/{repository}/pulls", {
         "title": f"Release v{version}", "base": "main", "head": branch,
         "body": f"Prepare Shoal {version}. Both Cargo versions are updated.\n\n"
-                "Validated formatting, Clippy, tests, and the release build.\n\n"
+                "Validated formatting, Clippy and tests.\n\n"
                 f"After merging, run `python3 scripts/release.py publish {version}`. "
                 "Alternatively use Actions → release for the fully automated process.\n",
     })

@@ -5,7 +5,7 @@ In Forgejo, open **Actions → release → Run workflow**, select `main`, and en
 Entering the already-tagged version on `main` resumes an interrupted publication
 from that immutable tag without creating another version commit.
 
-The workflow updates both Cargo versions, runs checks and a release build,
+The workflow updates both Cargo versions, runs the checks CI runs,
 creates and merges a version PR, validates the merged commit, and publishes its
 immutable tag and Forgejo release. Notes list merged PRs excluding release preparation
 since the nearest earlier published ancestor release, link referenced issues, and
