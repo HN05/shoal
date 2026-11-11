@@ -39,7 +39,7 @@ fn description(pid: u32) -> Result<Option<Description>> {
         },
     };
     Ok(Some(Description {
-        command,
+        command: printable(&command),
         elapsed: elapsed.as_secs(),
     }))
 }
@@ -51,6 +51,15 @@ fn command_line(arguments: &[std::ffi::OsString]) -> String {
         .map(|argument| argument.to_string_lossy())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// `text` with each control character shown as `?`, as `ps` shows it, so a
+/// newline or escape sequence in an argument cannot change the terminal or
+/// split a listing.
+fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { '?' } else { c })
+        .collect()
 }
 
 #[cfg(test)]
