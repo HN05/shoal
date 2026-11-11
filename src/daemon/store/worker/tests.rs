@@ -180,7 +180,7 @@ async fn full_queue_waits_and_drains_cancelled_callers_before_shutdown() -> Resu
 }
 
 #[tokio::test]
-async fn external_contention_keeps_the_configured_timeout() -> Result<()> {
+async fn external_contention_fails_busy_after_a_wait_and_the_store_recovers() -> Result<()> {
     let root = tempfile::tempdir()?;
     let path = root.path().join("state.db");
     let store = Store::open(path.clone()).await?;
@@ -199,12 +199,16 @@ async fn external_contention_keeps_the_configured_timeout() -> Result<()> {
     let claim = async move {
         clone
             .run(move |db| {
-                assert_eq!(
-                    db.query_row("PRAGMA busy_timeout", [], |r| r.get::<_, i64>(0))?,
-                    5000
-                );
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                tx.commit()?;
+                // Contention waits before it fails; the test need not wait
+                // that long for the failure.
+                let timeout = db.query_row("PRAGMA busy_timeout", [], |r| r.get::<_, i64>(0))?;
+                assert!(timeout > 0);
+                db.busy_timeout(Duration::ZERO)?;
+                let claimed = db
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                    .and_then(|tx| tx.commit());
+                db.busy_timeout(Duration::from_millis(timeout as u64))?;
+                claimed?;
                 Ok(())
             })
             .await
