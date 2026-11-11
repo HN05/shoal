@@ -22,6 +22,7 @@ fn a_repeated_place_keeps_the_agent_recorded_there() {
     let agent = Recorded {
         place: &session,
         agent: Some(&"claude".into()),
+        execution: None,
         stopped: None,
     };
     let other = Origin::created(HostName::Zmx, "other".to_owned());
@@ -68,9 +69,13 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
             Recorded {
                 place: &agent,
                 agent: Some(&"claude".into()),
+                execution: Some(&executions[0].id),
                 stopped: None,
             },
-            unrecorded(&setup),
+            Recorded {
+                execution: Some(&executions[1].id),
+                ..unrecorded(&setup)
+            },
             unrecorded(&shell),
         ]
     );
@@ -80,6 +85,7 @@ fn unrecorded(place: &Origin) -> Recorded<'_> {
     Recorded {
         place,
         agent: None,
+        execution: None,
         stopped: None,
     }
 }
@@ -114,13 +120,14 @@ fn a_workspace_records_where_a_stopped_agent_waits() {
         [Recorded {
             place: &place,
             agent: Some(&"claude".into()),
+            execution: Some(&"agent".into()),
             stopped: Some(&protection),
         }]
     );
 }
 
 #[test]
-fn every_place_in_a_stopped_agents_session_reports_the_stop() {
+fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() {
     let execution = Origin::created(HostName::Zmx, "work".to_owned());
     let created = Origin {
         instance: Some("1:10".into()),
@@ -130,6 +137,7 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop() {
     let mut sessions = vec![
         Session::open("work".into(), 0, &created),
         Session {
+            execution: Some("stopped".into()),
             stopped: Some(stopped_by_load()),
             ..Session::open("work".into(), 0, &execution)
         },
@@ -138,7 +146,15 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop() {
     mark_stopped(&mut sessions);
     let stopped: Vec<_> = sessions
         .iter()
-        .map(|session| session.stopped.is_some())
+        .map(|session| (session.stopped.is_some(), session.execution.clone()))
         .collect();
-    assert_eq!(stopped, [true, true, false]);
+    let stopped_execution = Some(ExecutionId::from("stopped"));
+    assert_eq!(
+        stopped,
+        [
+            (true, stopped_execution.clone()),
+            (true, stopped_execution),
+            (false, None)
+        ]
+    );
 }

@@ -1,6 +1,7 @@
 //! `shoal queue start --attach`, and `shoal attach` of an agent Shoal
 //! stopped: wait until the started entry's agent runs in a session, then
 //! attach this terminal to that session.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
@@ -32,30 +33,34 @@ pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()>
     }
 }
 
-/// Start the queued restore of the agent Shoal stopped in `workspace`,
-/// unless it is already starting, returning the name of the session the
-/// agent runs in once it does; `None` when no restore of it waits in the
-/// queue.
+/// Start the queued restore of the agent Shoal stopped as `execution`,
+/// unless it is already starting, and wait until it runs again in the
+/// session named `session`, where its wrapper waits; `false` when no
+/// restore of it waits in the queue.
 pub(in crate::cli::commands) async fn resume_stopped(
     ctx: &Context,
-    workspace: &SpaceId,
-) -> Result<Option<String>> {
+    execution: &ExecutionId,
+    session: &str,
+) -> Result<bool> {
     let entries = queued_agents::entries(ctx).await?;
-    let Some(restore) = queued_agents::restore_of(&entries, workspace) else {
-        return Ok(None);
+    let restore = entries.into_iter().find(|entry| {
+        entry.kind == QueueKind::Restore && entry.execution.as_ref() == Some(execution)
+    });
+    let Some(restore) = restore else {
+        return Ok(false);
     };
     let entry = match restore.state {
         QueueState::Queued => queue::start(&ctx.paths, restore.id.to_string()).await?,
-        QueueState::Starting => restore.clone(),
+        QueueState::Starting => restore,
     };
     ctx.emit(&format!("Resuming {}", entry.name), &entry)?;
-    let (_, session) = agent_terminal_session(ctx, &entry).await?;
-    Ok(Some(session))
+    agent_terminal_session(ctx, &entry, Some(session)).await?;
+    Ok(true)
 }
 
 /// Attach to the session of the started `entry`'s agent once it has one.
 pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
-    let (workspace, session) = agent_terminal_session(ctx, entry).await?;
+    let (workspace, session) = agent_terminal_session(ctx, entry, None).await?;
     sessions::attach(ctx, Some(SpaceSelector::id(&workspace)), Some(session)).await
 }
 
@@ -65,8 +70,12 @@ pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
 /// launch learns its workspace while it starts. The daemon records the
 /// agent where it runs before it takes the entry out of the queue, so an
 /// entry gone before the sessions were read without an agent session among
-/// them did not start in one.
-async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(SpaceId, String)> {
+/// them did not start in one. Only the session `named` counts when given.
+async fn agent_terminal_session(
+    ctx: &Context,
+    entry: &QueueEntry,
+    named: Option<&str>,
+) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().cloned();
     loop {
@@ -83,7 +92,7 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
         }
         match &workspace {
             Some(id) => {
-                if let Some(session) = sessions::agent_terminal_session(ctx, id).await? {
+                if let Some(session) = sessions::agent_terminal_session(ctx, id, named).await? {
                     return Ok((id.clone(), session));
                 }
                 ensure!(

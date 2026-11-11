@@ -4,7 +4,6 @@
 use anyhow::Result;
 
 use super::listing::ListFilter;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{
     queue::{self, QueueEntryId},
@@ -164,16 +163,6 @@ async fn start_launch(ctx: &Context, entry: &QueueEntryId) -> Result<()> {
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
     queue::entries(&ctx.paths).await
-}
-
-/// The restore among `entries` of the agent Shoal stopped in `workspace`.
-pub(super) fn restore_of<'a>(
-    entries: &'a [QueueEntry],
-    workspace: &SpaceId,
-) -> Option<&'a QueueEntry> {
-    entries.iter().find(|entry| {
-        entry.kind == QueueKind::Restore && entry.workspace_id.as_ref() == Some(workspace)
-    })
 }
 
 /// The entries `shoal list` and `shoal queue` show under `filter`.

@@ -1,5 +1,6 @@
 //! The agent sessions hosts keep, whom each runs for, and whether a
 //! terminal shows one.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use serde::Serialize;
@@ -51,6 +52,9 @@ pub struct Session {
     /// Terminals attached to the session; a host that cannot count them
     /// gives one while it shows the session.
     pub clients: u32,
+    /// The execution the daemon recorded there.
+    #[serde(skip)]
+    pub execution: Option<ExecutionId>,
     /// Why Shoal stopped the agent there, while it waits to be restored.
     #[serde(skip)]
     pub stopped: Option<Protection>,
@@ -67,6 +71,7 @@ impl Session {
             name,
             agent: None,
             clients,
+            execution: None,
             stopped: None,
             place: place.clone(),
         }

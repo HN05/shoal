@@ -2,7 +2,7 @@
 //! terminal to one of a workspace's or a running chat's, resuming a
 //! workspace's agent that Shoal stopped first.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -32,8 +32,8 @@ pub(super) async fn attach(
     let target = Target::resolve(ctx, target).await?;
     let sessions = target.sessions(ctx).await?;
     let chosen = chosen_session(ctx, &target, session, &sessions)?.clone();
-    let (target, session) = match &chosen.stopped {
-        Some(protection) => target.resumed(ctx, protection).await?,
+    let (target, session) = match chosen.stopped {
+        Some(_) => target.resumed(ctx, &chosen).await?,
         None => (target, chosen),
     };
     if terminal::attach(&target.number().to_string(), &session).await? {
@@ -71,12 +71,21 @@ fn chosen_session<'a>(
 }
 
 /// The name of the terminal session `shoal attach` takes in which the
-/// daemon recorded the agent of the workspace with the ID `id` running.
-pub(super) async fn agent_terminal_session(ctx: &Context, id: &SpaceId) -> Result<Option<String>> {
+/// daemon recorded the agent of the workspace with the ID `id` running,
+/// only the session `named` when given.
+pub(super) async fn agent_terminal_session(
+    ctx: &Context,
+    id: &SpaceId,
+    named: Option<&str>,
+) -> Result<Option<String>> {
     let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
     Ok((target.sessions(ctx).await?)
         .into_iter()
-        .find(|session| session.agent.is_some() && session.stopped.is_none())
+        .find(|session| {
+            session.agent.is_some()
+                && session.stopped.is_none()
+                && named.is_none_or(|named| session.name == named)
+        })
         .map(|session| session.name))
 }
 
@@ -168,23 +177,28 @@ impl Target {
         terminal::sessions(&settings, &self.places()).await
     }
 
-    /// The workspace, read again, and its agent's session once the agent
-    /// `protection` stopped runs again through its queued restore; refused
+    /// The workspace, read again, and `session` once the agent Shoal
+    /// stopped there runs in it again through its queued restore; refused
     /// with what restores it when no restore waits.
-    async fn resumed(self, ctx: &Context, protection: &Protection) -> Result<(Self, Session)> {
-        let refused = || anyhow!("{}", stopped_agent(&self, protection));
-        let Self::Workspace(inspection) = &self else {
-            return Err(refused());
+    async fn resumed(self, ctx: &Context, session: &Session) -> Result<(Self, Session)> {
+        let (Self::Workspace(inspection), Some(execution), Some(protection)) =
+            (&self, &session.execution, &session.stopped)
+        else {
+            bail!(
+                "{} has no stopped agent in session {}",
+                self.name(),
+                session.name
+            );
         };
-        let id = SpaceSelector::id(&inspection.workspace.id);
-        let name = (super::queue::resume_stopped(ctx, &inspection.workspace.id).await?)
-            .ok_or_else(refused)?;
-        let target = Self::inspected(ctx, id).await?;
-        let session = (target.sessions(ctx).await?)
+        if !super::queue::resume_stopped(ctx, execution, &session.name).await? {
+            bail!("{}", stopped_agent(&self, protection));
+        }
+        let target = Self::inspected(ctx, SpaceSelector::id(&inspection.workspace.id)).await?;
+        let resumed = (target.sessions(ctx).await?)
             .into_iter()
-            .find(|session| session.name == name && session.stopped.is_none())
-            .with_context(|| format!("{} has no session {name}", target.name()))?;
-        Ok((target, session))
+            .find(|open| open.name == session.name && open.stopped.is_none())
+            .with_context(|| format!("{} has no session {}", target.name(), session.name))?;
+        Ok((target, resumed))
     }
 
     /// Whose settings choose the hosts to look in.

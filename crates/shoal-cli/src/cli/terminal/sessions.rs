@@ -1,5 +1,6 @@
 //! The agent sessions hosts keep: finding them where the daemon recorded a
 //! workspace's or chat's agents, and attaching this terminal to one.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
@@ -18,6 +19,8 @@ use crate::{
 pub(in crate::cli) struct Recorded<'a> {
     pub place: &'a Origin,
     pub agent: Option<&'a crate::agent::Agent>,
+    /// The execution recorded there.
+    pub execution: Option<&'a ExecutionId>,
     /// Why Shoal stopped that agent, while its wrapper waits to restore it.
     pub stopped: Option<&'a Protection>,
 }
@@ -30,12 +33,14 @@ impl<'a> Recorded<'a> {
             Some(Self {
                 place: execution.origin.as_ref()?,
                 agent: execution.agent.as_ref(),
+                execution: Some(&execution.id),
                 stopped: execution.stopped.as_ref(),
             })
         });
         let created = places.iter().map(|place| Self {
             place,
             agent: None,
+            execution: None,
             stopped: None,
         });
         executions.chain(created).collect()
@@ -48,6 +53,7 @@ impl<'a> Recorded<'a> {
             .map(|place| Self {
                 place,
                 agent: Some(&chat.agent),
+                execution: None,
                 stopped: None,
             })
             .collect()
@@ -77,6 +83,7 @@ pub(in crate::cli) async fn sessions(
         .filter_map(|(recorded, session)| {
             Some(Session {
                 agent: recorded.agent.cloned(),
+                execution: recorded.execution.cloned(),
                 stopped: recorded.stopped.cloned(),
                 ..session?
             })
@@ -88,7 +95,7 @@ pub(in crate::cli) async fn sessions(
 
 /// Mark every one of `sessions` that is the session of a stopped agent,
 /// which another place, such as the one Shoal created for the agent, may
-/// have found too.
+/// have found too, with why it stopped and its execution.
 fn mark_stopped(sessions: &mut [Session]) {
     let stopped: Vec<_> = sessions
         .iter()
@@ -97,15 +104,17 @@ fn mark_stopped(sessions: &mut [Session]) {
                 session.place.host,
                 session.name.clone(),
                 session.stopped.clone()?,
+                session.execution.clone(),
             ))
         })
         .collect();
     for session in sessions {
-        if let Some((.., protection)) = stopped
+        if let Some((.., protection, execution)) = stopped
             .iter()
-            .find(|(host, name, _)| (*host, name.as_str()) == session.key())
+            .find(|(host, name, ..)| (*host, name.as_str()) == session.key())
         {
             session.stopped = Some(protection.clone());
+            session.execution = execution.clone();
         }
     }
 }
@@ -162,6 +171,7 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
         {
             Some(kept) => {
                 kept.agent = kept.agent.or(recorded.agent);
+                kept.execution = kept.execution.or(recorded.execution);
                 kept.stopped = kept.stopped.or(recorded.stopped);
             }
             None => distinct.push(*recorded),

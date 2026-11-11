@@ -4,7 +4,7 @@ use super::chats::{
     chat_args, chat_session_fixture, install_recording_agent, journal, save_running_chat,
 };
 use super::forge::{forge_origin, github_issue, install_api_curl, script_api};
-use super::zmx::{created_zmx_session, wait_zmx_sessions_ended, zmx_calls};
+use super::zmx::{agent_in_session, created_zmx_session, wait_zmx_sessions_ended, zmx_calls};
 use super::*;
 
 #[test]
@@ -2574,20 +2574,17 @@ fn queue_start_attaches_to_the_started_agents_session() {
     assert_eq!(attached, ["attach", opened[1].as_str()]);
 
     // An agent Shoal stopped is offered as stopped beside the workspace's
-    // shell; picking it starts its waiting restore and attaches to its
-    // session once the agent runs.
+    // other sessions, here another agent's; picking it starts its own
+    // waiting restore and attaches to its session once it runs there.
     let moved = fixture.ok(&["queue", "move", &fixture.id("second"), "1"]);
     assert_eq!(moved["stopped"], true, "{moved}");
-    let (output, rows) = fixture.pick(&["attach", &fixture.id("second")], "0", "");
+    let other = agent_in_session(&fixture, "second", "second-shell");
+    let (_, rows) = fixture.pick(&["attach", &fixture.id("second")], "none", "");
+    let stopped: Vec<_> = rows.lines().filter(|row| row.contains("stopped")).collect();
+    assert_eq!(stopped.len(), 1, "{rows}");
+    let choice = stopped[0].split('\t').next().unwrap_or_default();
+    let (output, rows) = fixture.pick(&["attach", &fixture.id("second")], choice, "");
     assert!(output.status.success(), "{output:?}\n{rows}");
-    let row = |index: &str| {
-        rows.lines()
-            .find(|row| row.starts_with(&format!("{index}\t")))
-            .unwrap_or_default()
-            .to_owned()
-    };
-    assert!(row("0").contains("stopped"), "{rows}");
-    assert!(!row("1").contains("stopped"), "{rows}");
     let attached = zmx_calls(&fixture)
         .into_iter()
         .rfind(|call| call[0] == "attach")
@@ -2626,6 +2623,7 @@ fn queue_start_attaches_to_the_started_agents_session() {
     fixture.ok(&["stop", &fixture.id("second")]);
     fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
+    drop(other);
     wait_zmx_sessions_ended(home);
 }
 
