@@ -5,13 +5,14 @@ use anyhow::Result;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
-    model::{StoppedChat, StoppedWorkspace, Workspace},
+    model::{PresentSpace, StoppedChat, StoppedWorkspace},
     processes::{Selection, Stopped},
     protocol::{QueuedLaunches, RemovalMethod},
 };
 
-/// The workspaces with running agents or commands, or queued launches.
-pub async fn targets(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
+/// The workspaces with running agents or commands, or queued launches,
+/// and the running chats.
+pub async fn targets(daemon: &impl Daemon) -> Result<Vec<PresentSpace>> {
     request(daemon, RemovalMethod::StopTargets).await
 }
 

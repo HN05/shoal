@@ -150,9 +150,9 @@ How the daemon exits decides what becomes of tracked agents and commands:
 
 - `shoal daemon restart`, `shoal daemon install` when it replaces an
   incompatible daemon, an update, and a crash leave them running.
-- `shoal daemon stop` stops them as `shoal stop --all` does, so agents stay down
-  until `shoal resume`, saves and stops running [chats](#chats) for
-  `shoal resume` too, then stops the daemon. Unlike `shoal stop`, it keeps
+- `shoal daemon stop` stops them and the running [chats](#chats) as
+  `shoal stop --all` does, so they stay down until `shoal resume`, then stops
+  the daemon. Unlike `shoal stop`, it keeps
   agents waiting in the [agent queue](#agent-queue) to start in existing
   workspaces, which the next daemon starts.
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
@@ -347,7 +347,7 @@ from the queue and reports them in `cancelled`; `shoal resume` does not bring th
 already starting is left to its agent. Naming a queued agent of a new workspace instead of a
 workspace removes it from the queue, as `shoal rm` does; a number always names a space,
 since a queued agent has none.
-Several workspaces, or `-A`/`--all` for every ready or failed workspace with a running
+Several spaces, or `-A`/`--all` for every running chat and every ready or failed workspace with a running
 execution, a pending restore or a queued agent waiting to start in it, stop in parallel, reporting each failure without keeping the others running.
 A stop whose wrappers do not finish in time fails naming each execution it
 waited on and its step: not started, still running, or verifying after exit.

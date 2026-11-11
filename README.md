@@ -216,7 +216,7 @@ shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
 shoal stop fix-login          # Stop agents and commands here and below; they stay down until shoal resume
 shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
-shoal stop --all              # Stop every workspace; a reboot saves agents too
+shoal stop --all              # Stop every workspace and chat; a reboot saves agents too
 shoal stop --interrupt fix-login  # Cancel its agent's turn; the agent keeps running
 shoal stop --leftovers        # Stop what this workspace's commands left running
 shoal stop --processes fix-login  # Stop its processes Shoal does not track; agents keep running

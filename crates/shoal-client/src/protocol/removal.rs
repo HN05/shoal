@@ -20,7 +20,7 @@ pub enum QueuedLaunches {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RemovalMethod {
-    /// The workspaces `stop --all` stops.
+    /// The workspaces and chats `stop --all` stops.
     StopTargets,
     StopWorkspace {
         workspace: SpaceSelector,

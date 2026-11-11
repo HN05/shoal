@@ -27,9 +27,7 @@ pub(super) async fn handle(
             let listed = manager.removed_workspaces().await;
             return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
         }
-        RemovalMethod::StopTargets => {
-            Body::Workspaces(manager.stop_targets(QueuedLaunches::Cancel).await?)
-        }
+        RemovalMethod::StopTargets => Body::Spaces(stop_targets(manager).await?),
         RemovalMethod::StopWorkspace {
             workspace,
             acknowledge_unproven,
@@ -129,6 +127,16 @@ pub(super) async fn handle(
                 .await?,
         )),
     }))
+}
+
+/// The spaces `shoal stop --all` stops: the workspaces
+/// [`Manager::stop_targets`] selects, then the running chats.
+async fn stop_targets(manager: &Manager) -> Result<Vec<PresentSpace>> {
+    let workspaces = manager.stop_targets(QueuedLaunches::Cancel).await?;
+    let chats = (manager.chats().await?.into_iter()).filter(|chat| chat.restore.is_none());
+    Ok((workspaces.into_iter().map(PresentSpace::Workspace))
+        .chain(chats.map(PresentSpace::Chat))
+        .collect())
 }
 
 impl Scoped for RemovalMethod {

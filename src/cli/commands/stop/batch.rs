@@ -20,8 +20,8 @@ use super::{
 
 /// Stop every settled workspace with a running execution, an agent whose
 /// restore is queued or requested, or an agent launch waiting to start in
-/// it, which stopping cancels; the daemon selects them while no restore or
-/// launch can move between the queue and its agent.
+/// it, which stopping cancels, and every running chat; the daemon selects
+/// them while no restore or launch can move between the queue and its agent.
 pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
     let running = crate::client::stopping::targets(&ctx.paths).await?;
     if running.is_empty() {
@@ -36,7 +36,6 @@ pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
         )?;
         return Ok(0);
     }
-    let running: Vec<_> = running.into_iter().map(PresentSpace::Workspace).collect();
     stop_each(ctx, &running, "--all", false).await
 }
 

@@ -80,6 +80,18 @@ fn stopping_a_space_stops_the_chats_below_it() {
     assert_eq!(running(), [false, false, false, true]);
 }
 
+/// `shoal stop --all` stops the running chats with the workspaces.
+#[test]
+fn stop_all_stops_running_chats() {
+    let fixture = Fixture::new();
+    let _chat = SleepingChat::start(&fixture, "talk", serde_json::json!({}));
+
+    let stopped = fixture.ok(&["stop", "--all"]);
+
+    assert_eq!(stopped["stopped"], serde_json::json!(["talk"]), "{stopped}");
+    assert!(!chat_runs(&fixture, "talk"));
+}
+
 /// `parent` is refused its own space and the chat `other` outside its tree,
 /// stops the chat `talk` below it and resumes it, and once the user stopped
 /// `talk`, stops it again without taking it over, so its resume of it is
