@@ -1735,8 +1735,8 @@ AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
 per tool holding its launcher, resume command, launch mode and argument
 templates, merged option by option across layers so a repository can replace
 `command` and keep the global `resume`. A `command` or `base` makes a tool an
-agent that `shoal run <name>` launches; names that built-in commands take are
-rejected, and `[commands]` holds only shortcuts that are not agents.
+agent that `shoal run <name>` launches, whatever built-in command shares its
+name, and `[commands]` holds only shortcuts that are not agents.
 What a tool needs of the machine, its skill directory and proxy, sits under
 `[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
 as tracked agents with scope, an agent Git profile, and exit notifications. Their `{prompt}` argument combines general instructions

@@ -1553,7 +1553,7 @@ review = ["exec", "--schema", "{schema}", "{prompt}"] # Optional
 way `shoal run claude` does, and `--agent droid` selects it. A tool is
 an agent when it is built in or has a `command` or `base`. Each option merges on
 its own across layers, so a repository can replace `command` and keep the global
-`resume`. Names that collide with built-in commands are rejected. The picker and
+`resume`. A tool may take a built-in command's name. The picker and
 completion offer AI tools only, and `enabled = false` turns a tool's agents
 off: pickers and completion leave them out, launches and reviews are refused,
 and a stopped agent's restore waits until the tool is on again. It stops no

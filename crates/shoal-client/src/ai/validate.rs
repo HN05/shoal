@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-use super::{Agent, Agents, PROVIDERS, resolve::runs_as_agent};
+use super::{Agent, Agents, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
 
 /// Each tool `agents` describes after every layer; `commands`, the
@@ -92,9 +92,9 @@ fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<
     named_commands::validate(&Commands::from([(name.to_owned(), argv.to_vec())]))
 }
 
-/// A tool that runs as `shoal <name>` needs a name that reaches it.
+/// A tool that runs as an agent needs a name no shortcut takes.
 fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
-    reachable_name(name)?;
+    agent_name(name)?;
     ensure!(
         !commands.contains_key(name),
         "{name:?} is an agent; [commands] holds only workspace shortcuts"
@@ -102,17 +102,12 @@ fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
     Ok(())
 }
 
-/// A name `shoal <name>` reaches: a portable one no built-in command takes,
-/// unless a built-in AI tool has it.
-pub fn reachable_name(name: &str) -> Result<()> {
+/// A name an agent may take: a portable one, which may be a built-in
+/// command's, since only `shoal run <name>` launches it.
+pub fn agent_name(name: &str) -> Result<()> {
     ensure!(
         name.parse::<crate::agent::Agent>().is_ok(),
         "{name:?} cannot name an agent; use lowercase letters, digits, '-' or '_'"
-    );
-    let built_in_provider = PROVIDERS.iter().any(|provider| provider.name == name);
-    ensure!(
-        built_in_provider || !BUILT_IN_COMMANDS.contains(&name),
-        "{name:?} is a built-in Shoal command; choose another name"
     );
     not_reserved(name)
 }
@@ -172,72 +167,6 @@ fn environment(agent: &Agent) -> Result<()> {
     }
     Ok(())
 }
-
-/// The names of Shoal's own subcommands, which a test keeps equal to the
-/// CLI's.
-pub const BUILT_IN_COMMANDS: &[&str] = &[
-    "start",
-    "contribute",
-    "split",
-    "convert",
-    "inbox",
-    "list",
-    "status",
-    "log",
-    "cd",
-    "edit",
-    "open",
-    "rename",
-    "adopt",
-    "setup",
-    "checkpoint",
-    "restore",
-    "messages",
-    "files",
-    "questions",
-    "progress",
-    "sleep",
-    "approvals",
-    "done",
-    "rm",
-    "cleanup",
-    "move",
-    "run",
-    "attach",
-    "demo",
-    "stop",
-    "restart",
-    "resume",
-    "queue",
-    "branch",
-    "diff",
-    "conflicts",
-    "review",
-    "merge",
-    "unmerge",
-    "forge",
-    "pr",
-    "issue",
-    "ci",
-    "link",
-    "unlink",
-    "view",
-    "watch",
-    "ready",
-    "acquire",
-    "release",
-    "leases",
-    "catalog",
-    "history",
-    "alerts",
-    "repo",
-    "config",
-    "update",
-    "daemon",
-    "shell",
-    "skill",
-    "internal",
-];
 
 /// Arguments must name one of `placeholders` when there are any.
 fn validate_arguments(argv: &[String], placeholders: &[&str]) -> Result<()> {
