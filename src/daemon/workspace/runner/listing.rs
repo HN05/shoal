@@ -1,12 +1,13 @@
-//! What lists and status show of the jobs the runner claimed: each job's
+//! What lists and status show of the runner's jobs: each claimed job's
 //! workspace names its job, and the workspace its run's PR or branch links
-//! lists the jobs that run for it.
+//! lists the jobs that run or wait for it.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::{
     daemon::workspace::Manager,
-    model::{QueuedJob, Workspace},
+    model::{QueueEntry, QueuedJob, Workspace},
+    state::{QueueKind, QueueState},
 };
 
 impl Manager {
@@ -49,5 +50,21 @@ impl Manager {
             workspaces.push(workspace);
         }
         Ok(workspaces)
+    }
+
+    /// The entries of the jobs waiting to start for the PR or branch the
+    /// workspace `id` links, with what held each back at the last admission
+    /// pass.
+    pub(crate) async fn linked_waiting_jobs(&self, id: &SpaceId) -> Result<Vec<QueueEntry>> {
+        let mut entries = self.queue_entries().await?;
+        entries.retain(|entry| {
+            entry.kind == QueueKind::Job
+                && entry.state == QueueState::Queued
+                && entry
+                    .job
+                    .as_ref()
+                    .is_some_and(|job| job.workspace_id.as_ref() == Some(id))
+        });
+        Ok(entries)
     }
 }

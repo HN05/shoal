@@ -18,7 +18,7 @@ use crate::{
     client::progress::Progress,
     config::modes::ModeName,
     forge::items::link,
-    model::{Chat, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
+    model::{Chat, HeldBy, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind, QueueState},
 };
 
@@ -426,7 +426,28 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
     if entry.waits_for_update && entry.state == QueueState::Queued {
         text += ", after an update";
     }
+    if let Some(held) = entry.held_by.filter(|_| entry.state == QueueState::Queued) {
+        text += &format!(", held by {}", held_by_label(held));
+    }
     (text, Some(status.style()))
+}
+
+/// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,
+/// a limit's setting, low disk space or a failed reading.
+pub fn held_by_label(held: HeldBy) -> String {
+    match held {
+        HeldBy::Memory { needed, left } => format!(
+            "memory: needs {}, {} left",
+            size_label(needed),
+            size_label(left)
+        ),
+        HeldBy::Disk => "low disk space".into(),
+        HeldBy::MaxAgents => "machine.max_agents".into(),
+        HeldBy::MaxJobs => "machine.max_jobs".into(),
+        HeldBy::RepositoryLimit => "agent.max_running".into(),
+        HeldBy::Permits => "runner.permit pool".into(),
+        HeldBy::Reading => "critical or missing reading".into(),
+    }
 }
 
 /// What a queue entry starts: a launch's issue title, a restore, or a CI job.

@@ -49,6 +49,7 @@ impl Manager {
         workspace.usage = self.workspace_usage(&workspace.id);
         workspace.job = self.workspace_job(&workspace.id).await?;
         let jobs = self.linked_job_workspaces(&workspace.id).await?;
+        let waiting_jobs = self.linked_waiting_jobs(&workspace.id).await?;
         let proxy_retry = self.proxy_retry(&executions);
         simulators.retain(|simulator| simulator.workspace_id.as_ref() == Some(&workspace.id));
         let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);
@@ -82,6 +83,7 @@ impl Manager {
             sync,
             changed_on_both_sides,
             jobs,
+            waiting_jobs,
             chats,
         };
         let records = Records {

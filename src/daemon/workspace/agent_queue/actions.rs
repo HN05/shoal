@@ -27,13 +27,13 @@ use crate::{
 
 impl Manager {
     /// The entry `selector` names by ID or name among those `caller` may
-    /// see, if one does.
+    /// act on, if one does.
     async fn find_entry(
         &self,
         selector: &str,
         caller: Option<&Caller>,
     ) -> Result<Option<QueueEntry>> {
-        let entries = self.visible_queue(caller).await?;
+        let entries = self.reachable_queue(caller).await?;
         let mut matches = entries
             .into_iter()
             .filter(|entry| entry.id == selector || entry.name == selector);

@@ -1077,7 +1077,8 @@ unchanged answers off the rate limit. Each job runs as a tracked execution in
 a disposable workspace at its commit, which goes once the forge's runner
 exits, at low CPU priority so that a build takes only the cores agents and the
 user leave idle. A job ends only on the forge's word, so stopping it cancels its run
-there and protection leaves it running. The workspace a run's PR or branch links lists the job, but
+there and protection leaves it running. The workspace a run's PR or branch links lists the job, and a
+waiting one with what holds it back, but
 neither owns it, lends it a build nor reaches it with its scope. The runner is
 registered per repository with the user's own login, never for a user,
 organisation or instance, or on GitHub one runner per job, and what the forge
@@ -1463,7 +1464,13 @@ restore counts as a launch, having no slot to take over.
 `shoal queue` starts, moves and cancels entries, and the daemon owns their
 order, `agent_queue.seq`: a move gives the waiting entries' numbers to them in
 their new order in one transaction, so it lasts across restarts, and positions
-count waiting entries machine-wide, as admission does. Moving a running agent
+count waiting entries machine-wide, as admission does. For the same reason
+every caller sees the whole queue, while acting on an entry keeps the scope
+rules. Each waiting entry carries what held it back at the last admission
+pass: memory, with what it needs and what is left, disk, a limit, a full
+permit pool or a critical or missing reading, so a wait never goes
+unexplained; the stagger is too brief to report, and the work an entry waits
+for stays in `waiting_for`. Moving a running agent
 stops it as `shoal restart` does rather than as `shoal stop` does, so its
 wrapper keeps the terminal and restores it there once the queue starts it. That
 restore waits only for a free slot and holds none, whatever the overload policy,

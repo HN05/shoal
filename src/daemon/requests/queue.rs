@@ -32,7 +32,7 @@ pub(super) async fn handle(
         QueueMethod::QueueAdd { request } => {
             Body::QueueAdmission(manager.queue_add(request).await?)
         }
-        QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue(caller).await?),
+        QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
         QueueMethod::QueueRemove { entry } => {
             Body::QueueEntry(manager.queue_remove(&entry, caller).await?)

@@ -243,7 +243,7 @@ async fn cancelling_succeeds_when_the_stopped_wrapper_removes_its_entry_first() 
 }
 
 #[tokio::test]
-async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
+async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
@@ -276,8 +276,24 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
     add(&manager, &repo, "other").await;
     let caller = Some(&caller);
 
-    let visible = manager.visible_queue(caller).await.unwrap();
-    let names: Vec<_> = visible.iter().map(|entry| entry.name.as_str()).collect();
+    // Every caller sees every entry, and what holds each waiting one back.
+    let visible = manager.visible_queue().await.unwrap();
+    let names: Vec<_> = visible
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.held_by))
+        .collect();
+    let max_agents = Some(crate::model::HeldBy::MaxAgents);
+    assert_eq!(
+        names,
+        [
+            ("first", None),
+            ("one", max_agents),
+            ("two", max_agents),
+            ("other", max_agents)
+        ]
+    );
+    let reachable = manager.reachable_queue(caller).await.unwrap();
+    let names: Vec<_> = reachable.iter().map(|entry| entry.name.as_str()).collect();
     assert_eq!(names, ["one", "two"]);
     manager.queue_remove("other", caller).await.unwrap_err();
     manager

@@ -258,12 +258,11 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
 }
 
 /// The CI jobs running for the workspace's PR or branch, each with what its
-/// processes use.
+/// processes use, then those waiting, each with what holds it back.
 fn render_jobs(status: &WorktreeStatus, palette: Palette) {
-    if status.jobs.is_empty() {
-        return;
+    if !status.jobs.is_empty() {
+        outln!("CI jobs:       {}", status.jobs.len());
     }
-    outln!("CI jobs:       {}", status.jobs.len());
     for job in &status.jobs {
         let subject = job.job.as_deref().map(ui::job_subject).unwrap_or_default();
         let usage = job.usage.as_ref().map(ui::usage_label).unwrap_or_default();
@@ -271,6 +270,25 @@ fn render_jobs(status: &WorktreeStatus, palette: Palette) {
             "  {}  {subject}  {}",
             palette.paint(Style::Heading, &job.name),
             palette.paint(Style::Muted, &usage)
+        );
+    }
+    if !status.waiting_jobs.is_empty() {
+        outln!("Waiting jobs:  {}", status.waiting_jobs.len());
+    }
+    for entry in &status.waiting_jobs {
+        let subject = entry
+            .job
+            .as_deref()
+            .map(ui::job_subject)
+            .unwrap_or_default();
+        let held = entry
+            .held_by
+            .map(|held| format!("held by {}", ui::held_by_label(held)))
+            .unwrap_or_default();
+        outln!(
+            "  {}  {subject}  {}",
+            palette.paint(Style::Heading, &entry.name),
+            palette.paint(Style::Muted, &held)
         );
     }
 }

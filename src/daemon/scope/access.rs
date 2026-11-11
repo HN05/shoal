@@ -290,9 +290,15 @@ impl Manager {
         Ok(())
     }
 
-    /// The agent queue `caller` may see: the entries for the workspaces its
-    /// scope reaches but its own, where it may queue agents.
-    pub(in crate::daemon) async fn visible_queue(
+    /// The agent queue every caller sees: all of it, since positions,
+    /// limits and what holds an entry back are machine-wide.
+    pub(in crate::daemon) async fn visible_queue(&self) -> Result<Vec<QueueEntry>> {
+        self.queue_entries().await
+    }
+
+    /// The agent queue entries `caller` may act on: those for the
+    /// workspaces its scope reaches but its own, where it may queue agents.
+    pub(in crate::daemon) async fn reachable_queue(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<QueueEntry>> {

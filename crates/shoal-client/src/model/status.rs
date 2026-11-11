@@ -179,6 +179,10 @@ pub struct WorktreeStatus {
     /// The workspaces of the CI jobs running for its PR or branch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jobs: Vec<Workspace>,
+    /// The CI jobs waiting to start for its PR or branch, each with what
+    /// holds it back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_jobs: Vec<super::QueueEntry>,
     /// The chats running or stopped in its worktree, by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chats: Vec<SpaceRef>,

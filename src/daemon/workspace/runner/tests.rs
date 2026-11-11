@@ -669,6 +669,29 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
 }
 
 #[tokio::test]
+async fn a_waiting_job_lists_with_its_branchs_workspace_and_what_holds_it() {
+    let fixture = fixture(
+        vec![job("h3", 7, 3)],
+        "unused",
+        "permit = \"builds\"\n[resources.builds]\n",
+    )
+    .await;
+    let manager = &fixture.manager;
+    let topic = manager
+        .create_workspace(&fixture.repository, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    hold_the_builds_permit(&fixture).await;
+    admit_and_claim(manager).await;
+    manager.dispatch_queue().await.unwrap();
+
+    let waiting = manager.linked_waiting_jobs(&topic.id).await.unwrap();
+    assert_eq!(waiting.len(), 1);
+    assert_eq!(waiting[0].job.as_ref().unwrap().job.name, "rust");
+    assert_eq!(waiting[0].held_by, Some(crate::model::HeldBy::Permits));
+}
+
+#[tokio::test]
 async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_forge() {
     let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
     let manager = &fixture.manager;

@@ -48,8 +48,17 @@ fn queue_status_names_the_work_a_launch_waits_for() {
     entry.mode = Some("review".into());
     let plain = Palette::stdout(true);
     assert_eq!(
-        queue_rows(&[entry], &[], plain),
+        queue_rows(std::slice::from_ref(&entry), &[], plain),
         ["○ ui  review  queued, position 2"]
+    );
+    entry.mode = None;
+    entry.held_by = Some(HeldBy::Memory {
+        needed: 4 << 30,
+        left: 3 << 29,
+    });
+    assert_eq!(
+        queue_status_cell(&entry).0,
+        "queued, position 2, held by memory: needs 4.0 GiB, 1.5 GiB left"
     );
 }
 

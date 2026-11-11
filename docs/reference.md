@@ -2150,11 +2150,17 @@ and `--focus` cannot wait for work.
 `shoal queue` lists the entries of every repository, since positions apply
 machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
 followed by the work a waiting launch is after, or `after an update` for a
-restore of an idle agent, and a restore with its agent; `shoal work` lists them
-after the workspaces. `queue --json` gives the entries with their `kind`,
+restore of an idle agent, then what held a waiting entry back at the last
+admission pass, as `held by` memory with what the entry needs and what is
+left, low disk space, `machine.max_agents`, `machine.max_jobs`,
+`agent.max_running`, a full `runner.permit` pool, or a critical or missing
+reading; the stagger between starts is too brief to show. A restore shows its
+agent; `shoal work` lists the entries after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
 with its run, `waiting_for` while dependencies remain,
-`waits_for_update` for a restore of an idle agent and
+`waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
+(`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
+`repository_limit`, `permits` or `reading`) and
 `base` once a launch starts on a dependency's branch, while `work --json` stays
 a list of workspaces. Entries are named as listed, by workspace name or by ID
 when several share one. On a terminal, `shoal queue` picks a waiting entry and
@@ -2175,10 +2181,10 @@ front of, or the last place. The order lasts across daemon restarts. Moving a
 workspace whose agent runs stops the agent as `shoal restart` does and places
 its restore, which its wrapper waits for in the same terminal and which needs
 only a free slot, whatever the overload policy; like `restart`, it refuses a
-disconnected agent or one without a restore command. Scoped callers see the
-entries for the workspaces below their own and may cancel them or move them
-back, never ahead; starting an entry and moving a running agent are for the
-user.
+disconnected agent or one without a restore command. Every caller sees every
+entry. Scoped callers may cancel the entries for the workspaces below their
+own or move them back, never ahead; starting an entry and moving a running
+agent are for the user.
 
 ### Agent accounts
 
@@ -3520,7 +3526,9 @@ runner. A job that cannot start is passed over with a
 
 `shoal work` lists a running job's workspace below the workspace that links its
 run's PR, or owns the branch it ran on, with the job and what its processes
-use, and that workspace's `shoal work status` lists the job under `CI jobs`. The job
+use, and that workspace's `shoal work status` lists the job under `CI jobs`,
+and each job still waiting to start under `Waiting jobs` with what holds it
+back, as `shoal queue` shows it. The job
 is not that workspace's child: it starts from the seed rather than the
 workspace's build, and the workspace's agent's scope does not reach it.
 
