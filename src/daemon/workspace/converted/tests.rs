@@ -241,3 +241,22 @@ async fn a_branch_only_the_remote_has_opens_without_a_fetch() {
     let head = crate::daemon::test_support::git(&workspace.path, &["rev-parse", "HEAD"]);
     assert_eq!(head, remote_head);
 }
+
+#[tokio::test]
+async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    crate::daemon::test_support::git(&repo.path, &["branch", "feature"]);
+    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let converting = Converting {
+        chat: talk,
+        mode: ModeName::DEFAULT,
+    };
+
+    let workspace = manager
+        .create_converted_workspace(converting, "feature/login".into(), None, Default::default())
+        .await
+        .unwrap();
+
+    assert_eq!(workspace.branch.as_deref(), Some("feature-2/login"));
+}

@@ -31,10 +31,14 @@ impl Manager {
         let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &branch).await?;
         let source = self.converted_source(&repo, &branch, base).await?;
-        // An existing branch goes under its local name, without its remote.
-        let branch = match &source {
-            WorkspaceSource::Existing { branch, .. } => branch.name.clone(),
-            WorkspaceSource::New { .. } => branch,
+        // An existing branch goes under its local name, without its remote,
+        // and a new one takes the name every new branch is allocated, its
+        // directory named after the branch asked for.
+        let (name, branch) = match &source {
+            WorkspaceSource::Existing { branch, .. } => (branch.name.clone(), branch.name.clone()),
+            WorkspaceSource::New { .. } => {
+                (branch.clone(), self.available_branch(&repo, &branch).await?)
+            }
         };
         let chat = converting.chat.id.clone();
         let new = NewWorkspace {
@@ -42,8 +46,7 @@ impl Manager {
             converts: Some(converting),
             ..Default::default()
         };
-        let created =
-            (self.create_branch_workspace(&repo, branch.clone(), branch, source, new)).await;
+        let created = (self.create_branch_workspace(&repo, name, branch, source, new)).await;
         if created.is_err() {
             self.give_chat_back(&repo, &chat).await;
         }
