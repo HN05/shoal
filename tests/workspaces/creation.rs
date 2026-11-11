@@ -800,6 +800,29 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
 }
 
 #[test]
+fn a_retry_that_fails_again_keeps_the_agent_waiting() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+    ));
+    install_test_script(fixture.repo.join("setup.sh"), "#!/bin/sh\nexit 3\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+    let repo = fixture.repo.to_str().unwrap();
+    // Retry, which fails again, then keep the workspace.
+    let (output, transcript) = fixture.interactive(
+        &["start", repo, "failing", "--here", "--agent", "waiter"],
+        "r\n\n",
+    );
+    assert!(!output.status.success(), "{transcript}");
+    let entries = fixture.ok(&["queue"]);
+    assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
+    assert_eq!(entries[0]["state"], "queued", "{entries}");
+    assert_eq!(
+        entries[0]["blockers"],
+        serde_json::json!(["setup of failing"])
+    );
+}
+
+#[test]
 fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     let fixture = Fixture::new();
     fixture.add("existing");

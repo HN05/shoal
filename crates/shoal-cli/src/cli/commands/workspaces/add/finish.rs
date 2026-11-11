@@ -17,7 +17,10 @@ use crate::client::{agent::AgentSessionId, queue::QueueEntryId};
 use crate::{
     cli::{
         agents,
-        commands::{issues, operations, queued_agents, workspaces::SetUp},
+        commands::{
+            issues, operations, queued_agents,
+            workspaces::{SetUp, waiting::WaitingAgent},
+        },
         context::Context,
         output::{Palette, Style},
         shell, terminal,
@@ -148,15 +151,18 @@ pub(super) async fn add_planned(
     let (name, number) = (started.workspace.name.clone(), started.workspace.number);
     let subject = (issue.as_ref().map(issues::Issue::subject))
         .or(prompt.map(crate::config::templates::Subject::told));
+    let waiting = waiting.map(|launch| WaitingAgent::new(*launch, queue_entry.clone()));
     let mut rest = AfterSetup {
         pr,
         agent: launch.clone(),
         waiting,
-        entry: queue_entry,
     };
     let finished = finish_add_workspace(ctx, started, &mut rest, &agent).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
-    let queue_entry = rest.entry;
+    let queue_entry = match rest.waiting {
+        Some(waiting) => waiting.starting,
+        None => queue_entry,
+    };
     let Some(Prepared {
         workspace,
         agent: entry,

@@ -19,6 +19,7 @@ mod run;
 mod setup;
 mod status;
 mod unmerge;
+mod waiting;
 mod watch;
 
 pub(super) use add::{AddOptions, AgentLaunch, StartsAsChat, add, check_target, link};
