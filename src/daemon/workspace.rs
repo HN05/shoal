@@ -50,7 +50,6 @@ mod restore;
 pub(crate) mod review;
 pub(crate) mod runner;
 mod sessions;
-mod shared_scans;
 mod shutdown_stop;
 mod signals;
 pub(crate) mod spotlight;
@@ -132,8 +131,6 @@ pub struct Manager {
     pub(crate) signals: signals::Signals,
     /// The time runs of agent messages settle by.
     pub(crate) settle_clock: crate::daemon::agent_messages::SettleClock,
-    /// Process scans shared by the checks for agents' running work.
-    pub(crate) work_scans: shared_scans::SharedScans,
     pub(crate) usage: usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
     /// Held shared from reading the tracked processes until those found
@@ -209,7 +206,6 @@ impl Manager {
             shutdown_stopped: Default::default(),
             signals: Default::default(),
             settle_clock: Default::default(),
-            work_scans: Default::default(),
             usage: Default::default(),
             leftovers: Default::default(),
             chat_handoffs: Default::default(),

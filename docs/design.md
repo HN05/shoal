@@ -325,13 +325,9 @@ queues an agent message for every workspace with a running agent, so agents
 know of the load before anything stops. A memory or CPU warning is a heads-up
 that asks for no action, so agents keep to their work. Warnings repeat per signal and workspace only
 after an interval and never stop, clean up or notify. A memory or CPU warning
-wakes an idle agent only while something besides the agents runs in its
-workspace, checked when the agent would be woken rather than when the warning
-is queued, since a turn that has just ended leaves nothing to stop and each
-woken turn costs tokens; otherwise it waits for the agent's next update or turn.
-Checks made at the same time share one process scan that starts after each asks;
-operations that stop or remove processes verify ownership with their own.
-A disk warning still wakes it, since deleting files frees space.
+never wakes an idle agent, since it gives the agent nothing to do and a woken
+turn costs tokens; it waits for the agent's next update or turn. A disk warning
+wakes it, since deleting files frees space.
 Their thresholds are not
 validated against stop thresholds, so lowering a stop threshold never invalidates
 an existing configuration.

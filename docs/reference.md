@@ -226,9 +226,8 @@ tells the agent that load is high and that it needs no action; a disk warning
 asks it to free space. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
 Each workspace hears about each signal at most once per `repeat_minutes`, and
 agents started later are warned at the next sample. A memory or CPU warning
-wakes an idle agent only while a tracked command, demo or background process
-runs in its workspace; otherwise it arrives with the agent's next update or
-turn. Warnings stop and remove
+arrives with the agent's next update or turn without waking an idle agent; a
+disk warning wakes it. Warnings stop and remove
 nothing; a failed reading warns about nothing. Warning thresholds are not checked
 against stop thresholds; a warning at or above one arrives with the stop.
 

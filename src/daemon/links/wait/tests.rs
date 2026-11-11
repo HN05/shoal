@@ -1684,7 +1684,7 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
 }
 
 #[tokio::test]
-async fn messages_waiting_for_work_come_with_the_next_updates() {
+async fn messages_for_the_next_turn_come_with_the_next_updates() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
@@ -1700,7 +1700,7 @@ async fn messages_waiting_for_work_come_with_the_next_updates() {
         .queue_agent_message_delivered(
             &workspace.id,
             "Memory is low".into(),
-            crate::daemon::agent_messages::Delivery::WhileWorkRuns,
+            crate::daemon::agent_messages::Delivery::NextTurn,
         )
         .await
         .unwrap();
@@ -1773,7 +1773,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .queue_agent_message_delivered(
             &parent.id,
             "Memory is low".into(),
-            crate::daemon::agent_messages::Delivery::WhileWorkRuns,
+            crate::daemon::agent_messages::Delivery::NextTurn,
         )
         .await
         .unwrap();
@@ -2660,7 +2660,7 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
         .queue_agent_message_delivered(
             &workspace.id,
             "Memory is low".into(),
-            crate::daemon::agent_messages::Delivery::WhileWorkRuns,
+            crate::daemon::agent_messages::Delivery::NextTurn,
         )
         .await
         .unwrap();

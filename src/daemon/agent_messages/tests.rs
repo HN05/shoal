@@ -124,11 +124,11 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
 }
 
 #[tokio::test]
-async fn a_message_for_running_work_wakes_only_while_work_runs() {
+async fn a_message_for_the_next_turn_wakes_only_once_queued_to_wake() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
     let queue = |delivery| {
-        manager.queue_agent_message_delivered(&workspace.id, "Memory is low".into(), delivery)
+        manager.queue_agent_message_delivered(&workspace.id, "Memory is high".into(), delivery)
     };
     let wakes = || async {
         manager
@@ -137,37 +137,22 @@ async fn a_message_for_running_work_wakes_only_while_work_runs() {
             .unwrap()
             .wakes
     };
-    queue(Delivery::WhileWorkRuns).await.unwrap();
-    assert_eq!(
-        manager
-            .agent_messages(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .len(),
-        1
-    );
-    assert!(!wakes().await);
-    // Queued again, it has waits check again for work.
-    let mut changed = manager.signals.watch_agent_messages();
-    changed.borrow_and_update();
-    queue(Delivery::WhileWorkRuns).await.unwrap();
-    assert!(changed.has_changed().unwrap());
-    let command = manager
+    // Work running in the workspace does not make it wake.
+    let _command = manager
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    assert!(wakes().await);
-    manager
-        .finish_execution(command.plan.id, ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
+    queue(Delivery::NextTurn).await.unwrap();
     assert!(!wakes().await);
-    // Queued to wake, it wakes without work and stays so.
+    let mut changed = manager.signals.watch_agent_messages();
     changed.borrow_and_update();
+    queue(Delivery::NextTurn).await.unwrap();
+    assert!(!changed.has_changed().unwrap());
+    // Queued to wake, it wakes and stays so.
     queue(Delivery::Wake).await.unwrap();
     assert!(changed.has_changed().unwrap());
     assert!(wakes().await);
-    queue(Delivery::WhileWorkRuns).await.unwrap();
+    queue(Delivery::NextTurn).await.unwrap();
     assert!(wakes().await);
     assert_eq!(
         manager

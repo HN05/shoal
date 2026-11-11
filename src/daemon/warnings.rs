@@ -15,10 +15,14 @@ pub(super) enum Signal {
 }
 
 impl Signal {
-    /// Whether an agent reduces it only through what runs in its workspace,
-    /// unlike disk space, which it can free by deleting files.
-    fn needs_processes(self) -> bool {
-        matches!(self, Self::Memory | Self::Cpu)
+    /// How its warning reaches an idle agent: a memory or CPU warning is a
+    /// heads-up that asks for nothing, so it waits for the agent's next turn,
+    /// while a disk warning wakes it to delete files.
+    fn delivery(self) -> Delivery {
+        match self {
+            Self::Memory | Self::Cpu => Delivery::NextTurn,
+            Self::Disk => Delivery::Wake,
+        }
     }
 }
 
@@ -31,9 +35,7 @@ pub(super) struct Warnings {
 impl Warnings {
     /// Queue `message` for each workspace with a running agent that has not
     /// been warned about `signal` within the repeat interval, including agents
-    /// started since the last warning. An idle agent with nothing running has
-    /// nothing to stop for a signal that needs processes, so the message
-    /// starts its next turn only while work runs in its workspace.
+    /// started since the last warning, delivered as [`Signal::delivery`] says.
     pub(super) async fn warn(
         &mut self,
         manager: &Manager,
@@ -45,11 +47,7 @@ impl Warnings {
             Duration::from_secs(manager.config().machine.overload.warning.repeat_minutes * 60);
         self.sent
             .retain(|_, sent| now.duration_since(*sent) < repeat);
-        let delivery = if signal.needs_processes() {
-            Delivery::WhileWorkRuns
-        } else {
-            Delivery::Wake
-        };
+        let delivery = signal.delivery();
         for workspace_id in manager.running_agent_workspaces().await {
             let key = (workspace_id, signal);
             if self.sent.contains_key(&key) {

@@ -51,16 +51,12 @@ pub(crate) fn insert(
 pub(crate) enum Delivery {
     /// It starts the agent's next turn.
     Wake,
-    /// It starts the agent's next turn only while a tracked command, demo or
-    /// background process runs in the workspace, as one the agent could stop;
-    /// otherwise it waits for the agent's next turn or update.
-    WhileWorkRuns,
+    /// It waits for the agent's next turn or update.
+    NextTurn,
 }
 
-/// [`insert`] with `delivery`. An identical unread message that would not
-/// always wake the agent wakes it once queued again with [`Delivery::Wake`];
-/// queued again with [`Delivery::WhileWorkRuns`], it returns its ID too, so
-/// waits check again whether work runs.
+/// [`insert`] with `delivery`. An identical unread message that does not
+/// wake the agent wakes it once queued again with [`Delivery::Wake`].
 pub(crate) fn insert_delivered(
     tx: &Transaction<'_>,
     workspace_id: &SpaceId,
@@ -87,12 +83,10 @@ pub(crate) fn insert_delivered(
         )
         .optional()?;
     if let Some((id, woke)) = pending {
-        if woke {
+        if woke || !wakes {
             return Ok(None);
         }
-        if wakes {
-            tx.execute("UPDATE agent_messages SET wakes=1 WHERE id=?1", [id])?;
-        }
+        tx.execute("UPDATE agent_messages SET wakes=1 WHERE id=?1", [id])?;
         return Ok(Some(id));
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
@@ -439,34 +433,21 @@ impl Manager {
     /// Unread messages, oldest first. They stay unread until delivered.
     pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<AgentMessage>> {
         let workspace = self.workspace(selector).await?;
-        Ok(self.read_unread(workspace.id).await?.0.messages)
+        Ok(self.read_unread(workspace.id).await?.messages)
     }
 
     /// Unread messages, oldest first, and whether one of them wakes an idle
-    /// agent now. One queued [`Delivery::WhileWorkRuns`] wakes it only while
-    /// work it could stop runs, or when that cannot be read.
+    /// agent.
     pub(crate) async fn unread_agent_messages(&self, selector: &SpaceSelector) -> Result<Unread> {
         let workspace = self.workspace(selector).await?;
-        let (mut unread, while_work_runs) = self.read_unread(workspace.id.clone()).await?;
-        if !unread.wakes && while_work_runs {
-            unread.wakes = self
-                .runs_agent_work(&workspace.id)
-                .await
-                .unwrap_or_else(|error| {
-                    crate::daemon::log!("running work unreadable, so messages wake: {error:#}");
-                    true
-                });
-        }
-        Ok(unread)
+        self.read_unread(workspace.id).await
     }
 
-    /// The workspace's unread messages, with whether one always wakes an
-    /// idle agent and whether one wakes it while work runs.
-    async fn read_unread(&self, workspace_id: SpaceId) -> Result<(Unread, bool)> {
+    /// The workspace's unread messages.
+    async fn read_unread(&self, workspace_id: SpaceId) -> Result<Unread> {
         self.store
             .run(move |db| {
                 let mut unread = Unread::default();
-                let mut while_work_runs = false;
                 let mut rows = db.prepare(
                     "SELECT id,created_at,message,attachments,wakes FROM agent_messages
                         WHERE workspace_id=?1 ORDER BY id",
@@ -480,14 +461,9 @@ impl Manager {
                         attachments: crate::daemon::store::json_column(row, "attachments")?
                             .unwrap_or_default(),
                     });
-                    // A message that does not always wake waits for work.
-                    if row.get::<_, bool>("wakes")? {
-                        unread.wakes = true;
-                    } else {
-                        while_work_runs = true;
-                    }
+                    unread.wakes |= row.get::<_, bool>("wakes")?;
                 }
-                Ok((unread, while_work_runs))
+                Ok(unread)
             })
             .await
     }

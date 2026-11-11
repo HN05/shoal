@@ -24,9 +24,8 @@ use crate::{
     agent::ModelChoice,
     daemon::notifications::NotificationKind,
     execution::TrackedAgent,
-    process::execution::Processes,
     protocol::timing,
-    state::{AgentState, ExecutionState, WorkspaceState},
+    state::{AgentState, WorkspaceState},
 };
 
 mod attachment;
@@ -947,44 +946,6 @@ impl Manager {
         Ok(agents.into_keys().collect())
     }
 
-    /// Whether something an agent could stop runs in the workspace: a tracked
-    /// command, a demo or a background process an agent started. The agents
-    /// themselves do not count, working or idle.
-    pub(crate) async fn runs_agent_work(&self, workspace_id: &SpaceId) -> anyhow::Result<bool> {
-        let id = workspace_id.to_owned();
-        let running = self
-            .store
-            .run(move |db| running_executions(db, &id))
-            .await?;
-        let connected: HashSet<ExecutionId> = self
-            .executions
-            .with_agents(|agents| {
-                running
-                    .iter()
-                    .filter(|execution| agents.contains_key(&execution.id))
-                    .map(|execution| execution.id.clone())
-                    .collect()
-            })
-            .await;
-        let (agents, work): (Vec<_>, Vec<_>) = running
-            .into_iter()
-            .partition(|execution| execution.agent.is_some() || connected.contains(&execution.id));
-        if !work.is_empty() {
-            return Ok(true);
-        }
-        if agents.is_empty() {
-            return Ok(false);
-        }
-        // Only wake checks read this, so checks made at the same time share a scan.
-        let scan = self
-            .work_scans
-            .scan(agents.iter().map(|agent| agent.id.clone()).collect())
-            .await?;
-        Ok(agents
-            .iter()
-            .any(|agent| Processes::runs_outside_group(agent, &scan)))
-    }
-
     /// Stop one agent under `reason`: the newest one-shot run first, which
     /// has no session to lose and starts over once readings are healthy.
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
@@ -1169,17 +1130,6 @@ fn still_idle(turns: &mut HashMap<ExecutionId, Turn>, agents: &HashMap<Execution
             turn.state = AgentState::Working;
         }
     }
-}
-
-/// The workspace's running executions.
-fn running_executions(
-    db: &rusqlite::Connection,
-    workspace_id: &SpaceId,
-) -> anyhow::Result<Vec<crate::model::Execution>> {
-    Ok(crate::daemon::store::executions(db, workspace_id)?
-        .into_iter()
-        .filter(|execution| execution.state == ExecutionState::Running)
-        .collect())
 }
 
 /// A running agent protection may stop.
