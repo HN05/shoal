@@ -74,22 +74,14 @@ const CHAT_COLUMNS: &[&str] = &[
     "converted",
 ];
 
-/// A chat's row, as a JSON object of its columns, with what restarting its
-/// agent reads from it. Its `Debug` leaves out the scope token.
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub(crate) struct ChatRow(serde_json::Map<String, serde_json::Value>);
-
-impl std::fmt::Debug for ChatRow {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut shown = self.0.clone();
-        if let Some(token) = shown.get_mut("scope_token")
-            && !token.is_null()
-        {
-            *token = serde_json::Value::String("<redacted>".into());
-        }
-        f.debug_tuple("ChatRow").field(&shown).finish()
-    }
+/// A chat's row: its scope token, kept as one, and its other columns as a
+/// JSON object, with what restarting its agent reads from it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ChatRow {
+    #[serde(default)]
+    scope_token: Option<ScopeToken>,
+    #[serde(flatten)]
+    columns: serde_json::Map<String, serde_json::Value>,
 }
 
 /// What a converted chat's agent ran as and with.
@@ -113,9 +105,10 @@ pub(crate) struct ChatAgent {
 impl ChatRow {
     /// The agent the row records.
     pub(crate) fn agent(&self) -> Result<ChatAgent> {
-        Ok(serde_json::from_value(serde_json::Value::Object(
-            self.0.clone(),
-        ))?)
+        let mut agent: ChatAgent =
+            serde_json::from_value(serde_json::Value::Object(self.columns.clone()))?;
+        agent.scope_token = self.scope_token.clone();
+        Ok(agent)
     }
 }
 
