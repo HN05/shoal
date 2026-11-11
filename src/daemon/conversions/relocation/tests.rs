@@ -150,3 +150,21 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
     assert!(last.converted);
     assert!(manager.caller(&token).await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    let keep = crate::protocol::QueuedLaunches::Keep;
+    (manager.stop_workspace_manually(&selector, false, None, keep))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    assert!(RESUMED.lock().unwrap().is_empty());
+}

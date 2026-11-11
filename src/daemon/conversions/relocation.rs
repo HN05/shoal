@@ -42,10 +42,21 @@ pub(crate) async fn run(manager: Arc<Manager>) {
 }
 
 impl Manager {
-    /// Restart the agent of each pending conversion whose turn ended.
+    /// Restart the agent of each pending conversion whose turn ended, each
+    /// under an operation guard, so an update waits for it, and with the
+    /// hand-overs held, so a stop of the workspace's agents, which hands its
+    /// agent over too, comes before or after it. A conversion read again
+    /// once they are held may be gone, its agent stopped.
     pub(crate) async fn relocate_finished_turns(&self) -> Result<()> {
         let pending = self.store.run(|db| super::record::all_pending(db)).await?;
-        for (id, pending) in pending {
+        for id in pending.into_iter().map(|(id, _)| id) {
+            let _operation = self.gates.operation().await;
+            let _handovers = self.conversion_handovers.lock().await;
+            let space = id.clone();
+            let pending = self.store.run(move |db| super::pending(db, &space)).await?;
+            let Some(pending) = pending else {
+                continue;
+            };
             if !self.turn_ended(&id, &pending).await? {
                 continue;
             }
@@ -117,8 +128,14 @@ impl Manager {
     /// `chat`, over to the workspace, ahead of a stop of the workspace's
     /// agents, which finds it nowhere else: once its session is kept as the
     /// workspace's last session, which `shoal resume` continues, stop it
-    /// where it ran, and forget the conversion.
-    pub(crate) async fn stop_converting_agent(&self, id: &SpaceId) -> Result<()> {
+    /// where it ran, and forget the conversion. Whether it had such an agent.
+    pub(crate) async fn stop_converting_agent(&self, id: &SpaceId) -> Result<bool> {
+        // A workspace that becomes a chat stops its own agent, under the
+        // hand-overs its relocation holds, so only a chat's agent takes them.
+        if !self.converting_chat_agent(id).await? {
+            return Ok(false);
+        }
+        let _handovers = self.conversion_handovers.lock().await;
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
         let Some(Pending::Workspace {
@@ -127,9 +144,18 @@ impl Manager {
             execution,
         }) = pending
         else {
-            return Ok(());
+            return Ok(false);
         };
-        self.hand_over(id, mode, &chat, execution).await
+        self.hand_over(id, mode, &chat, execution).await?;
+        Ok(true)
+    }
+
+    /// Whether a chat's agent has yet to restart in the workspace `id` it
+    /// became.
+    async fn converting_chat_agent(&self, id: &SpaceId) -> Result<bool> {
+        let space = id.to_owned();
+        let pending = self.store.run(move |db| super::pending(db, &space)).await?;
+        Ok(matches!(pending, Some(Pending::Workspace { .. })))
     }
 
     /// Keep the session of the agent of the chat that became the workspace

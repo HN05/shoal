@@ -144,6 +144,9 @@ pub struct Manager {
     /// Held while chats are saved and their processes stopped, and to
     /// restore or remove a stopped chat, so neither overlaps a stop.
     pub(crate) chat_saves: tokio::sync::Mutex<()>,
+    /// Held while a converted space's agent is handed over to the new place,
+    /// so a stop and the relocation never both hand it over.
+    pub(crate) conversion_handovers: tokio::sync::Mutex<()>,
     pub(crate) chat_stops: crate::daemon::chats::Stopping,
     /// The restarts of chats' agents.
     pub(crate) chat_agents: crate::daemon::chats::ChatAgents,
@@ -207,6 +210,7 @@ impl Manager {
             leftovers: Default::default(),
             chat_handoffs: Default::default(),
             chat_saves: Default::default(),
+            conversion_handovers: Default::default(),
             chat_stops: Default::default(),
             chat_agents: Default::default(),
             chat_removals: Default::default(),
