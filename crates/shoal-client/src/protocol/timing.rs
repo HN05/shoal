@@ -24,10 +24,16 @@ pub const UPDATE_WAIT_TIMEOUT: Duration = Duration::from_secs(600);
 /// Each refused attempt briefly holds back the update it waits for.
 pub const UPDATE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
+/// While the daemon registers an execution, it tells the wrapper this often
+/// that it is still at work, so a busy daemon is not taken for a hung one.
+pub const REGISTRATION_KEEPALIVE: Duration = Duration::from_secs(5);
+/// How long a wrapper waits for the next keepalive or the registration.
 /// Ordinary command registration needs no slow preparation, but its process
 /// and worktree checks run subprocesses; only guard against a hung daemon.
 pub const EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(30);
-/// Setup and merge can wait for Git gates, hooks, and upstream refreshes.
+/// As [`EXECUTION_START_TIMEOUT`] for setup and merge, which wait for Git
+/// gates, hooks and upstream refreshes, for a daemon that may fall behind
+/// on its keepalives while it does.
 pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
 /// Wait for the daemon to persist the spawned child's process group.
 pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -88,6 +94,7 @@ const _: () = {
                 + COMPLETION_ACK_TIMEOUT.as_millis()
     );
     assert!(PROCESS_PROOF_TIMEOUT.as_millis() < COMPLETION_ACK_TIMEOUT.as_millis());
+    assert!(REGISTRATION_KEEPALIVE.as_millis() * 4 < EXECUTION_START_TIMEOUT.as_millis());
     assert!(
         REATTACH_EXIT_TIMEOUT.as_millis()
             > WORKSPACE_STOP_TIMEOUT.as_millis() + 2 * DAEMON_WAIT_TIMEOUT.as_millis()

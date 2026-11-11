@@ -125,6 +125,9 @@ macro_rules! response_bodies {
             Ok,
             Error { code: ErrorCode, message: String },
             Busy { message: String },
+            /// The daemon still prepares what the request asked for, as it
+            /// sends while it registers an execution.
+            Keepalive,
             $($variant($payload),)*
         }
 
@@ -134,6 +137,7 @@ macro_rules! response_bodies {
                     Self::Ok => "Ok",
                     Self::Error { .. } => "Error",
                     Self::Busy { .. } => "Busy",
+                    Self::Keepalive => "Keepalive",
                     $(Self::$variant(_) => stringify!($variant),)*
                 }
             }

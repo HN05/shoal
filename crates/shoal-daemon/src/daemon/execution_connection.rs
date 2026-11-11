@@ -1,6 +1,7 @@
 //! Long-lived execution connections: the daemon side of the wrapper protocol.
-//! The wrapper reports its child and completion; the daemon relays stop and
-//! recovery controls and records the outcome.
+//! Once [`registration`] registers the execution, the wrapper reports its
+//! child and completion; the daemon relays stop and recovery controls and
+//! records the outcome.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
@@ -14,13 +15,12 @@ use tokio::{
 };
 
 use super::{
-    approvals::Undecided,
     events::{AgentEvent, EventKind},
     execution_recovery,
     scope::Caller,
     workspace::{
-        Completing, ExecutionKind, ExecutionRequest, Manager, ReattachedExecution, RecordChange,
-        StartedExecution, StopRequest, places::ExecutionPlace,
+        Completing, ExecutionKind, Manager, ReattachedExecution, RecordChange, StopRequest,
+        places::ExecutionPlace,
     },
 };
 use crate::client::space_names::SpaceSelector;
@@ -30,6 +30,7 @@ use crate::{
     process::identity::Identity,
     protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
 };
+use registration::Registered;
 
 pub(super) struct ExecutionContext {
     pub workspace: SpaceSelector,
@@ -94,131 +95,18 @@ pub(super) async fn execute(
     context: ExecutionContext,
     operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
-    let ExecutionContext {
-        workspace,
-        wrapper,
-        kind,
-        agent,
-        recover,
-        reattach,
-        queue_entry,
-        demo,
-        origin,
-        merge,
-        caller,
-    } = context;
-    if kind == ExecutionKind::Command
-        && agent.is_some()
-        && let Err(error) =
-            async { Manager::ensure_holds_agents(&manager.workspace(&workspace).await?) }.await
-    {
-        let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
-        return protocol::write(&mut stream, &Response::new(request_id, body)).await;
-    }
-    let giver = caller.as_ref().map(|caller| &caller.space_id);
-    if let Some(agent) = &agent
-        && let Err(error) =
-            (manager.ensure_workspace_agent_held(giver, &workspace, &agent.mode, &agent.narrowing))
-                .await
-    {
-        let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
-        return protocol::write(&mut stream, &Response::new(request_id, body)).await;
-    }
-    let admitted = match kind == ExecutionKind::Command && agent.is_some() {
-        true => match manager.admit_agent(&workspace).await {
-            Ok(admitted) => Some(admitted),
-            Err(error) => {
-                let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
-                return protocol::write(&mut stream, &Response::new(request_id, body)).await;
-            }
-        },
-        false => None,
-    };
-    let takes_entry = (kind == ExecutionKind::Command && agent.is_some())
-        .then_some(queue_entry.as_ref())
-        .flatten();
-    let reserved = match takes_entry {
-        Some(entry) => match manager.reserve_queue_entry(entry).await {
-            Ok(gate) => Some(gate),
-            Err(error) => {
-                let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
-                return protocol::write(&mut stream, &Response::new(request_id, body)).await;
-            }
-        },
-        None => None,
-    };
-    let StartedExecution {
+    let registration = registration::register(&manager, context);
+    let (registered, _listening) =
+        registration::keeping_alive(&mut stream, request_id, registration).await;
+    let Registered {
+        execution,
         plan,
-        stop,
-        _git_guard,
-    } = match manager
-        .begin_execution_placed(
-            &workspace,
-            Some(wrapper),
-            kind,
-            caller.as_ref(),
-            ExecutionRequest {
-                demo,
-                place: origin.map(|origin| ExecutionPlace {
-                    origin,
-                    agent: agent.is_some(),
-                }),
-                merge,
-            },
-        )
-        .await
-    {
-        Ok(begun) => begun,
-        Err(error) => {
-            let body = match error.downcast::<Undecided>() {
-                Ok(Undecided(request)) => {
-                    manager.notify_approval(&request).await;
-                    Body::ApprovalRequest(request)
-                }
-                Err(error) => Body::error(ErrorCode::ExecutionFailed, format!("{error:#}")),
-            };
-            return protocol::write(&mut stream, &Response::new(request_id, body)).await;
+        git_guard: _git_guard,
+    } = match registered {
+        Ok(registered) => registered,
+        Err(refusal) => {
+            return protocol::write(&mut stream, &Response::new(request_id, *refusal)).await;
         }
-    };
-    if !reattach {
-        manager.executions.mark_unattachable(&plan.id);
-    }
-    if kind == ExecutionKind::Command
-        && let Some(agent) = &agent
-    {
-        manager
-            .track_agent(
-                &plan.id,
-                agent,
-                &plan.workspace.id,
-                &plan.workspace.name,
-                recover,
-                std::time::Duration::ZERO,
-            )
-            .await;
-        if let Some(entry) = takes_entry {
-            manager.continue_restart(entry, &plan.id).await;
-            manager.consume_queue_entry(entry, &plan.workspace.id).await;
-        }
-    }
-    drop(reserved);
-    drop(admitted);
-    let execution = Connected {
-        id: plan.id.clone(),
-        kind,
-        workspace: plan.workspace.clone(),
-        agent,
-        recover,
-        reattach,
-        started: false,
-        awaiting_restore: false,
-        resuming: false,
-        unqueued: takes_entry.is_none(),
-        // Registration requires this daemon's protocol.
-        hears_restore_waits: true,
-        stopped: false,
-        stop,
-        records: RecordChange::of(&plan),
     };
     let response = Response::new(request_id, Body::Execution(plan));
     serve(stream, &manager, execution, response, operation).await
@@ -852,6 +740,8 @@ async fn read_execution_events(
         }
     }
 }
+
+mod registration;
 
 #[cfg(test)]
 mod tests;

@@ -273,3 +273,40 @@ async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsiv
     assert!(is_unreachable(&error));
     Ok(())
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_split_request_waits_through_keepalives_until_the_daemon_goes_quiet() -> Result<()> {
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let limit = Duration::from_secs(30);
+    // Keepalives within the limit outlast it many times over.
+    let daemon = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        for _ in 0..10 {
+            sleep(limit / 2).await;
+            protocol::write(&mut stream, &Response::new(request.id, Body::Keepalive)).await?;
+        }
+        protocol::write(&mut stream, &Response::new(request.id, Body::Ok)).await?;
+        // Then it falls silent on the next request.
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        protocol::write(&mut stream, &Response::new(request.id, Body::Keepalive)).await?;
+        anyhow::Ok(stream)
+    });
+    let started = Instant::now();
+    let (_, _, body) = open_split(&paths, DaemonMethod::Status, limit).await?;
+    assert!(matches!(body, Body::Ok), "{body:?}");
+    assert!(started.elapsed() >= limit * 5);
+
+    let started = Instant::now();
+    let Err(error) = open_split(&paths, DaemonMethod::Status, limit).await else {
+        panic!("a silent daemon answered");
+    };
+    assert!(started.elapsed() >= limit);
+    assert!(format!("{error:#}").contains("sent nothing"), "{error:#}");
+    daemon.await??;
+    Ok(())
+}

@@ -179,7 +179,8 @@ pub async fn open_buffered(
 }
 
 /// [`open_buffered`] with the stream split, so a task can own the receive
-/// half. `limit` bounds each reply, not a wait for an update.
+/// half. `limit` bounds the daemon's silence before each frame of its reply,
+/// not a wait for an update.
 pub async fn open_split(
     daemon: &impl Daemon,
     method: impl Into<Method>,
@@ -191,12 +192,26 @@ pub async fn open_split(
         let (reader, mut writer) = connect(daemon.paths()).await?.into_split();
         protocol::write(&mut writer, &request).await?;
         let mut reader = BufReader::new(reader);
-        let replied = timeout(limit, reply(&mut reader, &request))
-            .await
-            .context("daemon did not reply in time")?;
-        match replied {
+        match reply_kept_alive(&mut reader, &request, limit).await? {
             Ok(body) => return Ok((reader, writer, body)),
             Err(error) => update.retry(daemon.paths(), &request, error).await?,
+        }
+    }
+}
+
+/// The daemon's reply to `request` after the keepalives it sends while it
+/// still prepares it, failing once it sends nothing for `limit`.
+async fn reply_kept_alive(
+    stream: &mut (impl AsyncBufRead + Unpin),
+    request: &Request,
+    limit: Duration,
+) -> Result<Result<Body>> {
+    loop {
+        let replied = timeout(limit, reply(stream, request))
+            .await
+            .with_context(|| format!("the daemon sent nothing for {} seconds", limit.as_secs()))?;
+        if !matches!(replied, Ok(Body::Keepalive)) {
+            return Ok(replied);
         }
     }
 }
