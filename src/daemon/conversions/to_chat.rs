@@ -3,8 +3,10 @@
 //! agent in the repository's checkout.
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::Pending;
+use super::{Pending, record::ConvertedChat};
 use crate::client::space_names::SpaceSelector;
+use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
+use crate::execution::recovery;
 use crate::{
     config::modes::ModeName,
     daemon::{scope::Caller, workspace::Manager},
@@ -37,7 +39,8 @@ impl Manager {
                     workspace.name
                 )
             })?;
-        let (id, pending) = (workspace.id.clone(), Pending::Chat { mode, execution });
+        let chat = self.converted_chat(&workspace.id, mode, execution).await?;
+        let (id, pending) = (workspace.id.clone(), Pending::Chat { chat });
         self.store
             .write(move |tx| super::record::record(tx, &id, &pending))
             .await?;
@@ -45,6 +48,37 @@ impl Manager {
         // have already.
         self.signals.agent_changed();
         Ok(workspace)
+    }
+
+    /// The stopped chat the workspace `id` becomes in `mode`, whose agent
+    /// `execution` runs, with the session it reported so far.
+    async fn converted_chat(
+        &self,
+        id: &SpaceId,
+        mode: ModeName,
+        execution: ExecutionId,
+    ) -> Result<ConvertedChat> {
+        let recorded = self
+            .workspace_executions(id)
+            .await?
+            .into_iter()
+            .find(|recorded| recorded.id == execution)
+            .context("the agent to carry on is gone")?;
+        let agent = recorded
+            .agent
+            .context("the execution to carry on runs no agent")?;
+        let process = recorded
+            .wrapper
+            .context("the agent to carry on has no process")?;
+        Ok(ConvertedChat {
+            agent,
+            session: recovery::reported_session(&self.paths, id, &execution),
+            origin: recorded.origin,
+            process,
+            mode,
+            narrowing: recorded.narrowing,
+            execution,
+        })
     }
 
     /// The workspace `selector` names, refusing a chat, and a workspace that

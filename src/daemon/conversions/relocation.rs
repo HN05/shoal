@@ -2,6 +2,7 @@
 //! ends, Shoal stops it where the space was and starts it again from a fork
 //! of its session, in the new workspace's worktree or the chat's checkout,
 //! told what the space is now.
+use crate::client::agent::AgentSessionId;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
@@ -71,9 +72,7 @@ impl Manager {
                     chat,
                     execution,
                 } => self.relocate_to_workspace(&id, mode, chat, execution).await,
-                Pending::Chat { mode, execution } => {
-                    self.relocate_to_chat(&id, mode, execution).await
-                }
+                Pending::Chat { chat } => self.relocate_to_chat(&id, chat).await,
             };
             if let Err(error) = relocated {
                 self.report_failed_relocation(&id, &pending, &error).await;
@@ -103,9 +102,9 @@ impl Manager {
                 let process = chat.agent()?.process()?;
                 Ok(idle || !identity::alive(&process)?)
             }
-            Pending::Chat { execution, .. } => {
+            Pending::Chat { chat } => {
                 let running = self.running_agents().await?;
-                Ok(idle || !running.iter().any(|agent| agent.ran_as(execution)))
+                Ok(idle || !running.iter().any(|agent| agent.ran_as(&chat.execution)))
             }
         }
     }
@@ -186,16 +185,15 @@ impl Manager {
         Ok(())
     }
 
-    /// Make the workspace `id` the chat its agent, which `execution` runs,
-    /// carries on in, in `mode`: stop the agent, remove the worktree as
-    /// `shoal rm` does, and restore the chat in the repository's checkout.
-    async fn relocate_to_chat(
-        &self,
-        id: &SpaceId,
-        mode: ModeName,
-        execution: ExecutionId,
-    ) -> Result<()> {
-        let chat = self.converted_chat(id, mode, execution).await?;
+    /// Make the workspace `id` the stopped `chat` its agent carries on in:
+    /// stop the agent, remove the worktree as `shoal rm` does, and restore
+    /// the chat in the repository's checkout, continuing the session the
+    /// agent reported last, whether it still runs or exited.
+    async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat) -> Result<()> {
+        let chat = ConvertedChat {
+            session: self.latest_session(id, &chat),
+            ..chat
+        };
         self.convert_worktree_to_chat(id, &chat).await?;
         let chat = self
             .chat_by_id(id)
@@ -204,35 +202,17 @@ impl Manager {
         self.restore_converted_chat(&chat).await
     }
 
-    /// The stopped chat the workspace `id` becomes in `mode`, whose agent
-    /// `execution` runs, with the session it reported.
-    async fn converted_chat(
-        &self,
-        id: &SpaceId,
-        mode: ModeName,
-        execution: ExecutionId,
-    ) -> Result<ConvertedChat> {
-        let recorded = self
-            .workspace_executions(id)
-            .await?
-            .into_iter()
-            .find(|recorded| recorded.id == execution)
-            .context("the agent the workspace converts for is gone")?;
-        let agent = recorded
-            .agent
-            .context("the execution the workspace converts for runs no agent")?;
-        let process = recorded
-            .wrapper
-            .context("the agent the workspace converts for has no process")?;
-        Ok(ConvertedChat {
-            agent,
-            session: recovery::reported_session(&self.paths, id, &execution),
-            origin: recorded.origin,
-            process,
-            mode,
-            narrowing: recorded.narrowing,
-            execution,
-        })
+    /// The session the agent `chat` carries on reported last in the workspace
+    /// `id`: while it runs, else as its last session kept it when it exited,
+    /// else as the conversion recorded it.
+    fn latest_session(&self, id: &SpaceId, chat: &ConvertedChat) -> Option<AgentSessionId> {
+        let execution = &chat.execution;
+        recovery::reported_session(&self.paths, id, execution)
+            .or_else(|| {
+                let path = LastSession::path(&self.paths, id, execution);
+                LastSession::load(&path).ok().flatten()?.session
+            })
+            .or_else(|| chat.session.clone())
     }
 
     /// Tell the user that the agent of the space `id` did not restart in

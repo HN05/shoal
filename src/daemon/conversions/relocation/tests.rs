@@ -196,3 +196,66 @@ async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
 
     assert!(RESUMED.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let execution = crate::client::execution_ids::ExecutionId::generate();
+    // The agent exited on its own after the conversion was asked for,
+    // keeping its session as a last session.
+    let exited = LastSession {
+        execution: execution.clone(),
+        agent: "claude".into(),
+        session: Some("s2".into()),
+        moved: false,
+        copied: None,
+        converted: false,
+        origin: None,
+        stopped_by: None,
+        stop: None,
+        model: Default::default(),
+        mode: ModeName::DEFAULT,
+        narrowing: Default::default(),
+    };
+    exited.write(&manager.paths, &workspace.id).unwrap();
+    let chat = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution,
+        session: Some("s1".into()),
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+    };
+    let (id, pending) = (
+        workspace.id.clone(),
+        crate::daemon::conversions::Pending::Chat { chat },
+    );
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
+    assert!(chat.converted);
+    assert_eq!(
+        chat.session.map(|session| session.to_string()),
+        Some("s2".into())
+    );
+}

@@ -32,12 +32,10 @@ pub(crate) enum Pending {
         chat: ChatRow,
         execution: ExecutionId,
     },
-    /// A workspace that becomes a chat once the agent `execution` runs
-    /// stopped.
-    Chat {
-        mode: ModeName,
-        execution: ExecutionId,
-    },
+    /// A workspace that becomes the chat `chat` once the agent it carries on
+    /// stopped, with what its agent ran as and with, which outlives the
+    /// agent's execution, as when the agent exits first.
+    Chat { chat: ConvertedChat },
 }
 
 /// The columns of a chat's row, which a conversion keeps as they are.
@@ -230,7 +228,7 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
 /// The stopped chat a workspace becomes: its agent, the execution it ran
 /// as, the session it carries on and the place it ran in, the process it
 /// ran as, its mode and the permissions given to it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ConvertedChat {
     pub agent: Agent,
     pub execution: ExecutionId,
