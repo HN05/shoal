@@ -45,19 +45,8 @@ impl Base {
     /// as the global config, and register repository `name` holding `files`,
     /// whose `main` is on its origin.
     pub fn start(root: TempDir, config: &str, name: &str, files: &[(&str, &str)]) -> Self {
-        fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
-        fs::write(
-            root.path().join(".config/shoal/config.toml"),
-            format!("{NO_OVERLOAD_WARNINGS}{config}"),
-        )
-        .unwrap();
-        let repo = init_repo(root.path(), name, files);
-        // Model a starting commit already present on a remote, without network I/O.
-        git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-        // Fetches over SSH, as the daemon's background sync of a GitHub
-        // origin a test adds, fail here without reaching the network; a test
-        // that serves SSH itself sets its own command.
-        git(&repo, &["config", "core.sshCommand", "false"]);
+        write_global_config(root.path(), config);
+        let repo = offline_repository(root.path(), name, files);
         let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
         let base = Self {
             commands: CommandGroup::new(),
@@ -126,6 +115,29 @@ impl Base {
     pub fn id(&self, name: &str) -> String {
         support::daemon_client::space_id(self.root.path(), name)
     }
+}
+
+/// Write `config` after [`NO_OVERLOAD_WARNINGS`] as the global config in `root`.
+fn write_global_config(root: &Path, config: &str) {
+    fs::create_dir_all(root.join(".config/shoal")).unwrap();
+    fs::write(
+        root.join(".config/shoal/config.toml"),
+        format!("{NO_OVERLOAD_WARNINGS}{config}"),
+    )
+    .unwrap();
+}
+
+/// Create repository `name` in `root` holding `files`, whose `main` is on its
+/// origin and whose fetches never reach the network.
+fn offline_repository(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let repo = init_repo(root, name, files);
+    // Model a starting commit already present on a remote, without network I/O.
+    git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    // Fetches over SSH, as the daemon's background sync of a GitHub
+    // origin a test adds, fail here without reaching the network; a test
+    // that serves SSH itself sets its own command.
+    git(&repo, &["config", "core.sshCommand", "false"]);
+    repo
 }
 
 /// How fixtures start their daemon: as the CLI runs, with a `zmx` on the
