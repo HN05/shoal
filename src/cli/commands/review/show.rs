@@ -79,10 +79,11 @@ pub(in crate::cli::commands) async fn watch(
 
 /// The workspace's newest review for `shoal view`, if it has one; a lookup
 /// that fails leaves it out.
-pub(in crate::cli::commands) async fn latest(ctx: &Context, workspace: &str) -> Option<Review> {
-    reviews::show(&ctx.paths, Some(SpaceSelector::parse(workspace)), None)
-        .await
-        .ok()
+pub(in crate::cli::commands) async fn latest(
+    ctx: &Context,
+    workspace: SpaceSelector,
+) -> Option<Review> {
+    reviews::show(&ctx.paths, Some(workspace), None).await.ok()
 }
 
 /// The workspace a request without a review ID names.

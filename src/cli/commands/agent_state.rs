@@ -1,5 +1,6 @@
 //! `shoal internal agent-state` and `turn-failed`: the turn state, and the
 //! failure that ended a turn, that an agent's hooks report for its space.
+use crate::client::space_ids::SpaceId;
 use std::{
     io::{IsTerminal, Read},
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -108,7 +109,7 @@ async fn tell_failure(ctx: &Context, reported: &Result<i32>) {
     };
     let _ = agents::report_state_failure(
         &ctx.paths,
-        SpaceSelector::parse(&workspace),
+        SpaceSelector::Id(SpaceId::from(workspace)),
         format!("{error:#}"),
     )
     .await;

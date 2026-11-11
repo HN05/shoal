@@ -41,7 +41,7 @@ use crate::{
 #[derive(Default)]
 struct Typed {
     state: Option<PathBuf>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     pool: Option<String>,
     /// `--all` is already on the line.
     all: bool,
@@ -130,7 +130,7 @@ pub fn command() -> Command {
                     .flatten()
                     .and_then(|mut args| args.next())
                     .filter(|arg| !arg.to_string_lossy().starts_with('-'))
-                    .and_then(|arg| arg.to_str().map(str::to_owned))
+                    .and_then(|arg| arg.to_str().map(SpaceSelector::parse))
             });
         typed.named = leaf
             .try_get_many::<SpaceSelector>("workspace")
@@ -177,9 +177,12 @@ fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
 }
 
 /// The text of the space argument `id`, as typed.
-fn space_value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
-    let selector = matches.try_get_one::<SpaceSelector>(id).ok().flatten();
-    selector.map(ToString::to_string)
+fn space_value(matches: &clap::ArgMatches, id: &str) -> Option<SpaceSelector> {
+    matches
+        .try_get_one::<SpaceSelector>(id)
+        .ok()
+        .flatten()
+        .cloned()
 }
 
 /// Attach live completers to the arguments that name daemon-managed objects.
@@ -356,7 +359,7 @@ impl Typed {
                 let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
                 let workspace = context
                     .resolve(
-                        self.workspace.as_deref().map(SpaceSelector::parse).as_ref(),
+                        self.workspace.as_ref(),
                         env::workspace_scoped(),
                         ScopeOrder::AfterDirectory,
                     )
@@ -552,7 +555,7 @@ impl Typed {
     fn workspace<'a>(&self, workspaces: &'a [Workspace]) -> Option<&'a Workspace> {
         let cwd = std::env::current_dir().ok();
         WorkspaceContext::from_directory(workspaces, cwd.as_deref()).resolve(
-            self.workspace.as_deref().map(SpaceSelector::parse).as_ref(),
+            self.workspace.as_ref(),
             env::workspace_scoped(),
             ScopeOrder::AfterDirectory,
         )
