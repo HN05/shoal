@@ -148,6 +148,10 @@ fn ensure_base(
         )?,
         "base workspace {shown} is at a commit and has no branch to build on"
     );
+    ensure!(
+        !converting_to_chat(db, id)?,
+        "base workspace {shown} becomes a chat, whose worktree goes; build on its branch without it"
+    );
     Ok(())
 }
 
@@ -188,7 +192,8 @@ pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String
     Ok(git::strip_local(reference.trim_end()).map(str::to_owned))
 }
 
-/// The workspace in `repository_id` that owns `branch`.
+/// The workspace in `repository_id` that owns `branch`, one a new workspace
+/// may build on: none that becomes a chat.
 pub(super) fn owner(
     db: &Connection,
     repository_id: &RepositoryId,
@@ -196,11 +201,23 @@ pub(super) fn owner(
 ) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
-            "SELECT id FROM workspaces WHERE repository_id=?1 AND branch=?2",
+            "SELECT id FROM workspaces WHERE repository_id=?1 AND branch=?2
+                AND id NOT IN (SELECT space_id FROM space_conversions
+                    WHERE json_extract(record,'$.to')='chat')",
             params![repository_id, branch],
             |row| row.get(0),
         )
         .optional()?)
+}
+
+/// Whether the workspace `id` becomes a chat once its agent's turn ends,
+/// after which nothing may build on it, as its worktree goes then.
+fn converting_to_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
+    store::exists(
+        db,
+        "SELECT 1 FROM space_conversions WHERE space_id=?1 AND json_extract(record,'$.to')='chat'",
+        [id],
+    )
 }
 
 #[cfg(test)]

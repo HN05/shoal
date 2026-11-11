@@ -323,3 +323,60 @@ async fn a_workspace_built_on_after_the_command_keeps_its_worktree() {
     assert!(base.path.exists());
     assert!(manager.chat_by_id(&base.id).await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let base = manager
+        .create_workspace(&repo.id, "base".into(), None, None, None)
+        .await
+        .unwrap();
+    let stacked = manager
+        .create_workspace(&repo.id, "stacked".into(), None, None, None)
+        .await
+        .unwrap();
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        session: None,
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    let (id, pending) = (
+        base.id.clone(),
+        crate::daemon::conversions::Pending::Chat {
+            chat: Box::new(chat),
+            held: false,
+        },
+    );
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
+        .await
+        .unwrap();
+
+    let selector = SpaceSelector::id(&stacked.id);
+    let refused = (manager.set_base_workspace(&selector, Some(base.id.to_string())))
+        .await
+        .unwrap_err();
+    let created = manager
+        .create_workspace(&repo.id, "on-base".into(), Some("base".into()), None, None)
+        .await
+        .unwrap();
+
+    assert!(
+        format!("{refused:#}").contains("becomes a chat"),
+        "{refused:#}"
+    );
+    assert!(created.base_workspace.is_none());
+}
