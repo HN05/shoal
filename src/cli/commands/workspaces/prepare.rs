@@ -28,14 +28,13 @@ use crate::{
 /// Run `steps` in `workspace`, returning it ready with the agent queued.
 pub(in crate::cli::commands) async fn prepare(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     steps: Preparation,
     reporter: &Reporter<'_>,
 ) -> Result<Prepared> {
-    let mut workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
-            .await?
-            .workspace;
+    let mut workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
+        .await?
+        .workspace;
     if steps.setup {
         reporter.step(Step::SetupStarted).await?;
         workspace = run_setup(ctx, &workspace).await?;

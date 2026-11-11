@@ -75,13 +75,11 @@ pub(super) async fn publish(
 /// what waits for the user.
 pub(in crate::cli::commands) async fn push_and_open(
     ctx: &Context,
-    workspace: String,
+    workspace: SpaceSelector,
     options: PullOptions,
     reporter: &Reporter<'_>,
 ) -> Result<OpenOutcome> {
-    let workspace =
-        crate::client::workspaces::verify(&ctx.paths, SpaceSelector::parse(&workspace), true)
-            .await?;
+    let workspace = crate::client::workspaces::verify(&ctx.paths, workspace, true).await?;
     workspace.require_branch("shoal pr open")?;
     crate::client::reviews::check_pr_gate(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     let held =

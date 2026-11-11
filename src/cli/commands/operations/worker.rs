@@ -94,12 +94,12 @@ fn cancellation() -> Result<watch::Receiver<bool>> {
 async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Result<Outcome> {
     match spec {
         OperationSpec::Prepare { workspace, steps } => {
-            workspaces::prepare(ctx, workspace.to_string(), steps, reporter)
+            workspaces::prepare(ctx, workspace, steps, reporter)
                 .await
                 .map(Outcome::Prepared)
         }
         OperationSpec::OpenPull { workspace, options } => {
-            items::push_and_open(ctx, workspace.to_string(), options, reporter)
+            items::push_and_open(ctx, workspace, options, reporter)
                 .await
                 .map(Outcome::Opened)
         }
