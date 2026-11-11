@@ -59,6 +59,20 @@ impl ZellijServer {
             "show_startup_tips false\nshow_release_notes false\nsession_serialization false\n",
         )
         .unwrap();
+        // Zellij 0.46 opens a floating setup wizard on a new home, and
+        // refuses to split a pane while it shows.
+        for data in [
+            ".local/share/zellij",
+            "Library/Application Support/org.Zellij-Contributors.Zellij",
+        ] {
+            let data = root.join(data);
+            fs::create_dir_all(&data).unwrap();
+            fs::write(
+                data.join("desktop_integration.json"),
+                r#"{"flags": ["SetupNeverShow"]}"#,
+            )
+            .unwrap();
+        }
         let sockets = tempfile::Builder::new()
             .prefix("z")
             .tempdir_in("/tmp")
@@ -286,24 +300,9 @@ impl ZellijServer {
         self.servers().unwrap()
     }
 
-    /// The sessions whose server runs in the test's socket directory, as
-    /// the servers' last argument, the session's socket, names them.
+    /// The sessions whose server runs in the test's socket directory.
     fn servers(&self) -> std::io::Result<Vec<String>> {
-        let output = support::run::try_output(Command::new("ps").args(["-A", "-o", "args="]))?;
-        if !output.status.success() {
-            return Err(std::io::Error::other(format!("ps: {output:?}")));
-        }
-        let sockets = fs::canonicalize(self.sockets.path())?;
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .filter_map(|line| {
-                let (_, socket) = line.split_once(" --server ")?;
-                let socket = Path::new(socket.trim_end());
-                fs::canonicalize(socket.parent()?)
-                    .is_ok_and(|dir| dir.starts_with(&sockets))
-                    .then(|| socket.file_name()?.to_str().map(str::to_owned))?
-            })
-            .collect())
+        shoal_core::test_support::zellij_sessions(self.sockets.path())
     }
 
     /// `command` as if run in the user's pane.

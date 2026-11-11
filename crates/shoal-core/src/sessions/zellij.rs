@@ -924,6 +924,22 @@ fn servers_of(session: &str, socket_dir: Option<&Path>) -> Result<Vec<Server>> {
     }))
 }
 
+/// The sessions whose servers listen in `socket_dir`, each by the name its
+/// server started for or else its socket's.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn served_in(socket_dir: &Path) -> Result<Vec<String>> {
+    let names: std::collections::BTreeSet<_> = details::own_command_lines()?
+        .iter()
+        .filter_map(listening)
+        .filter(|listening| same_dir(socket_dir, &listening.server.socket_dir))
+        .map(|listening| {
+            details::variable(listening.server.pid, SESSION_VAR).unwrap_or(listening.socket)
+        })
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect();
+    Ok(names.into_iter().collect())
+}
+
 /// The Zellij server that `process` is, by its command line
 /// `zellij --server <socket dir>/<contract>/<socket>`.
 fn listening(process: &CommandLine) -> Option<Listening> {

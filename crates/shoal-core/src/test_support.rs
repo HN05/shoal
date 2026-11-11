@@ -522,3 +522,9 @@ pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
         .kill_on_drop(true);
     command
 }
+
+/// The Zellij sessions whose servers run in `socket_dir`, by the names
+/// they started with: Zellij 0.46 names its sockets by an ID.
+pub fn zellij_sessions(socket_dir: &Path) -> std::io::Result<Vec<String>> {
+    crate::sessions::zellij::served_in(socket_dir).map_err(std::io::Error::other)
+}
