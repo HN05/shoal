@@ -15,10 +15,11 @@ use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
-/// A terminal session labelled with the workspace that owns it.
+/// A terminal session labelled with the space, a workspace or a chat, that
+/// owns it.
 pub struct Session {
     pub name: String,
-    pub workspace: SpaceId,
+    pub space: SpaceId,
 }
 
 /// The ownership that must still match when a session is closed. Demo launches
@@ -26,7 +27,7 @@ pub struct Session {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Owner {
-    Workspace(SpaceId),
+    Space(SpaceId),
     Demo(String),
 }
 

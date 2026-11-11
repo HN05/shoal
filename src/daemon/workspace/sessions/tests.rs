@@ -4,6 +4,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::test_support::{manager, repository},
+    model::Workspace,
     removal::{InspectionPolicy, UnsavedWork},
     sessions::{Host, HostName, Origin, Session},
 };
@@ -69,9 +70,9 @@ impl Host for FakeHost {
                 .lock()
                 .map_err(|e| anyhow::anyhow!("{e}"))?
                 .iter()
-                .map(|(name, workspace)| Session {
+                .map(|(name, space)| Session {
                     name: name.clone(),
-                    workspace: workspace.clone(),
+                    space: space.clone(),
                 })
                 .collect())
         })
@@ -98,12 +99,12 @@ impl Host for FakeHost {
             // record proves it Shoal's.
             let owned = matches!(self.name, Some(HostName::Rex | HostName::Herdr))
                 || match owner {
-                    crate::sessions::Owner::Workspace(workspace) => self
+                    crate::sessions::Owner::Space(space) => self
                         .remaining
                         .lock()
                         .map_err(|e| anyhow::anyhow!("{e}"))?
                         .iter()
-                        .any(|(session, id)| session == name && id == workspace),
+                        .any(|(session, id)| session == name && id == space),
                     crate::sessions::Owner::Demo(launch) => {
                         self.demos
                             .lock()
@@ -518,7 +519,7 @@ async fn the_sweep_retries_failed_closes_once_the_workspace_is_gone() -> Result<
             let id = workspace.id.clone();
             move |db| {
                 db.execute(
-                    "UPDATE owned_places SET workspace_id='gone' WHERE workspace_id=?1",
+                    "UPDATE owned_places SET space_id='gone' WHERE space_id=?1",
                     [id],
                 )?;
                 Ok(())
@@ -832,3 +833,4 @@ async fn a_session_its_host_labels_closes_through_the_host_without_a_record() ->
     assert_eq!(host.closed()?, ["labelled"]);
     Ok(())
 }
+

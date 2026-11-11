@@ -470,6 +470,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 146 {
         db.execute_batch(CI_JOB_PEAK_CPU_DROPPED)?;
     }
+    if version >= 147 {
+        super::place_owners::own_by_space(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -512,6 +515,40 @@ fn recorded_places_keep_the_server_their_data_names() -> Result<()> {
         [
             ("w1:p1".to_owned(), "HERDR_SOCKET_PATH=/sock".to_owned()),
             ("b1".to_owned(), String::new()),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn places_a_chat_took_over_become_the_chats() -> Result<()> {
+    let mut db = historical_database(146)?;
+    let block = |id: &str| crate::sessions::Origin {
+        owned: false,
+        ..crate::sessions::Origin::created(crate::sessions::HostName::Rex, id.into())
+    };
+    db.execute(
+        "INSERT INTO chats(id,name,agent,pid,birth,started_at,origin)
+         VALUES ('chat','talk','claude',1,'birth',0,?1)",
+        [serde_json::to_string(&block("taken"))?],
+    )?;
+    for (place, owner) in [("kept", Some("workspace")), ("taken", None), ("left", None)] {
+        db.execute(
+            "INSERT INTO owned_places(host,server,place,workspace_id,origin)
+             VALUES ('rex','',?1,?2,?3)",
+            rusqlite::params![place, owner, serde_json::to_string(&block(place))?],
+        )?;
+    }
+    migrate(&mut db)?;
+    let owners: Vec<(String, String)> = db
+        .prepare("SELECT place,space_id FROM owned_places ORDER BY rowid")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        owners,
+        [
+            ("kept".to_owned(), "workspace".to_owned()),
+            ("taken".to_owned(), "chat".to_owned()),
         ]
     );
     Ok(())

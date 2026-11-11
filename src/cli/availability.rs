@@ -134,7 +134,7 @@ async fn session_workspaces(paths: &Paths) -> HashSet<SpaceId> {
         .chain(
             owned
                 .iter()
-                .map(|place| (place.workspace_id.as_str(), &place.origin)),
+                .map(|place| (place.space_id.as_str(), &place.origin)),
         )
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();

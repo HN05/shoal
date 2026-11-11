@@ -1,5 +1,6 @@
 //! Where executions run in terminal hosts, as their wrappers report it, and
-//! the places Shoal created for workspaces, which it closes with them.
+//! the places Shoal created for spaces, workspaces and chats alike, which it
+//! closes with them.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::sessions::OriginExt;
@@ -14,9 +15,8 @@ use crate::sessions::{Origin, PlaceOwnership};
 pub(crate) struct ExecutionPlace {
     pub origin: Origin,
     /// It runs an agent, which takes over a place Shoal created for another
-    /// workspace, as a relabelled zmx session does, so the earlier
-    /// workspace's end leaves it open. A command such as a nested `shoal
-    /// run` takes nothing.
+    /// space, as a relabelled zmx session does, so the earlier space's end
+    /// leaves it open. A command such as a nested `shoal run` takes nothing.
     pub agent: bool,
 }
 
@@ -33,12 +33,28 @@ pub(super) fn record_execution_place(
         params![execution, serde_json::to_string(&place.origin)?],
     )?;
     if place.agent {
-        let origin = &place.origin;
-        tx.execute(
-            "UPDATE owned_places SET workspace_id=?1 WHERE host=?2 AND server=?3 AND place=?4",
-            params![workspace, origin.host, origin.server(), origin.id()],
-        )?;
+        take_over(tx, workspace, &place.origin)?;
     }
+    Ok(())
+}
+
+/// Record `place`, where the chat `chat` starts, as the chat's: a place
+/// Shoal created for another space passes to it, as to an agent that
+/// starts there, and one Shoal opened for the chat is recorded, so the
+/// chat's removal closes either.
+pub(crate) fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<()> {
+    if place.owned && place.place.is_some() {
+        insert_owned(db, chat, place)?;
+    }
+    take_over(db, chat, place)
+}
+
+/// Make `space` the owner of `place` when the daemon records it.
+fn take_over(db: &Connection, space: &SpaceId, place: &Origin) -> Result<()> {
+    db.execute(
+        "UPDATE owned_places SET space_id=?1 WHERE host=?2 AND server=?3 AND place=?4",
+        params![space, place.host, place.server(), place.id()],
+    )?;
     Ok(())
 }
 
@@ -66,16 +82,13 @@ impl Manager {
             .await
     }
 
-    /// The places Shoal created for `workspace`, or for every workspace,
-    /// with the workspace each belongs to; places a chat took are no
-    /// workspace's.
+    /// The places Shoal created for `space`, or for every space, with the
+    /// space each belongs to.
     pub(crate) async fn owned_places(
         &self,
-        workspace: Option<SpaceId>,
+        space: Option<SpaceId>,
     ) -> Result<Vec<(SpaceId, Origin)>> {
-        self.store
-            .run(move |db| owned(db, workspace.as_ref()))
-            .await
+        self.store.run(move |db| owned(db, space.as_ref())).await
     }
 
     /// Whose `place` is for the workspace `selector` names: the record's
@@ -88,7 +101,7 @@ impl Manager {
     ) -> Result<PlaceOwnership> {
         let workspace = self.workspace(selector).await?;
         if let Some((owner, _)) = self.place_owner(place).await? {
-            return Ok(if owner.as_ref() == Some(&workspace.id) {
+            return Ok(if owner == workspace.id {
                 PlaceOwnership::Workspace
             } else {
                 PlaceOwnership::Elsewhere
@@ -104,41 +117,20 @@ impl Manager {
         })
     }
 
-    /// The record of `place`, with the workspace it names its owner, `None`
-    /// once a chat took the place over.
-    pub(super) async fn place_owner(
-        &self,
-        place: &Origin,
-    ) -> Result<Option<(Option<SpaceId>, Origin)>> {
+    /// The record of `place`, with the space it names its owner.
+    pub(super) async fn place_owner(&self, place: &Origin) -> Result<Option<(SpaceId, Origin)>> {
         let (host, server, place) = (place.host, place.server(), place.id().to_owned());
         self.store
             .run(move |db| {
                 db.query_row(
-                    "SELECT workspace_id,origin FROM owned_places
+                    "SELECT space_id,origin FROM owned_places
                      WHERE host=?1 AND server=?2 AND place=?3",
                     params![host, server, place],
-                    |row| Ok((row.get::<_, Option<SpaceId>>(0)?, row.get::<_, String>(1)?)),
+                    |row| Ok((row.get::<_, SpaceId>(0)?, row.get::<_, String>(1)?)),
                 )
                 .optional()?
-                .map(|(workspace, origin)| Ok((workspace, serde_json::from_str(&origin)?)))
+                .map(|(space, origin)| Ok((space, serde_json::from_str(&origin)?)))
                 .transpose()
-            })
-            .await
-    }
-
-    /// Take `place` from the workspace it was created for, as a chat
-    /// starting there does: no workspace's end closes it then.
-    pub(crate) async fn release_place(&self, place: &Origin) -> Result<()> {
-        let (host, server, place) = (place.host, place.server(), place.id().to_owned());
-        let _ownership = self.place_ownership.lock().await;
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE owned_places SET workspace_id=NULL
-                     WHERE host=?1 AND server=?2 AND place=?3",
-                    params![host, server, place],
-                )?;
-                Ok(())
             })
             .await
     }
@@ -160,14 +152,14 @@ fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
     Ok(())
 }
 
-/// Record `origin` as owned by `workspace` unless that place is recorded
+/// Record `origin` as owned by `space` unless that place is recorded
 /// already. A record of an earlier instance under the same ID, which a host
 /// that reuses IDs left, gives way to it.
-fn insert_owned(db: &Connection, workspace: &SpaceId, origin: &Origin) -> Result<()> {
+fn insert_owned(db: &Connection, space: &SpaceId, origin: &Origin) -> Result<()> {
     db.execute(
-        "INSERT INTO owned_places(host,server,place,workspace_id,origin)
+        "INSERT INTO owned_places(host,server,place,space_id,origin)
          VALUES (?1,?2,?3,?4,?5) ON CONFLICT(host,server,place) DO UPDATE
-         SET workspace_id=excluded.workspace_id, origin=excluded.origin
+         SET space_id=excluded.space_id, origin=excluded.origin
          WHERE json_extract(excluded.origin,'$.instance') IS NOT NULL
            AND json_extract(excluded.origin,'$.instance')
                IS NOT json_extract(owned_places.origin,'$.instance')",
@@ -175,28 +167,24 @@ fn insert_owned(db: &Connection, workspace: &SpaceId, origin: &Origin) -> Result
             origin.host,
             origin.server(),
             origin.id(),
-            workspace,
+            space,
             serde_json::to_string(origin)?
         ],
     )?;
     Ok(())
 }
 
-pub(super) fn owned(
-    db: &Connection,
-    workspace: Option<&SpaceId>,
-) -> Result<Vec<(SpaceId, Origin)>> {
+pub(super) fn owned(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<(SpaceId, Origin)>> {
     let mut statement = db.prepare(
-        "SELECT workspace_id,origin FROM owned_places
-         WHERE workspace_id IS NOT NULL AND (?1 IS NULL OR workspace_id=?1)
-         ORDER BY rowid",
+        "SELECT space_id,origin FROM owned_places
+         WHERE ?1 IS NULL OR space_id=?1 ORDER BY rowid",
     )?;
-    let rows = statement.query_map([workspace], |row| {
+    let rows = statement.query_map([space], |row| {
         Ok((row.get::<_, SpaceId>(0)?, row.get::<_, String>(1)?))
     })?;
     rows.map(|row| {
-        let (workspace, origin) = row?;
-        Ok((workspace, serde_json::from_str(&origin)?))
+        let (space, origin) = row?;
+        Ok((space, serde_json::from_str(&origin)?))
     })
     .collect()
 }

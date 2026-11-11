@@ -165,7 +165,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     ("w6", HostName::Herdr, "w9:p2"),
                 ]
                 .map(|(workspace, host, place)| OwnedPlace {
-                    workspace_id: workspace.into(),
+                    space_id: workspace.into(),
                     origin: Origin::created(host, place.into()),
                 })
                 .into(),

@@ -285,17 +285,14 @@ pub(super) async fn handle(
     }))
 }
 
-/// The places Shoal created for `workspace`, or for every workspace.
+/// The places Shoal created for `workspace`, or for every space.
 async fn owned_places(manager: &Manager, workspace: Option<SpaceId>) -> Result<Body> {
     Ok(Body::OwnedPlaces(
         manager
             .owned_places(workspace)
             .await?
             .into_iter()
-            .map(|(workspace_id, origin)| crate::model::OwnedPlace {
-                workspace_id,
-                origin,
-            })
+            .map(|(space_id, origin)| crate::model::OwnedPlace { space_id, origin })
             .collect(),
     ))
 }

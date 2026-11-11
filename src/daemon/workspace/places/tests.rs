@@ -72,7 +72,7 @@ async fn a_later_instance_under_a_reused_id_takes_its_record() -> Result<()> {
         Ok(manager
             .place_owner(&Origin::created(HostName::Zmx, "shared".into()))
             .await?
-            .and_then(|(owner, _)| owner))
+            .map(|(owner, _)| owner))
     };
     manager
         .record_owned_place(&SpaceSelector::id(&workspaces[0]), session("1:1"))
@@ -128,7 +128,7 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
         .place_owner(&Origin::created(HostName::Zmx, "shared".into()))
         .await?
         .context("the later record")?;
-    assert_eq!(owner.as_ref(), Some(&workspaces[1]));
+    assert_eq!(owner, workspaces[1]);
     assert_eq!(kept.instance.as_deref(), Some("2:2"));
     Ok(())
 }
@@ -188,7 +188,11 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
         PlaceOwnership::Unknown
     );
     // A chat that takes the place over takes it from the workspace.
-    manager.release_place(&pane).await?;
+    let chat = SpaceId::generate();
+    manager
+        .store
+        .run(move |db| record_chat_place(db, &chat, &pane))
+        .await?;
     assert_eq!(
         manager
             .place_ownership(

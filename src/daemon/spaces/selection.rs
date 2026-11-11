@@ -48,6 +48,16 @@ impl Manager {
             .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {id}")).into())
     }
 
+    /// Whether a workspace or chat, running or stopped, has the ID `id`.
+    pub(crate) async fn space_exists(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(db, "SELECT 1 FROM spaces WHERE id=?1", [id])
+            })
+            .await
+    }
+
     /// The workspace `selector` names, refusing a chat.
     pub async fn workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
         match self.space(selector).await? {

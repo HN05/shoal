@@ -57,9 +57,10 @@ pub struct ExecutionPlan {
     pub unmerge: Option<Box<UnmergePlan>>,
 }
 
-/// A place Shoal created for a workspace, which closes with it.
+/// A place Shoal created for a space, a workspace or a chat, which closes
+/// with it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedPlace {
-    pub workspace_id: SpaceId,
+    pub space_id: SpaceId,
     pub origin: crate::sessions::Origin,
 }

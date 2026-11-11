@@ -220,7 +220,7 @@ pub async fn untracked_worktrees(daemon: &impl Daemon) -> Result<Vec<UntrackedWo
     pages(daemon, WorkspaceMethod::UntrackedWorktrees).await
 }
 
-/// The places Shoal created for every workspace.
+/// The places Shoal created for every space, a workspace or a chat.
 pub async fn owned_places(daemon: &impl Daemon) -> Result<Vec<OwnedPlace>> {
     request(daemon, WorkspaceMethod::OwnedPlaces).await
 }

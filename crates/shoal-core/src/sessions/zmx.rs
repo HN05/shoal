@@ -224,8 +224,8 @@ impl super::Host for Zmx {
                 .into_iter()
                 .filter(|(_, fields)| in_state(fields, &state_label))
                 .filter_map(|(name, fields)| {
-                    let workspace = SpaceId::from(workspace_owner(&fields)?.to_owned());
-                    Some(super::Session { name, workspace })
+                    let space = SpaceId::from(space_owner(&fields)?.to_owned());
+                    Some(super::Session { name, space })
                 })
                 .collect())
         })
@@ -255,20 +255,18 @@ fn owned_by(fields: &Fields, owner: &super::Owner) -> bool {
         return false;
     }
     match owner {
-        super::Owner::Workspace(id) => workspace_owner(fields) == Some(id.as_str()),
+        super::Owner::Space(id) => space_owner(fields) == Some(id.as_str()),
         super::Owner::Demo(id) => {
             field(fields, CHAT_LABEL).is_none() && field(fields, "shoal.demo") == Some(id.as_str())
         }
     }
 }
 
-/// Old launchers could leave both owner labels when a workspace session became
-/// a chat. Conflicting ownership must never authorize workspace cleanup.
-fn workspace_owner(fields: &Fields) -> Option<&str> {
-    if field(fields, CHAT_LABEL).is_some() {
-        return None;
-    }
-    field(fields, WORKSPACE_LABEL)
+/// The space that owns a session: a chat that took over a workspace's
+/// session labels it as its own, and old launchers left the workspace's label
+/// beside the chat's.
+fn space_owner(fields: &Fields) -> Option<&str> {
+    field(fields, CHAT_LABEL).or_else(|| field(fields, WORKSPACE_LABEL))
 }
 
 #[cfg(test)]

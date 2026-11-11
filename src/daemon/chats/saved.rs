@@ -274,9 +274,6 @@ impl Manager {
             Some(id) => Some(self.reserve_repository_directory(id).await?),
             None => None,
         };
-        if let Some(origin) = &origin {
-            self.release_place(origin).await?;
-        }
         let restored = Restored {
             id: saved.id.clone(),
             repository: saved.repository_id.clone(),
@@ -290,9 +287,12 @@ impl Manager {
             hands_over,
         };
         let owner = self.root_dir_owner();
+        // The chat takes its place under the lock place closes hold.
+        let ownership = self.place_ownership.lock().await;
         let chat = (self.store)
             .write(move |tx| restore(tx, &owner, &restored))
             .await?;
+        drop(ownership);
         self.give_restored_tmp_dir(chat, repository.as_ref(), pid)
             .await
     }
@@ -601,6 +601,9 @@ fn restore(
         ],
     )?;
     ensure!(updated == 1, "the chat is no longer stopped");
+    if let Some(origin) = &restored.origin {
+        crate::daemon::workspace::places::record_chat_place(tx, &restored.id, origin)?;
+    }
     stopped::forget(tx, &restored.id)?;
     let chat = recorded(tx, owner)?
         .into_iter()

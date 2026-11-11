@@ -118,14 +118,8 @@ fn closing_checks_ownership_even_when_a_name_is_reused() {
     let listed =
         parse_list("name=reused\tshoal.created=1\tshoal.workspace=w1\tshoal.demo=new-launch\n");
     for (_, fields) in listed {
-        assert!(owned_by(
-            &fields,
-            &super::super::Owner::Workspace("w1".into())
-        ));
-        assert!(!owned_by(
-            &fields,
-            &super::super::Owner::Workspace("w2".into())
-        ));
+        assert!(owned_by(&fields, &super::super::Owner::Space("w1".into())));
+        assert!(!owned_by(&fields, &super::super::Owner::Space("w2".into())));
         assert!(owned_by(
             &fields,
             &super::super::Owner::Demo("new-launch".into())
@@ -140,10 +134,7 @@ fn closing_checks_ownership_even_when_a_name_is_reused() {
 #[test]
 fn sessions_the_user_opened_are_never_closed() {
     for (_, fields) in parse_list("name=mine\tshoal.workspace=w1\tshoal.demo=launch\n") {
-        assert!(!owned_by(
-            &fields,
-            &super::super::Owner::Workspace("w1".into())
-        ));
+        assert!(!owned_by(&fields, &super::super::Owner::Space("w1".into())));
         assert!(!owned_by(
             &fields,
             &super::super::Owner::Demo("launch".into())
@@ -152,16 +143,14 @@ fn sessions_the_user_opened_are_never_closed() {
 }
 
 #[test]
-fn conflicting_chat_ownership_never_authorizes_workspace_or_demo_cleanup() {
+fn a_chat_owns_the_session_it_took_from_a_workspace_or_demo() {
     let sessions = parse_list(
         "name=reused\tshoal.created=1\tshoal.workspace=w1\tshoal.demo=old-launch\tshoal.chat=c1\n",
     );
     for (_, fields) in sessions {
-        assert!(workspace_owner(&fields).is_none());
-        assert!(!owned_by(
-            &fields,
-            &super::super::Owner::Workspace("w1".into())
-        ));
+        assert_eq!(space_owner(&fields), Some("c1"));
+        assert!(owned_by(&fields, &super::super::Owner::Space("c1".into())));
+        assert!(!owned_by(&fields, &super::super::Owner::Space("w1".into())));
         assert!(!owned_by(
             &fields,
             &super::super::Owner::Demo("old-launch".into())

@@ -22,6 +22,7 @@ mod chat_names;
 mod event_tests;
 mod item_numbers;
 mod migrations;
+mod place_owners;
 mod place_servers;
 mod space_names;
 mod worker;
