@@ -185,6 +185,7 @@ pub async fn run(
         workspace::turn_retry::run,
     );
     spawn_supervised(&mut background, &manager, "chats", chats::run);
+    spawn_supervised(&mut background, &manager, "conversions", conversions::run);
     spawn_supervised(
         &mut background,
         &manager,

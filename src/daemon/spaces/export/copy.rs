@@ -164,6 +164,7 @@ fn running_record(
         session,
         moved: false,
         copied: None,
+        converted: false,
         stopped_by: None,
         turn: None,
         model: execution.model.clone(),

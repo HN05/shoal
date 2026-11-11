@@ -337,7 +337,7 @@ impl Manager {
     }
 
     /// Read recorded executions in every state for a known workspace ID.
-    pub(super) async fn workspace_executions(&self, id: &SpaceId) -> Result<Vec<Execution>> {
+    pub(crate) async fn workspace_executions(&self, id: &SpaceId) -> Result<Vec<Execution>> {
         let id = id.to_owned();
         self.store.run(move |db| store::executions(db, &id)).await
     }

@@ -61,6 +61,16 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
 }
 
 impl Manager {
+    /// Restore the stopped `chat` a workspace became as `shoal resume`
+    /// restores it, in a background place where a restored agent opens; a
+    /// failure leaves it for `shoal resume`.
+    pub(crate) async fn restore_converted_chat(&self, chat: &Chat) -> Result<()> {
+        match resume(&self.paths, chat).await? {
+            Ok(()) => Ok(()),
+            Err(error) => anyhow::bail!("{error}"),
+        }
+    }
+
     /// Tell the user that `chat` waits for `shoal resume` since its restore
     /// failed with `error`.
     pub(super) async fn notify_restore_failed(&self, chat: &Chat, error: &str) {

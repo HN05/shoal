@@ -458,6 +458,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
                 reason: Some("its terminal closed".into()),
                 at: Some(UnixTime::from_seconds(1_800_000_000)),
             }),
+            converted: false,
         }]
     );
     let kept = LastSession::path(

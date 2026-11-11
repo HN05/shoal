@@ -275,6 +275,7 @@ fn manifest_with_sessions() -> Manifest {
         ),
         stopped_by: None,
         stop: None,
+        converted: false,
     };
     let workspace: RemovedWorkspace = serde_json::from_value(serde_json::json!({
         "workspace_id": "w1",

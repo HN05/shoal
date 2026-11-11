@@ -381,6 +381,7 @@ fn chat_session(chat: &Chat) -> LastSession {
         session: chat.session.clone(),
         moved: false,
         copied: None,
+        converted: false,
         origin: None,
         stopped_by: None,
         stop: None,

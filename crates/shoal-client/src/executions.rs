@@ -121,6 +121,11 @@ pub struct Record {
     /// of `session`, which stays the original's, or anew without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copied: Option<Copied>,
+    /// The workspace was a chat whose agent this one carries on, so it
+    /// starts from a fork of `session` in the worktree, told what the space
+    /// is now.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub converted: bool,
     /// The space whose process asked for the stop, as for a restart that
     /// left the agent stopped, which with the spaces above it may resume the
     /// agent; unknown for one the user or Shoal stopped.
@@ -201,6 +206,9 @@ pub struct LastSession {
     /// As [`Record::copied`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copied: Option<Copied>,
+    /// As [`Record::converted`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub converted: bool,
     /// Where the agent ran, as its terminal host records it, so `shoal
     /// resume` can restore it there; unknown for one that exited on its own.
     #[serde(
