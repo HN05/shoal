@@ -617,8 +617,9 @@ pub(crate) fn set_repository_toml(fixture: &Fixture, text: &str) {
 /// Runs a session's command in place of a zmx session, recording each call
 /// and serving the sessions listed in `$HOME/zmx-sessions`. A detached
 /// session keeps the environment it was created with and runs sent text as
-/// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
-/// listed, with the labels set on it, once `$HOME/zmx-keep-sessions` exists.
+/// its shell would, logging the output to `$HOME/zmx-<name>.log`, which
+/// `history` prints, and stays listed, with the labels set on it, once
+/// `$HOME/zmx-keep-sessions` exists.
 /// `$HOME/zmx-<name>.running` exists while the sent text runs.
 /// An attached session ends once `$HOME/zmx-attach-ends-session` exists, and
 /// one an attach creates stays listed after its command, as after a detach,
@@ -700,6 +701,9 @@ elif args[:1] == ['send']:
         subprocess.Popen([sys.executable, __file__, 'worker', args[2].rstrip('\r')], env=env,
             start_new_session=True,
             stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+elif args[:1] == ['history']:
+    output = root / f'zmx-{args[1]}.log'
+    print(output.read_text() if output.exists() else '', end='')
 elif args[:1] == ['list']:
     sessions = root / 'zmx-sessions'
     listed = sessions.read_text() if sessions.exists() else 'no sessions found'

@@ -74,12 +74,11 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     let workspace = fixture.add("tried");
     let runs = Path::new(workspace["path"].as_str().unwrap()).join("runs");
-    // Without zmx or Herdr on PATH the demo runs in the background with a log.
-    let bin = fixture.root.path().join("bin");
+    let path = demo_path(&fixture);
     let demo = |args: &[&str]| {
         let output = fixture
             .command()
-            .env("PATH", fixture.restricted_path(&bin))
+            .env("PATH", &path)
             // As Shoal sets it for the agents it launches.
             .env("SHOAL_OUTPUT", "json")
             .arg("--json")
@@ -170,13 +169,12 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     );
 }
 
-/// `shoal --json demo ARGS` without zmx or Herdr on PATH, so the demo runs in
-/// the background with a log.
+/// `shoal --json demo ARGS` with the fixture's zmx, so the demo runs in a
+/// session of it.
 pub(crate) fn demo(fixture: &Fixture, args: &[&str]) -> Value {
-    let bin = fixture.root.path().join("bin");
     let output = fixture
         .command()
-        .env("PATH", fixture.restricted_path(&bin))
+        .env("PATH", demo_path(fixture))
         .arg("--json")
         .arg("demo")
         .args(args)
@@ -188,6 +186,17 @@ pub(crate) fn demo(fixture: &Fixture, args: &[&str]) -> Value {
         String::from_utf8_lossy(&output.stderr)
     );
     serde_json::from_slice(&output.stdout).unwrap()
+}
+
+/// A PATH whose only terminal host is the fixture's zmx, which runs a
+/// session's commands in place and logs what they print.
+fn demo_path(fixture: &Fixture) -> String {
+    let bin = fixture.root.path().join("bin");
+    let zmx = bin.join("zmx");
+    if !zmx.exists() {
+        install_test_script(zmx, PASSTHROUGH_ZMX);
+    }
+    fixture.restricted_path(&bin)
 }
 
 /// Start the demo `name` of `tried` with `preset`, whose command writes the
@@ -279,12 +288,11 @@ fn simulator_demos_share_the_workspace_simulator() {
 fn a_demo_outlives_the_command_that_started_it() {
     let fixture = Fixture::new();
     fixture.add("tried");
-    let bin = fixture.root.path().join("bin");
     let binary = support::shoal_binary();
     // A tracked command starts the demo, as an agent does, then exits.
     let output = fixture
         .command()
-        .env("PATH", fixture.restricted_path(&bin))
+        .env("PATH", demo_path(&fixture))
         .args([
             "run",
             "--workspace",
@@ -331,10 +339,10 @@ fn a_demo_outlives_the_command_that_started_it() {
 }
 
 #[test]
-fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
+fn demos_refuse_cleared_scopes_and_commands_that_cannot_run() {
     let fixture = Fixture::new();
     fixture.add("tried");
-    let other = fixture.add("other");
+    fixture.add("other");
     demo(
         &fixture,
         &[
@@ -347,14 +355,13 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
             "echo hello; exec sleep 600",
         ],
     );
-    let log = fixture
-        .root
-        .path()
-        .join("state/workspaces")
-        .join(other["id"].as_str().unwrap())
-        .join("demos/demo.log");
-    wait_until("the demo to write its log", || {
-        fs::read_to_string(&log).is_ok_and(|text| text.contains("hello"))
+    wait_until("the demo to print", || {
+        demo(
+            &fixture,
+            &["screen", "demo", "--workspace", &fixture.id("other")],
+        )["screen"]
+            .as_str()
+            .is_some_and(|text| text.contains("hello"))
     });
     // An invalid name is refused before a workspace is chosen.
     for args in [
@@ -390,7 +397,6 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         1
     );
     fixture.ok(&["rm", "--wait", &fixture.id("other"), "--yes"]);
-    assert!(!log.exists());
 
     // A command that cannot run never reports a started demo.
     let missing = fixture.run(&[
@@ -410,9 +416,9 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     );
 }
 
-/// The process groups of a workspace's only demo: its wrapper's, which a
-/// background demo leads, and its command's. Shoal stops neither when the
-/// fixture kills the daemon, so a test that ends early kills them here.
+/// The process groups of a workspace's only demo: its wrapper's, which its
+/// session leads, and its command's. Shoal stops neither when the fixture
+/// kills the daemon, so a test that ends early kills them here.
 struct DemoProcesses {
     groups: [u32; 2],
     ended: bool,
@@ -421,9 +427,12 @@ struct DemoProcesses {
 impl DemoProcesses {
     fn of(fixture: &Fixture, workspace: &str) -> Self {
         let execution = wait_registered_execution(fixture, workspace);
-        let pid = |process: &str| execution[process]["pid"].as_u64().unwrap() as u32;
+        let group = |process: &str| {
+            let pid = execution[process]["pid"].as_u64().unwrap() as i32;
+            unsafe { libc::getpgid(pid) as u32 }
+        };
         Self {
-            groups: [pid("wrapper"), pid("child")],
+            groups: [group("wrapper"), group("child")],
             ended: false,
         }
     }
