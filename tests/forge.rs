@@ -5666,9 +5666,9 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
         // Approval reads the issue it opened and the comment's item; reading
-        // it after the comment is posted fails.
+        // it after the comment is posted fails, in a way not tried again.
         "GET repos/team/project/issues/40": [issue, issue,
-            {"status": 500, "body": {"message": "unavailable"}}],
+            {"status": 403, "body": {"message": "unavailable"}}],
         "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"node_id": "C_1"}},
     }));
     let propose = |title: &str| {
