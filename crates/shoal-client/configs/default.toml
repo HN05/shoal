@@ -103,7 +103,7 @@ enabled = true
 sustained_seconds = 60
 
 [machine.overload.warning]
-# Message running agents to reduce load before an enabled protection stops them.
+# Message running agents about high load before an enabled protection stops them.
 enabled = true
 # Linux usage; macOS warns at native warning pressure.
 # memory_used_percent = 85

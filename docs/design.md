@@ -321,8 +321,9 @@ it, and protection and warnings do not use it yet. Processes that leave the
 workspace's environment, such as work handed to a shared server or container
 runtime, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
-queues an agent message for every workspace with a running agent, so agents can
-reduce load before anything stops. Warnings repeat per signal and workspace only
+queues an agent message for every workspace with a running agent, so agents
+know of the load before anything stops. A memory or CPU warning is a heads-up
+that asks for no action, so agents keep to their work. Warnings repeat per signal and workspace only
 after an interval and never stop, clean up or notify. A memory or CPU warning
 wakes an idle agent only while something besides the agents runs in its
 workspace, checked when the agent would be woken rather than when the warning

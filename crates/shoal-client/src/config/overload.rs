@@ -171,7 +171,7 @@ impl Default for Recovery {
 }
 
 /// Thresholds, normally below each enabled protection's stop threshold, at
-/// which Shoal messages running agents so they can reduce load first.
+/// which Shoal messages running agents before anything stops.
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Warning {

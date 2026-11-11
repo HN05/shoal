@@ -221,8 +221,9 @@ stops nothing, and no agent restores until every reading succeeds.
 Before stopping anything, Shoal warns the agents. While memory, CPU or free
 disk space is past its `[machine.overload.warning]` threshold and that protection is
 enabled, the daemon queues an [agent message](#agent-messages) for each
-workspace with a running agent, naming the threshold and asking it to reduce
-load. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
+workspace with a running agent, naming the threshold. A memory or CPU warning
+tells the agent that load is high and that it needs no action; a disk warning
+asks it to free space. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
 Each workspace hears about each signal at most once per `repeat_minutes`, and
 agents started later are warned at the next sample. A memory or CPU warning
 wakes an idle agent only while a tracked command, demo or background process

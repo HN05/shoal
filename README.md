@@ -354,7 +354,7 @@ agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }  # Shoal's change
 See [agent accounts](docs/reference.md#agent-accounts).
 
 Memory overload protection stops tracked agents by default while retaining their
-workspaces and leases; before that, Shoal messages running agents to reduce load. To opt out, run `shoal config set machine.overload.memory.enabled
+workspaces and leases; before that, Shoal tells running agents that memory pressure is high. To opt out, run `shoal config set machine.overload.memory.enabled
 false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked

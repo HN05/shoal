@@ -1,5 +1,5 @@
 //! Message running agents when machine load nears a protection's stop
-//! threshold, so they can reduce it before Shoal stops or cleans anything.
+//! threshold, so they know of it before Shoal stops or cleans anything.
 use crate::client::space_ids::SpaceId;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
@@ -66,23 +66,25 @@ impl Warnings {
     }
 }
 
-const REDUCE_LOAD: &str = "Avoid starting builds, tests or servers you do not need now, and stop processes you no longer need.";
+/// Memory and CPU warnings report the machine's load without asking the
+/// agent to change its work.
+const HEADS_UP: &str = "This is information only; it needs no action from you.";
 
 pub(super) fn memory(settings: &Overload) -> String {
     let level = if cfg!(target_os = "macos") {
-        "macOS reports memory pressure; Shoal stops an agent at critical pressure.".to_owned()
+        "Memory pressure is high: macOS reports warning pressure, and Shoal stops an agent at critical pressure.".to_owned()
     } else {
         format!(
-            "Memory use is above {}%; Shoal stops an agent at {}%.",
+            "Memory pressure is high: memory use is above {}%, and Shoal stops an agent at {}%.",
             settings.warning.memory_used_percent, settings.memory.used_percent
         )
     };
-    format!("{level} {REDUCE_LOAD}")
+    format!("{level} {HEADS_UP}")
 }
 
 pub(super) fn cpu(settings: &Overload) -> String {
     format!(
-        "CPU use has been above {}% for {} seconds; Shoal stops an agent after {} seconds above {}%. Run builds and tests with fewer parallel jobs. {REDUCE_LOAD}",
+        "CPU use has been above {}% for {} seconds; Shoal stops an agent after {} seconds above {}%. {HEADS_UP}",
         settings.warning.cpu_used_percent,
         settings.warning.cpu_sustained_seconds,
         settings.cpu.sustained_seconds,
