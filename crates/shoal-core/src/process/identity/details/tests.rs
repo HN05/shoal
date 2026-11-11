@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn own_command_lines_list_a_child_with_its_arguments() {
-    let mut child = std::process::Command::new("sleep")
-        .args(["300", "1"])
+    let mut child = std::process::Command::new("tail")
+        .args(["-f", "/dev/null"])
         .spawn()
         .unwrap();
     let listed = own_command_lines();
@@ -19,7 +19,7 @@ fn own_command_lines_list_a_child_with_its_arguments() {
         found,
         Some((
             std::process::id(),
-            vec!["sleep".into(), "300".into(), "1".into()]
+            vec!["tail".into(), "-f".into(), "/dev/null".into()]
         ))
     );
 }
