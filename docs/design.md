@@ -3201,10 +3201,12 @@ to tell, so the daemon remembers, by unique process ID, what the latest inventor
 told about each process's owner, an execution or none, while a live process can
 still name it as itself or as its parent. Inventories take turns, so the latest
 is the newest, except that an inference never replaces a reading of the process's
-own environment. Inventories read the kernel's process table, `proc_listallpids` on macOS
-and `/proc` on Linux, rather than run `ps`: stops, waits and status checks take
-them often, and each `ps` cost a process start plus more reads than Shoal
-needs, which skip a zombie after its first. Such a process takes what is remembered for it, failing that for
+own environment. Inventories, and the command lines, run times, terminals and
+foreground process groups Shoal shows or checks, read the kernel's process
+records, `proc_pidinfo` and `sysctl` on macOS and `/proc` on Linux, rather than
+run `ps`: stops, waits and status checks take them often, each `ps` cost a
+process start plus more reads than Shoal needs, which skip a zombie after its
+first, and Shoal needs no `ps` installed. Such a process takes what is remembered for it, failing that for
 its exited parent, and counts as
 unreadable only when no inventory saw either with its owner, as for a parent that
 exited between scans or before a daemon restart. An unreadable process counts only against executions of the

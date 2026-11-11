@@ -420,7 +420,7 @@ fn is_zero(count: &usize) -> bool {
     *count == 0
 }
 
-/// A process Shoal stopped, as `ps` showed it.
+/// A process Shoal stopped, as a person recognizes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedProcess {
     pub pid: u32,

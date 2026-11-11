@@ -573,7 +573,7 @@ impl Isolated {
     /// The processes naming the session or its directory, with their
     /// parents and states.
     fn processes(&self) -> String {
-        let listed = std::process::Command::new(Tool::Ps.program())
+        let listed = std::process::Command::new("ps")
             .args(["-A", "-o", "pid=,ppid=,stat=,etime=,args="])
             .output()
             .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())

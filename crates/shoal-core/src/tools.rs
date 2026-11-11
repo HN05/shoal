@@ -44,7 +44,6 @@ tools! {
     Curl => (programs::CURL, None),
     Tar => ("tar", None),
     Diff => ("diff", None),
-    Ps => ("ps", None),
     Plutil => ("/usr/bin/plutil", None),
     Launchctl => ("launchctl", None),
     Systemctl => ("systemctl", None),
