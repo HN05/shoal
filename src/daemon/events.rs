@@ -10,7 +10,7 @@ use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
     AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventCursor,
     EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, ShoalEvent, ShoalEventDetails,
-    ShoalEventKind, WorkspaceEvent,
+    ShoalEventKind, StoppedProcess, WorkspaceEvent,
 };
 use crate::time::UnixTime;
 

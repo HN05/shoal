@@ -28,8 +28,9 @@ use crate::{
 /// later deliveries.
 const LISTED_AT_ONCE: usize = 10;
 
-/// The longest command a leftover keeps, so a delivery stays small.
-const COMMAND_LIMIT: usize = 300;
+/// The longest command a leftover or a stopped process keeps, so a
+/// delivery or an event stays small.
+pub(crate) const COMMAND_LIMIT: usize = 300;
 
 /// What the last sweep found, by space.
 #[derive(Default)]

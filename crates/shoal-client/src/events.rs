@@ -403,6 +403,13 @@ pub struct AlertEvent {
     pub message: String,
 }
 
+/// A process Shoal stopped, as `ps` showed it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoppedProcess {
+    pub pid: u32,
+    pub command: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentStateEvent {
     /// Null once the execution that reported the state has ended.

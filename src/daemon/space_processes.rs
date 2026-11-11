@@ -9,12 +9,15 @@ use anyhow::{Result, ensure};
 pub(crate) use crate::client::processes::{Selection, Stopped};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{store, workspace::Manager},
+    daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, store, workspace::Manager},
     fsutil::off_runtime,
     model::{Chat, PresentSpace, Workspace},
-    process::identity::{
-        self, Identity,
-        spaces::{self, Space, Untracked},
+    process::{
+        described,
+        identity::{
+            self, Identity,
+            spaces::{self, Space, Untracked},
+        },
     },
     state::WorkspaceState,
     tmp_dirs::Layout,
@@ -69,21 +72,21 @@ impl Manager {
             PresentSpace::Workspace(workspace) => workspace,
             PresentSpace::Chat(_) => {
                 let chat = self.running_chat(selector).await?;
-                let processes = self
+                let stopped = self
                     .stop_untracked(self.chat_space(&chat).await?, selection, requester)
                     .await?;
                 return Ok(Stopped {
                     space: chat.name,
-                    processes,
+                    processes: stopped.len(),
                 });
             }
         };
-        let processes = self
+        let stopped = self
             .stop_workspace_untracked(&workspace, selection, requester)
             .await?;
         Ok(Stopped {
             space: workspace.name,
-            processes,
+            processes: stopped.len(),
         })
     }
 
@@ -91,12 +94,12 @@ impl Manager {
     /// so no execution registers between reading the tracked processes and
     /// signalling: its processes would count as untracked. The worktree ties
     /// processes to the workspace once it is verified to be its.
-    async fn stop_workspace_untracked(
+    pub(crate) async fn stop_workspace_untracked(
         &self,
         workspace: &Workspace,
         selection: Selection,
         requester: Option<Identity>,
-    ) -> Result<usize> {
+    ) -> Result<Vec<StoppedProcess>> {
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
@@ -176,8 +179,8 @@ impl Manager {
     }
 
     /// Stop the untracked processes of `space` that `selection` takes, other
-    /// than `requester` and the processes that started it, returning how
-    /// many there were. Each is checked against its identity before every
+    /// than `requester` and the processes that started it, returning them
+    /// as they ran. Each is checked against its identity before every
     /// signal, gets SIGTERM, then SIGKILL after the grace period; the error
     /// names those that survived.
     pub(crate) async fn stop_untracked(
@@ -185,16 +188,17 @@ impl Manager {
         space: Space,
         selection: Selection,
         requester: Option<Identity>,
-    ) -> Result<usize> {
+    ) -> Result<Vec<StoppedProcess>> {
         let _handoffs = self.chat_handoffs.read().await;
-        let mut stopped = std::collections::HashSet::new();
+        let mut stopped = Vec::new();
         for _ in 0..ROUNDS {
             let targets = self.selected(&space, selection, requester.clone()).await?;
             if targets.is_empty() {
-                return Ok(stopped.len());
+                return Ok(stopped);
             }
+            let described = described::describe(&pids_of(&targets)).await?;
             stop(&targets).await?;
-            stopped.extend(targets);
+            stopped.extend(as_stopped(&targets, described));
         }
         let remaining = self.selected(&space, selection, requester).await?;
         ensure!(
@@ -202,7 +206,7 @@ impl Manager {
             "processes survived stopping: {}; stop them yourself, then retry",
             pids(&remaining)
         );
-        Ok(stopped.len())
+        Ok(stopped)
     }
 
     async fn selected(
@@ -239,6 +243,27 @@ async fn stop(targets: &[Identity]) -> Result<()> {
         pids(survivors)
     );
     Err(error)
+}
+
+/// The processes of `targets` that `described` found running, as it shows them.
+fn as_stopped(
+    targets: &[Identity],
+    mut described: std::collections::HashMap<u32, described::Description>,
+) -> Vec<StoppedProcess> {
+    targets
+        .iter()
+        .filter_map(|process| {
+            let description = described.remove(&process.pid)?;
+            Some(StoppedProcess {
+                pid: process.pid,
+                command: description.command.chars().take(COMMAND_LIMIT).collect(),
+            })
+        })
+        .collect()
+}
+
+fn pids_of(processes: &[Identity]) -> Vec<u32> {
+    processes.iter().map(|process| process.pid).collect()
 }
 
 fn pids<'a>(processes: impl IntoIterator<Item = &'a Identity>) -> String {
