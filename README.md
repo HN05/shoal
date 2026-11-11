@@ -540,6 +540,6 @@ temporary `HOME` set `SHOAL_DEV_USER_FILES=1` to change user-level files.
 cargo build
 cargo nextest run
 cargo test --doc
-cargo clippy --all-targets -- -D warnings
+CARGO_BUILD_WARNINGS=deny cargo clippy --all-targets
 cargo fmt --check
 ```

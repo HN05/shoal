@@ -175,7 +175,7 @@ jobs:
       - name: cargo clippy
         if: env.DOCS_ONLY != 'true'
         run: |
-          cargo clippy --locked --all-targets -- -D warnings
+          CARGO_BUILD_WARNINGS=deny cargo clippy --locked --all-targets
 
       - name: cargo check of each crate alone
         if: env.DOCS_ONLY != 'true'

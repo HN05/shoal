@@ -318,8 +318,8 @@ test in the PR.
 
 ## Validation
 
-Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and
-`cargo nextest run` for Rust changes, with `cargo test --doc` when a change touches
+Run `cargo fmt --all --check`, `CARGO_BUILD_WARNINGS=deny cargo clippy
+--all-targets`, and `cargo nextest run` for Rust changes, with `cargo test --doc` when a change touches
 doc tests. Nextest runs every test in a process of its own, so a lock in a test
 binary's memory keeps no tests apart: tests that must not overlap take a lock
 other processes see, such as a file lock, and join a test group with

@@ -59,7 +59,7 @@ def bump(manifest, lock, requested, occupied):
 
 def validate():
     run("cargo", "fmt", "--all", "--check")
-    run("cargo", "clippy", "--locked", "--all-targets", "--", "-D", "warnings")
+    run("env", "CARGO_BUILD_WARNINGS=deny", "cargo", "clippy", "--locked", "--all-targets")
     run("cargo", "test", "--locked")
     run("python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py")
     run("cargo", "build", "--locked", "--release")
