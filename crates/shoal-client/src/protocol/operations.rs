@@ -66,6 +66,10 @@ pub enum OperationMethod {
         agent: Option<Box<QueuedLaunch>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
+        /// The starting queue entry whose launch opens the workspace. One a
+        /// scoped process queued opens it in that process's scope.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        queue_entry: Option<crate::queue::QueueEntryId>,
     },
     /// Split a child from `workspace` and start preparing it, as `shoal
     /// split` does, with the checks of [`Self::StartWorkspace`]: on the new

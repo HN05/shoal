@@ -817,7 +817,12 @@ from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
 scoped callers may queue only for the workspaces below theirs, and cancel those
-entries or move them back, but never ahead of other work. A workspace's
+entries or move them back, but never ahead of other work. A scoped caller's
+launch that a blocker holds queues before its workspace exists, so the
+workspace can start from the done blocker's branch: the entry records the
+caller's space, which the daemon starts it for and whose scope the user's
+process that opens the workspace then acts in, so it opens it only where the
+caller could. The launch keeps that space while it waits and goes with it. A workspace's
 coordinator is the agent of the nearest space above it that has one, whatever
 its kind, which one operation queues a message for: the events about
 it that notify the user, the child agent's messages, questions and completion

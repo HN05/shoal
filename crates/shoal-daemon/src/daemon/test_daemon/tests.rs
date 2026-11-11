@@ -335,6 +335,7 @@ fn start_workspace(daemon: &TestDaemon, start: WorkspaceStart) -> OperationMetho
         pr: None,
         agent: None,
         env: None,
+        queue_entry: None,
     }
 }
 
@@ -594,6 +595,73 @@ async fn a_chats_agent_starts_workspaces_below_its_chat() {
     assert!(
         worker.token.is_some(),
         "the worker acts with the chat's scope"
+    );
+    worker.exit(1);
+}
+
+#[tokio::test]
+async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
+    let daemon = TestDaemon::start().await;
+    let chat = daemon
+        .manager
+        .start_chat(
+            daemon.repository.id.clone().into(),
+            "planner".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let outside = daemon.workspace("outside").await;
+    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let agent = daemon.connector().scope(token);
+    let queue = QueueMethod::QueueAdd {
+        request: crate::model::QueueRequest {
+            repository: daemon.repository.id.clone().into(),
+            name: "api".into(),
+            agent: "claude".into(),
+            mode: None,
+            narrowing: Default::default(),
+            issue_title: None,
+            plan: "{}".into(),
+            env: Default::default(),
+            now: false,
+            workspace: None,
+            blockers: Vec::new(),
+        },
+    };
+    let admission: crate::model::QueueAdmission = connection::request(&agent, queue).await.unwrap();
+    // The daemon starts it, as it starts a launch in an existing workspace.
+    assert!(!admission.start);
+    let entry = admission.entry.unwrap();
+    assert_eq!(entry.queued_by.as_ref(), Some(&chat.id));
+    // Its worker, the user's process, opens the workspace only where the
+    // chat may, and below the chat unless told otherwise.
+    let app = daemon.connector();
+    let open = |parent: Option<&SpaceId>| {
+        let mut start = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
+        if let OperationMethod::StartWorkspace {
+            parent: given,
+            queue_entry,
+            ..
+        } = &mut start
+        {
+            *given = parent.map(SpaceSelector::id);
+            *queue_entry = Some(entry.id.clone());
+        }
+        start
+    };
+    let refused = connection::request::<StartedWorkspace>(&app, open(Some(&outside.id))).await;
+    assert!(refused.is_err());
+    let started: StartedWorkspace = connection::request(&app, open(None)).await.unwrap();
+    let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
+    assert_eq!(parent, Some(&chat.id));
+    let worker = fake::take(&started.operation);
+    assert!(
+        worker.token.is_some(),
+        "the worker acts in the chat's scope"
     );
     worker.exit(1);
 }
