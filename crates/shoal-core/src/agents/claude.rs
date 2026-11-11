@@ -34,10 +34,8 @@ impl Integration for Claude {
         settings::merge(args, routing)
     }
 
-    /// The `ANTHROPIC_BASE_URL` it would use, from the first of its
-    /// settings that names one, as Claude Code ranks them: the `--settings`
-    /// the wrapper merges, the project's local then shared settings, and the
-    /// user's; else its environment's, else Anthropic's API.
+    /// The `ANTHROPIC_BASE_URL` it would use, from the first of the settings
+    /// it reads that names one, else its environment's, else Anthropic's API.
     fn default_upstream(
         &self,
         args: &[OsString],
@@ -45,14 +43,7 @@ impl Integration for Claude {
         variable: &dyn Fn(&str) -> Option<OsString>,
         home: &Path,
     ) -> anyhow::Result<String> {
-        let [local, shared] = settings::project(directory);
-        let ranked = [
-            settings::given(args, directory)?,
-            local,
-            shared,
-            settings::user(variable, home),
-        ];
-        let url = ranked
+        let url = settings::ranked(args, directory, variable, home)?
             .iter()
             .find_map(|settings| settings["env"][BASE_URL].as_str().map(str::to_owned))
             .or_else(|| variable(BASE_URL)?.into_string().ok())

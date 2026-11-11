@@ -26,10 +26,57 @@ pub(super) fn merge(args: &mut Vec<OsString>, routing: &super::super::Routing) -
     Ok(())
 }
 
-/// What every `--settings` before a `--` in `args` gives, joined as
-/// [`merge`] joins them, with files relative to `directory`.
-pub(super) fn given(args: &[OsString], directory: &Path) -> Result<Value> {
-    join(&occurrences(args), directory)
+/// The settings a launch with `args` in `directory` reads, highest first as
+/// Claude Code ranks them: the `--settings` it is given, then of the sources
+/// `--setting-sources` enables, by default all, the project's local and
+/// shared settings and the user's, whose directory `variable` and `home`
+/// give.
+pub(super) fn ranked(
+    args: &[OsString],
+    directory: &Path,
+    variable: &dyn Fn(&str) -> Option<OsString>,
+    home: &Path,
+) -> Result<Vec<Value>> {
+    let enabled = sources(args);
+    let on = |source: &str| {
+        enabled
+            .as_ref()
+            .is_none_or(|enabled| enabled.iter().any(|on| on == source))
+    };
+    let [local, shared] = project(directory);
+    let mut ranked = vec![join(&occurrences(args), directory)?];
+    ranked.extend(on("local").then_some(local));
+    ranked.extend(on("project").then_some(shared));
+    ranked.extend(on("user").then(|| user(variable, home)));
+    Ok(ranked)
+}
+
+/// The sources the last `--setting-sources` before a `--` in `args` names,
+/// such as `user` and `project`; `None` without one.
+fn sources(args: &[OsString]) -> Option<Vec<String>> {
+    let mut sources = None;
+    for (at, arg) in args.iter().enumerate() {
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        if arg == "--" {
+            break;
+        }
+        let value = match arg.strip_prefix("--setting-sources") {
+            Some("") => args.get(at + 1).and_then(|value| value.to_str()),
+            Some(rest) => rest.strip_prefix('='),
+            None => None,
+        };
+        if let Some(value) = value {
+            sources = Some(
+                value
+                    .split(',')
+                    .map(|source| source.trim().to_owned())
+                    .collect(),
+            );
+        }
+    }
+    sources
 }
 
 /// The settings of each of `found` merged in order, with files relative to
@@ -54,7 +101,7 @@ pub(super) fn user(variable: &dyn Fn(&str) -> Option<OsString>, home: &Path) -> 
 
 /// The settings of the project in `directory`, its local ones first, which
 /// win over its shared ones; nothing for a file that cannot be read.
-pub(super) fn project(directory: &Path) -> [Value; 2] {
+fn project(directory: &Path) -> [Value; 2] {
     let settings = directory.join(".claude");
     ["settings.local.json", "settings.json"].map(|name| read_file(&settings.join(name)))
 }

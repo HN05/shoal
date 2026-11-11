@@ -306,6 +306,24 @@ fn claude_goes_to_the_base_url_its_settings_or_environment_name_else_anthropics(
     assert_eq!(url(&["claude"], &set), "http://local");
     let given = base_url("http://given");
     assert_eq!(url(&["claude", "--settings", &given], &set), "http://given");
+    // Only the sources the launch enables count, the last choice winning.
+    fn only<'a>(sources: &[&'a str]) -> Vec<&'a str> {
+        [&["claude"], sources].concat()
+    }
+    assert_eq!(
+        url(&only(&["--setting-sources", "user"]), &set),
+        "http://user"
+    );
+    assert_eq!(
+        url(&only(&["--setting-sources=project,user"]), &set),
+        "http://shared"
+    );
+    let twice = ["--setting-sources", "user", "--setting-sources", "local"];
+    assert_eq!(url(&only(&twice), &set), "http://local");
+    assert_eq!(
+        url(&only(&["--setting-sources", ""]), &set),
+        "http://environment"
+    );
 }
 
 #[test]

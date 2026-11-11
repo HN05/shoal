@@ -1684,8 +1684,9 @@ proxy = "retry"
 ```
 
 - Claude Code: the `ANTHROPIC_BASE_URL` of the first of its settings that sets
-  one, as it ranks them (the `--settings` the launch has, the workspace's
-  `.claude/settings.local.json`, then `.claude/settings.json`, then the user's),
+  one, as it ranks them (the `--settings` the launch has, then of the sources
+  its `--setting-sources` enables, the workspace's `.claude/settings.local.json`,
+  `.claude/settings.json` and the user's),
   else of its environment, else `https://api.anthropic.com`.
 - Codex on a provider of the user's: that provider's `base_url`.
 - Codex on its built-in OpenAI provider: `OPENAI_BASE_URL` when its environment
