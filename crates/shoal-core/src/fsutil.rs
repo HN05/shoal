@@ -10,6 +10,7 @@ pub mod executables;
 pub mod home;
 pub mod marked_dirs;
 pub mod off_runtime;
+pub mod subvolume;
 
 #[cfg(test)]
 pub(crate) mod tests;

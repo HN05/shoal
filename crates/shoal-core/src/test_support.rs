@@ -10,6 +10,7 @@ use crate::{
     process::identity::{self, Identity},
 };
 
+pub mod subvolumes;
 #[cfg(test)]
 mod tests;
 
