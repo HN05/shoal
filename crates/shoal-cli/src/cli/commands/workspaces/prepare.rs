@@ -62,8 +62,9 @@ pub(in crate::cli::commands) async fn prepare(
                 })
             })?;
     }
-    // The agents waiting for the workspace's setup may start now.
-    if workspace.state == WorkspaceState::Ready {
+    // The agents waiting for the workspace's setup may start now, once this
+    // preparation set it up or got past its post-setup hook.
+    if (steps.setup || steps.post_setup) && workspace.state == WorkspaceState::Ready {
         reporter.reached(Step::PostSetupEnded).await?;
     }
     let agent = match steps.agent {
@@ -177,8 +178,10 @@ async fn queue_agent(
 }
 
 /// Leave `launch` waiting in the queue of `workspace`, whose setup failed,
-/// to start once a retried setup readies it; a refusal only warns.
-pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) {
+/// to start once a retried setup readies it, which it waits for even when it
+/// was to start at once; a refusal only warns.
+pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, mut launch: QueuedLaunch) {
+    launch.now = false;
     let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
     let queued = async {
         let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;

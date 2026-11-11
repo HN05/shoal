@@ -420,8 +420,8 @@ async fn finish_add_workspace(
 
 /// Run what preparation leaves after setup once the user ignored its
 /// failure: `rest`, with the post-setup hook unless the workspace was
-/// `reused`. Returns the workspace with its PR and agent, and how the hook
-/// went.
+/// `reused` and no agent waits for its setup, which the hook lets start.
+/// Returns the workspace with its PR and agent, and how the hook went.
 async fn prepare_after_setup(
     ctx: &Context,
     workspace: Workspace,
@@ -429,10 +429,11 @@ async fn prepare_after_setup(
     rest: &mut AfterSetup,
 ) -> Result<(Prepared, Result<()>)> {
     let (pr, agent) = (rest.pr.take(), rest.agent.take());
+    let waits = rest.waiting.as_ref().is_some_and(WaitingAgent::failed);
     let spec = OperationSpec::Prepare {
         workspace: SpaceSelector::id(&workspace.id),
         steps: Preparation {
-            post_setup: !reused,
+            post_setup: !reused || waits,
             pr,
             agent,
             ..Default::default()

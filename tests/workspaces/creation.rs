@@ -1945,6 +1945,82 @@ fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
 /// the post-setup hook, then the ready workspace, or the typed failure of
 /// setup or the hook.
 #[test]
+fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
+    use shoal_client::{
+        connection::request,
+        operations::{Followed, Following},
+        protocol::{
+            OperationMethod,
+            operations::{QueuedLaunch, StartedWorkspace, WorkspaceStart},
+        },
+        space_names::SpaceSelector,
+    };
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+    ));
+    // Setup fails until `fixed`, and the hook until `hooked`.
+    install_test_script(fixture.repo.join("setup.sh"), "#!/bin/sh\n[ -f fixed ]\n");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\n[ -f hooked ]\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
+    let app = fixture.connector();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let start = |start: WorkspaceStart, agent: Option<QueuedLaunch>| {
+        let method = OperationMethod::StartWorkspace {
+            repository: fixture.repo.to_str().unwrap().into(),
+            start,
+            base: None,
+            path: None,
+            git_profile: None,
+            parent: None,
+            options: Default::default(),
+            env: None,
+            issue: None,
+            pr: None,
+            agent: agent.map(Box::new),
+            queue_entry: None,
+        };
+        runtime.block_on(async {
+            let started: StartedWorkspace = request(&app, method).await.unwrap();
+            let mut following = Following::open(&app, started.operation.clone(), 0)
+                .await
+                .unwrap();
+            while let Followed::Event(_) = following.next().await.unwrap() {}
+            started.workspace
+        })
+    };
+    let blockers = || fixture.ok(&["queue"])[0]["blockers"].clone();
+    // An agent meant to start at once waits for the failed setup.
+    let launch = QueuedLaunch {
+        now: true,
+        ..QueuedLaunch::new("waiter".into())
+    };
+    let workspace = start(WorkspaceStart::Name("failing".into()), Some(launch));
+    assert_eq!(blockers(), serde_json::json!(["setup of failing"]));
+
+    // A setup whose hook fails, then a reopening that runs neither, keep
+    // it waiting.
+    fs::write(workspace.path.join("fixed"), "").unwrap();
+    assert!(
+        !fixture
+            .run(&["setup", &fixture.id("failing")])
+            .status
+            .success()
+    );
+    start(
+        WorkspaceStart::Workspace(SpaceSelector::id(&workspace.id)),
+        None,
+    );
+    assert_eq!(blockers(), serde_json::json!(["setup of failing"]));
+    assert!(!workspace.path.join("agent-started").exists());
+}
+
+#[test]
 fn an_app_follows_the_setup_of_a_workspace_it_creates() {
     use shoal_client::{
         operations::{Followed, Following},
