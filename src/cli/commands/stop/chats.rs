@@ -16,7 +16,7 @@ pub(super) async fn stop_one(ctx: &Context, chat: &Chat) -> Result<i32> {
     let stopped = stop(ctx, chat).await?;
     let mut message = stopped_message(&chat.name, stopped);
     if !stopped.already_stopped {
-        message = format!("{message}. {}", continue_hint(&chat.name));
+        message = format!("{message}. {}", continue_hint(&chat.number.to_string()));
     }
     ctx.emit_styled(
         Style::Success,

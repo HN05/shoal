@@ -88,7 +88,10 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
         message = format!("{message}. {}", removed_launches(cancelled.len()));
     }
     if saved {
-        message = format!("{message}. {}", continue_hint(&workspace.name));
+        message = format!(
+            "{message}. {}",
+            continue_hint(&workspace.number.to_string())
+        );
     }
     ctx.emit_styled(
         Style::Success,

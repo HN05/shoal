@@ -62,7 +62,7 @@ pub(super) async fn stop_each(
             Ok(stop) => {
                 let message = stop.message(name);
                 if stop.saved(ctx, space.id()) {
-                    resumable.push(name.as_str());
+                    resumable.push(space.number().to_string());
                 }
                 let outcome = match stop {
                     Stop::CancelledRun(run) => Outcome::Cancelled(CancelledRun {

@@ -66,7 +66,7 @@ impl Manager {
         let kind = NotificationKind::RemovalFailed;
         let message = format!(
             "removal failed: {error:#}; the workspace stays, and shoal rm {} tries again",
-            workspace.name
+            workspace.number
         );
         if let Some(requester) = requester {
             let about = spaces::About {
