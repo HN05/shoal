@@ -162,6 +162,7 @@ impl Manager {
     /// was `chat`, as a stop of the workspace's agents does, keeping its
     /// session as `execution` for `shoal resume` in `mode`, since the
     /// workspace's post-setup hook failed with `failure`, and tell the user.
+    /// A hand-over that fails leaves the conversion pending, to try again.
     async fn stop_after_failed_hook(
         &self,
         id: &SpaceId,
@@ -170,7 +171,10 @@ impl Manager {
         execution: ExecutionId,
         failure: &str,
     ) -> Result<()> {
-        self.hand_over(id, mode, &chat, execution, None).await?;
+        if let Err(error) = self.hand_over(id, mode, &chat, execution, None).await {
+            log!("agent of {id} not handed over yet: {error:#}");
+            return Ok(());
+        }
         let name = self.workspace_by_id(id).await?.name;
         let message = format!(
             "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {name} continues it once the hook is repaired"
