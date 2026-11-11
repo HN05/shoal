@@ -469,8 +469,9 @@ space, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first, and the stopped chats; with nothing to resume anywhere it reports that without a picker.
 A named workspace whose setup failed retries its setup as `shoal setup` does,
-after which the agent waiting for it in the queue starts with the
-permissions it was started with, so `--permission` is refused there. Such
+after which the agent waiting for it in the queue starts as the queue admits
+it, with the permissions it was started with, so `--permission`, `--now` and
+`--focus` are refused there. Such
 workspaces resume together and apart from other spaces, which are refused
 beside them before any setup runs.
 Completion describes each workspace the same way.

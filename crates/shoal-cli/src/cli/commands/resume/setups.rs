@@ -11,13 +11,15 @@ use crate::{
 
 /// Retry the setup of the selected workspaces whose setup failed, when the
 /// selection names only such workspaces, and report them together; `None`
-/// when it names none. Other spaces beside them, or a `changing`
-/// --permission, which the agents waiting for those setups cannot take, are
-/// refused before any setup runs.
+/// when it names none. Other spaces beside them, a `changing`
+/// --permission, which the agents waiting for those setups cannot take, and
+/// `placing` options, since the queue starts those agents as it admits them,
+/// are refused before any setup runs.
 pub(super) async fn retry_failed(
     ctx: &Context,
     selected: &mut Selected,
     changing: bool,
+    placing: bool,
 ) -> Result<Option<i32>> {
     let failed = take_failed(ctx, selected).await?;
     let Some(first) = failed.first() else {
@@ -31,6 +33,11 @@ pub(super) async fn retry_failed(
     ensure!(
         !changing,
         "the setup of {} failed, and the agent waiting for it keeps the permissions it was started with; resume it without --permission",
+        first.name
+    );
+    ensure!(
+        !placing,
+        "the setup of {} failed, and the agent waiting for it starts from the queue as it admits it; resume it without --now or --focus",
         first.name
     );
     let mut set_up = Vec::new();

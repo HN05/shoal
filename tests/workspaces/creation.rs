@@ -803,6 +803,11 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     assert!(!changed.status.success(), "{changed:?}");
     let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(kept["state"], "failed", "{kept}");
+    // So are placement options, since the queue starts the waiting agent.
+    let now = fixture.run(&["resume", &fixture.id("failing"), "--now"]);
+    assert!(!now.status.success(), "{now:?}");
+    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(kept["state"], "failed", "{kept}");
     // Other spaces beside it are refused before any setup runs.
     fixture.ok(&["start", repo, "plain", "--skip-setup"]);
     let mixed = fixture.run(&["resume", &fixture.id("failing"), &fixture.id("plain")]);
