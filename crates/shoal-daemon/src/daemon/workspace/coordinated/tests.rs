@@ -254,3 +254,41 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
     finish(&manager, started).await;
     assert_eq!(chat_kept().await, None);
 }
+
+#[tokio::test]
+async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
+    use crate::{client::progress::ProgressChange, daemon::notifications::NotificationKind};
+    let (root, manager) = manager().await;
+    let (parent, child) = split_child(&manager, root.path()).await;
+    let started = start_agent(&manager, &parent).await;
+    // The child's own agent records what blocks it.
+    let reporting = start_agent(&manager, &child).await;
+    let add = ProgressChange::AddBlocker {
+        blocker: crate::model::Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    manager
+        .set_progress(&SpaceSelector::id(&child.id), add)
+        .await
+        .unwrap();
+
+    let messages = manager
+        .space_messages(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.message.contains("is blocked by PR")),
+        "{messages:?}"
+    );
+    let notifications = manager.notifications(false, 20).await.unwrap();
+    assert!(
+        !notifications
+            .iter()
+            .any(|notification| notification.kind == NotificationKind::SpaceBlocked)
+    );
+    finish(&manager, reporting).await;
+    finish(&manager, started).await;
+}

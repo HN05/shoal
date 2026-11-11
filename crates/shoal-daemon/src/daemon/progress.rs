@@ -14,6 +14,7 @@ use crate::client::{
     progress::{self, MAX_STEPS, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
     space_names::SpaceSelector,
 };
+use crate::model::PresentSpace;
 use crate::time::UnixTime;
 
 mod blockers;
@@ -312,29 +313,29 @@ impl Manager {
             self.publications.request(&id);
         }
         if let Some(progress) = progress.as_ref().filter(|_| !was_blocked) {
-            self.notify_blocked(space.name(), progress).await;
+            self.notify_blocked(&space, progress).await;
         }
         Ok(progress)
     }
 
-    /// Tell the coordinator of the space `name`, or the user without one,
-    /// that the space became blocked, naming what blocks it, unless
-    /// `progress` leaves it unblocked: a step blocker while other work
-    /// remains tells no one.
-    async fn notify_blocked(
-        &self,
-        name: &crate::client::space_names::SpaceName,
-        progress: &Progress,
-    ) {
+    /// Tell the coordinator of `space`, or the user without one, that the
+    /// space became blocked, naming what blocks it, unless `progress` leaves
+    /// it unblocked: a step blocker while other work remains tells no one.
+    async fn notify_blocked(&self, space: &PresentSpace, progress: &Progress) {
         if !progress.blocked() {
             return;
         }
         let blockers: Vec<String> = (progress.all_blockers())
             .map(|(_, blocker)| format!("{}: {}", blocker.cause(), blocker.reason))
             .collect();
-        let message = format!("{name} is blocked by {}", blockers.join("; "));
-        self.notify(Some(name), NotificationKind::SpaceBlocked, message)
-            .await;
+        let message = format!(
+            "Space {} ({}) is blocked by {}",
+            space.number(),
+            space.name(),
+            blockers.join("; ")
+        );
+        let kind = NotificationKind::SpaceBlocked;
+        (self.notify_space(space.name(), space.id(), kind, message)).await;
     }
 
     /// Whether the space `id` is blocked.
