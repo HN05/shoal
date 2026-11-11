@@ -1187,7 +1187,8 @@ exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
 as a Herdr pane with `terminal.herdr.enabled`, runs in place, as does an agent
 shortcut such as `shoal claude` without a terminal. Scoped callers, and callers
-without a terminal or with `--json`, such as another agent's tool call, start the agents of `start`, `contribute` and `resume --now` detached
+without a terminal or with `--json`, such as another agent's tool call, unless
+`start --focus` keeps one on a terminal beside it, start the agents of `start`, `contribute` and `resume --now` detached
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
 agent running. An agent Happy runs leaves the call at once anyway, so a
@@ -1271,7 +1272,9 @@ with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
 `terminal.focus` overrides this for tabs and zmx sessions alike, the
 [mode's](#modes-and-rules) `focus` overrides that for its launches, and
-`shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does.
+`shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does,
+also with `--json` on a terminal, which then prints the planned `workspace` and
+its `agent` once the host opens the launch's place.
 `enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
 overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
 a Herdr pane as a plain terminal:
@@ -2154,7 +2157,7 @@ once readings are healthy.
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. A start that runs detached, from
-a scoped caller or one without a terminal or with `--json`, creates the
+a scoped caller, one without a terminal or one with `--json` and no `--focus`, creates the
 workspace and sets it up
 first, reporting setup errors to the caller. A scoped caller's preparation then
 queues the agent in it; for the user's, the caller queues it once setup ends,

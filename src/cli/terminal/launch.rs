@@ -628,9 +628,10 @@ pub(in crate::cli) async fn start_chat(
 }
 
 /// The host that starts work beside this terminal. A place a host opened for
-/// this process, or a terminal without a user, keeps work in place.
+/// this process, or a terminal without a user, keeps work in place; a call
+/// that asked for JSON keeps its terminal's host.
 fn beside(ctx: &Context, settings: &Effective) -> Configured {
-    if ctx.place.is_none() && ctx.interactive() {
+    if ctx.place.is_none() && ctx.on_terminal() {
         current(settings)
     } else {
         Configured::plain(settings)

@@ -27,9 +27,8 @@ use crate::{
 };
 
 /// Whether the plan's agent starts detached: always for a scoped caller,
-/// which `--here` cannot keep in place, and for a noninteractive one, which
-/// has no terminal to start it beside, unless `--here` asks to run it in
-/// place.
+/// which `--here` cannot keep in place, and for one that does not start it
+/// beside its terminal, unless `--here` asks to run it in place.
 pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> Result<bool> {
     let agent = plan.agent_name().is_some();
     if crate::env::is_scoped() {
@@ -39,7 +38,7 @@ pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOption
         );
         return Ok(true);
     }
-    Ok(agent && !options.here && !ctx.interactive())
+    Ok(agent && !options.here && !options.starts_beside(ctx))
 }
 
 /// Open the planned workspace and start its agent detached. A scoped
@@ -104,7 +103,7 @@ pub(super) async fn ensure_detachable(
     }
     ensure!(
         !options.focus,
-        "a call without a terminal or with --json starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
+        "a call without a terminal starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
     );
     let settings = settings.get().await?;
     if !crate::env::is_scoped() && runs_its_own_way(settings, plan) {

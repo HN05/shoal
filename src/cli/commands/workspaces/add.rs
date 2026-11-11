@@ -78,6 +78,13 @@ impl AddOptions {
             || self.focus
             || (self.after.is_empty() && waits_for_user && focus_setting != Some(false))
     }
+
+    /// Whether a call with `ctx` starts its work beside its terminal: an
+    /// interactive one, or one on a terminal whose `--focus` asks to show the
+    /// work there, whatever output it asked for.
+    fn starts_beside(&self, ctx: &Context) -> bool {
+        ctx.interactive() || (self.focus && ctx.on_terminal())
+    }
 }
 
 pub(in crate::cli::commands) async fn add(

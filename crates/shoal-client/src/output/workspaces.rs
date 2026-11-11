@@ -91,6 +91,24 @@ pub struct InChat {
     pub in_chat: bool,
 }
 
+/// A start handed to a place beside the caller's terminal, which opens the
+/// workspace and starts its agent there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartedBeside {
+    /// The name the workspace is planned under.
+    pub workspace: SpaceName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::agent::Agent>,
+}
+
 outputs!(
-    Removed, Removals, Directory, Withdrawn, Revoked, Bases, Registered, InChat
+    Removed,
+    Removals,
+    Directory,
+    Withdrawn,
+    Revoked,
+    Bases,
+    Registered,
+    InChat,
+    StartedBeside
 );

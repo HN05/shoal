@@ -703,6 +703,31 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
 }
 
 #[test]
+fn a_focused_json_start_opens_its_tab_only_from_a_terminal() {
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
+    install_fake_herdr(&fixture);
+    let repo = fixture.repo.to_str().unwrap();
+    let args = |name| ["--json", "start", repo, name, "--agent", "pi", "--focus"];
+    let refused = fixture
+        .command()
+        .args(args("detached"))
+        .env("HERDR_ENV", "1")
+        .output()
+        .unwrap();
+    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!fixture.root.path().join("herdr-calls").exists());
+    let (caller, transcript) = herdr_call(&fixture, &args("shown"), "");
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    let started: Value = serde_json::from_slice(&caller.stdout).unwrap();
+    assert_eq!(
+        (&started["workspace"], &started["agent"]),
+        (&"shown".into(), &"pi".into()),
+        "{started}"
+    );
+    assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == "--focus"));
+}
+
+#[test]
 fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
     let fixture = Fixture::with_config(Some(
         "terminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",

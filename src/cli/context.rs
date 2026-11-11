@@ -72,6 +72,11 @@ impl Context {
         self.interactive() && io::stdout().is_terminal()
     }
 
+    /// A human is on both stdin and stderr, whatever output the caller asked for.
+    pub fn on_terminal(&self) -> bool {
+        Self::is_interactive(false)
+    }
+
     pub fn is_interactive(json: bool) -> bool {
         !json && io::stdin().is_terminal() && io::stderr().is_terminal()
     }
