@@ -63,6 +63,19 @@ pub(super) struct Launch {
     pub scope: Option<SpaceId>,
 }
 
+/// End the starting launches that created or opened `workspace`, whose
+/// setup failed, freeing their slots: the launch left waiting for its setup
+/// takes their place, whether or not their caller is still there to end
+/// them.
+fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<()> {
+    tx.execute(
+        "DELETE FROM agent_queue WHERE ?1 IN (workspace_id,opens_workspace_id)
+         AND kind=?2 AND state=?3",
+        params![workspace, QueueKind::Launch, QueueState::Starting],
+    )?;
+    Ok(())
+}
+
 /// Whether `workspace`'s setup failed, which a retried setup can ready.
 fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
     crate::daemon::store::exists(
@@ -87,10 +100,10 @@ fn planned_branch(plan: &str) -> Option<String> {
 /// so they tell no two launches apart. A launch in an existing workspace
 /// needs it ready in the same transaction, or failed in its setup for one
 /// that waits its turn, which then waits for a preparation there to get
-/// past its post-setup hook, and one a space queued needs that space present
-/// and not being removed: removal reserves the space before its final
-/// checks, so the launch either precedes them, which keeps the space, or is
-/// refused here.
+/// past its post-setup hook and takes the place of the start whose setup
+/// failed, and one a space queued needs that space present and not being
+/// removed: removal reserves the space before its final checks, so the
+/// launch either precedes them, which keeps the space, or is refused here.
 pub(super) fn insert_launch(
     tx: &rusqlite::Transaction<'_>,
     launch: &Launch,
@@ -100,11 +113,17 @@ pub(super) fn insert_launch(
         !crate::daemon::store::repository_removing(tx, &launch.repository)?,
         "the repository is being removed"
     );
-    if let Some(workspace) = &launch.opens
-        && (launch.request.now || !setup_failed(tx, workspace)?)
-    {
-        crate::daemon::store::require_ready(tx, workspace)
-            .context("start agents in a ready workspace")?;
+    let waits_for_setup = match &launch.opens {
+        Some(workspace) => !launch.request.now && setup_failed(tx, workspace)?,
+        None => false,
+    };
+    if let Some(workspace) = &launch.opens {
+        if waits_for_setup {
+            end_failed_starts(tx, workspace)?;
+        } else {
+            crate::daemon::store::require_ready(tx, workspace)
+                .context("start agents in a ready workspace")?;
+        }
     }
     if let Some(space) = &launch.scope {
         require_queuing_space(tx, space, removing)
@@ -154,7 +173,7 @@ pub(super) fn insert_launch(
     )?;
     blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
     if let Some(workspace) = &launch.opens
-        && setup_failed(tx, workspace)?
+        && waits_for_setup
     {
         blockers::wait_for_setup(tx, &launch.id, workspace)?;
     }

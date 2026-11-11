@@ -40,7 +40,7 @@ pub(in crate::cli::commands) async fn prepare(
             Err(error) => {
                 // The workspace stays for a retried setup, with the agent
                 // that waits for it and links its PR once it starts.
-                if let Some(launch) = steps.agent {
+                if let Some(launch) = steps.agent.or(steps.waiting) {
                     leave_waiting(ctx, &workspace, *launch, steps.pr).await;
                 }
                 return Err(error);
@@ -180,7 +180,7 @@ async fn queue_agent(
 /// Leave `launch` waiting in the queue of `workspace`, whose setup failed,
 /// to start once a retried setup readies it, linking `pr` then, and say so;
 /// a refusal only warns.
-pub(super) async fn leave_waiting(
+async fn leave_waiting(
     ctx: &Context,
     workspace: &Workspace,
     launch: QueuedLaunch,

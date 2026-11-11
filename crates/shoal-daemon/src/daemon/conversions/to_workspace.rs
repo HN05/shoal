@@ -91,6 +91,7 @@ impl Manager {
             issue: None,
             pr: None,
             agent: None,
+            waiting: None,
             env,
         };
         let started = self.prepare_new(opened, None, preparing, caller).await?;

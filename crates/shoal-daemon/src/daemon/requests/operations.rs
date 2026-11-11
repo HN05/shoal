@@ -52,6 +52,7 @@ pub(super) async fn handle(
             issue,
             pr,
             agent,
+            waiting,
             env,
             queue_entry,
         } => {
@@ -75,6 +76,7 @@ pub(super) async fn handle(
                 issue,
                 pr,
                 agent,
+                waiting,
                 env,
             };
             Body::WorkspaceStarted(
@@ -103,6 +105,7 @@ pub(super) async fn handle(
                 issue,
                 pr: None,
                 agent,
+                waiting: None,
                 env,
             };
             Body::WorkspaceStarted(

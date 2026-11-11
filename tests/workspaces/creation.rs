@@ -830,6 +830,51 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
 }
 
 #[test]
+fn a_failed_setup_leaves_the_agent_waiting_after_its_cli_exited() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let release = fixture.root.path().join("release-setup");
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        format!(
+            "#!/bin/sh\ntouch setup-started\nwhile [ ! -e '{}' ]; do sleep 0.1; done\nexit 3\n",
+            release.display()
+        ),
+    );
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+    let repo = fixture.repo.to_str().unwrap();
+    // A start without a terminal runs its agent itself once setup ends.
+    let mut start = fixture
+        .command()
+        .args(["start", repo, "failing", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let path = wait_for("the failing workspace", || {
+        let listed = fixture.ok(&["list"]);
+        let failing = listed.as_array()?.iter().find(|w| w["name"] == "failing")?;
+        Some(PathBuf::from(failing["path"].as_str()?))
+    });
+    wait_until("setup to start", || path.join("setup-started").exists());
+    start.kill().unwrap();
+    start.wait().unwrap();
+    fs::write(&release, "").unwrap();
+    // Its preparation leaves the agent waiting, in place of the start.
+    wait_until("the agent to wait for setup", || {
+        let entries = fixture.ok(&["queue"]);
+        entries.as_array().is_some_and(|entries| {
+            entries.len() == 1
+                && entries[0]["state"] == "queued"
+                && entries[0]["blockers"] == serde_json::json!(["setup of failing"])
+        })
+    });
+}
+
+#[test]
 fn a_retry_that_fails_again_keeps_the_agent_waiting() {
     let fixture = Fixture::with_config(Some(
         "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
@@ -1915,6 +1960,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             pr: None,
             agent: None,
             queue_entry: None,
+            waiting: None,
         };
         let refused = runtime.block_on(connection::request::<StartedWorkspace>(&app, create));
         assert!(refused.is_err(), "expected a refusal: {refused:?}");
@@ -1948,6 +1994,7 @@ fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
         pr: None,
         agent: None,
         queue_entry: None,
+        waiting: None,
     };
 
     let started = runtime
@@ -2009,6 +2056,7 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
             issue: None,
             pr: None,
             agent: agent.map(Box::new),
+            waiting: None,
             queue_entry: None,
         };
         let started: StartedWorkspace = runtime.block_on(request(&app, method)).unwrap();
@@ -2095,6 +2143,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
             pr: None,
             agent: None,
             queue_entry: None,
+            waiting: None,
         };
         runtime
             .block_on(shoal_client::connection::request::<StartedWorkspace>(

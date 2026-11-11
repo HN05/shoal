@@ -896,8 +896,9 @@ ignore (which repairs verified state first), or keep; a setup that never
 started offers only retry or keep. JSON callers get a nonzero exit.
 `setup` and `resume` rerun setup explicitly; nothing retries automatically.
 The agent a start launches in a workspace whose setup fails waits in the
-queue for that setup instead of holding its slot, queued by the preparation
-or by the CLI that would run it, so no follower is needed. A persisted
+queue for that setup instead of holding its slot, queued by the
+preparation, which also carries the agent a CLI would run itself, so no
+follower is needed. A persisted
 dependency that only a preparation getting past its post-setup hook releases
 holds it, so a retried setup starts it without the user restating its mode,
 task or permissions, and a failed hook keeps it waiting.

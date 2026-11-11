@@ -334,6 +334,7 @@ fn start_workspace(daemon: &TestDaemon, start: WorkspaceStart) -> OperationMetho
         issue: None,
         pr: None,
         agent: None,
+        waiting: None,
         env: None,
         queue_entry: None,
     }

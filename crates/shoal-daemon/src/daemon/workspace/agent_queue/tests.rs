@@ -1526,3 +1526,43 @@ async fn a_launch_keeps_waiting_when_its_workspaces_post_setup_hook_fails() {
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries[0].blockers, vec!["setup of child".to_owned()]);
 }
+
+#[tokio::test]
+async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    // The start that creates `child` holds the only slot.
+    let starting = add(&manager, &repo, "child").await.entry.unwrap();
+    assert_eq!(starting.state, QueueState::Starting);
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .queue_attach(&starting.id, &SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
+    manager
+        .set_state(
+            &child.id,
+            WorkspaceState::Failed,
+            Some("setup failed".into()),
+        )
+        .await
+        .unwrap();
+    // Its agent, left waiting for the setup, takes its place.
+    let waiting = manager
+        .queue_add(QueueRequest {
+            workspace: Some(SpaceSelector::id(&child.id)),
+            ..request(&repo, "child", false)
+        })
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    let ids: Vec<_> = entries.iter().map(|entry| &entry.id).collect();
+    assert_eq!(ids, [&waiting.id]);
+    assert!(add(&manager, &repo, "other").await.start);
+}

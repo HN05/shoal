@@ -2374,6 +2374,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         agent: Some(Box::new(
             shoal_client::protocol::operations::QueuedLaunch::new("reviewer".into()),
         )),
+        waiting: None,
         env: None,
         queue_entry: None,
     };
@@ -2487,6 +2488,7 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
         issue: None,
         pr: Some("https://forge.example/team/project/pulls/7".into()),
         agent: None,
+        waiting: None,
         env: None,
         queue_entry: None,
     };

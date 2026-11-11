@@ -106,6 +106,9 @@ pub struct NewWorkspace {
     pub agent: Option<Box<QueuedLaunch>>,
     /// The starting queue entry whose launch opens it.
     pub queue_entry: Option<crate::queue::QueueEntryId>,
+    /// The agent the caller starts itself once setup succeeds, which waits
+    /// in the queue should setup fail.
+    pub waiting: Option<Box<QueuedLaunch>>,
 }
 
 impl NewWorkspace {
@@ -124,6 +127,7 @@ impl NewWorkspace {
             pr: None,
             agent: None,
             queue_entry: None,
+            waiting: None,
         }
     }
 }
@@ -146,6 +150,7 @@ pub async fn start_workspace(
         pr,
         agent,
         queue_entry,
+        waiting,
     } = workspace;
     let method = OperationMethod::StartWorkspace {
         repository,
@@ -158,6 +163,7 @@ pub async fn start_workspace(
         issue,
         pr,
         agent,
+        waiting,
         env: Some(env),
         queue_entry,
     };

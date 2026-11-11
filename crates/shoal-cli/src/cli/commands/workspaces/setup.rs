@@ -282,6 +282,7 @@ async fn handle_setup_failure(
             && let Some(retry) = &mut retry
         {
             retry.agent = None;
+            retry.waiting = None;
             retry.post_setup = true;
         }
     }

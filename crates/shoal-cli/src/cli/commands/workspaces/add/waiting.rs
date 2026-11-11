@@ -1,5 +1,5 @@
 //! Following the added workspace's setup, whose failure leaves its agent
-//! waiting in the queue for a retried setup.
+//! waiting in the queue for a retried setup, as its preparation queued it.
 use anyhow::Result;
 
 use crate::cli::{
@@ -34,11 +34,14 @@ pub(super) async fn follow_add_setup(
         reused,
     } = started;
     let prepared = operations::follow_started::<Prepared>(ctx, operation).await;
+    // The preparation left the agent waiting when setup failed, so a retry
+    // queues none of its own.
     let retry = Preparation {
         setup: true,
         post_setup: !reused,
         pr: rest.pr.clone(),
         agent: rest.agent.clone(),
+        waiting: None,
     };
     let waiting = rest.waiting.as_mut();
     settle_setup(ctx, &workspace, prepared, Some(retry), waiting).await

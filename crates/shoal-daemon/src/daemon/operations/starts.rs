@@ -60,6 +60,9 @@ pub(crate) struct Preparing {
     pub issue: Option<String>,
     pub pr: Option<String>,
     pub agent: Option<Box<QueuedLaunch>>,
+    /// The agent the caller starts itself once setup succeeds, which waits
+    /// in the queue should setup fail.
+    pub waiting: Option<Box<QueuedLaunch>>,
     pub env: Option<BTreeMap<String, String>>,
 }
 
@@ -74,7 +77,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         let repo = self.repository(repository.clone()).await?;
-        if let Some(agent) = &preparing.agent {
+        if let Some(agent) = preparing.agent.as_ref().or(preparing.waiting.as_ref()) {
             ensure!(
                 !matches!(opening.start, WorkspaceStart::PullHead { .. }),
                 "a PR's head opens in a workspace at a commit, which holds no agent of its own"
@@ -271,6 +274,7 @@ impl Manager {
             post_setup: !reused,
             pr: preparing.pr,
             agent: preparing.agent,
+            waiting: preparing.waiting,
         };
         let spec = OperationSpec::Prepare {
             workspace: SpaceSelector::id(&workspace.id),

@@ -64,6 +64,10 @@ pub enum OperationMethod {
         pr: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<Box<QueuedLaunch>>,
+        /// The agent the caller starts itself once setup succeeds, which
+        /// waits in the queue for a retried setup should setup fail.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        waiting: Option<Box<QueuedLaunch>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
         /// The starting queue entry whose launch opens the workspace. One a
@@ -202,7 +206,8 @@ pub enum OperationSpec {
 
 /// What preparing a workspace runs: its setup when `setup`, then linking
 /// `pr`, which only warns when refused, then its post-setup hook when
-/// `post_setup`, then queuing `agent`.
+/// `post_setup`, then queuing `agent`. A failed setup leaves `agent`, or
+/// else `waiting`, waiting in the queue for a retried setup.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Preparation {
     pub setup: bool,
@@ -211,6 +216,9 @@ pub struct Preparation {
     pub pr: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<Box<QueuedLaunch>>,
+    /// The agent the caller starts itself once setup succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting: Option<Box<QueuedLaunch>>,
 }
 
 /// An agent to queue in a ready workspace, as a `shoal start` without a

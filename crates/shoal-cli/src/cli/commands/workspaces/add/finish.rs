@@ -113,7 +113,6 @@ pub(super) async fn add_planned(
     // A queued agent starts detached, so the caller's terminal, such as a
     // chat's session, stays its own.
     let told = (&prompt, args.as_slice(), &fork);
-    // The agent a failed setup leaves waiting for its retry.
     let own = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, false)?;
     let (launch, placed) = match start {
         AgentStart::Queued { now } => (
@@ -126,12 +125,16 @@ pub(super) async fn add_planned(
         ),
         AgentStart::Here => (None, None),
     };
+    // The agent this start runs itself, which its preparation leaves
+    // waiting in the queue should setup fail.
+    let has_agent = own.is_some();
     let start = AddStart {
         creation,
         parent: parent.or(chat.map(SpaceSelector::Id)),
         workspace,
         agent: launch.clone(),
         queue_entry: queue_entry.clone(),
+        waiting: own.filter(|_| launch.is_none()),
     };
     let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
     if let Some(entry) = &queue_entry {
@@ -152,10 +155,7 @@ pub(super) async fn add_planned(
     let subject = (issue.as_ref().map(issues::Issue::subject))
         .or(prompt.map(crate::config::templates::Subject::told));
     // Preparation leaves the agent it queues waiting itself.
-    let waiting = own.map(|own| {
-        let own = launch.is_none().then_some(*own);
-        WaitingAgent::new(own, queue_entry.clone(), pr.clone())
-    });
+    let waiting = has_agent.then(|| WaitingAgent::new(queue_entry.clone()));
     let mut rest = AfterSetup {
         pr,
         agent: launch.clone(),
@@ -306,6 +306,8 @@ struct AddStart {
     agent: Option<Box<QueuedLaunch>>,
     /// The starting queue entry whose launch opens it.
     queue_entry: Option<QueueEntryId>,
+    /// The agent the caller starts itself, which waits should setup fail.
+    waiting: Option<Box<QueuedLaunch>>,
 }
 
 /// Open the planned workspace, assigned `issue`, and start preparing it.
@@ -318,6 +320,7 @@ async fn start_add_workspace(
         workspace,
         agent,
         queue_entry,
+        waiting,
     }: AddStart,
     issue: Option<&issues::Issue>,
 ) -> Result<StartedWorkspace> {
@@ -359,6 +362,7 @@ async fn start_add_workspace(
         pr,
         agent,
         queue_entry,
+        waiting,
     };
     let env = crate::env::without_secrets();
     let started = crate::client::operations::start_workspace(&ctx.paths, new, env);
