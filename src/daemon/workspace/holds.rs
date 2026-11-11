@@ -113,7 +113,8 @@ impl Manager {
                 .await?,
             ),
         };
-        self.notify_allocation(&workspace.name, &outcome, "").await;
+        self.notify_allocation((&workspace.name, &workspace.id), &outcome, "")
+            .await;
         Ok(outcome)
     }
 

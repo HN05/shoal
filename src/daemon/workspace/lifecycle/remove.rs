@@ -581,8 +581,9 @@ impl Manager {
         .await
         .err()?;
         let message = format!("workspace removed; {error:#}");
-        self.notify(
-            Some(&workspace.name),
+        self.notify_space(
+            &workspace.name,
+            &workspace.id,
             crate::daemon::notifications::NotificationKind::HookFailed,
             &message,
         )

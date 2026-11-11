@@ -125,7 +125,10 @@ impl Manager {
                     let marks = &ready.marks;
                     (self.run_post_ready((&workspace).into(), &command, &configured, marks)).await;
                 }
-                Err(error) => self.post_ready_failed(&workspace.name, &error).await,
+                Err(error) => {
+                    self.post_ready_failed((&workspace.name, &workspace.id), &error)
+                        .await
+                }
             }
         }
         self.tell_coordinator(
@@ -176,7 +179,7 @@ impl Manager {
                     self.run_post_ready(hook, &command, &configured, &ready.marks)
                         .await;
                 }
-                Err(error) => self.post_ready_failed(&chat.name, &error).await,
+                Err(error) => self.post_ready_failed((&chat.name, &chat.id), &error).await,
             }
         }
         undrafted.context("marked ready for review, but a PR is still a draft")?;
@@ -196,18 +199,19 @@ impl Manager {
         let hook = Hook::PostReady(marks);
         let result = hooks::run_detached(hook, space, command, &self.paths, configured).await;
         if let Err(error) = result {
-            let name = match space {
-                HookSpace::Workspace(workspace) => &workspace.name,
-                HookSpace::Chat { chat, .. } => &chat.name,
+            let space = match space {
+                HookSpace::Workspace(workspace) => (&workspace.name, &workspace.id),
+                HookSpace::Chat { chat, .. } => (&chat.name, &chat.id),
             };
-            self.post_ready_failed(name, &error).await;
+            self.post_ready_failed(space, &error).await;
         }
     }
 
-    /// Tell the user that `hooks.post_ready` of the space `name` failed.
-    async fn post_ready_failed(&self, name: &SpaceName, error: &anyhow::Error) {
-        self.notify(
-            Some(name),
+    /// Tell the user that `hooks.post_ready` of the space failed.
+    async fn post_ready_failed(&self, (name, id): (&SpaceName, &SpaceId), error: &anyhow::Error) {
+        self.notify_space(
+            name,
+            id,
             NotificationKind::HookFailed,
             format!("marked ready for review; {error:#}"),
         )

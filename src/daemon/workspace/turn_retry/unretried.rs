@@ -103,8 +103,13 @@ impl Manager {
             .await?
         {
             let message = reason.message(agent, failure);
-            self.notify(Some(&workspace.name), NotificationKind::TurnFailed, message)
-                .await;
+            self.notify_space(
+                &workspace.name,
+                &workspace.id,
+                NotificationKind::TurnFailed,
+                message,
+            )
+            .await;
         }
         Ok(())
     }

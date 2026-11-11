@@ -167,11 +167,11 @@ impl Manager {
         attachments: Vec<PathBuf>,
         source: Source,
     ) -> bool {
-        let lookup = name.clone();
+        let (lookup, id) = (name.clone(), workspace_id.cloned());
         let agents = self.tracked_agents().await;
         let found = self
             .store
-            .run(move |db| coordinator(db, &lookup, source, &agents))
+            .run(move |db| coordinator(db, &lookup, id, source, &agents))
             .await;
         let coordinator = match found {
             Ok(Some(coordinator)) => coordinator,
@@ -563,19 +563,20 @@ fn has_running_agent(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> R
     )
 }
 
-/// The coordinator of the space named `name` for an event from `source`:
-/// the nearest space above it with an agent.
+/// The coordinator of the space `id`, else of the only workspace named
+/// `name`, for an event from `source`: the nearest space above it with an
+/// agent.
 fn coordinator(
     db: &Connection,
-    name: &str,
+    name: &SpaceName,
+    id: Option<SpaceId>,
     source: Source,
     agents: &TrackedAgents,
 ) -> Result<Option<SpaceId>> {
-    let id: Option<SpaceId> = db
-        .query_row("SELECT id FROM spaces WHERE name=?1", [name], |row| {
-            row.get(0)
-        })
-        .optional()?;
+    let id = match id {
+        Some(id) => Some(id),
+        None => crate::daemon::notifications::only_workspace_named(db, name)?,
+    };
     let Some(id) = id else {
         return Ok(None);
     };

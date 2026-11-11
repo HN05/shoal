@@ -399,7 +399,7 @@ impl Manager {
         if hook.is_some() {
             self.verify_worktree(&workspace).await?;
         }
-        let workspace_name = workspace.name.clone();
+        let workspace_name = (workspace.name.clone(), workspace.id.clone());
         let scoped = caller.is_some();
         let ahead = place.ahead();
         let acquisition = self
@@ -431,7 +431,7 @@ impl Manager {
             .await
             .context("resource lease retained; repeat acquire to retry the hook, or release it")?;
         }
-        self.notify_allocation(&workspace_name, &acquisition, "")
+        self.notify_allocation((&workspace_name.0, &workspace_name.1), &acquisition, "")
             .await;
         Ok(acquisition)
     }

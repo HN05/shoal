@@ -293,8 +293,9 @@ impl Manager {
                 ),
             }
         };
-        self.notify(
-            Some(&workspace.name),
+        self.notify_space(
+            &workspace.name,
+            &workspace.id,
             NotificationKind::AgentExited,
             message,
         )
@@ -361,8 +362,9 @@ impl Manager {
             .run_agent_exit_hook(workspace, agent, exit_code, complete)
             .await
         {
-            self.notify(
-                Some(&workspace.name),
+            self.notify_space(
+                &workspace.name,
+                &workspace.id,
                 NotificationKind::HookFailed,
                 format!("agent exited; {error:#}"),
             )
@@ -608,18 +610,22 @@ impl Manager {
     /// Tell the user why a protection-stopped agent's automatic restore waits
     /// beyond healthy readings, and a waiting `shoal restart` of it.
     pub(crate) async fn notify_restore_waits(&self, id: &ExecutionId, issue: &str) {
-        let Some((name, workspace)) = self
+        let Some((name, workspace, workspace_id)) = self
             .executions
-            .with_agent(id, |agent| (agent.name.clone(), agent.workspace.clone()))
+            .with_agent(id, |agent| {
+                let (workspace, id) = (agent.workspace.clone(), agent.workspace_id.clone());
+                (agent.name.clone(), workspace, id)
+            })
             .await
         else {
             return;
         };
         log!("restore of {name} in {workspace} waits for its processes to stop: {issue}");
-        self.notify(
-            Some(&workspace),
+        self.notify_space(
+            &workspace,
+            &workspace_id,
             NotificationKind::RecoveryBlocked,
-            format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace} cancels the restore"),
+            format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace_id} cancels the restore"),
         )
         .await;
         self.restart_waits(id, issue).await;
@@ -661,13 +667,13 @@ impl Manager {
                 agent.turn = None;
                 anyhow::Ok(Some((
                     agent.name.clone(),
-                    agent.workspace.clone(),
+                    (agent.workspace.clone(), agent.workspace_id.clone()),
                     restarting,
                 )))
             })
             .await?;
         drop(connections);
-        let Some((name, workspace, restarting)) = resumed else {
+        let Some((name, (workspace, workspace_id), restarting)) = resumed else {
             return Ok(false);
         };
         // `shoal restart` reports its own restarts.
@@ -679,8 +685,9 @@ impl Manager {
             Some(Grant::Queue) => "from the agent queue",
             _ => "after sustained healthy readings",
         };
-        self.notify(
-            Some(&workspace),
+        self.notify_space(
+            &workspace,
+            &workspace_id,
             NotificationKind::AgentResumed,
             format!("Restoring {name} {cause}"),
         )
@@ -1134,10 +1141,11 @@ impl Manager {
                 protection.resumes_when
             )
         };
-        self.notify(
-            Some(workspace),
+        self.notify_space(
+            workspace,
+            workspace_id,
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
+            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
         )
         .await;
     }

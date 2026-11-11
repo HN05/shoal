@@ -476,7 +476,7 @@ async fn stop_executions(
                 )
             }
         };
-        manager.notify(Some(&workspace.name), kind, message).await;
+        manager.notify_space(&workspace.name, &workspace.id, kind, message).await;
         anyhow::Ok(())
     });
     for result in futures_util::future::join_all(stops).await {

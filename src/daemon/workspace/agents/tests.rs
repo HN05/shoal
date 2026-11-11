@@ -177,7 +177,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         assert!(
             events[0]
                 .message
-                .contains(&format!("shoal resume {} --execution {id}", workspace.name))
+                .contains(&format!("shoal resume {} --execution {id}", workspace.id))
         );
         assert_eq!(
             manager.agent_overload(id).await,

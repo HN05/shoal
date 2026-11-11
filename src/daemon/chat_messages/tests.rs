@@ -525,3 +525,61 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     assert_eq!(file.path, *moved);
     assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
 }
+
+#[tokio::test]
+async fn same_named_spaces_reach_their_own_coordinators() {
+    let (temp, manager) = manager().await;
+    let (chat, worker) = chat_and_worker(&temp, &manager).await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let other_chat = manager
+        .start_chat(
+            worker.repository_id.clone().into(),
+            "chat-2".into(),
+            "codex".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&worker.repository_id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .assign_parent(&other.id, Some(other_chat.id.clone()))
+        .await
+        .unwrap();
+    // Both take the same name, which identifies neither.
+    for workspace in [&worker, &other] {
+        let selector = SpaceSelector::id(&workspace.id);
+        (manager.set_workspace_name(&selector, &"Same work".parse().unwrap()))
+            .await
+            .unwrap();
+        (manager.set_agent_state(&selector, AgentState::Working, None, None))
+            .await
+            .unwrap();
+    }
+    for (workspace, message) in [(&worker, "from the worker"), (&other, "from the other")] {
+        manager
+            .send_message(
+                &SpaceSelector::id(&workspace.id),
+                message.into(),
+                Vec::new(),
+                &Attacher::User,
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        received(&manager, &chat).await,
+        ["Same work: from the worker"]
+    );
+    assert_eq!(
+        received(&manager, &other_chat).await,
+        ["Same work: from the other"]
+    );
+    assert!(user(&manager).await.is_empty());
+}

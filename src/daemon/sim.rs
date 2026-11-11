@@ -254,14 +254,18 @@ impl Manager {
         } else {
             None
         };
-        let workspace_name = workspace.name.clone();
+        let workspace_name = (workspace.name.clone(), workspace.id.clone());
         let result = self
             .allocate_simulator(workspace, request, &mut audit, scoped, place.ahead())
             .await;
         place.settle(&result);
         if let Ok(outcome) = &result {
-            self.notify_allocation(&workspace_name, outcome, "simulator: ")
-                .await;
+            self.notify_allocation(
+                (&workspace_name.0, &workspace_name.1),
+                outcome,
+                "simulator: ",
+            )
+            .await;
         }
         if let Some(audit) = audit {
             self.finish_clean_request(audit, &result).await?;

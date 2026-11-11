@@ -401,8 +401,7 @@ impl Manager {
             );
             return false;
         }
-        self.notify(
-            Some(&workspace.name),
+        self.notify_space(&workspace.name, &workspace.id,
             crate::daemon::notifications::NotificationKind::AgentExited,
             format!(
                 "Restore of {agent} failed with exit code {code}; its restore waits in the agent queue"

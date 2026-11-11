@@ -139,8 +139,9 @@ impl Manager {
         if let Err(error) = self.cancel_stopped_restores(&workspace.id).await {
             crate::daemon::log!("agent queue: {error:#}");
         }
-        self.notify(
-            Some(&workspace.name),
+        self.notify_space(
+            &workspace.name,
+            &workspace.id,
             NotificationKind::SpaceDone,
             done_notice(&workspace.name, &completion, &closed),
         )
@@ -219,8 +220,9 @@ impl Manager {
         }
         .await;
         if let Err(error) = result {
-            self.notify(
-                Some(&workspace.name),
+            self.notify_space(
+                &workspace.name,
+                &workspace.id,
                 NotificationKind::HookFailed,
                 format!("assignment finished; {error:#}"),
             )

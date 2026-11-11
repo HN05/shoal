@@ -263,8 +263,12 @@ impl Manager {
                 request.number,
                 request.subject()
             );
-            self.notify(
-                request.space.as_ref(),
+            self.notify_about(
+                crate::daemon::notifications::About {
+                    name: request.space.clone(),
+                    id: Some(request.space_id.clone()),
+                    subject: None,
+                },
                 NotificationKind::PushFailed,
                 message,
             )

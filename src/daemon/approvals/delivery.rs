@@ -21,8 +21,12 @@ impl Manager {
         {
             return;
         }
-        self.notify(
-            request.space.as_ref(),
+        self.notify_about(
+            About {
+                name: request.space.clone(),
+                id: Some(request.space_id.clone()),
+                subject: None,
+            },
             NotificationKind::ApprovalWithdrawn,
             message,
         )

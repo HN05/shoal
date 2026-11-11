@@ -251,8 +251,7 @@ impl Manager {
             .stop_reason
             .as_deref()
             .map_or(String::new(), |reason| format!(" ({reason})"));
-        self.notify(
-            Some(&workspace.name),
+        self.notify_space(&workspace.name, &workspace.id,
             NotificationKind::RecoveryBlocked,
             format!(
                 "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal resume {} --execution {}",
@@ -268,8 +267,7 @@ impl Manager {
             execution,
             error,
         } = unreadable;
-        self.notify(
-            Some(&workspace.name),
+        self.notify_space(&workspace.name, &workspace.id,
             NotificationKind::RecoveryBlocked,
             format!(
                 "The recovery record of execution {execution} cannot be read: {error:#}; check or remove {}",

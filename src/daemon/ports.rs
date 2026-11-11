@@ -139,15 +139,16 @@ impl Manager {
         self.touch(&workspace.id).await;
         let (outcome, conflict) = self.store.write(move |tx| claim_port(tx, claim)).await?;
         if let Some(conflict) = conflict {
-            self.notify(
-                Some(&workspace.name),
+            self.notify_space(
+                &workspace.name,
+                &workspace.id,
                 NotificationKind::PortConflict,
                 conflict,
             )
             .await;
         }
         if let Acquisition::Allocation(allocation) = &outcome {
-            self.notify_allocation(&workspace.name, allocation, "")
+            self.notify_allocation((&workspace.name, &workspace.id), allocation, "")
                 .await;
         }
         Ok(outcome)

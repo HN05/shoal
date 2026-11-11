@@ -315,8 +315,9 @@ impl Manager {
                 .await
         };
         if let Err(error) = started.await {
-            self.notify(
-                Some(&workspace.name),
+            self.notify_space(
+                &workspace.name,
+                &workspace.id,
                 NotificationKind::SeedFailed,
                 format!("Workspace starts without the seed build: {error:#}"),
             )

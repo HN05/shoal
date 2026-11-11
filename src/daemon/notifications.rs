@@ -93,20 +93,31 @@ impl About {
         }
     }
 
-    /// With the identity of the workspace that has the name now when none
-    /// was given.
+    /// With the identity of the only workspace that has the name now when
+    /// none was given; names repeat, so a name others share names none.
     fn resolve(mut self, db: &rusqlite::Connection) -> Result<Self> {
         if self.id.is_none()
             && let Some(name) = &self.name
         {
-            self.id = db
-                .query_row("SELECT id FROM workspaces WHERE name=?1", [name], |row| {
-                    row.get(0)
-                })
-                .optional()?;
+            self.id = only_workspace_named(db, name)?;
         }
         Ok(self)
     }
+}
+
+/// The only workspace named `name`, if one alone has it.
+pub(crate) fn only_workspace_named(
+    db: &rusqlite::Connection,
+    name: &SpaceName,
+) -> Result<Option<SpaceId>> {
+    let ids = db
+        .prepare("SELECT id FROM workspaces WHERE name=?1 LIMIT 2")?
+        .query_map([name], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<SpaceId>>>()?;
+    Ok(match <[SpaceId; 1]>::try_from(ids) {
+        Ok([id]) => Some(id),
+        Err(_) => None,
+    })
 }
 
 /// Record an event for the user in the caller's transaction, with the files
@@ -240,6 +251,18 @@ impl Manager {
     ) {
         self.notify_about(About::named(workspace), kind, message.into())
             .await;
+    }
+
+    /// [`Manager::notify`] about the space `id`, which has `name`: names
+    /// repeat, so only its identity says which space the event is about.
+    pub async fn notify_space(
+        &self,
+        name: &SpaceName,
+        id: &SpaceId,
+        kind: NotificationKind,
+        message: impl Into<String>,
+    ) {
+        (self.notify_about(About::space(name, id), kind, message.into())).await;
     }
 
     /// [`Manager::notify`] about a workspace whose identity the caller holds,

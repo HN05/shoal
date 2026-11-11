@@ -23,7 +23,7 @@ impl Manager {
     pub(crate) async fn close_space_places(&self, id: &SpaceId, name: &SpaceName) {
         for host in &self.session_hosts {
             if let Err(error) = self.close_host_space_sessions(host.as_ref(), id).await {
-                self.session_cleanup_failed(Some(name), &error).await;
+                self.session_cleanup_failed(Some((name, id)), &error).await;
             }
         }
         self.close_owned_places(Some(id.clone())).await;
@@ -211,13 +211,22 @@ impl Manager {
             .await
     }
 
-    async fn session_cleanup_failed(&self, workspace: Option<&SpaceName>, error: &anyhow::Error) {
-        self.notify(
-            workspace,
-            NotificationKind::CleanupFailed,
-            &format!("terminal session cleanup failed: {error:#}; retry with shoal cleanup"),
-        )
-        .await;
+    async fn session_cleanup_failed(
+        &self,
+        workspace: Option<(&SpaceName, &SpaceId)>,
+        error: &anyhow::Error,
+    ) {
+        let message =
+            format!("terminal session cleanup failed: {error:#}; retry with shoal cleanup");
+        match workspace {
+            Some((name, id)) => {
+                (self.notify_space(name, id, NotificationKind::CleanupFailed, message)).await
+            }
+            None => {
+                self.notify(None, NotificationKind::CleanupFailed, message)
+                    .await
+            }
+        }
     }
 }
 

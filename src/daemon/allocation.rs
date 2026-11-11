@@ -1,4 +1,5 @@
 //! Shared outcomes of daemon-owned resource allocation.
+use crate::client::space_ids::SpaceId;
 use crate::{
     client::space_names::SpaceName,
     daemon::{approvals::ApprovalRequest, notifications::NotificationKind, workspace::Manager},
@@ -25,15 +26,16 @@ impl Manager {
     /// Record allocation notifications after the claim transaction has finished.
     pub async fn notify_allocation<T>(
         &self,
-        workspace: &SpaceName,
+        (workspace, id): (&SpaceName, &SpaceId),
         outcome: &Allocation<T>,
         busy_prefix: &str,
     ) {
         match outcome {
             Allocation::Granted(_) => {}
             Allocation::Busy(message) => {
-                self.notify(
-                    Some(workspace),
+                self.notify_space(
+                    workspace,
+                    id,
                     NotificationKind::ResourceBusy,
                     format!("{busy_prefix}{message}"),
                 )
