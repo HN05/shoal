@@ -18,6 +18,7 @@ pub(super) fn names_from_titles(db: &Connection) -> Result<()> {
     rename_removed_workspaces(db)?;
     create_legacy_chat_names(db)?;
     cut_chat_names(db)?;
+    name_title_events(db)?;
     if titled {
         drop_titles(db)?;
     }
@@ -135,6 +136,22 @@ fn rename_removed_workspaces(db: &Connection) -> Result<()> {
             params![id, name],
         )?;
     }
+    Ok(())
+}
+
+/// Rewrite each `renamed` event that recorded a new title as one recording
+/// the name it now is, so a space's log reads it as it happened; one that
+/// cleared the title keeps the name it recorded.
+fn name_title_events(db: &Connection) -> Result<()> {
+    db.execute_batch(
+        "UPDATE workspace_events
+            SET record=json_set(record,'$.name',json_extract(record,'$.title'))
+            WHERE json_valid(record) AND json_extract(record,'$.kind')='renamed'
+                AND json_type(record,'$.title')='text';
+         UPDATE workspace_events SET record=json_remove(record,'$.title')
+            WHERE json_valid(record) AND json_extract(record,'$.kind')='renamed'
+                AND json_type(record,'$.title') IS NOT NULL;",
+    )?;
     Ok(())
 }
 

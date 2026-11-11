@@ -833,7 +833,10 @@ fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> 
              VALUES ('gone','repo','old-name',9,
                  '{{"name":"old-name","links":{{"issue_title":"Gone issue"}}}}'),
                  ('titled-gone','repo','other',9,
-                 '{{"name":"other","title":"Gone title","links":{{"issue_title":"Gone issue"}}}}');"#,
+                 '{{"name":"other","title":"Gone title","links":{{"issue_title":"Gone issue"}}}}');
+         INSERT INTO workspace_events(record) VALUES
+             ('{{"kind":"renamed","workspace_id":"titled","name":"fix-login","title":"Login retries"}}'),
+             ('{{"kind":"renamed","workspace_id":"titled","name":"fix-login","title":null}}');"#,
         "x".repeat(64)
     ))?;
     let events = |db: &Connection| -> Result<i64> {
@@ -882,6 +885,16 @@ fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> 
         "Gone title 1"
     );
     assert_eq!(events(&db)?, before);
+    // A title an event recorded is the name it records now; a cleared one
+    // keeps the name it recorded.
+    let renames: Vec<String> = db
+        .prepare(
+            "SELECT json_extract(record,'$.name') || ' ' || (json_type(record,'$.title') IS NULL)
+                FROM workspace_events WHERE json_extract(record,'$.kind')='renamed' ORDER BY id",
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(renames, ["Login retries 1", "fix-login 1"]);
     // A later rename, or a branch rename, is journaled again.
     db.execute("UPDATE workspaces SET name='renamed' WHERE id='plain'", [])?;
     db.execute("UPDATE workspaces SET branch='other' WHERE id='plain'", [])?;
