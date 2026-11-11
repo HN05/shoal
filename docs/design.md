@@ -2269,6 +2269,26 @@ never notifies; coordinators read it on demand. Each change is a space's
 journal event, kept as its turn states are since plan tools change it as
 often.
 
+Blockers are part of progress, since they say why the work does not move:
+each sits on the space or on one step and names a space, an issue, a PR or a
+CI run with a one-line reason. Questions and approval requests already cover
+waiting for a person, so nothing else blocks. Plan tools set steps through
+hooks that cannot carry blockers, so agents set them with `shoal progress`
+flags, and a step's blocker follows the step by its tool's key, or its name
+without one, and goes with it. A space is blocked while a blocker of its own
+or one on every open step remains. One resolver serves queued launches and
+spaces: the item poll looks each forge blocker and each blocking run's
+workflow on the default branch up once, and a space blocker clears as
+admission decides for a launch. A CI run blocker clears once a later run of
+its workflow on the default branch passes, so a broken default branch that a
+merge fixes releases every agent it blocked without anyone touching them.
+Becoming blocked is the one blocker event that notifies, through the path
+that reports `done`, so a coordinator learns of it once. A blocked agent has
+nothing to do, so once its turn ends Shoal stops it as an idle stop does and
+its restore waits until nothing blocks the space instead of for an update;
+`shoal done` removes the blockers and cancels it. A chat comes back the same
+way through its automatic restore.
+
 An open PR the space opened or was assigned shows its progress in a section
 at the end of its body, which belongs to Shoal: the daemon writes it through
 the same forge-edit path as the space's other changes, recorded as its own so

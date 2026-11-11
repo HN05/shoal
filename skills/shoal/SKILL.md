@@ -213,7 +213,14 @@ reads its children's progress on demand.
 `shoal progress` numbers them: an issue by number or URL, a PR or CI run by
 URL, or a space by name or ID, with a one-line `--reason`. A step's blocker
 goes with the step when the plan drops it. A space is blocked while it has a
-blocker of its own or every step not done has one.
+blocker of its own or every step not done has one; lists show it `blocked`,
+and its coordinator, or the user, hears of it once. Once a blocked agent's
+turn ends, Shoal stops it and restores it when nothing blocks the space any
+longer, its first message naming what cleared: an issue closing, a PR merging
+or closing, a space done or removed, or a CI run, or a later run of its
+workflow on the default branch, passing. A coordinator removes a blocker of a
+space below with `--space`; `shoal resume` restores a blocked agent at once,
+and `shoal done` removes the blockers.
 
 ## Idle wakes
 
