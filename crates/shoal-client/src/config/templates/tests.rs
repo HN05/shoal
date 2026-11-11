@@ -136,8 +136,18 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
         assert_eq!(plan.system, chat.system);
         let first = plan.first_message.unwrap();
         assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
-        assert!(first.ends_with("work the plan splits off."), "{first}");
+        assert!(first.ends_with(plan_instructions_end()), "{first}");
     }
+}
+
+/// The built-in plan instructions' last line, which ends a plan's first
+/// message.
+fn plan_instructions_end() -> &'static str {
+    include_str!("../modes/plan.md")
+        .trim_end()
+        .lines()
+        .last()
+        .unwrap()
 }
 
 #[test]
