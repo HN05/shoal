@@ -87,8 +87,37 @@ impl Manager {
             None => None,
         };
         name_after_issue(&mut opening.new.options, issue.as_ref());
+        if opening.new.options.name.is_none() {
+            let title = self
+                .opened_pull_title(&repo.path, &opening, &preparing)
+                .await;
+            opening.new.options.name = title.map(|title| SpaceName::derive(&title, "workspace"));
+        }
         let opened = (self.open_for_start(repository, opening, caller.is_some())).await?;
         self.prepare_new(opened, issue, preparing, caller).await
+    }
+
+    /// The title of the PR a start opens at its head or links, which names
+    /// a new workspace without a name or issue of its own, as every start
+    /// does; a PR that cannot be read leaves it named after its branch, and
+    /// linking it reports why.
+    async fn opened_pull_title(
+        &self,
+        checkout: &std::path::Path,
+        opening: &Opening<'_>,
+        preparing: &Preparing,
+    ) -> Option<String> {
+        let input = match &opening.start {
+            WorkspaceStart::PullHead { url, .. } => url.as_str(),
+            _ => preparing.pr.as_deref()?,
+        };
+        match self.read_pull_title(checkout, input).await {
+            Ok(title) => Some(title),
+            Err(error) => {
+                log!("PR {input} not read to name its workspace: {error:#}");
+                None
+            }
+        }
     }
 
     /// Split child `name` from workspace `parent`, on `base` or a copy of

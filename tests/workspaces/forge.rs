@@ -2583,3 +2583,36 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let ran = fs::read_to_string(fixture.root.path().join("post-setup-ran")).unwrap();
     assert_eq!(ran, "ran\n");
 }
+
+#[test]
+fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
+    let fixture = Fixture::new();
+    forge_origin(&fixture);
+    install_api_curl(&fixture.root.path().join("bin"));
+    let pull = forgejo_pull(7, "open", "fix", &"7".repeat(40));
+    script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
+    fixture.ok(&["list"]);
+    let start = shoal_client::protocol::OperationMethod::StartWorkspace {
+        repository: fixture.repo.to_str().unwrap().into(),
+        start: shoal_client::protocol::operations::WorkspaceStart::Name("app-pr".into()),
+        base: Some("HEAD".into()),
+        path: None,
+        git_profile: None,
+        parent: None,
+        options: Default::default(),
+        issue: None,
+        pr: Some("https://forge.example/team/project/pulls/7".into()),
+        agent: None,
+        env: None,
+    };
+
+    let started = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(shoal_client::connection::request::<
+            shoal_client::protocol::operations::StartedWorkspace,
+        >(&fixture.connector(), start))
+        .unwrap();
+
+    assert_eq!(started.workspace.name, "PR 7");
+    assert_eq!(started.workspace.branch.as_deref(), Some("app-pr"));
+}

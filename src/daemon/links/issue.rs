@@ -115,6 +115,16 @@ impl Manager {
         })
     }
 
+    /// The title of the PR `input` names in the repository whose origin
+    /// `checkout` has.
+    pub(crate) async fn read_pull_title(&self, checkout: &Path, input: &str) -> Result<String> {
+        let remote = crate::repository::remote_url_from_path(checkout)
+            .await?
+            .context("PR lookup needs an origin remote")?;
+        let forge = self.forge(&remote).await?;
+        Ok(forge.pull_request(&self.user_account(), input).await?.title)
+    }
+
     /// The forge of the repository whose origin `checkout` has, with the
     /// number and canonical URL of the issue `input` names there.
     pub(super) async fn issue_forge(
