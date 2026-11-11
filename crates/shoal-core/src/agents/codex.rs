@@ -45,6 +45,12 @@ impl Integration for Codex {
         true
     }
 
+    /// Codex's base URL takes the OpenAI API's version, as each gateway
+    /// serves it.
+    fn api_path(&self) -> &'static str {
+        "/v1"
+    }
+
     fn proxy_args(&self) -> Vec<OsString> {
         vec![PROVIDER.into()]
     }

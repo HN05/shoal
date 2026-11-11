@@ -34,6 +34,33 @@ fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
     }
 }
 
+#[test]
+fn a_proxy_codex_names_takes_a_server_root_rather_than_codexs_api_url() {
+    let with = |upstream: &str, agent: &str| {
+        let text = format!(
+            "[machine.proxies.p]\nupstream = '{upstream}'\n\
+             [agents.codex-fast]\nbase = 'codex'\n[machine.agents.{agent}]\nproxy = 'p'\n"
+        );
+        parse(&text).unwrap().resolve(&Default::default())
+    };
+    for upstream in [
+        "http://127.0.0.1:8317/v1",
+        "http://127.0.0.1:8317/v1/",
+        "https://api.openai.com/v1",
+        "https://chatgpt.com/backend-api/codex",
+    ] {
+        for agent in ["codex", "codex-fast"] {
+            let error = with(upstream, agent).unwrap_err().to_string();
+            assert!(error.contains("machine.proxies.p.upstream"), "{error}");
+        }
+        // Claude names the version in its requests' own paths.
+        assert!(with(upstream, "claude").is_ok(), "{upstream}");
+    }
+    for upstream in ["http://127.0.0.1:8317", "https://gateway.example/api/v10"] {
+        assert!(with(upstream, "codex").is_ok(), "{upstream}");
+    }
+}
+
 #[tokio::test]
 async fn a_proxy_key_is_written_out_read_from_the_agents_environment_or_fetched() {
     let config = parse(

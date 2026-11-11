@@ -174,8 +174,9 @@ impl AgentLaunch {
             return Ok(command.to_vec());
         };
         let configured = self.configured_environment(environment);
+        let url = crate::agents::agent_url(self.kind(), &proxy.url);
         let routing = crate::agents::Routing {
-            url: &proxy.url,
+            url: &url,
             directory,
             private: proxy.private_dir(),
         };

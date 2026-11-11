@@ -36,7 +36,7 @@ pub use checks::{
     check_model, check_queued_launch, ensure_available, ensure_forks, programs, resolve_model,
 };
 pub(crate) use proxy::{
-    Routing, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
+    Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, with_proxy_args,
 };
 pub use trust::forget_repository_trust;
@@ -82,6 +82,13 @@ pub trait Integration: Sync {
     /// runs with leaves them unset.
     fn proxy_defaults(&self) -> &'static [(&'static str, &'static str)] {
         &[]
+    }
+
+    /// Where its API is under a server root such as a gateway's, which its
+    /// proxy's URL ends with when the proxy forwards to one: Claude Code
+    /// names `/v1` in each request's own path, Codex in its base URL.
+    fn api_path(&self) -> &'static str {
+        ""
     }
 
     /// Arguments that only send its API requests to Shoal's proxy, for a

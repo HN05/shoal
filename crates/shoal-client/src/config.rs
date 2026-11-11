@@ -331,6 +331,7 @@ impl Config {
         let agents = agents::describe(&settings.agents, &self.machine.agents);
         crate::ai::validate(&agents, &settings.commands)?;
         let tools = crate::ai::tools(&agents);
+        crate::config::proxies::validate_routes(&tools, &self.machine.proxies)?;
         let proxies = crate::config::proxies::routes(&tools, &self.machine.proxies);
         Ok(Effective::new(settings, tools, proxies))
     }

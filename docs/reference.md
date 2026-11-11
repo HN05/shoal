@@ -1694,10 +1694,10 @@ of a trusted project from its root (by `project_root_markers`, `.git` by
 default) down to the working directory, which `-C` may move, then the `-c`
 overrides it is launched with. Shoal's own overrides come after the launch's, so
 they win. On its built-in
-OpenAI provider, through a provider Shoal defines with the same login, whose
-upstream is then
-`https://chatgpt.com/backend-api/codex` for a ChatGPT login or
-`https://api.openai.com/v1` for an API key. The proxy forwards each request with
+OpenAI provider, through a provider Shoal defines with the same login. `upstream`
+is a server root for both tools: Claude Code names `/v1` in each request's path,
+and Codex gets the proxy's URL with `/v1`, so a proxy that a Codex tool names
+whose `upstream` ends in `/v1` or is on `chatgpt.com` fails validation. The proxy forwards each request with
 the agent's own credentials, or, with a `key`, sends the upstream that key as
 `Authorization: Bearer` in their place, so an agent on its own login can reach
 an upstream such as CLIProxyAPI that wants its own key. `key` is the key itself,

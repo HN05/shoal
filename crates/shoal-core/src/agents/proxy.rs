@@ -39,6 +39,13 @@ pub(crate) fn proxy_defaults(
         .collect()
 }
 
+/// The URL an agent with integration `kind` takes for its proxy at `url`,
+/// which forwards to its `upstream`, a server root, so the agent's API is
+/// under the path it names its own.
+pub(crate) fn agent_url(kind: IntegrationKind, url: &str) -> String {
+    format!("{url}{}", integration(kind).api_path())
+}
+
 /// Whether an agent with integration `kind` can go through Shoal's proxy.
 fn routes_through_proxy(kind: IntegrationKind) -> bool {
     integration(kind).routes_through_proxy()
