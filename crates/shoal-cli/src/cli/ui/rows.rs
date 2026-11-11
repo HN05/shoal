@@ -216,6 +216,16 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 8]) 
     )
 }
 
+/// Sort `workspaces` as lists show them: by status, then number.
+pub fn sort_workspaces(workspaces: &mut [Workspace], stopped: &HashSet<SpaceId>) {
+    workspaces.sort_by_key(|w| {
+        (
+            ListStatus::of_workspace(w, stopped.contains(&w.id)),
+            w.number,
+        )
+    });
+}
+
 /// `workspace_rows` with a status, which picks the marker, and a status cell
 /// per workspace.
 /// `with_markers` starts each row with its state marker, which multi-select

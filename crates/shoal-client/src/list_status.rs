@@ -7,38 +7,40 @@ use crate::{
 };
 
 /// What a list row shows a workspace, chat or queued agent doing. Its value name
-/// is the row's label in kebab case.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// is the row's label in kebab case. Lists sort spaces by it in declaration
+/// order: working agents first, then what needs the user, failures, changes
+/// under way, queued agents, and quiet spaces last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ListStatus {
-    Preparing,
-    Stopping,
-    Removing,
-    Reconciling,
-    Restoring,
-    Updating,
-    Failed,
-    Stopped,
-    NeedsInput,
-    /// Its progress records what blocks it.
-    Blocked,
-    Finished,
-    Ready,
     Working,
-    Waiting,
-    /// An idle agent that Shoal does not wake until its next turn starts.
-    Sleeping,
-    /// An idle agent that Shoal does not wake until `shoal sleep --undo`.
-    SleepingPermanent,
     /// An agent or command without a reported turn state runs.
     ProcessRunning,
     /// No agent of its own has started, and the agent above that does its
     /// work is working.
     ParentWorking,
+    NeedsInput,
+    Ready,
+    Stopped,
+    Failed,
+    Starting,
+    Preparing,
+    Restoring,
+    Updating,
+    Reconciling,
+    Stopping,
+    Removing,
+    Queued,
+    /// Its progress records what blocks it.
+    Blocked,
+    Waiting,
+    /// An idle agent that Shoal does not wake until its next turn starts.
+    Sleeping,
+    /// An idle agent that Shoal does not wake until `shoal sleep --undo`.
+    SleepingPermanent,
     ReadyOutdated,
     Inactive,
-    Queued,
-    Starting,
+    Finished,
 }
 
 impl ListStatus {

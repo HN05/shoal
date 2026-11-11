@@ -805,6 +805,9 @@ work is stopped, `ready`, the other [agent states](#agent-state),
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
 subagents work in a child it split, `ready (outdated)`, or `inactive`.
+`shoal list` and its picker order spaces by status, then number: working
+agents and processes first, then what needs you, failures, changes under
+way, queued agents, and quiet spaces last.
 Branches and paths are in `shoal status`.
 Every space, a workspace or a [chat](#chats), has a number no other space
 holds, the smallest free when it is created; it stays through renames and
@@ -825,8 +828,8 @@ where Enter shows one with `shoal view` and Ctrl-O opens it in the browser with
 opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal list` with `-p`/`--print`, like a filter, `--json` or output that is not a terminal,
-prints the list instead: your own workspaces first, then each running [chat](#chats)
-with its agent, followed by the workspaces it opened; `list --chats`
+prints the list instead: workspaces and running [chats](#chats), each chat with its
+agent, and each space followed by the spaces below it; `list --chats`
 lists only the chats. `list --repo <repository>`, with or without
 `--chats` or `--status`, lists only that registered repository's workspaces,
 chats and queued agents. `list --status <status>`,
