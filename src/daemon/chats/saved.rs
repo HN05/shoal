@@ -72,20 +72,24 @@ impl Manager {
     /// it owns, as [`Self::save_chats`] saves each chat; the process of the
     /// space `stopped_by` stops it, which may resume it.
     pub(crate) async fn save_chat(&self, id: &SpaceId, stopped_by: Option<&SpaceId>) -> Result<()> {
-        let saved = self.save_running_chat(id, stopped_by, || Ok(())).await?;
+        let saved = self
+            .save_running_chat(id, stopped_by, Saving::Restart)
+            .await?;
         ensure!(saved, "the chat no longer runs");
         Ok(())
     }
 
-    /// Save `chat` for `shoal stop` as [`Self::save_chat`] does, unless it
-    /// is stopped already, which keeps the space recorded as its stopper.
+    /// Save `chat` for `shoal stop` as [`Self::save_chat`] does, and keep
+    /// one whose automatic restore is pending from coming back on its own,
+    /// both stopped by the space `stopped_by`; any other stopped chat keeps
+    /// the space recorded as its stopper.
     pub(crate) async fn stop_chat_for_resume(
         &self,
         chat: &Chat,
         stopped_by: Option<&SpaceId>,
     ) -> Result<StoppedChat> {
-        let check = || self.check_chat_stop(chat);
-        let saved = self.save_running_chat(&chat.id, stopped_by, check).await?;
+        let saving = Saving::Stop(chat);
+        let saved = self.save_running_chat(&chat.id, stopped_by, saving).await?;
         Ok(StoppedChat {
             already_stopped: !saved,
         })
@@ -102,26 +106,33 @@ impl Manager {
         Ok(())
     }
 
-    /// [`Self::save_chat`] once `check` passes, with no other save or
-    /// handoff under way, returning whether the chat ran.
+    /// [`Self::save_chat`] for `saving`, with no other save, handoff or
+    /// automatic restore under way, returning whether the chat ran or its
+    /// automatic restore was pending.
     async fn save_running_chat(
         &self,
         id: &SpaceId,
         stopped_by: Option<&SpaceId>,
-        check: impl FnOnce() -> Result<()>,
+        saving: Saving<'_>,
     ) -> Result<bool> {
         let _saving = self.chat_saves.lock().await;
         let _handoffs = self.chat_handoffs.write().await;
-        check()?;
+        let stop = matches!(saving, Saving::Stop(_));
+        if let Saving::Stop(chat) = saving {
+            self.check_chat_stop(chat)?;
+        }
         self.stop_finished_chats().await?;
         let chat = id.to_owned();
         let stopped_by = stopped_by.cloned();
-        let Saved { running, released } = self
-            .store
-            .write(move |tx| save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref()))
+        let (held, Saved { running, released }) = (self.store)
+            .write(move |tx| {
+                let held = stop && hold_automatic(tx, &chat, stopped_by.as_ref())?;
+                let saved = save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref())?;
+                Ok((held, saved))
+            })
             .await?;
         let Some((id, process)) = running.into_iter().next() else {
-            return Ok(false);
+            return Ok(held);
         };
         let stopped = self.stop_saved(&id, &process).await;
         if stopped.is_err() {
@@ -375,6 +386,29 @@ fn saved_process(db: &mut Connection, id: &SpaceId) -> Result<Identity> {
         birth,
         unique: unique.as_deref().map(serde_json::from_str).transpose()?,
     })
+}
+
+/// Why [`Manager::save_running_chat`] saves a chat.
+enum Saving<'a> {
+    /// A restart, which starts it again at once.
+    Restart,
+    /// `shoal stop` of the chat, which stays down until `shoal resume`.
+    Stop(&'a Chat),
+}
+
+/// Turn the pending automatic restore of the chat `id` into a stop by the
+/// process of the space `stopped_by`, which waits for `shoal resume`,
+/// returning whether one was pending.
+fn hold_automatic(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    stopped_by: Option<&SpaceId>,
+) -> Result<bool> {
+    let held = tx.execute(
+        "UPDATE chats SET restore=?2,stopped_by=?3 WHERE id=?1 AND restore=?4",
+        params![id, ChatRestore::Resume, stopped_by, ChatRestore::Automatic],
+    )?;
+    Ok(held == 1)
 }
 
 /// What [`save`] saved.

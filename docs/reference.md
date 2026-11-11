@@ -334,7 +334,8 @@ the spaces below each selected one too, workspaces and chats, unless `--skip-chi
 started `--in` a workspace is not below it. Without a space it takes the current workspace,
 else a picker of the workspaces and the running chats, never the chat it runs in. It stops a
 chat as `shoal daemon stop` does, saving it and stopping the processes it owns, and the chat
-waits for `shoal resume <chat>`; a chat already stopped stays as it is. Its agents, and those
+waits for `shoal resume <chat>`; a chat already stopped stays as it is, except that one
+waiting to come back on its own after a shutdown waits for `shoal resume` instead. Its agents, and those
 stopped there before, stay down until `shoal resume` continues them: each
 becomes a last session, as an agent that exits on its own leaves, which holds
 no agent slot, keeps nothing from cleanup and nothing restores on its own. To

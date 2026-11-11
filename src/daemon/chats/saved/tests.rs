@@ -181,6 +181,29 @@ async fn a_stop_saves_a_running_chat_and_keeps_a_stopped_ones_stopper() {
     );
 }
 
+/// A chat a shutdown saved to come back on its own stays down for
+/// `shoal resume` once `shoal stop` stops it before its restore.
+#[tokio::test]
+async fn a_stop_keeps_a_pending_automatic_restore_from_bringing_the_chat_back() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    manager.save_chats(ChatRestore::Automatic).await;
+    process.wait().unwrap();
+    let coordinator = Some(SpaceId::from("coordinator"));
+
+    let stopped = manager.stop_chat_for_resume(&chat, coordinator.as_ref());
+    assert!(!stopped.await.unwrap().already_stopped);
+
+    let restores = crate::daemon::chats::restores::restore_automatic(&manager);
+    assert!(restores.await.unwrap().is_empty());
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Resume));
+    assert_eq!(
+        manager.chat_stopped_by(&chat.id).await.unwrap(),
+        coordinator
+    );
+}
+
 #[tokio::test]
 async fn the_daemon_saves_running_chats_as_it_exits() {
     for (ending, restore) in [
