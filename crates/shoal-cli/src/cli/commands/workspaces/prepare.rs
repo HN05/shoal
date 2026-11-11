@@ -8,12 +8,10 @@ use super::environment::configured_environment;
 use super::link_pull::link_or_warn;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agents::check_queued_launch,
     cli::{
         commands::operations::{Failed, Reporter},
         context::Context,
     },
-    config::Effective,
     execution,
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
@@ -21,7 +19,7 @@ use crate::{
         ConfigTarget,
         operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     },
-    start_plan::queued_agent_request,
+    queued_launches,
     state::WorkspaceState,
 };
 
@@ -179,19 +177,14 @@ async fn queue_agent(
     )
     .await?;
     reporter.ensure_running()?;
-    queue_in_workspace(ctx, workspace, &settings, launch).await
+    queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch).await
 }
 
 /// Leave `launch` waiting in the queue of `workspace`, whose setup failed,
-/// to start once a retried setup readies it, which it waits for even when it
-/// was to start at once; a refusal only warns.
-pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, mut launch: QueuedLaunch) {
-    launch.now = false;
-    let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-    let queued = async {
-        let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
-        queue_in_workspace(ctx, workspace, &settings, launch).await
-    };
+/// to start once a retried setup readies it, and say so; a refusal only
+/// warns.
+pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) {
+    let queued = queued_launches::queue_for_setup(&ctx.paths, workspace, launch);
     let (name, number) = (&workspace.name, workspace.number);
     match queued.await {
         Ok(entry) => eprintln!(
@@ -202,20 +195,4 @@ pub(super) async fn leave_waiting(ctx: &Context, workspace: &Workspace, mut laun
             eprintln!("warning: the agent of {name} cannot wait for its setup: {error:#}")
         }
     }
-}
-
-/// Queue `launch` in the ready `workspace`, whose effective `settings`
-/// must let it run, for the agent queue to start detached.
-pub(super) async fn queue_in_workspace(
-    ctx: &Context,
-    workspace: &Workspace,
-    settings: &Effective,
-    launch: QueuedLaunch,
-) -> Result<QueueEntry> {
-    check_queued_launch(&launch, settings)?;
-    let request = queued_agent_request(workspace, launch)?;
-    let admission = crate::client::queue::add(&ctx.paths, request).await?;
-    admission
-        .entry
-        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
 }

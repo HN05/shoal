@@ -26,6 +26,7 @@ pub mod presets;
 pub mod process;
 pub mod proxy;
 pub mod push_gate;
+pub mod queued_launches;
 pub mod refusal;
 pub mod releases;
 pub mod removal;

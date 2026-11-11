@@ -10,14 +10,10 @@ use super::finish::{holding, report_queued_in};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    cli::{
-        agents,
-        commands::{queued_agents, workspaces::prepare::queue_in_workspace},
-        context::Context,
-        terminal,
-    },
+    cli::{agents, commands::queued_agents, context::Context, terminal},
     model::{QueueEntry, Workspace},
     protocol::{ConfigTarget, operations::QueuedLaunch},
+    queued_launches,
     start_plan::{AddPlan, ResolvedAddAgent},
 };
 
@@ -99,7 +95,8 @@ async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Re
         return admit_here(ctx, workspace, launch).await;
     }
     terminal::ensure_background(&settings)?;
-    let entry = queue_in_workspace(ctx, workspace, &settings, launch).await?;
+    let entry =
+        queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch).await?;
     Ok(Placement::Queued(Box::new(entry)))
 }
 
