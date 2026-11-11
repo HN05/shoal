@@ -106,14 +106,15 @@ fn restart_restores_a_chat_in_a_new_place() {
         });
         wait_until("chat started", || home.join("chat-started").exists());
 
-        // It answers once the chat runs again, in the zmx session it opened.
+        // It answers once the chat runs again, in the zmx session it opened,
+        // which is the chat's own.
         let restarted = fixture.ok(&["restart", "talk"]);
         assert_eq!(
             restarted["restarted"],
             serde_json::json!([{
                 "space": "talk",
                 "agent": "claude",
-                "place": {"host": "zmx", "place": "talk"},
+                "place": {"host": "zmx", "place": "talk", "owned": true},
             }]),
             "{restarted}"
         );

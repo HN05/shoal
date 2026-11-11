@@ -71,6 +71,8 @@ fn main() {
     unsafe { env::take_session_end() };
     // SAFETY: as above; only the chat this process starts was shown.
     unsafe { env::take_shown_chat() };
+    // SAFETY: as above; only the chat this process starts runs in the place.
+    unsafe { env::take_opened_chat_place() };
     profile::start();
     client::connection::supervise(&service::Command);
     run_cli(cli);

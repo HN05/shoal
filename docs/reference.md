@@ -1288,9 +1288,9 @@ open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
 or the agent finishes its turn, as its hooks report it or, for an agent without
 them, as Herdr does, unless stopped work waits for `shoal resume` or the daemon
-stayed stopped for more than two minutes while the tab was open. Workspace
-removal closes it immediately, regardless of `terminal.close_when_done`, and daemon
-startup and `shoal cleanup` close those whose workspace is gone. Shoal closes
+stayed stopped for more than two minutes while the tab was open. Removing its
+workspace or chat closes it immediately, regardless of `terminal.close_when_done`, and daemon
+startup and `shoal cleanup` close those whose workspace or chat is gone. Shoal closes
 only the pane it opened the tab with, so a pane you split off keeps the tab
 open, and a tab you opened stays open. A background tab `shoal resume` opens
 closes the same way; a pane it reuses keeps its tab's behavior. `start`
@@ -1356,10 +1356,10 @@ place its agent was recorded in: attach makes the block's window active inside
 Rex and selects it in the Mac app from another terminal; a block that is gone
 leaves nothing to attach. Shoal closes only the blocks it created, and never
 their window's other blocks: completion and removal close them as they close a
-Herdr tab, and daemon startup and `shoal cleanup` close those whose workspace is
-gone. A block you opened stays open, even after an agent ran there, and one
-Shoal opened belongs to another workspace once that workspace's agent starts
-in it, and to no workspace once a chat does. Rex reports
+Herdr tab, and daemon startup and `shoal cleanup` close those whose workspace
+or chat is gone. A block you opened stays open, even after an agent ran there,
+and one Shoal opened belongs to another workspace or chat once its agent
+starts in it, and closes with that one instead. Rex reports
 no agent turn state, so an agent without turn hooks closes its block once its
 execution ends. Rex sends no push notifications to the phone, and a demo's
 screen of a full-screen program shows only its current screen.

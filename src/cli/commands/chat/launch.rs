@@ -191,7 +191,12 @@ impl Launch {
             narrowing: launch.narrowing,
             parent: launch.parent.as_ref(),
         };
-        let place = crate::terminal::current_place().await;
+        let place = crate::terminal::current_place()
+            .await
+            .map(|place| crate::sessions::Origin {
+                owned: crate::env::opened_chat_place(),
+                ..place
+            });
         let restores = launch.restores.as_ref();
         let chat =
             crate::client::chats::record(&ctx.paths, home, new, place, false, restores).await?;

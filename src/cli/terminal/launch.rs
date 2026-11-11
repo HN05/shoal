@@ -221,6 +221,15 @@ pub(super) fn place_env(ctx: &Context) -> Result<Vec<(&'static str, String)>> {
     ])
 }
 
+/// The variables a chat in a place Shoal opens for it needs: those of
+/// [`place_env`], and the mark that tells the chat the place is its own, which
+/// it records so its removal closes the place.
+fn chat_place_env(ctx: &Context) -> Result<Vec<(&'static str, String)>> {
+    let mut env = place_env(ctx)?;
+    env.push((env::OPENED_CHAT_PLACE, "1".to_owned()));
+    Ok(env)
+}
+
 /// This executable with `args`, as a place runs it.
 fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
     let mut argv = crate::workers::shoal_argv(&ctx.paths)?;
@@ -374,7 +383,8 @@ async fn start_in_background(
     if host.closes_when_done {
         argv.extend(["--close-in".into(), name.into()]);
     }
-    open_in_background(ctx, places, beside, &workspace.path, &label, &argv).await
+    let env = place_env(ctx)?;
+    open_in_background(ctx, places, beside, &workspace.path, &label, &argv, &env).await
 }
 
 /// Run Shoal with `args` for the chat `name` of `repository`, or of none,
@@ -403,7 +413,8 @@ pub(in crate::cli) async fn start_chat_in_background(
                 return Ok(None);
             };
             let beside = Beside::opening(group);
-            open_in_background(ctx, places, beside, cwd, name, &argv).await?;
+            let env = chat_place_env(ctx)?;
+            open_in_background(ctx, places, beside, cwd, name, &argv, &env).await?;
             Ok(Some(format!(
                 "Started {name} {}",
                 places.background_place(name)
@@ -414,8 +425,8 @@ pub(in crate::cli) async fn start_chat_in_background(
     .context(NO_QUEUED_HOST)
 }
 
-/// Run `argv` at `cwd` in a new background place of `places` `beside`,
-/// called `label`.
+/// Run `argv` at `cwd` with `env` in a new background place of `places`
+/// `beside`, called `label`.
 async fn open_in_background(
     ctx: &Context,
     places: &dyn Places,
@@ -423,6 +434,7 @@ async fn open_in_background(
     cwd: &Path,
     label: &str,
     argv: &[OsString],
+    env: &[(&str, String)],
 ) -> Result<()> {
     let start = Start {
         state: &ctx.paths.state,
@@ -432,7 +444,7 @@ async fn open_in_background(
         focus: false,
         split: beside.split,
         argv,
-        env: &place_env(ctx)?,
+        env,
     };
     places.open(&start).await.map(drop)
 }
@@ -557,7 +569,7 @@ pub(in crate::cli) async fn start_chat(
     let origin = groups::beside(ctx, &host, &repo, cwd).await?;
     let beside = host.beside(origin.as_ref());
     let attaches = host.host.attaches();
-    let mut env = place_env(ctx)?;
+    let mut env = chat_place_env(ctx)?;
     // A chat registers only once the place runs it, so the chat itself
     // records the place it is shown in for `attach -`.
     if attaches.is_none() {

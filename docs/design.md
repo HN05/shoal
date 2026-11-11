@@ -1218,8 +1218,8 @@ label goes with the session, and a close from the record checks it. A record
 names its session's process and creation time, so `attach` passes over a later
 session under the name, whose own record replaces it. Creation
 sets `shoal.created=1`, which relabelling never adds. The daemon closes a
-workspace's sessions when it removes the workspace, whatever `terminal.close_when_done`
-says, and startup and cleanup sweeps close those whose workspace record is gone,
+space's sessions when it removes the space, a workspace or a chat, whatever
+`terminal.close_when_done` says, and startup and cleanup sweeps close those whose space record is gone,
 retrying failures without restoring ownership. Sessions from before the label
 have no known origin and are left alone. A session zmx lists as unreachable,
 such as one a zmx of another version started, shows neither labels nor
@@ -1281,10 +1281,13 @@ and pending-close retries as zmx sessions; neither host reuses IDs on one
 server, Herdr not even across its restarts, so a recorded place that
 still exists is Shoal's, and each state directory knows only its own. Servers
 number places alike, so a record names its place by host, the server the host
-reads from its data, and ID. An agent of
-another workspace that starts in a recorded place takes it over and a chat
-releases it from its workspace, as relabelling does for a zmx session, while a
-nested command takes nothing; place watchers close recorded places
+reads from its data, and ID. A record names its owner, a space of either
+kind, and every removal of a space closes its places through one operation,
+so no kind of space keeps a place it cannot close. An agent of
+another workspace or a chat that starts in a recorded place takes it over, as
+relabelling does for a zmx session, while a nested command takes nothing; a
+place Shoal opens for a chat is the chat's from its start, which the chat
+learns from the place's environment; place watchers close recorded places
 through the daemon, which reads the owner and closes under one lock, or forgets
 the record and leaves the close to the watcher for a host it cannot close
 places of. A close ends only that block or pane, leaving the user's other
@@ -2311,8 +2314,8 @@ before its workspace's template, issue or branch changed keeps that stale label
 rather than risk overwriting the user's. The process the user runs chooses the name, so the tab or session that
 hosts the chat carries it before the chat is recorded; the chat's record names
 the session it runs in, so `shoal attach` finds it there, not by a session name
-zmx may have suffixed, and the chat labels the session with its ID so no
-workspace's end closes it. A chat waits for the user to speak first unless it opens on a
+zmx may have suffixed, and the chat labels the session with its ID, so the
+chat's removal closes a session Shoal created and no workspace's end does. A chat waits for the user to speak first unless it opens on a
 task: an agent that takes instructions apart from the first message gets them
 so, and another gets them as its first message, which starts a turn and so asks
 only for a short reply or carries the task.

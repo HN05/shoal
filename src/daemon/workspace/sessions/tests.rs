@@ -834,3 +834,74 @@ async fn a_session_its_host_labels_closes_through_the_host_without_a_record() ->
     Ok(())
 }
 
+/// Start the chat `name` of `workspace`'s repository running in `place`,
+/// with a sleep standing in for its agent.
+async fn chat_in(
+    manager: &Manager,
+    workspace: &Workspace,
+    name: &str,
+    place: Origin,
+) -> Result<(crate::model::Chat, crate::test_support::ProcessGroup)> {
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            workspace.repository_id.clone().into(),
+            name.into(),
+            "claude".into(),
+            process.id(),
+            Some(place),
+            false,
+        )
+        .await?;
+    Ok((chat, process))
+}
+
+#[tokio::test]
+async fn a_chats_removal_closes_the_places_shoal_created_that_it_runs_in() -> Result<()> {
+    let (_root, manager, workspace, host) = rex_fixture(&["taken"]).await?;
+    for block in ["opened", "taken", "users"] {
+        host.add(block, workspace.id.as_str())?;
+    }
+    let mut chats = Vec::new();
+    // Shoal opened one block for its chat, and a workspace's block and the
+    // user's own each run another.
+    for (name, block, owned) in [
+        ("opener", "opened", true),
+        ("taker", "taken", false),
+        ("guest", "users", false),
+    ] {
+        let place = Origin {
+            owned,
+            ..Origin::created(HostName::Rex, block.into())
+        };
+        chats.push(chat_in(&manager, &workspace, name, place).await?);
+    }
+    // The workspace's end leaves the block its chat took.
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert!(host.closed()?.is_empty());
+    for (chat, _process) in &chats {
+        manager
+            .remove_chat(&SpaceSelector::id(&chat.id), None)
+            .await?;
+    }
+    assert_eq!(host.closed()?, ["opened", "taken"]);
+    assert!(manager.owned_places(None).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_sweep_leaves_a_chats_places_while_it_is_recorded() -> Result<()> {
+    let (_root, manager, workspace, host) = fixture_for("rex").await?;
+    host.add("opened", workspace.id.as_str())?;
+    let place = Origin::created(HostName::Rex, "opened".into());
+    let (chat, _process) = chat_in(&manager, &workspace, "kept", place).await?;
+    manager.cleanup_orphan_sessions().await;
+    assert!(host.closed()?.is_empty());
+    let owners: Vec<_> = (manager.owned_places(None).await?)
+        .into_iter()
+        .map(|(owner, _)| owner)
+        .collect();
+    assert_eq!(owners, [chat.id]);
+    Ok(())
+}

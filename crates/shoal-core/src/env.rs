@@ -491,6 +491,29 @@ pub fn shown_chat() -> bool {
     SHOWN_LAUNCH_CHAT.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+static OPENED_LAUNCH_CHAT_PLACE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Keep whether this process runs a chat in a place Shoal opened for it, and
+/// drop the marker from the environment so the agent's own children do not
+/// inherit it.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub unsafe fn take_opened_chat_place() {
+    if std::env::var_os(OPENED_CHAT_PLACE).is_some_and(|value| !value.is_empty()) {
+        OPENED_LAUNCH_CHAT_PLACE.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    // SAFETY: the caller guarantees no other thread reads the environment.
+    unsafe { std::env::remove_var(OPENED_CHAT_PLACE) };
+}
+
+/// Whether the chat this process starts runs in a place Shoal opened for
+/// it, as [`take_opened_chat_place`] read it.
+pub fn opened_chat_place() -> bool {
+    OPENED_LAUNCH_CHAT_PLACE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Whether this process ends the session it runs in, as
 /// [`take_session_end`] read it.
 pub(crate) fn ends_launch_session() -> bool {

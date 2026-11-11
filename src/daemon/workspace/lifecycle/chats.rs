@@ -218,6 +218,7 @@ impl Manager {
         }
         self.ensure_ended(&chat, std::process::id()).await?;
         self.delete_chat(&chat).await?;
+        self.close_space_places(&chat.id, &chat.name).await;
         drop(reservation);
         Ok(children)
     }
