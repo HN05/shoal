@@ -181,6 +181,20 @@ impl Manager {
         Ok(())
     }
 
+    /// Keep `session` as the one the agent of the chat that became the
+    /// workspace `id` reported last, which its hand-over continues; a
+    /// workspace without such an agent keeps none.
+    pub(crate) async fn record_converting_session(
+        &self,
+        id: &SpaceId,
+        session: AgentSessionId,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        (self.store)
+            .run(move |db| super::record::record_session(db, &id, &session))
+            .await
+    }
+
     /// Keep the chat that the workspace `id` becomes stopped, as a stop of
     /// its agent by the process of the space `stopped_by`, or by the user,
     /// keeps that agent down until `shoal resume`.

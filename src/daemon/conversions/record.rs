@@ -208,6 +208,21 @@ pub(crate) fn record_stopped(
     Ok(())
 }
 
+/// Keep `session` as the one the agent of the chat that became the
+/// workspace `id` reported last, which its hand-over continues.
+pub(crate) fn record_session(
+    db: &Connection,
+    id: &SpaceId,
+    session: &AgentSessionId,
+) -> Result<()> {
+    db.execute(
+        "UPDATE space_conversions SET record=json_set(record,'$.chat.session',?2)
+         WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'",
+        params![id, session],
+    )?;
+    Ok(())
+}
+
 /// Hold the conversion of the workspace `id` into a chat, whose agent the
 /// process of the space `stopped_by`, or the user, stopped: the chat stays
 /// stopped once the workspace becomes it.

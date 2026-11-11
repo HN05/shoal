@@ -431,3 +431,23 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         .clone();
     assert!(!resumed.contains(&workspace.id));
 }
+
+#[tokio::test]
+async fn the_hand_over_continues_the_session_reported_after_the_conversion() {
+    let (root, manager) = manager().await;
+    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let idle = AgentState::Idle;
+
+    (manager.set_agent_state(&selector, idle, None, Some("s3".into())))
+        .await
+        .unwrap();
+    manager.relocate_finished_turns().await.unwrap();
+
+    process.wait().unwrap();
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    let reported: Vec<_> = (sessions.iter())
+        .map(|last| last.session.as_ref().map(ToString::to_string))
+        .collect();
+    assert_eq!(reported, [Some("s3".to_owned())]);
+}

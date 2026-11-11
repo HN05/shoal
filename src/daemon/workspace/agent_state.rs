@@ -302,7 +302,12 @@ impl Manager {
                     self.signals.agent_changed();
                 }
             }
-            (PresentSpace::Workspace(_), None) => {}
+            // The agent of a chat that became the workspace, which its
+            // hand-over continues.
+            (PresentSpace::Workspace(workspace), None) => {
+                self.record_converting_session(&workspace.id, session)
+                    .await?
+            }
         }
         Ok(())
     }
