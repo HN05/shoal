@@ -350,8 +350,8 @@ impl<'a> Removal<'a> {
 pub(super) enum Stage {
     Initial,
     AfterStop,
-    /// Once the spaces below are gone and, in a worktree, its hooks ran,
-    /// just before the space goes.
+    /// Once the spaces below are gone and, in a worktree, its removal hooks
+    /// ran, just before the space goes.
     Final,
 }
 
@@ -361,7 +361,7 @@ impl Stage {
         match self {
             Stage::Initial => "before removal",
             Stage::AfterStop => "while stopping commands",
-            Stage::Final => "during removal",
+            Stage::Final => "during removal hooks",
         }
     }
 }

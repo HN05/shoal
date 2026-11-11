@@ -413,7 +413,12 @@ impl Manager {
             ensure_confirmed(space.name(), &below, removal)?;
             self.ensure_none_stalled_below(below, removal).await?;
         }
-        let changed = || format!("{} changed {}", space.kind(), stage.change());
+        // Only a worktree runs removal hooks.
+        let when = match (stage, space.worktree()) {
+            (Stage::Final, None) => "while the spaces below it went",
+            _ => stage.change(),
+        };
+        let changed = || format!("{} changed {when}", space.kind());
         match (removal, stage) {
             // Later stages compare against the sweep's snapshot, so they also
             // cover changes made before removal started.
