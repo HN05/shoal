@@ -33,6 +33,7 @@ mod kept_branches;
 mod lifecycle;
 pub(crate) use lifecycle::fail_interrupted_removals;
 mod location;
+pub(crate) mod lost_reports;
 mod merge;
 mod naming;
 mod overload_recovery;
@@ -171,6 +172,8 @@ pub struct Manager {
     /// The config files of worktrees the current format rejects, which the
     /// daemon ignores.
     rejected_configs: repo_configuration::RejectedConfigs,
+    /// When each space's agent state was last reported.
+    report_times: Arc<lost_reports::ReportTimes>,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
 }
@@ -224,6 +227,7 @@ impl Manager {
             oneshot_runs: Default::default(),
             proxy_retries: Default::default(),
             rejected_configs: Default::default(),
+            report_times: Default::default(),
             file_access: Default::default(),
         }))
     }

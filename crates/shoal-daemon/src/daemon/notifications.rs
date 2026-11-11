@@ -298,11 +298,10 @@ impl Manager {
         Ok(About::space(space.name(), space.id()))
     }
 
-    /// Tell the user that a turn-state report of the workspace's agent failed
+    /// Tell the user that a turn-state report of the space's agent failed
     /// with `error`, so the state shown for the agent may be out of date.
     pub async fn report_state_failure(&self, selector: &SpaceSelector, error: &str) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        let about = About::space(&workspace.name, &workspace.id);
+        let about = self.space_about(selector).await?;
         let error = error.replace(char::is_control, " ");
         let message = crate::validate::shorten(
             format!("agent state report failed; {error}"),

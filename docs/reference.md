@@ -5118,9 +5118,13 @@ with the execution's record; one reported from outside lasts until the next
 report or removal. A chat's state ends when the chat stops or is restored, and a
 report arriving while it is stopped is not recorded. Each change, and each end,
 of a workspace's state is a [workspace event](#workspace-events); repeating the
-current state is not a change. Agent state never notifies, records completion, or affects cleanup;
-a report from a workspace process that fails, which the hooks would discard,
-leaves the state as last reported and records an [alert](#notifications) with the error.
+current state is not a change. Agent state never notifies, records completion, or affects cleanup.
+A space's own process keeps each report it sends in the state directory until
+the daemon answers, so a report the daemon does not receive, which the hooks
+would discard, stays there even when the hook's time limit ends it first: the
+daemon looks for such reports at start and every 15 seconds, records an
+[alert](#notifications) naming the space with the error, and records the newest
+report of a space unless a later one arrived first.
 Scoped callers report only for their own space, which their scope names
 wherever they run; `--space` selects another one for unscoped callers.
 

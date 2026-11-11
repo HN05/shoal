@@ -1149,30 +1149,42 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
 }
 
 #[test]
-fn a_failed_turn_state_report_alerts_the_user() {
-    let fixture = Fixture::new();
+fn a_turn_state_report_the_daemon_misses_alerts_and_arrives_once_it_answers() {
+    let mut fixture = Fixture::new();
     fixture.add("reporter");
-    fixture.add("other");
-    for report in [
-        &[
-            "internal",
-            "agent-state",
-            "waiting",
-            "--space",
-            &fixture.id("other"),
-        ][..],
-        &[
-            "internal",
-            "turn-failed",
-            "--integration",
-            "claude",
-            "--space",
-            &fixture.id("other"),
-        ],
-    ] {
-        let output = scoped_command(&fixture, "reporter", report);
-        assert!(!output.status.success(), "{output:?}");
-    }
+    let reporter = fixture.id("reporter");
+    let signals = tempfile::tempdir().unwrap();
+    // The turn ends while the daemon is down; the hook discards its failure,
+    // as the agent's hooks do.
+    let mut wrapper = fixture
+        .command()
+        .args(["run", "--workspace", &reporter, "--", "sh", "-c"])
+        .arg(concat!(
+            r#""$0" internal agent-state working >/dev/null || exit 1; "#,
+            r#"while [ ! -e "$1/stopped" ]; do sleep 0.1; done; "#,
+            r#""$0" internal agent-state idle --ends-turn claude >/dev/null 2>&1; "#,
+            r#"touch "$1/reported"; "#,
+            r#"while [ ! -e "$1/done" ]; do sleep 0.1; done"#,
+        ))
+        .arg(support::shoal_binary())
+        .arg(signals.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let state = |fixture: &Fixture| {
+        fixture.ok(&["status", &reporter])["workspace"]["agent_state"]["state"].clone()
+    };
+    wait_until("the agent to work", || state(&fixture) == "working");
+    fixture.daemon.kill();
+    fs::write(signals.path().join("stopped"), "").unwrap();
+    wait_until("the hook to report", || {
+        signals.path().join("reported").exists()
+    });
+
+    fixture.restart();
+    wait_until("the missed report to arrive", || state(&fixture) == "idle");
     let alerts = fixture.ok(&["alerts"]);
     let failures: Vec<&Value> = alerts
         .as_array()
@@ -1180,9 +1192,10 @@ fn a_failed_turn_state_report_alerts_the_user() {
         .iter()
         .filter(|alert| alert["kind"] == "state_report_failed")
         .collect();
-    // Both reports fail the same way, which shows once until read.
     assert_eq!(failures.len(), 1, "{alerts}");
     assert_eq!(failures[0]["workspace"], "reporter", "{alerts}");
+    fs::write(signals.path().join("done"), "").unwrap();
+    assert!(wrapper.wait().unwrap().success());
 }
 
 #[test]

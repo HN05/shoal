@@ -187,6 +187,12 @@ pub async fn run(
         "turn retries",
         workspace::turn_retry::run,
     );
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "lost hook reports",
+        workspace::lost_reports::run,
+    );
     spawn_supervised(&mut background, &manager, "chats", chats::run);
     spawn_supervised(&mut background, &manager, "conversions", conversions::run);
     spawn_supervised(

@@ -2244,8 +2244,14 @@ space with stopped work is `finished` too: its stopped agent has nothing left
 to do, and `stopped` would ask the user to resume it. A row's marker groups statuses by what they ask of the user, in a
 shape that reads without color. Like
 ready marks it is a status signal for integrations that never notifies,
-completes, or affects idle cleanup, though a failed report from a workspace
-process alerts the user with the error, which the hooks discard; overload protection reads it only to stop
+completes, or affects idle cleanup, though a report from a space's own
+process that the daemon does not receive alerts the user with the error, which
+the hooks discard. The hook keeps its report on disk until the daemon answers,
+so neither the alert nor the state depends on the call that failed or on the
+hook outliving its time limit: the daemon finds the reports left, alerts, and
+records the newest late unless a report made after it was recorded first.
+Every report counts from when its hook made it, and a chat's late report
+only while the chat runs the agent that made it; overload protection reads it only to stop
 idle agents first. A workspace keeps the
 latest report; a report from a tracked execution shows only while that
 execution runs and ends with its record, while one from outside lasts until

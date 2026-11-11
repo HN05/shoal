@@ -63,19 +63,25 @@ pub(super) async fn handle(
             state,
             session,
             turn_end,
-        } => Body::AgentStatus(match turn_end {
-            Some(turn_end) => {
-                ensure!(state == AgentState::Idle, "only an idle report ends a turn");
+            made,
+        } => {
+            ensure!(
+                turn_end.is_none() || state == AgentState::Idle,
+                "only an idle report ends a turn"
+            );
+            Body::AgentStatus(
                 manager
-                    .end_agent_turn(&workspace, execution(caller), session, turn_end)
-                    .await?
-            }
-            None => {
-                manager
-                    .set_agent_state(&workspace, state, execution(caller), session)
-                    .await?
-            }
-        }),
+                    .report_agent_state(
+                        &workspace,
+                        state,
+                        execution(caller),
+                        session,
+                        turn_end,
+                        made,
+                    )
+                    .await?,
+            )
+        }
         AgentMethod::SetProgress { space, change } => {
             Body::Progress(manager.set_progress(&space, change).await?)
         }
@@ -92,6 +98,7 @@ pub(super) async fn handle(
             session,
             execution: reported,
             turn_end,
+            made,
         } => Body::AgentStatus(
             manager
                 .report_turn_failure(
@@ -100,15 +107,12 @@ pub(super) async fn handle(
                     execution(caller).or(reported),
                     session,
                     turn_end,
+                    made,
                 )
                 .await?,
         ),
         AgentMethod::ReportWakeEnd { space, ended } => {
             manager.report_wake_end(&space, &ended).await?;
-            Body::Ok
-        }
-        AgentMethod::ReportStateFailure { workspace, error } => {
-            manager.report_state_failure(&workspace, &error).await?;
             Body::Ok
         }
         AgentMethod::ReportUpstreamReset {
@@ -229,8 +233,7 @@ impl Scoped for AgentMethod {
             // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }
             | AgentMethod::StartWokenTurn { workspace }
-            | AgentMethod::ReportTurnFailure { workspace, .. }
-            | AgentMethod::ReportStateFailure { workspace, .. } => Some(
+            | AgentMethod::ReportTurnFailure { workspace, .. } => Some(
                 manager
                     .own_workspace(
                         caller,

@@ -16,20 +16,22 @@ use crate::{
     state::{AgentState, TurnFailure},
 };
 
-/// Record `state` for the agent of `workspace`, running `session`;
-/// `turn_end` reports the turn that ended with it.
+/// Record `state` for the agent of `workspace`, running `session`, as a
+/// hook `made` it; `turn_end` reports the turn that ended with it.
 pub async fn set_state(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     state: AgentState,
     session: Option<AgentSessionId>,
     turn_end: Option<TurnEnd>,
+    made: Option<std::time::SystemTime>,
 ) -> Result<AgentStatus> {
     let method = AgentMethod::SetAgentState {
         workspace,
         state,
         session,
         turn_end,
+        made,
     };
     request(daemon, method).await
 }
@@ -43,13 +45,14 @@ pub async fn start_woken_turn(daemon: &impl Daemon, workspace: SpaceSelector) ->
 }
 
 /// Record the turn of `workspace`'s agent, running `session`, that
-/// `failure` ended.
+/// `failure` ended, as a hook `made` the report.
 pub async fn report_turn_failure(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     failure: TurnFailure,
     session: Option<AgentSessionId>,
     turn_end: TurnEnd,
+    made: Option<std::time::SystemTime>,
 ) -> Result<AgentStatus> {
     let method = AgentMethod::ReportTurnFailure {
         workspace,
@@ -57,17 +60,9 @@ pub async fn report_turn_failure(
         session,
         execution: None,
         turn_end,
+        made,
     };
     request(daemon, method).await
-}
-
-/// Tell the user that a report from `workspace` failed with `error`.
-pub async fn report_state_failure(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    error: String,
-) -> Result<()> {
-    request(daemon, AgentMethod::ReportStateFailure { workspace, error }).await
 }
 
 /// Tell the daemon that the wake hook of `space`'s agent ended for `ended`

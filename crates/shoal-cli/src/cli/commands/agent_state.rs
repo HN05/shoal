@@ -1,16 +1,17 @@
 //! `shoal internal agent-state` and `turn-failed`: the turn state, and the
 //! failure that ended a turn, that an agent's hooks report for its space.
-use crate::client::space_ids::SpaceId;
+use crate::client::execution_ids::ExecutionId;
 use std::{
     io::{IsTerminal, Read},
     os::fd::{AsFd, AsRawFd, BorrowedFd},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    agents::hook_reports::{Report, Sending},
     ai::IntegrationKind,
     cli::{
         context::Context,
@@ -31,26 +32,16 @@ pub(super) async fn run(
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
-    let reported = report_state(ctx, space, state, ends_turn).await;
-    tell_failure(ctx, &reported).await;
-    reported
-}
-
-async fn report_state(
-    ctx: &Context,
-    space: Option<SpaceSelector>,
-    state: AgentState,
-    ends_turn: Option<IntegrationKind>,
-) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
     let event = hook_event();
-    let turn_end = ends_turn.map(|integration| TurnEnd {
-        final_message: event.as_ref().and_then(final_message),
-        ..turn_end(ctx, integration)
-    });
-    let session = event.as_ref().and_then(session_of);
-    let status = agents::set_state(&ctx.paths, space.clone(), state, session, turn_end).await?;
-    emit(ctx, status)
+    let report = Report::State {
+        state,
+        session: event.as_ref().and_then(session_of),
+        turn_end: ends_turn.map(|integration| TurnEnd {
+            final_message: event.as_ref().and_then(final_message),
+            ..turn_end(ctx, integration)
+        }),
+    };
+    emit(ctx, send_kept(ctx, space, report).await?)
 }
 
 /// Report the agent of `space` working on the turn a wake starts, which no
@@ -68,51 +59,70 @@ pub(super) async fn turn_failed(
     space: Option<SpaceSelector>,
     integration: IntegrationKind,
 ) -> Result<i32> {
-    let reported = report_turn_failure(ctx, space, integration).await;
-    tell_failure(ctx, &reported).await;
-    reported
+    let event = hook_event().unwrap_or_default();
+    let report = Report::TurnFailure {
+        failure: crate::cli::agents::turn_failure(integration, &event)
+            .unwrap_or(TurnFailure::Other),
+        session: session_of(&event),
+        turn_end: turn_end(ctx, integration),
+    };
+    emit(ctx, send_kept(ctx, space, report).await?)
 }
 
-async fn report_turn_failure(
+/// Send `report` for the agent of the space `space` selects, kept on disk
+/// while it is sent, so that one the daemon does not receive stays for the
+/// daemon to find and tell the user about, even when the hook's time limit
+/// ends this process first.
+async fn send_kept(
     ctx: &Context,
     space: Option<SpaceSelector>,
-    integration: IntegrationKind,
-) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
-    let event = hook_event().unwrap_or_default();
-    let failure =
-        crate::cli::agents::turn_failure(integration, &event).unwrap_or(TurnFailure::Other);
-    let turn_end = turn_end(ctx, integration);
-    let status = agents::report_turn_failure(
-        &ctx.paths,
-        space.clone(),
-        failure,
-        session_of(&event),
-        turn_end,
-    )
-    .await?;
-    emit(ctx, status)
+    report: Report,
+) -> Result<AgentStatus> {
+    let kept = keep(ctx, space.is_none(), &report);
+    let made = kept.as_ref().map_or_else(SystemTime::now, Sending::made);
+    let sent = send(ctx, space, report, made).await;
+    if let Some(kept) = kept {
+        match &sent {
+            Ok(_) => kept.delivered(),
+            Err(error) => kept.failed(format!("{error:#}")),
+        }
+    }
+    sent
 }
 
-/// Tell the user that a report from a workspace process failed, since the
-/// hooks that report discard the error and the agent's state would stay as
-/// last reported without a word. The scope names the workspace, which the
-/// failure may have kept the report from finding. A daemon the report could
-/// not reach cannot record this either, so its failure is ignored.
-async fn tell_failure(ctx: &Context, reported: &Result<i32>) {
-    let Err(error) = reported else { return };
-    let Some(workspace) = crate::env::is_scoped()
-        .then(|| std::env::var(crate::env::WORKSPACE_ID).ok())
-        .flatten()
-    else {
-        return;
-    };
-    let _ = agents::report_state_failure(
-        &ctx.paths,
-        SpaceSelector::Id(SpaceId::from(workspace)),
-        format!("{error:#}"),
-    )
-    .await;
+/// `report` kept on disk when the hook of a workspace process's own space,
+/// as `own` says, makes it. One that cannot be kept is sent all the same.
+fn keep(ctx: &Context, own: bool, report: &Report) -> Option<Sending> {
+    let space = crate::env::own_space().filter(|_| own && crate::env::is_scoped())?;
+    let execution = std::env::var(crate::env::EXECUTION_ID)
+        .ok()
+        .filter(|execution| !execution.is_empty())
+        .map(ExecutionId::from);
+    Sending::keep(&ctx.paths, &space, report.clone(), execution).ok()
+}
+
+/// Send `report`, which a hook `made`, for the agent of the space `space`
+/// selects.
+async fn send(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    report: Report,
+    made: SystemTime,
+) -> Result<AgentStatus> {
+    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    let made = Some(made);
+    match report {
+        Report::State {
+            state,
+            session,
+            turn_end,
+        } => agents::set_state(&ctx.paths, space, state, session, turn_end, made).await,
+        Report::TurnFailure {
+            failure,
+            session,
+            turn_end,
+        } => agents::report_turn_failure(&ctx.paths, space, failure, session, turn_end, made).await,
+    }
 }
 
 /// What the hook of an agent with `integration` reports when its turn

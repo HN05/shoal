@@ -110,6 +110,7 @@ async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure
             Some(execution.into()),
             None,
             Default::default(),
+            None,
         )
         .await
         .unwrap();

@@ -2,7 +2,7 @@
 //! integrations that never notifies, completes, or changes cleanup.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    agents::hook_reports,
     execution::recovery,
     model::{AgentStatus, Execution, PresentSpace},
     process::{execution::Processes, identity::Scan},
@@ -141,29 +142,95 @@ impl Manager {
     }
 
     /// Record the state reported from `execution`, which clears it when its
-    /// record goes, and the agent `session` it reports for resuming it.
-    /// Repeating the current report writes nothing, since hooks repeat it
-    /// after every tool call, and a repeated state keeps its start.
-    pub async fn set_agent_state(
+    /// record goes, and the agent `session` it reports for resuming it, as
+    /// its hook `made` the report, from when it counts, as one that arrives
+    /// late does. A report with `turn_end` ends a turn, as
+    /// [`Self::end_turn`] records it. Repeating the current report writes
+    /// nothing, since hooks repeat it after every tool call, and a repeated
+    /// state keeps its start.
+    pub(crate) async fn report_agent_state(
         &self,
         selector: &SpaceSelector,
         state: AgentState,
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
+        turn_end: Option<TurnEnd>,
+        made: Option<SystemTime>,
     ) -> Result<AgentStatus> {
-        self.record_agent_state(selector, state, execution, session, TurnEnding::default())
-            .await
+        let _order = self.report_order(selector).await?;
+        if !self.newest_report(selector, made).await? {
+            return self.recorded_status(selector, state).await;
+        }
+        match turn_end {
+            Some(turn_end) => {
+                self.end_turn(selector, execution, session, turn_end, made)
+                    .await
+            }
+            None => {
+                let ending = TurnEnding::default();
+                self.record_agent_state(selector, state, execution, session, ending, made)
+                    .await
+            }
+        }
+    }
+
+    /// Whether a report its hook `made` for the space `selector` names is
+    /// newer than every report recorded for it, as one without a time is:
+    /// a report made before one recorded already, which arrives late, is
+    /// left out with all it would change.
+    async fn newest_report(
+        &self,
+        selector: &SpaceSelector,
+        made: Option<SystemTime>,
+    ) -> Result<bool> {
+        let Some(made) = made else {
+            return Ok(true);
+        };
+        let space = self.space(selector).await?;
+        // A report a hook still sends, made later, may be recorded already
+        // without a mark yet, as across a daemon restart.
+        let sending = hook_reports::sending(&self.paths, space.id())?;
+        if sending.is_some_and(|sending| sending > made) {
+            return Ok(false);
+        }
+        self.latest_report(space.id(), made).await
+    }
+
+    /// The state recorded for the space `selector` names, or `state`, as a
+    /// report leaves it that is not recorded.
+    async fn recorded_status(
+        &self,
+        selector: &SpaceSelector,
+        state: AgentState,
+    ) -> Result<AgentStatus> {
+        let id = self.space(selector).await?.id().to_owned();
+        let recorded = self.store.run(move |db| get(db, &id)).await?;
+        Ok(recorded.unwrap_or_else(|| unrecorded(state, UnixTime::now())))
+    }
+
+    /// Hold the order of the state reports of the space `selector` names
+    /// until the guard drops, so that a report that arrives late and is
+    /// found the newest stays so while it and what it changes are recorded.
+    pub(super) async fn report_order(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<tokio::sync::OwnedMutexGuard<()>> {
+        let space = self.space(selector).await?;
+        Ok(self.report_times.order(space.id()).await)
     }
 
     /// Record that the agent reporting from `execution` ended a turn and is
     /// idle, its prompt cache expiring the lifetime of its AI tool from now,
-    /// and ask the user the question the turn asked in its chat.
-    pub async fn end_agent_turn(
+    /// and ask the user the question the turn asked in its chat, for a
+    /// report made at `made`, as [`Self::record_agent_state`] takes it,
+    /// while the caller holds the space's [`Self::report_order`].
+    pub(super) async fn end_turn(
         &self,
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
         turn_end: TurnEnd,
+        made: Option<SystemTime>,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
             prompt_cache: Some(
@@ -174,7 +241,7 @@ impl Manager {
         };
         self.ask_marked_chat_question(selector, execution.as_ref(), turn_end.final_message)
             .await;
-        self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
+        self.record_agent_state(selector, AgentState::Idle, execution, session, ending, made)
             .await
     }
 
@@ -187,6 +254,7 @@ impl Manager {
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
     ) -> Result<bool> {
+        let _order = self.report_order(selector).await?;
         if let Some(id) = &execution
             && !self.claim_woken_turn(id).await
         {
@@ -199,7 +267,7 @@ impl Manager {
                 execution.clone(),
                 None,
                 TurnEnding::default(),
-                UnixTime::now(),
+                None,
             )
             .await?;
         // A chat whose save came first, in the transaction that would have
@@ -217,6 +285,7 @@ impl Manager {
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
     ) -> Result<AgentStatus> {
+        let _order = self.report_order(selector).await?;
         let ending = TurnEnding {
             interrupted: true,
             prompt_cache: Some(
@@ -225,7 +294,7 @@ impl Manager {
             ),
             ..TurnEnding::ended()
         };
-        self.record_agent_state(selector, AgentState::Idle, execution, None, ending)
+        self.record_agent_state(selector, AgentState::Idle, execution, None, ending, None)
             .await
     }
 
@@ -264,24 +333,26 @@ impl Manager {
         tools.remove(agent.name())
     }
 
-    /// Record `state` as [`Self::set_agent_state`] does, for a report that
-    /// `ending` says how it ends the agent's turn.
-    async fn record_agent_state(
+    /// Record `state` as [`Self::report_agent_state`] does, for a report that
+    /// `ending` says how it ends the agent's turn, while the caller holds
+    /// the space's [`Self::report_order`]. A report that arrives late, from
+    /// a hook that could not send it, counts from when it was `made`.
+    pub(super) async fn record_agent_state(
         &self,
         selector: &SpaceSelector,
         state: AgentState,
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
         ending: TurnEnding,
+        made: Option<SystemTime>,
     ) -> Result<AgentStatus> {
-        let now = UnixTime::now();
         let taken =
-            (self.take_agent_state(selector, state, execution, session, ending, now)).await?;
-        Ok(taken.unwrap_or_else(|| unrecorded(state, now)))
+            (self.take_agent_state(selector, state, execution, session, ending, made)).await?;
+        Ok(taken.unwrap_or_else(|| unrecorded(state, UnixTime::now())))
     }
 
-    /// [`Self::record_agent_state`] at `now`, returning the status the space
-    /// takes, or none when it takes no report, as a chat that stopped.
+    /// [`Self::record_agent_state`], returning the status the space takes,
+    /// or none when it takes no report, as a chat that stopped.
     async fn take_agent_state(
         &self,
         selector: &SpaceSelector,
@@ -289,7 +360,7 @@ impl Manager {
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
         ending: TurnEnding,
-        now: UnixTime,
+        made: Option<SystemTime>,
     ) -> Result<Option<AgentStatus>> {
         let space = self.space(selector).await?;
         self.record_turn(&space, execution.as_ref(), state, ending)
@@ -298,15 +369,18 @@ impl Manager {
             self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
         }
+        let now = UnixTime::now();
+        let made = made.unwrap_or_else(SystemTime::now);
         let report = Report {
             space: space.id().to_owned(),
             state,
             execution,
-            at: now,
+            at: UnixTime::from_system_time(made),
             prompt_cache_expires_at: ending.prompt_cache.map(|lifetime| now + lifetime),
             failed: ending.failed,
         };
         let saved = self.store.write(move |tx| save(tx, &report)).await?;
+        self.report_times.arrived(space.id(), made);
         let Some((status, changed)) = saved else {
             return Ok(None);
         };
@@ -366,8 +440,9 @@ impl Manager {
         Ok(())
     }
 
-    /// Record the turn `failure` ended as reported from `execution`, which
-    /// leaves the agent idle and may retry the turn. The retry is scheduled
+    /// Record the turn `failure` ended as reported from `execution`, as its
+    /// hook `made` the report, which leaves the agent idle and may retry
+    /// the turn. The retry is scheduled
     /// first, since the agent going idle finishes a delivered one.
     pub async fn report_turn_failure(
         &self,
@@ -376,6 +451,27 @@ impl Manager {
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
         turn_end: TurnEnd,
+        made: Option<SystemTime>,
+    ) -> Result<AgentStatus> {
+        let _order = self.report_order(selector).await?;
+        if !self.newest_report(selector, made).await? {
+            return self.recorded_status(selector, AgentState::Idle).await;
+        }
+        self.fail_turn(selector, failure, execution, session, turn_end, made)
+            .await
+    }
+
+    /// [`Self::report_turn_failure`] for a report made at `made`, as
+    /// [`Self::record_agent_state`] takes it, while the caller holds the
+    /// space's [`Self::report_order`].
+    pub(super) async fn fail_turn(
+        &self,
+        selector: &SpaceSelector,
+        failure: TurnFailure,
+        execution: Option<ExecutionId>,
+        session: Option<AgentSessionId>,
+        turn_end: TurnEnd,
+        made: Option<SystemTime>,
     ) -> Result<AgentStatus> {
         if let Some(execution) = &execution {
             self.retry_failed_turn(selector, failure, execution).await;
@@ -388,7 +484,7 @@ impl Manager {
             ),
             ..TurnEnding::ended()
         };
-        self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
+        self.record_agent_state(selector, AgentState::Idle, execution, session, ending, made)
             .await
     }
 }
@@ -397,7 +493,7 @@ impl Manager {
 /// failure or an interrupt ended it, and how long its prompt cache lives
 /// after it. A report that ends no turn has none of them.
 #[derive(Debug, Clone, Copy, Default)]
-struct TurnEnding {
+pub(super) struct TurnEnding {
     ends: bool,
     failed: bool,
     interrupted: bool,
@@ -436,7 +532,8 @@ struct Report {
     space: SpaceId,
     state: AgentState,
     execution: Option<ExecutionId>,
-    /// When it arrived.
+    /// When it was made, which is when it arrived unless a hook could not
+    /// send it.
     at: UnixTime,
     prompt_cache_expires_at: Option<UnixTime>,
     /// Whether a failure ended the agent's turn.
@@ -505,6 +602,33 @@ fn write_state(db: &Connection, report: &Report) -> Result<bool> {
         ],
     )?;
     Ok(changed > 0)
+}
+
+/// The reports tests make, as a hook's request makes them when it arrives.
+#[cfg(test)]
+impl Manager {
+    pub async fn set_agent_state(
+        &self,
+        selector: &SpaceSelector,
+        state: AgentState,
+        execution: Option<ExecutionId>,
+        session: Option<AgentSessionId>,
+    ) -> Result<AgentStatus> {
+        self.report_agent_state(selector, state, execution, session, None, None)
+            .await
+    }
+
+    pub async fn end_agent_turn(
+        &self,
+        selector: &SpaceSelector,
+        execution: Option<ExecutionId>,
+        session: Option<AgentSessionId>,
+        turn_end: TurnEnd,
+    ) -> Result<AgentStatus> {
+        let idle = AgentState::Idle;
+        self.report_agent_state(selector, idle, execution, session, Some(turn_end), None)
+            .await
+    }
 }
 
 #[cfg(test)]

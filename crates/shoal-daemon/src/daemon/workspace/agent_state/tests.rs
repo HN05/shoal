@@ -211,6 +211,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             state: AgentState::Waiting,
             session: None,
             turn_end: None,
+            made: None,
         };
         assert_eq!(
             scope::authorize(&manager, Some(&"scope".into()), &mut method)
@@ -228,6 +229,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             session: None,
             execution,
             turn_end: Default::default(),
+            made: None,
         };
         assert_eq!(
             scope::authorize(&manager, Some(&"scope".into()), &mut method)
@@ -265,6 +267,7 @@ async fn a_failed_turn_leaves_the_agent_idle() {
             None,
             None,
             Default::default(),
+            None,
         )
         .await
         .unwrap();

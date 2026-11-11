@@ -20,6 +20,10 @@ pub enum AgentMethod {
         session: Option<AgentSessionId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         turn_end: Option<TurnEnd>,
+        /// When the hook made the report, which orders it among those that
+        /// arrive late; when it arrives, without one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        made: Option<std::time::SystemTime>,
     },
     /// Change the space's progress, as its agent or its plan tool's hook
     /// reports it; answers with the progress after the change.
@@ -58,6 +62,9 @@ pub enum AgentMethod {
         execution: Option<ExecutionId>,
         #[serde(default, skip_serializing_if = "TurnEnd::is_empty")]
         turn_end: TurnEnd,
+        /// When the hook made the report, as for [`Self::SetAgentState`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        made: Option<std::time::SystemTime>,
     },
     /// The wake hook of the space's agent ended for `ended` without
     /// starting the agent's turn, which the daemon logs so that a missed
@@ -65,12 +72,6 @@ pub enum AgentMethod {
     ReportWakeEnd {
         space: SpaceSelector,
         ended: WakeEnd,
-    },
-    /// A turn-state report of the caller's agent that failed with `error`,
-    /// which leaves the state shown as last reported.
-    ReportStateFailure {
-        workspace: SpaceSelector,
-        error: String,
     },
     /// The retry the proxy of `execution` waits to make, which its wrapper
     /// reports; `None` once the proxy succeeded or gave up.

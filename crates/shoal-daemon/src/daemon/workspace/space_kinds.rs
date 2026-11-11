@@ -252,6 +252,7 @@ impl Manager {
     /// state and session logs.
     pub(crate) async fn forget_removed_space(&self, space: &PresentSpace) {
         self.close_space_places(space.id(), space.name()).await;
+        self.report_times.forget(space.id());
         if let PresentSpace::Workspace(workspace) = space {
             self.forget_workspace(&workspace.id).await;
             self.delete_session_logs(&workspace.id);

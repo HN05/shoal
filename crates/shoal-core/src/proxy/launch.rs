@@ -344,6 +344,7 @@ impl Reporter {
             session: None,
             execution: Some(self.execution.clone()),
             turn_end: Default::default(),
+            made: None,
         })
         .await;
     }
