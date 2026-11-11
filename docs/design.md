@@ -997,9 +997,15 @@ no script. Tools whose build outputs survive a move into another path get a
 seed: Cargo, whose seed covers it better than a shared compiler cache such as
 sccache, which needs another tool and gives up incremental builds, and the Node
 package managers. Cargo's seed also runs `cargo test`, which builds a proc-macro
-member with other settings than `cargo build --all-targets` does, and `cargo
-check`, which makes the dependency builds `cargo clippy` uses too; clippy's own
-results for the workspace crates change with each branch, so it has no step.
+member with other settings than `cargo build --all-targets` does, `cargo
+check`, which makes the dependency builds `cargo clippy` uses too, and `cargo
+clippy`: Cargo keeps clippy's builds of the workspace crates apart from
+`cargo check`'s, so without its own step every workspace type-checks them from
+scratch for clippy. Clippy's lint arguments are rustc options, and rustc
+discards incremental state built under other options, so the seed passes none
+and serves clippy runs that fail on warnings through Cargo's `build.warnings`
+instead; a step without them also denies nothing, so a default branch with
+warnings still seeds.
 A seed serves the workspace crates only if their incremental state survives
 the move, but rustc reuses it only under the same compiler options, which
 include the working directory, and reuses generated code only for the same
@@ -1012,7 +1018,14 @@ names each crate it builds and allows it no unstable features; a nightly rustc
 gets only the flag, so crates keep the features they enable. Dependencies,
 which Cargo builds without the wrapper, and Cargo's target queries, whose
 printed cfgs a grant would change, stay as the toolchain builds them, and the
-wrapper drops the flag for a rustc that no longer takes it. Preset seeds run the default branch's own build code, as
+wrapper drops the flag for a rustc that no longer takes it. `cargo clippy`
+replaces the workspace wrapper with `clippy-driver`, so the preset also sets
+`RUSTC_WRAPPER`, which Cargo runs before `clippy-driver` for the workspace
+crates and before rustc for everything else, to a second script that hands
+only `clippy-driver` runs to the workspace wrapper. That replaces a user's own
+`RUSTC_WRAPPER` or `build.rustc-wrapper`, such as sccache, whose work the seed
+already covers; one set in `[env]` wins, as every
+variable there does, and clippy then runs without the mapping. Preset seeds run the default branch's own build code, as
 `setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its

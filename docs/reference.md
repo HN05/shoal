@@ -3264,7 +3264,7 @@ presets = ["cargo", "bun"]
 
 | Preset | Sets up |
 |---|---|
-| `cargo` | A rustc wrapper that keeps the workspace crates' incremental state reusable, and a [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run` and `cargo check --all-targets`, keeping `target` |
+| `cargo` | Two rustc wrappers that keep the workspace crates' incremental state reusable, and a [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run`, `cargo check --all-targets` and `cargo clippy --all-targets`, keeping `target` |
 | `npm` | A seed running `npm ci`, keeping `node_modules` |
 | `pnpm` | A seed running `pnpm install --frozen-lockfile`, keeping `node_modules` |
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
@@ -3281,8 +3281,8 @@ checkout, but it keys a package by its directory unless paths are trimmed; with
 of file system paths. The seed fills that cache from the default branch.
 
 The `cargo` preset keeps a [shared cache](#shared-caches) named `preset.cargo`
-holding a rustc wrapper, and sets `RUSTC_WORKSPACE_WRAPPER` to it, so Cargo runs
-the workspace's own crates through it. rustc ignores incremental state built in
+holding two rustc wrappers. It sets `RUSTC_WORKSPACE_WRAPPER` to the first, so
+Cargo runs the workspace's own crates through it. rustc ignores incremental state built in
 another working directory, and the seed and every workspace build in
 directories of their own. For each crate it builds, the wrapper adds
 `-Zremap-cwd-prefix=.`, which leaves rustc's options the same in every
@@ -3294,9 +3294,22 @@ queries, which it passes through unchanged, build as the toolchain builds them. 
 output directory moves, so the wrapper passes `--out-dir` relative to the
 workspace root when it lies inside it. Debug info of the workspace's crates
 records `.` as their working directory. The wrapper leaves rustc's arguments unchanged under
-`RUSTC_BOOTSTRAP=-1` or when rustc no longer takes the flag. `cargo clippy`,
-which sets its own wrapper, and a `RUSTC_WORKSPACE_WRAPPER` in `[env]` run
-without it. Cargo keeps separate builds of the workspace's crates for each
+`RUSTC_BOOTSTRAP=-1` or when rustc no longer takes the flag. A
+`RUSTC_WORKSPACE_WRAPPER` in `[env]` runs without it.
+
+`cargo clippy` replaces `RUSTC_WORKSPACE_WRAPPER` with `clippy-driver`, so the
+preset also sets `RUSTC_WRAPPER` to the second wrapper, which applies the first
+one's mapping to clippy's builds of the workspace's crates and passes every
+other rustc run through unchanged. The preset's `RUSTC_WRAPPER` replaces a
+wrapper set in the inherited environment or as Cargo's `build.rustc-wrapper`,
+such as sccache; one set in `[env]` replaces the preset's, and clippy then
+builds without the mapping. The seed build fails without clippy installed.
+The seed's clippy results serve only clippy runs with the same lint arguments,
+and the seed passes none after `--`. To fail on warnings, use Cargo's
+`build.warnings` instead, as in `CARGO_BUILD_WARNINGS=deny cargo clippy
+--all-targets`.
+
+Cargo keeps separate builds of the workspace's crates for each
 wrapper, so a Cargo command run without the preset's environment, such as from
 a shell `shoal work env` did not set up, builds them from scratch.
 

@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{fs, process::Command};
 
 use super::*;
 
@@ -17,6 +17,14 @@ enum Rustc {
 /// that prints its arguments and `RUSTC_BOOTSTRAP`, and takes `-Z` options
 /// as `rustc` does. `{root}` in `args` stands for the root's path.
 fn run(bootstrap: Option<&str>, compiler: Rustc, args: &[&str]) -> String {
+    let args: Vec<_> = ["{root}/rustc"].iter().chain(args).copied().collect();
+    run_wrapper(WRAPPER, bootstrap, compiler, &args)
+}
+
+/// Runs the prepared `wrapper` in a workspace root with `args`, where
+/// `{root}/rustc` and `{root}/clippy-driver` are the same stand-in rustc.
+/// `{root}` in the output also stands for the root's path.
+fn run_wrapper(wrapper: &str, bootstrap: Option<&str>, compiler: Rustc, args: &[&str]) -> String {
     let kind = match compiler {
         Rustc::Stable => "stable",
         Rustc::Nightly => "nightly",
@@ -52,10 +60,10 @@ printf '%s\n' "$@"
         0o755,
     )
     .unwrap();
+    fs::copy(&rustc, root.path().join("clippy-driver")).unwrap();
     let mut command = Command::new("sh");
     command
-        .arg(root.path().join(WRAPPER))
-        .arg(&rustc)
+        .arg(root.path().join(wrapper))
         .args(
             args.iter()
                 .map(|arg| arg.replace("{root}", &root_path.display().to_string())),
@@ -67,7 +75,9 @@ printf '%s\n' "$@"
     }
     let output = command.output().unwrap();
     assert!(output.status.success(), "{output:?}");
-    String::from_utf8(output.stdout).unwrap()
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .replace(&root_path.display().to_string(), "{root}")
 }
 
 const CRATE: &[&str] = &["--crate-name", "demo", "src/lib.rs"];
@@ -150,5 +160,66 @@ fn the_wrapper_passes_through_what_it_cannot_map() {
         ),
         "RUSTC_BOOTSTRAP=unset\n-\n--crate-name\n___\n--print=cfg\n",
         "target queries see a stable compiler"
+    );
+}
+
+#[test]
+fn the_clippy_wrapper_maps_clippy_runs_of_the_crate_it_builds() {
+    assert_eq!(
+        run_wrapper(
+            CLIPPY_WRAPPER,
+            None,
+            Rustc::Stable,
+            &[
+                "{root}/clippy-driver",
+                "{root}/rustc",
+                "--crate-name",
+                "demo"
+            ]
+        ),
+        "RUSTC_BOOTSTRAP=demo\n{root}/rustc\n--crate-name\ndemo\n\
+         -Zremap-cwd-prefix=.\n-Zallow-features=\n"
+    );
+}
+
+#[test]
+fn the_clippy_wrapper_passes_other_runs_through() {
+    assert_eq!(
+        run_wrapper(
+            CLIPPY_WRAPPER,
+            None,
+            Rustc::Stable,
+            &["{root}/rustc", "--crate-name", "dependency"]
+        ),
+        "RUSTC_BOOTSTRAP=unset\n--crate-name\ndependency\n",
+        "dependencies build as the toolchain builds them"
+    );
+    assert_eq!(
+        run_wrapper(
+            CLIPPY_WRAPPER,
+            None,
+            Rustc::Stable,
+            &[
+                "{root}/clippy-driver",
+                "{root}/rustc",
+                "-",
+                "--crate-name",
+                "___",
+                "--print=cfg"
+            ]
+        ),
+        "RUSTC_BOOTSTRAP=unset\n{root}/rustc\n-\n--crate-name\n___\n--print=cfg\n",
+        "clippy's target queries see a stable compiler"
+    );
+    let workspace_wrapper = format!("{{root}}/{WRAPPER}");
+    assert_eq!(
+        run_wrapper(
+            CLIPPY_WRAPPER,
+            None,
+            Rustc::Stable,
+            &[&workspace_wrapper, "{root}/rustc", "--crate-name", "demo"]
+        ),
+        "RUSTC_BOOTSTRAP=demo\n--crate-name\ndemo\n-Zremap-cwd-prefix=.\n-Zallow-features=\n",
+        "an ordinary build of the crate gets the flags once"
     );
 }

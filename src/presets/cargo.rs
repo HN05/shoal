@@ -1,7 +1,8 @@
-//! The `cargo` preset's file in its shared cache directory: the rustc
+//! The `cargo` preset's files in its shared cache directory: the rustc
 //! wrapper `RUSTC_WORKSPACE_WRAPPER` names, which keeps the workspace
-//! crates' incremental state usable in every workspace. docs/design.md says
-//! why it takes these flags.
+//! crates' incremental state usable in every workspace, and the one
+//! `RUSTC_WRAPPER` names, which does the same for `cargo clippy`.
+//! docs/design.md says why they take these flags.
 use std::path::Path;
 
 use anyhow::Result;
@@ -11,9 +12,17 @@ use super::write_if_changed;
 /// The wrapper's file name inside the cache directory.
 pub const WRAPPER: &str = "rustc-workspace-wrapper";
 
-/// Write the wrapper into `directory`, leaving it untouched when current.
+/// The clippy wrapper's file name inside the cache directory.
+pub const CLIPPY_WRAPPER: &str = "rustc-clippy-wrapper";
+
+/// Write the wrappers into `directory`, leaving them untouched when current.
 pub fn prepare(directory: &Path) -> Result<()> {
-    write_if_changed(&directory.join(WRAPPER), WRAPPER_SCRIPT, 0o755)
+    write_if_changed(&directory.join(WRAPPER), WRAPPER_SCRIPT, 0o755)?;
+    write_if_changed(
+        &directory.join(CLIPPY_WRAPPER),
+        CLIPPY_WRAPPER_SCRIPT,
+        0o755,
+    )
 }
 
 /// Cargo runs it as `<wrapper> <rustc> <arguments>`, and also sends its
@@ -49,6 +58,21 @@ RUSTC_BOOTSTRAP=$bootstrap "$1" --crate-name "$crate" -Zremap-cwd-prefix=. -Zall
   --print=sysroot >/dev/null 2>&1 || exec "$@"
 export RUSTC_BOOTSTRAP="$bootstrap"
 exec "$@" -Zremap-cwd-prefix=. -Zallow-features=
+"#;
+
+/// `cargo clippy` names `clippy-driver` as the workspace wrapper itself, and
+/// runs `$RUSTC_WRAPPER clippy-driver <rustc> <arguments>` for the workspace
+/// crates and its target queries, and `$RUSTC_WRAPPER <rustc> <arguments>`
+/// for dependencies. So this wrapper hands only `clippy-driver` runs to the
+/// workspace wrapper beside it, whose probe runs `clippy-driver` as it would
+/// rustc, and passes every other run through unchanged, including the
+/// workspace wrapper's own runs in ordinary builds.
+const CLIPPY_WRAPPER_SCRIPT: &str = r#"#!/bin/sh
+# Written by Shoal for the cargo preset.
+case ${1##*/} in
+  clippy-driver) exec "${0%/*}/rustc-workspace-wrapper" "$@" ;;
+esac
+exec "$@"
 "#;
 
 #[cfg(test)]

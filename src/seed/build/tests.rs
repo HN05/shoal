@@ -24,6 +24,7 @@ fn presets_build_and_keep_what_their_tools_use() {
             "cargo build --all-targets",
             "cargo test --no-run",
             "cargo check --all-targets",
+            "cargo clippy --all-targets",
             "bun install --frozen-lockfile"
         ]
     );

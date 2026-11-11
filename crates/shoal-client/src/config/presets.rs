@@ -25,8 +25,8 @@ pub const KEPT_CACHES: &[&str] = &[CARGO_CACHE, XCODE_FILES_CACHE];
 states!(
     /// A build tool whose usual setup Shoal knows.
     Preset {
-        /// Cargo: seeds `target`, and runs workspace crates through a
-        /// wrapper that keeps their incremental state usable elsewhere.
+        /// Cargo: seeds `target`, and runs workspace crates through
+        /// wrappers that keep their incremental state usable elsewhere.
         Cargo => "cargo",
         /// npm: seeds `node_modules`.
         Npm => "npm",
@@ -59,6 +59,7 @@ impl Preset {
                 &["cargo", "build", "--all-targets"],
                 &["cargo", "test", "--no-run"],
                 &["cargo", "check", "--all-targets"],
+                &["cargo", "clippy", "--all-targets"],
             ],
             Self::Npm => &[&["npm", "ci"]],
             Self::Pnpm => &[&["pnpm", "install", "--frozen-lockfile"]],
@@ -88,10 +89,13 @@ impl Preset {
     /// outside its base directory.
     fn environment(self) -> &'static [(&'static str, &'static str)] {
         match self {
-            Self::Cargo => &[(
-                "RUSTC_WORKSPACE_WRAPPER",
-                "{cache.preset.cargo}/rustc-workspace-wrapper",
-            )],
+            Self::Cargo => &[
+                (
+                    "RUSTC_WORKSPACE_WRAPPER",
+                    "{cache.preset.cargo}/rustc-workspace-wrapper",
+                ),
+                ("RUSTC_WRAPPER", "{cache.preset.cargo}/rustc-clippy-wrapper"),
+            ],
             Self::Go => &[("GOFLAGS", "-trimpath")],
             Self::Xcode => &[
                 (

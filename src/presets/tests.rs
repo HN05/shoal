@@ -31,12 +31,21 @@ fn the_xcode_preset_keeps_its_files_in_a_shared_cache() {
 }
 
 #[test]
-fn the_cargo_preset_runs_workspace_crates_through_its_wrapper() {
+fn the_cargo_preset_runs_workspace_crates_through_its_wrappers() {
     let root = tempfile::tempdir().unwrap();
     prepare_cache(CARGO_CACHE, root.path()).unwrap();
-    assert!(root.path().join(cargo::WRAPPER).is_file());
+    let env = environment(&[Preset::Cargo], BTreeMap::new());
+    for (variable, wrapper) in [
+        ("RUSTC_WORKSPACE_WRAPPER", cargo::WRAPPER),
+        ("RUSTC_WRAPPER", cargo::CLIPPY_WRAPPER),
+    ] {
+        assert!(root.path().join(wrapper).is_file());
+        assert_eq!(env[variable], format!("{{cache.{CARGO_CACHE}}}/{wrapper}"));
+    }
+    // A wrapper of the user's own in `[env]` replaces the clippy wrapper.
+    let own = BTreeMap::from([("RUSTC_WRAPPER".to_owned(), "sccache".to_owned())]);
     assert_eq!(
-        environment(&[Preset::Cargo], BTreeMap::new())["RUSTC_WORKSPACE_WRAPPER"],
-        format!("{{cache.{CARGO_CACHE}}}/{}", cargo::WRAPPER)
+        environment(&[Preset::Cargo], own)["RUSTC_WRAPPER"],
+        "sccache"
     );
 }
