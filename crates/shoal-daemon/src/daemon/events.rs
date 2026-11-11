@@ -181,6 +181,22 @@ pub(crate) fn record(
     Ok(())
 }
 
+/// Leave the workspace `id`, whose removal for `cause` failed with `error`,
+/// in `state`, recording that it stays.
+pub(crate) fn retain(
+    db: &Connection,
+    id: &SpaceId,
+    state: crate::state::WorkspaceState,
+    cause: EventCause,
+    error: &str,
+) -> Result<()> {
+    db.execute(
+        "UPDATE workspaces SET state=?2,error=?3 WHERE id=?1",
+        params![id, state, error],
+    )?;
+    record(db, id, EventKind::Retained, cause, Some(error))
+}
+
 /// Record a link mutation in the transaction that changes its association.
 pub(crate) fn record_link(
     db: &Connection,
@@ -482,14 +498,7 @@ impl Manager {
         let id = id.to_owned();
         let error = format!("{error:#}");
         self.store
-            .write(move |tx| {
-                tx.execute(
-                    "UPDATE workspaces SET state=?2,error=?3 WHERE id=?1",
-                    params![id, state, error],
-                )?;
-                record(tx, &id, EventKind::Retained, cause, Some(&error))?;
-                Ok(())
-            })
+            .write(move |tx| retain(tx, &id, state, cause, &error))
             .await
     }
 

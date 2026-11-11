@@ -31,6 +31,7 @@ pub(super) mod identity;
 mod imported_sessions;
 mod kept_branches;
 mod lifecycle;
+pub(crate) use lifecycle::fail_interrupted_removals;
 mod location;
 mod merge;
 mod naming;

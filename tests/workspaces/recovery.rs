@@ -328,12 +328,16 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
             );
             assert_eq!(saved["git_dir"], workspace["git_dir"]);
             assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
-            let expected_error = if ["ready", "failed"].contains(state) {
-                "original error"
-            } else {
-                "daemon stopped during workspace operation; inspect before cleanup"
-            };
-            assert_eq!(saved["error"], expected_error);
+            let error = saved["error"].as_str().unwrap();
+            match *state {
+                "ready" | "failed" => assert_eq!(error, "original error"),
+                // A removal names the command that finishes it.
+                "removing" => assert!(error.contains(&format!("shoal rm {}", saved["number"]))),
+                _ => assert_eq!(
+                    error,
+                    "daemon stopped during workspace operation; inspect before cleanup"
+                ),
+            }
             assert!(
                 Path::new(saved["path"].as_str().unwrap())
                     .join("tracked")

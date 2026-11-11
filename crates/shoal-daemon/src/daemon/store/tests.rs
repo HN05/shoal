@@ -1545,20 +1545,27 @@ fn operation_snapshot(db: &mut Connection) -> Result<Vec<String>> {
 
 /// The operation snapshot of `seed_interrupted_operations` after quarantine.
 fn quarantined_snapshot() -> Vec<String> {
-    let mut rows: Vec<String> = WorkspaceState::ALL
-        .iter()
-        .map(|&original| {
+    let mut rows: Vec<String> = (WorkspaceState::ALL.iter().zip(1..))
+        .map(|(&original, number)| {
             let (state, error) = match original {
+                // Numbered in the order the seed inserts them.
+                WorkspaceState::Removing => (
+                    WorkspaceState::Failed,
+                    format!(
+                        "removal stopped when the daemon stopped; shoal rm {number} finishes it"
+                    ),
+                ),
                 WorkspaceState::Preparing
                 | WorkspaceState::Stopping
-                | WorkspaceState::Removing
                 | WorkspaceState::Reconciling
                 | WorkspaceState::Restoring
                 | WorkspaceState::Updating => (
                     WorkspaceState::Failed,
-                    "daemon stopped during workspace operation; inspect before cleanup",
+                    "daemon stopped during workspace operation; inspect before cleanup".into(),
                 ),
-                WorkspaceState::Ready | WorkspaceState::Failed => (original, "original error"),
+                WorkspaceState::Ready | WorkspaceState::Failed => {
+                    (original, "original error".into())
+                }
             };
             serde_json::json!([original, state, error]).to_string()
         })
