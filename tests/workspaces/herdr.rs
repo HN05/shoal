@@ -703,7 +703,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
 }
 
 #[test]
-fn a_focused_json_start_opens_its_tab_only_from_a_terminal() {
+fn a_json_start_opens_its_tab_only_from_a_terminal() {
     let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();
@@ -725,6 +725,24 @@ fn a_focused_json_start_opens_its_tab_only_from_a_terminal() {
         "{started}"
     );
     assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == "--focus"));
+    // An unattended agent's tab stays in the background, which the text
+    // output reports and JSON leaves to the planned workspace.
+    let background = [
+        "--json",
+        "start",
+        repo,
+        "background",
+        "--agent",
+        "pi",
+        "--now",
+        "--",
+        "task",
+    ];
+    let (caller, transcript) = herdr_call(&fixture, &background, "");
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    let started: Value = serde_json::from_slice(&caller.stdout).unwrap();
+    assert_eq!(started["workspace"], "background", "{started}");
+    assert!(!herdr_calls(&fixture)[1].iter().any(|arg| arg == "--focus"));
 }
 
 #[test]

@@ -184,7 +184,9 @@ impl Launch {
                 if let Some(handoff) = handoff {
                     handoff.wait().await?;
                 }
-                outln!("{report}");
+                if !ctx.json {
+                    outln!("{report}");
+                }
                 Ok(true)
             }
         }

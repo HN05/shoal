@@ -58,7 +58,7 @@ pub(in crate::cli) async fn start_add(
     let origin = groups::beside(ctx, &host, &repo, &cwd).await?;
     let beside = host.beside(origin.as_ref());
     let started = run_add(ctx, &host, places, beside, plan, name, placement).await?;
-    if started && placement == Placement::Background {
+    if started && placement == Placement::Background && !ctx.json {
         outln!("Started {name} {}", places.background_place(name));
     }
     Ok(started)
