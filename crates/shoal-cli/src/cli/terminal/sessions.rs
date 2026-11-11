@@ -203,31 +203,18 @@ pub(in crate::cli) fn session_owners(places: &[(&SpaceId, &Origin)]) -> HashSet<
 /// The IDs of the owners of `places`, recorded for owners by ID, with a
 /// session still open there, asking only hosts the owner's `settings`
 /// enable. A place whose owner has no settings, or whose host cannot say,
-/// counts as closed, as does one whose session is that of an agent stopped
-/// at one of `stopped`, recorded the same way.
+/// counts as closed.
 pub(in crate::cli) async fn open_session_owners(
     places: &[(&SpaceId, &Origin)],
-    stopped: &[(&SpaceId, &Origin)],
     settings: &HashMap<SpaceId, Effective>,
 ) -> HashSet<SpaceId> {
     let places = enabled_places(places, settings);
-    let stopped = enabled_places(stopped, settings);
-    let origins: Vec<&Origin> = places
-        .iter()
-        .chain(&stopped)
-        .map(|(_, place)| *place)
-        .collect();
+    let origins: Vec<&Origin> = places.iter().map(|(_, place)| *place).collect();
     let (found, _) = open_at(&origins, |host| named(host).sessions()).await;
-    let (open, stopped) = found.split_at(places.len());
-    let stopped: HashSet<_> = stopped.iter().flatten().map(Session::key).collect();
     places
         .iter()
-        .zip(open)
-        .filter(|(_, session)| {
-            session
-                .as_ref()
-                .is_some_and(|session| !stopped.contains(&session.key()))
-        })
+        .zip(found)
+        .filter(|(_, session)| session.is_some())
         .map(|((owner, _), _)| (*owner).clone())
         .collect()
 }

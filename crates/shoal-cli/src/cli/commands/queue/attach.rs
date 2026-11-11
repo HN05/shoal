@@ -1,5 +1,6 @@
-//! `shoal queue start --attach`: wait until the started entry's agent runs
-//! in a session, then attach this terminal to that session.
+//! `shoal queue start --attach`, and `shoal attach` of an agent Shoal
+//! stopped: wait until the started entry's agent runs in a session, then
+//! attach this terminal to that session.
 use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
@@ -13,7 +14,7 @@ use crate::{
         context::Context,
     },
     model::QueueEntry,
-    state::QueueKind,
+    state::{QueueKind, QueueState},
 };
 
 /// How long to wait for the agent's session, which setup comes before.
@@ -29,6 +30,27 @@ pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()>
         Some(job) => bail!("{} is a CI job, which has no session to attach", job.name),
         None => Ok(()),
     }
+}
+
+/// Start the queued restore of the agent Shoal stopped in `workspace`,
+/// unless it is already starting, returning the name of the session the
+/// agent runs in once it does; `None` when no restore of it waits in the
+/// queue.
+pub(in crate::cli::commands) async fn resume_stopped(
+    ctx: &Context,
+    workspace: &SpaceId,
+) -> Result<Option<String>> {
+    let entries = queued_agents::entries(ctx).await?;
+    let Some(restore) = queued_agents::restore_of(&entries, workspace) else {
+        return Ok(None);
+    };
+    let entry = match restore.state {
+        QueueState::Queued => queue::start(&ctx.paths, restore.id.to_string()).await?,
+        QueueState::Starting => restore.clone(),
+    };
+    ctx.emit(&format!("Resuming {}", entry.name), &entry)?;
+    let (_, session) = agent_terminal_session(ctx, &entry).await?;
+    Ok(Some(session))
 }
 
 /// Attach to the session of the started `entry`'s agent once it has one.

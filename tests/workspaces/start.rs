@@ -2503,11 +2503,12 @@ fn add_queues_agents_past_max_agents_until_removed() {
 }
 
 /// `queue start --attach` starts a waiting agent and attaches this terminal
-/// to the session the daemon starts it in.
+/// to the session the daemon starts it in, as `attach` does for an agent
+/// Shoal stopped.
 #[test]
 fn queue_start_attaches_to_the_started_agents_session() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.missing]\ncommand = ['shoal-test-missing-agent']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.missing]\ncommand = ['shoal-test-missing-agent']\n",
     ));
     let home = fixture.root.path();
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -2571,6 +2572,25 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .rfind(|call| call[0] == "attach")
         .unwrap();
     assert_eq!(attached, ["attach", opened[1].as_str()]);
+
+    // Attaching to an agent Shoal stopped, whose session shows only the
+    // stop, starts its waiting restore and attaches once the agent runs.
+    let moved = fixture.ok(&["queue", "move", &fixture.id("second"), "1"]);
+    assert_eq!(moved["stopped"], true, "{moved}");
+    let attaches = || {
+        zmx_calls(&fixture)
+            .into_iter()
+            .filter(|call| call[0] == "attach")
+            .count()
+    };
+    let before = attaches();
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().args(["attach", &fixture.id("second")]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attaches(), before + 1);
 
     // A start that fails ends the wait at once: this one's agent is gone
     // by the time the queue starts it.

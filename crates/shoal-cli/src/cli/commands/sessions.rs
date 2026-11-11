@@ -1,5 +1,6 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
-//! terminal to one of a workspace's or a running chat's.
+//! terminal to one of a workspace's or a running chat's, resuming a
+//! workspace's agent that Shoal stopped first.
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 
@@ -28,8 +29,10 @@ pub(super) async fn attach(
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
-    let sessions = (target.attachable(ctx, session.as_deref()).await?)
-        .map_err(|protection| anyhow!("{}", stopped_agent(&target, &protection)))?;
+    let (target, sessions, session) = match target.attachable(ctx, session.as_deref()).await? {
+        Ok(sessions) => (target, sessions, session),
+        Err(protection) => target.resumed(ctx, &protection).await?,
+    };
     let session = match (session, sessions.as_slice()) {
         (Some(name), _) => sessions
             .iter()
@@ -161,6 +164,27 @@ impl Target {
         Ok(terminal::attachable(sessions, named))
     }
 
+    /// The workspace, read again, once the agent `protection` stopped runs
+    /// again through its queued restore, with its sessions and the name of
+    /// the agent's; refused with what restores it when no restore waits.
+    async fn resumed(
+        self,
+        ctx: &Context,
+        protection: &Protection,
+    ) -> Result<(Self, Vec<crate::terminal::Session>, Option<String>)> {
+        let refused = || anyhow!("{}", stopped_agent(&self, protection));
+        let Self::Workspace(inspection) = &self else {
+            return Err(refused());
+        };
+        let id = SpaceSelector::id(&inspection.workspace.id);
+        let session = (super::queue::resume_stopped(ctx, &inspection.workspace.id).await?)
+            .ok_or_else(refused)?;
+        let target = Self::inspected(ctx, id).await?;
+        let sessions = (target.attachable(ctx, Some(&session)).await?)
+            .map_err(|protection| anyhow!("{}", stopped_agent(&target, &protection)))?;
+        Ok((target, sessions, Some(session)))
+    }
+
     /// Whose settings choose the hosts to look in.
     fn config(&self) -> ConfigTarget {
         match self {
@@ -214,14 +238,14 @@ impl Target {
     }
 }
 
-/// Why `target`'s agent, which `protection` stopped, cannot be attached to.
+/// Why `target`'s agent, which `protection` stopped, cannot be attached to
+/// while no restore of it waits to start.
 fn stopped_agent(target: &Target, protection: &Protection) -> String {
     format!(
-        "{}'s agent is stopped ({}) and resumes once {}; `shoal queue start --attach {}` resumes it now and attaches",
+        "{}'s agent is stopped ({}) and resumes once {}",
         target.name(),
         protection.reason,
         protection.resumes_when,
-        target.number()
     )
 }
 

@@ -119,9 +119,10 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 }
 
 /// The IDs of workspaces with agent sessions, counting the places their
-/// running agents were recorded in and those Shoal created for them, such as
-/// a session left at its shell after a failed launch, but not the session
-/// of an agent Shoal stopped to restore later.
+/// connected agents were recorded in, including one Shoal stopped whose
+/// wrapper waits to restore it, which attaching resumes, and those Shoal
+/// created for them, such as a session left at its shell after a failed
+/// launch.
 async fn session_workspaces(paths: &Paths) -> HashSet<SpaceId> {
     let agents = crate::client::agents::all(paths).await.unwrap_or_default();
     let owned = crate::client::workspaces::owned_places(paths)
@@ -137,17 +138,16 @@ async fn session_workspaces(paths: &Paths) -> HashSet<SpaceId> {
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
     let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
-    owners.extend(terminal::open_session_owners(&recorded, &places.stopped, &settings).await);
+    owners.extend(terminal::open_session_owners(&recorded, &settings).await);
     owners
 }
 
 /// Where agents were recorded running, as (workspace ID, place) pairs.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct AgentPlaces<'a> {
-    /// Connected agents, which run in their places.
+    /// Connected agents, which run in their places or, stopped by Shoal,
+    /// wait there to be restored.
     connected: Vec<(&'a SpaceId, &'a Origin)>,
-    /// Connected agents Shoal stopped there to restore later.
-    stopped: Vec<(&'a SpaceId, &'a Origin)>,
     /// Executions whose wrapper is gone, whose record outlives the session.
     unknown: Vec<(&'a SpaceId, &'a Origin)>,
 }
@@ -160,10 +160,9 @@ fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
         let Some(place) = agent.origin.as_ref() else {
             continue;
         };
-        let kind = match (&agent.agent, &agent.stopped) {
-            (None, _) => &mut places.unknown,
-            (Some(_), Some(_)) => &mut places.stopped,
-            (Some(_), None) => &mut places.connected,
+        let kind = match &agent.agent {
+            None => &mut places.unknown,
+            Some(_) => &mut places.connected,
         };
         kind.push((&agent.space_id, place));
     }

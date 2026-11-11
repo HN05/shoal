@@ -11,7 +11,7 @@ use crate::{
         ui,
     },
     model::{QueueEntry, QueuePlace},
-    state::{QueueKind, QueueState},
+    state::QueueState,
 };
 
 /// The waiting entries in queue order.
@@ -63,9 +63,7 @@ async fn named(ctx: &Context, selector: String) -> Result<String> {
     let Some(space) = spaces.find(&space) else {
         return Ok(selector);
     };
-    let restore = entries.iter().find(|entry| {
-        entry.kind == QueueKind::Restore && entry.workspace_id.as_ref() == Some(space.id())
-    });
+    let restore = queued_agents::restore_of(&entries, space.id());
     Ok(restore.map_or(selector, |entry| entry.id.to_string()))
 }
 

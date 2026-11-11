@@ -105,7 +105,7 @@ fn states_and_running_work_are_shown_and_missing_targets_hidden() {
 }
 
 #[test]
-fn agent_places_set_stopped_agents_apart() {
+fn agent_places_count_stopped_agents_as_connected() {
     let place =
         |name: &str| crate::sessions::Origin::created(crate::sessions::HostName::Zmx, name.into());
     let (running, stopped, gone) = (place("running"), place("stopped"), place("gone"));
@@ -138,8 +138,7 @@ fn agent_places_set_stopped_agents_apart() {
     assert_eq!(
         agent_places(&agents),
         AgentPlaces {
-            connected: vec![(&w1, &running)],
-            stopped: vec![(&w2, &stopped)],
+            connected: vec![(&w1, &running), (&w2, &stopped)],
             unknown: vec![(&w3, &gone)],
         }
     );

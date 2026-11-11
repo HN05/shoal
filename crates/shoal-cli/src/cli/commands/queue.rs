@@ -8,6 +8,8 @@ mod selection;
 
 use anyhow::Result;
 
+pub(super) use attach::resume_stopped;
+
 use crate::cli::{args::sessions::QueueCommand, context::Context};
 
 pub(super) async fn run(

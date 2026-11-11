@@ -1269,10 +1269,12 @@ in the Happy app or in a terminal no host serves has no session, and attaching s
 where it runs instead. Attach finds a session where the daemon recorded the
 workspace's agent or the chat running, or one Shoal opened for the workspace,
 such as a detached session left at its shell after a failed setup. The
-session of an agent Shoal stopped, such as for memory pressure, while it waits
-for its automatic restore is not offered: attaching to it says why the agent
-stopped, what restores it, and that `shoal queue start --attach <workspace>`
-restores it now and attaches. Sessions are named after the workspace's directory, or for a
+session of an agent Shoal stopped, such as for memory pressure, shows only the
+stop while it waits for its automatic restore: the picker lists its workspace
+as stopped, and attaching starts the restore now, as `shoal queue start
+--attach <workspace>` does, and attaches once the agent runs. Without a
+restore in the queue, attaching says why the agent stopped and what restores
+it. Sessions are named after the workspace's directory, or for a
 chat opaquely, such as `chat-0b9c3a52`, since nothing is built from its name, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
