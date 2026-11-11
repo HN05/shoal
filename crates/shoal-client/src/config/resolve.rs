@@ -215,6 +215,18 @@ impl Effective {
             .map_or(&NONE, |tool| &tool.launch)
     }
 
+    /// Whether the new tab or session of a space started in `mode` takes
+    /// the terminal: the mode's `focus`, else `terminal.focus`, while
+    /// `None` follows the launch. The setup mode always does, since the
+    /// user works with its agent straight away.
+    pub fn focus(&self, mode: &modes::ModeName) -> Option<bool> {
+        if *mode == modes::ModeName::SETUP {
+            return Some(true);
+        }
+        let configured = self.modes.get(mode.as_str()).and_then(|mode| mode.focus);
+        configured.or(self.terminal.focus)
+    }
+
     /// The model and effort a launch of `agent` runs with: each
     /// `requested` value, else `[agent] model` and `effort` when `[agent]
     /// default` names it, else its AI tool's.

@@ -153,20 +153,24 @@ impl Launch {
         self.run_here(ctx, &chat, model_args).await
     }
 
-    /// Run the chat in a new focused tab or session in its checkout or
-    /// worktree, where Shoal starts it in place, returning whether it ran
-    /// there; otherwise it runs here.
+    /// Run the chat in a new tab or session in its checkout or worktree,
+    /// focused or in the background as its mode says, where Shoal starts it
+    /// in place, returning whether it ran there; otherwise it runs here. A
+    /// chat that opens on no task waits for the user to speak first.
     async fn start_beside(&self, ctx: &Context) -> Result<bool> {
         let relaunch = self.relaunch(None);
         let chat = &self.chat;
         let repository = chat.repository.registered();
         let home = chat.home();
+        let waits_for_user = chat.opening.is_none();
+        let placement = terminal::Placement::of(&chat.settings, &chat.mode, false, waits_for_user);
         terminal::start_chat(
             ctx,
             &chat.settings,
             repository,
             home.path(),
             &chat.name,
+            placement,
             &relaunch,
         )
         .await

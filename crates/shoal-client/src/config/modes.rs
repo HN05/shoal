@@ -57,6 +57,9 @@ pub struct ModeConfig {
     /// message.
     #[option(template, default = String::new())]
     pub instructions: Option<String>,
+    /// Whether the new tab or session of a space started in this mode
+    /// takes the terminal, over `terminal.focus`; unset follows the launch.
+    pub focus: Option<bool>,
     /// What the mode's agents may do, over `[permissions]`.
     #[option(section)]
     pub permissions: PermissionsConfig,
@@ -71,14 +74,20 @@ pub struct RuleConfig {
     pub text: Option<String>,
 }
 
-/// The modes Shoal ships, each with the `work` rule before its own.
+/// The modes Shoal ships, each with the `work` rule before its own; the
+/// chats the user talks with take the terminal.
 pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     let mode = |kind, rule: &str, instructions: &str| ModeConfig {
         kind: Some(kind),
         repository: None,
         rules: vec![WORK_RULE.to_owned(), rule.to_owned()],
         instructions: Some(instructions.to_owned()),
+        focus: None,
         permissions: PermissionsConfig::default(),
+    };
+    let focused = |mode: ModeConfig| ModeConfig {
+        focus: Some(true),
+        ..mode
     };
     BTreeMap::from([
         (
@@ -89,10 +98,13 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
                 include_str!("modes/worker.md"),
             ),
         ),
-        (ModeName::CHAT.into(), mode(SpaceKind::Chat, "chat", "")),
+        (
+            ModeName::CHAT.into(),
+            focused(mode(SpaceKind::Chat, "chat", "")),
+        ),
         (
             ModeName::PLAN.into(),
-            mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md")),
+            focused(mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md"))),
         ),
         (
             ModeName::ORCHESTRATE.into(),

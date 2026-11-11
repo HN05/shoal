@@ -21,8 +21,8 @@ pub(in crate::cli) use here::{
     record_owned_here,
 };
 pub(in crate::cli) use launch::{
-    ensure_background, rerun_where_stopped, restore_queued, run_agent, run_in_background,
-    start_add, start_chat, start_chat_in_background, start_queued,
+    Placement, ensure_background, rerun_where_stopped, restore_queued, run_agent,
+    run_in_background, start_add, start_chat, start_chat_in_background, start_queued,
 };
 pub(in crate::cli) use naming::{Labels, Retitled, relabel_space};
 pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};

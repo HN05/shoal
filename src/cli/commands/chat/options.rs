@@ -58,8 +58,8 @@ pub(in crate::cli::commands) struct Options {
 /// Where a chat runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::cli::commands) enum ChatPlace {
-    /// In a new focused place beside this terminal, where a host opens one,
-    /// otherwise here.
+    /// In a new place beside this terminal, focused or in the background
+    /// as its mode says, where a host opens one, otherwise here.
     Beside,
     /// In this terminal instead of a new tab or detached session.
     Here,

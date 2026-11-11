@@ -210,6 +210,11 @@ impl AddPlan {
         self.issue.as_deref()
     }
 
+    /// The mode the agent starts in.
+    pub fn mode(&self) -> crate::config::modes::ModeName {
+        (self.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT)
+    }
+
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
     /// A workspace shell or an agent without input waits for the user.
     pub fn runs_unattended(&self) -> bool {

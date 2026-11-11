@@ -154,6 +154,8 @@ dirs = ["/tmp"]
 # [modes.plan]
 # kind = "chat"
 # rules = ["chat"]
+# Whether its launches take the terminal, over [terminal] focus.
+# focus = true
 
 # Each AI tool's launch settings, merged option by option with a repository's.
 [agents.claude]

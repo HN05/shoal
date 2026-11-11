@@ -1188,7 +1188,10 @@ than carrying its unbounded body, and preserving
 state/config selection and literal arguments without hook scripts or state files.
 By default, agents that start with an issue prompt or forwarded arguments stay in
 the background, and tabs that wait for the user's input receive focus; an
-explicit focus setting or `--focus` overrides this choice, except that `repo
+explicit focus setting, the mode's over the terminal's, or `--focus`
+overrides this choice, so each mode can decide whether its spaces take the
+terminal, and the built-in `chat` and `plan` modes, whose agents the user
+talks with, are set to; `repo
 setup` and `config setup` always focus the agent the user works with straight
 away. A launch the user waits for starts past `max_agents`, as `--now` does:
 one `--focus` focuses, or an interactive call's agent waiting for input that
@@ -2327,7 +2330,7 @@ them with an agent, and it approves them by its own permissions or grants, as
 a parent workspace does, and otherwise denies or passes them up; those it
 has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
-one and focuses it. A chat has a name from the same namespace as workspaces,
+one, placed as other launches are. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 is removed or renamed. A chat starts under its default name without asking
 the user for one: its agent learns what the work is and renames the chat with

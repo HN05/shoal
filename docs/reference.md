@@ -1262,7 +1262,8 @@ The `[terminal.herdr]` table in global or repository config uses normal per-opti
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
-`terminal.focus` overrides this for tabs and zmx sessions alike, and
+`terminal.focus` overrides this for tabs and zmx sessions alike, the
+[mode's](#modes-and-rules) `focus` overrides that for its launches, and
 `shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does.
 `enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
 overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
@@ -1856,12 +1857,15 @@ request to reply only that it is ready and wait for you. The template substitute
 `{path}` is the checkout, and a launcher using a placeholder only a workspace has a value for is refused. The checkout is trusted in the agent's
 config as workspace launches trust theirs.
 
-Every call starts a new chat and focuses it. Its name is `--name`, else the
+Every call starts a new chat, focused when its [mode's](#modes-and-rules)
+`focus`, else `terminal.focus`, says so, or when neither is set and it opens
+on no task; otherwise it starts in a background tab or detached session. Its
+name is `--name`, else the
 default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it,
 without asking; the agent renames it with `shoal rename` once it knows the
 work. Inside Herdr it
-opens a focused tab labelled with the name regardless of `terminal.focus`, unless
-`new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
+opens a tab labelled with the name, unless
+`new_tab = false` keeps it in the current pane, and inside Rex it opens a
 window; on a terminal it runs in a zmx
 session named after the chat, which [`shoal attach <name>`](#agents)
 returns to; inside a zmx session or a Herdr pane it runs in place. `--here` runs
@@ -2364,17 +2368,19 @@ the agent's system text carries, in order, which a workspace agent restored
 with its built-in resume arguments receives again (a configured
 `resume_command` is the user's own and gets none); and `instructions`, sent once after
 the agent's subject in its first message and never again on a restore;
-and `permissions`, what its agents may do, under the keys and values of
+`focus`, whether the new tab or session of its launches takes the terminal
+over `terminal.focus`, unset following that setting; and `permissions`, what
+its agents may do, under the keys and values of
 [`[permissions]`](#mode-permissions).
 `[rules.<name>]` sets a rule's `text`, which any mode can list. Shoal ships
 these modes:
 
-| Mode | Kind | Rules | Instructions |
-|---|---|---|---|
-| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-client/src/config/modes/worker.md) |
-| `chat` | chat | `work`, `chat` | none |
-| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-client/src/config/modes/plan.md) |
-| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-client/src/config/rules/orchestrate.md) | none |
+| Mode | Kind | Rules | Instructions | Focus |
+|---|---|---|---|---|
+| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-client/src/config/modes/worker.md) | unset |
+| `chat` | chat | `work`, `chat` | none | `true` |
+| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-client/src/config/modes/plan.md) | `true` |
+| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-client/src/config/rules/orchestrate.md) | none | unset |
 
 The built-in `setup` mode is apart from these: [`repo setup` and `config
 setup`](#set-up-config) start it, and a space records it as its mode. It takes

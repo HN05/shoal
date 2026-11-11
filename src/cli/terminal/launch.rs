@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     cli::{commands::issues::Issue, context::Context, recent},
-    config::Effective,
+    config::{Effective, modes::ModeName},
     env,
     execution::TrackedAgent,
     model::{Repository, Workspace},
@@ -29,11 +29,12 @@ use crate::{
 };
 
 /// Start `plan` beside this terminal: focused when it waits for the user,
-/// otherwise in the background, unless the `focus` setting says otherwise.
+/// otherwise in the background, unless its mode's or the terminal's `focus`
+/// setting says otherwise.
 /// Returns whether it left this process; a focused launch without a new tab
 /// stays here, where its agent runs in a session this terminal attaches to.
 /// `name` is the planned workspace name; `focus` focuses the start whatever
-/// the `focus` setting says.
+/// the settings say.
 pub(in crate::cli) async fn start_add(
     ctx: &Context,
     settings: &Effective,
@@ -47,8 +48,7 @@ pub(in crate::cli) async fn start_add(
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);
-    let focus = focus.then_some(true).or(settings.terminal.focus);
-    let placement = Placement::choose(focus, !plan.runs_unattended());
+    let placement = Placement::of(settings, &plan.mode(), focus, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
     let Some(places) = host.places() else {
         return Ok(false);
@@ -548,17 +548,18 @@ fn agent_worker(
 }
 
 /// Run Shoal with `args` for the chat `name` of `repository`, or of none,
-/// in `cwd`, its checkout, worktree or `root_dir`: in a new session this
-/// terminal attaches to, as
-/// `run_agent` does for tracked agents, otherwise in a new focused place,
-/// shown here when its host does not serve this terminal. Returns whether
-/// it ran there; `false` means the chat runs in place.
+/// in `cwd`, its checkout, worktree or `root_dir`, as `placement` asks: in
+/// a new background place, or focused in a new session this terminal
+/// attaches to, as `run_agent` does for tracked agents, otherwise in a new
+/// focused place, shown here when its host does not serve this terminal.
+/// Returns whether it ran there; `false` means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
     repository: Option<&Repository>,
     cwd: &Path,
     name: &SpaceName,
+    placement: Placement,
     args: &[OsString],
 ) -> Result<bool> {
     let host = beside(ctx, settings);
@@ -568,11 +569,12 @@ pub(in crate::cli) async fn start_chat(
     let repo = groups::Repo::of_chat(repository, cwd);
     let origin = groups::beside(ctx, &host, &repo, cwd).await?;
     let beside = host.beside(origin.as_ref());
-    let attaches = host.host.attaches();
+    let focus = placement == Placement::Focus;
+    let attaches = host.host.attaches().filter(|_| focus);
     let mut env = chat_place_env(ctx)?;
     // A chat registers only once the place runs it, so the chat itself
     // records the place it is shown in for `attach -`.
-    if attaches.is_none() {
+    if focus && attaches.is_none() {
         env.push((env::SHOWN_CHAT, "1".to_owned()));
     }
     let start = Start {
@@ -580,7 +582,7 @@ pub(in crate::cli) async fn start_chat(
         origin: beside.origin,
         cwd,
         label: name,
-        focus: true,
+        focus,
         split: beside.split,
         argv: &shoal_command(ctx, args)?,
         env: &env,
@@ -593,7 +595,10 @@ pub(in crate::cli) async fn start_chat(
         return Ok(true);
     }
     let place = places.open(&start).await?;
-    show_opened(&host, places, &place, name).await?;
+    match placement {
+        Placement::Focus => show_opened(&host, places, &place, name).await?,
+        Placement::Background => outln!("Started {name} {}", places.background_place(name)),
+    }
     Ok(true)
 }
 
@@ -615,6 +620,19 @@ pub(in crate::cli) enum Placement {
 }
 
 impl Placement {
+    /// Where a launch in `mode` goes under `settings`: focused when `focus`
+    /// asks, else as its `focus` setting says, else focused when it waits
+    /// for the user.
+    pub(in crate::cli) fn of(
+        settings: &Effective,
+        mode: &ModeName,
+        focus: bool,
+        waits_for_user: bool,
+    ) -> Self {
+        let setting = focus.then_some(true).or(settings.focus(mode));
+        Self::choose(setting, waits_for_user)
+    }
+
     /// The `focus` setting, otherwise focus a launch that waits for the user.
     fn choose(setting: Option<bool>, waits_for_user: bool) -> Self {
         if setting.unwrap_or(waits_for_user) {

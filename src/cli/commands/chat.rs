@@ -3,7 +3,7 @@
 //! workspace's work in its worktree, or without a repository in `root_dir`.
 //! A chat is no workspace's agent, so it is not a tracked execution; the
 //! daemon records it while its agent runs.
-//! Every start makes a new chat and gives it focus.
+//! Every start makes a new chat, focused as its mode says.
 pub(super) mod handoff;
 mod issue;
 pub(super) mod removal;
