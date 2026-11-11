@@ -646,3 +646,31 @@ async fn a_failed_hook_outlasts_its_operations_record() {
     assert!(RESUMED.lock().unwrap().is_empty());
     assert!(!manager.converting(&workspace.id).await.unwrap());
 }
+
+#[tokio::test]
+async fn a_preparation_end_reported_before_its_record_is_kept() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+    let id = workspace.id.clone();
+
+    let pending = (manager.store)
+        .run(move |db| {
+            use crate::daemon::conversions::record;
+            record::record_prepared(db, &id, "early", Some("hook exited 1"))?;
+            record::record_preparation(db, &id, "early")?;
+            crate::daemon::conversions::pending(db, &id)
+        })
+        .await
+        .unwrap();
+
+    let Some(crate::daemon::conversions::Pending::Workspace {
+        prepared,
+        hook_failure,
+        ..
+    }) = pending
+    else {
+        panic!("expected the conversion: {pending:?}");
+    };
+    assert!(prepared);
+    assert_eq!(hook_failure.as_deref(), Some("hook exited 1"));
+}

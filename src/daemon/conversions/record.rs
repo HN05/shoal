@@ -251,7 +251,9 @@ pub(crate) fn record_preparation(db: &Connection, id: &SpaceId, operation: &str)
 }
 
 /// Keep that the preparation `operation` of the workspace `id` a chat became
-/// ended, with why its post-setup hook failed when it did.
+/// ended, with why its post-setup hook failed when it did. An end reported
+/// before the conversion recorded its preparation, which starts before it
+/// does, records that preparation too.
 pub(crate) fn record_prepared(
     db: &Connection,
     id: &SpaceId,
@@ -260,8 +262,10 @@ pub(crate) fn record_prepared(
 ) -> Result<()> {
     db.execute(
         "UPDATE space_conversions
-         SET record=json_set(record,'$.prepared',json('true'),'$.hook_failure',?3)
-         WHERE space_id=?1 AND json_extract(record,'$.preparation')=?2",
+         SET record=json_set(record,'$.preparation',?2,'$.prepared',json('true'),
+            '$.hook_failure',?3)
+         WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'
+            AND COALESCE(json_extract(record,'$.preparation'),?2)=?2",
         params![id, operation, hook_failure],
     )?;
     Ok(())
