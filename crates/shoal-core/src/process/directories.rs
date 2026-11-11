@@ -53,15 +53,23 @@ fn working_directory(pid: u32) -> Result<Option<WorkingDirectory>> {
 fn working_directory(pid: u32) -> Result<Option<WorkingDirectory>> {
     let (Some(path), Some(name)) = (
         present(std::fs::read_link(format!("/proc/{pid}/cwd")))?,
-        present(std::fs::read_to_string(format!("/proc/{pid}/comm")))?,
+        present(std::fs::read(format!("/proc/{pid}/comm")))?,
     ) else {
         return Ok(None);
     };
     Ok(Some(WorkingDirectory {
         pid,
-        name: name.trim_end_matches('\n').to_owned(),
+        name: command_name(&name),
         path,
     }))
+}
+
+/// The name in a `/proc/{pid}/comm` read, decoded lossily: a process may name
+/// itself with any bytes, and the kernel's truncation can cut a character.
+#[cfg(target_os = "linux")]
+fn command_name(comm: &[u8]) -> String {
+    let name = comm.strip_suffix(b"\n").unwrap_or(comm);
+    String::from_utf8_lossy(name).into_owned()
 }
 
 /// A `/proc` read, or `None` when the process exited, even partway through
@@ -75,3 +83,6 @@ fn present<T>(read: std::io::Result<T>) -> Result<Option<T>> {
         Err(error) => Err(error.into()),
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests;
