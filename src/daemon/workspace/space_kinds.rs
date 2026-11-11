@@ -235,8 +235,7 @@ impl Manager {
         self.close_space_places(space.id(), space.name()).await;
         if let PresentSpace::Workspace(workspace) = space {
             self.forget_workspace(&workspace.id).await;
-            // Session logs are run data the deleted record owned.
-            let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
+            self.delete_session_logs(&workspace.id);
         }
     }
 
@@ -259,6 +258,11 @@ impl Manager {
         if let Err(error) = deleted {
             crate::daemon::log!("files of {} not deleted: {error:#}", space.name());
         }
+    }
+
+    /// Session logs are run data owned by the record just deleted.
+    fn delete_session_logs(&self, id: &crate::client::space_ids::SpaceId) {
+        let _ = std::fs::remove_dir_all(self.paths.workspace_state(id));
     }
 
     /// Delete the record of the workspace `id`, which `cause` removed, in
