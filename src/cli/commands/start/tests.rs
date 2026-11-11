@@ -216,3 +216,11 @@ fn a_workspace_start_takes_the_checked_repository_by_id() {
     let (_, named) = named_repository(Some("37".into()), Some("repo".into()), None).unwrap();
     assert!(matches!(named, Some(crate::repository::Selector::Value(value)) if value == "repo"));
 }
+
+#[test]
+fn a_branchless_start_without_a_terminal_begins_in_a_background_place() {
+    use chat::ChatPlace::{Background, Beside, Here};
+    assert_eq!(branchless_place(false, Beside), Background);
+    assert_eq!(branchless_place(false, Here), Here);
+    assert_eq!(branchless_place(true, Beside), Beside);
+}

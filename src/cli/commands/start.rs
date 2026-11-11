@@ -444,7 +444,19 @@ async fn as_chat(
     args.repository_override = Some(starts.repository.value().to_owned());
     args.checked_repository = None;
     let mode = starts.mode.unwrap_or(modes::ModeName::DEFAULT);
-    in_chat(ctx, args, ModeChoice::Named(mode)).await
+    let mut options = chat::Options::taken_from(&mut args);
+    options.place = branchless_place(ctx.interactive(), options.place);
+    in_chat_with(ctx, args, ModeChoice::Named(mode), options).await
+}
+
+/// Where the chat a branchless start begins as runs: beside this terminal
+/// or here, as `place` says, on a terminal, and without one, which nothing
+/// could run it in, in a background place.
+fn branchless_place(interactive: bool, place: chat::ChatPlace) -> chat::ChatPlace {
+    match (interactive, place) {
+        (false, chat::ChatPlace::Beside) => chat::ChatPlace::Background,
+        (_, place) => place,
+    }
 }
 
 /// Start the agent in a new or reopened workspace.
@@ -602,6 +614,16 @@ fn named_repository(
 /// a workspace's worktree.
 async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result<i32> {
     let options = chat::Options::taken_from(&mut args);
+    in_chat_with(ctx, args, mode, options).await
+}
+
+/// [`in_chat`] with the `options` taken from `args` already.
+async fn in_chat_with(
+    ctx: &Context,
+    args: StartArgs,
+    mode: ModeChoice,
+    options: chat::Options,
+) -> Result<i32> {
     let (repository, issue) = chat_target(
         args.repository,
         args.repository_override,
