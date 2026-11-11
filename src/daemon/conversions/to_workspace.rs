@@ -53,16 +53,36 @@ impl Manager {
         }
         let converting = Converting {
             chat,
-            mode: conversion.mode,
+            mode: conversion.mode.clone(),
         };
-        let workspace = self
-            .create_converted_workspace(
-                converting,
-                conversion.branch,
-                conversion.base,
-                conversion.options,
-            )
-            .await?;
+        // Held until the preparation is recorded, which the relocation then
+        // waits for.
+        let making = self.make_converted(converting, conversion, env, caller);
+        let started = self.conversion_handovers.hold(making).await?;
+        // The relocation waits for the agent's turn to end, which it may
+        // have already.
+        self.signals.agent_changed();
+        Ok(started)
+    }
+
+    /// Make the workspace `converting` turns its chat into as `conversion`
+    /// describes, and start preparing it in `env` for `caller`, recording
+    /// the preparation the chat's agent waits for.
+    async fn make_converted(
+        self: &Arc<Self>,
+        converting: Converting,
+        conversion: WorkspaceConversion,
+        env: Option<BTreeMap<String, String>>,
+        caller: Option<&Caller>,
+    ) -> Result<StartedWorkspace> {
+        let WorkspaceConversion {
+            branch,
+            base,
+            options,
+            ..
+        } = conversion;
+        let workspace =
+            (self.create_converted_workspace(converting, branch, base, options)).await?;
         let opened = OpenedWorkspace {
             workspace,
             reused: false,
@@ -74,9 +94,10 @@ impl Manager {
             env,
         };
         let started = self.prepare_new(opened, None, preparing, caller).await?;
-        // The relocation waits for the agent's turn to end, which it may
-        // have already.
-        self.signals.agent_changed();
+        let (id, operation) = (started.workspace.id.clone(), started.operation.clone());
+        self.store
+            .run(move |db| super::record::record_preparation(db, &id, &operation))
+            .await?;
         Ok(started)
     }
 

@@ -540,3 +540,74 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
     assert!(manager.chat_by_id(&workspace.id).await.unwrap().is_some());
     assert!(manager.workspace_by_id(&converted.id).await.is_err());
 }
+
+/// Start the preparation of `workspace` as a conversion's, with a worker the
+/// test drives, and record it with the conversion.
+async fn record_preparation(
+    manager: &Manager,
+    workspace: &Workspace,
+) -> (String, crate::daemon::operations::fake::Fake) {
+    use crate::protocol::operations::{OperationSpec, Preparation};
+    let spec = OperationSpec::Prepare {
+        workspace: SpaceSelector::id(&workspace.id),
+        steps: Preparation {
+            post_setup: true,
+            ..Default::default()
+        },
+    };
+    let operation = manager.start_operation(spec, None, None).await.unwrap();
+    let (id, recorded) = (workspace.id.clone(), operation.clone());
+    (manager.store)
+        .run(move |db| crate::daemon::conversions::record::record_preparation(db, &id, &recorded))
+        .await
+        .unwrap();
+    let worker = crate::daemon::operations::fake::take(&operation);
+    (operation, worker)
+}
+
+#[tokio::test]
+async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (_operation, _worker) = record_preparation(&manager, &workspace).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(manager.converting(&workspace.id).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_failed_post_setup_hook_leaves_the_agent_where_it_runs() {
+    use crate::protocol::operations::{Ended, Failure, Report};
+    let (root, manager) = manager().await;
+    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (operation, worker) = record_preparation(&manager, &workspace).await;
+    let failed = Ended::Failed(Failure::HookFailed {
+        message: "hook exited 1".into(),
+    });
+    (manager.report_operation(&operation, Report::Ended(failed), None))
+        .await
+        .unwrap();
+    worker.exit(1);
+    let entry = manager.operation(&operation, None).await.unwrap();
+    let mut changed = entry.watch();
+    while entry.events_from(0).1.is_none() {
+        changed.changed().await.unwrap();
+    }
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(!manager.converting(&workspace.id).await.unwrap());
+}

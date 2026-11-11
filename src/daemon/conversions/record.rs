@@ -31,6 +31,10 @@ pub(crate) enum Pending {
         mode: ModeName,
         chat: ChatRow,
         execution: ExecutionId,
+        /// The operation preparing the workspace, whose end, post-setup
+        /// hook included, the agent waits for.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preparation: Option<String>,
     },
     /// A workspace that becomes the chat `chat` once the agent it carries on
     /// stopped, with what its agent ran as and with, which outlives the
@@ -224,6 +228,17 @@ pub(crate) fn record_session(
         "UPDATE space_conversions SET record=json_set(record,'$.chat.session',?2)
          WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'",
         params![id, session],
+    )?;
+    Ok(())
+}
+
+/// Record `operation` as the one preparing the workspace `id` a chat
+/// became, whose end its agent's restart there waits for.
+pub(crate) fn record_preparation(db: &Connection, id: &SpaceId, operation: &str) -> Result<()> {
+    db.execute(
+        "UPDATE space_conversions SET record=json_set(record,'$.preparation',?2)
+         WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'",
+        params![id, operation],
     )?;
     Ok(())
 }

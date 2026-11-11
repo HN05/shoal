@@ -7,9 +7,10 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 
 use super::{Pending, record::ChatRow, record::ConvertedChat};
+use crate::protocol::operations::{Ended, Failure};
 use crate::{
     config::modes::ModeName,
     daemon::{
@@ -80,7 +81,14 @@ impl Manager {
         let Some(pending) = pending else {
             return Ok(());
         };
-        if !self.turn_ended(id, &pending).await? {
+        let ended = match self.turn_ended(id, &pending).await {
+            Ok(ended) => ended,
+            Err(error) => {
+                self.report_failed_relocation(id, &pending, &error).await;
+                return Ok(());
+            }
+        };
+        if !ended {
             return Ok(());
         }
         let relocated = match pending.clone() {
@@ -88,6 +96,7 @@ impl Manager {
                 mode,
                 chat,
                 execution,
+                ..
             } => self.relocate_to_workspace(id, mode, chat, execution).await,
             Pending::Chat { chat, held } => self.relocate_to_chat(id, *chat, held).await,
         };
@@ -109,10 +118,14 @@ impl Manager {
             .await?;
         let idle = state.is_some_and(|status| status.state == AgentState::Idle);
         match pending {
-            Pending::Workspace { chat, .. } => {
+            Pending::Workspace {
+                chat, preparation, ..
+            } => {
                 // A setup that failed waits for its repair, which readies it.
                 let workspace = self.workspace_by_id(id).await?;
-                if workspace.state != WorkspaceState::Ready {
+                if workspace.state != WorkspaceState::Ready
+                    || !self.preparation_over(preparation.as_deref()).await?
+                {
                     return Ok(false);
                 }
                 let process = chat.agent()?.process()?;
@@ -122,6 +135,26 @@ impl Manager {
                 let running = self.running_agents().await?;
                 Ok(idle || !running.iter().any(|agent| agent.ran_as(&chat.execution)))
             }
+        }
+    }
+
+    /// Whether the preparation `operation` of a chat's new workspace is over,
+    /// post-setup hook included, refusing one whose hook failed, after which
+    /// a start runs no agent there either. One no longer followed ended long
+    /// before.
+    async fn preparation_over(&self, operation: Option<&str>) -> Result<bool> {
+        let Some(operation) = operation else {
+            return Ok(true);
+        };
+        let Ok(entry) = self.operation(operation, None).await else {
+            return Ok(true);
+        };
+        match entry.events_from(u64::MAX).1 {
+            None => Ok(false),
+            Some(Ended::Failed(Failure::HookFailed { message })) => {
+                bail!("the workspace's post-setup hook failed: {message}")
+            }
+            Some(_) => Ok(true),
         }
     }
 
@@ -170,6 +203,7 @@ impl Manager {
             mode,
             chat,
             execution,
+            ..
         }) = pending
         else {
             return Ok(false);

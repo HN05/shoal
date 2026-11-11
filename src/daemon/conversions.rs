@@ -49,6 +49,7 @@ impl Converting {
             mode: self.mode.clone(),
             chat,
             execution: crate::client::execution_ids::ExecutionId::generate(),
+            preparation: None,
         };
         record::record(tx, &self.chat.id, &pending)
     }
