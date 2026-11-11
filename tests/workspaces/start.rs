@@ -1295,14 +1295,14 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
-        let inspection = fixture.ok(&["status", &fixture.id("298-pick-agent")]);
+        let inspection = fixture.ok(&["status", &fixture.id("Pick an agent")]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         if choice == "No agent" {
             assert!(!agent_args.exists());
             // The shared review picker also accepts the choice without a launch.
             let (output, transcript) =
-                fixture.interactive(&["review", "run", &fixture.id("298-pick-agent")], "");
+                fixture.interactive(&["review", "run", &fixture.id("Pick an agent")], "");
             assert!(output.status.success(), "{output:?}\n{transcript}");
             assert!(!agent_args.exists());
         } else {
@@ -1310,7 +1310,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             assert!(prompt.contains("Issue context"), "{prompt}");
             fs::remove_file(&agent_args).unwrap();
         }
-        fixture.ok(&["rm", "--wait", &fixture.id("298-pick-agent"), "--yes"]);
+        fixture.ok(&["rm", "--wait", &fixture.id("Pick an agent"), "--yes"]);
     }
 
     // A regular add uses the same picker when no agent was named or configured.
@@ -1876,7 +1876,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
     assert!(!stderr.contains("no mode"), "{output:?}");
     let reopened: Value =
         serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
-    assert_eq!(reopened["name"], "37-sort-queue", "{output:?}");
+    assert_eq!(reopened["name"], "Sort the queue", "{output:?}");
 }
 
 /// A chat started with `--parent` goes below that space, named by its
@@ -2336,16 +2336,13 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     assert_eq!(args[0], "--append-system-prompt");
     assert!(!args[1].contains("Clarify retries"), "{}", args[1]);
     assert!(args.last().unwrap().contains("Clarify retries"), "{args:?}");
-    // The chat is named after the issue without asking, as the stopped chat
-    // that planned it before is.
+    // The chat is named after the issue's title without asking, as the
+    // stopped chat that planned it before is.
     let started = journal(&fixture)
         .into_iter()
         .rfind(|event| event["kind"] == "chat_started")
         .unwrap();
-    assert_eq!(
-        started["chat"]["name"],
-        "repo with ' quotes & $literal-plan-12"
-    );
+    assert_eq!(started["chat"]["name"], "Clarify retries");
 }
 
 #[test]

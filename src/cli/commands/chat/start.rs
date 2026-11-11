@@ -165,7 +165,7 @@ async fn on_issue(
         return Ok(topic);
     };
     let issue = issue::chosen(ctx, repo, &settings.issue, &topic.mode, input).await?;
-    Ok(issue::on(topic, repo, &issue))
+    Ok(issue::on(topic, &issue))
 }
 
 /// The workspace `selector` names, else the current one, else one picked

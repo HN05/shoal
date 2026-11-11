@@ -229,9 +229,10 @@ impl AddPlan {
             .as_deref()
             .or(self.creation.existing.as_deref())
             .unwrap_or("shoal start");
+        let name = (self.creation.options.name.as_ref()).map_or(branch, |name| name.as_str());
         self.place_name
             .as_ref()
-            .map_or_else(|| branch.to_owned(), |name| name.render(branch, branch))
+            .map_or_else(|| name.to_owned(), |place| place.render(branch, name))
     }
 }
 

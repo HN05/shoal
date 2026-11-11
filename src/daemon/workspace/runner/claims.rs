@@ -21,7 +21,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::params;
 
 use super::{Registration, runner_labels};
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     client::resources::ResourceRequest,
     config::Runner,
@@ -129,7 +129,7 @@ impl Manager {
         let workspace = self
             .create_job_workspace(
                 &entry.repository_id,
-                &entry.name,
+                (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
                 &job.run.commit,
                 job.run.reference.as_deref(),
             )

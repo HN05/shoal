@@ -65,17 +65,11 @@ async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> R
     ui::pick_item(ctx, "Issue> ", &format!("issues labelled {label}"), issues)
 }
 
-/// `topic` started on `issue` of `repo`: named after the issue and its mode
-/// without asking, assigned the issue, and reopened in a new tab by the
-/// issue's URL.
-pub(super) fn on(topic: Topic, repo: &Repository, issue: &Issue) -> Topic {
+/// `topic` started on `issue`: named after the issue's title, assigned the
+/// issue, and reopened in a new tab by the issue's URL.
+pub(super) fn on(topic: Topic, issue: &Issue) -> Topic {
     Topic {
-        name: format!(
-            "{}-{}-{}",
-            crate::repository::name(repo),
-            topic.mode,
-            issue.number
-        ),
+        name: issue.title.clone(),
         relaunch: topic.relaunch.on_issue(&issue.url),
         subject: Some(issue.subject()),
         links: vec![(

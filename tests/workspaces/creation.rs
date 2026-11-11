@@ -109,7 +109,8 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
         .unwrap()
     };
     let created = add(&fixture.repo);
-    assert_eq!(created["name"], "12-clarify-retries");
+    assert_eq!(created["name"], "Clarify retries");
+    assert_eq!(created["branch"], "12-clarify-retries");
     let workspace = PathBuf::from(created["path"].as_str().unwrap());
     assert_eq!(add(&workspace)["id"], created["id"]);
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
@@ -1058,11 +1059,11 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
             String::from_utf8_lossy(&output.stderr)
         );
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
-        let name = format!("{number}-fix-api-timeout");
-        assert_eq!(workspace["name"], name);
-        assert_eq!(workspace["branch"], name);
+        // Named after the issue's title, on a branch derived from it.
+        assert_eq!(workspace["name"], title);
+        assert_eq!(workspace["branch"], format!("{number}-fix-api-timeout"));
         assert_eq!(
-            fixture.ok(&["status", &fixture.id(&name)])["issue"]["url"],
+            fixture.ok(&["status", workspace["id"].as_str().unwrap()])["issue"]["url"],
             url
         );
         let api = if host == "github.com" {
@@ -1082,7 +1083,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         assert!(prompt.contains(body));
         assert!(invocation.contains("\0--model\0test-model\0"));
         assert_eq!(
-            fixture.ok(&["status", &fixture.id(&name)])["executions"],
+            fixture.ok(&["status", workspace["id"].as_str().unwrap()])["executions"],
             serde_json::json!([])
         );
     }
@@ -1103,10 +1104,9 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(
-        serde_json::from_slice::<Value>(&output.stdout).unwrap()["name"],
-        "custom-issue-name"
-    );
+    let custom = serde_json::from_slice::<Value>(&output.stdout).unwrap();
+    assert_eq!(custom["branch"], "custom-issue-name");
+    assert_eq!(custom["name"], title);
 }
 
 #[test]
@@ -1199,7 +1199,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         let cwd = match number {
             45 => fixture.repo.join("nested"),
             46 => PathBuf::from(
-                fixture.ok(&["status", &fixture.id("41-paste-issue")])["workspace"]["path"]
+                fixture.ok(&["status", &fixture.id("Paste an issue")])["workspace"]["path"]
                     .as_str()
                     .unwrap(),
             )
@@ -1221,9 +1221,8 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             String::from_utf8_lossy(&output.stderr)
         );
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
-        let name = format!("{number}-paste-issue");
-        assert_eq!(workspace["name"], name);
-        assert_eq!(workspace["branch"], name);
+        assert_eq!(workspace["name"], "Paste an issue");
+        assert_eq!(workspace["branch"], format!("{number}-paste-issue"));
         let urls = fs::read_to_string(fixture.root.path().join("curl-urls")).unwrap();
         assert!(
             urls.contains(&format!(
@@ -1238,7 +1237,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(prompt.contains(&url) && prompt.contains(body), "{prompt}");
         assert!(invocation.contains("\0--model\0test-model\0"));
         assert_eq!(
-            fixture.ok(&["status", &fixture.id(&name)])["executions"],
+            fixture.ok(&["status", workspace["id"].as_str().unwrap()])["executions"],
             serde_json::json!([])
         );
     }
@@ -1273,7 +1272,8 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(workspace["name"], format!("{number}-create-workspace"));
+        assert_eq!(workspace["name"], "Create workspace");
+        assert_eq!(workspace["branch"], format!("{number}-create-workspace"));
         let inspection = fixture.ok(&["status", workspace["id"].as_str().unwrap()]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
@@ -1503,7 +1503,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     // A commit of its own keeps the branch when the workspace goes.
     let path = Path::new(created["path"].as_str().unwrap());
     commit_file(path, "work", "work\n");
-    fixture.ok(&["rm", "--wait", &fixture.id(branch), "--yes"]);
+    fixture.ok(&["rm", "--wait", created["id"].as_str().unwrap(), "--yes"]);
     let elsewhere = fixture.root.path().join("elsewhere");
     git(
         &fixture.repo,
@@ -1668,7 +1668,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     };
     let (output, transcript) = add("Use an issue", "34");
     assert!(output.status.success(), "{output:?} {transcript}");
-    let issue = fixture.ok(&["status", &fixture.id("34-fix-api-timeout")]);
+    let issue = fixture.ok(&["status", &fixture.id("Fix API timeout")]);
     assert_eq!(
         issue["issue"]["url"],
         "https://github.com/team/project/issues/34"
@@ -1727,8 +1727,45 @@ pub(crate) fn issue_fixture(host: &str) -> Fixture {
         "316",
         "--base",
         "HEAD",
+        // Named as its branch, over the issue's title.
+        "--name",
+        "issue-work",
     ]);
     fixture
+}
+
+#[test]
+fn a_new_workspace_is_named_by_name_else_its_issue_else_its_branch() {
+    let fixture = issue_fixture("github.com");
+    let repo = fixture.repo.to_str().unwrap();
+    // `--name` comes before the title of the issue the fixture starts on.
+    let named = &fixture.ok(&["status", &fixture.id("issue-work")])["workspace"];
+    assert_eq!(named["branch"], "issue-work", "{named}");
+    // Without an issue, the branch names it as it is, and its directory
+    // takes the branch cleaned up.
+    let plain = fixture.ok(&["start", repo, "fix/login", "--base", "HEAD"]);
+    assert_eq!(plain["name"], "fix/login");
+    assert!(
+        plain["path"].as_str().unwrap().ends_with("/fix-login"),
+        "{plain}"
+    );
+    // A typed name is trimmed and its whitespace collapsed.
+    let typed = fixture.ok(&[
+        "start",
+        repo,
+        "typed",
+        "--base",
+        "HEAD",
+        "--name",
+        "  Login   retries ",
+    ]);
+    assert_eq!(typed["name"], "Login retries");
+    for refused in ["a\u{202e}b", "two\nlines", &"x".repeat(41)] {
+        let output = fixture.run(&[
+            "start", repo, "refused", "--base", "HEAD", "--name", refused,
+        ]);
+        assert!(!output.status.success(), "{refused:?}");
+    }
 }
 
 fn write_issue_state(fixture: &Fixture, state: &str) {
@@ -1924,7 +1961,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
         .unwrap();
     assert!(top.status.success(), "{top:?}");
     let top: Value = serde_json::from_slice(&top.stdout).unwrap();
-    assert_eq!(top["name"], format!("main-{short}"));
+    assert_eq!(top["name"], format!("main at {short}"));
     assert_eq!(top["branch"], Value::Null);
     assert_eq!(top["at"]["commit"], main.trim());
     assert_eq!(top["at"]["made_for"], serde_json::json!({"ref": "main"}));
@@ -1936,7 +1973,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     );
     let child = fixture.ok(&["split", "--no-branch", "--workspace", &fixture.id("parent")]);
     assert_eq!(child["parent"]["name"], "parent");
-    assert_eq!(child["name"], format!("main-{short}"));
+    assert_eq!(child["name"], format!("main at {short}"));
     assert!(
         child["path"]
             .as_str()

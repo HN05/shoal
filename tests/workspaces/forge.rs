@@ -422,7 +422,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     );
     let url = "https://forge.example/team/project/pulls/7";
     let linked_prs =
-        || fixture.ok(&["status", &fixture.id("stack/top")])["workspace"]["links"]["prs"].clone();
+        || fixture.ok(&["status", &fixture.id("Top change")])["workspace"]["links"]["prs"].clone();
     assert_eq!(linked_prs(), serde_json::json!([url]));
     // Opening the PR again relinks it to its owner.
     fixture.ok(&[
@@ -431,7 +431,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         url,
         "assigned",
         "--space",
-        &fixture.id("stack/top"),
+        &fixture.id("Top change"),
     ]);
     assert_eq!(linked_prs(), serde_json::json!([]));
     let added = fixture
@@ -454,7 +454,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
-    let workspace = &fixture.ok(&["status", &fixture.id("stack/top")])["workspace"];
+    let workspace = &fixture.ok(&["status", &fixture.id("Top change")])["workspace"];
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
     let path_in = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -472,7 +472,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         url,
         "assigned",
         "--space",
-        &fixture.id("stack/top"),
+        &fixture.id("Top change"),
     ]);
     commit("more");
     git(&author, &["push", "origin", "stack/top"]);
@@ -2494,7 +2494,12 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert!(output.status.success(), "{output:?}");
     let ended = fixture.ok(&["watch", "review", "1"]);
     assert_eq!(ended["head"], first, "{ended}");
-    let workspace = &fixture.ok(&["status", &fixture.id("pr-8")])["workspace"];
+    // Named after the PR's title, in a directory named after its number.
+    let workspace = &fixture.ok(&["status", &fixture.id("PR 8")])["workspace"];
+    assert!(
+        workspace["path"].as_str().unwrap().ends_with("/pr-8"),
+        "{workspace}"
+    );
     assert_eq!(workspace["branch"], Value::Null);
     assert_eq!(workspace["at"]["made_for"], serde_json::json!({"pr": 8}));
     assert_eq!(workspace["setup_skipped"], true);
@@ -2529,7 +2534,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
     fixture.ok(&["watch", "review", &review_number(&output)]);
-    let moved = &fixture.ok(&["status", &fixture.id("pr-8")])["workspace"];
+    let moved = &fixture.ok(&["status", &fixture.id("PR 8")])["workspace"];
     assert_eq!(moved["id"], workspace["id"]);
     assert_eq!(moved["at"]["commit"], second);
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
@@ -2565,7 +2570,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
 
     // Adding the PR runs its setup hooks once; reviewing it reopens the
     // workspace without running them again.
-    fixture.ok(&["rm", "--wait", &fixture.id("pr-8"), "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("PR 8"), "--yes"]);
     let local = fixture.root.path().join("local.toml");
     let hook = fixture.root.path().join("post-setup.sh");
     install_test_script(&hook, "#!/bin/sh\necho ran >> \"$HOME/post-setup-ran\"\n");

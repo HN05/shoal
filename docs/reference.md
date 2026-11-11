@@ -693,7 +693,8 @@ PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. A PR from a fork, which has no branch in the
 repository, opens in a [workspace at a commit](#child-workspaces) at its head,
-below the space running `shoal start` or else top-level, named `pr-<number>`, fetched from the ref the forge serves it under
+below the space running `shoal start` or else top-level, named after the PR's title in a
+directory `pr-<number>`, fetched from the ref the forge serves it under
 (`refs/pull/<number>/head`, or `refs/merge-requests/<number>/head` on GitLab), with
 setup and its diff, `{diff_base}` included, compared with the PR's
 `origin/<base>`; a forge without such a ref refuses it, as does `--agent`, since no agent
@@ -1851,7 +1852,7 @@ checkout's or workspace's, else a picker. The
 agent is `--agent`, else `agent.default`, else a picker of the installed ones.
 The agent's configured launcher runs in the registered checkout with the mode's
 rendered rules as its instructions. With `--issue`, the chat is assigned the
-issue and named `<repo>-<mode>-<number>` without asking, and the agent starts
+issue and named after its title without asking, and the agent starts
 on it with the mode's instructions instead of waiting for you; without a value,
 `--issue` in the `plan` mode offers the open issues labelled `[issue]
 plan_label`. An agent with an
@@ -1865,10 +1866,9 @@ config as workspace launches trust theirs.
 Every call starts a new chat, focused when its [mode's](#modes-and-rules)
 `focus`, else `terminal.focus`, says so, or when neither is set and it opens
 on no task; otherwise it starts in a background tab or detached session. Its
-name is `--name`, else the
-default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it,
-without asking; the agent renames it with `shoal rename` once it knows the
-work. Inside Herdr it
+name is `--name`, else the default `<repo> <mode>`, such as `shoal chat`,
+without asking; names may repeat, and the agent renames it with `shoal rename`
+once it knows the work. Inside Herdr it
 opens a tab labelled with the name, unless
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a
 window; on a terminal it runs in a zmx
@@ -1923,7 +1923,7 @@ The name frees once the chat is removed.
 worktree instead of the checkout, to debug, audit or review its work, committed
 and uncommitted: the named workspace, else the current one, else a picker of the
 ready workspaces. The repository is the workspace's, the default name
-`<workspace>-chat`, and a workspace that is not ready or whose worktree is
+`<workspace name> chat`, and a workspace that is not ready or whose worktree is
 missing is refused. The chat is not the workspace's agent: it runs as any chat
 does, with its own identity, scope, `TMPDIR` and messages, without the
 workspace's scope, `[env]` or leases, and is not below the workspace, but
@@ -2403,7 +2403,7 @@ picker with the kind of space each starts in, and without one the start takes
 `--permission KEY=VALUE`, repeatable, gives that agent a
 [permission](#mode-permissions) whatever its mode allows. The picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,
-`--base` or another flag only a workspace takes, a chat for `--name`, and only
+`--base` or another flag only a workspace takes, and only
 modes in a repository when they name a repository or issue or ask for a kind
 of space; when only one fits, the start takes it without asking, as it takes
 `plan` for `--issue` without a value, which no other mode accepts. When the
@@ -2558,8 +2558,14 @@ collapsed to one space; control characters and bidirectional overrides are refus
 as is a longer name someone sets, while a name Shoal derives is cut to 40 characters
 ending with `…`. Names may repeat across spaces and repositories, never select a
 space, and name no file, directory, variable, session or branch, so renaming one
-moves nothing. A new workspace is named after the branch as given, which a branch
-rename leaves unchanged. Its worktree directory is named from the branch with
+moves nothing. A new space takes the first of: `--name`; for a CI job's
+workspace, the job's name; the title of the issue or PR it is started on or
+linked to; for a workspace, the branch as given, or without one the base and the
+short commit, such as `main at 84d4405`; for a chat, `<repo> <mode>`,
+`<workspace name> chat` in a workspace's worktree, or the mode, such as
+`orchestrate`, for a master session. Only `shoal rename` changes it later: a
+branch rename leaves it unchanged, and `shoal restore` gives a workspace back
+the name it had. Its worktree directory is named from the branch with
 every character other than ASCII letters, digits, `-` and `_` replaced by `-`,
 leading `-_` dropped, cut to 64 characters, falling back to `workspace`, and
 suffixed `-2`, `-3`, ... while another workspace of any repository has a directory
@@ -2585,8 +2591,8 @@ Suffixes never change the derived workspace name.
 and enters it with shell integration. The path is relative to the current directory
 (`~/` allowed) and must name its root. `--repo` selects the registered repository;
 otherwise it is the one whose checkout owns the worktree, else the only one sharing
-its `origin` remote, else one chosen interactively. Its local branch derives the workspace name;
-name or ownership conflicts fail. Main checkouts, detached or locked worktrees,
+its `origin` remote, else one chosen interactively. It is named after its local
+branch; ownership conflicts fail. Main checkouts, detached or locked worktrees,
 and paths overlapping protected locations are refused. Repeating adoption reopens
 a verified ready workspace; it cannot repair a moved managed worktree.
 At a workspace's recorded path, when its worktree exists but Shoal cannot verify
@@ -2684,8 +2690,9 @@ another commit or reading and running older code without touching the parent's
 worktree. `--base` resolves as for a branch and defaults to the refreshed default
 branch; a tag or commit that does not resolve makes Shoal fetch origin with its
 tags once and try again, and naming the parent's branch starts it at the parent's
-commit without stacking it. It is named after the branch and its short commit
-(`main-3f2a9c1`), the tag or the commit, with the usual suffix when taken, and
+commit without stacking it. It is named after the branch at its short commit
+(`main at 3f2a9c1`), the tag or the commit, in a directory such as
+`main-3f2a9c1` with the usual suffix when taken, and
 `shoal diff` compares with its starting commit. Run by a workspace's or a chat's
 process it is a child of the caller's space, or of `--workspace` when that names
 one below it; run by the user it is a child of `--workspace`
@@ -3584,7 +3591,8 @@ minutes later or when the config changes. Other forges and Gitea report the
 `run_jobs` capability as unsupported.
 
 The jobs the forge holds for the runner's labels join the [agent
-queue](#agent-queue) as `job` entries named `ci-<job>-<ID>`, in the order the
+queue](#agent-queue) as `job` entries named `ci-<job>-<ID>`, whose workspaces
+take the job's name in a directory of the entry's, in the order the
 forge queued them, except that a job goes ahead of a queued restore of the
 agent of the workspace its run links. The daemon reads them every ten seconds
 while a job could start and every minute while none can, so new jobs show in

@@ -6,7 +6,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::operations::NewWorkspace;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -278,6 +278,10 @@ async fn pull_request(
                 existing: Some(git::remote_ref("origin", &pull.head)),
                 base: Some(tracking),
                 pr: Some(pull.url.clone()),
+                options: CreationOptions {
+                    name: Some(SpaceName::derive(&pull.title, "workspace")),
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             let code = super::super::workspaces::add(
@@ -339,6 +343,7 @@ async fn fork_pull_workspace(
             .as_ref()
             .map(SpaceSelector::id),
         options: CreationOptions {
+            name: Some(SpaceName::derive(&pull.title, "workspace")),
             skip_setup: true,
             ..Default::default()
         },

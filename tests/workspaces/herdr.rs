@@ -390,8 +390,8 @@ fn herdr_tabs_take_the_name_of_their_space() {
                 "--agent",
                 "pi",
             ],
-            "34-fix-api-timeout",
-            "34-fix-api-timeout",
+            "Fix API timeout",
+            "Fix API timeout",
             false,
         ),
         (
@@ -403,8 +403,8 @@ fn herdr_tabs_take_the_name_of_their_space() {
                 "--agent",
                 "pi",
             ],
-            "34-fix-api-timeout",
-            "34-fix-api-timeout",
+            "Fix API timeout",
+            "Fix API timeout",
             false,
         ),
         (
@@ -417,8 +417,8 @@ fn herdr_tabs_take_the_name_of_their_space() {
                 "--agent",
                 "pi",
             ],
-            "fix/short",
-            "fix/short",
+            "Fix API timeout",
+            "Fix API timeout",
             true,
         ),
         (
@@ -430,8 +430,9 @@ fn herdr_tabs_take_the_name_of_their_space() {
                 "--agent",
                 "pi",
             ],
+            // The branch's workspace reopens under its name.
             "fix/short",
-            "fix/short",
+            "Fix API timeout",
             false,
         ),
     ] {
@@ -457,7 +458,7 @@ fn herdr_tabs_take_the_name_of_their_space() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         if args[1] == "34" {
-            fixture.ok(&["rm", "--wait", &fixture.id("34-fix-api-timeout"), "--yes"]);
+            fixture.ok(&["rm", "--wait", &fixture.id("Fix API timeout"), "--yes"]);
             wait_for_herdr_close(&fixture);
         }
     }
@@ -531,7 +532,8 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         assert!(!fixture.root.path().join("injected").exists());
-        fixture.ok(&["rm", "--wait", &fixture.id("topic"), "--yes"]);
+        let listed = fixture.ok(&["list"]);
+        fixture.ok(&["rm", "--wait", listed[0]["id"].as_str().unwrap(), "--yes"]);
         wait_for_herdr_close(&fixture);
     }
 }

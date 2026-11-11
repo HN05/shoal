@@ -216,7 +216,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     let renamed = fixture.ok(&[
         "branch",
         "rename",
-        &fixture.id("34-fix-api-timeout"),
+        &fixture.id("Fix API timeout"),
         "renamed-issue",
     ]);
     let reopened = fixture.ok(&issue);

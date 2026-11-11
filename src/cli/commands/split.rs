@@ -5,7 +5,7 @@
 use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{operations::NewSplit, output::split::Child};
 use crate::{
     cli::{
@@ -57,10 +57,15 @@ pub(super) async fn run(
         (None, None) if copy.is_some() => None,
         (None, None) => anyhow::bail!("name the child's branch or pass --issue"),
     };
+    // The child takes the issue's title as its name.
+    let mut options = split.options;
+    if let Some(issue) = &issue {
+        options.name = Some(SpaceName::derive(&issue.title, "workspace"));
+    }
     let start = NewSplit {
         copy: copy.map(|copy| copy.source),
         base: split.base,
-        options: split.options,
+        options,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
         ..NewSplit::new(parent.clone(), name)
     };

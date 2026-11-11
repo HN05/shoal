@@ -247,7 +247,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
         let launch: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').nth(1).unwrap()).unwrap();
         let name = launch["workspace"]["name"].as_str().unwrap().to_owned();
-        assert_eq!(name, "34-fix-api-timeout");
+        assert_eq!(name, "Fix API timeout");
         wait_until("fake happy record", || record.exists());
         let recorded = fs::read_to_string(&record).unwrap();
         // The prompt spans lines; the record ends the NUL-separated list before `scope=`.

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn a_chat_on_an_issue_is_named_after_it_and_its_mode_without_asking() {
+fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
     let repo = Repository {
         id: "id".into(),
         path: "/repo".into(),
@@ -18,10 +18,12 @@ fn a_chat_on_an_issue_is_named_after_it_and_its_mode_without_asking() {
         details: String::new(),
         labels: Vec::new(),
     };
-    let topic = on(Topic::repository(&repo, &"plan".into()), &repo, &issue);
+    let plain = Topic::repository(&repo, &"plan".into());
+    assert_eq!(plain.name, "shoal plan");
+    let topic = on(plain, &issue);
     assert_eq!(topic.mode, "plan");
     assert_eq!(topic.subject.unwrap().issue.unwrap().number, 1211);
-    assert_eq!(topic.name, "shoal-plan-1211");
+    assert_eq!(topic.name, "Attach to chats");
     let super::super::Relaunch::Start(start) = topic.relaunch else {
         panic!("expected a start");
     };

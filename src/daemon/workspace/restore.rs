@@ -177,7 +177,13 @@ impl Manager {
     ) -> Result<OpenedWorkspace> {
         let branch = self.restore_branch(removed).await?;
         let base = self.restore_base(removed).await?;
-        let new = super::NewWorkspace::default();
+        let new = super::NewWorkspace {
+            options: crate::protocol::CreationOptions {
+                name: Some(removed.name.clone()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let opened = self
             .open_branch_restoring(&removed.repository_id, &branch, base, new, files)
             .await?;
@@ -393,10 +399,9 @@ impl Manager {
     async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<String> {
         let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
         let checkpoint = &removed.checkpoint;
-        let branch = checkpoint
-            .branch
-            .clone()
-            .unwrap_or_else(|| removed.name.to_string());
+        // A detached HEAD reopens on a branch named as its directory would be.
+        let branch = (checkpoint.branch.clone())
+            .unwrap_or_else(|| crate::client::space_names::directory_name(&removed.name));
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
         }) {

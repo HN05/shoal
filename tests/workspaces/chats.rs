@@ -647,7 +647,7 @@ pub(crate) fn install_recording_agent(fixture: &Fixture, agent: &str) {
 }
 
 /// The default name of a chat about the fixture's repository.
-pub(crate) const CHAT_NAME: &str = "repo with ' quotes & $literal-chat";
+pub(crate) const CHAT_NAME: &str = "repo with ' quotes & $literal chat";
 
 /// Every retained journal event.
 pub(crate) fn journal(fixture: &Fixture) -> Vec<Value> {
@@ -1317,8 +1317,8 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
     let error = fs::read_to_string(home.join("add.err")).unwrap();
     let report: Value = serde_json::from_str(added.lines().next().unwrap_or_default())
         .unwrap_or_else(|_| panic!("{added}\n{error}"));
-    assert_eq!(report["name"], "12-clarify-retries", "{added}");
-    let worker = fixture.ok(&["status", &fixture.id("12-clarify-retries")]);
+    assert_eq!(report["name"], "Clarify retries", "{added}");
+    let worker = fixture.ok(&["status", &fixture.id("Clarify retries")]);
     assert_eq!(
         worker["workspace"]["parent"]["name"], "planning",
         "{worker}"
@@ -1340,7 +1340,7 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     let repo = fixture.repo.to_str().unwrap();
     let added = scoped_command(&fixture, "parent", &["start", repo, "--issue", "12"]);
     assert!(added.status.success(), "{added:?}");
-    let worker = fixture.ok(&["status", &fixture.id("12-clarify-retries")]);
+    let worker = fixture.ok(&["status", &fixture.id("Clarify retries")]);
     assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
     // Planning the issue reads it there too.
     let planned = scoped_command(
@@ -1683,7 +1683,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     assert!(args[1].contains("worker"), "{}", args[1]);
     let chats = fixture.ok(&["list", "--chats"]);
     let chat = &chats[0];
-    assert_eq!(chat["name"], "worker-chat", "{chats}");
+    assert_eq!(chat["name"], "worker chat", "{chats}");
     assert_eq!(chat["workspace"]["name"], "worker", "{chats}");
     let id = chat["id"].as_str().unwrap();
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
@@ -1733,7 +1733,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     // Each status names the other.
     assert_eq!(
         fixture.ok(&["status", &fixture.id("worker")])["chats"][0]["name"],
-        "worker-chat"
+        "worker chat"
     );
 
     // Its agent exited; `shoal resume` restores it in the worktree.
@@ -1742,7 +1742,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["resume", &fixture.id("worker-chat"), "--focus"]),
+            .args(["resume", &fixture.id("worker chat"), "--focus"]),
         "",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -1754,7 +1754,10 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
 
     let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("worker")], "n\n");
     assert!(!no.status.success());
-    assert!(prompt.contains("worker-chat"), "{prompt}");
+    assert!(
+        prompt.contains("chats in it first: worker chat"),
+        "{prompt}"
+    );
     let removed = fixture.run(&["rm", "--wait", &fixture.id("worker"), "--yes"]);
     assert!(removed.status.success(), "{removed:?}");
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));

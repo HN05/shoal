@@ -227,8 +227,8 @@ impl Manager {
         place: CopyPlace,
         new: &NewWorkspace<'_>,
     ) -> Result<Workspace> {
-        // A copy is named after the branch it asks for, which may take a
-        // suffix of its own.
+        // Without a name of its own, a copy is named after the branch it
+        // asks for.
         let requested = match &place {
             CopyPlace::Branch(Some(branch)) => branch.clone(),
             CopyPlace::Branch(None) | CopyPlace::Commit => source.copy_name(),
@@ -241,7 +241,8 @@ impl Manager {
             CopyPlace::Commit => None,
         };
         let from = branch.clone().unwrap_or_else(|| requested.clone());
-        let name = SpaceName::derive(&requested, "workspace");
+        let name = (new.options.name.clone())
+            .unwrap_or_else(|| SpaceName::derive(&requested, "workspace"));
         let path = self
             .new_workspace_path(repo, &from, new.path.clone())
             .await?;

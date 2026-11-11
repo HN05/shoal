@@ -33,11 +33,15 @@ pub(super) fn absolute(ctx: &Context, mut creation: Creation) -> Result<Creation
 pub(super) async fn plan_addition(
     ctx: &Context,
     target: &AddTarget,
-    creation: Creation,
+    mut creation: Creation,
     issue: Option<&issues::Issue>,
     agent: ResolvedAddAgent,
     args: Vec<OsString>,
 ) -> Result<AddPlan> {
+    // Without a name of its own, the workspace takes the issue's title.
+    if let Some(issue) = issue {
+        (creation.options.name).get_or_insert_with(|| SpaceName::derive(&issue.title, "workspace"));
+    }
     let place_name = match issue {
         Some(issue) => Some(PlaceName::new(
             None,
@@ -64,13 +68,17 @@ pub(super) async fn plan_addition(
     })
 }
 
-/// The workspace name `creation` will derive. An existing branch opens under
-/// its local name, so a remote's prefix is left out, as opening it does.
+/// The workspace name `creation` gives, else the one it will derive. An
+/// existing branch opens under its local name, so a remote's prefix is left
+/// out, as opening it does.
 pub(super) async fn planned_workspace_name(
     ctx: &Context,
     target: &AddTarget,
     creation: &Creation,
 ) -> Result<SpaceName> {
+    if let Some(name) = &creation.options.name {
+        return Ok(name.clone());
+    }
     let branch = match (&creation.branch, &creation.existing) {
         (Some(branch), _) => branch.clone(),
         (None, Some(selector)) => match git::strip_local(selector) {
@@ -150,7 +158,7 @@ pub(super) async fn check_add_creation(
         git_profile: creation.git_profile.clone(),
         path: creation.path.clone(),
         parent,
-        options: creation.options,
+        options: creation.options.clone(),
     };
     crate::client::workspaces::check_creation(&ctx.paths, planned).await
 }

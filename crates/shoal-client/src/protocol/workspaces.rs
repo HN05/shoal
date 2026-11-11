@@ -256,8 +256,12 @@ pub enum WorkspaceMethod {
 
 /// What a new workspace leaves out, for workspaces on a branch and at a
 /// commit alike.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreationOptions {
+    /// The new workspace's name, which otherwise derives from what it is
+    /// created for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<crate::space_names::SpaceName>,
     /// Skip what gates readiness, `setup.command`, `hooks.pre_setup` and
     /// `setup.copy_ignored`, and the hooks around it, `hooks.post_setup` and
     /// the removal hooks, until `shoal setup` runs it; the seed clone

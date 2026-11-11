@@ -59,17 +59,12 @@ async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
 /// Refuse the flags `args` sets that the kind of space `mode`, or the
 /// other flags, start in cannot use, before anything is asked or created.
 fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&modes::ModeName>) -> Result<()> {
-    let (unfit, hint) = match kind {
-        SpaceKind::Chat => (workspace_flags(args), "pass --worktree for a workspace"),
-        SpaceKind::Workspace => (
-            args.name
-                .is_some()
-                .then_some("--name")
-                .into_iter()
-                .collect(),
-            "pass --chat for a chat",
-        ),
-    };
+    // A workspace takes every flag a chat does.
+    if kind == SpaceKind::Workspace {
+        return Ok(());
+    }
+    let unfit = workspace_flags(args);
+    let hint = "pass --worktree for a workspace";
     let Some(flag) = unfit.first() else {
         return Ok(());
     };
@@ -241,18 +236,11 @@ fn positional_kind(positional: &str) -> Positional {
 }
 
 /// The kind of space the arguments other than the mode fit: a workspace
-/// for a flag only a workspace takes or a PR or branch link, a chat for
-/// `--name`.
+/// for a flag only a workspace takes or a PR or branch link.
 fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
     let links_branch = (args.repository.as_deref())
         .is_some_and(|positional| positional_kind(positional) == Positional::Branch);
-    if links_branch || !workspace_flags(args).is_empty() {
-        Some(SpaceKind::Workspace)
-    } else if args.name.is_some() {
-        Some(SpaceKind::Chat)
-    } else {
-        None
-    }
+    (links_branch || !workspace_flags(args).is_empty()).then_some(SpaceKind::Workspace)
 }
 
 /// The mode picked for a start whose arguments fit either kind of space,
@@ -503,7 +491,10 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
         base: args.base,
         git_profile: args.git_profile,
         pr: None,
-        options: args.creation.into(),
+        options: crate::protocol::CreationOptions {
+            name: args.name,
+            ..args.creation.into()
+        },
         pull_head: None,
         copy: copy.map(|copy| CopyCreation {
             source: copy.source,

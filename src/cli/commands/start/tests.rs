@@ -32,13 +32,7 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
     let workspace =
         |args: &[&str]| ensure_fits(&start(args), SpaceKind::Workspace, Some(&"worker".into()));
     workspace(&["repo", "topic", "--base", "main"]).unwrap();
-    let error = workspace(&["repo", "--name", "talk"])
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.starts_with("--name ") && error.contains("workspace"),
-        "{error}"
-    );
+    workspace(&["repo", "--name", "Login retries"]).unwrap();
 }
 
 #[test]
@@ -136,7 +130,8 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
         fits(&["https://forge.example/o/r/pulls/8"]),
         Some(SpaceKind::Workspace)
     );
-    assert_eq!(fits(&["repo", "--name", "talk"]), Some(SpaceKind::Chat));
+    // A name fits either kind.
+    assert_eq!(fits(&["repo", "--name", "talk"]), None);
 }
 
 #[test]

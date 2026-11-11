@@ -90,6 +90,7 @@ shoal start --copy 4 --fork                  # Try another approach from workspa
 shoal start --copy 4 --checkpoint 3          # Start from workspace 4's checkpoint 3, live or removed
 shoal start my-project --existing origin/feature/api --agent codex
 shoal start my-project quick-fix --path ../quick-fix
+shoal start my-project fix-login --name "Login retries"  # Name it apart from its branch
 shoal adopt ../existing-worktree        # Take ownership, including automatic cleanup
 shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directory
 shoal branch rename 3 fix/login              # Rename its branch; its name stays
@@ -193,11 +194,11 @@ shoal demo                     # Pick a running demo an agent started and open i
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal happy-claude fix-login   # Detached Happy session, visible in the Happy app
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
-shoal start --in fix-login     # Review a workspace's live work in a chat in its worktree, beside its agent
+shoal start --in 3             # Review a workspace's live work in a chat in its worktree, beside its agent
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
 shoal start --mode orchestrate   # Manage the spaces of every repository from one chat
-shoal rename my-project-chat login  # Rename a running chat
-shoal rename --request my-project-chat  # Ask its agent to choose the name
+shoal rename 5 "Login design"  # Rename a running chat
+shoal rename --request 5        # Ask its agent to choose the name
 shoal diff 3                   # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
@@ -211,7 +212,7 @@ shoal messages send --all "Network is back"  # Message every agent, running or s
 shoal log 3              # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
 shoal log                # Outside a space: every space's entries, daemon starts and stops, reloads, cleanup
 shoal files 3                 # The files attached to the workspace
-shoal files my-project-chat   # The files a chat's agent attached
+shoal files 5                 # The files a chat's agent attached
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
 shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal resume

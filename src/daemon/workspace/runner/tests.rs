@@ -11,7 +11,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     client::resources::ResourceRequest,
     daemon::{
@@ -383,7 +383,8 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
         .workspace_by_id(&claimed[0].workspace_id)
         .await
         .unwrap();
-    assert_eq!(workspace.name, "ci-rust-4");
+    assert_eq!(workspace.name, "rust");
+    assert_eq!(workspace.directory_name(), "ci-rust-4");
     assert_eq!(workspace.repository_id, fixture.repository);
     assert_eq!(workspace.branch, None);
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.head);
@@ -713,6 +714,13 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
         .unwrap();
     let named = job.job.as_ref().unwrap();
     assert_eq!(named.job.name, "rust");
+    // The workspace takes the job's name, and its directory the entry's.
+    assert_eq!(job.name, "rust");
+    assert!(
+        job.directory_name().starts_with("ci-rust-"),
+        "{}",
+        job.path.display()
+    );
     assert_eq!(named.workspace_id.as_ref(), Some(&topic.id));
     let linked = manager.linked_job_workspaces(&topic.id).await.unwrap();
     assert_eq!(linked.len(), 1);
@@ -1087,7 +1095,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     let workspace = manager
         .create_job_workspace(
             &fixture.repository,
-            &entry.name,
+            (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
             &job.run.commit,
             job.run.reference.as_deref(),
         )

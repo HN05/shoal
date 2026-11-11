@@ -21,10 +21,11 @@ use crate::{
 };
 
 /// The commit a workspace at a commit starts at, what it was made for, and
-/// the name it derives from them.
+/// the directory and name it derives from them.
 struct Start {
     at: StartingCommit,
-    name: String,
+    directory: String,
+    name: SpaceName,
     /// The ref its diff compares with; none compares with `at`.
     diff_ref: Option<String>,
 }
@@ -123,8 +124,16 @@ impl Manager {
         // record, so one whose creation fails is still there.
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
+        let name = options.name.clone().unwrap_or(start.name);
         let workspace = self
-            .record_commit_workspace(repo, &start.name, start.at, start.diff_ref, parent, options)
+            .record_commit_workspace(
+                repo,
+                (&start.directory, name),
+                start.at,
+                start.diff_ref,
+                parent,
+                options,
+            )
             .await?;
         let result = self
             .materialize_commit_worktree(repo, &workspace, &head, None)
@@ -132,14 +141,15 @@ impl Manager {
         self.settle_creation(&workspace, result).await
     }
 
-    /// Create the workspace CI job `name` runs in: at `commit`, fetched
+    /// Create the workspace a CI job runs in, in `directory` and named
+    /// after the job: at `commit`, fetched
     /// from the ref `reference` `origin` serves it under, or else by
     /// itself, made for nothing, so no PR reuses it, and disposable, without
     /// setup; the seed clone still happens.
     pub(crate) async fn create_job_workspace(
         &self,
         repository_id: &RepositoryId,
-        name: &str,
+        (directory, name): (&str, SpaceName),
         commit: &str,
         reference: Option<&str>,
     ) -> Result<Workspace> {
@@ -150,11 +160,12 @@ impl Manager {
             made_for: None,
         };
         let options = CreationOptions {
+            name: None,
             skip_setup: true,
             disposable: true,
         };
         let workspace = self
-            .record_commit_workspace(&repo, name, at, None, None, options)
+            .record_commit_workspace(&repo, (directory, name), at, None, None, options)
             .await?;
         let result = self
             .materialize_commit_worktree(&repo, &workspace, commit, None)
@@ -324,7 +335,7 @@ impl Manager {
         let workspace = self
             .record_commit_workspace(
                 &repo,
-                &removed.name,
+                (removed.name.as_str(), removed.name.clone()),
                 at,
                 diff_ref,
                 None,
@@ -338,20 +349,20 @@ impl Manager {
         self.settle_creation(&workspace, result).await
     }
 
-    /// Record a new workspace at a commit named after `name`, which started
-    /// `at`, below `parent`, whose diff compares with `diff_ref`, else with
-    /// `at`. The caller holds the repository's Git gate.
+    /// Record a new workspace at a commit in a directory named after
+    /// `directory`, with `name`, which started `at`, below `parent`, whose
+    /// diff compares with `diff_ref`, else with `at`. The caller holds the
+    /// repository's Git gate.
     async fn record_commit_workspace(
         &self,
         repo: &Repository,
-        name: &str,
+        (directory, name): (&str, SpaceName),
         at: StartingCommit,
         diff_ref: Option<String>,
         parent: Option<SpaceId>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        let path = self.new_workspace_path(repo, name, None).await?;
-        let name = SpaceName::derive(name, "workspace");
+        let path = self.new_workspace_path(repo, directory, None).await?;
         let workspace = Workspace {
             base_commit: Some(at.commit.clone()),
             base_ref: diff_ref,
@@ -462,15 +473,18 @@ async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
             commit: fetched,
             made_for: Some(MadeFor::Pr(head.number)),
         },
-        name: format!("pr-{}", head.number),
+        directory: format!("pr-{}", head.number),
+        name: SpaceName::derive(&format!("pr-{}", head.number), "workspace"),
         diff_ref: head.base.clone(),
     })
 }
 
 /// What a revision that resolved to `commit` names: a tag by its name, a
 /// branch as `base` gave it, or the default branch when `base` named none,
-/// with the workspace named after the tag, or the branch and the short
-/// commit; a bare commit is made for nothing and named by its short commit.
+/// with the workspace named after the tag, or the branch at the short
+/// commit, such as `main at 84d4405`, in a directory such as
+/// `main-84d4405`; a bare commit is made for nothing and named by its short
+/// commit.
 fn named_start(commit: String, base: Option<&str>, reference: &str) -> Start {
     let short = commit[..commit.len().min(7)].to_owned();
     let branch = reference.strip_prefix(git::LOCAL_REFS).or_else(|| {
@@ -479,20 +493,22 @@ fn named_start(commit: String, base: Option<&str>, reference: &str) -> Start {
             .and_then(|remote| remote.split_once('/'))
             .map(|(_, branch)| branch)
     });
-    let (name, made_for) = match (reference.strip_prefix("refs/tags/"), branch) {
-        (Some(tag), _) => (tag.to_owned(), Some(tag.to_owned())),
+    let (directory, name, made_for) = match (reference.strip_prefix("refs/tags/"), branch) {
+        (Some(tag), _) => (tag.to_owned(), tag.to_owned(), Some(tag.to_owned())),
         (None, Some(branch)) => (
             format!("{branch}-{short}"),
+            format!("{branch} at {short}"),
             Some(base.unwrap_or(branch).to_owned()),
         ),
-        (None, None) => (short, None),
+        (None, None) => (short.clone(), short, None),
     };
     Start {
         at: StartingCommit {
             commit,
             made_for: made_for.map(MadeFor::Ref),
         },
-        name,
+        directory,
+        name: SpaceName::derive(&name, "workspace"),
         diff_ref: None,
     }
 }

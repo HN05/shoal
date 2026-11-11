@@ -77,14 +77,17 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let workspace = fixture.add("scratch");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
-    fixture.ok(&["rm", "--wait", &fixture.id("scratch"), "--yes"]);
+    // A name of its own, which the restore gives back.
+    fixture.ok(&["rename", &fixture.id("scratch"), "Scratch notes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("Scratch notes"), "--yes"]);
     assert!(!path.exists());
     let removed = fixture.ok(&["restore"]);
-    assert_eq!(removed[0]["name"], "scratch");
+    assert_eq!(removed[0]["name"], "Scratch notes");
     assert_eq!(removed[0]["cause"], "manual");
 
-    let restored = fixture.ok(&["restore", &fixture.id("scratch")]);
-    assert_eq!(restored["workspace"]["name"], "scratch");
+    let restored = fixture.ok(&["restore", &fixture.id("Scratch notes")]);
+    assert_eq!(restored["workspace"]["name"], "Scratch notes");
+    assert_eq!(restored["workspace"]["branch"], "scratch");
     assert_eq!(restored["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
     assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
@@ -93,13 +96,18 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 
     // The restored workspace keeps the removal's checkpoint, and returns to
     // any checkpoint after keeping the state it replaces.
-    let checkpoints = fixture.ok(&["restore", &fixture.id("scratch")]);
+    let checkpoints = fixture.ok(&["restore", &fixture.id("Scratch notes")]);
     assert_eq!(checkpoints[0]["number"], 1);
     assert_eq!(checkpoints[0]["cause"], "removal");
-    let checkpoint = fixture.ok(&["checkpoint", &fixture.id("scratch"), "--name", "draft"]);
+    let checkpoint = fixture.ok(&[
+        "checkpoint",
+        &fixture.id("Scratch notes"),
+        "--name",
+        "draft",
+    ]);
     assert_eq!(checkpoint["number"], 2);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let restored = fixture.ok(&["restore", &fixture.id("scratch"), "2"]);
+    let restored = fixture.ok(&["restore", &fixture.id("Scratch notes"), "2"]);
     assert_eq!(restored["replaced"]["number"], 3);
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }

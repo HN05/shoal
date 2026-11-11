@@ -639,9 +639,13 @@ interactive Git commands retain normal prompting. Ancestry and exact-ref checks
 distinguish negative answers from command failures; failed checks stop branch
 selection, refresh, and removal with the Git diagnostic.
 
-New-branch creation accepts literal Git branch names. The workspace takes the
-branch as its name, a free-text label that may repeat, and a portable directory
-name derived from it, suffixed while another workspace of any repository has that
+New-branch creation accepts literal Git branch names. A space's name is a
+free-text label that may repeat, so it says what the work is rather than
+identifying anything: a new space takes `--name`, else what it was started for,
+a CI job's name or the linked issue's or PR's title, else for a workspace the
+branch as given, so the label a list or tab shows is the most telling one known
+at creation; only `shoal rename` changes it, so a label never shifts under the
+user. The workspace's portable directory name derives from the branch, suffixed while another workspace of any repository has that
 directory name, so a normalization collision touches no existing work. Branch
 conflicts get numeric suffixes on the blocking component only, never changing the
 workspace's name. Names reserved by the Worktrunk
@@ -854,8 +858,8 @@ A subagent inherits its agent's scope, and under Codex its instructions and
 directory, so a `SubagentStart` hook names the workspace it works in; without
 it, a Codex subagent finishes its agent's assignment as the instructions say.
 
-`shoal branch rename` changes a ready workspace's checked-out branch and derived name
-in one durable operation; its path, identity, resources, and associations stay
+`shoal branch rename` changes a ready workspace's checked-out branch, keeping its
+name, in one durable operation; its path, identity, resources, and associations stay
 with the workspace. The default branch, a branch checked out elsewhere, or a
 name collision is refused. No execution other than the scoped caller may be
 recorded, and interrupted intent blocks reuse until explicit repair or verified
@@ -1797,11 +1801,12 @@ daemon forgets them after cleanup.
 
 Issue-based workspace opening requires an open issue and persists its canonical
 URL before tracked setup or agent launch. Reopening first follows the issue
-association, then an existing local branch with the derived name, rather than
+association, then an existing local branch with the derived branch name, rather than
 suffixing a new branch; conflicts fail before the agent picker. Associations are idempotent and cannot
 be replaced. Status and inspection expose them.
-The derived name is the issue number and at most three title words, short
-enough to read in full in tabs, session names and branch lists.
+The derived branch is the issue number and at most three title words, short
+enough to read in full in branch lists, while the workspace takes the issue's
+title as its name, which says what the work is.
 
 `start <link>` recognizes issue, PR and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.

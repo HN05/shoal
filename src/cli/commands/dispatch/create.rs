@@ -21,6 +21,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             let options = CreationOptions {
                 skip_setup: branch.skip_setup,
                 disposable,
+                name: None,
             };
             if no_branch {
                 return split::at_commit(&ctx, workspace, branch.base, copy, options).await;

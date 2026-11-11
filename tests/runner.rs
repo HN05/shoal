@@ -156,7 +156,7 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
             .find(|workspace| workspace["id"] == workspace_id.as_str())
             .filter(|workspace| workspace["running"] == true)
     });
-    assert_eq!(job["name"], "ci-rust-4");
+    assert_eq!(job["name"], "rust");
     assert_eq!(job["at"]["commit"], head.as_str());
     assert_eq!(job["job"]["job"]["handle"], "h1");
 

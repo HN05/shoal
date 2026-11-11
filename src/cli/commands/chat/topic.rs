@@ -16,7 +16,7 @@ use crate::{
 pub(in crate::cli::commands) struct Topic {
     /// The command that starts the same chat again in a new place.
     pub relaunch: Relaunch,
-    /// The chat's default name, suffixed `-2`, `-3`, ... while another holds it.
+    /// The chat's default name, which `--name` replaces.
     pub name: String,
     /// The mode the agent starts in.
     pub mode: crate::config::modes::ModeName,
@@ -43,7 +43,7 @@ impl Topic {
     ) -> Self {
         Self {
             relaunch: Relaunch::start(mode, in_checkout(repo)),
-            name: format!("{}-chat", repository::name(repo)),
+            name: format!("{} {mode}", repository::name(repo)),
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
@@ -80,7 +80,7 @@ impl Topic {
         };
         Self {
             relaunch: Relaunch::start(mode, place),
-            name: format!("{}-chat", workspace.name),
+            name: format!("{} chat", workspace.name),
             mode: mode.clone(),
             subject: None,
             linked_issue: None,

@@ -52,7 +52,8 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
         .unwrap();
     assert_eq!(at_main.branch, None);
     assert_eq!(at_main.state, WorkspaceState::Ready);
-    assert_eq!(at_main.name, format!("main-{}", &main[..7]));
+    assert_eq!(at_main.name, format!("main at {}", &main[..7]));
+    assert_eq!(at_main.directory_name(), format!("main-{}", &main[..7]));
     let at = at_main.at.clone().unwrap();
     assert_eq!(
         (at.commit.as_str(), at.made_for),

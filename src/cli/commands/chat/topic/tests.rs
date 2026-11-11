@@ -111,7 +111,7 @@ fn a_chat_in_a_workspace_reopens_there() {
     );
     workspace.id = "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09".into();
     let topic = Topic::workspace(workspace.clone(), &"plan".into());
-    assert_eq!(topic.name, "worker-chat");
+    assert_eq!(topic.name, "worker chat");
     let agent: Agent = "claude".parse().unwrap();
     let options = Options {
         agent: None,

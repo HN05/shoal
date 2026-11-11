@@ -149,7 +149,7 @@ pub struct StartArgs {
     #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub chat: bool,
     /// Start in a workspace with a worktree, whatever the mode's kind.
-    #[arg(long, conflicts_with_all = ["name", "in_workspace"])]
+    #[arg(long, conflicts_with = "in_workspace")]
     pub worktree: bool,
     /// Run the chat in this ready workspace's worktree; without a value, the
     /// current workspace, else a picker.
@@ -220,8 +220,9 @@ pub struct StartArgs {
     /// repeat for more. An issue's agent also waits for the issues blocking it.
     #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
     pub after: Vec<String>,
-    /// Name of a chat; defaults to <repo>-chat, <workspace>-chat with --in,
-    /// or <repo>-<mode>-<issue number> with --issue, asked for on a terminal.
+    /// The new space's name, free text of at most 40 characters; defaults
+    /// to the linked issue's or PR's title, else a workspace's branch, or
+    /// for a chat "<repo> <mode>", or "<workspace name> chat" with --in.
     #[arg(long)]
     pub name: Option<crate::client::space_names::SpaceName>,
     #[command(flatten)]
@@ -393,6 +394,7 @@ pub struct CreationArgs {
 impl From<CreationArgs> for crate::protocol::CreationOptions {
     fn from(args: CreationArgs) -> Self {
         Self {
+            name: None,
             skip_setup: args.skip_setup,
             disposable: args.disposable,
         }

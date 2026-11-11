@@ -44,9 +44,11 @@ pub(super) async fn to_workspace(
         branch: name,
         issue: issue.map(|issue| issue.url),
         base: branch.base,
+        // The workspace keeps the chat's name.
         options: CreationOptions {
             skip_setup: branch.skip_setup,
             disposable: false,
+            name: None,
         },
         mode,
     };
