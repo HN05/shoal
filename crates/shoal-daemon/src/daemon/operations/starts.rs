@@ -93,7 +93,7 @@ impl Manager {
                 .await;
             opening.new.options.name = title.map(|title| SpaceName::derive(&title, "workspace"));
         }
-        let opened = (self.open_for_start(repository, opening, caller.is_some())).await?;
+        let opened = (self.open_for_start(repository, opening, caller)).await?;
         self.prepare_new(opened, issue, preparing, caller).await
     }
 
@@ -176,8 +176,8 @@ impl Manager {
 
     /// Create the workspace `opening` names in `repository` on a new
     /// branch, or open the one on its existing branch or PR head, or the
-    /// recorded one it names. A `confined` parent, whose own agent asks,
-    /// takes over no workspace outside its subtree.
+    /// recorded one it names. For a scoped `caller`, the parent takes over
+    /// no workspace outside its subtree.
     async fn open_for_start(
         &self,
         repository: Selector,
@@ -187,7 +187,7 @@ impl Manager {
             new,
             parent,
         }: Opening<'_>,
-        confined: bool,
+        caller: Option<&Caller>,
     ) -> Result<OpenedWorkspace> {
         let placed = base.is_some() || new.path.is_some() || new.git_profile.is_some();
         match start {
@@ -201,7 +201,7 @@ impl Manager {
                 })
             }
             WorkspaceStart::Branch(branch) => {
-                self.open_branch_below(repository, &branch, base, new, parent, confined)
+                self.open_branch_below(repository, &branch, base, new, parent, caller)
                     .await
             }
             WorkspaceStart::Copy { source, branch } => {
@@ -224,7 +224,7 @@ impl Manager {
                     !placed,
                     "a workspace at a PR's head takes no base, path or Git profile"
                 );
-                self.open_pull_head(repository, url, head, parent, new.options, confined)
+                self.open_pull_head(repository, url, head, parent, new.options, caller)
                     .await
             }
             WorkspaceStart::Workspace(workspace) => {

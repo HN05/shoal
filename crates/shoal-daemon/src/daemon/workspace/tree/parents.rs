@@ -8,7 +8,7 @@ use rusqlite::params;
 use super::super::{Manager, NewWorkspace};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{chats::Removing, spaces, store},
+    daemon::{chats::Removing, scope::Caller, spaces, store},
     model::{OpenedWorkspace, SpaceKind, Workspace},
 };
 
@@ -25,8 +25,8 @@ impl Manager {
     }
 
     /// [`Self::open_branch`] below `parent`, where and as `new` says,
-    /// returning the workspace with its parent. A `confined` parent, whose
-    /// own agent asks, takes over no existing workspace outside its subtree.
+    /// returning the workspace with its parent. For a scoped `caller`,
+    /// `parent` takes over no existing workspace outside its subtree.
     pub async fn open_branch_below(
         &self,
         repository: crate::repository::Selector,
@@ -34,7 +34,7 @@ impl Manager {
         base: Option<String>,
         new: NewWorkspace<'_>,
         parent: Option<SpaceId>,
-        confined: bool,
+        caller: Option<&Caller>,
     ) -> Result<OpenedWorkspace> {
         self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
@@ -43,17 +43,32 @@ impl Manager {
             ..new
         };
         let mut opened = self.open_branch_with(repository, branch, base, new).await?;
-        if let Some(parent) = parent.as_ref().filter(|_| confined && opened.reused) {
-            ensure!(
-                self.within_subtree(parent, &opened.workspace.id).await?,
-                "{} is outside the space opening it; ask the user to open it",
-                opened.workspace.name
-            );
+        if opened.reused {
+            (self.ensure_takes_over(parent.as_ref(), &opened.workspace, caller)).await?;
         }
         opened.workspace = self
             .give_to_parent(&SpaceSelector::id(&opened.workspace.id), parent)
             .await?;
         Ok(opened)
+    }
+
+    /// Refuse a scoped `caller` the existing `workspace` outside the
+    /// subtree of `parent`, the space it opens it below.
+    pub(in crate::daemon) async fn ensure_takes_over(
+        &self,
+        parent: Option<&SpaceId>,
+        workspace: &Workspace,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let (Some(parent), Some(_)) = (parent, caller) else {
+            return Ok(());
+        };
+        ensure!(
+            self.within_subtree(parent, &workspace.id).await?,
+            "{} is outside the space opening it; ask the user to open it",
+            workspace.name
+        );
+        Ok(())
     }
 
     /// [`Self::create_workspace`] below `parent`, returning the workspace with

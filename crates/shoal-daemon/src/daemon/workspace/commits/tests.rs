@@ -405,7 +405,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
             },
             None,
             Default::default(),
-            false,
+            None,
         )
     };
     let first = push_head("first");
@@ -577,7 +577,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
             },
             None,
             Default::default(),
-            false,
+            None,
         )
     };
     let opened = open(None).await.unwrap();
@@ -634,7 +634,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
             },
             None,
             Default::default(),
-            false,
+            None,
         )
         .await
         .unwrap();
@@ -698,20 +698,32 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
         start("first").await.unwrap(),
         start("second").await.unwrap(),
     );
-    let open = |chat: Option<SpaceId>, confined: bool| {
-        manager.open_pull_head(
-            (&repo.id).into(),
-            "https://forge.example/team/repo/pulls/4".into(),
-            crate::protocol::PullHead {
+    let (manager, repo) = (&manager, &repo);
+    // The chat's own agent opens it `by_agent`, and the user otherwise.
+    let open = |chat: Option<SpaceId>, by_agent: bool| {
+        let caller = (chat.clone().filter(|_| by_agent)).map(|space_id| Caller {
+            space_id,
+            execution: None,
+        });
+        let head = head.clone();
+        async move {
+            let head = crate::protocol::PullHead {
                 number: PullNumber::new(4),
                 reference: "refs/pull/4/head".into(),
-                commit: head.clone(),
+                commit: head,
                 base: None,
-            },
-            chat,
-            Default::default(),
-            confined,
-        )
+            };
+            let url = "https://forge.example/team/repo/pulls/4".into();
+            (manager.open_pull_head(
+                (&repo.id).into(),
+                url,
+                head,
+                chat,
+                Default::default(),
+                caller.as_ref(),
+            ))
+            .await
+        }
     };
     let opened = open(Some(first.id.clone()), true).await.unwrap().workspace;
     assert_eq!(
@@ -846,7 +858,10 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
             },
             Some(chat.id.clone()),
             Default::default(),
-            true,
+            Some(&Caller {
+                space_id: chat.id.clone(),
+                execution: None,
+            }),
         )
         .await
         .unwrap_err();

@@ -10,6 +10,7 @@ use super::{Manager, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    daemon::scope::Caller,
     git,
     model::{
         MadeFor, OpenedWorkspace, RemovedWorkspace, Repository, SpaceKind, StartingCommit,
@@ -62,9 +63,8 @@ impl Manager {
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
     /// the one made for or linked to the PR, moved to `head` when the PR's
     /// head moved, so there is at most one per PR, or else a new one below
-    /// the space `parent`, or a top-level one of the user's. A `confined`
-    /// parent, whose own agent asks, takes over no workspace outside its
-    /// subtree.
+    /// the space `parent`, or a top-level one of the user's. For a scoped
+    /// `caller`, `parent` takes over no workspace outside its subtree.
     pub async fn open_pull_head(
         &self,
         repository: crate::repository::Selector,
@@ -72,19 +72,13 @@ impl Manager {
         head: PullHead,
         parent: Option<SpaceId>,
         options: CreationOptions,
-        confined: bool,
+        caller: Option<&Caller>,
     ) -> Result<OpenedWorkspace> {
         self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
         let (repo, git) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
-            if let Some(parent) = parent.as_ref().filter(|_| confined) {
-                anyhow::ensure!(
-                    self.within_subtree(parent, &workspace.id).await?,
-                    "{} is outside the space opening it; ask the user to open it",
-                    workspace.name
-                );
-            }
+            (self.ensure_takes_over(parent.as_ref(), &workspace, caller)).await?;
             self.move_to_pull_head(&repo, &workspace, &head).await?;
             if let Some(base) = head.base {
                 self.record_diff_ref(&workspace.id, base).await?;

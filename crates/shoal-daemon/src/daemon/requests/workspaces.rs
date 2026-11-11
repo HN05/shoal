@@ -56,7 +56,7 @@ pub(super) async fn handle(
                         base,
                         new,
                         manager.space_id(parent.as_ref()).await?,
-                        caller.is_some(),
+                        caller,
                     )
                     .await?,
             )
@@ -117,7 +117,7 @@ pub(super) async fn handle(
                     head,
                     manager.space_id(parent.as_ref()).await?,
                     options,
-                    caller.is_some(),
+                    caller,
                 )
                 .await?,
         ),
