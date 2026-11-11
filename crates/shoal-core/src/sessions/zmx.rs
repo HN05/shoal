@@ -2,7 +2,7 @@
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::{path::Path, time::Duration};
 use tokio::process::Command;
 
 use crate::{subprocess::Run, tools::Tool};
@@ -15,6 +15,10 @@ pub(crate) const CREATED: &str = "shoal.created=1";
 /// The oldest zmx Shoal supports. Since 1.0.0 a zmx reaches only servers of
 /// its own version, and 1.0.0's macOS release could not reach its own.
 const OLDEST: (u32, u32, u32) = (1, 0, 1);
+/// How long a zmx command that discovers or ends sessions may run before it
+/// is stopped; only a hang guard, since each one answers at once, so a
+/// removal that closes a session fails instead of waiting on it forever.
+const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Serialize in-place ownership replacement with verified cleanup in the native
 /// namespace, regardless of which Shoal state directory initiated it.
@@ -50,7 +54,7 @@ pub(crate) async fn ensure_supported() -> Result<()> {
 async fn version() -> Result<String> {
     let mut command = Command::new(Tool::Zmx.program());
     command.arg("version");
-    let output = Run::new(command).checked().await?;
+    let output = Run::new(command).timeout(TIMEOUT).checked().await?;
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
@@ -87,7 +91,7 @@ fn reported<'a>(version: &'a str, key: &str) -> Option<&'a str> {
 pub(crate) async fn kill(session: &str) -> Result<()> {
     let mut kill = Command::new(Tool::Zmx.program());
     kill.args(["kill", session]);
-    let result = Run::new(kill).checked().await;
+    let result = Run::new(kill).timeout(TIMEOUT).checked().await;
     // The session's shell or a place watcher may have closed it first.
     if result.is_err()
         && list()
@@ -107,6 +111,7 @@ pub(crate) async fn list() -> Result<Vec<(String, Fields)>> {
     let mut command = Command::new(Tool::Zmx.program());
     command.arg("list");
     let output = Run::new(command)
+        .timeout(TIMEOUT)
         .checked()
         .await
         .context("list zmx sessions")?;

@@ -3721,8 +3721,11 @@ Stopping its commands, its hooks, the checkpoint and deleting the worktree then 
 on in the background, and `--json` reports `background` with the spaces it takes
 first instead of what it did. A failure from then on keeps the workspace and
 arrives as a `removal_failed` notification, or for an agent's removal as a message
-to that agent, saying why; `shoal rm` tries again. `--wait` returns only once the
-workspace is removed and reports the branch it kept. Removing a chat always waits.
+to that agent, saying why; `shoal rm` tries again. Deleting the worktree fails
+once it has run for ten minutes, and closing a zmx session once it has run for
+30 seconds. `--wait` returns only once
+the workspace is removed and reports the branch it kept. Removing a chat always
+waits.
 
 Removal deletes the workspace's branch when a remote-tracking branch or the
 default branch has every one of its commits, including squash and rebase merges
