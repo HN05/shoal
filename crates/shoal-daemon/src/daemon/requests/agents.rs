@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::progress::ProgressChange;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     protocol::{AgentMethod, Body, WokenTurn},
@@ -238,6 +239,11 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
+            // A coordinator removes what blocks a space below its own.
+            AgentMethod::SetProgress {
+                space,
+                change: ProgressChange::RemoveBlocker { .. },
+            } => Some(space),
             AgentMethod::SetProgress { space, .. } => Some(
                 manager
                     .own_workspace(

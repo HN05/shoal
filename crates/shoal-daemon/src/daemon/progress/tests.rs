@@ -205,7 +205,7 @@ async fn changes_are_journaled_once_and_outlive_a_restart() {
 }
 
 #[tokio::test]
-async fn scoped_callers_set_only_their_own_progress_and_read_below() {
+async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below() {
     let (temp, manager) = manager().await;
     let [own, other] = workspaces(&manager, &temp, ["own", "other"]).await;
     manager
@@ -244,6 +244,26 @@ async fn scoped_callers_set_only_their_own_progress_and_read_below() {
     assert!(allowed(&mut read(&own)).await);
     assert!(allowed(&mut read(&child)).await);
     assert!(!allowed(&mut read(&other)).await);
+    // A coordinator removes what blocks a space below, and only removes.
+    let blocker = crate::model::Blocker::Issue("7".into());
+    let unblock = |space: &Workspace| AgentMethod::SetProgress {
+        space: SpaceSelector::id(&space.id),
+        change: ProgressChange::RemoveBlocker {
+            blocker: blocker.clone(),
+            step: None,
+        },
+    };
+    let block = AgentMethod::SetProgress {
+        space: SpaceSelector::id(&child.id),
+        change: ProgressChange::AddBlocker {
+            blocker: blocker.clone(),
+            step: None,
+            reason: "Needs it".into(),
+        },
+    };
+    assert!(allowed(&mut unblock(&child)).await);
+    assert!(!allowed(&mut unblock(&other)).await);
+    assert!(!allowed(&mut { block }).await);
 }
 
 #[tokio::test]
