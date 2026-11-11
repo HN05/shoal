@@ -43,6 +43,9 @@ pub(super) async fn run(manager: Arc<Manager>) {
         if let Err(error) = manager.stop_finished_chats().await {
             log!("chats: {error:#}");
         }
+        if let Err(error) = manager.save_blocked_chats().await {
+            log!("chats: {error:#}");
+        }
         if let Err(error) = restores::restore_automatic(&manager).await.map(drop) {
             log!("chats: {error:#}");
         }
@@ -977,6 +980,7 @@ fn forget_unstarted(db: &mut Connection, id: &SpaceId, process: &Identity) -> Re
 }
 
 mod agents;
+mod blocked;
 mod done;
 mod files;
 mod processes;

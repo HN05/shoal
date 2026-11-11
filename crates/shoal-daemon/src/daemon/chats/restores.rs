@@ -88,12 +88,18 @@ impl Manager {
 }
 
 /// Make the chats saved to come back on their own wait for `shoal resume`,
-/// returning them, unless one still runs, which runs on.
+/// returning them, unless one still runs, which runs on, or its space is
+/// blocked, which waits until nothing blocks it.
 fn claim_automatic(tx: &rusqlite::Transaction<'_>, owner: &std::path::Path) -> Result<Vec<Chat>> {
-    let saved: Vec<Chat> = recorded(tx, owner)?
-        .into_iter()
-        .filter(|chat| chat.restore == Some(ChatRestore::Automatic))
-        .collect();
+    let mut saved = Vec::new();
+    for chat in recorded(tx, owner)? {
+        let blocked = || crate::daemon::progress::current(tx, &chat.id);
+        if chat.restore == Some(ChatRestore::Automatic)
+            && !blocked()?.is_some_and(|progress| progress.blocked())
+        {
+            saved.push(chat);
+        }
+    }
     let mut claimed = Vec::new();
     for chat in saved {
         let restore = match still_runs(tx, &chat)? {

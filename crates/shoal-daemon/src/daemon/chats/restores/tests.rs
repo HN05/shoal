@@ -162,3 +162,43 @@ async fn a_claimed_automatic_restore_refuses_a_stop_until_it_ends() {
     }
     manager.check_chat_stop(&chat).unwrap();
 }
+
+#[tokio::test]
+async fn a_blocked_chat_stops_after_its_turn_and_restores_once_unblocked() {
+    use crate::{client::progress::ProgressChange, model::Blocker, state::AgentState};
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    let selector = SpaceSelector::id(&chat.id);
+    let blocker = Blocker::Pr("https://github.com/team/app/pull/8".into());
+    let add = ProgressChange::AddBlocker {
+        blocker: blocker.clone(),
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    manager.set_progress(&selector, add).await.unwrap();
+    manager
+        .set_agent_state(&selector, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    manager.save_blocked_chats().await.unwrap();
+    let running = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(running.restore, None, "a working agent finishes its turn");
+
+    manager
+        .set_agent_state(&selector, AgentState::Idle, None, None)
+        .await
+        .unwrap();
+    manager.save_blocked_chats().await.unwrap();
+    process.wait().unwrap();
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Automatic));
+    assert_eq!(restore_saved(&manager).await, 0, "it waits while blocked");
+
+    let remove = ProgressChange::RemoveBlocker {
+        blocker,
+        step: None,
+    };
+    manager.set_progress(&selector, remove).await.unwrap();
+    assert_eq!(restore_saved(&manager).await, 1);
+    assert_eq!(resumed(&chat), 1);
+}

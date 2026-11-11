@@ -5185,7 +5185,9 @@ naming what cleared. `shoal resume` restores the agent at once, telling it
 what still blocks the space; `shoal stop` cancels the waiting restore as it
 cancels other queued restores, and the blockers stay. `shoal done` removes
 the space's blockers and cancels the restore. The waiting restore keeps the
-space from cleanup, as other automatic restores do.
+space from cleanup, as other automatic restores do. A chat's agent stops the
+same way: Shoal saves the chat to come back on its own, which waits while it
+is blocked, then restores it in a background place, as `shoal restart` does.
 
 `status` shows a `Progress` section with the status line and the numbered
 steps, marking the current one, and `list` shows how many steps are done with

@@ -79,6 +79,13 @@ impl Manager {
         Ok(())
     }
 
+    /// Save the running chat `id`, whose agent ended its turn while its space
+    /// is blocked, to come back on its own once nothing blocks it, unless
+    /// its agent started a turn since or its space is no longer blocked.
+    pub(super) async fn save_blocked_chat(&self, id: &SpaceId) -> Result<()> {
+        (self.save_running_chat(id, None, Saving::Blocked).await).map(drop)
+    }
+
     /// Save `chat` for `shoal stop` as [`Self::save_chat`] does, and keep
     /// one whose automatic restore is pending from coming back on its own,
     /// both stopped by the space `stopped_by`; any other stopped chat keeps
@@ -135,6 +142,11 @@ impl Manager {
         let _saving = self.chat_saves.lock().await;
         let _handoffs = self.chat_handoffs.write().await;
         let stop = matches!(saving, Saving::Stop(_));
+        let blocked = matches!(saving, Saving::Blocked);
+        let restore = match blocked {
+            true => ChatRestore::Automatic,
+            false => ChatRestore::Resume,
+        };
         if let Saving::Stop(chat) = saving {
             self.check_chat_stop(chat)?;
         }
@@ -143,9 +155,12 @@ impl Manager {
         let stopped_by = stopped_by.cloned();
         let (saved, stopping, released) = (self.store)
             .write(move |tx| {
+                if blocked && !idle_and_blocked(tx, &chat)? {
+                    return Ok((false, None, Vec::new()));
+                }
                 let held = stop && hold_automatic(tx, &chat, stopped_by.as_ref())?;
                 let Saved { running, released } =
-                    save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref())?;
+                    save(tx, restore, Some(&chat), stopped_by.as_ref())?;
                 let saved = held || !running.is_empty();
                 // A save an interrupted daemon never stopped, or a stop that
                 // failed, may leave what a stopped chat owns running.
@@ -228,7 +243,8 @@ impl Manager {
     /// which replaces the one it recorded, at `origin` in a terminal host
     /// when it runs in one, or when `hands_over`, in a session `pid` starts
     /// and [`Self::move_chat`] names, as [`Self::start_chat`] records a new
-    /// chat. It keeps its ID, name, agent and start time.
+    /// chat. It keeps its ID, name, agent and start time, and its agent
+    /// learns what still blocks its space, if anything does.
     pub async fn restore_chat(
         &self,
         id: &SpaceId,
@@ -244,6 +260,8 @@ impl Manager {
             "chat {} is being removed",
             saved.name
         );
+        // Only `shoal resume` restores a chat whose space is still blocked.
+        self.tell_still_blocked(&saved.id).await;
         self.run_again(&saved, pid, narrowing, origin, hands_over)
             .await
     }
@@ -440,6 +458,22 @@ enum Saving<'a> {
     Restart,
     /// `shoal stop` of the chat, which stays down until `shoal resume`.
     Stop(&'a Chat),
+    /// Its agent ended a turn while its space is blocked; it comes back on
+    /// its own once nothing blocks the space.
+    Blocked,
+}
+
+/// Whether the agent of the chat `id` is idle and its space blocked, as
+/// they are when the save claims it: one that started a turn since it was
+/// chosen keeps running.
+fn idle_and_blocked(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<bool> {
+    let idle = crate::daemon::store::exists(
+        tx,
+        "SELECT 1 FROM space_agent_state WHERE space_id=?1 AND state=?2",
+        params![id, crate::state::AgentState::Idle],
+    )?;
+    let progress = crate::daemon::progress::current(tx, id)?;
+    Ok(idle && progress.is_some_and(|progress| progress.blocked()))
 }
 
 /// Turn the pending automatic restore of the chat `id` into a stop by the
