@@ -103,10 +103,7 @@ impl Launch {
         let topic = restored(ctx, topic, options.restore.as_ref(), &home).await?;
         let name = initial_name(&topic, options.name.clone());
         let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
-        let mut chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
-        if chat.opening.is_none() {
-            chat.opening = waiting_prompt(ctx, options.restore.as_ref()).await?;
-        }
+        let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
             agent,
             chat,
@@ -232,7 +229,8 @@ impl Launch {
     }
 
     /// Run the recorded `chat`'s agent with `model_args` here, labelling
-    /// this terminal as the chat's, once the chat holds its scope token.
+    /// this terminal as the chat's, once the chat holds its scope token; a
+    /// restored one told nothing new starts its turn when messages wait.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
         let ChatLaunch {
             repository,
@@ -244,6 +242,12 @@ impl Launch {
             args,
             ..
         } = self.chat;
+        // Recording a restore may leave the agent a message, such as what
+        // still blocks the chat, so what waits is read only now.
+        let opening = match opening {
+            Some(opening) => Some(opening),
+            None => waiting_prompt(ctx, self.options.restore.as_ref()).await?,
+        };
         let home = repository.home(workspace.as_ref());
         let directories = agents::chat_dir_args(&settings, &self.agent, &ctx.paths.home, chat);
         let command = command::command(
