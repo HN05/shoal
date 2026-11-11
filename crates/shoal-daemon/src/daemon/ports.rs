@@ -134,8 +134,7 @@ impl Manager {
             .await?
             .into_settings()
             .ports;
-        let claim =
-            PortClaim::resolve(workspace.id.clone(), name, request, ports, caller.is_some())?;
+        let claim = PortClaim::resolve(workspace.id.clone(), name, request, ports, caller)?;
         self.touch(&workspace.id).await;
         let (outcome, conflict) = self.store.write(move |tx| claim_port(tx, claim)).await?;
         if let Some(conflict) = conflict {
@@ -235,7 +234,7 @@ impl PortClaim {
         name: String,
         request: PortRequest,
         ports: Ports,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Self> {
         validate::lowercase_name("port", &name)?;
         let definition = ports.definitions.get(&name).cloned().unwrap_or_default();
@@ -264,7 +263,7 @@ impl PortClaim {
             reason,
             policy,
             range: ports.start..=ports.end,
-            approval: (scoped && definition.requires_approval)
+            approval: (caller.is_some() && definition.requires_approval)
                 .then_some(definition.approval_lifetime),
         })
     }

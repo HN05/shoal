@@ -91,8 +91,12 @@ fn holders(db: &Connection, active: &[ResourceLease]) -> Result<String> {
     })
 }
 
-fn leases_query(scoped: bool) -> String {
-    let filter = if scoped { "WHERE workspace_id=?1" } else { "" };
+fn leases_query(by_owner: bool) -> String {
+    let filter = if by_owner {
+        "WHERE workspace_id=?1"
+    } else {
+        ""
+    };
     format!(
         "SELECT {LEASE_COLUMNS} FROM resource_leases {filter} ORDER BY scope,pool,resource,name,id"
     )
@@ -400,14 +404,14 @@ impl Manager {
             self.verify_worktree(&workspace).await?;
         }
         let workspace_name = (workspace.name.clone(), workspace.id.clone());
-        let scoped = caller.is_some();
+        let caller = caller.cloned();
         let ahead = place.ahead();
         let acquisition = self
             .store
             .run(move |db| {
                 let claimant = Claimant {
                     workspace_id: workspace.id,
-                    scoped,
+                    caller,
                     ahead,
                 };
                 acquire_lease(db, claimant, scope, definition, request, related)
@@ -586,8 +590,8 @@ fn release_lease(
 /// The workspace asking for a lease and its standing.
 struct Claimant {
     workspace_id: SpaceId,
-    /// Scoped callers need configured approvals.
-    scoped: bool,
+    /// Who asks for it, which a scoped caller does with configured approvals.
+    caller: Option<Caller>,
     /// Queued requests that arrived earlier.
     ahead: usize,
 }
@@ -606,7 +610,7 @@ fn acquire_lease(
 ) -> Result<Allocation<ResourceLease>> {
     let Claimant {
         workspace_id,
-        scoped,
+        caller,
         ahead,
     } = claimant;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -633,7 +637,8 @@ fn acquire_lease(
         scope: scope.clone(),
         pool: request.pool.clone(),
     };
-    if scoped && let Some(pending) = approvals::current(&tx, &workspace_id, &target, &request.name)?
+    if caller.is_some()
+        && let Some(pending) = approvals::current(&tx, &workspace_id, &target, &request.name)?
     {
         let Specification::Resource(bound) = &pending.specification else {
             bail!(
@@ -678,7 +683,7 @@ fn acquire_lease(
         .as_deref()
         .map(|selector| repositories::resolve(&tx, selector, &mut related))
         .transpose()?;
-    if scoped && settings.requires_approval {
+    if caller.is_some() && settings.requires_approval {
         let bound = ResourceSpecification {
             repository: repository.clone(),
             definition: definition.clone(),

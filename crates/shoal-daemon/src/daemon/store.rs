@@ -506,8 +506,12 @@ fn port(row: &Row<'_>) -> rusqlite::Result<PortReservation> {
     })
 }
 
-fn ports_query(scoped: bool) -> String {
-    let filter = if scoped { "WHERE workspace_id=?1" } else { "" };
+fn ports_query(by_owner: bool) -> String {
+    let filter = if by_owner {
+        "WHERE workspace_id=?1"
+    } else {
+        ""
+    };
     format!("SELECT {PORT_COLUMNS} FROM ports {filter} ORDER BY workspace_id,name")
 }
 

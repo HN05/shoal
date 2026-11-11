@@ -243,8 +243,6 @@ impl Manager {
         );
         let _guard = self.gates.lock_simulators().await;
         let workspace = self.workspace(selector).await?;
-        // An exported scope has no execution, but its requests still need approval.
-        let scoped = caller.is_some();
         let execution_id = caller.and_then(|c| c.execution_id().cloned());
         let mut audit = if request.clean {
             Some(
@@ -256,7 +254,7 @@ impl Manager {
         };
         let workspace_name = (workspace.name.clone(), workspace.id.clone());
         let result = self
-            .allocate_simulator(workspace, request, &mut audit, scoped, place.ahead())
+            .allocate_simulator(workspace, request, &mut audit, caller, place.ahead())
             .await;
         place.settle(&result);
         if let Ok(outcome) = &result {
@@ -281,7 +279,7 @@ impl Manager {
         workspace: Workspace,
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
-        scoped: bool,
+        caller: Option<&Caller>,
         ahead: usize,
     ) -> Result<Allocation<Box<Simulator>>> {
         validate::name("simulator lease", &request.name)?;
@@ -326,7 +324,8 @@ impl Manager {
             return Ok(Allocation::Granted(Box::new(sim.clone())));
         }
         let profile = profile.unwrap();
-        if scoped && profile.requires_approval {
+        // An exported scope has no execution, but its requests still need approval.
+        if caller.is_some() && profile.requires_approval {
             let approval = approvals::ApprovalRequest::new(
                 &workspace.id,
                 approvals::Target::Simulator,
