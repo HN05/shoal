@@ -6,7 +6,7 @@ use crate::{
         commands::{config_setup, configuration, service, update},
         context::Context,
     },
-    daemon::handoff::Handoff,
+    daemon_handoff::Handoff,
 };
 
 pub(in crate::cli::commands) async fn run(

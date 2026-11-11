@@ -20,8 +20,7 @@ use anyhow::{Context as _, Result};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{client, context::Context, installed},
-    daemon::ownership,
-    env,
+    daemon_owner, env,
     model::Inspection,
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
@@ -143,7 +142,7 @@ pub async fn watch(
         known.get()
     };
     let close = async || close_place(ctx, host, &place, &record, known.get()).await;
-    let mut daemon = DaemonPresence::new(|| ownership::owner(&ctx.paths).is_some());
+    let mut daemon = DaemonPresence::new(|| daemon_owner::owner(&ctx.paths).is_some());
     close_when_due(
         watches,
         &place,

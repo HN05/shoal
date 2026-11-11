@@ -2,7 +2,7 @@
 //! connections.
 use crate::{
     client::{connection::Supervision, paths::Paths, processes::Identity},
-    daemon::ownership,
+    daemon_owner,
 };
 
 /// The `shoal` binary's [`Supervision`].
@@ -10,7 +10,7 @@ pub(crate) struct Command;
 
 impl Supervision for Command {
     fn owner(&self, paths: &Paths) -> Option<Identity> {
-        ownership::owner(paths)
+        daemon_owner::owner(paths)
     }
 
     fn managed(&self, paths: &Paths) -> bool {

@@ -3,7 +3,7 @@
 use std::{
     fs::{self, File, OpenOptions},
     os::unix::{
-        fs::{FileExt, FileTypeExt, OpenOptionsExt, PermissionsExt},
+        fs::{FileTypeExt, OpenOptionsExt, PermissionsExt},
         net::UnixListener as StdListener,
     },
     path::Path,
@@ -12,13 +12,11 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use tokio::net::UnixListener;
 
-use super::{
-    handoff::{self, Handoff},
-    log,
-};
+use super::log;
 use crate::{
+    daemon_handoff::{self, Handoff},
+    daemon_owner,
     paths::Paths,
-    process::identity::{self, Identity},
 };
 
 /// Held from startup through shutdown or handoff; dropping it removes the
@@ -44,7 +42,7 @@ impl Ownership {
         };
         fs2::FileExt::try_lock_exclusive(&lock)
             .context("a daemon already owns this state directory")?;
-        if let Err(error) = record_owner(&lock) {
+        if let Err(error) = daemon_owner::record(&lock) {
             log!("record the daemon's process in its lock: {error:#}");
         }
         if inherited.is_none() {
@@ -70,7 +68,7 @@ impl Ownership {
     /// Replace this process with the daemon at `path`, passing it the lock
     /// and listener; returns only when exec fails.
     pub(super) fn hand_off(&self, path: &Path, listener: &UnixListener) -> Result<()> {
-        handoff::exec(path, &self.paths, listener, &self.lock)
+        daemon_handoff::exec(path, &self.paths, listener, &self.lock)
     }
 }
 
@@ -78,22 +76,6 @@ impl Drop for Ownership {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.paths.socket);
     }
-}
-
-/// Name this process in the lock, so clients can tell a daemon that holds the
-/// state directory without answering from one that is not running.
-fn record_owner(lock: &File) -> Result<()> {
-    let owner = identity::capture(std::process::id())?.context("this process has no identity")?;
-    lock.set_len(0)?;
-    lock.write_all_at(&serde_json::to_vec(&owner)?, 0)?;
-    Ok(())
-}
-
-/// The live daemon that owns the state directory, as its lock names it.
-pub(crate) fn owner(paths: &Paths) -> Option<Identity> {
-    let recorded = fs::read(paths.daemon_lock()).ok()?;
-    let owner = serde_json::from_slice(&recorded).ok()?;
-    identity::alive(&owner).ok()?.then_some(owner)
 }
 
 fn open_lock(paths: &Paths) -> Result<File> {

@@ -11,6 +11,8 @@ mod caches;
 mod cli;
 mod config_file;
 mod daemon;
+mod daemon_handoff;
+mod daemon_owner;
 mod env;
 mod execution;
 mod fsutil;
@@ -69,7 +71,7 @@ fn main() {
         // startup variables removed below still reach the replacement.
         unsafe { process::responsibility::claim(releases) };
     }
-    cli.daemon_handoff = daemon::handoff::Handoff::take().unwrap_or_else(|error| {
+    cli.daemon_handoff = daemon_handoff::Handoff::take().unwrap_or_else(|error| {
         eprintln!("error: {error:#}");
         std::process::exit(1);
     });

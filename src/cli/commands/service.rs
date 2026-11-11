@@ -13,7 +13,7 @@ use crate::cli::{args::service::DaemonCommand, context::Context};
 pub(super) async fn run(
     ctx: Context,
     command: DaemonCommand,
-    handoff: Option<crate::daemon::handoff::Handoff>,
+    handoff: Option<crate::daemon_handoff::Handoff>,
 ) -> Result<i32> {
     match command {
         DaemonCommand::Install {

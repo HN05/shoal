@@ -178,7 +178,7 @@ async fn terminate(paths: &Paths) -> Result<()> {
 
 /// SIGTERM to the daemon owning the state directory; `missing` when none does.
 fn signal_owner(paths: &Paths, missing: anyhow::Error) -> Result<()> {
-    let owner = crate::daemon::ownership::owner(paths).ok_or(missing)?;
+    let owner = crate::daemon_owner::owner(paths).ok_or(missing)?;
     crate::process::identity::signal(&owner, libc::SIGTERM)
 }
 

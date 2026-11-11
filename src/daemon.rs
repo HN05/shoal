@@ -21,7 +21,6 @@ pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
 mod git_logins;
-pub(crate) mod handoff;
 pub(crate) mod item_numbers;
 mod keep_awake;
 pub mod leftovers;
@@ -33,7 +32,7 @@ pub(crate) mod operations;
 mod overload;
 #[cfg(test)]
 mod overload_tests;
-pub(crate) mod ownership;
+mod ownership;
 mod permissions;
 pub mod ports;
 pub(crate) mod progress;
@@ -115,7 +114,11 @@ struct Server {
     capacity: Arc<connections::Capacity>,
 }
 
-pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
+pub async fn run(
+    paths: Paths,
+    managed: bool,
+    handoff: Option<crate::daemon_handoff::Handoff>,
+) -> Result<()> {
     // Read before an upgrade can replace it, as the update below is, since
     // wrappers continue only from the binary the daemon runs.
     crate::installed::remember_started();

@@ -52,7 +52,7 @@ use crate::client::space_names::SpaceSelector;
 )]
 pub struct Cli {
     #[arg(skip)]
-    pub(crate) daemon_handoff: Option<crate::daemon::handoff::Handoff>,
+    pub(crate) daemon_handoff: Option<crate::daemon_handoff::Handoff>,
     /// What the command needs of its workspace, from its subcommand path.
     #[arg(skip)]
     pub(crate) need: availability::Need,

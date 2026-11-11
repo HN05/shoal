@@ -49,7 +49,7 @@ impl Handoff {
         }))
     }
 
-    pub(super) fn verify(&self, paths: &Paths) -> Result<()> {
+    pub(crate) fn verify(&self, paths: &Paths) -> Result<()> {
         let expected = fs::metadata(paths.daemon_lock())?;
         let actual = self.lock.metadata()?;
         ensure!(
@@ -66,7 +66,7 @@ impl Handoff {
 
 /// Workers and SQLite have drained before descriptors become inheritable.
 /// Exec retains the service PID, ownership lock and listening socket backlog.
-pub(super) fn exec(path: &Path, paths: &Paths, listener: &UnixListener, lock: &File) -> Result<()> {
+pub(crate) fn exec(path: &Path, paths: &Paths, listener: &UnixListener, lock: &File) -> Result<()> {
     let descriptors = [lock.as_raw_fd(), listener.as_raw_fd()];
     let mut command = Command::new(path);
     command
