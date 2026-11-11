@@ -140,7 +140,7 @@ async fn agents_are_listed_by_the_names_agent_selection_takes() {
 }
 
 #[tokio::test]
-async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
+async fn a_shared_workspace_keeps_the_turn_of_the_agent_that_reported_last() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let mut ids = Vec::new();
@@ -152,7 +152,8 @@ async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
         track(&manager, &workspace, &execution.plan.id, name, true).await;
         ids.push(execution.plan.id);
     }
-    // The workspace keeps only the later report; each agent keeps its own.
+    // The workspace keeps only the later report, which leaves the other
+    // agent's turn unknown, as one that never reported.
     for (id, state) in ids.iter().zip([AgentState::Idle, AgentState::Working]) {
         manager
             .set_agent_state(
@@ -171,7 +172,7 @@ async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
         .into_iter()
         .map(|agent| (agent.execution, agent.state))
         .collect();
-    assert_eq!(states[&ids[0]], Some(AgentState::Idle));
+    assert_eq!(states[&ids[0]], None);
     assert_eq!(states[&ids[1]], Some(AgentState::Working));
     let status = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))

@@ -6,7 +6,7 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, anyhow, ensure};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager, stops};
@@ -27,10 +27,10 @@ impl Manager {
     /// may have run one, and every agent a restart starts in a new wrapper,
     /// by the execution it ran as; connected commands are left out.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
-        let (executions, interrupted, stops) = (self.store)
+        let (executions, reported, stops) = (self.store)
             .read(|db| {
                 let executions = store::all_executions(db)?;
-                Ok((executions, interrupted_executions(db)?, stops::all(db)?))
+                Ok((executions, reported_turns(db)?, stops::all(db)?))
             })
             .await?;
         let connections = self.executions.connections().await;
@@ -49,8 +49,9 @@ impl Manager {
                             // Named as `--agent` and recovery records name it.
                             agent: agent.map(|agent| agent.name.normalized()),
                             restorable: agent.is_some_and(|agent| agent.recover),
-                            state: agent.and_then(|agent| agent.turn),
-                            interrupted: interrupted.contains(&execution.id),
+                            state: agent.and(reported.get(&execution.id).map(|turn| turn.0)),
+                            interrupted: agent.is_some()
+                                && reported.get(&execution.id).is_some_and(|turn| turn.1),
                             restarted_by: agent
                                 .map(|agent| agent.restarts.restarted_by())
                                 .unwrap_or_default(),
@@ -166,6 +167,7 @@ impl Manager {
             .with_restarts(|_, renewals| renewal::current(renewals, id))
             .await;
         let stopped = self.agent_overload(&current).await;
+        let turn = self.reported_turn(&current).await;
         self.executions
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);
@@ -173,16 +175,20 @@ impl Manager {
                     return handover.answer_changing(run, change.as_ref());
                 }
                 // A stop of an agent that runs again meanwhile shows only on
-                // its stop channel.
-                let stopped = stopped.filter(|_| id == current);
-                let agent = agents.get_mut(&id).map(|agent| (agent, stopped));
+                // its stop channel, and its turn is unknown.
+                let (stopped, turn) = match id == current {
+                    true => (stopped, turn),
+                    false => (None, None),
+                };
+                let agent = agents.get_mut(&id).map(|agent| (agent, stopped, turn));
                 self.stop_for_restart(&id, agent, run, in_place, stopped_by, change)
             })
             .await
     }
 
     /// Save the handoff of `agent`, the agent of `id` with the protection
-    /// stop that stopped it if any, then stop it for a restart, `in_place` or in a new wrapper, which starts it with `change`
+    /// stop that stopped it if any and the turn state it reported, then stop
+    /// it for a restart, `in_place` or in a new wrapper, which starts it with `change`
     /// made when given, or join the restart already in progress as
     /// it was asked. The handoff names the space `stopped_by`, whose process
     /// asked for the restart, so it may resume an agent the restart leaves
@@ -190,13 +196,13 @@ impl Manager {
     fn stop_for_restart(
         &self,
         id: &ExecutionId,
-        agent: Option<(&mut Agent, Option<Protection>)>,
+        agent: Option<(&mut Agent, Option<Protection>, Option<AgentState>)>,
         run: Option<String>,
         in_place: bool,
         stopped_by: Option<&SpaceId>,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
-        let (agent, stopped) =
+        let (agent, stopped, turn) =
             agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
         // even if another run restarts it since.
@@ -223,7 +229,7 @@ impl Manager {
             id,
             &agent.tracked(),
             Some(&Protection::restart().reason),
-            agent.turn,
+            turn,
             stopped_by,
         )
         .context("save the agent's recovery record")?;
@@ -253,33 +259,12 @@ impl Manager {
             .unwrap_or(false)
     }
 
-    /// Keep the turn state the agent of `id` reported.
-    pub(crate) async fn record_agent_turn(&self, id: &ExecutionId, state: AgentState) {
-        self.executions
-            .with_agent(id, |agent| {
-                if state != AgentState::Idle {
-                    agent.turns_started += 1;
-                }
-                agent.turn = Some(state);
-            })
-            .await;
-    }
-
-    /// Mark the agent of `id` working on the turn a wake starts, unless a
-    /// stop of it came first, under the lock a stop takes, so a stop that
-    /// read the agent idle before cannot follow. Whether it is marked; an
-    /// execution that runs no tracked agent has nothing to stop.
-    pub(crate) async fn claim_woken_turn(&self, id: &ExecutionId) -> bool {
-        self.executions
-            .with_agent(id, |agent| {
-                let running = agent.running();
-                if running {
-                    agent.turn = Some(AgentState::Working);
-                }
-                running
-            })
+    /// Whether something stops the tracked agent of `id`, such as a restart
+    /// or `shoal stop`, which a turn that starts now would not outlast.
+    pub(crate) async fn agent_stopping(&self, id: &ExecutionId) -> bool {
+        (self.executions.with_agent(id, |agent| !agent.running()))
             .await
-            .unwrap_or(true)
+            .unwrap_or(false)
     }
 
     /// Whether `shoal restart` is restarting the agent of `id`.
@@ -421,11 +406,15 @@ impl Manager {
     }
 }
 
-/// The executions whose agent's last turn an interrupt ended.
-fn interrupted_executions(db: &rusqlite::Connection) -> Result<HashSet<ExecutionId>> {
+/// The turn state each execution reported last, and whether an interrupt
+/// ended its last turn.
+fn reported_turns(db: &rusqlite::Connection) -> Result<HashMap<ExecutionId, (AgentState, bool)>> {
     Ok(db
-        .prepare("SELECT execution_id FROM space_agent_state WHERE interrupted AND execution_id IS NOT NULL")?
-        .query_map([], |row| row.get(0))?
+        .prepare(
+            "SELECT execution_id,state,interrupted FROM space_agent_state
+             WHERE execution_id IS NOT NULL",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, (row.get(1)?, row.get(2)?))))?
         .collect::<rusqlite::Result<_>>()?)
 }
 

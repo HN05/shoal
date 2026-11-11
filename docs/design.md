@@ -234,7 +234,19 @@ policy does not apply. Stopping any idle agent works the same way and is
 opt-in, since timers the agent keeps itself end with it, which only a done
 assignment leaves nothing to do. Either stops an agent once its prompt cache
 has expired and not before, since a resumed session's first request writes
-most of the cache again. A
+most of the cache again. A space's reported turn state counts the turns its
+agent starts, a count that continues for a restored agent or another
+execution, and a protection stop is recorded by execution with the count it
+was decided at, until the agent runs again or its restore is cancelled. A
+stop chosen between turns records itself only while the agent is still idle
+in the turn it was chosen in, and a report that starts a turn records none
+once a stop is recorded, leaving its update for the restore: each decides in
+one transaction, so whichever commits first wins, and the stop reaches the
+wrapper only after its record commits. A workspace with several agents keeps
+the turn of the one that reported last, leaving the others' unknown, which
+counts as working. A record an earlier daemon left authorizes no signal: a
+reattaching wrapper restores it or, when its restore no longer waits, it is
+forgotten. A
 record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
 wrapper saves `stopped` after ending the agent. At startup, and whenever an
@@ -317,8 +329,9 @@ and subagents, which a stop and resume would end and start again. The CLI types
 the key through the terminal host of the place the daemon recorded for the
 agent, a workspace's or a chat's, so a client driving Shoal need not know each
 agent's key or each host, and the daemon records the turn's end, which no hook
-reports. The daemon keeps the interruption with the agent's transient metadata
-until a turn starts or ends again or the chat is restored; `shoal resume`
+reports. The daemon keeps the interruption with the turn state the agent
+reported, or a chat's with its transient metadata, until a turn starts or ends
+again or the chat is restored; `shoal resume`
 continues the interrupted turn, as it continues stopped work, so a
 client pairs one command with each. A chat's agent has no wrapper to wake it
 after an interrupt, so it receives its updates with its next turn.

@@ -17,11 +17,13 @@ use crate::{
     time::UnixTime,
 };
 
-/// An agent's turn state and when it began.
+/// An agent's turn state, when it began and the turn generation of its
+/// space it is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Turn {
     pub state: AgentState,
     pub since: UnixTime,
+    pub generation: i64,
     /// When an idle agent's prompt cache expires, for an AI tool whose cache
     /// lifetime is known.
     pub cache_expires_at: Option<UnixTime>,
@@ -47,7 +49,7 @@ impl Turn {
 fn reported(db: &Connection) -> Result<(HashMap<ExecutionId, Turn>, Vec<Execution>)> {
     let turns: HashMap<ExecutionId, Turn> = db
         .prepare(
-            "SELECT execution_id,state,since,prompt_cache_expires_at FROM space_agent_state
+            "SELECT execution_id,state,since,prompt_cache_expires_at,turn FROM space_agent_state
              WHERE execution_id IS NOT NULL",
         )?
         .query_map([], |row| {
@@ -57,6 +59,7 @@ fn reported(db: &Connection) -> Result<(HashMap<ExecutionId, Turn>, Vec<Executio
                     state: row.get(1)?,
                     since: row.get(2)?,
                     cache_expires_at: row.get(3)?,
+                    generation: row.get(4)?,
                 },
             ))
         })?

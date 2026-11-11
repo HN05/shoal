@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use super::{Manager, Protection, ProtectionExt, restart};
 use crate::daemon::log;
+use crate::{state::AgentState, time::UnixTime};
 
 /// The stop recorded for execution `id`.
 fn get(db: &Connection, id: &ExecutionId) -> Result<Option<Protection>> {
@@ -39,10 +40,43 @@ pub(super) fn all(db: &Connection) -> Result<HashMap<ExecutionId, Protection>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// What still holds when a stop chosen between turns is recorded: the agent
+/// is idle in the turn generation it was chosen in, and for a stop that
+/// frees memory, its prompt cache expired by `cache_expired_at`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Between {
+    pub turn: i64,
+    pub cache_expired_at: Option<UnixTime>,
+}
+
+/// Whether the agent of execution `id` is still `between` turns: a turn
+/// that started since, or a turn end that renewed its cache, keeps it.
+fn still_between(db: &Connection, id: &ExecutionId, between: Between) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM space_agent_state
+             WHERE execution_id=?1 AND state=?2 AND turn=?3
+                 AND (?4 IS NULL OR prompt_cache_expires_at IS NULL
+                     OR prompt_cache_expires_at<=?4))",
+        params![id, AgentState::Idle, between.turn, between.cache_expired_at],
+        |row| row.get(0),
+    )?)
+}
+
 /// Record that `protection` stops the agent of execution `id` at its
 /// space's current turn generation, unless a stop of it is recorded
-/// already. Whether it was recorded.
-pub(super) fn insert(db: &Connection, id: &ExecutionId, protection: &Protection) -> Result<bool> {
+/// already, or one chosen `between` turns finds that no longer holds.
+/// Whether it was recorded.
+pub(super) fn insert(
+    db: &Connection,
+    id: &ExecutionId,
+    protection: &Protection,
+    between: Option<Between>,
+) -> Result<bool> {
+    if let Some(between) = between
+        && !still_between(db, id, between)?
+    {
+        return Ok(false);
+    }
     let inserted = db.execute(
         "INSERT INTO agent_stops(execution_id,reason,resumes_when,turn)
          VALUES (?1,?2,?3,(SELECT turn FROM space_agent_state WHERE execution_id=?1))
@@ -69,6 +103,26 @@ fn set(db: &Connection, id: &ExecutionId, protection: &Protection) -> Result<()>
 pub(super) fn delete(db: &Connection, id: &ExecutionId) -> Result<()> {
     db.execute("DELETE FROM agent_stops WHERE execution_id=?1", [id])?;
     Ok(())
+}
+
+/// Forget the stop of the agent of execution `id` as it runs again, with
+/// the turn state it reported before, so nothing counts it idle in a turn
+/// it ended before its stop until it reports its own; its space's turn
+/// count continues.
+fn resume(db: &Connection, id: &ExecutionId) -> Result<()> {
+    delete(db, id)?;
+    db.execute("DELETE FROM space_agent_state WHERE execution_id=?1", [id])?;
+    Ok(())
+}
+
+/// Whether a stop is recorded for execution `id`, which a report from it
+/// that starts a turn defers to.
+pub(crate) fn recorded(db: &Connection, id: &ExecutionId) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM agent_stops WHERE execution_id=?1)",
+        [id],
+        |row| row.get(0),
+    )?)
 }
 
 impl Manager {
@@ -102,17 +156,25 @@ impl Manager {
         }
     }
 
-    /// Record that `protection` stops the agent of `id`, unless a stop of it
-    /// is recorded already. Whether it was recorded.
+    /// Record that `protection` stops the agent of `id`, chosen `between`
+    /// turns when given, as [`insert`] decides. Whether it was recorded.
     pub(super) async fn record_agent_stop(
         &self,
         id: &ExecutionId,
         protection: &Protection,
+        between: Option<Between>,
     ) -> Result<bool> {
         let (execution, protection) = (id.to_owned(), protection.clone());
         self.store
-            .write(move |tx| insert(tx, &execution, &protection))
+            .write(move |tx| insert(tx, &execution, &protection, between))
             .await
+    }
+
+    /// Forget the stop of the agent of `id` and its turn state as it runs
+    /// again, as [`resume`] does.
+    pub(super) async fn forget_resumed_stop(&self, id: &ExecutionId) -> Result<()> {
+        let execution = id.to_owned();
+        self.store.write(move |tx| resume(tx, &execution)).await
     }
 
     /// Forget the stop of the agent of `id`, as when it runs again or its

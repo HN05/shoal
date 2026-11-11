@@ -109,6 +109,20 @@ pub(crate) fn interrupted(db: &Connection, execution: &ExecutionId) -> Result<bo
         .unwrap_or(false))
 }
 
+/// The state the agent `execution` runs reported last, while it lasts.
+pub(crate) fn reported_by_execution(
+    db: &Connection,
+    execution: &ExecutionId,
+) -> Result<Option<AgentState>> {
+    Ok(db
+        .query_row(
+            "SELECT state FROM space_agent_state WHERE execution_id=?1",
+            [execution],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// Every space's last reported state.
 pub(crate) fn all(db: &Connection) -> Result<Vec<(SpaceId, AgentState)>> {
     Ok(db
@@ -162,6 +176,19 @@ fn reported_by(db: &Connection, id: &ExecutionId) -> Result<Option<StoppedTurn>>
 }
 
 impl Manager {
+    /// The turn state the agent of `id` reported last, which a stop's
+    /// handoff keeps; unknown when it cannot be read.
+    pub(crate) async fn reported_turn(&self, id: &ExecutionId) -> Option<AgentState> {
+        let execution = id.to_owned();
+        let reported = (self.store)
+            .run(move |db| reported_by_execution(db, &execution))
+            .await;
+        reported.unwrap_or_else(|error| {
+            crate::daemon::log!("turn of execution {id} unreadable: {error:#}");
+            None
+        })
+    }
+
     /// Keep the state execution `id` last reported in the recovery record it
     /// saved, before the state goes with the execution's record, judged by
     /// `scan` when its processes were scanned. A failure leaves the turn
@@ -295,8 +322,10 @@ impl Manager {
         execution: Option<ExecutionId>,
     ) -> Result<bool> {
         let _order = self.report_order(selector).await?;
+        // A protection stop is decided against the turn in the transaction
+        // that would record it; others show only on the agent's connection.
         if let Some(id) = &execution
-            && !self.claim_woken_turn(id).await
+            && self.agent_stopping(id).await
         {
             return Ok(false);
         }
@@ -313,11 +342,11 @@ impl Manager {
                 None,
             )
             .await?;
-        // A chat whose save came first, in the transaction that would have
-        // recorded the turn, takes no report: the update that woke its hook,
-        // such as the one a blocked chat's save leaves, waits for its
-        // restore.
-        Ok(execution.is_some() || recorded.is_some())
+        // A stopped agent, or a chat whose save came first, in the
+        // transaction that would have recorded the turn, takes no report:
+        // the update that woke its hook, such as the one a blocked agent's
+        // stop leaves, waits for its restore.
+        Ok(recorded.is_some())
     }
 
     /// Record that an interrupt ended the turn of the agent reporting from
@@ -406,8 +435,13 @@ impl Manager {
         made: Option<SystemTime>,
     ) -> Result<Option<AgentStatus>> {
         let space = self.space(selector).await?;
-        self.record_turn(&space, execution.as_ref(), state, ending)
-            .await;
+        // A chat's agent reports from no execution and keeps its interrupt
+        // with its transient metadata.
+        if let PresentSpace::Chat(chat) = &space
+            && execution.is_none()
+        {
+            (self.chat_agents).record_turn(&chat.id, ending.interrupted_after(state));
+        }
         if let Some(session) = session {
             self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
@@ -434,26 +468,6 @@ impl Manager {
             self.signals.agent_changed();
         }
         Ok(Some(status))
-    }
-
-    /// Record the turn `state` reports with `ending` for the agent that
-    /// reports from `execution` in `space` with the agent's transient
-    /// metadata: a chat's agent reports from none and keeps its interrupt
-    /// there, while the state an execution reports keeps its own.
-    async fn record_turn(
-        &self,
-        space: &PresentSpace,
-        execution: Option<&ExecutionId>,
-        state: AgentState,
-        ending: TurnEnding,
-    ) {
-        match (space, execution) {
-            (_, Some(execution)) => self.record_agent_turn(execution, state).await,
-            (PresentSpace::Chat(chat), None) => {
-                (self.chat_agents).record_turn(&chat.id, ending.interrupted_after(state))
-            }
-            (PresentSpace::Workspace(_), None) => {}
-        }
     }
 
     /// Record the agent `session` reported in `space`: a chat keeps its
@@ -632,13 +646,18 @@ fn recorded(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
 
 /// Record `report` with the turn retries it settles and the sleep a turn it
 /// starts ends, in one transaction: the state it leaves and whether it
-/// changed it, or `None` when its space takes no report by then.
+/// changed it, or `None` when its space takes no report by then, or its
+/// agent no turn since Shoal decided to stop it.
 fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(AgentStatus, bool)>> {
     if !takes_report(tx, &report.space)? {
         return Ok(None);
     }
     let recorded = recorded(tx, &report.space)?;
-    let changed = write_state(tx, report, report.starts_turn(recorded.as_ref()))?;
+    let starts = report.starts_turn(recorded.as_ref());
+    if starts && report.state == AgentState::Working && stopped(tx, report)? {
+        return Ok(None);
+    }
+    let changed = write_state(tx, report, starts)?;
     let previous = recorded.map(|recorded| recorded.state);
     super::turn_retry::follow_state(tx, &report.space, report.state)?;
     crate::daemon::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
@@ -648,6 +667,15 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     }
     let status = get(tx, &report.space)?.expect("agent state was just recorded");
     Ok(Some((status, changed)))
+}
+
+/// Whether Shoal decided to stop the agent `report` comes from, whose turn
+/// then waits for its restore.
+fn stopped(db: &Connection, report: &Report) -> Result<bool> {
+    match &report.execution {
+        Some(execution) => super::agents::stop_recorded(db, execution),
+        None => Ok(false),
+    }
 }
 
 /// Whether the space `id` takes a state report: a workspace, or a chat

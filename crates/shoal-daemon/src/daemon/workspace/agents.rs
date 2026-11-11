@@ -37,6 +37,7 @@ mod restart;
 mod stops;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Outcome, Renewals, Restart, Restarts, forget_ended_renewals, restarted};
+pub(crate) use stops::recorded as stop_recorded;
 
 /// Operations on the client type [`Protection`] that only the `shoal` command uses.
 pub(crate) trait ProtectionExt {
@@ -180,12 +181,6 @@ pub(crate) struct Agent {
     update_hold: Option<OwnedRwLockReadGuard<()>>,
     /// The `shoal restart` of it in progress and those that ended.
     restarts: restart::Restarts,
-    /// The turn state the agent reported last, which the workspace's state
-    /// keeps only while no other execution there reports.
-    turn: Option<crate::state::AgentState>,
-    /// How many turns its reports have started, so a stop that read its
-    /// turn state before an await can tell that a turn came between.
-    turns_started: u64,
     /// Whether a terminal shows the agent, as its wrapper reported last;
     /// `None` until it reports.
     attached: Option<bool>,
@@ -461,8 +456,6 @@ impl Manager {
             stop: stop.clone(),
             update_hold: None,
             restarts: Default::default(),
-            turn: None,
-            turns_started: 0,
             attached: None,
         };
         connections
@@ -630,10 +623,11 @@ impl Manager {
     ) -> anyhow::Result<bool> {
         let _gate = self.agent_queue.lock_admission().await;
         anyhow::ensure!(!self.agent_queue.suspended(), "the system is shutting down");
-        // The agent's turns count again before it runs.
+        // The agent's turns count again before it runs, and it reports its
+        // own.
         let protected = self.agent_overload(id).await.is_some();
-        if protected {
-            self.forget_agent_stop(id).await;
+        if protected || self.restart_requested(id).await {
+            self.forget_resumed_stop(id).await?;
         }
         let connections = self.executions.connections().await;
         let stop = connections
@@ -656,8 +650,6 @@ impl Manager {
                 stop.send(false)?;
                 agent.update_hold = None;
                 agent.started = Instant::now();
-                // The resumed agent reports its own turns.
-                agent.turn = None;
                 anyhow::Ok(Some((
                     agent.name.clone(),
                     (agent.workspace.clone(), agent.workspace_id.clone()),
@@ -927,54 +919,41 @@ impl Manager {
     }
 
     async fn stop_agents(&self, protection: &Protection, select: Select) -> Vec<StoppedAgent> {
-        // Without turns every agent counts as working, as one without hooks does.
-        let turns = self.agent_turns().await.unwrap_or_else(|error| {
-            log!("agent turns unavailable to protection: {error:#}");
-            HashMap::new()
-        });
+        let turns = self.protection_turns().await;
         self.stop_agents_by_turn(protection, select, turns).await
     }
 
-    /// Stop the agents `select` picks by `turns`, read before taking the
-    /// agents lock.
+    /// The agents' turns as protection reads them; without them every agent
+    /// counts as working, as one without hooks does.
+    async fn protection_turns(&self) -> HashMap<ExecutionId, Turn> {
+        self.agent_turns().await.unwrap_or_else(|error| {
+            log!("agent turns unavailable to protection: {error:#}");
+            HashMap::new()
+        })
+    }
+
+    /// Stop the agents `select` picks by `turns`. One picked idle stops only
+    /// while no turn started since `turns` were read, so `select` picks
+    /// again by the turns read then, a few times at most.
     async fn stop_agents_by_turn(
         &self,
         protection: &Protection,
         select: Select,
         mut turns: HashMap<ExecutionId, Turn>,
     ) -> Vec<StoppedAgent> {
-        let selected: Vec<(ExecutionId, Option<AgentState>)> = self
-            .executions
-            .with_agents(|agents| {
-                still_idle(&mut turns, agents);
-                let running =
-                    agents
-                        .iter()
-                        .filter(|(_, agent)| agent.running())
-                        .map(|(id, agent)| Running {
-                            id,
-                            started: agent.started,
-                            attached: agent.attached == Some(true),
-                        });
-                let selected: Vec<ExecutionId> = match select {
-                    Select::One => first_to_stop(running, &turns)
-                        .into_iter()
-                        .cloned()
-                        .collect(),
-                    Select::All => running.map(|agent| agent.id.clone()).collect(),
-                };
-                selected
-                    .into_iter()
-                    .map(|id| {
-                        let turn = turns.get(&id).map(|turn| turn.state);
-                        (id, turn)
-                    })
-                    .collect()
-            })
-            .await;
         let mut stopped = Vec::new();
-        for (id, turn) in selected {
-            stopped.extend(self.protect(&id, protection, turn).await);
+        for _ in 0..PROTECTION_CHOICES {
+            let mut raced = false;
+            for (id, turn) in self.choose_stops(select, &turns).await {
+                match self.protect(&id, protection, turn, None).await {
+                    Some(agent) => stopped.push(agent),
+                    None => raced |= turn.is_some_and(|turn| turn.idle()),
+                }
+            }
+            if !raced {
+                break;
+            }
+            turns = self.protection_turns().await;
         }
         if !stopped.is_empty() {
             self.overload_recovery.reset();
@@ -985,17 +964,82 @@ impl Manager {
         stopped
     }
 
+    /// The running agents `select` picks by `turns`, each with its turn.
+    async fn choose_stops(
+        &self,
+        select: Select,
+        turns: &HashMap<ExecutionId, Turn>,
+    ) -> Vec<(ExecutionId, Option<Turn>)> {
+        self.executions
+            .with_agents(|agents| {
+                let running =
+                    agents
+                        .iter()
+                        .filter(|(_, agent)| agent.running())
+                        .map(|(id, agent)| Running {
+                            id,
+                            started: agent.started,
+                            attached: agent.attached == Some(true),
+                        });
+                let selected: Vec<ExecutionId> = match select {
+                    Select::One => first_to_stop(running, turns).into_iter().cloned().collect(),
+                    Select::All => running.map(|agent| agent.id.clone()).collect(),
+                };
+                selected
+                    .into_iter()
+                    .map(|id| {
+                        let turn = turns.get(&id).copied();
+                        (id, turn)
+                    })
+                    .collect()
+            })
+            .await
+    }
+
     /// Stop the agent of `id`, chosen in `turn`, for `protection`: save the
-    /// recovery handoff, so a wrapper terminated under pressure can still be
-    /// resumed, then record the stop and deliver it. A stop recorded or
-    /// delivered meanwhile keeps the agent from this one.
+    /// recovery handoff, then record the stop and deliver it. A stop recorded or
+    /// delivered meanwhile keeps the agent from this one, and so does a turn
+    /// that started since one chosen idle, or for a stop that frees memory
+    /// with a cache `cache_expired_at` must find expired, a turn end that
+    /// renewed it.
     async fn protect(
         &self,
         id: &ExecutionId,
         protection: &Protection,
-        turn: Option<AgentState>,
+        chosen: Option<Turn>,
+        cache_expired_at: Option<crate::time::UnixTime>,
     ) -> Option<StoppedAgent> {
-        let (tracked, mut stopped) = (self.executions)
+        let turn = chosen.map(|turn| turn.state);
+        let between = chosen.filter(Turn::idle).map(|turn| stops::Between {
+            turn: turn.generation,
+            cache_expired_at,
+        });
+        let (tracked, mut stopped) = self.stop_target(id, protection, turn).await?;
+        let handoff = self.save_stop_handoff(&stopped, &tracked, protection, turn);
+        // Nothing presses an idle stop, so it waits for a record that
+        // restores the agent.
+        if handoff.is_err() && protection.is_idle() {
+            return None;
+        }
+        stopped.handoff_saved = handoff.is_ok();
+        if let Err(error) = self.decide_stop(id, &stopped.protection, between).await {
+            let (name, reason) = (&stopped.name, &protection.reason);
+            log!("{name} not stopped for {reason}: {error:#}");
+            discard_unused_handoff(handoff);
+            return None;
+        }
+        Some(stopped)
+    }
+
+    /// The identity of the tracked agent of `id`, and how a stop for
+    /// `protection` in `turn` stops it.
+    async fn stop_target(
+        &self,
+        id: &ExecutionId,
+        protection: &Protection,
+        turn: Option<AgentState>,
+    ) -> Option<(TrackedAgent, StoppedAgent)> {
+        (self.executions)
             .with_agent(id, |agent| {
                 let stopped = StoppedAgent {
                     id: id.clone(),
@@ -1008,48 +1052,45 @@ impl Manager {
                 };
                 (agent.tracked(), stopped)
             })
-            .await?;
-        let handoff = crate::execution::recovery::save_record(
+            .await
+    }
+
+    /// Save the recovery handoff of the `stopped` agent before its stop is
+    /// delivered, so a wrapper terminated under pressure can still be
+    /// resumed.
+    fn save_stop_handoff(
+        &self,
+        stopped: &StoppedAgent,
+        tracked: &TrackedAgent,
+        protection: &Protection,
+        turn: Option<AgentState>,
+    ) -> anyhow::Result<std::path::PathBuf> {
+        let saved = crate::execution::recovery::save_record(
             &self.paths,
             &stopped.workspace_id,
-            id,
-            &tracked,
+            &stopped.id,
+            tracked,
             Some(&protection.reason),
             turn,
         );
-        if let Err(error) = &handoff {
+        if let Err(error) = &saved {
             log!("overload recovery handoff not saved: {error:#}");
-            // Nothing presses an idle stop, so it waits for a record that
-            // restores the agent.
-            if protection.is_idle() {
-                return None;
-            }
         }
-        stopped.handoff_saved = handoff.is_ok();
-        match self.decide_stop(id, &stopped.protection).await {
-            Ok(()) => Some(stopped),
-            Err(error) => {
-                log!(
-                    "{} not stopped for {}: {error:#}",
-                    stopped.name,
-                    protection.reason
-                );
-                if let Ok(handoff) = &handoff
-                    && let Err(error) = crate::execution::recovery::consume(handoff)
-                {
-                    log!("unused recovery handoff not removed: {error:#}");
-                }
-                None
-            }
-        }
+        saved
     }
 
-    /// Record that `protection` stops the agent of `id` and deliver the
-    /// stop, forgetting the record when it cannot be delivered.
-    async fn decide_stop(&self, id: &ExecutionId, protection: &Protection) -> anyhow::Result<()> {
+    /// Record that `protection` stops the agent of `id`, chosen `between`
+    /// turns when given, and deliver the stop, forgetting the record when it
+    /// cannot be delivered.
+    async fn decide_stop(
+        &self,
+        id: &ExecutionId,
+        protection: &Protection,
+        between: Option<stops::Between>,
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            self.record_agent_stop(id, protection).await?,
-            "a stop of it is recorded already"
+            self.record_agent_stop(id, protection, between).await?,
+            "it is stopped already or no longer idle in the turn it was chosen in"
         );
         let delivered = self.deliver_stop(id).await;
         if delivered.is_err() {
@@ -1107,24 +1148,15 @@ impl Manager {
     }
 }
 
+/// How many times protection picks agents to stop again after a turn
+/// started in one it picked idle.
+const PROTECTION_CHOICES: usize = 3;
+
+#[derive(Clone, Copy)]
 enum Select {
     /// The agent [`first_to_stop`] picks.
     One,
     All,
-}
-
-/// Count an agent idle in `turns` as working unless the turn it reported
-/// last is still idle, such as one that started a turn since they were read:
-/// its reports reach `agents` before the state the turns come from, under the
-/// lock the caller holds. One that has not reported since it started counts
-/// as working too.
-fn still_idle(turns: &mut HashMap<ExecutionId, Turn>, agents: &HashMap<ExecutionId, Agent>) {
-    for (id, turn) in turns.iter_mut() {
-        let reported = agents.get(id).and_then(|agent| agent.turn);
-        if turn.idle() && reported != Some(AgentState::Idle) {
-            turn.state = AgentState::Working;
-        }
-    }
 }
 
 /// A running agent protection may stop.
@@ -1185,6 +1217,15 @@ fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protecti
             resumes_when: "an update arrives for it".into(),
         },
         _ => protection.clone(),
+    }
+}
+
+/// Remove the recovery handoff saved for a stop that did not happen.
+fn discard_unused_handoff(handoff: anyhow::Result<std::path::PathBuf>) {
+    if let Ok(handoff) = handoff
+        && let Err(error) = crate::execution::recovery::consume(&handoff)
+    {
+        log!("unused recovery handoff not removed: {error:#}");
     }
 }
 

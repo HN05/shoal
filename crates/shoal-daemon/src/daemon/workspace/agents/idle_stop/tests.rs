@@ -14,6 +14,7 @@ use crate::{
     },
     execution::recovery::Record,
     model::Workspace,
+    state::AgentState,
 };
 
 /// How a test workspace keeps its agent.
@@ -231,7 +232,7 @@ async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
-    let chosen = chosen_held(&execution.plan.id, 0);
+    let chosen = chosen_held(&manager, &execution.plan.id).await;
     // A turn ended after the sweep chose the agent.
     cache_expires_in(&manager, &workspace, 600).await;
     let turns = manager.agent_turns().await.unwrap();
@@ -242,7 +243,7 @@ async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
 }
 
 #[tokio::test]
-async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
+async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -251,10 +252,10 @@ async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
     let id = execution.plan.id.clone();
-    let chosen = chosen_held(&id, 0);
+    let chosen = chosen_held(&manager, &id).await;
     let turns = manager.agent_turns().await.unwrap();
     // A whole turn passes after the turns were read, so they show the agent
-    // idle with the cache it had before.
+    // idle as it was when it was chosen.
     for state in [AgentState::Working, AgentState::Idle] {
         manager
             .set_agent_state(
@@ -266,10 +267,12 @@ async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
             .await
             .unwrap();
     }
+    cache_expires_in(&manager, &workspace, 0).await;
     manager
         .stop_idle(turns, chosen, crate::time::UnixTime::now())
         .await;
-    assert!(!*execution.stop.borrow());
+    assert!(!*execution.stop.borrow(), "the agent keeps running");
+    assert!(manager.agent_overload(&id).await.is_none());
 }
 
 #[tokio::test]
@@ -292,6 +295,33 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
 }
 
 #[tokio::test]
+async fn a_wake_after_a_recorded_stop_records_no_turn() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let id = execution.plan.id.clone();
+    let before = manager.reported_turns().await.unwrap()[&id];
+    // The stop is recorded but has not reached the wrapper yet.
+    let protection = Protection::idle_held();
+    assert!(
+        manager
+            .record_agent_stop(&id, &protection, None)
+            .await
+            .unwrap()
+    );
+    let woken = manager
+        .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id.clone()))
+        .await
+        .unwrap();
+    assert!(!woken, "the update waits for the restore");
+    assert_eq!(manager.reported_turns().await.unwrap()[&id], before);
+}
+
+#[tokio::test]
 async fn an_idle_stop_after_a_wake_keeps_the_agent() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
@@ -299,24 +329,27 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (_, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
     let id = execution.plan.id.clone();
-    let chosen = chosen_held(&id, 0);
+    let chosen = chosen_held(&manager, &id).await;
     let turns = manager.agent_turns().await.unwrap();
-    // The wake claims the turn before it records it.
-    assert!(manager.claim_woken_turn(&id).await);
+    let woken = manager
+        .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
+        .await
+        .unwrap();
+    assert!(woken);
     manager
         .stop_idle(turns, chosen, crate::time::UnixTime::now())
         .await;
     assert!(!*execution.stop.borrow());
 }
 
-/// The sweep's choice to stop `execution` as idle in a held done workspace
-/// when it had started `turns_started` turns.
-fn chosen_held(execution: &ExecutionId, turns_started: u64) -> HashMap<ExecutionId, Chosen> {
+/// The sweep's choice to stop `execution` as idle in a held done workspace,
+/// in the turn it reports now.
+async fn chosen_held(manager: &Manager, execution: &ExecutionId) -> HashMap<ExecutionId, Chosen> {
     let stop = Chosen {
         protection: Protection::idle_held(),
-        turns_started,
+        turn: manager.reported_turns().await.unwrap()[execution],
     };
     HashMap::from([(execution.to_owned(), stop)])
 }
