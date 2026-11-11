@@ -454,15 +454,7 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
         fixture.ok(&["leases", "port", "--workspace", &fixture.id("configured")])["reserved"],
         serde_json::json!([])
     );
-    let accepted = fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("configured"),
-        "--port",
-        &proposal["suggested_port"].to_string(),
-    ]);
+    let accepted = accept_suggested_port(&fixture, &fixture.id("configured"), proposal);
     assert_eq!(accepted["env_var"], "PORT");
     assert_eq!(
         fixture.ok(&[
@@ -516,6 +508,38 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
         warning.contains("keep only one repository config"),
         "{warning}"
     );
+}
+
+/// Reserves the port `proposal` suggests for `web` in `workspace`. Another
+/// process on a shared runner can bind it before the reservation, which then
+/// suggests another free port, so the next suggestion is accepted instead.
+fn accept_suggested_port(fixture: &Fixture, workspace: &str, mut proposal: Value) -> Value {
+    for _ in 0..5 {
+        let suggested = proposal["suggested_port"].to_string();
+        let output = fixture.run(&[
+            "--json",
+            "acquire",
+            "port",
+            "web",
+            "--workspace",
+            workspace,
+            "--port",
+            &suggested,
+        ]);
+        assert!(
+            matches!(output.status.code(), Some(0 | 2)),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+        if output.status.success() {
+            assert_eq!(result["port"].to_string(), suggested);
+            return result;
+        }
+        assert_eq!(result["reserved"], false);
+        proposal = result;
+    }
+    panic!("other processes took every suggested port");
 }
 
 pub(crate) const RESOURCE_CONFIG: &str = r#"
