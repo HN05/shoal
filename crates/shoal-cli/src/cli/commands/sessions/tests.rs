@@ -1,34 +1,34 @@
 use super::*;
+use crate::sessions::HostName;
 
-fn agent_at(host: HostName, name: &str) -> Session {
+fn agent_in(window: &str, execution: &str) -> Session {
     Session {
         agent: Some("claude".into()),
-        ..Session::open(name.into(), 0, &Origin::created(host, name.into()))
+        execution: Some(execution.into()),
+        ..Session::open(
+            "work".into(),
+            0,
+            &Origin::created(HostName::Tmux, window.into()),
+        )
     }
 }
 
 #[test]
-fn an_agent_session_is_found_by_its_host_as_well_as_its_name() {
+fn an_agent_session_is_found_by_its_execution_whatever_its_name() {
+    // Two windows of one host share the name `work`.
     let stopped = Session {
         stopped: Some(Protection {
             reason: "critical memory pressure".into(),
             resumes_when: "an update arrives for it".into(),
         }),
-        ..agent_at(HostName::Zmx, "work")
+        ..agent_in("@1", "stopped")
     };
-    let other_host = agent_at(HostName::Tmux, "work");
-    let hosts = |sessions: Vec<Session>, key| {
-        agent_session(sessions, key).map(|session| session.place.host)
+    let running = agent_in("@2", "running");
+    let found = |sessions: Vec<Session>, execution: &str| {
+        agent_session(sessions, Some(&execution.into())).map(|session| session.execution)
     };
 
-    // A session another host gives the same name is not the stopped one's.
-    let sessions = vec![stopped, other_host.clone()];
-    assert_eq!(hosts(sessions.clone(), Some((HostName::Zmx, "work"))), None);
-    assert_eq!(hosts(sessions, None), Some(HostName::Tmux));
-    // Once its agent runs again, it is found by that key.
-    let resumed = vec![other_host, agent_at(HostName::Zmx, "work")];
-    assert_eq!(
-        hosts(resumed, Some((HostName::Zmx, "work"))),
-        Some(HostName::Zmx)
-    );
+    assert_eq!(found(vec![stopped, running.clone()], "stopped"), None);
+    let resumed = vec![running, agent_in("@1", "stopped")];
+    assert_eq!(found(resumed, "stopped"), Some(Some("stopped".into())));
 }

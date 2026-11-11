@@ -2578,6 +2578,11 @@ fn queue_start_attaches_to_the_started_agents_session() {
     // waiting restore and attaches to its session once it runs there.
     let moved = fixture.ok(&["queue", "move", &fixture.id("second"), "1"]);
     assert_eq!(moved["stopped"], true, "{moved}");
+    let status = fixture.ok(&["status", &fixture.id("second")]);
+    let stopped_execution = (status["executions"].as_array().unwrap().iter())
+        .find(|execution| !execution["stopped"].is_null())
+        .map(|execution| execution["id"].clone())
+        .unwrap();
     let other = agent_in_session(&fixture, "second", "second-shell");
     let (_, rows) = fixture.pick(&["attach", &fixture.id("second")], "none", "");
     let stopped: Vec<_> = rows.lines().filter(|row| row.contains("stopped")).collect();
@@ -2590,12 +2595,19 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .rfind(|call| call[0] == "attach")
         .unwrap();
     assert_eq!(attached, ["attach", opened[1].as_str()]);
+    // The stopped agent runs again as the same execution, in its wrapper.
     let status = fixture.ok(&["status", &fixture.id("second")]);
     let executions = status["executions"].as_array().unwrap();
     assert!(
         executions
             .iter()
             .all(|execution| execution["stopped"].is_null()),
+        "{status}"
+    );
+    assert!(
+        executions
+            .iter()
+            .any(|execution| execution["id"] == stopped_execution),
         "{status}"
     );
 

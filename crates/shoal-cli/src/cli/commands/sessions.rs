@@ -1,6 +1,7 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
 //! terminal to one of a workspace's or a running chat's, resuming a
 //! workspace's agent that Shoal stopped first.
+use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
 
@@ -15,7 +16,7 @@ use crate::{
     },
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
-    sessions::{HostName, Origin},
+    sessions::Origin,
     terminal::Session,
 };
 
@@ -72,25 +73,25 @@ fn chosen_session<'a>(
 
 /// The name of the terminal session `shoal attach` takes in which the
 /// daemon recorded the agent of the workspace with the ID `id` running,
-/// only the session with `key` when given.
+/// only `execution`'s when given.
 pub(super) async fn agent_terminal_session(
     ctx: &Context,
     id: &SpaceId,
-    key: Option<(HostName, &str)>,
+    execution: Option<&ExecutionId>,
 ) -> Result<Option<String>> {
     let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
-    let session = agent_session(target.sessions(ctx).await?, key);
+    let session = agent_session(target.sessions(ctx).await?, execution);
     Ok(session.map(|session| session.name))
 }
 
 /// The one of `sessions` where an agent runs that Shoal has not stopped,
-/// only the session with `key` when given: its host and the name that host
-/// knows it by, since another host may give a session the same name.
-fn agent_session(sessions: Vec<Session>, key: Option<(HostName, &str)>) -> Option<Session> {
+/// only `execution`'s when given, since a host may give the places of
+/// several agents one name.
+fn agent_session(sessions: Vec<Session>, execution: Option<&ExecutionId>) -> Option<Session> {
     sessions.into_iter().find(|session| {
         session.agent.is_some()
             && session.stopped.is_none()
-            && key.is_none_or(|key| session.key() == key)
+            && execution.is_none_or(|execution| session.execution.as_ref() == Some(execution))
     })
 }
 
@@ -182,9 +183,9 @@ impl Target {
         terminal::sessions(&settings, &self.places()).await
     }
 
-    /// The workspace, read again, and `session` once the agent Shoal
-    /// stopped there runs in it again through its queued restore; refused
-    /// with what restores it when no restore waits.
+    /// The workspace, read again, and the session of the agent Shoal
+    /// stopped in `session` once it runs again through its queued restore;
+    /// refused with what restores it when no restore waits.
     async fn resumed(self, ctx: &Context, session: &Session) -> Result<(Self, Session)> {
         let (Self::Workspace(inspection), Some(execution), Some(protection)) =
             (&self, &session.execution, &session.stopped)
@@ -195,11 +196,11 @@ impl Target {
                 session.name
             );
         };
-        if !super::queue::resume_stopped(ctx, execution, session.key()).await? {
+        if !super::queue::resume_stopped(ctx, execution).await? {
             bail!("{}", stopped_agent(&self, protection));
         }
         let target = Self::inspected(ctx, SpaceSelector::id(&inspection.workspace.id)).await?;
-        let resumed = agent_session(target.sessions(ctx).await?, Some(session.key()))
+        let resumed = agent_session(target.sessions(ctx).await?, Some(execution))
             .with_context(|| format!("{} has no session {}", target.name(), session.name))?;
         Ok((target, resumed))
     }

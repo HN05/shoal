@@ -134,6 +134,8 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() 
         ..execution.clone()
     };
     let other = Origin::created(HostName::Zmx, "other".to_owned());
+    // A host may give another agent's place the same name; it keeps its own state.
+    let running = Origin::created(HostName::Zmx, "running".to_owned());
     let mut sessions = vec![
         Session::open("work".into(), 0, &created),
         Session {
@@ -142,6 +144,10 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() 
             ..Session::open("work".into(), 0, &execution)
         },
         Session::open("other".into(), 0, &other),
+        Session {
+            execution: Some("running".into()),
+            ..Session::open("work".into(), 0, &running)
+        },
     ];
     mark_stopped(&mut sessions);
     let stopped: Vec<_> = sessions
@@ -154,7 +160,8 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop_and_its_execution() 
         [
             (true, stopped_execution.clone()),
             (true, stopped_execution),
-            (false, None)
+            (false, None),
+            (false, Some(ExecutionId::from("running")))
         ]
     );
 }

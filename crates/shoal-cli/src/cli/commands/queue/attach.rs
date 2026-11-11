@@ -15,7 +15,6 @@ use crate::{
         context::Context,
     },
     model::QueueEntry,
-    sessions::HostName,
     state::{QueueKind, QueueState},
 };
 
@@ -35,13 +34,12 @@ pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()>
 }
 
 /// Start the queued restore of the agent Shoal stopped as `execution`,
-/// unless it is already starting, and wait until it runs again in the
-/// session with the key `session`, where its wrapper waits; `false` when
-/// no restore of it waits in the queue.
+/// unless it is already starting, and wait until it runs again in its
+/// session, where its wrapper waits; `false` when no restore of it waits in
+/// the queue.
 pub(in crate::cli::commands) async fn resume_stopped(
     ctx: &Context,
     execution: &ExecutionId,
-    session: (HostName, &str),
 ) -> Result<bool> {
     let entries = queued_agents::entries(ctx).await?;
     let restore = entries.into_iter().find(|entry| {
@@ -55,7 +53,7 @@ pub(in crate::cli::commands) async fn resume_stopped(
         QueueState::Starting => restore,
     };
     ctx.emit(&format!("Resuming {}", entry.name), &entry)?;
-    agent_terminal_session(ctx, &entry, Some(session)).await?;
+    agent_terminal_session(ctx, &entry, Some(execution)).await?;
     Ok(true)
 }
 
@@ -71,12 +69,11 @@ pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
 /// launch learns its workspace while it starts. The daemon records the
 /// agent where it runs before it takes the entry out of the queue, so an
 /// entry gone before the sessions were read without an agent session among
-/// them did not start in one. Only the session with `key` counts when
-/// given.
+/// them did not start in one. Only `execution`'s session counts when given.
 async fn agent_terminal_session(
     ctx: &Context,
     entry: &QueueEntry,
-    key: Option<(HostName, &str)>,
+    execution: Option<&ExecutionId>,
 ) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().cloned();
@@ -94,7 +91,7 @@ async fn agent_terminal_session(
         }
         match &workspace {
             Some(id) => {
-                if let Some(session) = sessions::agent_terminal_session(ctx, id, key).await? {
+                if let Some(session) = sessions::agent_terminal_session(ctx, id, execution).await? {
                     return Ok((id.clone(), session));
                 }
                 ensure!(

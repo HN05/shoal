@@ -95,7 +95,9 @@ pub(in crate::cli) async fn sessions(
 
 /// Mark every one of `sessions` that is the session of a stopped agent,
 /// which another place, such as the one Shoal created for the agent, may
-/// have found too, with why it stopped and its execution.
+/// have found too, with why it stopped and its execution. A session with an
+/// execution of its own keeps its own state, since a host may give the
+/// places of several agents one name.
 fn mark_stopped(sessions: &mut [Session]) {
     let stopped: Vec<_> = sessions
         .iter()
@@ -108,7 +110,10 @@ fn mark_stopped(sessions: &mut [Session]) {
             ))
         })
         .collect();
-    for session in sessions {
+    for session in sessions
+        .iter_mut()
+        .filter(|session| session.execution.is_none())
+    {
         if let Some((.., protection, execution)) = stopped
             .iter()
             .find(|(host, name, ..)| (*host, name.as_str()) == session.key())
