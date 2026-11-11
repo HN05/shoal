@@ -1,3 +1,4 @@
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::process::identity::IdentityExt;
 use crate::{
@@ -155,6 +156,28 @@ async fn a_removed_saved_chat_ends() {
     assert_eq!(
         chat_events(&manager).await,
         ["chat_started talk", "chat_saved talk", "chat_ended talk"]
+    );
+}
+
+/// `shoal stop` saves a running chat for its stopper to resume, and leaves
+/// a stopped one, with its stopper, as it is.
+#[tokio::test]
+async fn a_stop_saves_a_running_chat_and_keeps_a_stopped_ones_stopper() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    let coordinator = Some(SpaceId::from("coordinator"));
+
+    let stopped = manager.stop_chat_for_resume(&chat, coordinator.as_ref());
+    assert!(!stopped.await.unwrap().already_stopped);
+    let again = manager.stop_chat_for_resume(&chat, None).await.unwrap();
+
+    assert!(again.already_stopped);
+    assert!(!process.wait().unwrap().success());
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Resume));
+    assert_eq!(
+        manager.chat_stopped_by(&chat.id).await.unwrap(),
+        coordinator
     );
 }
 

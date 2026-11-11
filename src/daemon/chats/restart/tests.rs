@@ -204,6 +204,33 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
     restoring.kill();
 }
 
+/// A stop during a restart would leave the chat to the restore that brings
+/// it back, so it is refused.
+#[tokio::test]
+async fn a_restarting_chat_refuses_a_stop() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = named_chat(root.path(), &manager, "busy").await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    HELD.lock().unwrap().push(chat.name.to_string());
+    let restart = tokio::spawn({
+        let (manager, id) = (manager.clone(), chat.id.clone());
+        async move { manager.restart_chat(&id, run("a"), None, None).await }
+    });
+    while !RESUMED.lock().unwrap().contains(&chat.id) {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    process.wait().unwrap();
+
+    let error = manager.stop_chat_for_resume(&chat, None).await.unwrap_err();
+
+    assert!(format!("{error:#}").contains("restarts now"), "{error:#}");
+    HELD.lock().unwrap().retain(|name| *name != chat.name);
+    let _ = restart.await.unwrap();
+}
+
 #[tokio::test]
 async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
     let (root, manager) = manager().await;

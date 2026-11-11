@@ -20,7 +20,7 @@ mod sync;
 mod workspaces;
 
 pub use agents::{AgentSession, AgentStatus, PendingRestart, RunningAgent};
-pub use chats::{Chat, ChatHome, RenamedChat, chat_mode};
+pub use chats::{Chat, ChatHome, RenamedChat, StoppedChat, chat_mode};
 pub use checkpoints::{Checkpoint, CheckpointCause, CheckpointNumber, RestoredCheckpoint};
 pub use cleanup::CleanupReason;
 pub use completion::{Completion, HandedBack};

@@ -15,7 +15,8 @@ pub enum QueuedLaunches {
     Keep,
 }
 
-/// Requests that stop, remove, clean up, export and restore workspaces.
+/// Requests that stop spaces, and remove, clean up, export and restore
+/// workspaces.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RemovalMethod {
@@ -30,9 +31,12 @@ pub enum RemovalMethod {
         /// the answer lists when the stop cancels them.
         launches: QueuedLaunches,
     },
-    /// Refuse now what stopping `workspace` would refuse, so a batch checks
-    /// every target before stopping any.
-    CheckStop { workspace: SpaceSelector },
+    /// Save the chat `chat` for `shoal resume` and stop its agent; a
+    /// stopped chat stays as it is.
+    StopChat { chat: SpaceSelector },
+    /// Refuse now what stopping the workspace or chat `space` would refuse,
+    /// so a batch checks every target before stopping any.
+    CheckStop { space: SpaceSelector },
     /// Stop the untracked processes of the workspace or chat `space` that
     /// `selection` takes, other than process `requester` and the processes
     /// that started it.

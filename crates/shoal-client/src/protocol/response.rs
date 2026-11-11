@@ -167,6 +167,7 @@ response_bodies! {
     QueueAdmission(crate::model::QueueAdmission),
     QueueEntries(Vec<crate::model::QueueEntry>),
     StoppedWorkspace(crate::model::StoppedWorkspace),
+    StoppedChat(crate::model::StoppedChat),
     RunningAgents(Vec<crate::model::RunningAgent>),
     RestartedPlace(Option<crate::sessions::Origin>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),

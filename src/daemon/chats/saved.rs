@@ -22,7 +22,7 @@ use crate::{
         log, store,
         workspace::Manager,
     },
-    model::{Chat, Repository},
+    model::{Chat, Repository, StoppedChat},
     process::identity::{self, Identity},
     sessions::Origin,
     state::ChatRestore,
@@ -72,8 +72,47 @@ impl Manager {
     /// it owns, as [`Self::save_chats`] saves each chat; the process of the
     /// space `stopped_by` stops it, which may resume it.
     pub(crate) async fn save_chat(&self, id: &SpaceId, stopped_by: Option<&SpaceId>) -> Result<()> {
+        let saved = self.save_running_chat(id, stopped_by, || Ok(())).await?;
+        ensure!(saved, "the chat no longer runs");
+        Ok(())
+    }
+
+    /// Save `chat` for `shoal stop` as [`Self::save_chat`] does, unless it
+    /// is stopped already, which keeps the space recorded as its stopper.
+    pub(crate) async fn stop_chat_for_resume(
+        &self,
+        chat: &Chat,
+        stopped_by: Option<&SpaceId>,
+    ) -> Result<StoppedChat> {
+        let check = || self.check_chat_stop(chat);
+        let saved = self.save_running_chat(&chat.id, stopped_by, check).await?;
+        Ok(StoppedChat {
+            already_stopped: !saved,
+        })
+    }
+
+    /// Refuse a `shoal stop` of `chat` while a restart stops it to start it
+    /// again, which would bring it back.
+    pub(crate) fn check_chat_stop(&self, chat: &Chat) -> Result<()> {
+        ensure!(
+            !self.chat_agents.restarting(&chat.id),
+            "chat {} restarts now; stop it once it runs again",
+            chat.name
+        );
+        Ok(())
+    }
+
+    /// [`Self::save_chat`] once `check` passes, with no other save or
+    /// handoff under way, returning whether the chat ran.
+    async fn save_running_chat(
+        &self,
+        id: &SpaceId,
+        stopped_by: Option<&SpaceId>,
+        check: impl FnOnce() -> Result<()>,
+    ) -> Result<bool> {
         let _saving = self.chat_saves.lock().await;
         let _handoffs = self.chat_handoffs.write().await;
+        check()?;
         self.stop_finished_chats().await?;
         let chat = id.to_owned();
         let stopped_by = stopped_by.cloned();
@@ -81,16 +120,15 @@ impl Manager {
             .store
             .write(move |tx| save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref()))
             .await?;
-        let (id, process) = running
-            .into_iter()
-            .next()
-            .context("the chat no longer runs")?;
+        let Some((id, process)) = running.into_iter().next() else {
+            return Ok(false);
+        };
         let stopped = self.stop_saved(&id, &process).await;
         if stopped.is_err() {
             self.keep_after_failed_stop(id, process).await;
         }
         self.ask_user_about(&released).await;
-        stopped
+        stopped.map(|()| true)
     }
 
     /// Settle the chat `id`, saved while it ran as `process`, after a stop

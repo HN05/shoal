@@ -74,7 +74,8 @@ const REQUESTS: &[&str] = &[
     // Removal and restore.
     r#""stop_targets""#,
     r#"{"stop_workspace":{"workspace":"fix","acknowledge_unproven":false,"launches":"cancel"}}"#,
-    r#"{"check_stop":{"workspace":"fix"}}"#,
+    r#"{"stop_chat":{"chat":"talk"}}"#,
+    r#"{"check_stop":{"space":"fix"}}"#,
     r#"{"stop_processes":{"space":"fix","selection":"leftovers","requester":42}}"#,
     r#"{"check_removal":{"workspace":"fix","include_changes":true}}"#,
     r#"{"remove_workspace":{"workspace":"fix","unsaved":"all"}}"#,

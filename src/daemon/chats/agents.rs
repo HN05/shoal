@@ -144,6 +144,11 @@ impl ChatAgents {
             .collect()
     }
 
+    /// Whether a restart of the chat `id` is in progress.
+    pub(super) fn restarting(&self, id: &SpaceId) -> bool {
+        (self.lock().get(id)).is_some_and(|agent| agent.restarts.current.is_some())
+    }
+
     /// Record that the process of the space `stopped_by` asked for the
     /// restart of the chat `id` that starts now.
     pub(super) fn set_stopper(&self, id: &SpaceId, stopped_by: Option<SpaceId>) {

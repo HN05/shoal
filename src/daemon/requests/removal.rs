@@ -11,6 +11,7 @@ use super::super::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    model::PresentSpace,
     process::identity,
     protocol::{Body, QueuedLaunches, RemovalMethod},
     removal::InspectionPolicy,
@@ -41,9 +42,18 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        RemovalMethod::CheckStop { workspace } => {
-            let id = manager.workspace(&workspace).await?.id;
-            manager.check_lifecycle(&id).await?;
+        RemovalMethod::StopChat { chat } => {
+            let chat = manager.chat(&chat).await?;
+            let stopped_by = caller.map(|caller| &caller.space_id);
+            Body::StoppedChat(manager.stop_chat_for_resume(&chat, stopped_by).await?)
+        }
+        RemovalMethod::CheckStop { space } => {
+            match manager.space(&space).await? {
+                PresentSpace::Workspace(workspace) => {
+                    manager.check_lifecycle(&workspace.id).await?
+                }
+                PresentSpace::Chat(chat) => manager.check_chat_stop(&chat)?,
+            }
             Body::Ok
         }
         RemovalMethod::StopProcesses {
@@ -153,10 +163,18 @@ impl Scoped for RemovalMethod {
                     .await
                     .map(Some)
             }
+            RemovalMethod::StopChat { chat } => manager
+                .workspace_below(
+                    caller,
+                    chat,
+                    "scoped processes stop only the spaces below theirs",
+                )
+                .await
+                .map(Some),
             // Its own processes too: a scoped caller's shells and their
             // commands descend from its execution, which keeps them.
             RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),
-            RemovalMethod::CheckStop { workspace } => Ok(Some(workspace)),
+            RemovalMethod::CheckStop { space } => Ok(Some(space)),
             _ => Err(denied()),
         }
     }

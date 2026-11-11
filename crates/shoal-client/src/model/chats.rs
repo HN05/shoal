@@ -122,6 +122,13 @@ impl<'a> ChatHome<'a> {
     }
 }
 
+/// What `shoal stop` did to a chat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoppedChat {
+    /// It was stopped before, and keeps the space recorded as its stopper.
+    pub already_stopped: bool,
+}
+
 /// A chat after a rename, with the name it had before.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenamedChat {
