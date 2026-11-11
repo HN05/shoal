@@ -2,7 +2,7 @@
 //! user. Like agent messages, delivery deletes them; a chat removed before
 //! receiving them gives them to the user as the notifications they would
 //! have been.
-use crate::client::space_ids::SpaceId;
+use crate::client::space_ids::{SpaceId, SpaceNumber};
 use crate::daemon::links::wait::UpdatesExt;
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
@@ -113,25 +113,32 @@ impl Manager {
     }
 
     /// The chat's unread messages, oldest first, each naming its workspace
-    /// unless it comes from the user.
+    /// by number and name, since names repeat, unless it comes from the
+    /// user.
     pub async fn chat_messages(&self, chat: &SpaceId) -> Result<Vec<AgentMessage>> {
         let chat = chat.to_owned();
         self.store
             .run(move |db| {
                 Ok(db
                     .prepare(
-                        "SELECT id,created_at,workspace,message,attachments FROM chat_messages
-                            WHERE chat_id=?1 ORDER BY id",
+                        "SELECT message.id,message.created_at,message.workspace,message.message,
+                                message.attachments,space.number
+                            FROM chat_messages message
+                            LEFT JOIN spaces space ON space.id=message.workspace_id
+                            WHERE message.chat_id=?1 ORDER BY message.id",
                     )?
                     .query_map([chat], |row| {
                         let (workspace, message): (String, String) = (row.get(2)?, row.get(3)?);
+                        let number: Option<SpaceNumber> = row.get(5)?;
                         Ok(AgentMessage {
                             id: row.get(0)?,
                             created_at: row.get(1)?,
-                            message: if workspace.is_empty() {
-                                message
-                            } else {
-                                format!("{workspace}: {message}")
+                            message: match (workspace.as_str(), number) {
+                                ("", _) => message,
+                                (workspace, None) => format!("{workspace}: {message}"),
+                                (workspace, Some(number)) => {
+                                    format!("{number} {workspace}: {message}")
+                                }
                             },
                             attachments: crate::daemon::store::json_column(row, "attachments")?
                                 .unwrap_or_default(),
@@ -241,12 +248,21 @@ fn insert(
     attachments: &[PathBuf],
 ) -> Result<Option<i64>> {
     let workspace = about.name.as_deref().unwrap_or_default();
+    // Names repeat: a message is about the space its ID names, else the
+    // only workspace with the name, and is the same as another only when
+    // both are about that space.
+    let id = match (&about.id, &about.name) {
+        (Some(id), _) => Some(id.clone()),
+        (None, Some(name)) => crate::daemon::notifications::only_workspace_named(tx, name)?,
+        (None, None) => None,
+    };
     let attachments = serde_json::to_string(attachments)?;
     let pending: Option<i64> = tx
         .query_row(
             "SELECT id FROM chat_messages
-                WHERE chat_id=?1 AND workspace=?2 AND message=?3 AND attachments=?4",
-            params![chat, workspace, message, attachments],
+                WHERE chat_id=?1 AND workspace=?2 AND workspace_id IS ?3 AND message=?4
+                    AND attachments=?5",
+            params![chat, workspace, id, message, attachments],
             |row| row.get(0),
         )
         .optional()?;
@@ -272,12 +288,12 @@ fn insert(
     tx.execute(
         "INSERT INTO chat_messages
             (chat_id,created_at,workspace,workspace_id,kind,message,attachments)
-            VALUES (?1,?2,?3,COALESCE(?4,(SELECT id FROM workspaces WHERE name=?3)),?5,?6,?7)",
+            VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
             chat,
             crate::time::UnixTime::now(),
             workspace,
-            about.id,
+            id,
             kind,
             message,
             attachments

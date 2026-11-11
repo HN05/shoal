@@ -114,12 +114,18 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         )
         .await
         .unwrap();
-    assert_eq!(received(&manager, &chat).await, ["worker: second"]);
+    assert_eq!(
+        received(&manager, &chat).await,
+        [format!("{} worker: second", worker.number)]
+    );
     let worker_messages = manager
         .agent_messages(&SpaceSelector::id(&worker.id))
         .await
         .unwrap();
-    assert_eq!(worker_messages[0].message, "helper: to the worker");
+    assert_eq!(
+        worker_messages[0].message,
+        format!("{} helper: to the worker", helper.number)
+    );
     assert_eq!(
         user(&manager).await,
         [(
@@ -151,7 +157,10 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .unwrap();
     assert_eq!(
         received(&manager, &chat).await,
-        ["worker: second", "helper: to the chat"]
+        [
+            format!("{} worker: second", worker.number),
+            format!("{} helper: to the chat", helper.number)
+        ]
     );
 }
 
@@ -185,7 +194,10 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         .unwrap();
     let woken = waiting.await.unwrap().unwrap();
     assert!(!woken.superseded);
-    assert_eq!(woken.messages[0].message, "worker: done with the tests");
+    assert_eq!(
+        woken.messages[0].message,
+        format!("{} worker: done with the tests", worker.number)
+    );
 
     let ids = woken.messages.iter().map(|m| m.id).collect();
     manager
@@ -222,7 +234,10 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         .await
         .unwrap();
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
-    assert_eq!(delivered.messages[0].message, "worker: next");
+    assert_eq!(
+        delivered.messages[0].message,
+        format!("{} worker: next", worker.number)
+    );
 }
 
 #[tokio::test]
@@ -324,7 +339,10 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert_eq!(
         received(&manager, &chat).await,
-        ["worker: unread", "worker: marked ready"]
+        [
+            format!("{} worker: unread", worker.number),
+            format!("{} worker: marked ready", worker.number)
+        ]
     );
     assert!(user(&manager).await.is_empty());
 
@@ -333,7 +351,10 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     manager.stop_finished_chats().await.unwrap();
     assert_eq!(
         received(&manager, &chat).await,
-        ["worker: unread", "worker: marked ready"]
+        [
+            format!("{} worker: unread", worker.number),
+            format!("{} worker: marked ready", worker.number)
+        ]
     );
     assert!(user(&manager).await.is_empty());
     manager
@@ -575,11 +596,53 @@ async fn same_named_spaces_reach_their_own_coordinators() {
     }
     assert_eq!(
         received(&manager, &chat).await,
-        ["Same work: from the worker"]
+        [format!("{} Same work: from the worker", worker.number)]
     );
     assert_eq!(
         received(&manager, &other_chat).await,
-        ["Same work: from the other"]
+        [format!("{} Same work: from the other", other.number)]
     );
     assert!(user(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn same_named_siblings_send_the_same_message_apart() {
+    let (temp, manager) = manager().await;
+    let (chat, worker) = chat_and_worker(&temp, &manager).await;
+    let sibling = manager
+        .create_workspace(&worker.repository_id, "sibling".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .assign_parent(&sibling.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    for workspace in [&worker, &sibling] {
+        let selector = SpaceSelector::id(&workspace.id);
+        (manager.set_workspace_name(&selector, &"Same work".parse().unwrap()))
+            .await
+            .unwrap();
+        (manager.set_agent_state(&selector, AgentState::Working, None, None))
+            .await
+            .unwrap();
+    }
+    for workspace in [&worker, &sibling] {
+        manager
+            .send_message(
+                &SpaceSelector::id(&workspace.id),
+                "tests pass".into(),
+                Vec::new(),
+                &Attacher::User,
+            )
+            .await
+            .unwrap();
+    }
+    // Identical text from two spaces is two messages, each naming its own.
+    assert_eq!(
+        received(&manager, &chat).await,
+        [
+            format!("{} Same work: tests pass", worker.number),
+            format!("{} Same work: tests pass", sibling.number),
+        ]
+    );
 }

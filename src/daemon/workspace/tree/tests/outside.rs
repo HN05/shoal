@@ -207,7 +207,8 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .messages
         .last()
         .map(|message| message.message.as_str());
-    assert_eq!(last, Some("below: done"), "{delivered:?}");
+    let done = format!("{} below: done", below.number);
+    assert_eq!(last, Some(done.as_str()), "{delivered:?}");
     let deliveries = (delivered.updates.iter())
         .map(|update| update.delivery.clone())
         .collect();

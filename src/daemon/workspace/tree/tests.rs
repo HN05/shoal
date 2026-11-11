@@ -900,7 +900,13 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
             "claude exited",
         )
         .await;
-    assert_eq!(received().await, ["child: second", "helper: claude exited"]);
+    assert_eq!(
+        received().await,
+        [
+            format!("{} child: second", child.number),
+            "helper: claude exited".into()
+        ]
+    );
     assert_eq!(user().await, ["first", "from the parent"]);
 }
 
@@ -1078,7 +1084,10 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         .agent_messages(&SpaceSelector::id(&parent.id))
         .await
         .unwrap();
-    assert_eq!(received[0].message, "child: done with the API");
+    assert_eq!(
+        received[0].message,
+        format!("{} child: done with the API", child.number)
+    );
     assert!(manager.notifications(false, 10).await.unwrap().is_empty());
     // The child's own agent receives its activity instead of the parent's.
     assert!(

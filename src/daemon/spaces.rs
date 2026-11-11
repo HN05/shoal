@@ -65,7 +65,7 @@ impl Manager {
         match kind.with_context(|| format!("no space {id}"))? {
             SpaceKind::Workspace => {
                 let message = match about {
-                    Some(about) => format!("{}: {message}", about.name),
+                    Some(about) => format!("{}: {message}", self.about_label(about).await?),
                     None => message,
                 };
                 (self.queue_agent_message_attached(id, message, attachments)).await
@@ -78,6 +78,28 @@ impl Manager {
                 (self.queue_chat_message(id, name, about_id, kind, message, attachments)).await
             }
         }
+    }
+
+    /// The space `about` names, by number and name while it has a number,
+    /// since names repeat.
+    async fn about_label(&self, about: About<'_>) -> Result<String> {
+        let Some(id) = about.id.cloned() else {
+            return Ok(about.name.to_string());
+        };
+        let number = (self.store)
+            .run(move |db| {
+                let query = "SELECT number FROM spaces WHERE id=?1";
+                Ok(rusqlite::OptionalExtension::optional(db.query_row(
+                    query,
+                    [&id],
+                    |row| row.get(0),
+                ))?)
+            })
+            .await?;
+        Ok(match number {
+            Some(number) => crate::client::space_names::label(number, about.name),
+            None => about.name.to_string(),
+        })
     }
 
     /// Withdraw the completion the workspace or chat `selector`

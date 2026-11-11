@@ -510,7 +510,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     let [message] = received.as_slice() else {
         panic!("{received:?}");
     };
-    assert_eq!(message.message, "child: Done");
+    assert_eq!(message.message, format!("{} child: Done", child.number));
     let [copy] = message.attachments.as_slice() else {
         panic!("{message:?}");
     };

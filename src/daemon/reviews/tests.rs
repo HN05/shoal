@@ -742,7 +742,8 @@ async fn the_coordinating_agent_hears_one_line() {
     let [line] = received.as_slice() else {
         panic!("{received:?}");
     };
-    assert!(line.starts_with("child: "), "{line}");
+    let prefix = format!("{} child: ", child.number);
+    assert!(line.starts_with(&prefix), "{line}");
 }
 
 #[tokio::test]
