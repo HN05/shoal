@@ -15,7 +15,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
         Path::new(workspace["path"].as_str().unwrap()),
         fs::canonicalize(path).unwrap()
     );
-    assert_eq!(workspace["name"], "custom-topic");
+    assert_eq!(workspace["name"], "custom/topic");
     assert_eq!(
         fixture.ok(&["start", repo, "--existing", "custom/topic", "--path", path])["id"],
         workspace["id"]
@@ -35,7 +35,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     );
     let ordinary = fixture.add("ordinary");
     assert!(Path::new(ordinary["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
-    fixture.ok(&["rm", "--wait", &fixture.id("custom-topic"), "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("custom/topic"), "--yes"]);
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
@@ -106,7 +106,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
         String::from_utf8_lossy(&output.stderr)
     );
     let w: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(w["name"], "adopt-topic");
+    assert_eq!(w["name"], "adopt/topic");
     assert_eq!(w["state"], "ready");
     assert_eq!(w["base_ref"], "refs/heads/main");
     assert_eq!(
@@ -124,7 +124,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     let output = fixture.run(&[
         "run",
         "--workspace",
-        &fixture.id("adopt-topic"),
+        &fixture.id("adopt/topic"),
         "--",
         "cat",
         "tracked",
@@ -134,7 +134,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
         String::from_utf8_lossy(&output.stdout),
         "work in progress\n"
     );
-    let diff = fixture.run(&["diff", &fixture.id("adopt-topic")]);
+    let diff = fixture.run(&["diff", &fixture.id("adopt/topic")]);
     assert!(diff.status.success());
     assert!(String::from_utf8_lossy(&diff.stdout).contains("+work in progress"));
     // Full ownership includes resource release and repository removal of this external path.
@@ -143,7 +143,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
         "port",
         "test",
         "--workspace",
-        &fixture.id("adopt-topic"),
+        &fixture.id("adopt/topic"),
     ]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
     assert!(!path.exists());
@@ -210,68 +210,6 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
     );
     assert!(!source.join(".gitignore").exists());
     assert!(source.exists());
-}
-
-#[test]
-fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
-    let fixture = Fixture::new();
-    let source = fixture.root.path().join("external worktree");
-    let occupied = fixture.root.path().join("occupied worktree");
-    let repo = fixture.repo.to_str().unwrap();
-    let occupied_workspace = fixture.ok(&[
-        "start",
-        repo,
-        "copy-topic-2",
-        "--path",
-        occupied.to_str().unwrap(),
-    ]);
-    git(
-        &fixture.repo,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            "copy/topic",
-            source.to_str().unwrap(),
-        ],
-    );
-    fs::write(source.join("tracked"), "changed in source\n").unwrap();
-    fs::write(source.join("untracked"), "preserve source\n").unwrap();
-    let worktrees = git(&fixture.repo, &["worktree", "list", "--porcelain"]);
-    let repositories = fixture.ok(&["repo", "ls"]);
-    let destination =
-        Path::new(repositories[0]["workspaces_dir"].as_str().unwrap()).join("copy-topic-2");
-
-    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
-    assert!(!output.status.success());
-    assert!(source.exists());
-    assert_eq!(
-        fs::read_to_string(source.join("tracked")).unwrap(),
-        "changed in source\n"
-    );
-    assert_eq!(
-        fs::read_to_string(source.join("untracked")).unwrap(),
-        "preserve source\n"
-    );
-
-    assert!(!destination.exists());
-    assert!(
-        git(&fixture.repo, &["branch", "--list", "copy/topic-2"])
-            .trim()
-            .is_empty()
-    );
-    assert_eq!(
-        git(&fixture.repo, &["worktree", "list", "--porcelain"]),
-        worktrees
-    );
-    assert_eq!(
-        fs::read_to_string(occupied.join("tracked")).unwrap(),
-        "committed\n"
-    );
-    let workspaces = fixture.ok(&["list"]);
-    assert_eq!(workspaces.as_array().unwrap().len(), 1);
-    assert_eq!(workspaces[0]["id"], occupied_workspace["id"]);
-    assert_eq!(workspaces[0]["path"], occupied_workspace["path"]);
 }
 
 #[test]

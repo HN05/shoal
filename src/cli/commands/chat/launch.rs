@@ -101,7 +101,7 @@ impl Launch {
         check_model(&settings, &agent, &options.model)?;
         let home = topic.home(&repo).path().to_owned();
         let topic = restored(ctx, topic, options.restore.as_ref(), &home).await?;
-        let name = initial_name(ctx, &topic, options.name.clone()).await?;
+        let name = initial_name(&topic, options.name.clone());
         let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
@@ -274,17 +274,9 @@ async fn restored(
     Ok(with_saved(topic, &chats, chat, home))
 }
 
-/// `--name`, which [`Options::check_name`] checked, else the topic's name
-/// or its lowest free variant.
-async fn initial_name(
-    ctx: &Context,
-    topic: &Topic,
-    requested: Option<SpaceName>,
-) -> Result<SpaceName> {
-    match requested {
-        Some(name) => Ok(name),
-        None => crate::client::chats::free_name(&ctx.paths, topic.name.clone()).await,
-    }
+/// `--name`, else the topic's name.
+fn initial_name(topic: &Topic, requested: Option<SpaceName>) -> SpaceName {
+    requested.unwrap_or_else(|| SpaceName::derive(&topic.name, "chat"))
 }
 
 /// Replace this process with the agent in `path`, so the terminal's signals

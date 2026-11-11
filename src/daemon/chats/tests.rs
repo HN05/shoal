@@ -135,7 +135,6 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
             .map(|parent| parent.id),
         Some(ending.id.clone())
     );
-    assert!(manager.check_chat_name("stopping".into()).await.is_err());
     assert_eq!(
         chat_events(&manager).await,
         [
@@ -404,7 +403,7 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
 }
 
 #[tokio::test]
-async fn chats_and_workspaces_share_one_namespace() {
+async fn chats_and_workspaces_may_share_a_name() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -415,87 +414,45 @@ async fn chats_and_workspaces_share_one_namespace() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let start = |name: &str, pid| {
+    let start = |name: &str| {
         manager.start_chat(
             repo.id.clone().into(),
             name.into(),
             "claude".into(),
-            pid,
+            std::process::id(),
             None,
             false,
         )
     };
 
-    // A chat takes neither a workspace's name nor an invalid one.
-    assert!(start("worker", std::process::id()).await.is_err());
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    start("talk", process.id()).await.unwrap();
-    assert!(start("talk", std::process::id()).await.is_err());
-    assert!(manager.check_chat_name("talk".into()).await.is_err());
-    manager.check_chat_name("other".into()).await.unwrap();
+    // A chat takes a workspace's name or another chat's, unchanged.
+    let first = start("worker").await.unwrap();
+    let second = start("worker").await.unwrap();
     assert_eq!(
-        manager.free_chat_name("talk".into()).await.unwrap(),
-        "talk-2"
+        (first.name.as_str(), second.name.as_str()),
+        ("worker", "worker")
     );
-    assert_eq!(
-        manager.free_chat_name("worker".into()).await.unwrap(),
-        "worker-2"
-    );
-    assert_eq!(
-        manager.free_chat_name("re po".into()).await.unwrap(),
-        "re-po"
-    );
+    assert_ne!(first.id, second.id);
 
-    // A workspace is neither checked, created nor renamed to a chat's name.
-    let options = Default::default();
-    assert!(
-        manager
-            .check_creation(&repo.id, Some("talk"), None, options)
-            .await
-            .is_err()
-    );
-    assert!(
-        manager
-            .create_workspace(&repo.id, "talk".into(), None, None, None)
-            .await
-            .is_err()
-    );
-    assert!(
-        manager
-            .rename_workspace(&SpaceSelector::id(&worker.id), "talk", None)
-            .await
-            .is_err()
-    );
-
-    // The name frees once the chat is removed; a stopped chat keeps it.
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
-    assert!(
-        manager
-            .check_creation(&repo.id, Some("talk"), None, options)
-            .await
-            .is_err()
-    );
-    manager
-        .remove_chat(&manager.named("talk").await, None)
+    // A workspace on another branch keeps the name its branch gives, and a
+    // branch rename leaves the name as it was.
+    let talk = manager
+        .create_workspace(&repo.id, "talk".into(), None, None, None)
         .await
         .unwrap();
-    manager
-        .check_creation(&repo.id, Some("talk"), None, options)
-        .await
-        .unwrap();
+    assert_eq!(talk.name, "talk");
     let renamed = manager
-        .rename_workspace(&SpaceSelector::id(&worker.id), "talk", None)
+        .rename_workspace(&SpaceSelector::id(&worker.id), "renamed", None)
         .await
         .unwrap();
-    assert_eq!(renamed.name, "talk");
-    assert!(start("talk", std::process::id()).await.is_err());
+    assert_eq!(
+        (renamed.name.as_str(), renamed.branch.as_deref()),
+        ("worker", Some("renamed"))
+    );
 }
 
 #[tokio::test]
-async fn a_renamed_chat_takes_a_free_name_and_keeps_its_files() {
+async fn a_renamed_chat_keeps_its_files() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -522,10 +479,7 @@ async fn a_renamed_chat_takes_a_free_name_and_keeps_its_files() {
     std::fs::create_dir_all(files.parent().unwrap()).unwrap();
     std::fs::write(files.with_extension("log"), "talk log").unwrap();
 
-    // The new name is refused where a new chat's would be.
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
-    assert!(rename(talk.id.as_str(), "worker").await.is_err());
-    assert!(rename(talk.id.as_str(), "other").await.is_err());
     assert!(rename("gone", "topic").await.is_err());
     assert_eq!(
         rename(talk.id.as_str(), "talk").await.unwrap(),

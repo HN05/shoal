@@ -45,7 +45,7 @@ shoal start my-project fix-ui --base fix-login --agent claude
 shoal start my-project --mode plan --issue 42 --agent claude
 shoal start --issue 43 --agent claude
 shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
-shoal claude fix-login
+shoal claude 3
 shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 
@@ -163,8 +163,8 @@ to the space above or the user.
 ```sh
 shoal list            # Spaces, children below their parent; --chats for chats
 shoal inbox           # Questions, approvals, waiting or failed spaces, ready marks
-shoal status fix-login
-shoal log fix-login   # Its log; --all for every event, --follow
+shoal status 3
+shoal log 3           # Its log; --all for every event, --follow
 shoal alerts
 ```
 
@@ -174,7 +174,7 @@ and in `cleanup_reason` why cleanup keeps it. `list` and `status` show the
 `agent_state` agents' hooks report (`working`, `waiting`, `idle`). `log`
 lists a space's creation, agent starts and exits, links, PR changes, ready
 marks, completion, questions, approvals, alerts and child spaces, oldest
-first; a removed space is named by its last name. Outside a space, `status`
+first; a removed space is selected by its ID. Outside a space, `status`
 shows the daemon and `log` every space's entries with the daemon's.
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and

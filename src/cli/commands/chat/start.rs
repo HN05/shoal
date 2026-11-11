@@ -37,7 +37,6 @@ pub(in crate::cli::commands) async fn start(
     let restores = options.restore.clone();
     let started = async {
         let mut options = options.for_caller(ctx)?;
-        options.check_name(ctx).await?;
         let repo = match &subject.issue {
             Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
             None => chosen(ctx, repository).await?,
@@ -79,7 +78,6 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
     let restores = options.restore.clone();
     let started = async {
         let options = options.for_caller(ctx)?;
-        options.check_name(ctx).await?;
         check_parent(ctx, None, None, options.parent.as_ref()).await?;
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
         let settings = crate::client::workspaces::settings(&ctx.paths, repository.config()).await?;
@@ -108,7 +106,6 @@ pub(in crate::cli::commands) async fn start_in_workspace(
     let restores = options.restore.clone();
     let started = async {
         let mut options = options.for_caller(ctx)?;
-        options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
         let parent = options.parent.as_ref();

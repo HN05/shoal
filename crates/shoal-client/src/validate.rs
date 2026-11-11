@@ -10,7 +10,8 @@ pub const MAX_TITLE_LEN: usize = 40;
 pub const MAX_FILE_TITLE_LEN: usize = 128;
 
 /// Portable identifier: ASCII letters, digits, `-` or `_`, starting with a
-/// letter or digit. Used for workspaces, repositories, and simulator profiles.
+/// letter or digit. Used for repositories, simulator profiles and other
+/// names configuration and commands select by; a space's name is free text.
 pub fn name(kind: &str, value: &str) -> Result<()> {
     ensure!(
         !value.is_empty()

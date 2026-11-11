@@ -1,66 +1,83 @@
-//! How spaces are named and selected: a space's name, which is never all
-//! digits, since a number alone selects a space by its number, and the
-//! selector a command names a space with.
+//! How spaces are named and selected: a space's name, the free-text label
+//! people read, and the selector a command takes a space by, its number or
+//! its ID, since names can repeat.
 use crate::space_ids::{SpaceId, SpaceNumber};
-use anyhow::{Result, bail};
+use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{model::SpaceKind, validate::MAX_NAME_LEN};
+use crate::validate::MAX_NAME_LEN;
 
-/// A space's name: 1–64 ASCII letters, digits, hyphens or underscores,
-/// starting with a letter or digit, and not all digits.
+/// The most characters a space's name holds, so it fits a tab whatever its
+/// script.
+pub const MAX_SPACE_NAME_LEN: usize = 40;
+
+/// A space's name: the one label people read, a single line of 1–40
+/// characters without control characters or bidirectional overrides, with
+/// no leading or trailing whitespace and single spaces inside. It never
+/// selects a space and nothing is built from it, so names may repeat. A
+/// name a record holds reads as it was stored, whatever rule it predates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
+#[serde(from = "String", into = "String")]
 pub struct SpaceName(String);
 
 impl SpaceName {
-    /// The name someone gives, refused unless it is a valid space name.
+    /// The name someone sets, with its whitespace trimmed and collapsed,
+    /// refused when it is empty, longer than the limit, or holds a control
+    /// character or a bidirectional override.
     pub fn parse(value: &str) -> Result<Self> {
-        crate::validate::name("space", value)?;
-        if all_digits(value) {
-            bail!("space names cannot be all digits; `{value}` selects space number {value}");
-        }
-        Ok(Self(value.to_owned()))
+        ensure!(
+            !value.chars().any(forbidden),
+            "a space's name is one line without control characters or bidirectional overrides"
+        );
+        let name = collapsed(value);
+        ensure!(!name.is_empty(), "a space's name cannot be empty");
+        ensure!(
+            name.chars().count() <= MAX_SPACE_NAME_LEN,
+            "a space's name is at most {MAX_SPACE_NAME_LEN} characters"
+        );
+        Ok(Self(name))
     }
 
-    /// The name a space of `kind` derives from `text`, such as a branch:
-    /// every other character becomes `-`, and a name that would be all digits
-    /// or empty takes the kind as its prefix or name.
-    pub fn derive(kind: SpaceKind, text: &str) -> Self {
-        let mapped: String = text
-            .chars()
-            .map(
-                |c| match c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
-                    true => c,
-                    false => '-',
-                },
-            )
+    /// The name Shoal gives a space from `text`, such as a branch or an
+    /// issue's title: what [`Self::parse`] refuses becomes a space, and a
+    /// name over the limit is cut to end with `…`; `fallback` when nothing
+    /// is left.
+    pub fn derive(text: &str, fallback: &str) -> Self {
+        let cleaned: String = (text.chars())
+            .map(|c| if forbidden(c) { ' ' } else { c })
             .collect();
-        let mapped = mapped.trim_start_matches(['-', '_']);
-        let name = match mapped {
-            "" => kind.as_str().to_owned(),
-            digits if all_digits(digits) => format!("{}-{digits}", kind.as_str()),
-            name => name.to_owned(),
+        let name = match collapsed(&cleaned) {
+            name if name.is_empty() => fallback.to_owned(),
+            name => name,
         };
-        Self(name.chars().take(MAX_NAME_LEN).collect())
-    }
-
-    /// This name, or with `-<suffix>` from 2 on, shortened to fit the name
-    /// limit; the suffix keeps it from being all digits.
-    pub fn suffixed(&self, suffix: u64) -> Self {
-        let suffix = match suffix {
-            1 => String::new(),
-            n => format!("-{n}"),
-        };
-        let kept = MAX_NAME_LEN.saturating_sub(suffix.len());
-        let mut name: String = self.0.chars().take(kept).collect();
-        name.push_str(&suffix);
-        Self(name)
+        Self(shortened(name))
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// Whether `c` cannot be part of a name: a control character, which would
+/// corrupt the terminals that show it, or a bidirectional override, which
+/// would make it read as other text.
+fn forbidden(c: char) -> bool {
+    c.is_control() || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// `text` without leading or trailing whitespace and with each run inside it
+/// one space.
+fn collapsed(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// `name`, or cut to the limit ending with `…` when it is longer.
+fn shortened(name: String) -> String {
+    if name.chars().count() <= MAX_SPACE_NAME_LEN {
+        return name;
+    }
+    let kept: String = name.chars().take(MAX_SPACE_NAME_LEN - 1).collect();
+    format!("{}…", kept.trim_end())
 }
 
 /// The name of a directory or terminal session made from `text`, such as a
@@ -158,11 +175,21 @@ impl std::str::FromStr for SpaceName {
     }
 }
 
-impl TryFrom<String> for SpaceName {
-    type Error = anyhow::Error;
+/// Arguments parse as a name someone sets, whatever other conversions a
+/// build offers.
+#[cfg(feature = "clap")]
+impl clap::builder::ValueParserFactory for SpaceName {
+    type Parser = fn(&str) -> Result<Self>;
 
-    fn try_from(value: String) -> Result<Self> {
-        Self::parse(&value)
+    fn value_parser() -> Self::Parser {
+        Self::parse
+    }
+}
+
+/// A name a record holds, as it was stored.
+impl From<String> for SpaceName {
+    fn from(name: String) -> Self {
+        Self(name)
     }
 }
 
@@ -384,12 +411,7 @@ impl rusqlite::types::ToSql for SpaceName {
 #[cfg(feature = "rusqlite")]
 impl rusqlite::types::FromSql for SpaceName {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        Self::parse(value.as_str()?).map_err(|error| {
-            rusqlite::types::FromSqlError::Other(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("{error:#}"),
-            )))
-        })
+        Ok(Self(value.as_str()?.to_owned()))
     }
 }
 

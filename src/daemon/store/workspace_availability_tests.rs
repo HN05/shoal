@@ -8,77 +8,22 @@ fn database() -> Result<Connection> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES
             ('repo','/repo','/repo',0), ('other','/other','/other',0);
          INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
-            ('owner','repo','worker','/worker','topic','ready'),
-            ('renaming','other','old-name','/renaming','old-branch','reconciling');
-         INSERT INTO workspace_renames(workspace_id,name,branch) VALUES
-            ('renaming','reserved','new-branch');",
+            ('owner','repo','worker','/worker','topic','ready');",
     )?;
     Ok(db)
 }
 
 #[test]
-fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()> {
+fn a_branch_belongs_to_one_workspace_of_its_repository() -> Result<()> {
     let mut db = database()?;
     let tx = db.transaction()?;
-    // Creation and rename differ only in whether the caller's own record is excluded.
-    let renaming = SpaceId::from("renaming");
-    for except_id in [None, Some(&renaming)] {
-        for repository_id in ["repo", "other"] {
-            for name in ["worker", "reserved"] {
-                let error = ensure_name_and_branch_available(
-                    &tx,
-                    &repository_id.into(),
-                    &name.into(),
-                    Some("unused"),
-                    except_id,
-                )
-                .unwrap_err();
-                assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
-            }
-        }
-        let error = ensure_name_and_branch_available(
-            &tx,
-            &"repo".into(),
-            &"free".into(),
-            Some("topic"),
-            except_id,
-        )
-        .unwrap_err();
-        assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
-        ensure_name_and_branch_available(
-            &tx,
-            &"other".into(),
-            &"free".into(),
-            Some("topic"),
-            except_id,
-        )?;
-        ensure_name_and_branch_available(
-            &tx,
-            &"repo".into(),
-            &"free".into(),
-            Some("unused"),
-            except_id,
-        )?;
-    }
-    Ok(())
-}
-
-#[test]
-fn rename_can_retain_its_own_name_and_branch() -> Result<()> {
-    let mut db = database()?;
-    let tx = db.transaction()?;
-    for (name, branch) in [("worker", "topic"), ("worker", "new"), ("new", "topic")] {
-        ensure_name_and_branch_available(
-            &tx,
-            &"repo".into(),
-            &name.into(),
-            Some(branch),
-            Some(&SpaceId::from("owner")),
-        )?;
-        assert!(
-            ensure_name_and_branch_available(&tx, &"repo".into(), &name.into(), Some(branch), None)
-                .is_err()
-        );
-    }
+    let error = ensure_branch_available(&tx, &"repo".into(), Some("topic"), None).unwrap_err();
+    assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
+    ensure_branch_available(&tx, &"other".into(), Some("topic"), None)?;
+    ensure_branch_available(&tx, &"repo".into(), Some("unused"), None)?;
+    ensure_branch_available(&tx, &"repo".into(), None, None)?;
+    // A rename keeps its own branch.
+    let owner = SpaceId::from("owner");
+    ensure_branch_available(&tx, &"repo".into(), Some("topic"), Some(&owner))?;
     Ok(())
 }

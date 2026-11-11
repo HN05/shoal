@@ -60,12 +60,6 @@ pub async fn start(
     .await
 }
 
-/// Refuse a name a new chat could not take now.
-pub async fn check_name(daemon: &impl Daemon, name: &SpaceName) -> Result<()> {
-    let name = name.clone();
-    request::<()>(daemon, ChatMethod::CheckChatName { name }).await
-}
-
 /// Refuse `parent`, a space a new chat in `repository`, or without one, in
 /// the worktree of `workspace` when given, could not go below.
 pub async fn check_parent(
@@ -94,11 +88,6 @@ pub async fn check_restore(daemon: &impl Daemon, chat: &SpaceId) -> Result<()> {
 pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
     let root: crate::protocol::ChatRoot = request(daemon, ChatMethod::ChatRoot).await?;
     Ok(root.path)
-}
-
-/// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
-pub async fn free_name(daemon: &impl Daemon, name: String) -> Result<SpaceName> {
-    request(daemon, ChatMethod::FreeChatName { name }).await
 }
 
 /// The scope token `chat`'s agent carries.

@@ -332,10 +332,10 @@ instead of the PR delivery guidance below.
   nor any directory whose identity differs from the recorded one.
 - Worktrunk compatibility is shared across creation and existing-branch selection:
   reserved names get a leaf suffix on creation and an error on opening; suffixes
-  never change derived workspace names or directories. Adapter outcomes preserve
+  never change a workspace's name or directory. Adapter outcomes preserve
   unfamiliar strings without treating them as confirmed branch deletion.
-- Workspace rename preserves the recorded path and ownership while changing the
-  checked-out branch and derived name; PR watches and acknowledgements name no
+- A branch rename preserves the recorded path, name and ownership while changing
+  the checked-out branch; PR watches and acknowledgements name no
   branch and stay. Reserve intent before changing Git;
   no execution other than the scoped caller may be recorded.
   explicit repair reconciles interrupted intent without replaying the mutation.

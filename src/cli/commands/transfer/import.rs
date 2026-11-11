@@ -217,18 +217,13 @@ impl Package {
         .await;
         let settings = chat::settings(ctx, &repo).await?;
         let topic = chat::Topic::imported(&repo, &packaged.mode, &packaged.links);
-        let options = self.chat_options(ctx, packaged, place).await?;
+        let options = self.chat_options(packaged, place)?;
         let repo = crate::cli::agents::ChatRepository::Registered(repo);
         chat::launch(ctx, repo, settings, topic, options).await
     }
 
     /// How the packaged chat starts at `place`.
-    async fn chat_options(
-        &self,
-        ctx: &Context,
-        packaged: &PackagedChat,
-        place: ChatPlace,
-    ) -> Result<chat::Options> {
+    fn chat_options(&self, packaged: &PackagedChat, place: ChatPlace) -> Result<chat::Options> {
         let session = self
             .sessions
             .last_sessions
@@ -238,9 +233,7 @@ impl Package {
             narrowing: chat::Narrowing::Recorded(packaged.narrowing),
             agent: Some(packaged.agent.name().parse()?),
             place,
-            name: Some(
-                crate::client::chats::free_name(&ctx.paths, packaged.name.to_string()).await?,
-            ),
+            name: Some(packaged.name.clone()),
             model: Default::default(),
             args: Vec::new(),
             session,

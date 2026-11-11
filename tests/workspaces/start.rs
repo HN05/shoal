@@ -2336,15 +2336,15 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     assert_eq!(args[0], "--append-system-prompt");
     assert!(!args[1].contains("Clarify retries"), "{}", args[1]);
     assert!(args.last().unwrap().contains("Clarify retries"), "{args:?}");
-    // The chat is named after the issue without asking, beside the stopped
-    // chat that planned it before, which keeps its name.
+    // The chat is named after the issue without asking, as the stopped chat
+    // that planned it before is.
     let started = journal(&fixture)
         .into_iter()
         .rfind(|event| event["kind"] == "chat_started")
         .unwrap();
     assert_eq!(
         started["chat"]["name"],
-        "repo-with---quotes----literal-plan-12-2"
+        "repo with ' quotes & $literal-plan-12"
     );
 }
 

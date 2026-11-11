@@ -6260,11 +6260,13 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
 
     // A workspace renamed meanwhile does not get the old branch's PR linked.
     let shoal = support::shoal_binary();
-    let rename = |from: &str, to: &str| {
+    // The workspace keeps its name through its branch's renames.
+    let topic = fixture.id("topic");
+    let rename = |to: &str| {
         let renamed = fixture.run(&[
             "run",
             "--workspace",
-            &fixture.id(from),
+            &topic,
             "--",
             shoal,
             "--json",
@@ -6274,10 +6276,10 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         ]);
         assert!(renamed.status.success(), "{renamed:?}");
     };
-    rename("topic", "renamed");
+    rename("renamed");
     let refused = fixture.run(&["approvals", "--approve", &id]);
     assert!(!refused.status.success(), "{refused:?}");
-    rename("renamed", "topic");
+    rename("topic");
     assert_eq!(fixture.ok(&["approvals", "--approve", &id])["url"], url);
     assert_eq!(
         writes(&fixture),

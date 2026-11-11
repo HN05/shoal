@@ -91,10 +91,6 @@ pub enum ChatMethod {
         chat: SpaceSelector,
         name: SpaceName,
     },
-    /// Refuse a name a new chat could not take now.
-    CheckChatName {
-        name: SpaceName,
-    },
     /// Refuse a `parent` a new chat in `repository`, or without one, in the
     /// worktree of `workspace` when given, could not go below.
     CheckChatParent {
@@ -105,11 +101,6 @@ pub enum ChatMethod {
         /// As [`Self::StartChat`]'s parent.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<SpaceSelector>,
-    },
-    /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could
-    /// take now.
-    FreeChatName {
-        name: String,
     },
     /// The scope token the agent of the chat `chat`, by ID, carries, which
     /// confines it to the chat and the spaces below it.

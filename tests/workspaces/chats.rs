@@ -647,7 +647,7 @@ pub(crate) fn install_recording_agent(fixture: &Fixture, agent: &str) {
 }
 
 /// The default name of a chat about the fixture's repository.
-pub(crate) const CHAT_NAME: &str = "repo-with---quotes----literal-chat";
+pub(crate) const CHAT_NAME: &str = "repo with ' quotes & $literal-chat";
 
 /// Every retained journal event.
 pub(crate) fn journal(fixture: &Fixture) -> Vec<Value> {
@@ -725,8 +725,9 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
-    // The session is named after the chat, cut to fit zmx's socket path.
-    let session = &CHAT_NAME[..32];
+    // The session is named after the chat, cleaned up as a directory's
+    // name and cut to fit zmx's socket path.
+    let session = &"repo-with---quotes----literal-chat"[..32];
     assert_eq!(
         calls[1][..4],
         ["attach", "--labels", "shoal.created=1", session]
@@ -2129,15 +2130,12 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
             .collect()
     };
 
-    // By name; the zmx session keeps its name, and attach finds it by the
-    // chat's new one.
+    // By ID; the zmx session keeps its name, and attach finds the chat.
     let renamed = fixture.ok(&["rename", &fixture.id("talk"), "topic"]);
     assert_eq!(renamed["id"], talk.as_str());
     assert_eq!(renamed["name"], "topic");
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("topic")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let output = fixture.run(&["rename", &fixture.id("repo-plan-7"), "topic"]);
-    assert!(!output.status.success());
 
     // The chat this runs in, as its agent would.
     let output = fixture
@@ -2156,11 +2154,11 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    // A chat refuses a name a workspace's title could have.
+    // A name is one line.
     let output = fixture
         .command()
         .current_dir(&fixture.repo)
-        .args(["rename", &fixture.id("calm"), "bad/name"])
+        .args(["rename", &fixture.id("calm"), "bad\nname"])
         .output()
         .unwrap();
     assert!(!output.status.success());

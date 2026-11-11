@@ -1631,7 +1631,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             "",
         );
         assert!(output.status.success(), "{transcript}");
-        let workspace = fixture.ok(&["status", &fixture.id("coworker-topic")]);
+        let workspace = fixture.ok(&["status", &fixture.id("coworker/topic")]);
         assert_eq!(
             fs::read_to_string(&directive).unwrap().trim(),
             workspace["workspace"]["path"].as_str().unwrap()
@@ -1936,10 +1936,16 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     );
     let child = fixture.ok(&["split", "--no-branch", "--workspace", &fixture.id("parent")]);
     assert_eq!(child["parent"]["name"], "parent");
-    assert_eq!(child["name"], format!("main-{short}-2"));
+    assert_eq!(child["name"], format!("main-{short}"));
+    assert!(
+        child["path"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("main-{short}-2"))
+    );
     for args in [
         &["split", "--no-branch", "child"][..],
-        &["split", "--no-branch", "--issue", &fixture.id("4")],
+        &["split", "--no-branch", "--issue", "4"],
     ] {
         assert!(!fixture.run(args).status.success(), "{args:?}");
     }

@@ -9,9 +9,9 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Manager, NewWorkspace, restore::RestoredFiles};
+use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
-use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     git::{self, worktrunk},
     model::{
@@ -62,7 +62,8 @@ impl Source {
     /// The name a copy takes when none is given: the copied branch's, or
     /// for a workspace at a commit its name's, with `-copy` added.
     fn copy_name(&self) -> String {
-        format!("{}-copy", self.branch.as_deref().unwrap_or(&self.name))
+        let directory = crate::client::space_names::directory_name(&self.name);
+        format!("{}-copy", self.branch.as_deref().unwrap_or(&directory))
     }
 
     /// The copied workspace's checkpoint the copy starts from.
@@ -226,27 +227,23 @@ impl Manager {
         place: CopyPlace,
         new: &NewWorkspace<'_>,
     ) -> Result<Workspace> {
-        let (name, branch) = match place {
-            CopyPlace::Branch(Some(branch)) => {
-                git::check_branch_name(Some(&repo.path), &branch).await?;
-                let name = SpaceName::derive(SpaceKind::Workspace, &branch);
-                (name, Some(self.available_branch(repo, &branch).await?))
-            }
-            CopyPlace::Branch(None) => {
-                let branch = self.free_copy_branch(repo, &source.copy_name()).await?;
-                (
-                    SpaceName::derive(SpaceKind::Workspace, &branch),
-                    Some(branch),
-                )
-            }
-            CopyPlace::Commit => {
-                let name = self.free_workspace_name(&source.copy_name()).await?;
-                (name, None)
-            }
+        // A copy is named after the branch it asks for, which may take a
+        // suffix of its own.
+        let requested = match &place {
+            CopyPlace::Branch(Some(branch)) => branch.clone(),
+            CopyPlace::Branch(None) | CopyPlace::Commit => source.copy_name(),
         };
-        let from = branch.as_deref().unwrap_or(&name);
+        let branch = match place {
+            CopyPlace::Branch(_) => {
+                git::check_branch_name(Some(&repo.path), &requested).await?;
+                Some(self.available_branch(repo, &requested).await?)
+            }
+            CopyPlace::Commit => None,
+        };
+        let from = branch.clone().unwrap_or_else(|| requested.clone());
+        let name = SpaceName::derive(&requested, "workspace");
         let path = self
-            .new_workspace_path(repo, from, new.path.clone())
+            .new_workspace_path(repo, &from, new.path.clone())
             .await?;
         let at = branch.is_none().then(|| StartingCommit {
             commit: source.head.clone(),
@@ -269,28 +266,6 @@ impl Manager {
         let base_branch = branch.and(source.base_branch.clone());
         self.insert_workspace(record, base_branch, new.parent.clone())
             .await
-    }
-
-    /// The free branch for `name`, or for the first of `name-2`, `name-3`,
-    /// ... whose free branch also derives a free workspace name, so a copy
-    /// named after its source keeps one name for both.
-    async fn free_copy_branch(&self, repo: &Repository, name: &str) -> Result<String> {
-        git::check_branch_name(Some(&repo.path), name).await?;
-        let mut suffix = 1;
-        loop {
-            let candidate = match suffix {
-                1 => name.to_owned(),
-                _ => format!("{name}-{suffix}"),
-            };
-            // The branch may take its suffix on another component than the
-            // last, when that one names a branch too.
-            let branch = self.available_branch(repo, &candidate).await?;
-            let derived = SpaceName::derive(SpaceKind::Workspace, &branch);
-            if self.free_workspace_name(&derived).await? == derived {
-                return Ok(branch);
-            }
-            suffix += 1;
-        }
     }
 
     /// Create the copy's worktree with its source's files, then take its

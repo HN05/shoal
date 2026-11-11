@@ -85,10 +85,6 @@ pub(super) async fn handle(
             let id = manager.chat(&chat).await?.id;
             Body::RenamedChat(manager.rename_chat(id, name).await?)
         }
-        ChatMethod::CheckChatName { name } => {
-            manager.check_chat_name(name).await?;
-            Body::Ok
-        }
         ChatMethod::CheckChatParent {
             repository,
             workspace,
@@ -101,7 +97,6 @@ pub(super) async fn handle(
             (manager.ensure_parent_takes(repository.as_ref(), parent.as_ref())).await?;
             Body::Ok
         }
-        ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
         ChatMethod::ChatRoot => Body::ChatRoot(crate::protocol::ChatRoot {
             path: manager.prepare_chat_root().await?,
         }),
@@ -216,9 +211,7 @@ impl Scoped for ChatMethod {
                     )
                     .await?,
             ),
-            ChatMethod::CheckChatName { .. }
-            | ChatMethod::FreeChatName { .. }
-            | ChatMethod::ChatRoot => None,
+            ChatMethod::ChatRoot => None,
             // A scoped caller restores a chat from the background place it
             // opens for it, with its scope, once its check passed here.
             ChatMethod::RestoreChat { chat, .. } | ChatMethod::CheckChatRestore { chat } => {

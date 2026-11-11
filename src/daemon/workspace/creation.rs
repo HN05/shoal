@@ -5,7 +5,7 @@ use super::{
     Manager, NewWorktreeOptions, branches, identity, ownership::owns_git_dir, restore, stack, tree,
 };
 use crate::client::space_ids::SpaceId;
-use crate::{client::space_names::SpaceName, model::SpaceKind};
+use crate::client::space_names::SpaceName;
 use crate::{
     config::Config,
     daemon::store,
@@ -113,12 +113,6 @@ impl Manager {
             };
             check_base(&repo, base, source).await?;
         }
-        if let Some(name) = &name {
-            let name = SpaceName::derive(SpaceKind::Workspace, name);
-            self.store
-                .run(move |db| store::ensure_name_available(db, &name, None))
-                .await?;
-        }
         self.check_new_workspace_path(&repo, name.as_deref(), options.path)
             .await
     }
@@ -162,7 +156,7 @@ impl Manager {
         }
         .or(below);
         let path = self.new_workspace_path(repo, &name, path).await?;
-        let name = given_name.unwrap_or_else(|| SpaceName::derive(SpaceKind::Workspace, &name));
+        let name = given_name.unwrap_or_else(|| SpaceName::derive(&name, "workspace"));
         let workspace = Workspace {
             setup_skipped: options.skip_setup,
             disposable: options.disposable,
@@ -258,10 +252,9 @@ impl Manager {
                     Placement::Replacing(_) => Some(&record.id),
                     Placement::Below(_) => None,
                 };
-                store::ensure_name_and_branch_available(
+                store::ensure_branch_available(
                     tx,
                     &record.repository_id,
-                    &record.name,
                     record.branch.as_deref(),
                     replaced,
                 )?;

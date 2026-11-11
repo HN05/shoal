@@ -76,7 +76,7 @@ shoal repo add /path/to/project --name my-project
 shoal repo setup my-project   # Have an agent write its config, committed or local
 shoal config setup            # Have an agent write the global config for this machine
 shoal start my-project fix-login
-shoal codex fix-login
+shoal codex 3
 ```
 
 Use `shoal start my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
@@ -84,17 +84,17 @@ Use `shoal start my-project` to pick a new or existing branch, an open issue or 
 ```sh
 shoal start my-project fix-api --base feature/api  # Branch from feature/api
 shoal start my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
-shoal branch base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
-shoal split fix-typo --workspace fix-api     # Create a child workspace for work in its own PR
-shoal start --copy fix-api --fork            # Try another approach from fix-api's current files
-shoal start --copy fix-api --checkpoint 3    # Start from fix-api's checkpoint 3, live or removed
+shoal branch base set feature-api --workspace 4        # Record that workspace 4 builds on feature-api
+shoal split fix-typo --workspace 4           # Create a child workspace for work in its own PR
+shoal start --copy 4 --fork                  # Try another approach from workspace 4's current files
+shoal start --copy 4 --checkpoint 3          # Start from workspace 4's checkpoint 3, live or removed
 shoal start my-project --existing origin/feature/api --agent codex
 shoal start my-project quick-fix --path ../quick-fix
 shoal adopt ../existing-worktree        # Take ownership, including automatic cleanup
 shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directory
-shoal branch rename fix-login fix/login      # Rename its branch and workspace together
-shoal rename fix-login "Login retries"  # Title the tabs Shoal opens for it
-shoal rename --request fix-login        # Ask its agent to choose the title
+shoal branch rename 3 fix/login              # Rename its branch; its name stays
+shoal rename 3 "Login retries"          # Title the tabs Shoal opens for it
+shoal rename --request 3                # Ask its agent to choose the title
 shoal rename                            # Pick a workspace or chat, then type its title or name
 shoal start https://github.com/owner/repo/issues/68 # Create from an issue
 shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, or branch link
@@ -171,24 +171,24 @@ shoal queue                   # Agents waiting for a slot under the agent limits
 shoal list --chats            # Running chats
 shoal list --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal list --status needs-input,failed  # Only rows with these statuses
-shoal status fix-login        # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
+shoal status 3                # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
 shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
 shoal status                  # Outside a space: the daemon, unread notifications and cleanup failures
-shoal config show fix-login   # Effective settings and the source of each value
+shoal config show 3           # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
 shoal config set agent.default codex
 shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved together
 shoal config set agent.default claude --repo my-project
 shoal config unset agent.default  # Restore the default
-shoal cd fix-login             # Enter a workspace; omit the name for a picker
-shoal run --workspace fix-login -- cargo test
-shoal edit fix-login           # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
-shoal run check --workspace fix-login      # With [commands] check = ["cargo", "test"] in config
+shoal cd 3                     # Enter a workspace; omit it for a picker
+shoal run --workspace 3 -- cargo test
+shoal edit 3                   # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
+shoal run check --workspace 3              # With [commands] check = ["cargo", "test"] in config
 shoal run                     # List configured commands, arguments, and source layers
-shoal claude fix-login         # Run Claude Code
-shoal open fix-login --app claude  # Open in the Claude desktop app (macOS)
-shoal open fix-login --app codex   # Open in the Codex desktop app
-shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl-\ detaches
+shoal claude 3                 # Run Claude Code
+shoal open 3 --app claude          # Open in the Claude desktop app (macOS)
+shoal open 3 --app codex           # Open in the Codex desktop app
+shoal attach 3                 # Reattach to the workspace's agent session; Ctrl-\ detaches
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal happy-claude fix-login   # Detached Happy session, visible in the Happy app
@@ -198,7 +198,7 @@ shoal start --mode plan --issue  # Settle the plan of an issue that needs one, i
 shoal start --mode orchestrate   # Manage the spaces of every repository from one chat
 shoal rename my-project-chat login  # Rename a running chat
 shoal rename --request my-project-chat  # Ask its agent to choose the name
-shoal diff fix-login           # Changes since the branch's fork point
+shoal diff 3                   # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
@@ -208,42 +208,42 @@ shoal progress --space fix-login  # Its status line and plan steps
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Network is back"  # Message every agent, running or stopped
-shoal log fix-login      # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
+shoal log 3              # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
 shoal log                # Outside a space: every space's entries, daemon starts and stops, reloads, cleanup
-shoal files fix-login         # The files attached to the workspace
+shoal files 3                 # The files attached to the workspace
 shoal files my-project-chat   # The files a chat's agent attached
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
-shoal stop fix-login          # Stop agents and commands here and below; they stay down until shoal resume
-shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
+shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal resume
+shoal stop 3 5                # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace and chat; a reboot saves agents too
-shoal stop --interrupt fix-login  # Cancel its agent's turn; the agent keeps running
+shoal stop --interrupt 3          # Cancel its agent's turn; the agent keeps running
 shoal stop --leftovers        # Stop what this workspace's commands left running
-shoal stop --processes fix-login  # Stop its processes Shoal does not track; agents keep running
+shoal stop --processes 3          # Stop its processes Shoal does not track; agents keep running
 shoal restart --all --agent claude  # Restart Claude agents in new terminals, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
 shoal resume --all            # Queue the restore of stopped agents, restore stopped chats; report stopped commands
-shoal resume fix-login        # Continue its stopped agent, or the turn shoal stop --interrupt ended
-shoal resume fix-login --now  # Restore its stopped agent at once in the background
-shoal resume fix-login --focus # Restore its stopped agent in this terminal
+shoal resume 3                # Continue its stopped agent, or the turn shoal stop --interrupt ended
+shoal resume 3 --now          # Restore its stopped agent at once in the background
+shoal resume 3 --focus # Restore its stopped agent in this terminal
 shoal resume talk             # Restore a chat Shoal saved, continuing its session
-shoal done fix-login          # Mark finished and request safe cleanup
-shoal done --cleanup fix-login # Request cleanup despite [cleanup.done] enabled = false
+shoal done 3                  # Mark finished and request safe cleanup
+shoal done --cleanup 3 # Request cleanup despite [cleanup.done] enabled = false
 shoal done --attach report.md  # Hand back files, such as an investigation's report
 shoal done --summary "No leak; the cache is freed on drop" # State the finding in the completion notice
-shoal done --integrated fix-login # Another branch has its work under new commits
-shoal done fix-login --undo        # Withdraw a recorded done
-shoal rm fix-login            # Remove the workspace
-shoal rm fix-login old-spike  # Remove several; the picker selects them with Tab or Ctrl-A
+shoal done --integrated 3 # Another branch has its work under new commits
+shoal done 3 --undo                # Withdraw a recorded done
+shoal rm 3                    # Remove the workspace
+shoal rm 3 6                  # Remove several; the picker selects them with Tab or Ctrl-A
 shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
-shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
-shoal restore fix-login       # Pick a checkpoint, or open a removed workspace again
-shoal restore fix-login 3     # Return the workspace to checkpoint 3
-shoal move ssh other fix-login # Move the workspace or chat to another machine; its agents continue there
-shoal move export fix-login | ssh other shoal move import # The same through any pipe
+shoal checkpoint 3            # Keep HEAD and unsaved files to return to later
+shoal restore 3               # Pick a checkpoint, or open a removed workspace again
+shoal restore 3 3             # Return the workspace to checkpoint 3
+shoal move ssh other 3 # Move the workspace or chat to another machine; its agents continue there
+shoal move export 3 | ssh other shoal move import # The same through any pipe
 shoal move export --repo app --all -o moving # Export every workspace and chat of app, a file each
-shoal move export fix-login --keep -o copy.shoal # Export a copy and keep fix-login running here
-shoal move ssh other fix-login --keep # Copy fix-login to another machine and keep it running here
+shoal move export 3 --keep -o copy.shoal # Export a copy and keep fix-login running here
+shoal move ssh other 3 --keep # Copy fix-login to another machine and keep it running here
 shoal move import moving           # Import every space exported to a directory
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
@@ -496,9 +496,9 @@ and the import starts it again, continuing its session.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh
-shoal acquire hold --workspace fix-login --name quay-thread-42 --reason "Quay thread"
-shoal leases hold --workspace fix-login
-shoal release hold --workspace fix-login --name quay-thread-42
+shoal acquire hold --workspace 3 --name quay-thread-42 --reason "Quay thread"
+shoal leases hold --workspace 3
+shoal release hold --workspace 3 --name quay-thread-42
 ```
 
 Configure idle cleanup in a repository's `.shoal.toml`, or for every repository in

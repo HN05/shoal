@@ -290,14 +290,16 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - The state directory holds only the daemon's own state, never files agents or
   the user work with: temporary directories, attached files and copies of work
   live in a repository directory, or in `root_dir` for chats without a repository.
-- Accept literal Git branch names and derive portable workspace names separately.
-  Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
-  names/directories unchanged; serialize allocation per repo. Existing branches,
+- A space's name is a free-text label that may repeat; it never selects a space
+  and nothing is built from it. Accept literal Git branch names and derive a
+  portable worktree directory name separately, suffixed while another workspace
+  has it. Suffix conflicting branch components with `-2`, `-3`, etc.; keep the
+  name and directory unchanged; serialize allocation per repo. Existing branches,
   including an issue's derived local branch, get unsuffixed worktrees or reopen
   owned ones; other checkouts require explicit adoption.
   Adopt only linked, unlocked worktree roots on local branches, preserving files and
   settings without setup; record identity and readiness atomically under normal cleanup.
-  Reject ownership/name collisions and never use adoption to repair moved worktrees.
+  Reject ownership collisions and never use adoption to repair moved worktrees.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

@@ -25,7 +25,7 @@ pub struct Chat {
     /// The repository it belongs to; none for a chat that manages the
     /// spaces of every repository.
     pub repository_id: Option<RepositoryId>,
-    /// Unique among workspace names and the names of other chats.
+    /// The label people read, which other spaces may share.
     pub name: SpaceName,
     pub agent: crate::agent::Agent,
     /// The mode its agent started in, which its restores keep.

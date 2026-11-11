@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 148;
+pub(super) const SCHEMA_VERSION: i64 = 150;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -401,17 +401,99 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (136, "", Some(allow_chats_without_repository)),
     (137, "", Some(allow_files_without_repository)),
     (138, CHAT_STOPPERS, None),
-    (139, "", Some(super::space_names::rename_invalid_names)),
+    // Renamed recorded space names an earlier name rule refused, which read
+    // as stored now.
+    (139, "", None),
     (140, include_str!("space_events.sql"), None),
     (141, AUTOMATIC_WRAPPER_RESTORES, None),
     (142, include_str!("space_progress.sql"), None),
     (143, PERMISSION_NARROWINGS, None),
     (144, include_str!("spaces.sql"), None),
-    (145, "", Some(super::space_names::rename_invalid_copies)),
+    // Renamed the copies other records keep of those names.
+    (145, "", None),
     (146, CI_JOB_PEAK_CPU_DROPPED, None),
     (147, "", Some(place_owners::own_by_space)),
     (148, include_str!("space_conversions.sql"), None),
+    (149, UNNAMED_RENAMES, None),
+    (150, "", Some(repeatable_names)),
 ];
+
+/// The migrations that rebuild a table others reference, which run on their
+/// own with foreign keys off, so dropping the old table deletes nothing that
+/// references it.
+const REBUILDS: &[i64] = &[150];
+
+/// Names are labels that may repeat, so the tables of workspaces and chats
+/// lose the unique constraint on them, which only a rebuild removes.
+pub(super) fn repeatable_names(db: &Connection) -> Result<()> {
+    for table in ["workspaces", "chats"] {
+        // The first workspaces table left the name nullable.
+        for (from, to) in [
+            ("name TEXT NOT NULL UNIQUE", "name TEXT NOT NULL"),
+            ("name TEXT UNIQUE", "name TEXT"),
+        ] {
+            rebuild(db, table, from, to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Rebuild `table` with the column definition `from` replaced by `to`,
+/// keeping its rows, indexes and triggers, as SQLite documents for schema
+/// changes `ALTER TABLE` cannot make; a table without `from` stays. The
+/// caller has turned foreign keys off and checks them before committing;
+/// views and other tables' triggers name the table, which keeps its name.
+fn rebuild(db: &Connection, table: &str, from: &str, to: &str) -> Result<()> {
+    let sql: String = db.query_row(
+        "SELECT sql FROM sqlite_schema WHERE type='table' AND name=?1",
+        [table],
+        |row| row.get(0),
+    )?;
+    match sql.matches(from).count() {
+        0 => return Ok(()),
+        1 => {}
+        _ => anyhow::bail!("unexpected {table} table definition"),
+    }
+    let columns = sql
+        .find('(')
+        .context("a table definition lists its columns")?;
+    let rebuilt = format!("{table}_rebuilt");
+    let created = format!(
+        "CREATE TABLE {rebuilt} {}",
+        sql[columns..].replacen(from, to, 1)
+    );
+    let dependents: Vec<String> = db
+        .prepare(
+            "SELECT sql FROM sqlite_schema WHERE tbl_name=?1 AND type IN ('index','trigger')
+                AND sql IS NOT NULL ORDER BY rowid",
+        )?
+        .query_map([table], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    db.execute_batch(&created)?;
+    db.execute_batch(&format!(
+        "INSERT INTO {rebuilt} SELECT * FROM {table}; DROP TABLE {table};"
+    ))?;
+    // The views and triggers that name the table are not rewritten for the
+    // rename, since they already name what it becomes.
+    db.pragma_update(None, "legacy_alter_table", true)?;
+    db.execute_batch(&format!("ALTER TABLE {rebuilt} RENAME TO {table};"))?;
+    db.pragma_update(None, "legacy_alter_table", false)?;
+    for dependent in dependents {
+        db.execute_batch(&dependent)?;
+    }
+    Ok(())
+}
+
+/// A branch rename keeps the workspace's name, so an unfinished one reserves
+/// only its branch. The name was unique, so the table is rebuilt.
+pub(super) const UNNAMED_RENAMES: &str = "CREATE TABLE workspace_renames_branch (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    branch TEXT NOT NULL
+);
+INSERT INTO workspace_renames_branch(workspace_id,branch)
+    SELECT workspace_id,branch FROM workspace_renames;
+DROP TABLE workspace_renames;
+ALTER TABLE workspace_renames_branch RENAME TO workspace_renames;";
 
 /// Admission counts a CI job at its memory alone, so its runs' peak CPU is
 /// no longer kept. Nothing references either table, so each is rebuilt,
@@ -889,16 +971,59 @@ pub(super) fn migrate(db: &mut Connection) -> Result<()> {
     if version == SCHEMA_VERSION {
         return Ok(());
     }
-    let tx = db.transaction()?;
-    for &(target, sql, prepare) in MIGRATIONS {
-        if target > version {
-            if let Some(prepare) = prepare {
-                prepare(&tx)?;
+    let pending = MIGRATIONS.iter().filter(|(target, ..)| *target > version);
+    // Consecutive migrations share a transaction; a rebuild runs on its own.
+    let mut batches: Vec<Vec<&(i64, &str, Option<Prepare>)>> = Vec::new();
+    for migration in pending {
+        match batches.last_mut() {
+            Some(batch)
+                if !REBUILDS.contains(&migration.0)
+                    && !batch.iter().any(|(target, ..)| REBUILDS.contains(target)) =>
+            {
+                batch.push(migration)
             }
-            tx.execute_batch(sql)
-                .with_context(|| format!("apply schema migration {target}"))?;
-            tx.pragma_update(None, "user_version", target)?;
+            _ => batches.push(vec![migration]),
         }
+    }
+    for batch in batches {
+        let rebuilds = batch.iter().any(|(target, ..)| REBUILDS.contains(target));
+        if rebuilds {
+            db.pragma_update(None, "foreign_keys", false)?;
+        }
+        let applied = apply(db, &batch, rebuilds);
+        if rebuilds {
+            db.pragma_update(None, "foreign_keys", true)?;
+        }
+        applied?;
+    }
+    Ok(())
+}
+
+/// Apply `batch` in one transaction, which a rebuild leaves only when every
+/// foreign key still holds.
+fn apply(
+    db: &mut Connection,
+    batch: &[&(i64, &str, Option<Prepare>)],
+    rebuilds: bool,
+) -> Result<()> {
+    let tx = db.transaction()?;
+    for &&(target, sql, prepare) in batch {
+        if let Some(prepare) = prepare {
+            prepare(&tx).with_context(|| format!("prepare schema migration {target}"))?;
+        }
+        tx.execute_batch(sql)
+            .with_context(|| format!("apply schema migration {target}"))?;
+        tx.pragma_update(None, "user_version", target)?;
+    }
+    if rebuilds {
+        let violations: i64 =
+            tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })?;
+        ensure!(
+            violations == 0,
+            "a rebuilt table broke {violations} references"
+        );
     }
     tx.commit()?;
     Ok(())

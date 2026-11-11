@@ -350,8 +350,8 @@ impl Manager {
         parent: Option<SpaceId>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        let name = self.free_workspace_name(name).await?;
-        let path = self.new_workspace_path(repo, &name, None).await?;
+        let path = self.new_workspace_path(repo, name, None).await?;
+        let name = SpaceName::derive(name, "workspace");
         let workspace = Workspace {
             base_commit: Some(at.commit.clone()),
             base_ref: diff_ref,
@@ -404,14 +404,6 @@ impl Manager {
         };
         let reference = git::symbolic_revision(&repo.path, &revision, git::run_isolated).await?;
         Ok(named_start(commit, base, reference.trim_end_matches('\n')))
-    }
-
-    /// `name`, or the first of `name-2`, `name-3`, ... that nothing holds.
-    pub(super) async fn free_workspace_name(&self, name: &str) -> Result<SpaceName> {
-        let name = SpaceName::derive(SpaceKind::Workspace, name);
-        self.store
-            .run(move |db| crate::daemon::store::free_name(db, &name))
-            .await
     }
 }
 

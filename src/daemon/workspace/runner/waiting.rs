@@ -10,7 +10,7 @@ use anyhow::Result;
 use rusqlite::params;
 
 use super::{Registration, runner_labels};
-use crate::{client::space_names::SpaceName, model::SpaceKind};
+use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
@@ -179,10 +179,7 @@ fn queue_job(
     job: &QueuedJob,
 ) -> Result<()> {
     let id = QueueEntryId::generate();
-    let name = SpaceName::derive(
-        SpaceKind::Workspace,
-        &format!("ci-{}-{}", job.job.name, job.job.id),
-    );
+    let name = SpaceName::derive(&format!("ci-{}-{}", job.job.name, job.job.id), "workspace");
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
          VALUES (?1,?2,?3,?4,'',?5,?6,?7)",

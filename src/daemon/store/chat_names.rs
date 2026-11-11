@@ -6,7 +6,8 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use crate::{
-    client::space_names::SpaceName, forge::repo::remote_url::source_name, model::SpaceKind,
+    client::space_names::{directory_name, suffixed_directory},
+    forge::repo::remote_url::source_name,
 };
 
 /// Name each recorded chat, and the chats of journal events, after its
@@ -18,8 +19,8 @@ pub(super) fn name_chats(db: &Connection) -> Result<()> {
     name_journal_chats(db, &bases, &named)
 }
 
-/// Each repository's `<repo>-chat`, as a valid name.
-struct ChatBases(HashMap<String, SpaceName>);
+/// Each repository's `<repo>-chat`, as names were then.
+struct ChatBases(HashMap<String, String>);
 
 impl ChatBases {
     fn load(db: &Connection) -> Result<Self> {
@@ -29,10 +30,7 @@ impl ChatBases {
                 let (id, name, source): (String, Option<String>, String) =
                     (row.get(0)?, row.get(1)?, row.get(2)?);
                 let name = name.unwrap_or_else(|| source_name(&source).to_owned());
-                Ok((
-                    id,
-                    SpaceName::derive(SpaceKind::Chat, &format!("{name}-chat")),
-                ))
+                Ok((id, directory_name(&format!("{name}-chat"))))
             })?
             .collect::<rusqlite::Result<_>>()?;
         Ok(Self(bases))
@@ -41,9 +39,8 @@ impl ChatBases {
     /// The name of chat `number` of `repository`; a removed repository's
     /// chats are plain `chat`.
     fn name(&self, repository: &str, number: u32) -> String {
-        let base = (self.0.get(repository).cloned())
-            .unwrap_or_else(|| SpaceName::derive(SpaceKind::Chat, ""));
-        base.suffixed(u64::from(number)).into()
+        let base = self.0.get(repository).map_or("chat", String::as_str);
+        suffixed_directory(base, u64::from(number))
     }
 }
 
@@ -51,8 +48,18 @@ impl ChatBases {
 /// workspaces, unfinished renames and earlier chats hold. Returns the names
 /// by chat ID.
 fn name_recorded_chats(db: &Connection, bases: &ChatBases) -> Result<HashMap<String, String>> {
+    // Unfinished renames reserved a name until a later version.
+    let renames_named: bool = db.query_row(
+        "SELECT COUNT(*)>0 FROM pragma_table_info('workspace_renames') WHERE name='name'",
+        [],
+        |row| row.get(0),
+    )?;
+    let taken = match renames_named {
+        true => "SELECT name FROM workspaces UNION SELECT name FROM workspace_renames",
+        false => "SELECT name FROM workspaces",
+    };
     let mut taken: HashSet<String> = db
-        .prepare("SELECT name FROM workspaces UNION SELECT name FROM workspace_renames")?
+        .prepare(taken)?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     let chats = db

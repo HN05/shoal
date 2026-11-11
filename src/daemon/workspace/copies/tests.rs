@@ -111,7 +111,7 @@ async fn a_copy_takes_the_files_and_diff_base_of_its_source() {
 }
 
 #[tokio::test]
-async fn a_copy_s_name_stays_its_requested_one_and_a_default_one_is_free_for_both() {
+async fn a_copy_s_name_stays_its_requested_one() {
     let f = Fixture::new().await;
     let path = &f.source.path;
     // Branches only Git has, which no workspace owns.
@@ -120,7 +120,7 @@ async fn a_copy_s_name_stays_its_requested_one_and_a_default_one_is_free_for_bot
     let copy = f.copy(None, CopyPlace::Branch(None)).await.unwrap();
     assert_eq!(
         (copy.name.as_str(), copy.branch.as_deref()),
-        ("topic-copy-2", Some("topic-copy-2"))
+        ("topic-copy", Some("topic-copy-2"))
     );
     let named = f
         .copy(None, CopyPlace::Branch(Some("named".into())))

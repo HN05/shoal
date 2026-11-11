@@ -209,15 +209,6 @@ impl Options {
         })
     }
 
-    /// Refuse a `--name` the daemon would refuse, before any picker opens.
-    /// A restored chat keeps its own.
-    pub async fn check_name(&self, ctx: &Context) -> Result<()> {
-        match (&self.name, &self.restore) {
-            (Some(name), None) => crate::client::chats::check_name(&ctx.paths, name).await,
-            _ => Ok(()),
-        }
-    }
-
     /// Refuse the agent `--agent` or `agent.default` names under
     /// `settings`, or a `--model` it cannot take, before any picker opens.
     pub fn check_agent(&mut self, settings: &Effective) -> Result<()> {

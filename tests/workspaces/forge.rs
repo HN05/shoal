@@ -422,7 +422,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     );
     let url = "https://forge.example/team/project/pulls/7";
     let linked_prs =
-        || fixture.ok(&["status", &fixture.id("stack-top")])["workspace"]["links"]["prs"].clone();
+        || fixture.ok(&["status", &fixture.id("stack/top")])["workspace"]["links"]["prs"].clone();
     assert_eq!(linked_prs(), serde_json::json!([url]));
     // Opening the PR again relinks it to its owner.
     fixture.ok(&[
@@ -431,7 +431,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         url,
         "assigned",
         "--space",
-        &fixture.id("stack-top"),
+        &fixture.id("stack/top"),
     ]);
     assert_eq!(linked_prs(), serde_json::json!([]));
     let added = fixture
@@ -454,7 +454,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
-    let workspace = &fixture.ok(&["status", &fixture.id("stack-top")])["workspace"];
+    let workspace = &fixture.ok(&["status", &fixture.id("stack/top")])["workspace"];
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
     let path_in = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -472,7 +472,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         url,
         "assigned",
         "--space",
-        &fixture.id("stack-top"),
+        &fixture.id("stack/top"),
     ]);
     commit("more");
     git(&author, &["push", "origin", "stack/top"]);

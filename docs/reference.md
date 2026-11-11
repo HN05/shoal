@@ -645,11 +645,11 @@ Shoal.
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
-branch and its derived workspace name while keeping the worktree path and
-owned resources and settings. Dirty files are preserved;
+branch while keeping its name, worktree path, `{workspace}`, and owned resources
+and settings. Dirty files are preserved;
 Git keeps the branch's upstream and reflog. Remotes and open PR head branches
-are unchanged. Names must be available locally and as a derived workspace name;
-rename does not choose a suffix. The default branch, branches checked out
+are unchanged. The branch must be free locally and in no other workspace of the
+repository; rename does not choose a suffix. The default branch, branches checked out
 elsewhere, and Worktrunk-reserved names are refused. Scoped callers may rename
 their own workspace when no other execution is recorded; unscoped renames
 require no recorded executions. The caller keeps its original environment, and
@@ -719,25 +719,25 @@ shoal start my-project fix-login
 shoal start my-project fix-api -a codex -- "Fix the API timeout"
 shoal start https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
-shoal cd fix-login                       # Enter through the shell function
+shoal cd 3                               # Enter through the shell function
 shoal cd -                               # Previous directory
 shoal run --workspace fix-login -- cargo test
-shoal edit fix-login                     # Open in $VISUAL/$EDITOR or the edit command
-shoal open fix-login --app claude        # Claude desktop app (macOS)
-shoal open fix-login --app codex         # Codex desktop app
+shoal edit 3                             # Open in $VISUAL/$EDITOR or the edit command
+shoal open 3 --app claude                # Claude desktop app (macOS)
+shoal open 3 --app codex                 # Codex desktop app
 shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
-shoal open fix-login                     # app.default, else the only installed app, else a picker
-shoal claude fix-login -- --help
+shoal open 3                             # app.default, else the only installed app, else a picker
+shoal claude 3 -- --help
 shoal codex                              # Current workspace or picker
 shoal happy-codex fix-login              # Detached Happy session for the Happy app
-shoal status fix-login              # Activity, changes, held resources, issue and PR state
+shoal status 3                      # Activity, changes, held resources, issue and PR state
 shoal status planning               # A chat's agent, sessions, issue and PR state
 shoal status pr 12                  # Workspaces and chats that link PR 12
 shoal status ci 2765                # Workspaces and chats that link CI run 2765
 shoal status resource devices       # Workspaces that hold a devices lease
-shoal stop fix-login                     # Stop agents and commands until shoal resume
-shoal rm fix-login                       # Remove; choose what to keep if work differs
-shoal rm fix-login old-spike             # Remove several, confirming once for all
+shoal stop 3                             # Stop agents and commands until shoal resume
+shoal rm 3                               # Remove; choose what to keep if work differs
+shoal rm 3 6                             # Remove several, confirming once for all
 shoal rm plan-cache                      # Remove a chat and the spaces below it
 shoal rm fix-login --wait                # Return once it is gone, naming a kept branch
 ```
@@ -2107,14 +2107,14 @@ shoal config set agent.max_running 2 --repo shoal  # And at most two of them in 
 shoal config set agent.max_running none --repo docs # No repository limit
 shoal start <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal start <issue-url> --agent claude --now    # Starts now regardless of the limits
-shoal start <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
+shoal start <issue-url> --agent claude --after <id> --after 12  # Starts once that workspace and #12 are done
 shoal resume -A                               # Queues the restore of every stopped agent
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
-shoal queue start api                         # Starts a waiting entry now regardless of the limits
-shoal queue start --attach api                # Starts it and attaches this terminal to its agent's session
-shoal queue move api 1                        # Moves an entry to position 1; without a position, pick its place
-shoal queue move api last                     # Stops api's running agent and queues its restore last
-shoal queue cancel api                        # Removes a waiting entry; a restore's agent stays stopped
+shoal queue start <entry>                     # Starts a waiting entry now regardless of the limits
+shoal queue start --attach <entry>            # Starts it and attaches this terminal to its agent's session
+shoal queue move <entry> 1                    # Moves an entry to position 1; without a position, pick its place
+shoal queue move 5 last                       # Stops workspace 5's running agent and queues its restore last
+shoal queue cancel <entry>                    # Removes a waiting entry; a restore's agent stays stopped
 ```
 
 `machine.max_agents` limits the agents that run at once. It defaults to `dynamic`,
@@ -2553,14 +2553,18 @@ a matching local tracking branch without discarding ahead commits. Ambiguous
 remotes or unrelated local branches fail. A ready Shoal workspace reopens without
 setup/hooks or refresh; other checkouts block creation, including checked-out `main`.
 Full `refs/heads/...` and `refs/remotes/...` selectors disambiguate names.
-The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, drops
-leading `-_`, truncates to 64 characters, and falls back to `workspace`; a name
-that would be all digits takes the prefix `workspace-`, as a branch `123` gives
-`workspace-123`, since a number selects a space. A name given with `--name` or
-`shoal rename` cannot be all digits. Globally colliding names fail. Commands
-use this name, the space's number or its ID. The worktree directory is named from the
-branch the same way, suffixed `-2`, `-3`, ... while another workspace of any
-repository has a directory of that name, and never moves. Directories default to the repository's
+A space's name is the label lists, tabs and notices show: a single line of 1–40
+characters, any printable ones, with surrounding whitespace trimmed and inner runs
+collapsed to one space; control characters and bidirectional overrides are refused,
+as is a longer name someone sets, while a name Shoal derives is cut to 40 characters
+ending with `…`. Names may repeat across spaces and repositories, never select a
+space, and name no file, directory, variable, session or branch, so renaming one
+moves nothing. A new workspace is named after the branch as given, which a branch
+rename leaves unchanged. Its worktree directory is named from the branch with
+every character other than ASCII letters, digits, `-` and `_` replaced by `-`,
+leading `-_` dropped, cut to 64 characters, falling back to `workspace`, and
+suffixed `-2`, `-3`, ... while another workspace of any repository has a directory
+of that name; it never moves. Directories default to the repository's
 Shoal workspace directory;
 `start --path <dir>` selects an exact new directory for this workspace only (relative
 to the current directory; `~/` allowed). Existing paths and overlaps with Shoal
@@ -3336,9 +3340,9 @@ workspace, and sends setup output to stderr. Then choose explicitly; `--skip`
 leaves what setup did and is not available to workspace processes:
 
 ```sh
-shoal setup fix-login                 # Rerun setup and the post-setup hook
-shoal setup fix-login --skip          # Accept the failure after ownership checks
-shoal rm fix-login --yes                    # Delete this workspace
+shoal setup 3                         # Rerun setup and the post-setup hook
+shoal setup 3 --skip                  # Accept the failure after ownership checks
+shoal rm 3 --yes                            # Delete this workspace
 ```
 
 `--skip-setup` on `shoal start` and `shoal split` creates a workspace without
@@ -3762,8 +3766,9 @@ Workspace processes cannot list or delete kept branches.
 
 ```sh
 shoal checkpoint --name "before migration"  # keep the current workspace's state
-shoal restore topic    # pick one of topic's checkpoints, or open removed topic again
-shoal restore topic 3  # return topic to checkpoint 3
+shoal restore 7        # pick one of workspace 7's checkpoints
+shoal restore <id>     # open the removed workspace with that ID again
+shoal restore 7 3      # return workspace 7 to checkpoint 3
 shoal restore          # pick a removed workspace to open again
 ```
 
@@ -3820,15 +3825,15 @@ archive_max_mb = 50
 ### Move a space to another machine
 
 ```sh
-shoal move export topic -o topic.shoal         # remove topic and write it to a file
+shoal move export 7 -o topic.shoal             # remove workspace 7 and write it to a file
 shoal move export plan-cache -o plan.shoal     # end the chat plan-cache and write it to a file
 shoal move import topic.shoal                  # continue it in the repository with the same origin
-shoal move export topic | ssh other shoal move import --resume  # agents continue there
+shoal move export 7 | ssh other shoal move import --resume      # agents continue there
 shoal move ssh other plan-cache                # the same, once ssh reaches Shoal there
 shoal move export --repo app --all -o moving   # end every space of app, a file each
-shoal move export topic spike -o moving        # remove both, a file each
-shoal move export topic --keep -o copy.shoal   # keep topic running and write a copy of it
-shoal move ssh other topic --keep              # keep topic running and copy it there
+shoal move export 7 8 -o moving                # remove both, a file each
+shoal move export 7 --keep -o copy.shoal       # keep workspace 7 running and write a copy of it
+shoal move ssh other 7 --keep                  # keep workspace 7 running and copy it there
 shoal move import moving                       # continue every space exported to moving
 ```
 
@@ -5188,7 +5193,7 @@ idle_minutes = 240
 shoal cleanup                        # Pick what to remove; Tab selects several
 shoal cleanup --dry-run              # List what is left behind, and why other spaces stay
 shoal cleanup spaces                 # Remove every idle and merged space now
-shoal cleanup spaces fix-login       # Remove one, or report why it stays
+shoal cleanup spaces 3               # Remove one, or report why it stays
 shoal cleanup caches --repo project  # Empty one repository's shared caches
 ```
 
@@ -5218,7 +5223,7 @@ repository config applies to that repository's workspaces on the next sweep.
 
 ```sh
 shoal log                 # This space, or Shoal's log outside one
-shoal log fix-login       # A named space, including a removed one
+shoal log 3               # A space by number, or a removed one by ID
 shoal log --all           # Every event Shoal recorded for the space
 shoal log --limit 20      # The newest 20 entries (default 50)
 shoal log --follow        # Keep printing new entries
@@ -5741,9 +5746,9 @@ Bash, Zsh, Fish, PowerShell, and Elvish.
 ```sh
 shoal inbox                         # Failed workspaces and untracked worktrees, with their fix
 shoal alerts                        # Problems the daemon found when it started or reloaded
-shoal stop fix-login                # Stop survivors; asks before forgetting an unprovable execution
-shoal setup fix-login --skip   # Accept a failed setup
-shoal branch rename fix-login topic # Finish an interrupted rename, then rename
+shoal stop 3                        # Stop survivors; asks before forgetting an unprovable execution
+shoal setup 3 --skip           # Accept a failed setup
+shoal branch rename 3 topic             # Finish an interrupted rename, then rename
 shoal adopt <path>             # Reclaim a worktree at its recorded path after checking it
 ```
 

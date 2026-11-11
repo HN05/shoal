@@ -5,6 +5,7 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::{AddOptions, target::AddTarget};
+use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -17,7 +18,6 @@ use crate::{
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     terminal::PlaceName,
 };
-use crate::{client::space_names::SpaceName, model::SpaceKind};
 
 /// `creation` with its path resolved against the current directory.
 pub(super) fn absolute(ctx: &Context, mut creation: Creation) -> Result<Creation> {
@@ -84,7 +84,7 @@ pub(super) async fn planned_workspace_name(
         },
         (None, None) => (creation.copy.as_ref()).map_or_else(String::new, |copy| copy.name.clone()),
     };
-    Ok(SpaceName::derive(SpaceKind::Workspace, &branch))
+    Ok(SpaceName::derive(&branch, "workspace"))
 }
 
 /// Agent arguments as a queued launch carries them, refusing one that is

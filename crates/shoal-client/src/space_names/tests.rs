@@ -1,57 +1,48 @@
 use super::*;
 use crate::space_ids::SpaceId;
-use crate::space_names::SpaceSelector;
 
 #[test]
-fn a_given_name_may_not_be_all_digits() {
-    let refused = SpaceName::parse("42").unwrap_err().to_string();
-    assert!(refused.contains("space number 42"), "{refused}");
-    for valid in ["fix-login", "Fix_2", "1887-select", "4a"] {
-        assert_eq!(SpaceName::parse(valid).unwrap().as_str(), valid);
+fn a_set_name_is_one_line_of_at_most_forty_characters() {
+    let parse = |text: &str| SpaceName::parse(text).map(|name| name.to_string());
+    assert_eq!(
+        parse("  Plan:  summary with\u{a0}shoal done ").unwrap(),
+        "Plan: summary with shoal done"
+    );
+    for valid in ["42", "Fix login", "修正 ログイン", "🚀 launch", "a/b: (c)"] {
+        assert_eq!(parse(valid).unwrap(), valid);
     }
-    for invalid in ["", "-fix", "fix login", &"a".repeat(65)] {
-        assert!(SpaceName::parse(invalid).is_err(), "{invalid}");
+    assert_eq!(parse(&"é".repeat(40)).unwrap().chars().count(), 40);
+    for invalid in [
+        "",
+        "   ",
+        "two\nlines",
+        "tab\there",
+        "bell\u{7}",
+        "right\u{202E}left",
+        "isolate\u{2066}",
+        &"é".repeat(41),
+    ] {
+        assert!(parse(invalid).is_err(), "{invalid:?}");
     }
 }
 
 #[test]
-fn a_derived_name_that_would_be_all_digits_takes_its_kind() {
-    let derive = |kind, text| SpaceName::derive(kind, text).to_string();
-    assert_eq!(derive(SpaceKind::Workspace, "123"), "workspace-123");
-    assert_eq!(derive(SpaceKind::Chat, "123"), "chat-123");
-    assert_eq!(derive(SpaceKind::Workspace, "feature/123"), "feature-123");
-    assert_eq!(derive(SpaceKind::Workspace, "/1"), "workspace-1");
-    assert_eq!(derive(SpaceKind::Chat, "//"), "chat");
-    assert_eq!(derive(SpaceKind::Workspace, "@"), "workspace");
-    let long = derive(SpaceKind::Workspace, &"9".repeat(80));
-    assert_eq!(long.len(), MAX_NAME_LEN);
-    assert!(long.starts_with("workspace-9"));
+fn a_derived_name_drops_what_a_set_one_refuses_and_is_cut_with_an_ellipsis() {
+    let derive = |text: &str| SpaceName::derive(text, "chat").to_string();
+    assert_eq!(derive("feature/login"), "feature/login");
+    assert_eq!(derive(" Fix\n the\u{202E}  login "), "Fix the login");
+    assert_eq!(derive("\u{7}"), "chat");
+    let long = derive(&format!("{} tail", "word ".repeat(10)));
+    assert_eq!(long.chars().count(), 40);
+    assert!(long.ends_with("word…"), "{long}");
 }
 
 #[test]
-fn a_derived_name_starts_with_a_letter_or_digit() {
-    let derive = |text| SpaceName::derive(SpaceKind::Workspace, text).to_string();
-    assert_eq!(derive("_private"), "private");
-    assert_eq!(derive("+special"), "special");
-    assert_eq!(derive("-_-leaf"), "leaf");
-}
-
-#[test]
-fn a_suffix_fits_the_limit() {
-    let name = SpaceName::parse("chat").unwrap();
-    assert_eq!(name.suffixed(1), name);
-    assert_eq!(name.suffixed(3).as_str(), "chat-3");
-    let long = SpaceName::parse(&"a".repeat(MAX_NAME_LEN)).unwrap();
-    let cut = long.suffixed(12);
-    assert_eq!(cut.len(), MAX_NAME_LEN);
-    assert!(cut.ends_with("-12"));
-}
-
-#[test]
-fn reading_a_name_validates_it() {
-    let name: SpaceName = serde_json::from_str("\"fix-login\"").unwrap();
-    assert_eq!(serde_json::to_string(&name).unwrap(), "\"fix-login\"");
-    assert!(serde_json::from_str::<SpaceName>("\"42\"").is_err());
+fn a_stored_name_reads_as_it_was_stored() {
+    let long = "x".repeat(64);
+    let name: SpaceName = serde_json::from_str(&format!("\"{long}\"")).unwrap();
+    assert_eq!(name.as_str(), long);
+    assert_eq!(serde_json::to_string(&name).unwrap(), format!("\"{long}\""));
 }
 
 #[test]
@@ -90,6 +81,10 @@ fn a_directory_name_keeps_portable_characters() {
     assert_eq!(directory_name("rust (fmt, test)"), "rust--fmt--test-");
     assert_eq!(directory_name("123"), "123");
     assert_eq!(directory_name("/_x"), "x");
+    assert_eq!(directory_name("_private"), "private");
+    assert_eq!(directory_name("+special"), "special");
+    assert_eq!(directory_name("-_-leaf"), "leaf");
+    assert_eq!(directory_name("@"), "workspace");
     assert_eq!(directory_name("Ünïcode"), "n-code");
     assert_eq!(directory_name("//"), "workspace");
     assert_eq!(directory_name(&"a".repeat(80)).len(), MAX_NAME_LEN);

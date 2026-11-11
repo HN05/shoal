@@ -6,7 +6,6 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
-use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;
@@ -116,7 +115,6 @@ impl Manager {
     ) -> Result<()> {
         let workspace = workspace.clone();
         let intent = RenameIntent {
-            name: SpaceName::derive(SpaceKind::Workspace, branch),
             branch: branch.to_owned(),
         };
         let caller_execution = caller_execution.cloned();
@@ -131,10 +129,9 @@ impl Manager {
                     )?,
                     "workspace has other active or unknown executions; stop them before renaming"
                 );
-                store::ensure_name_and_branch_available(
+                store::ensure_branch_available(
                     tx,
                     &workspace.repository_id,
-                    &intent.name,
                     Some(&intent.branch),
                     Some(&workspace.id),
                 )?;

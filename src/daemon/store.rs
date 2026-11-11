@@ -24,7 +24,6 @@ mod item_numbers;
 mod migrations;
 mod place_owners;
 mod place_servers;
-mod space_names;
 mod worker;
 #[cfg(test)]
 mod workspace_availability_tests;
@@ -201,109 +200,28 @@ pub fn ensure_path_outside_moves(db: &Connection, path: &std::path::Path) -> Res
     Ok(())
 }
 
-/// What holds a name: workspaces, unfinished renames and running chats share
-/// one namespace across repositories.
-enum NameHolder {
-    Workspace,
-    Rename,
-    Chat,
-}
-
-/// What holds `name`, other than the workspace `except_id`. A chat holds
-/// its name while it runs or waits saved, as far as the caller ended
-/// finished ones first.
-fn name_holder(
-    db: &Connection,
-    name: &SpaceName,
-    except_id: Option<&SpaceId>,
-) -> Result<Option<NameHolder>> {
-    if exists(
-        db,
-        "SELECT 1 FROM workspaces WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
-        rusqlite::params![name, except_id],
-    )? {
-        return Ok(Some(NameHolder::Workspace));
-    }
-    if exists(db, "SELECT 1 FROM workspace_renames WHERE name=?1", [name])? {
-        return Ok(Some(NameHolder::Rename));
-    }
-    if exists(
-        db,
-        "SELECT 1 FROM chats WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
-        rusqlite::params![name, except_id],
-    )? {
-        return Ok(Some(NameHolder::Chat));
-    }
-    Ok(None)
-}
-
-/// Refuse a name another workspace, an unfinished rename or a chat, running
-/// or saved, holds.
-pub fn ensure_name_available(
-    db: &Connection,
-    name: &SpaceName,
-    except_id: Option<&SpaceId>,
-) -> Result<()> {
-    match name_holder(db, name, except_id)? {
-        None => Ok(()),
-        Some(NameHolder::Workspace) => Err(Refusal::new(
-            Reason::NameTaken,
-            format!("workspace name already exists: {name}"),
-        )
-        .into()),
-        Some(NameHolder::Rename) => Err(Refusal::new(
-            Reason::NameTaken,
-            format!("workspace name is reserved by an unfinished rename: {name}"),
-        )
-        .into()),
-        Some(NameHolder::Chat) => Err(Refusal::new(
-            Reason::NameTaken,
-            format!("a chat already has the name {name}"),
-        )
-        .into()),
-    }
-}
-
-/// Whether a workspace, an unfinished rename or a chat, running or saved,
-/// holds `name`.
-pub fn name_taken(db: &Connection, name: &SpaceName) -> Result<bool> {
-    Ok(name_holder(db, name, None)?.is_some())
-}
-
-/// The first of `base`, `base-2`, `base-3`, ... that nothing holds, each cut
-/// to the longest name allowed.
-pub fn free_name(db: &Connection, base: &SpaceName) -> Result<SpaceName> {
-    for suffix in 1_u64.. {
-        let candidate = base.suffixed(suffix);
-        if !name_taken(db, &candidate)? {
-            return Ok(candidate);
-        }
-    }
-    unreachable!("an unused suffix exists")
-}
-
-/// Check ownership before inserting a workspace or reserving a rename in a transaction.
-/// Names (including pending renames) are global; branches belong to one repository.
-pub fn ensure_name_and_branch_available(
+/// Refuse `branch` of the repository when another workspace than
+/// `except_id` owns it, before inserting a workspace or reserving a rename
+/// in a transaction.
+pub fn ensure_branch_available(
     db: &Connection,
     repository_id: &RepositoryId,
-    name: &SpaceName,
     branch: Option<&str>,
     except_id: Option<&SpaceId>,
 ) -> Result<()> {
-    ensure_name_available(db, name, except_id)?;
     let Some(branch) = branch else {
         return Ok(());
     };
-    let owner: Option<SpaceId> = db
+    let owner: Option<(crate::client::space_ids::SpaceNumber, SpaceName)> = db
         .query_row(
-            "SELECT name FROM workspaces WHERE repository_id=?1 AND branch=?2
+            "SELECT number,name FROM workspaces WHERE repository_id=?1 AND branch=?2
                 AND (?3 IS NULL OR id!=?3)",
             rusqlite::params![repository_id, branch, except_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
-    if let Some(owner) = owner {
+    if let Some((number, name)) = owner {
+        let owner = crate::client::space_names::label(number, &name);
         return Err(Refusal::new(
             Reason::NameTaken,
             format!("branch is already owned by workspace {owner}"),

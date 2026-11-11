@@ -1400,7 +1400,7 @@ fn agents_wait_for_the_answer_to_their_question() {
     let output = scoped_command(&fixture, "asker", &["questions", &id, "--answer", "1"]);
     assert!(!output.status.success(), "agents cannot answer: {output:?}");
     let renamed = fixture.rename("asker", "renamed");
-    assert_eq!(renamed["data"]["name"], "renamed", "{renamed}");
+    assert_eq!(renamed["data"]["branch"], "renamed", "{renamed}");
     fixture.ok(&["questions", &id, "--answer", "2"]);
     let output = asker.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -1408,7 +1408,7 @@ fn agents_wait_for_the_answer_to_their_question() {
     assert_eq!(answered["answer"], "Postgres");
     // The wait printed the answer, so its message is not delivered again.
     assert_eq!(
-        fixture.ok(&["messages", &fixture.id("renamed")]),
+        fixture.ok(&["messages", &fixture.id("asker")]),
         serde_json::json!([])
     );
     assert_eq!(
@@ -1418,7 +1418,7 @@ fn agents_wait_for_the_answer_to_their_question() {
 
     let output = scoped_command(
         &fixture,
-        "renamed",
+        "asker",
         &["questions", "ask", "Which cache?", "--recommend", "None"],
     );
     assert!(output.status.success(), "{output:?}");

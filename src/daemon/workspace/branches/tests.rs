@@ -1,4 +1,5 @@
 use crate::client::repository_ids::RepositoryId;
+use crate::client::space_names::SpaceName;
 use crate::git::existing_branch::BranchExt;
 use std::{fs, path::PathBuf, sync::Arc};
 
@@ -276,7 +277,8 @@ async fn nested_branch_conflicts_suffix_the_blocked_component() {
         &["update-ref", "refs/remotes/origin/henrik-3/topic-2", "HEAD"],
     );
     let workspace = f.add("henrik/topic").await;
-    assert_eq!(workspace.name, "henrik-topic");
+    assert_eq!(workspace.name, "henrik/topic");
+    assert_eq!(workspace.directory_name(), "henrik-topic");
     assert_eq!(workspace.branch.as_deref(), Some("henrik-3/topic-3"));
     assert_eq!(
         git(&workspace.path, &["symbolic-ref", "HEAD"]).trim(),
@@ -432,7 +434,9 @@ async fn creation_honors_explicit_history_and_sync_preserves_ahead_main() {
 /// Allocate a workspace for each case's name, remove it, then open the
 /// existing branch of that name: a reserved name gets a suffixed branch and
 /// cannot be opened as is, and the others open at the allocated path. The
-/// cases' branches and workspace names differ, so they share one repository.
+/// workspace takes the name as given, and a directory named as the case
+/// says. The cases' branches and directories differ, so they share one
+/// repository.
 async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
     let f = Fixture::new().await;
     for (name, workspace_name, reserved) in cases {
@@ -443,7 +447,7 @@ async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
             name.clone()
         };
         assert_eq!(allocated.branch.as_deref(), Some(expected.as_str()));
-        assert_eq!(&allocated.name, workspace_name);
+        assert_eq!(allocated.name, SpaceName::derive(name, "workspace"));
         assert_eq!(
             allocated.path.file_name().unwrap().to_str().unwrap(),
             workspace_name
@@ -475,7 +479,7 @@ async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
         } else {
             let workspace = opened.unwrap().workspace;
             assert_eq!(workspace.branch.as_deref(), Some(name.as_str()));
-            assert_eq!(&workspace.name, workspace_name);
+            assert_eq!(workspace.name, SpaceName::derive(name, "workspace"));
             assert_eq!(workspace.path, allocated.path);
             assert_eq!(
                 git(&workspace.path, &["symbolic-ref", "HEAD"]),
@@ -584,7 +588,8 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
         .unwrap();
     assert!(!opened.reused);
     assert_eq!(opened.workspace.branch.as_deref(), Some("coworker/topic"));
-    assert_eq!(opened.workspace.name, "coworker-topic");
+    assert_eq!(opened.workspace.name, "coworker/topic");
+    assert_eq!(opened.workspace.directory_name(), "coworker-topic");
     assert_eq!(
         opened.workspace.base_ref.as_deref(),
         Some("refs/heads/main")
@@ -650,7 +655,7 @@ async fn existing_branch_records_an_explicit_base_for_new_worktrees() {
 }
 
 #[tokio::test]
-async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
+async fn existing_branch_refuses_other_checkouts_and_takes_a_free_directory() {
     let f = Fixture::new().await;
     f.manager
         .open_branch(&f.repo_id, "main", None, None, None)
@@ -659,13 +664,14 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     assert!(f.manager.list_workspaces().await.unwrap().is_empty());
     git(&f.repo, &["branch", "topic/one"]);
     f.add("topic-one").await;
-    assert!(
-        f.manager
-            .open_branch(&f.repo_id, "topic/one", None, None, None)
-            .await
-            .is_err()
-    );
-    assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 1);
+    // Its directory would be another workspace's, so it takes a suffix.
+    let opened = f
+        .manager
+        .open_branch(&f.repo_id, "topic/one", None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(opened.workspace.name, "topic/one");
+    assert_eq!(opened.workspace.directory_name(), "topic-one-2");
     git(&f.repo, &["switch", "--detach"]);
     let main = f
         .manager
@@ -761,12 +767,6 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
             None,
             None,
             options(None, None, Some(&*f.repo)),
-        ),
-        (
-            f.repo_id.as_str(),
-            Some("owned"),
-            None,
-            options(None, None, Some(&*new_path)),
         ),
     ] {
         f.manager
@@ -2228,7 +2228,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         .adopt_workspace(&f.repo_id, &path, false)
         .await
         .unwrap();
-    assert_eq!(w.name, "adopt-topic");
+    assert_eq!(w.name, "adopt/topic");
     assert_eq!(w.state, crate::state::WorkspaceState::Ready);
     assert_eq!(w.base_ref.as_deref(), Some("refs/heads/main"));
     assert!(w.git_dir.is_some() && w.git_dir_id.is_some());
@@ -2341,14 +2341,7 @@ async fn adoption_refuses_invalid_roots_and_moved_owned_worktrees() {
             .await
             .is_err()
     );
-    f.add("adopt-topic").await;
-    assert!(
-        f.manager
-            .adopt_workspace(&f.repo_id, &path, false)
-            .await
-            .is_err()
-    );
-    assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 2);
+    assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 1);
     assert!(path.join("tracked").exists());
 }
 

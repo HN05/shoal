@@ -639,12 +639,12 @@ interactive Git commands retain normal prompting. Ancestry and exact-ref checks
 distinguish negative answers from command failures; failed checks stop branch
 selection, refresh, and removal with the Git diagnostic.
 
-New-branch creation accepts literal Git branch names and derives a portable,
-globally unique workspace name and directory from them, prefixed `workspace-`
-where it would be all digits, since a number selects a space; a normalization collision
-fails without
-touching existing work. Branch conflicts get numeric suffixes on the blocking
-component only, never changing the workspace name. Names reserved by the Worktrunk
+New-branch creation accepts literal Git branch names. The workspace takes the
+branch as its name, a free-text label that may repeat, and a portable directory
+name derived from it, suffixed while another workspace of any repository has that
+directory name, so a normalization collision touches no existing work. Branch
+conflicts get numeric suffixes on the blocking component only, never changing the
+workspace's name. Names reserved by the Worktrunk
 adapter across supported Git object formats get a leaf suffix on creation and
 an incompatibility error on existing-branch selection. Ownership of a worktree's
 Git admin directory is proven by a marker naming the workspace, written there on
@@ -2331,12 +2331,11 @@ them with an agent, and it approves them by its own permissions or grants, as
 a parent workspace does, and otherwise denies or passes them up; those it
 has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
-one, placed as other launches are. A chat has a name from the same namespace as workspaces,
-since both are places the user returns to by name, and its name frees when it
-is removed or renamed. A chat starts under its default name without asking
+one, placed as other launches are. A chat has a name as a workspace has, a label that may repeat; its files are
+kept under its ID. A chat starts under its default name without asking
 the user for one: its agent learns what the work is and renames the chat with
-`shoal rename`. Renaming changes the record and the files kept under the
-name, not the zmx session, which zmx names only at creation. A place that
+`shoal rename`. Renaming changes the record, not the zmx session, which zmx
+names only at creation. A place that
 hosts a space, a workspace or a chat, takes a new label only while it still
 shows the label Shoal gave it, since another label is the user's: a chat's its
 old name, a workspace's the label its previous title rendered. A place labelled
@@ -2783,8 +2782,8 @@ instead receives their paths as the message's attached files. A chat's `done` re
 workspace's does, with cleanup by the same setting and override, but no branch
 another could integrate and no parent to tell, so it notifies the user and its
 agent keeps running until completion cleanup removes the chat after the grace
-period, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user returns to both by name, from
-one namespace, so what applies to both is named for
+period, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user reads both by their names and
+selects both by number or ID, so what applies to both is named for
 the space, and the flag that selects one is `--space`. Each space also has a
 number, the smallest no other space holds when it is recorded, from one
 sequence across repositories, so it stays short to type and read; it lasts as

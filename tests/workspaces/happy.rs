@@ -749,7 +749,8 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     // Happy's Codex takes them as its first message, saved here when Happy
     // cannot deliver it.
     let (started, recorded) = chat("happy-codex");
-    assert_eq!(started["chat"]["name"], format!("{CHAT_NAME}-2"));
+    // Names may repeat, so the second chat takes the same one.
+    assert_eq!(started["chat"]["name"], CHAT_NAME);
     assert_eq!(
         args(&recorded),
         [

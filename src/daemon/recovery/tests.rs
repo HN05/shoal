@@ -81,7 +81,7 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,'new-topic','new/topic')",
+                "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,'new/topic')",
                 [&id],
             )?;
             Ok(())

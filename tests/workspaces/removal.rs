@@ -560,8 +560,6 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
         [],
     )
     .unwrap();
-    let again = scoped_command(&fixture, "parent", &["split", "child"]);
-    assert!(!again.status.success(), "{again:?}");
     for name in ["parent", "other"] {
         let output = scoped_command(
             &fixture,

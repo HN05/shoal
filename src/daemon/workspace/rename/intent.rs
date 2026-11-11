@@ -1,23 +1,22 @@
-//! Durable rename intent: the reserved name and branch a workspace is moving to.
+//! Durable rename intent: the reserved branch a workspace is moving to.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::{client::space_names::SpaceName, git, model::Workspace};
+use crate::{git, model::Workspace};
 
-/// The identity a workspace takes once Git has renamed its branch.
+/// The branch a workspace takes once Git has renamed it; its name stays.
 pub(super) struct RenameIntent {
-    pub name: SpaceName,
     pub branch: String,
 }
 
 impl RenameIntent {
-    /// Reserve the name and branch inside the caller's transaction.
+    /// Reserve the branch inside the caller's transaction.
     pub(super) fn record(&self, db: &Connection, workspace_id: &SpaceId) -> Result<()> {
         db.execute(
-            "INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,?2,?3)",
-            params![workspace_id, self.name, self.branch],
+            "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,?2)",
+            params![workspace_id, self.branch],
         )?;
         Ok(())
     }
@@ -33,12 +32,11 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT name,branch FROM workspace_renames WHERE workspace_id=?1",
+                        "SELECT branch FROM workspace_renames WHERE workspace_id=?1",
                         [id],
                         |row| {
                             Ok(RenameIntent {
-                                name: row.get(0)?,
-                                branch: row.get(1)?,
+                                branch: row.get(0)?,
                             })
                         },
                     )
@@ -60,8 +58,8 @@ impl Manager {
         self.store
             .write(move |tx| {
                 tx.execute(
-                    "UPDATE workspaces SET name=?2,branch=?3 WHERE id=?1",
-                    params![id, intent.name, intent.branch],
+                    "UPDATE workspaces SET branch=?2 WHERE id=?1",
+                    params![id, intent.branch],
                 )?;
                 tx.execute(
                     "UPDATE workspaces SET base_ref=?3 WHERE repository_id=?1 AND base_ref=?2",

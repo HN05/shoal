@@ -278,22 +278,7 @@ impl Manager {
         }
     }
 
-    /// Refuse a name a new chat could not take now.
-    pub async fn check_chat_name(&self, name: SpaceName) -> Result<()> {
-        self.store
-            .run(move |db| store::ensure_name_available(db, &name, None))
-            .await
-    }
-
-    /// `name`, made a valid name, or its lowest `-2`, `-3`, ... variant
-    /// that a new chat could take now.
-    pub async fn free_chat_name(&self, name: String) -> Result<SpaceName> {
-        let base = SpaceName::derive(SpaceKind::Chat, &name);
-        self.store.run(move |db| store::free_name(db, &base)).await
-    }
-
-    /// Give the chat `chat` the name `name`, which must be free as a new
-    /// chat's.
+    /// Give the chat `chat` the name `name`.
     pub async fn rename_chat(&self, chat: SpaceId, name: SpaceName) -> Result<RenamedChat> {
         let owner = self.root_dir_owner();
         let (old, renamed) = self
@@ -676,7 +661,6 @@ fn insert(
 ) -> Result<Chat> {
     let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
-    store::ensure_name_available(tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
             unique_id,scope_token,workspace_id,mode,root_dir,narrowing)
@@ -772,8 +756,8 @@ fn ensure_place_free(
     }
 }
 
-/// Rename the running or stopped chat `chat`, by ID or name, to `name` unless
-/// another holds it. Returns the chat before and after.
+/// Rename the running or stopped chat `chat` to `name`. Returns the chat
+/// before and after.
 fn rename(
     tx: &rusqlite::Transaction<'_>,
     owner: &Path,
@@ -785,7 +769,6 @@ fn rename(
         .find(|running| running.id == *chat)
         .with_context(|| format!("no running chat {chat}"))?;
     if old.name != *name {
-        store::ensure_name_available(tx, name, None)?;
         tx.execute(
             "UPDATE chats SET name=?2 WHERE id=?1",
             params![old.id, name],

@@ -4,13 +4,13 @@ use crate::forge::numbers::PullNumber;
 use crate::time::UnixTime;
 use std::path::Path;
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{Caller, ScopedExecution},
         test_support::{commit, git, manager, repository},
     },
-    model::{MadeFor, SpaceKind, Workspace},
+    model::{MadeFor, Workspace},
     protocol::{CommitStart, WorkspaceMethod},
     state::WorkspaceState,
 };
@@ -72,7 +72,11 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     let again = create(&manager, &repo.id, None, CommitStart::Revision(None))
         .await
         .unwrap();
-    assert_eq!(again.name, format!("{}-2", at_main.name));
+    assert_eq!(again.name, at_main.name);
+    assert_eq!(
+        again.directory_name(),
+        format!("{}-2", at_main.directory_name())
+    );
 
     let tagged = create(
         &manager,
@@ -82,7 +86,8 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     )
     .await
     .unwrap();
-    assert_eq!(tagged.name, "v1-4-0");
+    assert_eq!(tagged.name, "v1.4.0");
+    assert_eq!(tagged.directory_name(), "v1-4-0");
     assert_eq!(
         tagged.at.unwrap().made_for,
         Some(MadeFor::Ref("v1.4.0".into()))
@@ -97,11 +102,7 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     )
     .await
     .unwrap();
-    // A short commit of only digits takes the kind as its prefix.
-    assert_eq!(
-        bare.name,
-        SpaceName::derive(SpaceKind::Workspace, &first[..7])
-    );
+    assert_eq!(bare.name, first[..7]);
     assert_eq!(bare.at.unwrap().made_for, None);
 }
 

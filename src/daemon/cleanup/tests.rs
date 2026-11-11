@@ -109,7 +109,7 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
             git(&workspace.path, &["branch", "-m", "new/topic"]);
             let id = workspace.id.clone();
             manager.store.run(move |db| {
-                db.execute("INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,'new-topic','new/topic')", [&id])?;
+                db.execute("INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,'new/topic')", [&id])?;
                 db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [&id])?;
                 Ok(())
             }).await.unwrap();

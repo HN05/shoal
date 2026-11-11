@@ -23,10 +23,7 @@ impl Operation {
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
                 | Self::Chat(
-                    ChatMethod::CheckChatName { .. }
-                        | ChatMethod::CheckChatParent { .. }
-                        | ChatMethod::CheckChatRestore { .. }
-                        | ChatMethod::FreeChatName { .. }
+                    ChatMethod::CheckChatParent { .. } | ChatMethod::CheckChatRestore { .. }
                 )
                 | Self::Ci(
                     CiMethod::CheckLog { .. }

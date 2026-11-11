@@ -55,38 +55,19 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
 }
 
 #[test]
-fn an_earlier_package_of_an_all_digit_workspace_imports_under_its_derived_name() {
+fn an_earlier_package_imports_under_the_name_it_holds() {
     let manifest = manifest_with_sessions();
     let mut value = serde_json::to_value(&manifest).unwrap();
-    value["workspace"]["name"] = "123".into();
-    let bytes = format!("{}\n{value}\n", header(2)).into_bytes();
-    let import = Import::read(&mut &bytes[..]).unwrap();
-    let Space::Workspace(packaged) = &import.manifest.space else {
-        panic!("a chat package: {:?}", import.manifest);
-    };
-    assert_eq!(packaged.workspace.name, "workspace-123");
-}
-
-#[test]
-fn an_earlier_package_of_an_all_digit_chat_imports_under_its_derived_name() {
-    let manifest = Manifest {
-        remote_url: None,
-        space: Space::Chat(PackagedChat {
-            name: "plan-cache".into(),
-            agent: "claude".into(),
-            links: Default::default(),
-            mode: "chat".into(),
-            narrowing: Default::default(),
-        }),
-        sessions: None,
-        session_files: Vec::new(),
-        copy: None,
-    };
-    let mut value = serde_json::to_value(&manifest).unwrap();
-    value["name"] = "123".into();
-    let bytes = format!("{}\n{value}\n", header(3)).into_bytes();
-    let import = Import::read(&mut &bytes[..]).unwrap();
-    assert_eq!(import.manifest.name(), "chat-123");
+    // A name an earlier rule refused, and one longer than a set name may be.
+    for name in ["123", &"x".repeat(64)] {
+        value["workspace"]["name"] = name.into();
+        let bytes = format!("{}\n{value}\n", header(2)).into_bytes();
+        let import = Import::read(&mut &bytes[..]).unwrap();
+        let Space::Workspace(packaged) = &import.manifest.space else {
+            panic!("a chat package: {:?}", import.manifest);
+        };
+        assert_eq!(packaged.workspace.name, name);
+    }
 }
 
 #[test]

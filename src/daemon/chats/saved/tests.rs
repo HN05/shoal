@@ -99,7 +99,6 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
             .map(|parent| parent.id),
         Some(chat.id.clone())
     );
-    assert!(manager.check_chat_name("talk".into()).await.is_err());
     assert_eq!(
         std::fs::read_to_string(tmp_dir.join("notes")).unwrap(),
         "kept"
@@ -160,7 +159,6 @@ async fn a_removed_saved_chat_ends() {
     assert_eq!(removed.chat.id, chat.id);
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!chat.tmp_dir.unwrap().exists());
-    manager.check_chat_name("talk".into()).await.unwrap();
     assert_eq!(
         chat_events(&manager).await,
         ["chat_started talk", "chat_saved talk", "chat_ended talk"]

@@ -70,9 +70,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
 /// Ask for the chat's new name until the daemon accepts one.
 pub(in crate::cli::commands) async fn ask_name(ctx: &Context) -> Result<SpaceName> {
     ui::input_until(ctx, "Chat name", None, |name| async move {
-        let name = SpaceName::parse(&name)?;
-        crate::client::chats::check_name(&ctx.paths, &name).await?;
-        Ok(name)
+        SpaceName::parse(&name)
     })
     .await
 }
