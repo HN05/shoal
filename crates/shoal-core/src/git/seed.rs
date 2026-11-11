@@ -81,8 +81,9 @@ pub async fn unmodified_files(worktree: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// The `outputs` of the worktree that hold no tracked file, so deleting
-/// them leaves the worktree as clean as it was.
+/// The `outputs` of the worktree that hold no tracked file, its checked-out
+/// submodules' included, so deleting them leaves the worktree as clean as
+/// it was.
 pub async fn untracked_outputs(worktree: &Path, outputs: &[String]) -> Result<Vec<String>> {
     if outputs.is_empty() {
         return Ok(Vec::new());
@@ -91,7 +92,7 @@ pub async fn untracked_outputs(worktree: &Path, outputs: &[String]) -> Result<Ve
         .iter()
         .map(|output| format!(":(literal){output}"))
         .collect();
-    let mut args = vec!["ls-files", "-z", "--"];
+    let mut args = vec!["ls-files", "-z", "--recurse-submodules", "--"];
     args.extend(pathspecs.iter().map(String::as_str));
     let listing = super::run_isolated(worktree, &args).await?;
     let tracked: Vec<String> = names(&listing).collect();
