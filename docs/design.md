@@ -1216,7 +1216,10 @@ sets `shoal.created=1`, which relabelling never adds. The daemon closes a
 workspace's sessions when it removes the workspace, whatever `terminal.close_when_done`
 says, and startup and cleanup sweeps close those whose workspace record is gone,
 retrying failures without restoring ownership. Sessions from before the label
-have no known origin and are left alone. Relabelling replaces obsolete ownership
+have no known origin and are left alone. A session zmx lists as unreachable,
+such as one a zmx of another version started, shows neither labels nor
+instance, so every lookup of it, and every sweep while one exists, fails
+naming it instead of taking it for another owner's or for gone. Relabelling replaces obsolete ownership
 before any in-place agent or chat can launch, so removal preserves a session
 reused by another owner. zmx has no conditional kill, so ownership checks,
 relabelling and closes hold a lock beside zmx's socket directory, shared by

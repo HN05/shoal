@@ -28,6 +28,19 @@ fn list_parses_names_fields_and_labels_after_the_marker() {
 }
 
 #[test]
+fn a_session_zmx_cannot_reach_is_refused_rather_than_taken_for_another_owners() -> Result<()> {
+    // zmx 1.x lists a session an older zmx started without its labels.
+    let sessions = parse_list(
+        "  name=old\terr=Unexpected\tstatus=unreachable\n\
+         \x20 name=new\tpid=2\tclients=0\tcreated=20\tcwd=file://host/a\tshoal.created=1\n",
+    );
+    assert!(find(&sessions, "old").is_err());
+    assert!(find(&sessions, "new")?.is_some());
+    assert!(find(&sessions, "gone")?.is_none());
+    Ok(())
+}
+
+#[test]
 fn session_cleanup_is_scoped_to_sessions_this_state_created() -> Result<()> {
     let root = tempfile::tempdir()?;
     let state = root.path().join("state with spaces");

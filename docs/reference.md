@@ -889,7 +889,7 @@ workspace it runs in, as `shoal list --chats`, the inbox and the menu do with
 `in <workspace>`. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
 record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
-in `sessions`, or a failed `zmx list` in `sessions_error`. `transcripts` lists every
+in `sessions`, or a failed `zmx list`, or a session zmx cannot reach, in `sessions_error`. `transcripts` lists every
 session the space's agents reported, with `agent`, `session`, the `execution` a
 workspace's agent ran as, whether the agent runs it now in `current`, its
 transcript in `path` and all its files, the transcript included, in `files`,

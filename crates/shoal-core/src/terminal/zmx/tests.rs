@@ -34,15 +34,27 @@ fn a_watch_follows_only_the_session_it_began_with() {
         workspace: "w1".into(),
         instance: instance.map(str::to_owned),
     };
+    let hosts = |place| hosts(&sessions, &place).unwrap();
     assert_eq!(instance(&sessions[0].1), "7:100");
-    assert!(hosts(&sessions, &watched("fix", Some("7:100"))));
-    assert!(hosts(&sessions, &watched("fix", None)));
+    assert!(hosts(watched("fix", Some("7:100"))));
+    assert!(hosts(watched("fix", None)));
     // A later session of the same workspace under the same name.
-    assert!(!hosts(&sessions, &watched("fix", Some("6:90"))));
+    assert!(!hosts(watched("fix", Some("6:90"))));
     // Another workspace's session, an unlabelled one, or none at all.
-    assert!(!hosts(&sessions, &watched("other", None)));
-    assert!(!hosts(&sessions, &watched("bare", None)));
-    assert!(!hosts(&sessions, &watched("gone", None)));
+    assert!(!hosts(watched("other", None)));
+    assert!(!hosts(watched("bare", None)));
+    assert!(!hosts(watched("gone", None)));
+}
+
+#[test]
+fn a_watch_neither_follows_nor_loses_a_session_zmx_cannot_reach() {
+    let sessions = parse_list("  name=fix\terr=Unexpected\tstatus=unreachable\n");
+    let watched = Watched {
+        id: "fix".into(),
+        workspace: "w1".into(),
+        instance: None,
+    };
+    assert!(hosts(&sessions, &watched).is_err());
 }
 
 #[test]
@@ -66,11 +78,11 @@ fn a_failed_demo_worker_ends_its_shell() -> Result<()> {
 #[test]
 fn a_recorded_session_is_only_the_instance_it_recorded() {
     let sessions = parse_list("  name=shared\tpid=2\tcreated=20\n");
-    let (name, fields) = &sessions[0];
+    let fields = &sessions[0].1;
     let mut place = Origin::created(HostName::Zmx, "shared".into());
-    assert!(is_instance(name, fields, &place));
+    assert!(is_instance(fields, &place));
     place.instance = Some("2:20".into());
-    assert!(is_instance(name, fields, &place));
+    assert!(is_instance(fields, &place));
     place.instance = Some("1:10".into());
-    assert!(!is_instance(name, fields, &place));
+    assert!(!is_instance(fields, &place));
 }

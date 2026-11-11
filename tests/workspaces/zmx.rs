@@ -875,6 +875,26 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
 }
 
 #[test]
+fn status_reports_a_session_zmx_cannot_reach_instead_of_dropping_it() {
+    let fixture = Fixture::new();
+    fixture.add("persist");
+    let sessions = fixture.root.path().join("zmx-sessions");
+    fs::write(&sessions, "  name=persist\tpid=1\tclients=0\n").unwrap();
+    let agent = agent_in_session(&fixture, "persist", "persist");
+    // zmx 1.x lists a session an older zmx started without its labels.
+    fs::write(
+        &sessions,
+        "  name=persist\terr=Unexpected\tstatus=unreachable\n",
+    )
+    .unwrap();
+    let status = fixture.ok(&["status", "persist"]);
+    assert_eq!(status["sessions"], serde_json::json!([]));
+    assert!(status["sessions_error"].is_string(), "{status}");
+    fs::write(&sessions, "  name=persist\tpid=1\tclients=0\n").unwrap();
+    drop(agent);
+}
+
+#[test]
 fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     let fixture = Fixture::new();
     install_fake_agents(&fixture, &["claude"]);

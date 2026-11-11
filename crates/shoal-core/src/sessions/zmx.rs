@@ -1,6 +1,6 @@
 //! zmx session discovery and termination, shared by launchers and cleanup.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use tokio::process::Command;
@@ -90,6 +90,36 @@ pub(crate) fn parse_list(output: &str) -> Vec<(String, Fields)> {
         .collect()
 }
 
+/// The fields of the session `name` among `sessions`, while zmx lists it.
+pub(crate) fn find<'a>(sessions: &'a [(String, Fields)], name: &str) -> Result<Option<&'a Fields>> {
+    sessions
+        .iter()
+        .find(|(listed, _)| listed == name)
+        .map(|(listed, fields)| reachable(listed, fields))
+        .transpose()
+}
+
+/// Refuse `sessions` while one of them, whatever its owner, is unreachable.
+fn ensure_reachable(sessions: &[(String, Fields)]) -> Result<()> {
+    sessions
+        .iter()
+        .try_for_each(|(name, fields)| reachable(name, fields).map(drop))
+}
+
+/// zmx lists a session it cannot talk to, such as one a zmx of another
+/// version started, by name and error alone. Without its labels nothing tells
+/// whose it is, so it is refused rather than taken for another owner's.
+fn reachable<'a>(name: &str, fields: &'a Fields) -> Result<&'a Fields> {
+    if field(fields, "status") == Some("unreachable") {
+        bail!(
+            "zmx cannot reach session {name} ({}), which a zmx of another version may have \
+             started; end its processes and restart the agents that ran there",
+            field(fields, "err").unwrap_or("no error reported")
+        );
+    }
+    Ok(fields)
+}
+
 pub(crate) fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
     fields
         .iter()
@@ -148,8 +178,9 @@ impl super::Host for Zmx {
                 return Ok(Vec::new());
             }
             let state_label = state_label(state)?;
-            Ok(list()
-                .await?
+            let sessions = list().await?;
+            ensure_reachable(&sessions)?;
+            Ok(sessions
                 .into_iter()
                 .filter(|(_, fields)| in_state(fields, &state_label))
                 .filter_map(|(name, fields)| {
@@ -169,11 +200,7 @@ impl super::Host for Zmx {
         Box::pin(async move {
             let session = place.id();
             let _server = ownership_lock().await?;
-            if list()
-                .await?
-                .iter()
-                .any(|(name, fields)| name == session && owned_by(fields, owner))
-            {
+            if find(&list().await?, session)?.is_some_and(|fields| owned_by(fields, owner)) {
                 kill(session).await?;
             }
             Ok(())

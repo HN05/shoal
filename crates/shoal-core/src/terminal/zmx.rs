@@ -24,7 +24,7 @@ use crate::{
     env,
     sessions::{
         HostName, Origin,
-        zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, kill, list},
+        zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, find, kill, list},
     },
     subprocess::Run,
     tools::Tool,
@@ -143,21 +143,16 @@ impl Watches for Zmx {
     /// zmx reuses session names, so a session is told apart by its process
     /// and creation time.
     fn place_instance<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move {
-            let sessions = list().await?;
-            Ok(sessions
-                .iter()
-                .find(|(name, _)| name == place)
-                .map(|(_, fields)| instance(fields)))
-        })
+        Box::pin(async move { Ok(find(&list().await?, place)?.map(instance)) })
     }
 
     /// zmx reads no agent state, so a session is only open or gone. A later
-    /// session under the same name counts as gone.
+    /// session under the same name counts as gone, and one zmx cannot reach
+    /// as neither.
     fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(async move {
             let sessions = list().await?;
-            Ok(if hosts(&sessions, place) {
+            Ok(if hosts(&sessions, place)? {
                 PlaceState::Open(None)
             } else {
                 PlaceState::Gone
@@ -382,15 +377,11 @@ async fn close_failed_session(name: &str, created: Option<&str>) -> Result<()> {
 }
 
 async fn cleanup_instance(name: &str) -> Result<Option<String>> {
-    Ok(list()
-        .await?
-        .iter()
-        .find(|(session, _)| session == name)
-        .and_then(|(_, fields)| {
-            field(fields, "pid").filter(|value| !value.is_empty())?;
-            field(fields, "created").filter(|value| !value.is_empty())?;
-            Some(instance(fields))
-        }))
+    Ok(find(&list().await?, name)?.and_then(|fields| {
+        field(fields, "pid").filter(|value| !value.is_empty())?;
+        field(fields, "created").filter(|value| !value.is_empty())?;
+        Some(instance(fields))
+    }))
 }
 
 fn worker_words(argv: &[OsString]) -> Result<Vec<&str>> {
@@ -538,43 +529,40 @@ fn ended(status: ExitStatus) -> Result<()> {
 /// one.
 async fn sessions_at(places: &[&Origin]) -> Result<Vec<Option<Session>>> {
     let sessions = list().await?;
-    Ok(places
+    places
         .iter()
         .map(|place| {
-            sessions
-                .iter()
-                .find(|(name, fields)| is_instance(name, fields, place))
-                .map(|(name, fields)| {
+            Ok(find(&sessions, place.id())?
+                .filter(|fields| is_instance(fields, place))
+                .map(|fields| {
                     let clients = field(fields, "clients")
                         .and_then(|clients| clients.parse().ok())
                         .unwrap_or(0);
-                    Session::open(name.clone(), clients, place)
-                })
+                    Session::open(place.id().to_owned(), clients, place)
+                }))
         })
-        .collect())
+        .collect()
 }
 
-/// Whether the session `name` with `fields` is `place`, the instance it
-/// recorded when it has one.
-fn is_instance(name: &str, fields: &Fields, place: &Origin) -> bool {
-    name == place.id()
-        && place
-            .instance
-            .as_ref()
-            .is_none_or(|recorded| *recorded == instance(fields))
+/// Whether the session with `fields` under `place`'s name is `place`, the
+/// instance it recorded when it has one.
+fn is_instance(fields: &Fields, place: &Origin) -> bool {
+    place
+        .instance
+        .as_ref()
+        .is_none_or(|recorded| *recorded == instance(fields))
 }
 
 /// Whether `sessions` list the watched session: under its name, labelled
 /// with its workspace, and the instance the watch began with.
-fn hosts(sessions: &[(String, Fields)], place: &Watched) -> bool {
-    sessions.iter().any(|(name, fields)| {
-        *name == place.id
-            && field(fields, WORKSPACE_LABEL) == Some(place.workspace.as_str())
+fn hosts(sessions: &[(String, Fields)], place: &Watched) -> Result<bool> {
+    Ok(find(sessions, &place.id)?.is_some_and(|fields| {
+        field(fields, WORKSPACE_LABEL) == Some(place.workspace.as_str())
             && place
                 .instance
                 .as_ref()
                 .is_none_or(|instance| *instance == self::instance(fields))
-    })
+    }))
 }
 
 /// A session's process and creation time.
