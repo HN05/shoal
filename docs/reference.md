@@ -1673,7 +1673,8 @@ proxy = "cliproxy"
 ```
 
 A proxy without `upstream` only adds the retries, sending each agent's requests
-where they would go without it, which Shoal finds when the agent launches:
+where they would go without it, which Shoal finds when the agent launches,
+from the environment the agent runs with, its tool's `env_remove` included:
 
 ```toml
 [machine.proxies.retry]

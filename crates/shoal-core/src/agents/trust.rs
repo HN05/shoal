@@ -174,10 +174,17 @@ fn claude_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
 }
 
 pub(super) fn codex_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
-    env::codex_home_from(|name| environment.variable(name)).map(|dir| {
-        dir.unwrap_or_else(|| environment.home.join(".codex"))
-            .join("config.toml")
-    })
+    let variable = |name: &str| environment.variable(name);
+    Ok(codex_home(&variable, environment.home)?.join("config.toml"))
+}
+
+/// The directory Codex keeps its config and login in: `.codex` under `home`
+/// unless `CODEX_HOME`, which `variable` reads, moves it.
+pub(super) fn codex_home(
+    variable: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    home: &std::path::Path,
+) -> Result<std::path::PathBuf> {
+    Ok(env::codex_home_from(variable)?.unwrap_or_else(|| home.join(".codex")))
 }
 
 /// Trust the repository's checkout and the shared workspaces directory for

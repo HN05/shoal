@@ -203,6 +203,46 @@ async fn prompt_cache_child() {
     assert_eq!(prompt_cache_1h(&launch, &chosen), None);
 }
 
+#[tokio::test]
+async fn a_proxy_without_an_upstream_reads_the_environment_as_the_agent_sees_it() {
+    // The variable the agent's own environment removes is this process's.
+    let root = tempfile::tempdir().unwrap();
+    let mut child = crate::test_support::isolated_test(
+        root.path(),
+        "execution::spawn::tests::removed_base_url_child",
+    );
+    child.env("ANTHROPIC_BASE_URL", "http://inherited");
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), child.output())
+        .await
+        .expect("base URL check stalled")
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[tokio::test]
+#[ignore = "isolated environment launched by the removed base URL test"]
+async fn removed_base_url_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let home = tempfile::tempdir().unwrap();
+    let mut launch = launch(home.path());
+    let retrying: crate::proxy::Proxy = toml::from_str("").unwrap();
+    let upstream = async |launch: &mut AgentLaunch| {
+        let proxy = Some(retrying.clone());
+        let unset = BTreeMap::new();
+        launch
+            .restart_proxy(proxy, &claude(), home.path(), &unset)
+            .await
+            .unwrap();
+        launch.proxy.as_ref().unwrap().upstream.clone()
+    };
+    assert_eq!(upstream(&mut launch).await, "http://inherited");
+    let removed = "ANTHROPIC_BASE_URL".to_owned();
+    launch.environment.remove.insert(removed);
+    assert_eq!(upstream(&mut launch).await, "https://api.anthropic.com");
+}
+
 /// What `launch` sets `ENABLE_PROMPT_CACHING_1H` to over the workspace's
 /// `environment`, if it touches it.
 fn prompt_cache_1h(

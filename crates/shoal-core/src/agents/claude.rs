@@ -34,19 +34,24 @@ impl Integration for Claude {
         settings::merge(args, routing)
     }
 
-    /// The `ANTHROPIC_BASE_URL` it would use: in the `--settings` the
-    /// wrapper merges, which win over its user settings, which win over its
-    /// environment; Anthropic's API without one.
+    /// The `ANTHROPIC_BASE_URL` it would use, from the first of its
+    /// settings that names one, as Claude Code ranks them: the `--settings`
+    /// the wrapper merges and the user's; else its environment's, else
+    /// Anthropic's API.
     fn default_upstream(
         &self,
         args: &[OsString],
         directory: &Path,
-        environment: &AgentEnvironment,
+        variable: &dyn Fn(&str) -> Option<OsString>,
+        home: &Path,
     ) -> anyhow::Result<String> {
-        let variable = |name: &str| environment.variable(name);
-        let in_settings = |settings: Value| settings["env"][BASE_URL].as_str().map(str::to_owned);
-        let url = in_settings(settings::given(args, directory)?)
-            .or_else(|| in_settings(settings::user(&variable, environment.home)))
+        let ranked = [
+            settings::given(args, directory)?,
+            settings::user(variable, home),
+        ];
+        let url = ranked
+            .iter()
+            .find_map(|settings| settings["env"][BASE_URL].as_str().map(str::to_owned))
             .or_else(|| variable(BASE_URL)?.into_string().ok())
             .filter(|url| !url.is_empty());
         Ok(url.unwrap_or_else(|| ANTHROPIC_API.to_owned()))

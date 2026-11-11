@@ -51,23 +51,22 @@ pub(crate) fn agent_url(kind: IntegrationKind, url: &str, proxy: &crate::proxy::
 }
 
 /// Where `proxy` forwards the requests of an agent with integration `kind`
-/// launched as `command` in `directory`, running with `configured` added to
-/// this process's environment: its `upstream`, else where the agent's
-/// requests go without it.
+/// launched as `command` in `directory`, with its user files under `home`
+/// and the environment `variable` reads, its own removals included: its
+/// `upstream`, else where the agent's requests go without it.
 pub(crate) fn upstream(
     kind: IntegrationKind,
     proxy: &crate::proxy::Proxy,
     command: &[OsString],
     directory: &Path,
+    variable: &dyn Fn(&str) -> Option<OsString>,
     home: &Path,
-    configured: &BTreeMap<String, OsString>,
 ) -> Result<String> {
     if let Some(upstream) = &proxy.upstream {
         return Ok(upstream.clone());
     }
-    let environment = AgentEnvironment::new(home, configured);
     integration(kind)
-        .default_upstream(command, directory, &environment)
+        .default_upstream(command, directory, variable, home)
         .context("find where the agent's API requests go without its proxy")
 }
 

@@ -94,12 +94,14 @@ pub trait Integration: Sync {
     /// Where its API requests go without a proxy, which a proxy without an
     /// `upstream` forwards them to, its full base URL: by `args`, a launch's
     /// arguments with the placeholders of [`Self::hook_args`], running in
-    /// `directory` with `environment`.
+    /// `directory` with its user files under `home` and the environment
+    /// `variable` reads.
     fn default_upstream(
         &self,
         _args: &[OsString],
         _directory: &Path,
-        _environment: &AgentEnvironment,
+        _variable: &dyn Fn(&str) -> Option<OsString>,
+        _home: &Path,
     ) -> Result<String> {
         anyhow::bail!("Shoal does not know where its API requests go")
     }

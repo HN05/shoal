@@ -180,7 +180,8 @@ async fn reached(
     let proxy = launch_proxy(settings, &name.into()).unwrap().unwrap();
     let mut command: Vec<OsString> = command.iter().map(Into::into).collect();
     with_proxy_args(settings, &name.into(), &mut command);
-    let upstream = upstream(kind, proxy, &command, home, home, configured).unwrap();
+    let variable = |name: &str| crate::env::configured_var(configured, name);
+    let upstream = upstream(kind, proxy, &command, home, &variable, home).unwrap();
     let key = match &proxy.key {
         Some(key) => Some(key.resolve(|_| None).await.unwrap()),
         None => None,
@@ -269,18 +270,13 @@ fn default_upstream(
     home: &Path,
     variables: &[(&str, &str)],
 ) -> String {
-    let configured = variables
-        .iter()
-        .map(|(name, value)| ((*name).to_owned(), (*value).into()))
-        .collect();
-    let environment = AgentEnvironment {
-        home,
-        configured: &configured,
-        inherited: |_| None,
+    let variable = |name: &str| {
+        let set = variables.iter().find(|(set, _)| *set == name);
+        set.map(|(_, value)| OsString::from(value))
     };
     let args: Vec<OsString> = args.iter().map(Into::into).collect();
     integration(kind)
-        .default_upstream(&args, home, &environment)
+        .default_upstream(&args, home, &variable, home)
         .unwrap()
 }
 

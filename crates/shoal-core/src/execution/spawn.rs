@@ -91,7 +91,8 @@ impl AgentLaunch {
     }
 
     /// Where `proxy` forwards the requests of the agent launched as
-    /// `command` in `directory` with the workspace's `environment`.
+    /// `command` in `directory` with the workspace's `environment`, as the
+    /// agent sees it.
     fn upstream(
         &self,
         proxy: &crate::proxy::Proxy,
@@ -100,13 +101,14 @@ impl AgentLaunch {
         environment: &BTreeMap<String, OsString>,
     ) -> Result<String> {
         let configured = self.configured_environment(environment);
+        let variable = |name: &str| self.variable(&configured, name);
         crate::agents::upstream(
             self.kind(),
             proxy,
             command,
             directory,
+            &variable,
             &self.home,
-            &configured,
         )
     }
 

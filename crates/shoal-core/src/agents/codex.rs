@@ -44,12 +44,11 @@ impl Integration for Codex {
         &self,
         args: &[OsString],
         directory: &std::path::Path,
-        environment: &AgentEnvironment,
+        variable: &dyn Fn(&str) -> Option<OsString>,
+        home: &std::path::Path,
     ) -> Result<String> {
-        let config = super::trust::codex_config(environment)?;
-        let codex_home = config.parent().unwrap_or(directory);
-        let variable = |name: &str| environment.variable(name);
-        provider::base_url(args, codex_home, directory, &variable)
+        let codex_home = super::trust::codex_home(variable, home)?;
+        provider::base_url(args, &codex_home, directory, variable)
     }
 
     /// Codex fires no hook after a failed turn, so the proxy's failure
