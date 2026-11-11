@@ -84,9 +84,15 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         // Work to wait for is refused before the agent or any picker.
         (
             vec![
-                "start", "test", "new", "--agent", "codex", "--after", "missing",
+                "start",
+                "test",
+                "new",
+                "--agent",
+                "codex",
+                "--add-blocker",
+                "missing",
             ],
-            vec!["list_repositories", "check_dependencies"],
+            vec!["list_repositories", "check_blockers"],
             "neither a workspace nor a queued agent",
         ),
     ] {
@@ -272,7 +278,7 @@ impl FakeDaemon {
                             }}),
                         }
                     }
-                    "check_dependencies" => json!({"type": "error", "data": {
+                    "check_blockers" => json!({"type": "error", "data": {
                         "code": "operation_failed", "message": "missing is neither a workspace nor a queued agent"
                     }}),
                     // The daemon refuses the number before it reads the issue.

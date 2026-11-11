@@ -116,7 +116,7 @@ pub(super) async fn handle(
             let blockers = manager
                 .issue_blockers(&context, &item, caller.is_some())
                 .await;
-            return Ok(Answer::pages(blockers, Body::Dependencies));
+            return Ok(Answer::pages(blockers, Body::Blockers));
         }
         ItemMethod::PullRequest { context, item } => Body::PullRequest(
             manager

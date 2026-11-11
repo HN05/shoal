@@ -10,7 +10,7 @@ use super::{
     finish::{AgentStart, add_planned, execute_add_with_target},
     handoff::start_queued,
     plan::planned_workspace_name,
-    queue::{admit_launch, failing_entry, launch_dependencies},
+    queue::{admit_launch, failing_entry, launch_blockers},
     target::AddTarget,
 };
 use crate::client::queue::QueueEntryId;
@@ -22,7 +22,7 @@ use crate::{
         terminal,
     },
     config::Effective,
-    model::Dependency,
+    model::Blocker,
     start_plan::AddPlan,
 };
 
@@ -51,13 +51,13 @@ pub(super) async fn add_detached(
     target: AddTarget,
     issue: Option<issues::Issue>,
     options: AddOptions,
-    after: Vec<Dependency>,
+    blockers: Vec<Blocker>,
 ) -> Result<i32> {
     if plan.agent_name().is_none() {
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     }
-    let after = launch_dependencies(ctx, &target, issue.as_ref(), options.now, after).await?;
-    if after.is_empty() {
+    let blockers = launch_blockers(ctx, &target, issue.as_ref(), options.now, blockers).await?;
+    if blockers.is_empty() {
         let start = match crate::env::is_scoped() {
             true => AgentStart::Queued { now: options.now },
             false => AgentStart::Placed { now: options.now },
@@ -66,11 +66,11 @@ pub(super) async fn add_detached(
     }
     ensure!(
         !crate::env::is_scoped(),
-        "scoped processes add a workspace at once, so its agent cannot wait for other work; add it once {} is complete",
-        waited_for(&after)
+        "scoped processes add a workspace at once, so its agent cannot be blocked; add it once {} clears",
+        blocked_by(&blockers)
     );
     if let Some(queued) =
-        admit_launch(ctx, &target, &mut plan, issue.as_ref(), false, after).await?
+        admit_launch(ctx, &target, &mut plan, issue.as_ref(), false, blockers).await?
     {
         return Ok(queued);
     }
@@ -119,19 +119,19 @@ fn runs_its_own_way(settings: &Effective, plan: &AddPlan) -> bool {
     (plan.agent.agent.as_ref()).is_some_and(|agent| agents::runs_its_own_way(agent, settings))
 }
 
-/// The names of the work `after` lists.
-fn waited_for(after: &[Dependency]) -> String {
-    let names: Vec<_> = (after.iter())
-        .map(|dependency| match dependency {
-            Dependency::Work(name) | Dependency::Issue(name) => name.as_str(),
+/// The names of what `blockers` lists.
+fn blocked_by(blockers: &[Blocker]) -> String {
+    let names: Vec<_> = (blockers.iter())
+        .map(|blocker| match blocker {
+            Blocker::Space(name) | Blocker::Issue(name) => name.as_str(),
         })
         .collect();
     names.join(", ")
 }
 
-/// Start the `plan` the queue admitted at once, since the work it waits for
-/// is already complete, in the background as the daemon starts it once
-/// that work completes, and report its entry.
+/// Start the `plan` the queue admitted at once, since its blockers already
+/// cleared, in the background as the daemon starts it once they clear, and
+/// report its entry.
 async fn start_admitted(ctx: &Context, target: &AddTarget, plan: AddPlan) -> Result<i32> {
     let id = (plan.queue_entry.as_ref().map(QueueEntryId::as_str))
         .context("the daemon admitted a waiting agent without an entry")?;

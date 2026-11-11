@@ -50,7 +50,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         here,
         focus,
         now,
-        after: Vec::new(),
+        blockers: Vec::new(),
         model: model.into(),
         ..Default::default()
     };

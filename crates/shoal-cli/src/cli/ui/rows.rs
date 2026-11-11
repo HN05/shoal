@@ -419,8 +419,8 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
         Some(position) => format!("{label}, position {position}"),
         None => label,
     };
-    if !entry.waiting_for.is_empty() {
-        text += &format!(", after {}", entry.waiting_for.join(", "));
+    if !entry.blockers.is_empty() {
+        text += &format!(", blocked by {}", entry.blockers.join(", "));
     }
     if entry.waits_for_update && entry.state == QueueState::Queued {
         text += ", after an update";

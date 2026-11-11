@@ -53,14 +53,14 @@ fn an_agent_running_unattended_queues_unless_focused_or_now() {
 #[test]
 fn an_agent_waiting_for_work_queues() {
     let options = AddOptions {
-        after: vec!["other".into()],
+        blockers: vec!["other".into()],
         ..Default::default()
     };
     assert!(!options.starts_now(&plan(&[]), None, true));
 }
 
 #[test]
-fn after_takes_a_bare_number_as_an_issue_and_text_as_work() {
+fn a_blocker_takes_a_bare_number_as_an_issue_and_text_as_a_space() {
     assert!(super::queue::names_issue("42"));
     assert!(super::queue::names_issue(
         "https://forge.example/team/repo/issues/42"

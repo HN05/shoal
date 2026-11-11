@@ -610,7 +610,7 @@ impl Backend for GitLab {
     }
 
     /// GitLab lists blocking issues among an issue's links.
-    async fn open_issue_dependencies(
+    async fn open_issue_blockers(
         &self,
         repo: &ForgeRepo,
         account: &Account,

@@ -1,4 +1,4 @@
-//! Admitting an addition's agent to the agent queue, with the work it waits for.
+//! Admitting an addition's agent to the agent queue, with what blocks it.
 use anyhow::Result;
 
 use crate::client::queue::QueueEntryId;
@@ -11,38 +11,38 @@ use crate::{
         context::Context,
     },
     forge::IssueInput,
-    model::Dependency,
+    model::Blocker,
     start_plan::AddPlan,
 };
 
-/// The work `--after` names, refused before any prompt when the repository
+/// What `--add-blocker` names, refused before any prompt when the repository
 /// has no such workspace, queued agent or issue.
-pub(super) async fn after_dependencies(
+pub(super) async fn named_blockers(
     ctx: &Context,
     target: &AddTarget,
-    after: &[String],
-) -> Result<Vec<Dependency>> {
-    if after.is_empty() {
+    named: &[String],
+) -> Result<Vec<Blocker>> {
+    if named.is_empty() {
         return Ok(Vec::new());
     }
     let repo = target.repository(ctx).await?;
-    let mut dependencies = Vec::new();
-    for input in after {
-        dependencies.push(match names_issue(input) {
-            true => Dependency::Issue(issues::url(ctx, repo, input).await?),
-            false => Dependency::Work(input.clone()),
+    let mut blockers = Vec::new();
+    for input in named {
+        blockers.push(match names_issue(input) {
+            true => Blocker::Issue(issues::url(ctx, repo, input).await?),
+            false => Blocker::Space(input.clone()),
         });
     }
-    crate::client::workspaces::check_dependencies(
+    crate::client::workspaces::check_blockers(
         &ctx.paths,
         target.selector.clone(),
-        dependencies.clone(),
+        blockers.clone(),
     )
     .await?;
-    Ok(dependencies)
+    Ok(blockers)
 }
 
-/// Whether an `--after` value names an issue, by number or URL, as `shoal
+/// Whether an `--add-blocker` value names an issue, by number or URL, as `shoal
 /// start` takes one: unlike every other space argument, a bare number here
 /// is an issue, never a space's number.
 pub(super) fn names_issue(input: &str) -> bool {
@@ -50,7 +50,7 @@ pub(super) fn names_issue(input: &str) -> bool {
 }
 
 /// Admit the plan's agent, if any, to the agent queue: a start takes its
-/// slot and builds on the branch a done dependency left, while a queued
+/// slot and builds on the branch a done blocker left, while a queued
 /// launch is reported and returns its exit status.
 pub(super) async fn admit(
     ctx: &Context,
@@ -59,7 +59,7 @@ pub(super) async fn admit(
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
     options: &AddOptions,
-    after: Vec<Dependency>,
+    blockers: Vec<Blocker>,
 ) -> Result<Option<i32>> {
     if plan.agent_name().is_none() {
         return Ok(None);
@@ -69,18 +69,18 @@ pub(super) async fn admit(
         settings.get().await?.focus(&plan.mode()),
         ctx.on_terminal(),
     );
-    let after = launch_dependencies(ctx, target, issue, now, after).await?;
-    admit_launch(ctx, target, plan, issue, now, after).await
+    let blockers = launch_blockers(ctx, target, issue, now, blockers).await?;
+    admit_launch(ctx, target, plan, issue, now, blockers).await
 }
 
-/// [`admit`] the plan's agent, which starts `now` or waits for `after`.
+/// [`admit`] the plan's agent, which starts `now` or waits for `blockers`.
 pub(super) async fn admit_launch(
     ctx: &Context,
     target: &AddTarget,
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
     now: bool,
-    after: Vec<Dependency>,
+    blockers: Vec<Blocker>,
 ) -> Result<Option<i32>> {
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
@@ -90,7 +90,7 @@ pub(super) async fn admit_launch(
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
         now,
-        after,
+        blockers,
     };
     match queued_agents::admit(ctx, plan, launch).await? {
         queued_agents::Admission::Start { entry, base } => {
@@ -116,38 +116,38 @@ pub(super) async fn failing_entry<T>(
     result
 }
 
-/// The work a launch waits for: `after`, and the open issues the forge
-/// records as blocking its issue. A launch that starts `now` waits for nothing.
-pub(super) async fn launch_dependencies(
+/// What blocks a launch: `blockers`, and the open issues the forge records
+/// as blocking its issue. A launch that starts `now` waits for nothing.
+pub(super) async fn launch_blockers(
     ctx: &Context,
     target: &AddTarget,
     issue: Option<&issues::Issue>,
     now: bool,
-    mut after: Vec<Dependency>,
-) -> Result<Vec<Dependency>> {
+    mut blockers: Vec<Blocker>,
+) -> Result<Vec<Blocker>> {
     if now {
         return Ok(Vec::new());
     }
     if let Some(issue) = issue {
-        after.extend(issue_blockers(ctx, target, issue).await?);
+        blockers.extend(issue_blockers(ctx, target, issue).await?);
     }
-    Ok(after)
+    Ok(blockers)
 }
 
 /// The open issues the forge records as blocking `issue`. A forge that
-/// cannot list them, such as a repository with dependencies turned off,
+/// cannot list them, such as a repository with blocking issues turned off,
 /// leaves a warning and none.
 async fn issue_blockers(
     ctx: &Context,
     target: &AddTarget,
     issue: &issues::Issue,
-) -> Result<Vec<Dependency>> {
+) -> Result<Vec<Blocker>> {
     let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
     match client::issue_blockers(&ctx.paths, context, issue.url.clone()).await {
         Ok(blockers) => Ok(blockers),
         Err(error) => {
             eprintln!(
-                "warning: cannot list the issues blocking #{}, so the agent does not wait for them: {error:#}",
+                "warning: cannot list the issues blocking #{}, so they do not block the agent: {error:#}",
                 issue.number
             );
             Ok(Vec::new())

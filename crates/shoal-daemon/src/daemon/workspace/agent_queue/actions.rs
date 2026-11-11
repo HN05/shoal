@@ -11,7 +11,7 @@ use rusqlite::params;
 
 use super::{
     Grant,
-    dependencies::Readiness,
+    blockers::Readiness,
     order,
     store::{ENTRY_COLUMNS, WaitingRestore, entry as queue_entry, record_waiting_restore},
 };
@@ -104,16 +104,16 @@ impl Manager {
         Ok(entry)
     }
 
-    /// The branch a done dependency gives `entry` to build on, refusing one
-    /// that still waits for work.
+    /// The branch a done blocker gives `entry` to build on, refusing one
+    /// that something still blocks.
     async fn start_base(&self, entry: &QueueEntry) -> Result<Option<String>> {
-        match self.dependency_readiness().await?.remove(&entry.id) {
+        match self.blocker_readiness().await?.remove(&entry.id) {
             None => Ok(None),
             Some(Readiness::Ready { base }) => Ok(base),
-            Some(Readiness::Waiting(work)) => bail!(
-                "{} waits for {} and builds on its branch, so it cannot start before that work is complete",
+            Some(Readiness::Waiting(blocked_by)) => bail!(
+                "{} is blocked by {} and builds on its branch, so it cannot start before that work is complete",
                 entry.name,
-                work.join(", ")
+                blocked_by.join(", ")
             ),
         }
     }

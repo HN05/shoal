@@ -504,13 +504,13 @@ impl Backend for Forgejo {
         Err(capability::unsupported(self, Capability::ResolveThreads))
     }
 
-    async fn open_issue_dependencies(
+    async fn open_issue_blockers(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: IssueNumber,
     ) -> Result<Vec<String>> {
-        github_rest::open_dependencies(repo, account, &format!("issues/{number}/dependencies"))
+        github_rest::open_blockers(repo, account, &format!("issues/{number}/dependencies"))
             .await
     }
 

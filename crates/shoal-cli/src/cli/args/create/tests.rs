@@ -71,7 +71,7 @@ fn a_workspaces_start_parses_back_from_its_command_line() {
         git_profile: Some("work".into()),
         agent: Some("claude".parse().unwrap()),
         fork: true,
-        after: vec!["12".into(), "other".into()],
+        add_blocker: vec!["12".into(), "other".into()],
         creation: CreationArgs {
             skip_setup: true,
             disposable: true,

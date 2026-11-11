@@ -11,7 +11,7 @@ use crate::client::{
 };
 use crate::{
     cli::{context::Context, output::Palette, ui},
-    model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    model::{Blocker, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     start_plan::AddPlan,
     state::{QueueKind, QueueState},
     terminal,
@@ -19,7 +19,7 @@ use crate::{
 
 pub(super) enum Admission {
     /// Start now; the entry, when one tracks the slot, and the branch of a
-    /// done dependency to build on.
+    /// done blocker to build on.
     Start {
         entry: Option<QueueEntryId>,
         base: Option<String>,
@@ -35,7 +35,7 @@ pub(super) struct Launch {
     pub name: SpaceName,
     pub issue_title: Option<String>,
     pub now: bool,
-    pub after: Vec<Dependency>,
+    pub blockers: Vec<Blocker>,
 }
 
 /// Ask the daemon for a slot for `launch`, which `plan` starts.
@@ -51,7 +51,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         env: terminal::start_environment(),
         now: launch.now,
         workspace: None,
-        after: launch.after,
+        blockers: launch.blockers,
     };
     let admission = queue::add(&ctx.paths, request).await?;
     Ok(match (admission.start, admission.entry) {
@@ -77,15 +77,14 @@ pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -
     Ok(0)
 }
 
-/// When the queued `entry` starts: once the work it waits for is complete
-/// and an agent slot is free.
+/// When the queued `entry` starts: once nothing blocks it and an agent slot
+/// is free.
 pub(super) fn starts_when(entry: &QueueEntry) -> String {
-    match entry.waiting_for.as_slice() {
+    match entry.blockers.as_slice() {
         [] => "when an agent slot is free".to_owned(),
-        [work] => format!("once {work} is complete and an agent slot is free"),
-        work => format!(
-            "once {} are complete and an agent slot is free",
-            work.join(", ")
+        blockers => format!(
+            "once it is no longer blocked by {} and an agent slot is free",
+            blockers.join(", ")
         ),
     }
 }

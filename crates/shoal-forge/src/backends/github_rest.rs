@@ -465,8 +465,8 @@ pub(crate) fn head_spec(pull: &NewPull) -> String {
     }
 }
 
-/// The URLs of the open issues an issue dependency list at `endpoint` names.
-pub(crate) async fn open_dependencies(
+/// The URLs of the open issues the list of blocking issues at `endpoint` names.
+pub(crate) async fn open_blockers(
     repo: &ForgeRepo,
     account: &crate::account::Account,
     endpoint: &str,

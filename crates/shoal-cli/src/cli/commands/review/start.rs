@@ -295,7 +295,7 @@ async fn pull_request(
                     here: true,
                     focus: false,
                     now: false,
-                    after: Vec::new(),
+                    blockers: Vec::new(),
                     ..Default::default()
                 },
             )

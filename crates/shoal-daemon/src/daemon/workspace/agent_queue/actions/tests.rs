@@ -8,7 +8,7 @@ use crate::{
             request, started, stopped_agents,
         },
     },
-    model::{Dependency, QueueRequest},
+    model::{Blocker, QueueRequest},
     protocol::QueuedLaunches,
 };
 
@@ -159,7 +159,7 @@ async fn entries_start_now_past_the_limits_unless_they_wait_for_work() {
     let a = manager.queued("a").await;
     let dependent = manager
         .queue_add(QueueRequest {
-            after: vec![Dependency::Work(a)],
+            blockers: vec![Blocker::Space(a)],
             ..request(&repo, "dependent", false)
         })
         .await

@@ -117,7 +117,7 @@ async fn admit_here(
         name: workspace.name.clone(),
         issue_title: launch.issue.as_ref().map(|issue| issue.title.clone()),
         now: launch.now,
-        after: Vec::new(),
+        blockers: Vec::new(),
     };
     let plan = AddPlan::agent_in(workspace, launch)?;
     match queued_agents::admit(ctx, &plan, request).await? {

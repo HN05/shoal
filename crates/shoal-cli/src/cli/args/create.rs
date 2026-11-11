@@ -146,7 +146,7 @@ pub struct StartArgs {
     #[arg(long, hide = true, value_parser = recorded, conflicts_with = "permissions")]
     pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
     /// Start in a chat, whatever the mode's kind.
-    #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
+    #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub chat: bool,
     /// Start in a workspace with a worktree, whatever the mode's kind.
     #[arg(long, conflicts_with = "in_workspace")]
@@ -157,7 +157,7 @@ pub struct StartArgs {
         long = "in",
         num_args = 0..=1,
         value_name = "WORKSPACE",
-        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"]
+        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
     pub in_workspace: Option<Option<SpaceSelector>>,
     /// The space the new one goes below, by number or ID; defaults to the
@@ -217,9 +217,10 @@ pub struct StartArgs {
     #[arg(long)]
     pub now: bool,
     /// Queue the agent until this workspace, queued agent or issue is complete;
-    /// repeat for more. An issue's agent also waits for the issues blocking it.
-    #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
-    pub after: Vec<String>,
+    /// repeat for more. An issue's agent is also blocked by the issues the
+    /// forge records as blocking it.
+    #[arg(long, value_name = "BLOCKER", conflicts_with_all = ["now", "focus"])]
+    pub add_blocker: Vec<String>,
     /// The new space's name, free text of at most 40 characters; defaults
     /// to the linked issue's or PR's title, else a workspace's branch, or
     /// for a chat "<repo> <mode>", or "<workspace name> chat" with --in.
@@ -284,7 +285,7 @@ impl StartArgs {
             agent,
             fork,
             now,
-            after,
+            add_blocker,
             name,
             copy: CopyArgs { copy, checkpoint },
             creation:
@@ -325,7 +326,7 @@ impl StartArgs {
         line.values("agent", agent.as_ref().map(Agent::name));
         line.switch("fork", *fork);
         line.switch("now", *now);
-        line.values("after", after);
+        line.values("add_blocker", add_blocker);
         line.values("name", name.as_ref().map(|name| name.as_str()));
         line.optional("copy", selected(copy));
         line.values("checkpoint", checkpoint.map(|number| number.to_string()));

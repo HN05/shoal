@@ -3,7 +3,7 @@
 //! order as slots free.
 mod actions;
 mod agents;
-mod dependencies;
+mod blockers;
 mod dispatch;
 mod entries;
 mod expiry;

@@ -37,14 +37,12 @@ impl ForgeRepo {
     }
 
     /// The URLs of the open issues the forge records as blocking issue `number`.
-    pub async fn open_issue_dependencies(
+    pub async fn open_issue_blockers(
         &self,
         account: &Account,
         number: IssueNumber,
     ) -> Result<Vec<String>> {
-        self.kind
-            .open_issue_dependencies(self, account, number)
-            .await
+        self.kind.open_issue_blockers(self, account, number).await
     }
 
     /// An issue's state; a PR's number is refused.

@@ -221,14 +221,14 @@ impl Backend for GitHub {
             .hint_login(self)
     }
 
-    async fn open_issue_dependencies(
+    async fn open_issue_blockers(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: IssueNumber,
     ) -> Result<Vec<String>> {
         let endpoint = format!("issues/{number}/dependencies/blocked_by");
-        github_rest::open_dependencies(repo, account, &endpoint).await
+        github_rest::open_blockers(repo, account, &endpoint).await
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {

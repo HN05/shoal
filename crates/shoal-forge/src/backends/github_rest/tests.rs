@@ -30,7 +30,7 @@ fn statuses_report_failed_running_and_waiting_checks() {
 }
 
 #[test]
-fn dependencies_keep_open_issues() {
+fn blockers_keep_open_issues() {
     let issues = [
         json!({"state": "open", "html_url": "https://forge.example/o/r/issues/1"}),
         json!({"state": "closed", "html_url": "https://forge.example/o/r/issues/2"}),

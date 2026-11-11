@@ -5,7 +5,7 @@ use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
-use super::dependencies;
+use super::blockers;
 use crate::client::time::UnixTime;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
@@ -125,7 +125,7 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
             crate::daemon::store::narrowing_column(&request.narrowing)?,
         ],
     )?;
-    dependencies::record(tx, &launch.id, &launch.repository, &request.after)?;
+    blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
     Ok(())
 }
 
@@ -186,7 +186,7 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         workspace_id: row.get("workspace_id")?,
         execution: row.get("execution_id")?,
         opens: row.get("opens_workspace_id")?,
-        waiting_for: Vec::new(),
+        blockers: Vec::new(),
         waits_for_update: false,
         base: row.get("base_branch")?,
         job: crate::daemon::store::json_column(row, "job")?,

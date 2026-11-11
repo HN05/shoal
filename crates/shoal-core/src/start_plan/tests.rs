@@ -105,10 +105,10 @@ fn plans_queued_before_every_launch_ran_tracked_still_decode() {
 }
 
 #[test]
-fn a_finished_dependency_s_branch_is_the_base_of_new_branches_but_not_of_copies() {
+fn a_done_blocker_s_branch_is_the_base_of_new_branches_but_not_of_copies() {
     let mut new = super::Creation::default();
-    new.build_on(Some("dependency".into()));
-    assert_eq!(new.base.as_deref(), Some("dependency"));
+    new.build_on(Some("blocker".into()));
+    assert_eq!(new.base.as_deref(), Some("blocker"));
     let mut copy = super::Creation {
         copy: Some(super::CopyCreation {
             source: crate::protocol::CopySource {
@@ -119,6 +119,6 @@ fn a_finished_dependency_s_branch_is_the_base_of_new_branches_but_not_of_copies(
         }),
         ..Default::default()
     };
-    copy.build_on(Some("dependency".into()));
+    copy.build_on(Some("blocker".into()));
     assert_eq!(copy.base, None);
 }

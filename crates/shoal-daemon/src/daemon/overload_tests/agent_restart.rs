@@ -96,7 +96,7 @@ fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
         env: Default::default(),
         now: false,
         workspace: None,
-        after: Vec::new(),
+        blockers: Vec::new(),
     }
 }
 

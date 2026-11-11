@@ -87,11 +87,11 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<SpaceSelector>,
     },
-    /// Refuse the work `after` names that a queued launch in `repository`
+    /// Refuse the `blockers` that a queued launch in `repository`
     /// could not wait for, without queuing anything.
-    CheckDependencies {
+    CheckBlockers {
         repository: crate::repository::Selector,
-        after: Vec<crate::model::Dependency>,
+        blockers: Vec<crate::model::Blocker>,
     },
     AdoptWorkspace {
         repository: crate::repository::Selector,

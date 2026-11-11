@@ -30,7 +30,7 @@ use self::{
     handoff::start_beside,
     mode::choose_add_mode,
     plan::{absolute, check_add_creation, plan_addition, start_as},
-    queue::{admit, after_dependencies, failing_entry},
+    queue::{admit, failing_entry, named_blockers},
     source::{load_add_issue, pick_add_source, select_add_creation},
     target::resolve_add_target,
 };
@@ -48,8 +48,8 @@ pub(in crate::cli::commands) struct AddOptions {
     pub focus: bool,
     /// Start the agent even when `max_agents` is reached.
     pub now: bool,
-    /// Workspaces, queued agents and issues the agent waits for.
-    pub after: Vec<String>,
+    /// Workspaces, queued agents and issues that block the agent.
+    pub blockers: Vec<String>,
     /// The model and effort requested over the configured ones.
     pub model: crate::agent::ModelChoice,
     /// The mode the agent starts in; the default mode when `None`.
@@ -76,7 +76,7 @@ impl AddOptions {
         let waits_for_user = on_terminal && !plan.runs_unattended();
         self.now
             || self.focus
-            || (self.after.is_empty() && waits_for_user && focus_setting != Some(false))
+            || (self.blockers.is_empty() && waits_for_user && focus_setting != Some(false))
     }
 }
 
@@ -98,7 +98,7 @@ pub(in crate::cli::commands) async fn add(
     let mut creation = absolute(ctx, creation)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
     check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
-    let after = after_dependencies(ctx, &target, &options.after).await?;
+    let blockers = named_blockers(ctx, &target, &options.blockers).await?;
     let settings = AddSettings::new(ctx, &target.selector);
     let repository = Some(target.selector.clone());
     crate::cli::commands::permissions::ensure_held(ctx, repository, &options.narrowing).await?;
@@ -124,15 +124,15 @@ pub(in crate::cli::commands) async fn add(
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     start_as(&mut plan, &options, mode);
     ensure!(
-        options.after.is_empty() || plan.agent_name().is_some(),
-        "--after queues an agent; name one with --agent"
+        options.blockers.is_empty() || plan.agent_name().is_some(),
+        "--add-blocker queues an agent; name one with --agent"
     );
     if starts_detached(ctx, &plan, &options)? {
         ensure_detachable(&settings, &plan, &options).await?;
         // Boxed, as are the launches below it: the start path's futures
         // nest deep enough to overflow the main thread's stack in debug
         // builds on Linux.
-        return Box::pin(add_detached(ctx, plan, target, issue, options, after)).await;
+        return Box::pin(add_detached(ctx, plan, target, issue, options, blockers)).await;
     }
     if let Some(queued) = admit(
         ctx,
@@ -141,7 +141,7 @@ pub(in crate::cli::commands) async fn add(
         &mut plan,
         issue.as_ref(),
         &options,
-        after,
+        blockers,
     )
     .await?
     {

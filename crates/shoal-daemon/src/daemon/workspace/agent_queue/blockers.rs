@@ -1,8 +1,8 @@
-//! The work a queued launch waits for. A launch starts once every workspace
-//! it depends on is done at its current HEAD or removed, every launch has
-//! opened its workspace, which then stands in for it, and every issue has
-//! closed or is done in a workspace of the repository that links it. It
-//! builds on the branch of the done dependency that contains the others.
+//! What blocks a queued launch. A launch starts once every space blocking it
+//! is done at its current HEAD or removed, every launch has opened its
+//! workspace, which then stands in for it, and every issue has closed or is
+//! done in a workspace of the repository that links it. It builds on the
+//! branch of the done blocker that contains the others.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceSelector};
 use std::collections::HashMap;
@@ -19,20 +19,20 @@ use crate::{
     },
     forge::{ForgeRepo, account::Account},
     git,
-    model::{Dependency, SpaceKind, Workspace},
-    state::{DependencyKind, QueueKind, QueueState},
+    model::{Blocker, SpaceKind, Workspace},
+    state::{BlockerKind, QueueKind, QueueState},
 };
 
-/// Whether a waiting launch's dependencies let it start.
+/// Whether a waiting launch's blockers let it start.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Readiness {
-    /// It may start, on the branch of a done dependency that is not merged.
+    /// It may start, on the branch of a done blocker that is not merged.
     Ready { base: Option<String> },
-    /// What it still waits for, by name or URL.
+    /// What still blocks it, by name or URL.
     Waiting(Vec<String>),
 }
 
-/// One dependency as admission sees it.
+/// One blocker as admission sees it.
 #[derive(Debug, Clone)]
 enum Progress {
     Complete,
@@ -49,43 +49,44 @@ struct Done {
     head: String,
 }
 
-/// A recorded dependency of a waiting launch in `repository`.
+/// A recorded blocker of a waiting launch in `repository`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Recorded {
     repository: RepositoryId,
-    kind: DependencyKind,
+    kind: BlockerKind,
     target: String,
 }
 
-/// Record `after` as the dependencies of `entry`, a launch in `repository`.
+/// Record `blockers` as what blocks `entry`, a launch in `repository`.
 pub(super) fn record(
     db: &Connection,
     entry: &QueueEntryId,
     repository: &RepositoryId,
-    after: &[Dependency],
+    blockers: &[Blocker],
 ) -> Result<()> {
-    for dependency in after {
-        let (kind, target) = match dependency {
-            Dependency::Issue(url) => (DependencyKind::Issue, url.clone()),
-            Dependency::Work(selector) => work(db, Some(entry), repository, selector)?,
+    for blocker in blockers {
+        let (kind, target) = match blocker {
+            Blocker::Issue(url) => (BlockerKind::Issue, url.clone()),
+            Blocker::Space(selector) => space(db, Some(entry), repository, selector)?,
         };
         db.execute(
-            "INSERT OR IGNORE INTO agent_queue_dependencies(entry_id,kind,target) VALUES (?1,?2,?3)",
+            "INSERT OR IGNORE INTO agent_queue_blockers(entry_id,kind,target) VALUES (?1,?2,?3)",
             params![entry, kind, target],
         )?;
     }
     Ok(())
 }
 
-/// Refuse the workspaces and queued launches of `after` that `repository` lacks.
-fn ensure_work_exists(
+/// Refuse the workspaces and queued launches of `blockers` that `repository`
+/// lacks.
+fn ensure_spaces_exist(
     db: &Connection,
     repository: &RepositoryId,
-    after: &[Dependency],
+    blockers: &[Blocker],
 ) -> Result<()> {
-    for dependency in after {
-        if let Dependency::Work(selector) = dependency {
-            work(db, None, repository, selector)?;
+    for blocker in blockers {
+        if let Blocker::Space(selector) = blocker {
+            space(db, None, repository, selector)?;
         }
     }
     Ok(())
@@ -94,12 +95,12 @@ fn ensure_work_exists(
 /// The workspace or queued launch of `repository`, other than `entry`, that
 /// `selector` names. A launch that already opened its workspace stands for
 /// that workspace.
-fn work(
+fn space(
     db: &Connection,
     entry: Option<&QueueEntryId>,
     repository: &RepositoryId,
     selector: &str,
-) -> Result<(DependencyKind, String)> {
+) -> Result<(BlockerKind, String)> {
     let selected = match SpaceSelector::parse(selector) {
         Ok(selector) => crate::daemon::spaces::selected(db, &selector)?,
         Err(_) => None,
@@ -111,7 +112,7 @@ fn work(
             params![id, repository],
         )?;
         if owned {
-            return Ok((DependencyKind::Workspace, id.into()));
+            return Ok((BlockerKind::Space, id.into()));
         }
     }
     let launch: Option<(String, Option<String>)> = db
@@ -123,8 +124,8 @@ fn work(
         )
         .optional()?;
     match launch {
-        Some((_, Some(workspace))) => Ok((DependencyKind::Workspace, workspace)),
-        Some((id, None)) => Ok((DependencyKind::Launch, id)),
+        Some((_, Some(workspace))) => Ok((BlockerKind::Space, workspace)),
+        Some((id, None)) => Ok((BlockerKind::Launch, id)),
         None => bail!("{selector} is neither a workspace nor a queued agent of this repository"),
     }
 }
@@ -136,38 +137,33 @@ pub(super) fn replace_launch(
     workspace: &SpaceId,
 ) -> Result<()> {
     db.execute(
-        "UPDATE OR IGNORE agent_queue_dependencies SET kind=?3,target=?2 WHERE kind=?4 AND target=?1",
-        params![
-            entry,
-            workspace,
-            DependencyKind::Workspace,
-            DependencyKind::Launch
-        ],
+        "UPDATE OR IGNORE agent_queue_blockers SET kind=?3,target=?2 WHERE kind=?4 AND target=?1",
+        params![entry, workspace, BlockerKind::Space, BlockerKind::Launch],
     )?;
     db.execute(
-        "DELETE FROM agent_queue_dependencies WHERE kind=?2 AND target=?1",
-        params![entry, DependencyKind::Launch],
+        "DELETE FROM agent_queue_blockers WHERE kind=?2 AND target=?1",
+        params![entry, BlockerKind::Launch],
     )?;
     Ok(())
 }
 
 impl Manager {
-    /// Refuse `after` when it names work of `repository` that a queued
+    /// Refuse `blockers` when they name work of `repository` that a queued
     /// launch could not wait for.
-    pub async fn check_dependencies(
+    pub async fn check_blockers(
         &self,
         repository: &crate::repository::Selector,
-        after: Vec<Dependency>,
+        blockers: Vec<Blocker>,
     ) -> Result<()> {
         let repository = self.repository(repository).await?.id;
         self.store
-            .run(move |db| ensure_work_exists(db, &repository, &after))
+            .run(move |db| ensure_spaces_exist(db, &repository, &blockers))
             .await
     }
 
-    /// The readiness of each waiting launch with dependencies, by entry ID.
-    pub(super) async fn dependency_readiness(&self) -> Result<HashMap<QueueEntryId, Readiness>> {
-        let recorded = self.store.run(waiting_dependencies).await?;
+    /// The readiness of each waiting launch with blockers, by entry ID.
+    pub(super) async fn blocker_readiness(&self) -> Result<HashMap<QueueEntryId, Readiness>> {
+        let recorded = self.store.run(waiting_blockers).await?;
         let mut readiness = HashMap::new();
         for (entry, progress) in self.entry_progress(recorded).await? {
             readiness.insert(entry, readiness_of(progress).await?);
@@ -175,19 +171,19 @@ impl Manager {
         Ok(readiness)
     }
 
-    /// The progress of each entry's dependencies, looking each one up once.
+    /// The progress of each entry's blockers, looking each one up once.
     async fn entry_progress(
         &self,
         recorded: Vec<(QueueEntryId, Recorded)>,
     ) -> Result<HashMap<QueueEntryId, Vec<Progress>>> {
         let mut known = HashMap::new();
         let mut entries: HashMap<QueueEntryId, Vec<Progress>> = HashMap::new();
-        for (entry, dependency) in recorded {
-            let progress = match known.get(&dependency) {
+        for (entry, blocker) in recorded {
+            let progress = match known.get(&blocker) {
                 Some(progress) => progress,
                 None => {
-                    let found = self.progress(&dependency).await?;
-                    known.entry(dependency).or_insert(found)
+                    let found = self.progress(&blocker).await?;
+                    known.entry(blocker).or_insert(found)
                 }
             };
             entries.entry(entry).or_default().push(progress.clone());
@@ -195,18 +191,18 @@ impl Manager {
         Ok(entries)
     }
 
-    async fn progress(&self, dependency: &Recorded) -> Result<Progress> {
+    async fn progress(&self, blocker: &Recorded) -> Result<Progress> {
         let Recorded {
             repository,
             kind,
             target,
-        } = dependency.clone();
+        } = blocker.clone();
         match kind {
-            DependencyKind::Launch => {
+            BlockerKind::Launch => {
                 let name = self.store.run(move |db| launch_name(db, &target)).await?;
                 Ok(name.map_or(Progress::Complete, Progress::Waiting))
             }
-            DependencyKind::Workspace => {
+            BlockerKind::Space => {
                 match self
                     .store
                     .run(move |db| workspace_by_id(db, &SpaceId::from(target)))
@@ -216,7 +212,7 @@ impl Manager {
                     None => Ok(Progress::Complete),
                 }
             }
-            DependencyKind::Issue => {
+            BlockerKind::Issue => {
                 let url = target.clone();
                 let linked = self
                     .store
@@ -264,9 +260,9 @@ impl Manager {
         }
     }
 
-    /// Forget the issue dependencies that have closed.
-    pub(crate) async fn poll_dependency_issues(&self) -> Result<()> {
-        let urls = self.store.run(issue_dependencies).await?;
+    /// Forget the issue blockers that have closed.
+    pub(crate) async fn poll_blocker_issues(&self) -> Result<()> {
+        let urls = self.store.run(issue_blockers).await?;
         let account = self.user_account();
         let hosts = self.forge_hosts();
         let mut failure = None;
@@ -284,7 +280,7 @@ impl Manager {
 
     async fn forget_issue(&self, url: String) -> Result<()> {
         self.store
-            .run(move |db| forget_issue_dependency(db, &url))
+            .run(move |db| forget_issue_blocker(db, &url))
             .await
     }
 }
@@ -294,12 +290,12 @@ async fn issue_closed(hosts: &ForgeHosts<'_>, account: &Account, url: &str) -> R
     forge.issue_url_closed(account, url).await
 }
 
-/// Each dependency of the waiting launches with its entry, in queue order.
-fn waiting_dependencies(db: &mut Connection) -> Result<Vec<(QueueEntryId, Recorded)>> {
+/// Each blocker of the waiting launches with its entry, in queue order.
+fn waiting_blockers(db: &mut Connection) -> Result<Vec<(QueueEntryId, Recorded)>> {
     Ok(db
         .prepare(
             "SELECT d.entry_id,q.repository_id,d.kind,d.target
-             FROM agent_queue_dependencies d JOIN agent_queue q ON q.id=d.entry_id
+             FROM agent_queue_blockers d JOIN agent_queue q ON q.id=d.entry_id
              WHERE q.state=?1 ORDER BY q.seq,d.rowid",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -358,29 +354,29 @@ fn recorded_workspace<P: rusqlite::Params>(
 }
 
 /// The URLs of the issues queued launches wait for.
-fn issue_dependencies(db: &mut Connection) -> Result<Vec<String>> {
+fn issue_blockers(db: &mut Connection) -> Result<Vec<String>> {
     Ok(db
-        .prepare("SELECT DISTINCT target FROM agent_queue_dependencies WHERE kind=?1")?
-        .query_map([DependencyKind::Issue], |row| row.get(0))?
+        .prepare("SELECT DISTINCT target FROM agent_queue_blockers WHERE kind=?1")?
+        .query_map([BlockerKind::Issue], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<String>>>()?)
 }
 
-fn forget_issue_dependency(db: &Connection, url: &str) -> Result<()> {
+fn forget_issue_blocker(db: &Connection, url: &str) -> Result<()> {
     db.execute(
-        "DELETE FROM agent_queue_dependencies WHERE kind=?1 AND target=?2",
-        params![DependencyKind::Issue, url],
+        "DELETE FROM agent_queue_blockers WHERE kind=?1 AND target=?2",
+        params![BlockerKind::Issue, url],
     )?;
     Ok(())
 }
 
-/// Ready when nothing is waiting, on the branch of the done dependency whose
-/// HEAD contains every other's; done dependencies on separate branches wait
+/// Ready when nothing blocks, on the branch of the done blocker whose HEAD
+/// contains every other's; done blockers on separate branches wait
 /// until all but one have merged and gone.
 async fn readiness_of(progress: Vec<Progress>) -> Result<Readiness> {
     let mut waiting = Vec::new();
     let mut done = Vec::new();
-    for dependency in progress {
-        match dependency {
+    for blocker in progress {
+        match blocker {
             Progress::Complete => {}
             Progress::Done(found) => done.push(found),
             Progress::Waiting(label) => waiting.push(label),

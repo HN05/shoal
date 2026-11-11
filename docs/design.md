@@ -1208,7 +1208,7 @@ are set to; `repo
 setup` and `config setup` always focus the agent the user works with straight
 away. A launch the user waits for starts past `max_agents`, as `--now` does:
 one `--focus` focuses, or an interactive call's agent waiting for input that
-the setting does not send to the background, unless `--after` makes it wait for work; the setting alone does not, so it
+the setting does not send to the background, unless `--add-blocker` makes it wait for work; the setting alone does not, so it
 cannot switch the limit off. Commands say only what they
 launch; one terminal layer chooses the placement and the backend that carries
 it out, so focus behaves alike everywhere and another backend plugs in with
@@ -1505,7 +1505,7 @@ agent's slot, so fixed limits let it take that slot back rather than counting it
 twice, which would deadlock a full machine of stopped agents, while dynamic
 admission measures its memory like a new start. Restores also need the recovery
 interval's healthy readings, one per interval. An entry waiting for anything
-besides a slot, such as those readings, an update or a dependency, keeps its
+besides a slot, such as those readings, an update or a blocker, keeps its
 place without holding back work queued behind it: the stopped agent's slot still
 counts and dynamic admission measures memory, so the limits, not the order, keep
 new starts from undoing the protection. Admission binds the recovery epoch, which stops, reloads and
@@ -1554,15 +1554,15 @@ from, such as a Herdr tab in its workspace, otherwise one of
 runs the worker, because zmx gives commands it runs itself no terminal input. That shell is zmx's bash, so the
 session ends once its agent or workspace shell has run, whatever the exit
 status, and only a failed start replaces it with the user's login shell.
-A queued launch may depend on workspaces, queued launches and issues, including
+A queued launch may be blocked by spaces, queued launches and issues, including
 the blockers its issue's forge records, and admission passes it over until they
-are complete. Complete means done at the current HEAD, not merged: the launch
-branches from the done dependency and stacks on it, so dependent agents start
-before review, and the existing restack on merge carries them to the default
-branch. A commit after `done` is new work and holds them again. One launch builds
-on one branch, so done dependencies on separate branches wait until all but one
-merge. A launch's dependency becomes its workspace once it opens one, and
-removed work counts as complete, since nothing is left to wait for.
+clear. A space clears once done at its current HEAD, not merged: the launch
+branches from the done blocker and stacks on it, so blocked agents start before
+review, and the existing restack on merge carries them to the default branch. A
+commit after `done` is new work and blocks them again. One launch builds on one
+branch, so done blockers on separate branches wait until all but one merge. A
+launch blocker becomes its workspace once it opens one, and removed work
+clears, since nothing is left to wait for.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
@@ -2823,7 +2823,7 @@ resolver in the daemon and one in the client; a name is a label people read
 and never selects one, so names may repeat. The client refuses text that is
 neither a number nor an ID before it asks the daemon. A number selects only a
 space that exists, never a removed workspace or a queued launch, which are
-selected by ID. `--after` is the exception: it names dependencies, where
+selected by ID. `--add-blocker` is the exception: it names blockers, where
 a bare number stays an issue, as `shoal start` takes one. A chat owns attached
 files as a workspace does, since its
 agent hands the user reports and pages too; they stay for the same retention

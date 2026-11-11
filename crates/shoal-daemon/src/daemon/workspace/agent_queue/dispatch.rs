@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 
 use super::{
-    dependencies, expiry,
+    blockers, expiry,
     limits::{Admission, Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
 };
@@ -125,7 +125,7 @@ impl Manager {
             return Ok(false);
         }
         let mut work = self.waiting_work().await?;
-        let bases = self.hold_back_dependents(&mut work.entries).await?;
+        let bases = self.hold_back_blocked(&mut work.entries).await?;
         let published = self.overload_recovery.published();
         let admission = self.fitting_entries(&work, published.is_some()).await?;
         self.agent_queue.record_held_back(admission.held);
@@ -286,25 +286,24 @@ impl Manager {
         })
     }
 
-    /// Take the launches whose dependencies are not complete out of `waiting`,
-    /// returning the branch each remaining launch with a done dependency
-    /// builds on.
-    async fn hold_back_dependents(
+    /// Take the launches that blockers hold back out of `waiting`, returning
+    /// the branch each remaining launch with a done blocker builds on.
+    async fn hold_back_blocked(
         &self,
         waiting: &mut Vec<Waiting>,
     ) -> Result<HashMap<QueueEntryId, String>> {
-        let readiness = self.dependency_readiness().await?;
+        let readiness = self.blocker_readiness().await?;
         waiting.retain(|entry| {
             !matches!(
                 readiness.get(&entry.id),
-                Some(dependencies::Readiness::Waiting(_))
+                Some(blockers::Readiness::Waiting(_))
             )
         });
         Ok(readiness
             .into_iter()
             .filter_map(|(id, readiness)| match readiness {
-                dependencies::Readiness::Ready { base } => Some((id, base?)),
-                dependencies::Readiness::Waiting(_) => None,
+                blockers::Readiness::Ready { base } => Some((id, base?)),
+                blockers::Readiness::Waiting(_) => None,
             })
             .collect())
     }

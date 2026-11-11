@@ -54,7 +54,7 @@ pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRe
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now,
         workspace: None,
-        after: Vec::new(),
+        blockers: Vec::new(),
     }
 }
 

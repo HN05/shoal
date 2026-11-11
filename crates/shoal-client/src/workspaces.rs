@@ -13,7 +13,7 @@ use crate::{
     config::{Config, Effective, hooks::HookKind, repo::ConfigLayers},
     connection::{Daemon, call, pages, request},
     model::{
-        ConflictCheck, Dependency, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
+        Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
         RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, WorkspaceMethod},
@@ -87,15 +87,18 @@ pub async fn check_creation(daemon: &impl Daemon, planned: PlannedWorkspace) -> 
     request(daemon, method).await
 }
 
-/// Refuse dependencies `after` that `repository` cannot wait for.
-pub async fn check_dependencies(
+/// Refuse `blockers` that a launch in `repository` cannot wait for.
+pub async fn check_blockers(
     daemon: &impl Daemon,
     repository: Selector,
-    after: Vec<Dependency>,
+    blockers: Vec<Blocker>,
 ) -> Result<()> {
     request(
         daemon,
-        WorkspaceMethod::CheckDependencies { repository, after },
+        WorkspaceMethod::CheckBlockers {
+            repository,
+            blockers,
+        },
     )
     .await
 }

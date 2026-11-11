@@ -161,8 +161,11 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        WorkspaceMethod::CheckDependencies { repository, after } => {
-            manager.check_dependencies(&repository, after).await?;
+        WorkspaceMethod::CheckBlockers {
+            repository,
+            blockers,
+        } => {
+            manager.check_blockers(&repository, blockers).await?;
             Body::Ok
         }
         WorkspaceMethod::AdoptWorkspace {
@@ -365,7 +368,7 @@ impl Scoped for WorkspaceMethod {
                 manager.narrow_to_log(caller, space).await?;
                 None
             }
-            WorkspaceMethod::CheckDependencies { .. }
+            WorkspaceMethod::CheckBlockers { .. }
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Global,
             } => None,

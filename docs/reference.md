@@ -814,7 +814,7 @@ space 3, and `-` selects the space the command last acted on; other text is
 refused with "a space is selected by its number or ID". A name never selects
 a space, so names may repeat. A removed workspace has no number and is
 selected by its ID. Without a space, a terminal opens a picker that shows the
-names. `--after` is the one argument where a bare number names an issue
+names. `--add-blocker` is the one argument where a bare number names an issue
 instead.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
@@ -2000,7 +2000,7 @@ workspaces only in its own repository; one in another repository is refused.
 With `--agent`, the agent is queued once the workspace is set up, and the
 daemon starts it with the workspace's own scope when a slot is free, as for
 any agent a workspace process starts. Since the workspace is created at once, an agent that
-would wait for `--after` or the issue's open blockers is refused there, as are
+would wait for `--add-blocker` or the issue's open blockers is refused there, as are
 `--now` and `--focus`. While it runs, or waits to come back on its own, the chat
 [coordinates](#child-workspaces) the spaces below it and receives the activity
 of those without an agent of their own; while it is otherwise stopped, their
@@ -2141,7 +2141,7 @@ shoal config set agent.max_running 2 --repo shoal  # And at most two of them in 
 shoal config set agent.max_running none --repo docs # No repository limit
 shoal start <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal start <issue-url> --agent claude --now    # Starts now regardless of the limits
-shoal start <issue-url> --agent claude --after <id> --after 12  # Starts once that workspace and #12 are done
+shoal start <issue-url> --agent claude --add-blocker <id> --add-blocker 12  # Starts once that workspace and #12 clear
 shoal resume -A                               # Queues the restore of every stopped agent
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
 shoal queue start <entry>                     # Starts a waiting entry, or a space's queued restore, now regardless of the limits
@@ -2211,8 +2211,8 @@ workspace for two minutes, records a `queue_failed` notification with the reason
 and frees the slot. Deleting the workspace during setup frees it without one.
 `--now` starts at once and still takes a slot, and so does a launch the user
 waits for: one `--focus` focuses, or an agent added from a terminal without an
-issue or arguments that the `focus` setting does not send to the background, unless `--after` makes it
-wait for work.
+issue or arguments that the `focus` setting does not send to the background, unless `--add-blocker`
+makes it wait for work.
 
 An agent's automatic restore after a protection stop waits in the same queue,
 in order with launches, from when its processes stop. A restore of an agent
@@ -2253,28 +2253,28 @@ and leaves the agent stopped. Stopping the workspace or marking its assignment
 done cancels a pending one, and resuming or discarding the agent another way
 removes it.
 
-`--after` names work the launch waits for: a workspace of the repository by
-ID, a queued agent by its entry's ID, or an issue number or URL, so a bare number is an
-issue; repeat it for more. An issue launch also
-waits for the open issues its forge records as blocking it: Forgejo and GitHub
-issue dependencies and GitLab "is blocked by" links; when the forge cannot list
-them, such as with dependencies turned off, Shoal warns and the agent does not
-wait for them. Such a launch queues even without a limit and starts once every
-workspace it waits for is done at its current HEAD, every queued agent has
-opened its workspace and that workspace is, and every issue is closed or done in
-a workspace of the repository that links it; a removed workspace or queued agent
-leaves nothing to wait for. A commit after `shoal done` makes the workspace wait
-again; issue state is read every 30 seconds. A new branch then starts from the
-done dependency's branch and is stacked on that workspace, as with `--base`, so
-the agent builds on the finished work before it merges. With several done
-dependencies it takes the one whose HEAD contains the others, and while they are
-on separate branches it waits until all but one have merged and their workspaces
-are gone. `--base` and `--existing` keep their own starting point, and `--now`
-and `--focus` cannot wait for work.
+`--add-blocker` names what blocks the launch: a workspace of the
+repository by ID, a queued agent by its entry's ID, or an issue number or URL,
+so a bare number is an issue; repeat it for more. An issue launch is also blocked by the open issues
+its forge records as blocking it: Forgejo and GitHub issue dependencies and
+GitLab "is blocked by" links; when the forge cannot list them, such as with
+that feature turned off, Shoal warns and they do not block the agent. Such a
+launch queues even without a limit and starts once every workspace blocking it
+is done at its current HEAD, every queued agent has opened its workspace and
+that workspace is, and every issue is closed or done in a workspace of the
+repository that links it; a removed workspace or queued agent no longer blocks.
+A commit after `shoal done` blocks the launch again; issue state is read every
+30 seconds. A new branch then starts from the done blocker's branch and is
+stacked on that workspace, as with `--base`, so the agent builds on the
+finished work before it merges. With several done blockers it takes the one
+whose HEAD contains the others, and while they are on separate branches it
+waits until all but one have merged and their workspaces are gone. `--base` and
+`--existing` keep their own starting point, and `--now` and `--focus` cannot
+wait for blockers.
 
 `shoal queue` lists the entries of every repository, since positions apply
 machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
-followed by the work a waiting launch is after, or `after an update` for a
+followed by `blocked by` and what blocks a waiting launch, or `after an update` for a
 restore of an idle agent, then what held a waiting entry back at the last
 admission pass, as `held by` memory with what the entry needs and what is
 left, low disk space, `machine.max_agents`, `machine.max_jobs`,
@@ -2282,11 +2282,11 @@ left, low disk space, `machine.max_agents`, `machine.max_jobs`,
 reading; the stagger between starts is too brief to show. A restore shows its
 agent; `shoal list` shows the entries after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
-with its run, `waiting_for` while dependencies remain,
+with its run, `blockers` while any remain,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
 `repository_limit`, `permits` or `reading`) and
-`base` once a launch starts on a dependency's branch, while `list --json` stays
+`base` once a launch starts on a blocker's branch, while `list --json` stays
 a list of workspaces. Each line starts with the entry's ID, which `queue
 start`, `move` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
 then starts it, with or without attaching, moves or cancels it.

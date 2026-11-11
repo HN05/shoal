@@ -289,8 +289,8 @@ pub(crate) trait Backend {
     }
 
     /// The URLs of the open issues the forge records as blocking an issue.
-    /// A forge without issue dependencies records none.
-    async fn open_issue_dependencies(
+    /// A forge that records no blocking issues lists none.
+    async fn open_issue_blockers(
         &self,
         _repo: &ForgeRepo,
         _account: &Account,

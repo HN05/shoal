@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 
 use super::{
-    dependencies,
+    blockers,
     dispatch::Start,
     store::{ENTRY_COLUMNS, Launch, entry, insert_launch},
 };
@@ -26,13 +26,13 @@ use crate::{
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
-    /// applies to and that waits for no other work starts untracked; one
+    /// applies to and that nothing blocks starts untracked; one
     /// admitted here starts in the caller, except a launch in an existing
     /// workspace, which the daemon always starts.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
         ensure!(
-            !request.now || request.after.is_empty(),
-            "a launch that starts now cannot wait for other work"
+            !request.now || request.blockers.is_empty(),
+            "a launch that starts now cannot be blocked"
         );
         let repository = self.repository(&request.repository).await?;
         let target = match &request.workspace {
@@ -44,7 +44,7 @@ impl Manager {
         let limits = self
             .agent_limits(vec![repository.id.clone()], &[], &[])
             .await?;
-        if target.is_none() && request.after.is_empty() && !limits.apply_to(&repository.id) {
+        if target.is_none() && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,
@@ -107,15 +107,15 @@ impl Manager {
         Ok(workspace.id)
     }
 
-    /// Entries in queue order, waiting ones numbered and with the work they
-    /// wait for and what held them back at the last admission pass.
+    /// Entries in queue order, waiting ones numbered and with what blocks
+    /// them and what held them back at the last admission pass.
     pub async fn queue_entries(&self) -> Result<Vec<QueueEntry>> {
         let mut entries = self.numbered_entries().await?;
-        let mut readiness = self.dependency_readiness().await?;
+        let mut readiness = self.blocker_readiness().await?;
         let waking = self.restores_waiting_for_updates().await?;
         for entry in &mut entries {
-            if let Some(dependencies::Readiness::Waiting(work)) = readiness.remove(&entry.id) {
-                entry.waiting_for = work;
+            if let Some(blockers::Readiness::Waiting(blocked_by)) = readiness.remove(&entry.id) {
+                entry.blockers = blocked_by;
             }
             entry.waits_for_update = waking.contains(&entry.id);
             if entry.state == QueueState::Queued {
@@ -258,7 +258,7 @@ impl Manager {
                     params![id, workspace.id, QueueState::Starting],
                 )?;
                 if started == 1 {
-                    dependencies::replace_launch(tx, &id, &workspace.id)?;
+                    blockers::replace_launch(tx, &id, &workspace.id)?;
                 }
                 let waiting = match opens && started == 0 {
                     true => tx.execute(

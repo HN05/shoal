@@ -134,9 +134,9 @@ each waiting entry. Set a fixed machine-wide limit
 (`shoal config set machine.max_agents 3`) or `none` to disable queuing, and
 limit one repository's agents with `agent.max_running` (`--repo my-project`). `shoal start` queues agents past the effective
 limit and starts them as slots free; `--now` starts one anyway, and `shoal rm
-<name>` drops a queued one. `--after <workspace|issue>` holds an agent until
-that work is done and starts it on the finished branch; an issue's agent also
-waits for the issues blocking it. See the [agent queue](docs/reference.md#agent-queue).
+<name>` drops a queued one. `--add-blocker <workspace|issue>` holds an agent
+until that work is done and starts it on the finished branch; an issue's agent
+is also blocked by the issues blocking that issue. See the [agent queue](docs/reference.md#agent-queue).
 
 Shoal can also run a registered repository's CI jobs on this machine:
 `shoal config set runner.enabled true --repo my-project` registers a runner on

@@ -23,7 +23,7 @@ use crate::{
         raw::RawRequest,
         review::{reviewers::Reviewer, thread::Thread},
     },
-    model::{Dependency, MergeWarning, Selected},
+    model::{Blocker, MergeWarning, Selected},
     protocol::{DownloadPiece, ItemContext, ItemMethod},
 };
 
@@ -165,7 +165,7 @@ pub async fn issue_blockers(
     daemon: &impl Daemon,
     context: ItemContext,
     item: String,
-) -> Result<Vec<Dependency>> {
+) -> Result<Vec<Blocker>> {
     pages(daemon, ItemMethod::IssueBlockers { context, item }).await
 }
 

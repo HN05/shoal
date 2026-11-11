@@ -2067,7 +2067,13 @@ fn text_listings_lead_with_the_ids_their_commands_take() {
     // A background launch needs zmx on the CLI's PATH.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.ok(&[
-        "start", repo, "later", "--after", first, "--agent", "claude",
+        "start",
+        repo,
+        "later",
+        "--add-blocker",
+        first,
+        "--agent",
+        "claude",
     ]);
     let queued = fixture.ok(&["queue"]);
     let entry = queued[0]["id"].as_str().unwrap();

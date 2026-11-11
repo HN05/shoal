@@ -1230,7 +1230,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\nworker=$(head -n 1 \"$HOME/add.json\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')\n\"$shoal\" start \"$PWD\" later --agent codex --after \"$worker\" 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\nworker=$(head -n 1 \"$HOME/add.json\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')\n\"$shoal\" start \"$PWD\" later --agent codex --add-blocker \"$worker\" 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
             support::shoal_binary()
         ),
     );

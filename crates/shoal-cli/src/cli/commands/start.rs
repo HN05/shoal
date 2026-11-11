@@ -89,7 +89,7 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
         ("--checkpoint", args.copy.checkpoint.is_some()),
         ("--focus", args.focus),
         ("--now", args.now),
-        ("--after", !args.after.is_empty()),
+        ("--add-blocker", !args.add_blocker.is_empty()),
         ("--skip-setup", args.creation.skip_setup),
         ("--disposable", args.creation.disposable),
     ]
@@ -505,7 +505,7 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
         here: args.here,
         focus: args.focus,
         now: args.now,
-        after: args.after,
+        blockers: args.add_blocker,
         model: args.model.into(),
         mode: Some(mode),
         narrowing: given(&args.permissions),

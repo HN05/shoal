@@ -187,7 +187,7 @@ pub enum ItemMethod {
         item: String,
     },
     /// The open issues the forge records as blocking the issue `item`
-    /// names in the context's repository, as issue dependencies, answered in one or more `dependencies`
+    /// names in the context's repository, as blockers, answered in one or more `blockers`
     /// frames and then `ok`.
     IssueBlockers {
         #[serde(flatten)]

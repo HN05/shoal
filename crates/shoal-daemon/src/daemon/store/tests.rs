@@ -490,6 +490,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 154 {
         db.execute_batch(include_str!("space_sleep.sql"))?;
     }
+    if version >= 155 {
+        db.execute_batch(include_str!("agent_queue_blockers.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1025,7 +1028,7 @@ fn queued_launches_keep_their_order_as_typed_entries() -> Result<()> {
 }
 
 #[test]
-fn restores_outlive_their_execution_and_launches_keep_their_dependencies() -> Result<()> {
+fn restores_outlive_their_execution_and_launches_keep_their_blockers() -> Result<()> {
     let mut db = historical_database(71)?;
     db.execute_batch(
         "INSERT INTO agent_queue(seq,id,kind,repository_id,name,agent,plan,env,state,created_at)
@@ -1037,7 +1040,10 @@ fn restores_outlive_their_execution_and_launches_keep_their_dependencies() -> Re
     )?;
     migrate(&mut db)?;
     let count = |sql: &str| -> Result<i64> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
-    assert_eq!(count("SELECT COUNT(*) FROM agent_queue_dependencies")?, 1);
+    assert_eq!(
+        count("SELECT COUNT(*) FROM agent_queue_blockers WHERE kind='space'")?,
+        1
+    );
     db.execute("DELETE FROM executions WHERE id='execution'", [])?;
     assert_eq!(count("SELECT COUNT(*) FROM agent_queue")?, 2);
     // A restore the daemon starts carries its terminal's variables.

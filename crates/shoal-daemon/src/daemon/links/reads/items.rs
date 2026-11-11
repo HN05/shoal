@@ -20,7 +20,7 @@ use crate::{
         numbers::CommentId,
         review::{reviewers::Reviewer, thread::Thread},
     },
-    model::{Dependency, Repository, Selected, SelectedItem},
+    model::{Blocker, Repository, Selected, SelectedItem},
     protocol::ItemContext,
 };
 
@@ -139,14 +139,14 @@ impl Manager {
         context: &ItemContext,
         item: &str,
         scoped: bool,
-    ) -> Result<Vec<Dependency>> {
+    ) -> Result<Vec<Blocker>> {
         let forge = self.context_forge(context).await?;
         let (number, _) = forge.issue(item)?;
         let account = self.read_account(scoped);
         let mut blockers = Vec::new();
-        for url in forge.open_issue_dependencies(&account, number).await? {
+        for url in forge.open_issue_blockers(&account, number).await? {
             let (_, url) = ForgeRepo::from_issue_url(&url)?.issue(&url)?;
-            blockers.push(Dependency::Issue(url));
+            blockers.push(Blocker::Issue(url));
         }
         Ok(blockers)
     }

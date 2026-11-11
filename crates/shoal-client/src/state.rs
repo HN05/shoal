@@ -262,9 +262,9 @@ states!(
         Resume => "resume",
     }
 );
-states!(DependencyKind {
-    /// A workspace, by ID.
-    Workspace => "workspace",
+states!(BlockerKind {
+    /// A space, by ID.
+    Space => "space",
     /// A queued launch, by entry ID, until it opens its workspace.
     Launch => "launch",
     /// An issue, by URL.

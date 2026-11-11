@@ -75,11 +75,12 @@ own agent from a fork of its session, so it needs only its task after `--`.
 `start` returns once the workspace is set up, with the workspace and the
 agent's queue entry. The daemon starts queued agents as `max_agents` allows
 (`state: queued`, `position`); `shoal queue` lists entries and `--now` starts
-one regardless. `--after <workspace|queued agent|issue>` (repeatable) holds an
-agent until that work is done, where a bare number is an issue, a workspace
-is selected by its ID and a queued agent by its entry's ID, and an issue's agent also waits for the issues
-its forge records as blocking it; the agent then starts on the done workspace's
-branch, and `waiting_for` lists what it still waits for. A Happy agent reports
+one regardless. `--add-blocker <workspace|queued agent|issue>` (repeatable)
+holds an agent until that work is done, where a bare number is an issue, a
+workspace is selected by its ID and a queued agent by its entry's ID, and an
+issue's agent is also blocked by the issues its forge records as blocking it;
+the agent then starts on the done workspace's branch, and `blockers` lists
+what still blocks it. A Happy agent reports
 its launch (`execution_id`, `pid`, `log`); `prompt_delivered: false` means the
 first message is in `prompt_file` for the user to send from the app.
 

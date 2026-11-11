@@ -86,7 +86,7 @@ impl Operation {
                 )
                 | Self::Workspace(
                     WorkspaceMethod::CheckCreation { .. }
-                        | WorkspaceMethod::CheckDependencies { .. }
+                        | WorkspaceMethod::CheckBlockers { .. }
                         | WorkspaceMethod::ListWorkspaces
                         | WorkspaceMethod::UntrackedWorktrees
                         | WorkspaceMethod::FindSpaces { .. }

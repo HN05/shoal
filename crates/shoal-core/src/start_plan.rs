@@ -56,7 +56,7 @@ impl Creation {
             && self.copy.is_none()
     }
 
-    /// Build a new branch on `base`, the branch of a done dependency, unless
+    /// Build a new branch on `base`, the branch of a done blocker, unless
     /// the addition names its own base, opens an existing branch or copies a
     /// workspace, which starts from that workspace instead.
     pub fn build_on(&mut self, base: Option<String>) {
@@ -100,7 +100,7 @@ pub fn queued_agent_request(
         env,
         now,
         workspace: Some(SpaceSelector::id(&workspace.id)),
-        after: Vec::new(),
+        blockers: Vec::new(),
     })
 }
 

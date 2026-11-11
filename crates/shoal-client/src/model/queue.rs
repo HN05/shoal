@@ -1,4 +1,4 @@
-//! The agent launch queue and the work its entries wait for.
+//! The agent launch queue and what blocks its entries.
 use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
@@ -41,15 +41,15 @@ pub struct QueueEntry {
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opens: Option<SpaceId>,
-    /// The work a waiting launch still waits for: workspace and queued launch
+    /// What still blocks a waiting launch: workspace and queued launch
     /// names and issue URLs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub waiting_for: Vec<String>,
+    pub blockers: Vec<String>,
     /// Whether a restore waits for an update for its agent, which stopped
     /// between turns, rather than restoring an interrupted one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub waits_for_update: bool,
-    /// The branch of the completed dependency a started launch builds on.
+    /// The branch of the done blocker a started launch builds on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
     /// The CI job a job's entry claims.
@@ -131,12 +131,13 @@ pub enum QueuePlace {
     Last,
 }
 
-/// Work a queued launch waits for until it is complete.
+/// What blocks work until it clears.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Dependency {
-    /// A workspace or a queued launch of the same repository, by name or ID.
-    Work(String),
+pub enum Blocker {
+    /// A space, or for a launch a queued launch of the same repository, by
+    /// name or ID.
+    Space(String),
     /// An issue, by URL.
     Issue(String),
 }
@@ -173,9 +174,9 @@ pub struct QueueRequest {
     /// the caller's processes, whether or not a limit applies.
     #[serde(default)]
     pub workspace: Option<SpaceSelector>,
-    /// The work the launch waits for; it always queues while any remains.
+    /// What blocks the launch; it always queues while any remains.
     #[serde(default)]
-    pub after: Vec<Dependency>,
+    pub blockers: Vec<Blocker>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

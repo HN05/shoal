@@ -811,7 +811,7 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
     happy_launch(&start(&["placed"]));
     fixture.add("finished");
     fixture.ok(&["done", &fixture.id("finished")]);
-    happy_launch(&start(&["next", "--after", &fixture.id("finished")]));
+    happy_launch(&start(&["next", "--add-blocker", &fixture.id("finished")]));
     fixture.ok(&["stop", &fixture.id("placed")]);
     fixture.ok(&["stop", &fixture.id("next")]);
 }
