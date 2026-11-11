@@ -896,7 +896,9 @@ blocking evidence. Other failures let interactive callers choose delete, ignore
 `setup` reruns setup explicitly; nothing retries automatically.
 While the daemon registers an execution it sends the wrapper keepalives, and
 the wrapper's limit bounds the daemon's silence rather than the whole wait, so
-setups queued behind each other's Git gate never fail for being slow.
+setups queued behind each other's Git gate never fail for being slow; a
+registration whose wrapper left is forgotten rather than recorded as a failed
+setup.
 Tracked setup starts by copying the repository checkout's ignored files unless
 `setup.copy_ignored = false`, so local files like `.env` arrive without a setup
 script and failures gate readiness; `.worktreeinclude`, a convention other worktree

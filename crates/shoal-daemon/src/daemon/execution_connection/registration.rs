@@ -1,6 +1,6 @@
 //! Registering a wrapper's execution: the checks and reservations before its
 //! command may run, while keepalives tell the wrapper that the daemon is
-//! still at work.
+//! still at work, and forgetting a registration its wrapper never received.
 use std::{future::Future, sync::Arc};
 
 use anyhow::Result;
@@ -10,6 +10,7 @@ use super::{Connected, ExecutionContext};
 use crate::{
     daemon::{
         approvals::Undecided,
+        log,
         workspace::{
             ExecutionKind, ExecutionRequest, Manager, RecordChange, StartedExecution,
             places::ExecutionPlace,
@@ -167,6 +168,28 @@ pub(super) async fn register(
         plan,
         git_guard: _git_guard,
     })
+}
+
+/// Whether the daemon forgets `execution` when its wrapper never received
+/// the registration, rather than recording a disconnected wrapper. Setup,
+/// merge and unmerge run nothing before the wrapper has their plan; a
+/// command may track an agent or a demo, whose disconnect has its own path.
+pub(super) fn cancels_undelivered(execution: &Connected) -> bool {
+    execution.kind != ExecutionKind::Command
+}
+
+/// Forget the registered `execution`, whose wrapper left before it received
+/// its plan, so its command never ran.
+pub(super) async fn cancel(manager: &Manager, execution: Connected) -> Result<()> {
+    log!(
+        "{} execution {} in {} was not delivered: its wrapper left before the daemon registered it",
+        execution.kind,
+        execution.id,
+        execution.workspace.name
+    );
+    manager
+        .cancel_execution(&execution.id, execution.kind)
+        .await
 }
 
 #[cfg(test)]

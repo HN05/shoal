@@ -96,7 +96,7 @@ pub(super) async fn execute(
     operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let registration = registration::register(&manager, context);
-    let (registered, _listening) =
+    let (registered, listening) =
         registration::keeping_alive(&mut stream, request_id, registration).await;
     let Registered {
         execution,
@@ -109,7 +109,11 @@ pub(super) async fn execute(
         }
     };
     let response = Response::new(request_id, Body::Execution(plan));
-    serve(stream, &manager, execution, response, operation).await
+    let delivered = listening && protocol::write(&mut stream, &response).await.is_ok();
+    if !delivered && registration::cancels_undelivered(&execution) {
+        return registration::cancel(&manager, execution).await;
+    }
+    serve(stream, &manager, execution, None, operation).await
 }
 
 /// Restore a wrapper's connection after a daemon restart, then serve it like
@@ -166,24 +170,25 @@ pub(super) async fn reattach(
         stream,
         &manager,
         execution,
-        Response::new(request_id, Body::Ok),
+        Some(Response::new(request_id, Body::Ok)),
         operation,
     )
     .await
 }
 
-/// Relay controls and events after `response` until the wrapper reports
-/// completion or disconnects, then record the outcome. A wrapper reattaches
-/// only while its child runs with the daemon's acknowledgement or while it
-/// waits to restore its agent, so the registration's `operation` holds back a
-/// daemon update until the child runs, as does an overload stop, or a
-/// reattachment while waiting, until the agent is restored. Otherwise a
-/// running execution does not; recording its changes takes the guard again.
+/// Relay controls and events after `response`, unless the caller already
+/// sent it, until the wrapper reports completion or disconnects, then record
+/// the outcome. A wrapper reattaches only while its child runs with the
+/// daemon's acknowledgement or while it waits to restore its agent, so the
+/// registration's `operation` holds back a daemon update until the child
+/// runs, as does an overload stop, or a reattachment while waiting, until the
+/// agent is restored. Otherwise a running execution does not; recording its
+/// changes takes the guard again.
 async fn serve(
     stream: UnixStream,
     manager: &Manager,
     mut execution: Connected,
-    response: Response,
+    response: Option<Response>,
     operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
@@ -193,7 +198,9 @@ async fn serve(
     let mut handoff_claimed = false;
     let mut unattachable = (!execution.started || execution.awaiting_restore).then_some(operation);
     let result = async {
-        protocol::write(&mut writer, &response).await?;
+        if let Some(response) = &response {
+            protocol::write(&mut writer, response).await?;
+        }
         relay(
             manager,
             &mut execution,

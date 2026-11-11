@@ -33,6 +33,30 @@ impl Manager {
             .await
     }
 
+    /// Forget execution `id` of `kind`, whose wrapper never received its
+    /// plan, so its command never ran. A setup leaves its preparing workspace
+    /// failed with that, rather than with a setup failure.
+    pub(crate) async fn cancel_execution(
+        &self,
+        id: &ExecutionId,
+        kind: ExecutionKind,
+    ) -> Result<()> {
+        let connections = self.executions.connections().await;
+        let record_id = id.to_owned();
+        self.store
+            .write(move |tx| {
+                if kind == ExecutionKind::Setup {
+                    record_setup_not_started(tx, &record_id)?;
+                }
+                record_execution_end(tx, &record_id, true)
+            })
+            .await?;
+        if connections.disconnect(id).await {
+            self.agent_queue.wake();
+        }
+        Ok(())
+    }
+
     pub(super) async fn delete_execution_record(&self, id: &ExecutionId) -> Result<Option<String>> {
         let id = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
@@ -75,6 +99,19 @@ fn record_setup_result(
     )?;
     Ok(())
 }
+
+/// Fail the preparing workspace of setup execution `id`, which never ran.
+fn record_setup_not_started(tx: &Transaction<'_>, id: &ExecutionId) -> Result<()> {
+    tx.execute(
+        "UPDATE workspaces SET state=?2,error=?3,setup_finished=0 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?4",
+        params![id, WorkspaceState::Failed, SETUP_NOT_STARTED, WorkspaceState::Preparing],
+    )?;
+    Ok(())
+}
+
+/// Why a workspace whose setup never ran is failed.
+const SETUP_NOT_STARTED: &str =
+    "setup did not start: its wrapper left before the daemon registered it; retry with shoal setup";
 
 /// Retain unverified executions for recovery; only verified completion deletes
 /// the record, together with any demo it owns.
