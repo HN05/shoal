@@ -26,7 +26,7 @@ fn places_name_their_session_and_pane() {
 }
 
 #[test]
-fn servers_are_zellij_serving_the_session() {
+fn servers_are_zellij_listening_on_a_socket() {
     let process = |arguments: &[&str]| CommandLine {
         pid: 14016,
         parent: 1,
@@ -38,16 +38,18 @@ fn servers_are_zellij_serving_the_session() {
         "/tmp/z s/contract_version_1/my repo",
     ]);
     assert_eq!(
-        server_of(&server, "my repo"),
-        Some(Server {
-            pid: 14016,
-            parent: 1,
-            socket_dir: PathBuf::from("/tmp/z s"),
+        listening(&server),
+        Some(Listening {
+            server: Server {
+                pid: 14016,
+                parent: 1,
+                socket_dir: PathBuf::from("/tmp/z s"),
+            },
+            socket: "my repo".into(),
         })
     );
-    assert_eq!(server_of(&server, "repo"), None);
     let client = process(&["zellij", "attach", "my-repo"]);
-    assert_eq!(server_of(&client, "my-repo"), None);
+    assert_eq!(listening(&client), None);
     let other = process(&[
         "/bin/sh",
         "-c",
@@ -55,7 +57,37 @@ fn servers_are_zellij_serving_the_session() {
         "--server",
         "/tmp/z/contract_version_1/repo",
     ]);
-    assert_eq!(server_of(&other, "repo"), None);
+    assert_eq!(listening(&other), None);
+}
+
+/// A server whose socket the session names serves it, as Zellij before
+/// 0.46 names sockets; otherwise a server that started for the session,
+/// whose socket an ID names.
+#[test]
+fn a_session_is_served_by_its_socket_or_the_server_started_for_it() {
+    let listening = |pid, socket: &str| Listening {
+        server: Server {
+            pid,
+            parent: 1,
+            socket_dir: PathBuf::from("/tmp/z"),
+        },
+        socket: socket.into(),
+    };
+    // Server N started for session `idN`. Zellij before 0.46 renamed the
+    // first's socket with its session, and the third's socket is an ID.
+    let started_as = |pid| Some(OsString::from(format!("id{pid}")));
+    let servers = || {
+        vec![
+            listening(1, "repo"),
+            listening(2, "id1"),
+            listening(3, "b56861592ede"),
+        ]
+    };
+    let pids = |servers: Vec<Server>| servers.iter().map(|s| s.pid).collect::<Vec<_>>();
+    assert_eq!(pids(serving(servers(), "repo", started_as)), [1]);
+    assert_eq!(pids(serving(servers(), "id1", started_as)), [2]);
+    assert_eq!(pids(serving(servers(), "id3", started_as)), [3]);
+    assert_eq!(pids(serving(servers(), "other", started_as)), [0; 0]);
 }
 
 #[test]
@@ -400,6 +432,7 @@ impl Isolated {
             "show_startup_tips false\nshow_release_notes false\nsession_serialization false\n",
         )
         .unwrap();
+        Self::share_home(dir.path());
         // Named after its directory, so no other server shares the name.
         let session = dir.path().file_name().unwrap().to_str().unwrap().to_owned();
         let started = Self::zellij_in(dir.path())
@@ -419,6 +452,18 @@ impl Isolated {
             client,
             screen,
         })
+    }
+
+    /// Give the `zellij` commands Shoal runs the session's home: Zellij
+    /// 0.46 finds a session's socket by its name in an index under the
+    /// home's cache directory.
+    fn share_home(dir: &Path) {
+        // SAFETY: nextest runs each test in a process of its own, and the
+        // test reads no environment on another thread while it starts.
+        unsafe {
+            std::env::set_var("HOME", dir);
+            std::env::remove_var("XDG_CACHE_HOME");
+        }
     }
 
     /// `zellij` with the session's environment, which is every pane's.

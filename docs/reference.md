@@ -1498,7 +1498,9 @@ focused start, a chat or an agent launch then attaches the terminal to its
 session until you detach. A start queued from Zellij opens a background tab in
 the session it was queued from while a client shows it, otherwise a session of
 its own. `ZELLIJ_SOCKET_DIR` chooses the sessions Shoal reaches, as it does
-for `zellij`. Shoal needs Zellij 0.45 or later.
+for `zellij`, and from Zellij 0.46 so does the cache directory where Zellij
+records session names, which `HOME`, or `XDG_CACHE_HOME` on Linux, sets: the
+daemon reaches sessions started with its own. Shoal needs Zellij 0.45 or later.
 
 `shoal attach` and `shoal status` find a workspace's or chat's pane by the place
 its agent was recorded in, named after its tab: attach selects the tab and pane

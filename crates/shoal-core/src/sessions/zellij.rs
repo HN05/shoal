@@ -8,6 +8,7 @@
 //! recorded pane.
 use std::{
     collections::{BTreeMap, HashSet},
+    ffi::OsString,
     path::{Path, PathBuf},
     process::Output,
     time::Duration,
@@ -63,7 +64,8 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The variable choosing the directory of every session's socket.
 pub(crate) const SOCKET_DIR_VAR: &str = "ZELLIJ_SOCKET_DIR";
-/// The variable naming the session a pane runs in.
+/// The variable naming the session a pane runs in, and the one a server
+/// started for.
 pub(crate) const SESSION_VAR: &str = "ZELLIJ_SESSION_NAME";
 /// The variable naming the pane a process runs in, by its number.
 pub(crate) const PANE_VAR: &str = "ZELLIJ_PANE_ID";
@@ -129,6 +131,13 @@ struct Server {
     pid: u32,
     parent: u32,
     socket_dir: PathBuf,
+}
+
+/// A Zellij server and the name of the socket it listens on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Listening {
+    server: Server,
+    socket: OsString,
 }
 
 /// What `list-panes --json` reports for a pane.
@@ -268,18 +277,10 @@ impl Zellij {
     /// The server process of `session` in this socket directory, among this
     /// user's processes. Without a directory, the only one of that name.
     async fn server(&self, session: &str) -> Result<Option<Server>> {
-        let listed = tokio::task::spawn_blocking(details::own_command_lines)
+        let (name, socket_dir) = (session.to_owned(), self.socket_dir.clone());
+        let named = tokio::task::spawn_blocking(move || servers_of(&name, socket_dir.as_deref()))
             .await
             .context("process listing worker failed")??;
-        let named = listed
-            .iter()
-            .filter_map(|process| server_of(process, session))
-            .filter(|server| {
-                self.socket_dir
-                    .as_deref()
-                    .is_none_or(|dir| same_dir(dir, &server.socket_dir))
-            })
-            .collect();
         let mut servers = without_forks(named).into_iter();
         let server = servers.next();
         ensure!(
@@ -908,9 +909,24 @@ fn same_dir(a: &Path, b: &Path) -> bool {
             .is_some_and(|(a, b)| a == b)
 }
 
-/// The Zellij server for `session` that `process` is, by its command line
-/// `zellij --server <socket dir>/<contract>/<session>`.
-fn server_of(process: &CommandLine, session: &str) -> Option<Server> {
+/// The Zellij servers of `session` among this user's processes, in
+/// `socket_dir` where one is given.
+fn servers_of(session: &str, socket_dir: Option<&Path>) -> Result<Vec<Server>> {
+    let listening = details::own_command_lines()?
+        .iter()
+        .filter_map(listening)
+        .filter(|listening| {
+            socket_dir.is_none_or(|dir| same_dir(dir, &listening.server.socket_dir))
+        })
+        .collect();
+    Ok(serving(listening, session, |pid| {
+        details::variable(pid, SESSION_VAR)
+    }))
+}
+
+/// The Zellij server that `process` is, by its command line
+/// `zellij --server <socket dir>/<contract>/<socket>`.
+fn listening(process: &CommandLine) -> Option<Listening> {
     let (program, arguments) = process.arguments.split_first()?;
     if Path::new(program).file_name()? != "zellij" {
         return None;
@@ -920,14 +936,42 @@ fn server_of(process: &CommandLine, session: &str) -> Option<Server> {
         .skip_while(|argument| *argument != "--server")
         .nth(1)?;
     let socket = Path::new(socket);
-    if socket.file_name()? != session {
-        return None;
-    }
-    Some(Server {
-        pid: process.pid,
-        parent: process.parent,
-        socket_dir: socket.parent()?.parent()?.to_owned(),
+    Some(Listening {
+        server: Server {
+            pid: process.pid,
+            parent: process.parent,
+            socket_dir: socket.parent()?.parent()?.to_owned(),
+        },
+        socket: socket.file_name()?.to_owned(),
     })
+}
+
+/// The servers among `listening` that serve `session`. Zellij before 0.46
+/// names a server's socket after its session; later ones name it by an ID,
+/// and the session's name is the one its server started with, which
+/// `started_as` reads.
+fn serving(
+    listening: Vec<Listening>,
+    session: &str,
+    started_as: impl Fn(u32) -> Option<OsString>,
+) -> Vec<Server> {
+    let (named, others): (Vec<_>, Vec<_>) = listening
+        .into_iter()
+        .partition(|listening| listening.socket == session);
+    let servers = if named.is_empty() {
+        others
+            .into_iter()
+            .filter(|listening| {
+                started_as(listening.server.pid).is_some_and(|name| name == session)
+            })
+            .collect()
+    } else {
+        named
+    };
+    servers
+        .into_iter()
+        .map(|listening| listening.server)
+        .collect()
 }
 
 /// `servers` without the children a server forks to start a pane's

@@ -22,9 +22,17 @@ fn own_command_lines_list_a_child_with_its_arguments() {
 }
 
 #[test]
+fn variables_are_those_a_process_started_with() {
+    let pid = std::process::id();
+    assert_eq!(variable(pid, "PATH"), std::env::var_os("PATH"));
+    assert_eq!(variable(pid, "PAT"), None);
+}
+
+#[test]
 fn a_pid_that_names_no_process_shows_nothing() {
     for pid in [0, u32::MAX] {
         assert_eq!(arguments(pid), None);
+        assert_eq!(variable(pid, "PATH"), None);
         assert_eq!(elapsed(pid).unwrap(), None);
         assert_eq!(terminal(pid).unwrap(), None);
         assert_eq!(foreground_group(pid).unwrap(), None);

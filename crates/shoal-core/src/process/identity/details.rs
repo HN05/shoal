@@ -1,8 +1,8 @@
 //! What the kernel shows about a process beyond its identity: the command
 //! line a person recognizes it by and that finds a terminal host's server,
-//! how long it has run, and its terminal with that terminal's foreground
-//! process group. A process that has exited, or whose records the kernel
-//! refuses, shows none of it.
+//! the environment it started with, how long it has run, and its terminal
+//! with that terminal's foreground process group. A process that has
+//! exited, or whose records the kernel refuses, shows none of it.
 use super::platform;
 use anyhow::Result;
 use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf, time::Duration};
@@ -33,6 +33,16 @@ pub(crate) fn own_command_lines() -> Result<Vec<CommandLine>> {
 pub(crate) fn arguments(pid: u32) -> Option<Vec<OsString>> {
     let arguments = platform::arguments(valid(pid)?)?;
     Some(arguments.into_iter().map(OsString::from_vec).collect())
+}
+
+/// The value of environment variable `name` that `pid` started with.
+pub(crate) fn variable(pid: u32, name: &str) -> Option<OsString> {
+    let prefix = format!("{name}=");
+    platform::environment(valid(pid)?)
+        .ok()?
+        .into_iter()
+        .find_map(|entry| Some(entry.strip_prefix(prefix.as_bytes())?.to_vec()))
+        .map(OsString::from_vec)
 }
 
 /// How long `pid` has run.
