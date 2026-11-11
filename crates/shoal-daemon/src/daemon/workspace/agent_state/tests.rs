@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::RecordExt;
 use crate::time::UnixTime;
@@ -127,6 +128,61 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         .await
         .unwrap();
     assert_eq!(state_events(&manager).await.len(), 4);
+}
+
+/// The turn generation the space `id` records.
+async fn turn(manager: &Manager, id: &SpaceId) -> i64 {
+    let id = id.clone();
+    manager
+        .store
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT turn FROM space_agent_state WHERE space_id=?1",
+                [id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    let id = workspace.id.clone();
+    let execution = |sql: &'static str| {
+        let id = id.clone();
+        manager.store.run(move |db| {
+            db.execute(sql, [id])?;
+            Ok(())
+        })
+    };
+    execution("INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running')")
+        .await
+        .unwrap();
+    let selected = SpaceSelector::id(&workspace.id);
+    let report = |state, execution: &str| {
+        manager.set_agent_state(&selected, state, Some(execution.into()), None)
+    };
+    report(AgentState::Working, "agent").await.unwrap();
+    let first = turn(&manager, &workspace.id).await;
+    for state in [AgentState::Working, AgentState::Idle, AgentState::Waiting] {
+        report(state, "agent").await.unwrap();
+        assert_eq!(turn(&manager, &workspace.id).await, first, "{state:?}");
+    }
+    report(AgentState::Working, "agent").await.unwrap();
+    assert_eq!(turn(&manager, &workspace.id).await, first + 1);
+
+    // The state goes with its execution, and the next one counts on.
+    execution("DELETE FROM executions WHERE workspace_id=?1")
+        .await
+        .unwrap();
+    execution("INSERT INTO executions(id,workspace_id,state) VALUES ('next',?1,'running')")
+        .await
+        .unwrap();
+    report(AgentState::Idle, "next").await.unwrap();
+    assert_eq!(turn(&manager, &workspace.id).await, first + 2);
 }
 
 #[tokio::test]
@@ -468,6 +524,8 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
                     at: UnixTime::from_seconds(1),
                     prompt_cache_expires_at: None,
                     failed: false,
+                    interrupted: None,
+                    woken: false,
                 };
                 Ok((save(tx, &report)?, get(tx, &id)?))
             })

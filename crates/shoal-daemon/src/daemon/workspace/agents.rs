@@ -187,10 +187,6 @@ pub(crate) struct Agent {
     /// How many turns its reports have started, so a stop that read its
     /// turn state before an await can tell that a turn came between.
     turns_started: u64,
-    /// Whether an interrupt ended its last turn, which leaves it idle
-    /// without the hook that ends its other turns, until a turn starts or
-    /// ends again.
-    interrupted: bool,
     /// Whether a terminal shows the agent, as its wrapper reported last;
     /// `None` until it reports.
     attached: Option<bool>,
@@ -473,7 +469,6 @@ impl Manager {
             restarts: Default::default(),
             turn: None,
             turns_started: 0,
-            interrupted: false,
             attached: None,
         };
         connections

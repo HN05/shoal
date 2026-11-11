@@ -9,8 +9,7 @@ use rusqlite::Connection;
 
 use super::{log, spaces, workspace::Manager};
 use crate::{
-    client::space_ids::SpaceId, daemon::workspace::agent_state, model::PresentSpace,
-    state::AgentState, time::UnixTime,
+    client::space_ids::SpaceId, daemon::workspace::agent_state, model::PresentSpace, time::UnixTime,
 };
 
 pub(crate) mod sleep;
@@ -50,27 +49,26 @@ impl Manager {
         let idle = self.store.read(|db| agent_state::idle(db)).await?;
         woken
             .0
-            .retain(|id, _| idle.iter().any(|(idle, _)| idle == id));
-        for (id, since) in idle {
-            if let Err(error) = self.wake_if_due(&id, since, woken, now).await {
-                log!("idle wake of space {id}: {error:#}");
+            .retain(|id, _| idle.iter().any(|idle| idle.space == *id));
+        for idle in idle {
+            if let Err(error) = self.wake_if_due(&idle, woken, now).await {
+                log!("idle wake of space {}: {error:#}", idle.space);
             }
         }
         Ok(())
     }
 
-    /// Wake the agent of the space `id`, idle since `since`, when its mode
-    /// wakes it and it is due at `now`, unless the space is done or the
-    /// agent sleeps. The transaction that queues the wake checks all of
-    /// that again, since a turn, a sleep or `shoal done` may have come while
-    /// the mode's settings were read.
+    /// Wake the `idle` agent when its mode wakes it and it is due at `now`,
+    /// unless the space is done or the agent sleeps. The transaction that
+    /// queues the wake checks all of that again, since a turn, a sleep or
+    /// `shoal done` may have come while the mode's settings were read.
     async fn wake_if_due(
         &self,
-        id: &SpaceId,
-        since: UnixTime,
+        idle: &agent_state::Idle,
         woken: &mut Woken,
         now: UnixTime,
     ) -> Result<()> {
+        let id = &idle.space;
         let space = self.space_by_id(id).await?;
         if space.done() || space.sleep().is_some() {
             return Ok(());
@@ -78,12 +76,12 @@ impl Manager {
         let Some(minutes) = self.idle_wake_minutes(&space).await? else {
             return Ok(());
         };
-        if !woken.due(id, since, Duration::from_secs(minutes * 60), now) {
+        if !woken.due(id, idle.since, Duration::from_secs(minutes * 60), now) {
             return Ok(());
         }
-        let (space, message) = (id.to_owned(), wake_message(minutes));
+        let (space, turn, message) = (id.to_owned(), idle.turn, wake_message(minutes));
         let queued = (self.store)
-            .write(move |tx| match still_idle(tx, &space, since)? {
+            .write(move |tx| match still_idle(tx, &space, turn)? {
                 true => spaces::queue_shoal_message(tx, &space, &message),
                 false => Ok(None),
             })
@@ -109,11 +107,10 @@ impl Manager {
     }
 }
 
-/// Whether the agent of the space `id` is still idle since `since`, neither
-/// sleeping nor in a space whose work is done.
-fn still_idle(db: &Connection, id: &SpaceId, since: UnixTime) -> Result<bool> {
-    let idle = agent_state::current(db, id)?
-        .is_some_and(|status| status.state == AgentState::Idle && status.since == since);
+/// Whether the agent of the space `id` is still idle in the turn
+/// generation `turn`, neither sleeping nor in a space whose work is done.
+fn still_idle(db: &Connection, id: &SpaceId, turn: i64) -> Result<bool> {
+    let idle = agent_state::idle_in(db, id, turn)?;
     Ok(idle && sleep::current(db, id)?.is_none() && !done(db, id)?)
 }
 

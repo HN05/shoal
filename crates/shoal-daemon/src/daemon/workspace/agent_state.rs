@@ -54,19 +54,59 @@ fn status(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentStatus> {
     })
 }
 
+/// A space whose agent is idle.
+pub(crate) struct Idle {
+    pub space: SpaceId,
+    /// When it went idle.
+    pub since: UnixTime,
+    /// The turn generation it is idle in.
+    pub turn: i64,
+}
+
 /// The spaces whose agent is idle while it can still be, as [`current`]
-/// reads it, each with when it went idle.
-pub(crate) fn idle(db: &Connection) -> Result<Vec<(SpaceId, UnixTime)>> {
+/// reads it.
+pub(crate) fn idle(db: &Connection) -> Result<Vec<Idle>> {
     Ok(db
         .prepare(
-            "SELECT s.space_id,s.since FROM space_agent_state s
+            "SELECT s.space_id,s.since,s.turn FROM space_agent_state s
              LEFT JOIN executions e ON e.id=s.execution_id
              WHERE s.state=?1 AND (s.execution_id IS NULL OR e.state=?2)",
         )?
         .query_map(params![AgentState::Idle, ExecutionState::Running], |row| {
-            Ok((row.get(0)?, row.get(1)?))
+            Ok(Idle {
+                space: row.get(0)?,
+                since: row.get(1)?,
+                turn: row.get(2)?,
+            })
         })?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Whether the agent of the space `id` is still idle in the turn generation
+/// `turn`, while it can still be, as [`current`] reads it: no turn started
+/// since and no other execution reported.
+pub(crate) fn idle_in(db: &Connection, id: &SpaceId, turn: i64) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM space_agent_state s
+             LEFT JOIN executions e ON e.id=s.execution_id
+             WHERE s.space_id=?1 AND s.state=?2 AND s.turn=?3
+                 AND (s.execution_id IS NULL OR e.state=?4))",
+        params![id, AgentState::Idle, turn, ExecutionState::Running],
+        |row| row.get(0),
+    )?)
+}
+
+/// Whether an interrupt ended the last turn of the agent `execution` runs,
+/// which leaves it idle without the hook that ends its other turns.
+pub(crate) fn interrupted(db: &Connection, execution: &ExecutionId) -> Result<bool> {
+    Ok(db
+        .query_row(
+            "SELECT interrupted FROM space_agent_state WHERE execution_id=?1",
+            [execution],
+            |row| row.get(0),
+        )
+        .optional()?
+        .unwrap_or(false))
 }
 
 /// Every space's last reported state.
@@ -266,7 +306,10 @@ impl Manager {
                 AgentState::Working,
                 execution.clone(),
                 None,
-                TurnEnding::default(),
+                TurnEnding {
+                    woken: true,
+                    ..TurnEnding::default()
+                },
                 None,
             )
             .await?;
@@ -379,6 +422,8 @@ impl Manager {
             at,
             prompt_cache_expires_at: ending.prompt_cache.map(|lifetime| at + lifetime),
             failed: ending.failed,
+            interrupted: ending.interrupted_after(state),
+            woken: ending.woken,
         };
         let saved = self.store.write(move |tx| save(tx, &report)).await?;
         self.report_times.arrived(space.id(), made);
@@ -392,8 +437,9 @@ impl Manager {
     }
 
     /// Record the turn `state` reports with `ending` for the agent that
-    /// reports from `execution` in `space`, with the agent's other transient
-    /// metadata: a chat's agent reports from none.
+    /// reports from `execution` in `space` with the agent's transient
+    /// metadata: a chat's agent reports from none and keeps its interrupt
+    /// there, while the state an execution reports keeps its own.
     async fn record_turn(
         &self,
         space: &PresentSpace,
@@ -401,10 +447,11 @@ impl Manager {
         state: AgentState,
         ending: TurnEnding,
     ) {
-        let interrupted = ending.interrupted_after(state);
         match (space, execution) {
-            (_, Some(execution)) => self.record_agent_turn(execution, state, interrupted).await,
-            (PresentSpace::Chat(chat), None) => self.chat_agents.record_turn(&chat.id, interrupted),
+            (_, Some(execution)) => self.record_agent_turn(execution, state).await,
+            (PresentSpace::Chat(chat), None) => {
+                (self.chat_agents).record_turn(&chat.id, ending.interrupted_after(state))
+            }
             (PresentSpace::Workspace(_), None) => {}
         }
     }
@@ -492,9 +539,11 @@ impl Manager {
 
 /// How a report ends the agent's turn: whether it ends one, whether a
 /// failure or an interrupt ended it, and how long its prompt cache lives
-/// after it. A report that ends no turn has none of them.
+/// after it, or whether a wake hook starts the turn it reports. A report
+/// that ends no turn has none of the former.
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct TurnEnding {
+    woken: bool,
     ends: bool,
     failed: bool,
     interrupted: bool,
@@ -539,6 +588,46 @@ struct Report {
     prompt_cache_expires_at: Option<UnixTime>,
     /// Whether a failure ended the agent's turn.
     failed: bool,
+    /// Whether an interrupt ended it, when the report says.
+    interrupted: Option<bool>,
+    /// Whether a wake hook starts the turn it reports.
+    woken: bool,
+}
+
+impl Report {
+    /// Whether the report starts a turn after the space's `previous` one:
+    /// a woken turn, a working agent that was idle or waiting, or the first
+    /// report of another execution, which a decision made for the previous
+    /// one must tell apart too.
+    fn starts_turn(&self, previous: Option<&Recorded>) -> bool {
+        let Some(previous) = previous else {
+            return true;
+        };
+        self.woken
+            || previous.execution != self.execution
+            || (self.state == AgentState::Working && previous.state != AgentState::Working)
+    }
+}
+
+/// The state a space recorded last, and the execution that reported it.
+struct Recorded {
+    state: AgentState,
+    execution: Option<ExecutionId>,
+}
+
+fn recorded(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
+    Ok(db
+        .query_row(
+            "SELECT state,execution_id FROM space_agent_state WHERE space_id=?1",
+            [id],
+            |row| {
+                Ok(Recorded {
+                    state: row.get(0)?,
+                    execution: row.get(1)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 /// Record `report` with the turn retries it settles and the sleep a turn it
@@ -548,8 +637,9 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     if !takes_report(tx, &report.space)? {
         return Ok(None);
     }
-    let previous = get(tx, &report.space)?.map(|status| status.state);
-    let changed = write_state(tx, report)?;
+    let recorded = recorded(tx, &report.space)?;
+    let changed = write_state(tx, report, report.starts_turn(recorded.as_ref()))?;
+    let previous = recorded.map(|recorded| recorded.state);
     super::turn_retry::follow_state(tx, &report.space, report.state)?;
     crate::daemon::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
     if !report.failed {
@@ -575,12 +665,16 @@ fn takes_report(db: &Connection, id: &SpaceId) -> Result<bool> {
 /// Write `report` over the space's last one, keeping a repeated state's
 /// start: an idle agent's prompt cache expires as a turn just ended says,
 /// keeps its expiry while the same execution stays idle, and has none
-/// otherwise. Whether anything changed.
-fn write_state(db: &Connection, report: &Report) -> Result<bool> {
+/// otherwise. A report that `starts` a turn counts it in the space's turn
+/// generation, which a new state continues from the space's last count.
+/// Whether anything changed.
+fn write_state(db: &Connection, report: &Report, starts: bool) -> Result<bool> {
     let changed = db.execute(
         "INSERT INTO space_agent_state
-             (space_id,state,execution_id,since,prompt_cache_expires_at)
-         VALUES (?1,?2,?3,?4,?5)
+             (space_id,state,execution_id,since,prompt_cache_expires_at,turn,interrupted)
+         VALUES (?1,?2,?3,?4,?5,
+             COALESCE((SELECT turn FROM space_turns WHERE space_id=?1),0)+1,
+             COALESCE(?7,0))
          ON CONFLICT(space_id) DO UPDATE SET
              since=CASE WHEN state=excluded.state THEN since ELSE excluded.since END,
              prompt_cache_expires_at=CASE
@@ -590,16 +684,22 @@ fn write_state(db: &Connection, report: &Report) -> Result<bool> {
                  WHEN state=excluded.state AND execution_id IS excluded.execution_id
                      THEN prompt_cache_expires_at
              END,
+             turn=turn+?6,
+             interrupted=COALESCE(?7,interrupted),
              state=excluded.state,execution_id=excluded.execution_id
          WHERE state IS NOT excluded.state
              OR execution_id IS NOT excluded.execution_id
-             OR excluded.prompt_cache_expires_at IS NOT NULL",
+             OR excluded.prompt_cache_expires_at IS NOT NULL
+             OR ?6
+             OR interrupted IS NOT COALESCE(?7,interrupted)",
         params![
             report.space,
             report.state,
             report.execution,
             report.at,
-            report.prompt_cache_expires_at
+            report.prompt_cache_expires_at,
+            starts,
+            report.interrupted,
         ],
     )?;
     Ok(changed > 0)

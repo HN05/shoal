@@ -70,10 +70,14 @@ impl Manager {
     /// Whether the agent of `execution` idles after an interrupt ended its
     /// last turn.
     pub(crate) async fn turn_interrupted(&self, execution: &ExecutionId) -> bool {
-        self.executions
-            .with_agent(execution, |agent| agent.interrupted)
-            .await
-            .unwrap_or(false)
+        let id = execution.to_owned();
+        let interrupted = (self.store)
+            .read(move |db| super::super::agent_state::interrupted(db, &id))
+            .await;
+        interrupted.unwrap_or_else(|error| {
+            crate::daemon::log!("interrupt of execution {execution} unreadable: {error:#}");
+            false
+        })
     }
 }
 
