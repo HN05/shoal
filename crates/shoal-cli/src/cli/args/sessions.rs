@@ -114,7 +114,7 @@ pub enum SessionsCommand {
         #[arg(short = 'p', long)]
         print: bool,
     },
-    /// Attach this terminal to a workspace's or chat's agent session; Ctrl-\ detaches.
+    /// Attach this terminal to a workspace's or chat's agent session; Ctrl-\ detaches zmx.
     ///
     /// Terminal agents and chats run in sessions of a terminal host, such as
     /// zmx sessions, that keep running after their terminal closes or

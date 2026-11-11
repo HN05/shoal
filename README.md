@@ -184,7 +184,7 @@ shoal run                     # List configured commands, arguments, and source 
 shoal claude 3                 # Run Claude Code
 shoal open 3 --app claude          # Open in the Claude desktop app (macOS)
 shoal open 3 --app codex           # Open in the Codex desktop app
-shoal attach 3                 # Reattach to the workspace's agent session; Ctrl-\ detaches
+shoal attach 3                 # Reattach to the workspace's agent session; Ctrl-\ detaches zmx
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal happy-claude 3           # Detached Happy session, visible in the Happy app
@@ -321,8 +321,9 @@ With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,
 [review command](docs/reference.md#configured-commands) for uncommitted review.
 
 CLI agents and chats run in sessions of a terminal host, by default
-[zmx](https://github.com/neurosnap/zmx), that keep running when you detach with
-Ctrl-\ or close the terminal; `shoal attach` returns to one, such as a zmx
+[zmx](https://github.com/neurosnap/zmx), that keep running when you detach, with
+Ctrl-\ in zmx or the host's own control elsewhere, or close the terminal;
+`shoal attach` returns to one, such as a zmx
 session or a Herdr tab, by its workspace's or chat's number or ID. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. Codex and Claude run with
 their own sandbox and approval settings; Shoal turns on network access in Codex's
