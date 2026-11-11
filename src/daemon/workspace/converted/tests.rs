@@ -102,6 +102,10 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let attacher = crate::daemon::workspace_files::Attacher::User;
+    let done = (manager.mark_chat_done(&talk.id, Default::default(), &attacher))
+        .await
+        .unwrap();
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
@@ -119,6 +123,7 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
         (talk.number, talk.pid, &talk.name)
     );
     assert!(manager.workspace_by_id(&talk.id).await.is_err());
+    assert_eq!(manager.completion(&talk.id).await.unwrap(), Some(done));
     let token = manager.chat_scope(&talk.id).await.unwrap();
     assert!(manager.caller(&token).await.unwrap().is_some());
     // It was the workspace's once its record went in, and is the chat again.

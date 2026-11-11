@@ -85,13 +85,23 @@ const CHAT_COLUMNS: &[&str] = &[
 ];
 
 /// A chat's row: its scope token, kept as one, and its other columns as a
-/// JSON object, with what restarting its agent reads from it.
+/// JSON object, with what restarting its agent reads from it, and the
+/// chat's completion, which a failed conversion gives back with the row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ChatRow {
     #[serde(default)]
     scope_token: Option<ScopeToken>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    space_completion: Option<KeptCompletion>,
     #[serde(flatten)]
     columns: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A completion as `space_completion` records it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct KeptCompletion {
+    record: String,
+    cause: String,
 }
 
 /// What a converted chat's agent ran as and with.
@@ -371,8 +381,8 @@ pub(crate) fn relocated_chat(
 }
 
 /// Give back the chat `row`, which the workspace `id` replaced, and remove
-/// that workspace's row: its questions and unread messages return to the
-/// chat.
+/// that workspace's row: its completion, questions and unread messages
+/// return to the chat.
 pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
     insert_chat_row(tx, row)?;
     tx.execute(
@@ -382,6 +392,13 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
     move_agent_messages(tx, id)?;
     tx.execute("DELETE FROM executions WHERE workspace_id=?1", [id])?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+    // Last, since deleting the workspace's row deletes the completion.
+    if let Some(completion) = &row.space_completion {
+        tx.execute(
+            "INSERT OR REPLACE INTO space_completion(space_id,record,cause) VALUES (?1,?2,?3)",
+            params![id, completion.record, completion.cause],
+        )?;
+    }
     forget(tx, id)
 }
 
@@ -477,7 +494,20 @@ fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
         )
         .optional()?
         .with_context(|| format!("no chat {id}"))?;
-    Ok(serde_json::from_str(&row)?)
+    let mut row: ChatRow = serde_json::from_str(&row)?;
+    row.space_completion = db
+        .query_row(
+            "SELECT record,cause FROM space_completion WHERE space_id=?1",
+            [id],
+            |row| {
+                Ok(KeptCompletion {
+                    record: row.get(0)?,
+                    cause: row.get(1)?,
+                })
+            },
+        )
+        .optional()?;
+    Ok(row)
 }
 
 /// Insert the chat `row` as it was.
