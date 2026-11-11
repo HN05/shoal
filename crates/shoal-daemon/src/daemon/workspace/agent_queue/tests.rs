@@ -1068,12 +1068,29 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
     };
     let reached = manager.reachable_queue(Some(&sibling)).await.unwrap();
     assert!(reached.iter().all(|reached| reached.id != entry.id));
-    // Removing the space removes the launch with it.
+    // Converting the space to a chat, which moves its row to the other
+    // table, keeps the launch; removing the space removes it.
     let parent_id = parent.id.clone();
     manager
         .store
         .run(move |db| {
+            db.execute(
+                "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,number)
+                 SELECT id,repository_id,name,'claude',1,'birth',0,number
+                 FROM workspaces WHERE id=?1",
+                [&parent_id],
+            )?;
             db.execute("DELETE FROM workspaces WHERE id=?1", [&parent_id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(manager.queue_entries().await.unwrap().len(), 1);
+    let parent_id = parent.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("DELETE FROM chats WHERE id=?1", [&parent_id])?;
             Ok(())
         })
         .await
