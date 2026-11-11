@@ -193,6 +193,20 @@ pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow
     Ok(row)
 }
 
+/// Forget the conversion of the chat that became the workspace `id`, whose
+/// agent, which carried the scope `token`, restarted there under a scope of
+/// its own.
+pub(crate) fn relocated_chat(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    token: Option<&ScopeToken>,
+) -> Result<()> {
+    if let Some(token) = token {
+        tx.execute("DELETE FROM workspace_scopes WHERE token=?1", [token])?;
+    }
+    forget(tx, id)
+}
+
 /// Give back the chat `row`, which the workspace `id` replaced, and remove
 /// that workspace's row: its questions and unread messages return to the
 /// chat.

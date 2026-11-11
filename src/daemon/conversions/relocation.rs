@@ -119,12 +119,7 @@ impl Manager {
         last.write(&self.paths, id)?;
         let (space, token) = (id.to_owned(), agent.scope_token.clone());
         self.store
-            .write(move |tx| {
-                if let Some(token) = token {
-                    tx.execute("DELETE FROM workspace_scopes WHERE token=?1", [token])?;
-                }
-                super::record::forget(tx, &space)
-            })
+            .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
             .await?;
         self.signals.agent_changed();
         resume_workspace(&self.paths, id, origin.as_ref()).await
