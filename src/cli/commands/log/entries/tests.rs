@@ -65,6 +65,14 @@ fn details_name_what_each_entry_is_about() {
         ),
         "3.2 SQLite"
     );
+    assert_eq!(
+        details(
+            serde_json::json!({"kind": "job_ended", "job": {"name": "rust",
+            "run": "https://forge.example/team/repo/actions/runs/2765",
+            "stopped": [{"pid": 41, "command": "sh -c loop"}, {"pid": 42, "command": "sleep 60"}]}})
+        ),
+        "rust, run 2765; stopped 41 sh -c loop, 42 sleep 60"
+    );
 }
 
 #[test]

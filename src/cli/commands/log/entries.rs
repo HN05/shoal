@@ -108,6 +108,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::ProgressChanged => fixed("Progress", progress(event)),
         EventKind::ChildCreated => fixed("Child created", child(event)),
         EventKind::ChildRemoved => fixed("Child removed", child(event)),
+        EventKind::JobEnded => fixed("CI job ended", job(event)),
         EventKind::Ready => fixed("Setup finished", String::new()),
         EventKind::SetupFailed => fixed("Setup failed", error(event)),
         EventKind::Retained => fixed("Cleanup failed", error(event)),
@@ -341,6 +342,22 @@ fn child(event: &EventDetails) -> String {
         Some(child) => child.name.to_string(),
         None => String::new(),
     }
+}
+
+/// The job Shoal ended, its run, and the processes it stopped first.
+fn job(event: &EventDetails) -> String {
+    let Some(job) = &event.job else {
+        return String::new();
+    };
+    let ended = format!("{}, {}", job.name, reference(&job.run));
+    if job.stopped.is_empty() {
+        return ended;
+    }
+    let stopped = (job.stopped.iter())
+        .map(|process| format!("{} {}", process.pid, process.command))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{ended}; stopped {stopped}")
 }
 
 fn error(event: &EventDetails) -> String {

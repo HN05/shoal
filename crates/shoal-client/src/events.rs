@@ -147,6 +147,9 @@ states!(EventKind {
     /// `workspace_id` or `chat_id` names; `path` and `branch` are the new
     /// workspace's.
     Converted => "converted",
+    /// Shoal ended the workspace's CI job, whose runner kept running after
+    /// the forge finished the job's run.
+    JobEnded => "job_ended",
 });
 
 states!(
@@ -312,6 +315,9 @@ pub struct EventDetails {
     /// The space created or removed below this one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child: Option<crate::model::SpaceRef>,
+    /// The CI job Shoal ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<Box<JobEndedEvent>>,
 }
 
 impl EventDetails {
@@ -401,6 +407,16 @@ pub struct ApprovalEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertEvent {
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobEndedEvent {
+    /// The job's name.
+    pub name: String,
+    /// The web URL of the run it belongs to.
+    pub run: String,
+    /// The processes of the job's workspace Shoal stopped before its runner.
+    pub stopped: Vec<StoppedProcess>,
 }
 
 /// A process Shoal stopped, as `ps` showed it.

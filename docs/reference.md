@@ -5218,7 +5218,8 @@ details, under a heading for each date:
   them, and their closing, merging and reopening on the forge;
 - the questions it asked and their answers, the approvals it requested and
   their decisions, and the alerts it sent;
-- the spaces created and removed below it.
+- the spaces created and removed below it;
+- a CI job Shoal ended after its run finished, with the processes it stopped.
 
 `--all` adds every other event of the space, dimmed: setup and cleanup
 results, branch, base and parent changes, its agent's turn states and
@@ -5264,7 +5265,7 @@ the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
 other null), `repository_id` (null for a chat without a repository), `name`,
 `path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `alert_sent`, `progress_changed`, `child_created` and `child_removed`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -5295,6 +5296,9 @@ with its `message`. `progress_changed` events add `progress` as
 both are cleared. `child_created` and `child_removed` events, in the log of
 the space above, add `child` with its `id`, `name`, `kind` and a workspace's
 `branch`.
+`job_ended` events, when Shoal ended a [CI job](#runner) whose runner outlived
+its run, add `job` with the job's `name`, its `run`'s URL and the processes it
+`stopped` before the runner, each with its `pid` and `command`.
 `demo_started` events, when a [demo](#demos)'s command first runs, and
 `demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,
 `preset` and, for a simulator demo, the device's `udid`.
