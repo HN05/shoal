@@ -184,7 +184,8 @@ async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() 
         backends::ForgeKind,
         test_support::{Server, agent_on, repo_on},
     };
-    // `deploy` needs `test`, so rerunning `test` blocks it again.
+    // `deploy` needs `test`, so rerunning `test` blocks it again; `lint`
+    // was cancelled before it ran.
     let statuses = Arc::new(Mutex::new(vec![
         ("build", "success"),
         ("test", "failure"),
@@ -210,7 +211,8 @@ async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() 
             .iter()
             .enumerate()
             .map(|(index, (name, status))| {
-                json!({"id": index + 1, "name": name, "run_id": 9, "status": status})
+                json!({"id": index + 1, "name": name, "run_id": 9, "status": status,
+                    "task_id": 0})
             })
             .collect();
         (200, Vec::new(), json!(listed).to_string().into())

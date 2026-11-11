@@ -306,7 +306,7 @@ impl Snapshot {
                 (UpdateKind::Reopened, "Item reopened".into())
             }
             (_, Merged) => (UpdateKind::Merged, "PR merged".into()),
-            (_, state @ (Failed | Finished)) => (
+            (_, state @ (Failed | Finished | Cancelled)) => (
                 UpdateKind::CiCompleted,
                 format!(
                     "Run {state}{}; read it with shoal view ci {url}",
@@ -322,7 +322,7 @@ impl Snapshot {
     pub fn run_finished(&self) -> bool {
         matches!(
             self.state,
-            Some(SnapshotState::Failed | SnapshotState::Finished)
+            Some(SnapshotState::Failed | SnapshotState::Finished | SnapshotState::Cancelled)
         )
     }
 

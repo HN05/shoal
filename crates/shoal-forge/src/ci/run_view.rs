@@ -132,6 +132,12 @@ impl ForgeRepo {
         let run = self.view_run(account, input).await?;
         let jobs = self.jobs_of(account, &run).await?;
         let job = find_job(&run, &jobs, job)?;
+        ensure!(
+            job.state != JobState::Cancelled,
+            "job {} of {} has no log: it was cancelled before it ran",
+            job.name,
+            run.url
+        );
         let log = self.kind.run_job_log(self, account, &run, job).await?;
         let step = match self.kind.listed_failed_step(self, account, job.id).await {
             None => self.kind.failed_step(&log),
@@ -156,15 +162,16 @@ impl ForgeRepo {
         };
         let mut snapshot = Snapshot::of(SnapshotKind::Run, Some(state));
         if state == SnapshotState::Failed {
-            snapshot.failed_jobs = self.failed_jobs(account, &run).await?;
+            let jobs = self.jobs_of(account, &run).await?;
+            snapshot.state = Some(stopped_run_state(&jobs));
+            snapshot.failed_jobs = self.failed_jobs(account, &run, &jobs).await;
         }
         Ok(snapshot)
     }
 
-    /// The failed jobs of `run`, with the failing steps of those a run's
-    /// update names; only their logs are read.
-    async fn failed_jobs(&self, account: &Account, run: &Run) -> Result<Vec<FailedJob>> {
-        let jobs = self.jobs_of(account, run).await?;
+    /// The failed jobs of `run` among its `jobs`, with the failing steps of
+    /// those a run's update names; only their logs are read.
+    async fn failed_jobs(&self, account: &Account, run: &Run, jobs: &[RunJob]) -> Vec<FailedJob> {
         let failed = jobs.iter().filter(|job| job.state == JobState::Failed);
         let mut failed_jobs = Vec::new();
         for (index, job) in failed.enumerate() {
@@ -177,7 +184,7 @@ impl ForgeRepo {
                 step,
             });
         }
-        Ok(failed_jobs)
+        failed_jobs
     }
 
     /// The step that failed in `job`, where the forge lists it or reads its
@@ -243,6 +250,18 @@ impl ForgeRepo {
             limit: FINISHED_LOOKUP,
         };
         Ok(newest_finished(self.list_runs(account, &filter).await?))
+    }
+}
+
+/// The state of a run the forge reports as failed, from its `jobs`: one
+/// whose jobs only stopped short by being cancelled before they ran was
+/// cancelled.
+fn stopped_run_state(jobs: &[RunJob]) -> SnapshotState {
+    let failed = jobs.iter().any(|job| job.state == JobState::Failed);
+    let cancelled = jobs.iter().any(|job| job.state == JobState::Cancelled);
+    match (failed, cancelled) {
+        (false, true) => SnapshotState::Cancelled,
+        _ => SnapshotState::Failed,
     }
 }
 

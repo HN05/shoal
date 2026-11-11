@@ -158,7 +158,9 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
                 {"id": 2, "name": "report", "status": "failure", "run_id": 9331},
                 {"id": 3, "name": "rust", "status": "waiting", "run_id": 9331, "task_id": 0},
                 {"id": 4, "name": "docs", "status": "blocked", "run_id": 9331},
-                {"id": 5, "name": "lint", "status": "running", "run_id": 9331}]),
+                {"id": 5, "name": "lint", "status": "running", "run_id": 9331},
+                {"id": 6, "name": "test", "status": "cancelled", "run_id": 9331, "task_id": 0},
+                {"id": 7, "name": "fmt", "status": "cancelled", "run_id": 9331, "task_id": 8}]),
     )?;
     assert_eq!(
         jobs[1].url.as_deref(),
@@ -171,7 +173,9 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
             JobState::Failed,
             JobState::Waiting,
             JobState::Waiting,
-            JobState::Running
+            JobState::Running,
+            JobState::Cancelled,
+            JobState::Failed
         ]
     );
     Ok(())
@@ -214,10 +218,72 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
 }
 
 #[test]
+fn a_failed_run_whose_jobs_only_never_ran_was_cancelled() {
+    let job = |state| RunJob {
+        id: JobId::new(1),
+        name: "rust".into(),
+        state,
+        url: None,
+    };
+    let states = |states: &[JobState]| states.iter().copied().map(job).collect::<Vec<_>>();
+    assert_eq!(
+        stopped_run_state(&states(&[JobState::Finished, JobState::Cancelled])),
+        SnapshotState::Cancelled
+    );
+    assert_eq!(
+        stopped_run_state(&states(&[JobState::Failed, JobState::Cancelled])),
+        SnapshotState::Failed
+    );
+    assert_eq!(
+        stopped_run_state(&states(&[JobState::Finished])),
+        SnapshotState::Failed
+    );
+}
+
+#[test]
 fn filters_need_a_bounded_limit_and_nonempty_names() {
     assert!(validate_filter(&filter(Some("topic"), Some("ci.yml"))).is_ok());
     assert!(validate_filter(&filter(Some(" "), None)).is_err());
     let mut unbounded = filter(None, None);
     unbounded.limit = MAX_RUNS + 1;
     assert!(validate_filter(&unbounded).is_err());
+}
+
+#[tokio::test]
+async fn a_run_cancelled_before_its_job_ran_reports_it_without_reading_its_log() -> Result<()> {
+    use crate::{
+        backends::ForgeKind,
+        test_support::{Server, agent_on, repo_on},
+    };
+    let server = Server::start(|request| {
+        let body = match request.line.as_str() {
+            "GET /api/v1/repos/team/repo/actions/runs?run_number=7" => json!({"workflow_runs": [
+                {"id": 30, "index_in_repo": 7, "status": "cancelled", "prettyref": "main",
+                    "workflow_id": "ci.yml", "commit_sha": "abc"}
+            ]}),
+            "GET /api/v1/repos/team/repo/actions/runs/30/jobs" => json!([
+                {"id": 1, "name": "gate", "status": "success", "run_id": 30, "task_id": 5},
+                {"id": 2, "name": "rust", "status": "cancelled", "run_id": 30, "task_id": 0}
+            ]),
+            _ => return (404, Vec::new(), Vec::new()),
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+    let account = agent_on(&server, "agent");
+    let activity = forgejo.run_activity(&account, "7").await?;
+    assert_eq!(activity.state(), Some(SnapshotState::Cancelled));
+    assert!(activity.failed_jobs.is_empty());
+    let log = forgejo
+        .run_job_log(&account, "7", &JobRef::Id(JobId::new(2)))
+        .await;
+    assert!(log.is_err());
+    assert!(
+        !server
+            .received()
+            .iter()
+            .any(|request| request.line.contains("/logs")),
+        "a job that never ran has no log to read"
+    );
+    Ok(())
 }

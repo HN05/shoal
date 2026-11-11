@@ -806,7 +806,7 @@ impl Backend for Forgejo {
                 Ok(RunJob {
                     id: JobId::new(job["id"].as_u64().context("Actions job has no ID")?),
                     name: text(&job["name"]).context("Actions job has no name")?,
-                    state: actions::state(&job["status"])?,
+                    state: actions::job_state(job)?,
                     url: Some(format!("{}/jobs/{index}", run.url)),
                 })
             })

@@ -157,7 +157,7 @@ impl ForgeRepo {
             let jobs = self.jobs_of(account, run).await?;
             let Some(job) = jobs
                 .iter()
-                .find(|job| job.state == JobState::Failed && !rerun.contains(&job.id))
+                .find(|job| job.state.rerunnable() && !rerun.contains(&job.id))
             else {
                 break;
             };

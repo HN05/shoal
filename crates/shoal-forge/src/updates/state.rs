@@ -33,6 +33,9 @@ states!(
         Running => "running",
         Failed => "failed",
         Finished => "finished",
+        /// A run that stopped short only because jobs were cancelled before
+        /// they ran.
+        Cancelled => "cancelled",
     }
 );
 
@@ -68,6 +71,7 @@ impl From<JobState> for SnapshotState {
             JobState::Running => Self::Running,
             JobState::Failed => Self::Failed,
             JobState::Finished => Self::Finished,
+            JobState::Cancelled => Self::Cancelled,
         }
     }
 }

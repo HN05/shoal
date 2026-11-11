@@ -54,6 +54,8 @@ states!(
         Waiting => "waiting",
         Running => "running",
         Finished => "finished",
+        /// A job cancelled before a runner took it, which has no log.
+        Cancelled => "cancelled",
     }
 );
 
@@ -61,6 +63,11 @@ impl JobState {
     /// Whether the job or run has yet to finish.
     pub fn unfinished(self) -> bool {
         matches!(self, Self::Waiting | Self::Running)
+    }
+
+    /// Whether the job stopped without succeeding, so a rerun applies to it.
+    pub(crate) fn rerunnable(self) -> bool {
+        matches!(self, Self::Failed | Self::Cancelled)
     }
 }
 
@@ -120,7 +127,7 @@ impl CiAction {
     /// Whether the action applies to a job in a state, and those states.
     pub(crate) fn applies_to(self) -> (fn(JobState) -> bool, &'static str) {
         match self {
-            Self::Rerun => (|state| state == JobState::Failed, "failed"),
+            Self::Rerun => (JobState::rerunnable, "failed"),
             Self::Cancel => (JobState::unfinished, "running or waiting"),
         }
     }

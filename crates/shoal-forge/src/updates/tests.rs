@@ -646,6 +646,13 @@ fn a_run_reports_once_when_it_finishes_with_its_failed_steps() {
     assert!(failed.changes(&failed, url).is_empty());
     let finished = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Finished));
     assert_eq!(Snapshot::default().changes(&finished, url).len(), 1);
+    let cancelled = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Cancelled));
+    let updates = running.changes(&cancelled, url);
+    assert!(
+        updates[0].message.starts_with("Run cancelled;"),
+        "{updates:?}"
+    );
+    assert!(cancelled.run_finished());
 }
 
 #[test]

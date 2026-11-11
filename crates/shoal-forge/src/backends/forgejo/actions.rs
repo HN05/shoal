@@ -215,6 +215,17 @@ pub(crate) fn state(status: &Value) -> Result<JobState> {
     })
 }
 
+/// The state of a run's job, where a job cancelled before a runner took it
+/// has no task.
+pub(crate) fn job_state(job: &Value) -> Result<JobState> {
+    Ok(match state(&job["status"])? {
+        JobState::Failed if job["status"] == "cancelled" && job["task_id"] == 0 => {
+            JobState::Cancelled
+        }
+        state => state,
+    })
+}
+
 /// Whether a pending commit status reports a Forgejo Actions job that no
 /// runner has taken, which only its description tells.
 pub(crate) fn status_waits(status: &Value) -> bool {

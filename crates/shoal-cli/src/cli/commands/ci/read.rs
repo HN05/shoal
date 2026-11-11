@@ -82,12 +82,12 @@ pub(in crate::cli::commands) fn render_run(view: &RunView, relations: &[Relation
     for job in &view.jobs {
         match &job.url {
             Some(url) => outln!(
-                "  {:<8}  {}  (ID {})  {url}",
+                "  {:<9}  {}  (ID {})  {url}",
                 job.state.as_str(),
                 job.name,
                 job.id
             ),
-            None => outln!("  {:<8}  {}  (ID {})", job.state.as_str(), job.name, job.id),
+            None => outln!("  {:<9}  {}  (ID {})", job.state.as_str(), job.name, job.id),
         }
     }
     for log in &view.logs {
