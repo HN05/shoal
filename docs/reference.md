@@ -2251,8 +2251,8 @@ with its run, `waiting_for` while dependencies remain,
 (`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
 `repository_limit`, `permits` or `reading`) and
 `base` once a launch starts on a dependency's branch, while `list --json` stays
-a list of workspaces. Entries are named as listed, by workspace name or by ID
-when several share one. On a terminal, `shoal queue` picks a waiting entry and
+a list of workspaces. Each line starts with the entry's ID, which `queue
+start`, `move` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
 then starts it, with or without attaching, moves or cancels it.
 
 `queue start` starts a waiting entry, by its ID or, for a queued restore, by
@@ -3807,7 +3807,8 @@ restore their own workspace's checkpoints.
 `shoal restore` and `shoal restore <workspace>` open a picker of the removed
 workspaces or of an existing workspace's checkpoints and restore the one picked;
 without a terminal, or with `--json`, they list them instead, each removed
-workspace with the number of its removal's checkpoint. When
+workspace led by its ID, which selects it, with the number of its removal's
+checkpoint. When
 `<workspace>` is a removed one's ID, it opens that removed workspace on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its

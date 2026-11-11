@@ -2038,3 +2038,31 @@ fn outside_a_checkout_issue_open_picks_a_workspace_and_repo_commands_a_repositor
         );
     }
 }
+
+#[test]
+fn text_listings_lead_with_the_ids_their_commands_take() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let first = fixture.add("first");
+    let first = first["id"].as_str().unwrap();
+    fixture.ok(&[
+        "start", repo, "later", "--after", first, "--agent", "claude",
+    ]);
+    let queued = fixture.ok(&["queue"]);
+    let entry = queued[0]["id"].as_str().unwrap();
+    let text = |args: &[&str]| {
+        let output = fixture.command().arg("--text").args(args).output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    let queue = text(&["queue", "--print"]);
+    assert!(queue.lines().any(|line| line.starts_with(entry)), "{queue}");
+
+    fixture.ok(&["rm", "--wait", first, "--yes"]);
+    let removed = text(&["restore"]);
+    assert!(
+        removed.lines().any(|line| line.starts_with(first)),
+        "{removed}"
+    );
+}

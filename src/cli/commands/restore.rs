@@ -297,12 +297,14 @@ pub(super) async fn prepare_reopened(
     }))
 }
 
+/// List `removed`, each led by the ID that selects it, since a removed
+/// workspace has no number and its name selects nothing.
 fn print_removed(removed: &[RemovedWorkspace]) {
     if removed.is_empty() {
         outln!("No removed workspaces to restore");
     }
-    for line in removed_lines(removed) {
-        outln!("{line}");
+    for (workspace, line) in removed.iter().zip(removed_lines(removed)) {
+        outln!("{}  {line}", workspace.workspace_id);
     }
 }
 

@@ -6,7 +6,8 @@ use crate::cli::{
     context::Context,
 };
 
-/// List the entries of `repository`, of every repository without one.
+/// List the entries of `repository`, of every repository without one,
+/// each led by the ID that `shoal queue start`, `move` and `cancel` take.
 pub(super) async fn list(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let filter = ListFilter::resolve(ctx, repository, Vec::new()).await?;
     let entries = queued_agents::listed(ctx, &filter).await?;
@@ -15,8 +16,8 @@ pub(super) async fn list(ctx: &Context, repository: Option<String>) -> Result<i3
         if rows.is_empty() {
             outln!("No queued agents");
         }
-        for row in rows {
-            outln!("{row}");
+        for (entry, row) in entries.iter().zip(rows) {
+            outln!("{}  {row}", entry.id);
         }
     })?;
     Ok(0)
