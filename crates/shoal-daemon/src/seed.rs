@@ -225,7 +225,7 @@ impl Snapshot {
     /// Clone the seed worktree's outputs among `paths` for the next
     /// snapshot, while the current one stays in use. On a filesystem with
     /// subvolumes, each output becomes one, so this and later freezes take
-    /// snapshots of it. Callers exclude other changes to the snapshot.
+    /// snapshots of it. Callers exclude other stages and installs.
     pub async fn stage(layout: &Layout, paths: &[String]) -> Result<Staged> {
         Self::stage_with(&clone_tree, &Btrfs, layout, paths).await
     }
@@ -321,7 +321,8 @@ impl Snapshot {
 
     /// Clone the outputs into the spare a new worktree takes instead of
     /// cloning them itself, unless one is ready. Returns whether it cloned.
-    /// Callers exclude other changes to the snapshot, but not takers.
+    /// Callers exclude other refills and changes to the snapshot, but not
+    /// clones or takers.
     pub async fn refill_spare(&self, layout: &Layout) -> Result<bool> {
         self.refill_spare_with(&clone_tree, layout).await
     }

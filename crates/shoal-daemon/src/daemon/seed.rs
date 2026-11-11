@@ -206,7 +206,9 @@ impl Manager {
     }
 
     /// Replace the snapshot with the outputs the seed worktree built, cloning
-    /// them and deleting the replaced snapshot outside the Git gate.
+    /// them while clones of the current snapshot go on and deleting the
+    /// replaced one once nothing reads it. The caller holds the build slot,
+    /// which keeps every other change to the snapshots out.
     async fn freeze_seed(
         &self,
         repo: &Repository,
@@ -214,8 +216,6 @@ impl Manager {
         plan: &Plan,
         build: &(String, String),
     ) -> Result<()> {
-        let slot = self.seeds.slot(&repo.id);
-        let _snapshot = slot.snapshot.lock().await;
         let staged = Snapshot::stage(layout, &plan.paths).await?;
         self.install_snapshot(repo, layout, staged, build).await?;
         let retired = layout.clone();
@@ -223,7 +223,8 @@ impl Manager {
     }
 
     /// Make `staged` the snapshot of the seed worktree built at `tip`,
-    /// checked under the Git gate while the repository is available.
+    /// checked under the Git gate while the repository is available, once
+    /// the clones of the current snapshot end.
     async fn install_snapshot(
         &self,
         repo: &Repository,
@@ -231,6 +232,8 @@ impl Manager {
         staged: Staged,
         (tip, settings): &(String, String),
     ) -> Result<()> {
+        let slot = self.seeds.slot(&repo.id);
+        let _snapshot = slot.snapshot.write().await;
         let _git = self.gates.lock_git(&repo.id).await;
         self.ensure_repository_available(&repo.id).await?;
         let worktree = layout.worktree();
@@ -259,9 +262,10 @@ impl Manager {
 
     /// Clone a spare of the repository's snapshot when it has none, its
     /// settings still describe the snapshot and the host has headroom for it.
+    /// Starts clone and take the spare meanwhile.
     async fn refill_spare(&self, id: &RepositoryId) -> Result<()> {
         let slot = self.seeds.slot(id);
-        let _snapshot = slot.snapshot.lock().await;
+        let _snapshot = slot.snapshot.read().await;
         // Read under the lock: a move or removal of the repository holds it.
         let Ok(repo) = self.repository(id).await else {
             return Ok(());
@@ -302,7 +306,7 @@ impl Manager {
                 return Ok(());
             };
             let slot = self.seeds.slot(&repo.id);
-            let _snapshot = slot.snapshot.lock().await;
+            let _snapshot = slot.snapshot.read().await;
             let Some(snapshot) = Snapshot::open(&layout)? else {
                 return Ok(());
             };
@@ -314,7 +318,7 @@ impl Manager {
                 );
                 return Ok(());
             }
-            self.start_from_snapshot(&layout, &snapshot, &workspace.path, &plan.paths)
+            self.start_from_snapshot(&slot, &layout, &snapshot, &workspace.path, &plan.paths)
                 .await
         };
         if let Err(error) = started.await {
@@ -330,14 +334,20 @@ impl Manager {
 
     /// Give the new `worktree` the snapshot's outputs among `paths`: the
     /// spare's, which the spare task then replaces, or else a clone of them.
+    /// The caller reads the snapshot under `slot`.
     async fn start_from_snapshot(
         &self,
+        slot: &SeedSlot,
         layout: &Layout,
         snapshot: &Snapshot,
         worktree: &Path,
         paths: &[String],
     ) -> Result<()> {
-        let outputs = match snapshot.take_spare(layout, worktree, paths)? {
+        let spare = {
+            let _taking = slot.spare.lock().await;
+            snapshot.take_spare(layout, worktree, paths)?
+        };
+        let outputs = match spare {
             Some(taken) => {
                 self.seeds.want_spare();
                 taken
@@ -360,7 +370,7 @@ impl Manager {
         let slot = self.seeds.slot(repository_id);
         slot.cancel.send_replace(true);
         let guard = slot.gate.clone().lock_owned().await;
-        let snapshot = slot.snapshot.clone().lock_owned().await;
+        let snapshot = slot.snapshot.clone().write_owned().await;
         SeedStop {
             _guard: guard,
             _snapshot: snapshot,
@@ -489,9 +499,12 @@ pub(super) async fn is_seed_worktree(repo: &Repository, layout: &Layout) -> Resu
 pub(crate) struct SeedSlot {
     gate: Arc<tokio::sync::Mutex<()>>,
     cancel: watch::Sender<bool>,
-    /// Held while the snapshot or its spare changes, which a build does only
-    /// once it has built.
-    snapshot: Arc<tokio::sync::Mutex<()>>,
+    /// Read while a clone of the snapshot's outputs runs, and written while
+    /// the snapshot is swapped, which a build does only once it has built,
+    /// or deleted.
+    snapshot: Arc<tokio::sync::RwLock<()>>,
+    /// Held while a new worktree takes the spare, which has one taker.
+    spare: tokio::sync::Mutex<()>,
 }
 
 impl Default for SeedSlot {
@@ -500,6 +513,7 @@ impl Default for SeedSlot {
             gate: Default::default(),
             cancel: watch::channel(false).0,
             snapshot: Default::default(),
+            spare: Default::default(),
         }
     }
 }
@@ -508,7 +522,7 @@ impl Default for SeedSlot {
 /// allows them again.
 pub(super) struct SeedStop {
     _guard: tokio::sync::OwnedMutexGuard<()>,
-    _snapshot: tokio::sync::OwnedMutexGuard<()>,
+    _snapshot: tokio::sync::OwnedRwLockWriteGuard<()>,
     slot: Arc<SeedSlot>,
 }
 

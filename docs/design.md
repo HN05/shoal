@@ -1029,8 +1029,11 @@ build tree takes minutes, so creation clones after its Git operations, outside
 the repository Git gate, and the workspace is neither ready nor set up until the
 clone ends. The daemon also keeps one spare clone of the snapshot ready:
 creation moves it into the new worktree, a background task clones the next, and
-creation clones only when no spare is ready. A new snapshot is cloned and the old one
-deleted outside the gate, which it takes only to swap them. Creation restores the
+creation clones only when no spare is ready. Clones read the snapshot under a
+shared lock of the seed's own, which a swap or deletion of the snapshot takes
+exclusively, so starts and the refill clone at the same time and only taking the
+spare is exclusive. A new snapshot is cloned and the old one deleted outside the
+Git gate, which it takes only to swap them. Creation restores the
 seed's modification times on tracked files its commit left unchanged, since
 mtime-based tools otherwise treat every freshly checked-out file as new.
 Clones of a file still cost time per file, so on btrfs each output is a

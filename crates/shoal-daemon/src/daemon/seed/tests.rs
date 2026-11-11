@@ -417,7 +417,7 @@ async fn a_start_releases_the_git_gate_before_its_seed_step() {
     let (_, repo) = seeded(&manager, temp.path(), "#!/bin/sh\nmkdir -p out\n").await;
     // A swap holds the snapshot, so the start's seed step waits.
     let slot = manager.seeds.slot(&repo.id);
-    let swap = slot.snapshot.clone().lock_owned().await;
+    let swap = slot.snapshot.clone().write_owned().await;
     let creating = tokio::spawn({
         let manager = manager.clone();
         let id = repo.id.clone();
@@ -444,4 +444,33 @@ async fn a_start_releases_the_git_gate_before_its_seed_step() {
     drop(swap);
     let workspace = creating.await.unwrap().unwrap();
     assert_eq!(workspace.state, WorkspaceState::Ready);
+}
+
+#[tokio::test]
+async fn a_start_clones_while_a_refill_reads_the_snapshot() {
+    let (temp, manager) = manager().await;
+    configure(&manager, NO_PRESSURE).await;
+    let (_, repo) = seeded(
+        &manager,
+        temp.path(),
+        "#!/bin/sh\nmkdir -p out\necho built > out/built\n",
+    )
+    .await;
+    manager.refresh_seeds().await;
+    let layout = Layout::of(&repo).unwrap();
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
+    }
+    // A refill reads the snapshot for its whole clone.
+    let slot = manager.seeds.slot(&repo.id);
+    let _refill = slot.snapshot.clone().read_owned().await;
+    let creating = manager.create_workspace(&repo.id, "feature".into(), None, None, None);
+    let workspace = tokio::time::timeout(Duration::from_secs(60), creating)
+        .await
+        .expect("the start does not wait for the refill")
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("out/built")).unwrap(),
+        "built\n"
+    );
 }
