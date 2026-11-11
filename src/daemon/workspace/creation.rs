@@ -174,6 +174,7 @@ impl Manager {
                 WorkspaceState::Preparing,
             )
         };
+        let converted_mode = converts.as_ref().map(|converting| converting.mode.clone());
         let placement = match converts {
             Some(converting) => Placement::Replacing(Box::new(converting)),
             None => Placement::Below(parent),
@@ -181,9 +182,15 @@ impl Manager {
         let workspace = self
             .insert_workspace_as(workspace, base_branch, placement)
             .await?;
-        let result = self
+        let mut result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
             .await;
+        // Before the workspace is ready, so nothing uses one that goes.
+        if let (Ok(_), Some(mode)) = (&result, &converted_mode)
+            && let Err(error) = self.ensure_worktree_mode(&workspace, mode).await
+        {
+            result = Err(error);
+        }
         self.settle_creation(&workspace, result).await
     }
 

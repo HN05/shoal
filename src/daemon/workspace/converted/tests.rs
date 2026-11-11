@@ -314,4 +314,7 @@ async fn a_mode_the_branch_does_not_define_gives_the_chat_back() {
         "{refused:#}"
     );
     assert!(manager.chat_by_id(&talk.id).await.unwrap().is_some());
+    // It was never ready for commands or leases to use.
+    let kinds = kinds(&manager, &talk.id).await;
+    assert!(!kinds.contains(&EventKind::Ready.to_string()), "{kinds:?}");
 }

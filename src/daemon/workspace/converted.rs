@@ -56,19 +56,13 @@ impl Manager {
                 (branch.clone(), self.available_branch(&repo, &branch).await?)
             }
         };
-        let (chat, mode) = (converting.chat.id.clone(), converting.mode.clone());
+        let chat = converting.chat.id.clone();
         let new = NewWorkspace {
             options,
             converts: Some(converting),
             ..Default::default()
         };
-        let created = async {
-            let workspace =
-                (self.create_branch_workspace(&repo, name, branch, source, new)).await?;
-            self.ensure_worktree_mode(&workspace, &mode).await?;
-            Ok(workspace)
-        }
-        .await;
+        let created = (self.create_branch_workspace(&repo, name, branch, source, new)).await;
         if created.is_err() {
             self.give_chat_back(&repo, &chat).await;
         }
@@ -78,7 +72,11 @@ impl Manager {
     /// Refuse `mode` for the agent of the converted `workspace` unless the
     /// settings of its worktree, which may differ from the checkout's on its
     /// branch, define it.
-    async fn ensure_worktree_mode(&self, workspace: &Workspace, mode: &ModeName) -> Result<()> {
+    pub(super) async fn ensure_worktree_mode(
+        &self,
+        workspace: &Workspace,
+        mode: &ModeName,
+    ) -> Result<()> {
         let settings = self.workspace_settings_with_templates(workspace).await?;
         crate::daemon::conversions::ensure_mode(&settings, mode)
     }
