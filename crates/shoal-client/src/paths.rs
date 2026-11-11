@@ -84,6 +84,12 @@ impl Paths {
         self.state.join("state.db")
     }
 
+    /// The reports agents' hooks keep while they send them, in a directory
+    /// per space, where those the daemon did not receive stay for it to find.
+    pub fn hook_reports(&self) -> PathBuf {
+        self.state.join("hook-reports")
+    }
+
     /// Copies of the files proposed issues and PRs attach, kept until the
     /// user decides, since the agent's copies may be gone by then.
     pub fn proposal_files(&self) -> PathBuf {

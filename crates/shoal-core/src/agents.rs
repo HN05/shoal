@@ -12,6 +12,7 @@ mod claude;
 mod codex;
 pub mod detached;
 pub(crate) mod happy;
+pub mod hook_reports;
 pub mod hooks;
 mod proxy;
 pub mod trust;
