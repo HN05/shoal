@@ -12,6 +12,7 @@ use crate::{
     daemon::{
         log,
         notifications::{About, NotificationKind},
+        spaces,
         workspace::Manager,
     },
     model::Workspace,
@@ -54,29 +55,34 @@ impl Manager {
     }
 
     /// Tell the agent of `requester`, or else the user, that removing
-    /// `workspace` failed with `error` and the workspace stays.
+    /// `workspace` failed with `error` and the workspace stays. A requesting
+    /// chat removed before it reads the message hands it to the user.
     async fn report_failed_removal(
         &self,
         workspace: &Workspace,
         requester: Option<&SpaceId>,
         error: &anyhow::Error,
     ) {
+        let kind = NotificationKind::RemovalFailed;
         let message = format!(
-            "Could not remove {}: {error:#}; it stays, and shoal rm {} tries again",
-            workspace.name, workspace.name
+            "removal failed: {error:#}; the workspace stays, and shoal rm {} tries again",
+            workspace.name
         );
         if let Some(requester) = requester {
-            match (self.queue_space_message(requester, None, message.clone(), Vec::new())).await {
+            let about = spaces::About {
+                name: &workspace.name,
+                id: Some(&workspace.id),
+                kind: Some(kind),
+            };
+            let queued =
+                self.queue_space_message(requester, Some(about), message.clone(), Vec::new());
+            match queued.await {
                 Ok(()) => return,
                 Err(error) => log!("removal failure not sent to {requester}: {error:#}"),
             }
         }
-        self.notify_about(
-            About::space(&workspace.name, &workspace.id),
-            NotificationKind::RemovalFailed,
-            message,
-        )
-        .await;
+        self.notify_about(About::space(&workspace.name, &workspace.id), kind, message)
+            .await;
     }
 }
 

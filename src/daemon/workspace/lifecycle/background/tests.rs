@@ -121,3 +121,58 @@ async fn a_failure_reaches_the_requesting_agent() {
             .all(|notification| notification.kind != NotificationKind::RemovalFailed)
     );
 }
+
+#[tokio::test]
+async fn a_failure_outlives_the_requesting_chat() {
+    let (_root, manager, workspace) = fixture_with_removal_hook("exit 1").await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let chat = manager
+        .start_chat(
+            workspace.repository_id.clone().into(),
+            "requester".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    manager
+        .start_workspace_removal(
+            &SpaceSelector::id(&workspace.id),
+            NOTHING.clone(),
+            false,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    drop(manager.gates.quiesce().await);
+    let failed = |notification: &crate::daemon::notifications::Notification| {
+        notification.kind == NotificationKind::RemovalFailed
+            && notification.workspace.as_ref() == Some(&workspace.name)
+    };
+    assert!(
+        !manager
+            .notifications(true, 10)
+            .await
+            .unwrap()
+            .iter()
+            .any(failed)
+    );
+
+    process.kill();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .notifications(true, 10)
+            .await
+            .unwrap()
+            .iter()
+            .any(failed)
+    );
+}
