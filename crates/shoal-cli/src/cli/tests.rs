@@ -212,14 +212,20 @@ fn update_is_administrative() {
 }
 
 #[test]
-fn removed_built_ins_remain_available_as_configured_commands() {
-    // Removed built-ins remain available as user-configured command names.
-    for name in ["approve", "deny", "escalate", "answer"] {
-        assert!(matches!(
-            Cli::try_parse_from(["shoal", name]).unwrap().command,
-            Some(Command::Custom(_))
-        ));
-    }
+fn only_an_unknown_top_level_name_points_to_shoal_run() {
+    let refused = |args: &[&str]| {
+        let error = Cli::try_parse_from(args).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::InvalidSubcommand,
+            "{args:?}"
+        );
+        names_unknown_command(&error, args.iter().map(OsString::from))
+    };
+    // A removed built-in's name runs nothing, as a configured command's does.
+    assert!(refused(&["shoal", "approve"]));
+    assert!(refused(&["shoal", "--json", "approve", "3"]));
+    assert!(!refused(&["shoal", "repo", "approve"]));
 }
 
 /// Each built-in command below `command`, with its deferred arguments built,

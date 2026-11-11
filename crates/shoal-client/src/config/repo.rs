@@ -70,7 +70,7 @@ states!(
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Settings)]
 pub struct RepoConfig {
-    /// Workspace shortcuts that are not agents: `shoal <name> [workspace]`.
+    /// Workspace shortcuts that are not agents: `shoal run <name> [-w <workspace>]`.
     #[option(named)]
     pub commands: crate::config::named_commands::Commands,
     #[option(named_sections, default = crate::config::agents::built_in())]

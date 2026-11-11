@@ -26,7 +26,7 @@ pub type Agents = BTreeMap<String, Agent>;
 pub struct Agent {
     /// Parent directory in which Shoal installs `<skill>/SKILL.md`.
     pub skill_dir: Option<PathBuf>,
-    /// Its launcher; a tool with one runs as `shoal <name>`.
+    /// Its launcher; a tool with one runs as `shoal run <name>`.
     pub command: Option<Vec<String>>,
     /// Arguments that give the agent instructions apart from its first
     /// message, with `{instructions}`, or `{instructions_toml}` for a TOML

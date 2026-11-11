@@ -1,18 +1,13 @@
-//! `shoal run` and `shoal <name>`: configured commands use the same workspace
-//! selection and wrapper as arbitrary commands.
+//! `shoal run <name>`: configured commands use the same workspace selection
+//! and wrapper as arbitrary commands.
 use crate::client::space_ids::SpaceId;
-use std::{
-    collections::BTreeSet,
-    ffi::{OsStr, OsString},
-};
+use std::ffi::{OsStr, OsString};
 
-use anyhow::{Context as _, Result};
-use clap::{CommandFactory, Parser};
+use anyhow::Result;
 
-use crate::cli::args::Invocation;
 use crate::client::space_names::SpaceSelector;
 
-use crate::client::output::configured::{BareName, CommandDefinition};
+use crate::client::output::configured::CommandDefinition;
 use crate::{
     cli::{
         client::{self},
@@ -37,39 +32,17 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
     let global = Config::load(&ctx.paths)?;
     let layers = listing_layers(ctx, workspace).await?;
     let definitions = Stack::new(&global, &layers).named(|config| &config.commands);
-
-    let built_ins: BTreeSet<_> = crate::cli::Cli::command()
-        .get_subcommands()
-        .map(|command| command.get_name().to_owned())
-        .collect();
     let definitions: Vec<_> = definitions
         .into_iter()
-        .map(|(name, (argv, layer))| {
-            let bare_name = if built_ins.contains(&name) {
-                BareName::BuiltIn
-            } else {
-                BareName::Shorthand
-            };
-            CommandDefinition {
-                name,
-                argv,
-                layer,
-                bare_name,
-            }
-        })
+        .map(|(name, (argv, layer))| CommandDefinition { name, argv, layer })
         .collect();
     ctx.show(&definitions, |definitions| {
         for command in definitions {
             outln!(
-                "{} = {} ({}{})",
+                "{} = {} ({})",
                 command.name,
                 serde_json::to_string(&command.argv).expect("serialize command argv"),
                 command.layer,
-                if command.bare_name == BareName::BuiltIn {
-                    "; bare name is built-in"
-                } else {
-                    ""
-                }
             );
         }
     })?;
@@ -101,48 +74,8 @@ async fn workspace_layers(ctx: &Context, workspace: SpaceSelector) -> Result<Con
         .await
 }
 
-/// The name `shoal <name>` runs.
-pub(super) fn command_name(words: &[OsString]) -> Result<String> {
-    Ok(words[0]
-        .to_str()
-        .context("command name must be UTF-8")?
-        .to_owned())
-}
-
-/// The workspace `shoal <name>` names, read past help flags and argument
-/// errors so that the name is checked before either is reported.
-pub(super) fn named_workspace(words: &[OsString]) -> Option<SpaceSelector> {
-    let help = clap::Arg::new("help")
-        .short('h')
-        .long("help")
-        .action(clap::ArgAction::SetTrue);
-    Invocation::command()
-        .disable_help_flag(true)
-        .arg(help)
-        .ignore_errors(true)
-        .try_get_matches_from(words)
-        .ok()?
-        .get_one::<SpaceSelector>("workspace")
-        .cloned()
-}
-
-/// The workspace and arguments of `shoal <name>`; `None` once help has been
-/// printed.
-pub(super) fn invocation(
-    words: Vec<OsString>,
-) -> Result<Option<(Option<SpaceSelector>, Vec<OsString>)>> {
-    match Invocation::try_parse_from(words) {
-        Ok(invocation) => Ok(Some((invocation.workspace, invocation.args))),
-        Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp => {
-            crate::cli::output::print_clap_output(&error);
-            Ok(None)
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-
 /// The configuration that defines a command for one run.
-pub(super) enum Definition {
+enum Definition {
     /// The global configuration: the named or current workspace runs it, else
     /// the one picked.
     Global(Option<SpaceSelector>),
@@ -154,11 +87,7 @@ pub(super) enum Definition {
 
 /// Where `name` is defined for a run in the `named` or current workspace; an
 /// unknown command when no configuration it could run from defines it.
-pub(super) async fn definition(
-    ctx: &Context,
-    name: &str,
-    named: Option<SpaceSelector>,
-) -> Result<Definition> {
+async fn definition(ctx: &Context, name: &str, named: Option<SpaceSelector>) -> Result<Definition> {
     if defined_globally(ctx, name)? {
         return Ok(Definition::Global(named));
     }
@@ -173,7 +102,7 @@ pub(super) async fn definition(
     if defining.is_empty() {
         return Err(unknown_command(name));
     }
-    // The arguments more likely belong to a mistyped built-in.
+    // The command is unknown wherever the named workspace would have run it.
     if let Some(selector) = named {
         return Err(anyhow::anyhow!("unknown workspace: {selector}").context(unknown_command(name)));
     }
@@ -268,7 +197,7 @@ pub(crate) async fn run(
 }
 
 /// Runs `name` in a workspace whose configuration `definition` found it in.
-pub(super) async fn run_defined(
+async fn run_defined(
     ctx: &Context,
     name: &str,
     definition: Definition,
@@ -340,25 +269,7 @@ pub(super) fn expand_outside_workspace(
 }
 
 fn unknown_command(name: &str) -> anyhow::Error {
-    let mut message = format!("unknown command {name:?} in the current context");
-    // Let clap suggest from the actual built-ins, without the custom-command fallback.
-    if let Err(error) = crate::cli::Cli::command()
-        .allow_external_subcommands(false)
-        .external_subcommand_value_parser(None)
-        .try_get_matches_from(["shoal", name])
-        && let Some(clap::error::ContextValue::Strings(suggestions)) =
-            error.get(clap::error::ContextKind::SuggestedSubcommand)
-        && !suggestions.is_empty()
-    {
-        let suggestions = suggestions
-            .iter()
-            .map(|suggestion| format!("`shoal {suggestion}`"))
-            .collect::<Vec<_>>()
-            .join(" or ");
-        message.push_str(&format!("; did you mean {suggestions}?"));
-    }
-    message.push_str(
-        "; run `shoal --help` for built-in commands or `shoal run` for configured commands",
-    );
-    anyhow::anyhow!(message)
+    anyhow::anyhow!(
+        "unknown command {name:?} in the current context; `shoal run` lists the configured commands"
+    )
 }

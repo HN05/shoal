@@ -63,14 +63,6 @@ pub struct BodyArgs {
     pub body_file: Option<PathBuf>,
 }
 
-/// The arguments of `shoal <name>`, a configured command or AI tool.
-#[derive(Debug, clap::Parser)]
-pub struct Invocation {
-    pub workspace: Option<SpaceSelector>,
-    #[arg(last = true)]
-    pub args: Vec<std::ffi::OsString>,
-}
-
 // `--model` and `--effort` of a command that starts an agent.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct ModelArgs {

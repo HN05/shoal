@@ -45,7 +45,7 @@ shoal start my-project fix-ui --base fix-login --agent claude
 shoal start my-project --mode plan --issue 42 --agent claude
 shoal start --issue 43 --agent claude
 shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
-shoal claude 3
+shoal run claude -w 3
 shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 

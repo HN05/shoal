@@ -15,11 +15,12 @@ use crate::{
 
 /// Operations on the client type [`Need`] that only the `shoal` command uses.
 pub(crate) trait NeedExt: Sized {
-    /// The need of the built-in command at `path`, such as `["release", "hold"]`; `None` for other names, which run configured commands.
+    /// The need of the command at `path`, such as `["release", "hold"]`;
+    /// `None` for a command that names no workspace.
     fn of(path: &[&str]) -> Option<Self>;
 
-    /// The need of the command at `path`; configured commands need a ready
-    /// workspace to run in.
+    /// The need of the command at `path`, a ready workspace where
+    /// [`Self::of`] states none.
     fn of_command(path: &[&str]) -> Self;
 
     /// What a picker reports when no workspace is left to offer.

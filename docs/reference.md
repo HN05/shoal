@@ -760,9 +760,9 @@ shoal open 3 --app claude                # Claude desktop app (macOS)
 shoal open 3 --app codex                 # Codex desktop app
 shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
 shoal open 3                             # app.default, else the only installed app, else a picker
-shoal claude 3 -- --help
-shoal codex                              # Current workspace or picker
-shoal happy-codex 3                      # Detached Happy session for the Happy app
+shoal run claude -w 3 -- --help
+shoal run codex                          # Current workspace or picker
+shoal run happy-codex -w 3               # Detached Happy session for the Happy app
 shoal status 3                      # Activity, changes, held resources, issue and PR state
 shoal status 5                      # A chat's agent, sessions, issue and PR state
 shoal status pr 12                  # Workspaces and chats that link PR 12
@@ -962,17 +962,15 @@ check = ["cargo", "test"]
 ```
 
 Use `shoal run -- <command> <arguments>` for arbitrary commands and
-`shoal run check [--workspace W] -- <extra arguments>` for configured ones; the shorter `shoal check`
-form is equivalent when the name does not collide with a built-in command. Omit
+`shoal run check [--workspace W] -- <extra arguments>` for configured ones, whatever
+built-in command shares the name; `shoal check` runs nothing, and an unknown
+top-level name prints a line pointing to `shoal run <name>`. Omit
 the workspace to use the current one, otherwise the picker, which offers only the
 workspaces that define a repository-only command. Unless the global
 configuration, the current or named workspace, or on a terminal any workspace
-defines a name, it is rejected as unknown with suggestions for similar built-ins
-before its arguments are read, so `-h` and flags apply only to defined commands. Put
-Shoal's global flags before `run` or the shorthand command name. Bare `shoal run`
-lists each effective command's argument array, source layer, and whether its bare
-name is a built-in; outside a managed workspace it lists only global commands and
-built-in defaults.
+defines a name, it is rejected as unknown. Bare `shoal run`
+lists each effective command's argument array and source layer; outside a
+managed workspace it lists only global commands and built-in defaults.
 Each name resolves from local config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
 The executable is resolved through PATH (or use a path),
@@ -1209,8 +1207,8 @@ exits; an agent in a zmx session leaves it where it was.
 `--json` emits the workspace record first, then the agent's unmodified output,
 or for an agent that starts detached its queue entry.
 
-On a terminal, CLI agent launches (`shoal claude`, `shoal codex`, other AI
-tools, `start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
+On a terminal, CLI agent launches (`shoal run claude`, `shoal run codex`, other
+AI tools, `start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
 session, so the agent keeps running when you detach with Ctrl-\ or close the
 terminal. zmx passes the agent's output to your terminal unchanged, so images and
 other terminal protocols keep working, and restores the screen when you attach
@@ -1220,7 +1218,7 @@ emulator input modes on the caller's terminal. zmx reports no exit status: these
 exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
 as a Herdr pane with `terminal.herdr.enabled`, runs in place, as does an agent
-shortcut such as `shoal claude` without a terminal. Scoped callers, and callers
+launch such as `shoal run claude` without a terminal. Scoped callers, and callers
 without a terminal, such as another agent's tool call, start the agents of `start`, `contribute` and `resume --now` detached
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
@@ -1530,7 +1528,7 @@ replaying the output.
 Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
 (`pi`) and [Grok Build](https://docs.x.ai/build/overview) (`grok`); pi and Grok
-take the prompt as their first argument. Each runs as `shoal <name>` once its
+take the prompt as their first argument. Each runs as `shoal run <name>` once its
 executable is on PATH. Add another AI tool in global or repository config to run
 it as an agent:
 
@@ -1551,8 +1549,8 @@ effort_args = ["--reasoning-effort", "{effort}"]      # Optional
 review = ["exec", "--schema", "{schema}", "{prompt}"] # Optional
 ```
 
-`shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
-workspace the way `shoal claude` does, and `--agent droid` selects it. A tool is
+`shoal run droid [--workspace W] -- <args>` then starts it in a workspace the
+way `shoal run claude` does, and `--agent droid` selects it. A tool is
 an agent when it is built in or has a `command` or `base`. Each option merges on
 its own across layers, so a repository can replace `command` and keep the global
 `resume`. Names that collide with built-in commands are rejected. The picker and
@@ -1792,7 +1790,7 @@ Happy sessions are an optional integration: off until `agents.happy.enabled = tr
 global or repository config. While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
-`shoal happy-claude|happy-codex [workspace]` and `start --agent happy-claude|happy-codex`
+`shoal run happy-claude|happy-codex [--workspace W]` and `start --agent happy-claude|happy-codex`
 start a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
 would (`happy <agent> --happy-starting-mode remote --started-by daemon`, then
 your `--` arguments), so it registers with that daemon and appears in the Happy
@@ -1918,7 +1916,7 @@ from a chat's name, which [`shoal attach <number>`](#agents)
 returns to; in any other place of a host, such as a zmx session, it runs in
 place. `--here` runs it in place in this terminal. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
-starts detached in the checkout as `shoal happy-codex` starts a workspace session, and
+starts detached in the checkout as `shoal run happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
 prompts are delivered. Its output and any saved first message are kept at
@@ -3989,7 +3987,7 @@ without `SHOAL_DEV_USER_FILES`, stay for the workspace's next removal record.
 and `--resume` queues the restores of the agents the export stopped, as `shoal
 resume` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal restore`, trusts the workspace's path for the agents that resume there. An agent
-without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
+without a kept session `shoal resume` starts as `shoal run claude` or `shoal run codex`
 starts a new one, telling it the workspace moved, instead of running
 its `resume_command`. An imported chat starts in the repository's checkout as
 a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
@@ -5603,7 +5601,7 @@ why under `refused` while the others still receive it, and the command then
 exits 1. Sending the same message again does not repeat it to agents that
 have not read it yet, because identical unread messages collapse.
 
-`shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
+`shoal run claude`, `shoal run codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
 events, so a working agent receives new messages, the activity on its linked
 issues and PRs that the daemon has queued for the next watch, and the

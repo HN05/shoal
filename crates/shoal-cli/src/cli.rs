@@ -50,7 +50,7 @@ use crate::client::space_names::SpaceSelector;
     about,
     disable_help_subcommand = true,
     help_template = help::template(),
-    after_help = "Start here (with a registered repository):\n  shoal start my-project fix-login\n  shoal run --workspace fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
+    after_help = "Start here (with a registered repository):\n  shoal start my-project fix-login\n  shoal run --workspace 3 -- cargo test\n  shoal status 3\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
     #[arg(skip)]
@@ -98,9 +98,6 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Run a configured command or AI tool.
-    #[command(external_subcommand)]
-    Custom(Vec<OsString>),
     #[command(flatten)]
     Integration(IntegrationCommand),
     #[command(flatten)]
@@ -148,7 +145,7 @@ impl Cli {
     pub fn from_args() -> Self {
         let mut matches = <Self as clap::CommandFactory>::command()
             .try_get_matches()
-            .unwrap_or_else(|error| exit_parse(error));
+            .unwrap_or_else(|error| exit_parse(error, std::env::args_os()));
         let mut path = vec![];
         let mut leaf = &matches;
         while let Some((name, child)) = leaf.subcommand() {
@@ -191,12 +188,34 @@ impl Cli {
     }
 }
 
-fn exit_parse(error: clap::Error) -> ! {
-    if error.use_stderr() {
+/// Reports clap's refusal of the command line `args`, pointing an unknown
+/// top-level name to `shoal run`, which runs configured commands.
+fn exit_parse(error: clap::Error, args: impl IntoIterator<Item = OsString>) -> ! {
+    if !error.use_stderr() {
+        output::print_clap_output(&error);
+        std::process::exit(error.exit_code())
+    }
+    if !names_unknown_command(&error, args) {
         error.exit()
     }
-    output::print_clap_output(&error);
+    // A failed print leaves nothing else to report it to.
+    let _ = error.print();
+    eprintln!("{CONFIGURED_COMMANDS}");
     std::process::exit(error.exit_code())
+}
+
+/// What an unknown top-level name prints after clap's error.
+const CONFIGURED_COMMANDS: &str = "configured commands run with `shoal run <name>`";
+
+/// Whether clap refused `args` for a first command name Shoal does not have,
+/// rather than for an unknown name below one of its commands.
+fn names_unknown_command(error: &clap::Error, args: impl IntoIterator<Item = OsString>) -> bool {
+    // Accepting any name at the top level leaves only deeper names refused.
+    error.kind() == clap::error::ErrorKind::InvalidSubcommand
+        && <Cli as clap::CommandFactory>::command()
+            .allow_external_subcommands(true)
+            .try_get_matches_from(args)
+            .is_ok()
 }
 
 impl Command {
@@ -217,7 +236,6 @@ impl Command {
             Command::Run {
                 name: Some(name), ..
             } => name.clone(),
-            Command::Custom(words) => words.first()?.to_str()?.to_owned(),
             _ => return None,
         })
     }

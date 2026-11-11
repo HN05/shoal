@@ -3,7 +3,7 @@ use crate::cli::availability::NeedExt;
 use crate::paths::PathsExt;
 use std::{
     collections::BTreeSet,
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     future::Future,
     path::PathBuf,
     sync::{Arc, OnceLock},
@@ -48,7 +48,6 @@ struct Typed {
     all: bool,
     /// Workspaces already named on the line, which are not offered again.
     named: Vec<String>,
-    custom: Option<String>,
     /// The selected command also governs inherited global workspace options.
     need: Option<Need>,
     settings: OnceLock<Settings>,
@@ -112,30 +111,10 @@ pub fn command() -> Command {
         let mut path = Vec::new();
         while let Some((name, child)) = leaf.subcommand() {
             path.push(name);
-            if child
-                .try_get_many::<OsString>("")
-                .ok()
-                .flatten()
-                .is_some_and(|args| args.len() > 0)
-            {
-                typed.custom = Some(name.to_owned());
-            }
             leaf = child;
         }
         typed.need = Need::of_matches(&path, leaf);
-        typed.workspace = space_value(leaf, "workspace")
-            .or_else(|| space_value(leaf, "space"))
-            .or_else(|| {
-                leaf.try_get_many::<OsString>("")
-                    .ok()
-                    .flatten()
-                    .and_then(|mut args| args.next())
-                    .filter(|arg| !arg.to_string_lossy().starts_with('-'))
-                    .and_then(|arg| {
-                        arg.to_str()
-                            .and_then(|text| SpaceSelector::parse(text).ok())
-                    })
-            });
+        typed.workspace = space_value(leaf, "workspace").or_else(|| space_value(leaf, "space"));
         typed.named = leaf
             .try_get_many::<SpaceSelector>("workspace")
             .ok()
@@ -145,31 +124,6 @@ pub fn command() -> Command {
             .unwrap_or_default();
         typed.pool = value(leaf, "pool");
         typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
-    }
-    let search_path = std::env::var_os("PATH").unwrap_or_default();
-    for name in typed.command_names(&search_path) {
-        if command
-            .get_subcommands()
-            .any(|subcommand| subcommand.get_name() == name)
-        {
-            continue;
-        }
-        let about = if typed
-            .settings()
-            .agents
-            .iter()
-            .any(|agent| *agent == name.as_str())
-        {
-            format!("Run {name} in a workspace")
-        } else {
-            "Configured workspace command".to_owned()
-        };
-        command = command.subcommand(
-            Command::new(name)
-                .about(about)
-                .arg(clap::Arg::new("workspace"))
-                .arg(clap::Arg::new("args").last(true).num_args(0..)),
-        );
     }
     // Decoration reads every command's arguments, which are deferred until built.
     command.build();
@@ -303,7 +257,7 @@ fn own_first(arg: clap::Arg) -> clap::Arg {
 }
 
 impl Typed {
-    /// The configured commands and the agents a command line names: those
+    /// The configured commands and the agents `shoal run` names: those
     /// pickers offer, including the ones integrations add, such as Happy's,
     /// whose programs are on `search_path`.
     fn command_names(&self, search_path: &OsStr) -> Vec<String> {
@@ -312,8 +266,7 @@ impl Typed {
         let agents = (settings.agents.iter())
             .filter(|agent| self.launchable(agent, search_path))
             .map(|agent| agent.name().to_owned());
-        let mut names: BTreeSet<String> = commands.cloned().chain(agents).collect();
-        names.extend(self.custom.clone());
+        let names: BTreeSet<String> = commands.cloned().chain(agents).collect();
         names.into_iter().collect()
     }
 

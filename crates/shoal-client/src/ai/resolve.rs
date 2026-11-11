@@ -25,9 +25,9 @@ pub type Tools = BTreeMap<String, Tool>;
 /// nearest base's, else the built-in tool's its lineage ends at.
 #[derive(Debug, Clone)]
 pub struct Tool {
-    /// Identity: what `--agent`, `shoal <name>` and recovery records use.
+    /// Identity: what `--agent`, `shoal run <name>` and recovery records use.
     pub name: String,
-    /// Whether it runs as an agent of its own, as `shoal <name>` does:
+    /// Whether it runs as an agent of its own, as `shoal run <name>` does:
     /// built in, or configured with a launcher or a base. A tool with only
     /// a skill directory or argument templates is not one.
     pub runs_as_agent: bool,

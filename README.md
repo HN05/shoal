@@ -74,7 +74,7 @@ shoal repo add /path/to/project --name my-project
 shoal repo setup my-project   # Have an agent write its config, committed or local
 shoal config setup            # Have an agent write the global config for this machine
 shoal start my-project fix-login
-shoal codex 3
+shoal run codex -w 3
 ```
 
 Use `shoal start my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
@@ -181,13 +181,13 @@ shoal run --workspace 3 -- cargo test
 shoal edit 3                   # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
 shoal run check --workspace 3              # With [commands] check = ["cargo", "test"] in config
 shoal run                     # List configured commands, arguments, and source layers
-shoal claude 3                 # Run Claude Code
+shoal run claude -w 3          # Run Claude Code
 shoal open 3 --app claude          # Open in the Claude desktop app (macOS)
 shoal open 3 --app codex           # Open in the Codex desktop app
 shoal attach 3                 # Reattach to the workspace's agent session; Ctrl-\ detaches zmx
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
-shoal happy-claude 3           # Detached Happy session, visible in the Happy app
+shoal run happy-claude -w 3    # Detached Happy session, visible in the Happy app
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
 shoal start --in 3             # Review a workspace's live work in a chat in its worktree, beside its agent
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat

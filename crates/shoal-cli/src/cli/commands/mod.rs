@@ -312,7 +312,6 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
             workspace,
             args,
         } => dispatch::run::run(ctx, name, workspace, args).await,
-        Command::Custom(words) => dispatch::run::custom(ctx, words).await,
         Command::Internal { command } => dispatch::internal::run(ctx, command).await,
         Command::Approvals { command, args } => dispatch::approvals::run(ctx, command, args).await,
         Command::Integration(command) => dispatch::integration::run(ctx, command).await,

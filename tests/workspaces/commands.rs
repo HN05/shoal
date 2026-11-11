@@ -143,8 +143,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let command = |name: &str| listed.iter().find(|entry| entry["name"] == name).unwrap();
     // Agents launch under [agents], so `run` lists only the shortcuts.
     assert!(!listed.iter().any(|entry| entry["name"] == "claude"));
-    assert_eq!(command("global")["bare_name"], "shorthand");
-    assert_eq!(command("list")["bare_name"], "built_in");
+    assert_eq!(command("global")["layer"], "global_config");
     assert_eq!(command("worktree")["layer"], "worktree_file");
     assert_eq!(command("saved")["layer"], "local_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
@@ -227,14 +226,8 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
     for directory in [fixture.root.path(), path] {
         for (format, json) in [("--text", false), ("--json", true)] {
             for args in [
-                vec!["bogus"],
-                vec!["bogus", "-h"],
-                vec!["bogus", "--help"],
-                vec!["bogus", "--all"],
-                vec!["bogus", &fixture.id("command-target")],
-                vec!["bogus", "missing"],
-                vec!["bogus", "--", "x"],
                 vec!["run", "bogus"],
+                vec!["run", "bogus", "--", "x"],
                 vec!["run", "bogus", "--workspace", &fixture.id("command-target")],
             ] {
                 let output = fixture
@@ -252,38 +245,43 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
             }
         }
     }
-
-    // A command the workspace defines parses its own arguments.
-    let help = fixture
-        .command()
-        .current_dir(path)
-        .args(["local-check", "-h"])
-        .output()
-        .unwrap();
-    assert!(help.status.success(), "{help:?}");
-    assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check"));
-    let flag = fixture
-        .command()
-        .current_dir(path)
-        .args(["local-check", "--all"])
-        .output()
-        .unwrap();
-    assert!(!flag.status.success(), "{flag:?}");
-    let output = fixture.run(&["local-check", &fixture.id("command-target"), "--", "extra"]);
+    let output = fixture.run(&[
+        "run",
+        "local-check",
+        "-w",
+        &fixture.id("command-target"),
+        "--",
+        "extra",
+    ]);
     assert_eq!(output.stdout, b"repository commandextra", "{output:?}");
-    // Help names the defining workspace before or after the flag.
-    let target = fixture.id("command-target");
+}
+
+#[test]
+fn a_top_level_name_runs_no_configured_command_or_agent() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]
+check = ['printf', '%s', 'ran']
+",
+    ));
+    let workspace = fixture.add("command-target");
+    let path = Path::new(workspace["path"].as_str().unwrap());
     for args in [
-        ["local-check", "-h", &target],
-        ["local-check", &target, "--help"],
+        vec!["check"],
+        vec!["check", &fixture.id("command-target")],
+        vec!["claude", &fixture.id("command-target")],
+        vec!["bogus", "--", "x"],
     ] {
-        let help = fixture.run(&args);
-        assert!(help.status.success(), "{args:?}: {help:?}");
-        assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check"));
-    }
-    // Elsewhere only the workspace that defines it is missing.
-    for args in [["local-check", "-h"], ["local-check", "missing"]] {
-        assert!(!fixture.run(&args).status.success(), "{args:?}");
+        let output = fixture
+            .command()
+            .current_dir(path)
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains(&format!("'{}'", args[0])), "{error}");
+        assert!(error.contains("`shoal run <name>`"), "{error}");
     }
 }
 
@@ -293,14 +291,7 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
     let workspace = fixture.add("command-target");
     let path = Path::new(workspace["path"].as_str().unwrap());
     for directory in [fixture.root.path(), path] {
-        for args in [
-            vec!["lease"],
-            vec!["lease", &fixture.id("command-target")],
-            vec!["lease", "12"],
-            vec!["run", "lease"],
-            vec!["run", "lease", "--workspace", &fixture.id("command-target")],
-            vec!["run", "lease", "--workspace", "12"],
-        ] {
+        for args in [vec!["lease"], vec!["lease", &fixture.id("command-target")]] {
             let output = fixture
                 .command()
                 .current_dir(directory)
@@ -309,7 +300,7 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
                 .unwrap();
             let error = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success(), "{directory:?} {args:?}");
-            assert!(error.contains("`shoal leases`"), "{error}");
+            assert!(error.contains("'leases'"), "{error}");
         }
     }
     // A similar built-in name must not prevent an explicitly configured shortcut.

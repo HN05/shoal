@@ -16,7 +16,6 @@ fn arguments_show_as_the_command_line_passes_them() {
         (&["start"], "branch", Some("<repository> <branch>")),
         (&["repo", "rename"], "name", Some("<repository> <name>")),
         (&["status"], "repository", None),
-        (&["check"], "workspace", Some("<workspace>")),
         (&["status", "no-such-command"], "workspace", None),
     ] {
         assert_eq!(

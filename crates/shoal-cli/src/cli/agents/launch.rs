@@ -19,7 +19,7 @@ use crate::{
     model::Workspace,
 };
 
-/// The workspace a command such as `shoal codex` names, else the current
+/// The workspace a command such as `shoal run codex` names, else the current
 /// directory's or a picked one.
 pub(super) async fn shortcut_workspace(
     ctx: &Context,

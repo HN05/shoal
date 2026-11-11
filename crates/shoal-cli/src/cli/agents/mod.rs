@@ -1,5 +1,5 @@
 //! The CLI's side of the agents Shoal launches (see [`crate::agents`]):
-//! picking one, `shoal <name>`, launching one from a command in a
+//! picking one, `shoal run <name>`, launching one from a command in a
 //! workspace or a chat, handing a workspace to a desktop app, and the trust
 //! and session files those launches prepare.
 mod desktop;
@@ -319,7 +319,7 @@ pub(super) async fn launch_agent(
     Ok(code)
 }
 
-/// How `shoal <name>` runs.
+/// How `shoal run <name>` runs.
 enum NamedRun {
     /// A configured command.
     Command,
@@ -327,18 +327,6 @@ enum NamedRun {
     Agent,
     /// An agent only these workspaces define, outside every workspace.
     Elsewhere(Vec<crate::model::Workspace>),
-}
-
-/// Whether `shoal <name>` launches an agent rather than a configured command.
-pub(super) async fn is_agent(
-    ctx: &Context,
-    name: &str,
-    workspace: Option<&SpaceSelector>,
-) -> Result<bool> {
-    Ok(!matches!(
-        classify(ctx, name, workspace).await?,
-        NamedRun::Command
-    ))
 }
 
 /// Agents are those the targeted workspace's settings resolve, else this
@@ -419,8 +407,8 @@ async fn agent_target(
     Ok(current.map(|workspace| ConfigTarget::Workspace(SpaceSelector::id(&workspace.id))))
 }
 
-/// `shoal <name>` and `shoal run <name>`: agents launch with their prompts,
-/// other names run as plain configured commands.
+/// `shoal run <name>`: agents launch with their prompts, other names run as
+/// plain configured commands.
 pub(super) async fn run_named(
     ctx: &Context,
     name: &str,

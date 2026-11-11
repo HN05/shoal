@@ -184,15 +184,11 @@ fn subcommands(help: &str) -> Vec<String> {
 #[test]
 fn a_closed_stdout_ends_commands_quietly() {
     let root = tempfile::tempdir().unwrap();
-    let config = root.path().join(".config/shoal/config.toml");
-    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-    std::fs::write(&config, "[commands]\ncustom-tool = ['true']\n").unwrap();
     for args in [
         vec!["skill"],
         vec!["--json", "skill"],
         vec!["--help"],
         vec!["--version"],
-        vec!["custom-tool", "--help"],
     ] {
         let output = support::close_stdout(&mut support::cli(root.path()))
             .args(&args)

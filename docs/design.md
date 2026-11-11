@@ -1668,13 +1668,15 @@ last.
 Named `[commands]` are executable/argument arrays resolved per name from saved
 repository config, worktree config, then global config and built-in defaults at
 launch. They run through the tracked wrapper with workspace scope, terminal I/O,
-and literal extra arguments. `run` lists the resolved arrays with their layers and
-provides an explicit spelling for names that collide with built-ins; built-ins win
-the bare shorthand. Without a current or explicit workspace, repository-only
-commands pick from the workspaces whose configuration defines them. Unknown
-names report a command error with suggestions for similar built-ins and never
-open a picker; the definition is looked up before the arguments are parsed, so
-help and argument errors belong only to defined commands. Workspace fields expand once within individual
+and literal extra arguments. `shoal run <name>` is their only name, so a
+configured command never competes with a built-in: there is no `shoal <name>`
+shorthand, and an unknown top-level name prints clap's error, with its
+suggestions of similar built-ins, followed by one fixed line pointing to
+`shoal run <name>`, without reading configuration. `run` lists the resolved
+arrays with their layers. Without a current or explicit workspace,
+repository-only commands pick from the workspaces whose configuration defines
+them. An unknown name reports a command error and never opens a picker.
+Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `edit` runs the
 `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path, through the same
@@ -1732,9 +1734,9 @@ agents.
 AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
 per tool holding its launcher, resume command, launch mode and argument
 templates, merged option by option across layers so a repository can replace
-`command` and keep the global `resume`. A `command` or `base` gives a tool a
-`shoal <name>` agent shortcut that `run` shares; names that built-in commands
-shadow are rejected, and `[commands]` holds only shortcuts that are not agents.
+`command` and keep the global `resume`. A `command` or `base` makes a tool an
+agent that `shoal run <name>` launches; names that built-in commands take are
+rejected, and `[commands]` holds only shortcuts that are not agents.
 What a tool needs of the machine, its skill directory and proxy, sits under
 `[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
 as tracked agents with scope, an agent Git profile, and exit notifications. Their `{prompt}` argument combines general instructions
@@ -1857,7 +1859,7 @@ detached in `terminal.default_host`, which never names an external app.
 Happy sessions are an optional integration behind the `agents.happy.enabled`
 setting, off by default. Happy is an agent backend like any other: `shoal happy` is gone, and its
 agents start as other agents do, with `--agent happy-claude|happy-codex` or as
-`shoal happy-claude`. They are the phone-driven flow: a console session that
+`shoal run happy-claude`. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the

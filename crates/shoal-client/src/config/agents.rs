@@ -11,7 +11,7 @@ use crate::config::options::Options;
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = AgentTool)]
 pub struct AgentToolConfig {
-    /// The launcher `shoal <name>` and tracked launches run; a tool with one
+    /// The launcher `shoal run <name>` and tracked launches run; a tool with one
     /// runs as an agent.
     pub command: Option<Vec<String>>,
     /// Restores a session; it must not repeat the initial prompt.

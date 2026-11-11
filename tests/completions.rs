@@ -59,7 +59,7 @@ fn bash_completes_commands_and_flags_without_a_daemon() {
     let output = support::isolated(home.path(), "bash").args(["--noprofile", "--norc", "-c", r#"
 source "$1"
 COMP_TYPE=9
-COMP_WORDS=(shoal co); COMP_CWORD=1; COMP_LINE='shoal co'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal run co); COMP_CWORD=2; COMP_LINE='shoal run co'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 COMP_WORDS=(shoal open --a); COMP_CWORD=2; COMP_LINE='shoal open --a'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
@@ -137,7 +137,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "messages", "send", "hello", "--a"], "--all"),
         (vec!["shoal", "open", "--a"], "--app"),
         (vec!["shoal", "start", "--agent", "co"], "codex"),
-        (vec!["shoal", "dro"], "droid"),
+        (vec!["shoal", "run", "dro"], "droid"),
         (
             vec!["shoal", "start", "--agent", "happy-cl"],
             "happy-claude",
@@ -170,9 +170,11 @@ fn agents_without_installed_executables_are_not_completed() {
     // Only the fixture's bin, so agents installed on this machine stay out.
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
     for (words, expected, missing) in [
-        (vec!["shoal", "c"], &["claude"][..], &["codex"][..]),
-        (vec!["shoal", "ha"], &[], &["happy"]),
-        (vec!["shoal", "dr"], &[], &["droid"]),
+        (vec!["shoal", "run", "c"], &["claude"][..], &["codex"][..]),
+        (vec!["shoal", "run", "ha"], &[], &["happy"]),
+        (vec!["shoal", "run", "dr"], &[], &["droid"]),
+        // Agents run only through `shoal run`.
+        (vec!["shoal", "c"], &[], &["claude"]),
         // Plain configured commands are not agents.
         (vec!["shoal", "start", "--agent", "r"], &[], &["review"]),
         (
@@ -234,27 +236,19 @@ fn agents_complete_only_when_enabled_and_installed() {
     install_programs(home.path(), &["happy"]);
     for words in [
         &["shoal", "start", "--agent", "happy-"][..],
-        &["shoal", "happy-"],
         &["shoal", "run", "happy-"],
     ] {
         assert_eq!(complete(words), Vec::<String>::new(), "{words:?}");
     }
     install_programs(home.path(), &["claude"]);
     assert_eq!(agents("happy-"), ["happy-claude"]);
-    for words in [&["shoal", "happy-"][..], &["shoal", "run", "happy-"]] {
-        assert!(
-            complete(words).contains(&"happy-claude".to_owned()),
-            "{words:?}"
-        );
-    }
+    assert!(complete(&["shoal", "run", "happy-"]).contains(&"happy-claude".to_owned()));
     assert_eq!(agents("cl"), ["claude"]);
     // Happy's agents are off until enabled, and any agent can be turned off.
     fs::write(&config, "[agents.claude]\nenabled = false\n").unwrap();
     assert_eq!(agents("happy-"), Vec::<String>::new());
     assert_eq!(agents("cl"), Vec::<String>::new());
-    for words in [&["shoal", "cl"][..], &["shoal", "run", "cl"]] {
-        assert!(!complete(words).contains(&"claude".to_owned()), "{words:?}");
-    }
+    assert!(!complete(&["shoal", "run", "cl"]).contains(&"claude".to_owned()));
 }
 
 #[test]
