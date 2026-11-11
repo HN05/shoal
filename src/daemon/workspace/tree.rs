@@ -282,12 +282,15 @@ fn has_agent(column: &str) -> String {
 }
 
 /// SQL true when the agent of the space in `column` runs: a workspace's
-/// among the tracked agents bound as parameter `?2`, or a chat's until the
-/// chat stops.
+/// among the tracked agents bound as parameter `?2`, a chat's until the
+/// chat stops, or that of a chat that became the workspace until it is
+/// handed over to it.
 fn runs_agent(column: &str) -> String {
     format!(
         "({column} IN (SELECT value FROM json_each(?2))
-            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore IS NULL))"
+            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore IS NULL)
+            OR EXISTS (SELECT 1 FROM space_conversions WHERE space_conversions.space_id={column}
+                AND json_extract(space_conversions.record,'$.to')='workspace'))"
     )
 }
 

@@ -184,3 +184,47 @@ async fn idle_cleanup_keeps_a_child_without_an_agent_while_its_chat_runs() {
     manager.stop_chat(&chat.id).await.unwrap();
     assert_eq!(kept(&manager, &child).await, None);
 }
+
+#[tokio::test]
+async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (chat, _process) =
+        crate::daemon::test_support::chat(&manager, "lead", "worker", Some(&repo), None).await;
+    let child = manager
+        .create_workspace_below(
+            repo.id.into(),
+            "child".into(),
+            None,
+            Default::default(),
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    let converting = crate::daemon::conversions::Converting {
+        chat: chat.clone(),
+        mode: crate::config::modes::ModeName::DEFAULT,
+    };
+
+    // Its agent runs on where it ran, untracked in the workspace, until it
+    // is handed over.
+    manager
+        .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        kept(&manager, &child).await,
+        Some(CleanupReason::ParentAgentRunning)
+    );
+    let id = chat.id.clone();
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::relocated_chat(tx, &id, None))
+        .await
+        .unwrap();
+    assert_eq!(kept(&manager, &child).await, None);
+}
