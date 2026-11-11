@@ -63,6 +63,15 @@ pub(super) struct Launch {
     pub scope: Option<SpaceId>,
 }
 
+/// Whether `workspace`'s setup failed, which a retried setup can ready.
+fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
+    crate::daemon::store::exists(
+        tx,
+        "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
+        params![workspace, crate::state::WorkspaceState::Failed],
+    )
+}
+
 /// The branch the launch `plan` creates or opens, if it names one.
 fn planned_branch(plan: &str) -> Option<String> {
     let plan: serde_json::Value = serde_json::from_str(plan).ok()?;
@@ -76,10 +85,12 @@ fn planned_branch(plan: &str) -> Option<String> {
 /// Record `launch` unless its repository already queues a launch in the
 /// same workspace, or of the same branch, or is being removed; names repeat,
 /// so they tell no two launches apart. A launch in an existing workspace
-/// needs it ready in the same transaction, and one a space queued needs
-/// that space present and not being removed: removal reserves the space
-/// before its final checks, so the launch either precedes them, which keeps
-/// the space, or is refused here.
+/// needs it ready in the same transaction, or failed in its setup for one
+/// that waits its turn, which then waits for a preparation there to get
+/// past its post-setup hook, and one a space queued needs that space present
+/// and not being removed: removal reserves the space before its final
+/// checks, so the launch either precedes them, which keeps the space, or is
+/// refused here.
 pub(super) fn insert_launch(
     tx: &rusqlite::Transaction<'_>,
     launch: &Launch,
@@ -89,7 +100,9 @@ pub(super) fn insert_launch(
         !crate::daemon::store::repository_removing(tx, &launch.repository)?,
         "the repository is being removed"
     );
-    if let Some(workspace) = &launch.opens {
+    if let Some(workspace) = &launch.opens
+        && (launch.request.now || !setup_failed(tx, workspace)?)
+    {
         crate::daemon::store::require_ready(tx, workspace)
             .context("start agents in a ready workspace")?;
     }
@@ -140,6 +153,11 @@ pub(super) fn insert_launch(
         ],
     )?;
     blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
+    if let Some(workspace) = &launch.opens
+        && setup_failed(tx, workspace)?
+    {
+        blockers::wait_for_setup(tx, &launch.id, workspace)?;
+    }
     Ok(())
 }
 

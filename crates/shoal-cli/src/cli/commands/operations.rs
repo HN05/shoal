@@ -128,7 +128,7 @@ fn doing(step: Option<Step>) -> &'static str {
     match step {
         None => "Starting",
         Some(Step::SetupStarted) => "Running setup",
-        Some(Step::Ready | Step::PrLinked) => "Preparing workspace",
+        Some(Step::Ready | Step::PrLinked | Step::PostSetupEnded) => "Preparing workspace",
         Some(Step::PostSetupStarted) => "Running post-setup hook",
         Some(Step::PushStarted) => "Pushing",
         Some(Step::MergeStarted) => "Merging",

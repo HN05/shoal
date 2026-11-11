@@ -273,6 +273,9 @@ states!(BlockerKind {
     Pr => "pr",
     /// A CI run, by URL.
     CiRun => "ci_run",
+    /// The setup of the workspace a launch opens, by ID, after it failed,
+    /// until a preparation there gets past its post-setup hook.
+    Setup => "setup",
 });
 states!(AgentState: ValueEnum {
     /// The agent is working on a turn.

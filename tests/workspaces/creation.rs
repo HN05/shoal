@@ -1935,7 +1935,12 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
         .collect();
     assert_eq!(
         steps,
-        [Step::SetupStarted, Step::Ready, Step::PostSetupStarted]
+        [
+            Step::SetupStarted,
+            Step::Ready,
+            Step::PostSetupStarted,
+            Step::PostSetupEnded
+        ]
     );
     let lines = lines(&events);
     for line in ["setting up", "set up", "post-setup ran"] {

@@ -21,7 +21,7 @@ use uuid::Uuid;
 use super::{scope::Caller, workspace::Manager};
 use crate::client::space_names::SpaceSelector;
 use crate::protocol::operations::{
-    Ended, Failure, OperationEvent, OperationSpec, Order, Progress, Report, Stream,
+    Ended, Failure, OperationEvent, OperationSpec, Order, Progress, Report, Step, Stream,
 };
 use crate::refusal::{Reason, Refusal};
 #[cfg(test)]
@@ -266,7 +266,12 @@ impl Manager {
     ) -> Result<()> {
         let entry = self.operation(id, caller).await?;
         match report {
-            Report::Step(step) => entry.push(Progress::Step { step }),
+            Report::Step(step) => {
+                if step == Step::PostSetupEnded {
+                    self.release_setup_waits(&entry.workspace).await?;
+                }
+                entry.push(Progress::Step { step });
+            }
             Report::Ended(ended) => {
                 self.keep_preparation_end(&entry.workspace, id, &ended)
                     .await;

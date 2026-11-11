@@ -496,6 +496,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 156 {
         db.execute_batch(include_str!("agent_queue_scopes.sql"))?;
     }
+    if version >= 157 {
+        db.execute_batch(include_str!("setup_blockers.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

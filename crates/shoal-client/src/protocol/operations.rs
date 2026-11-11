@@ -292,6 +292,8 @@ impl OperationSpec {
 crate::state::states!(Step {
     SetupStarted => "setup_started",
     PostSetupStarted => "post_setup_started",
+    /// What preparation runs after setup and its hook may start now.
+    PostSetupEnded => "post_setup_ended",
     Ready => "ready",
     PrLinked => "pr_linked",
     AgentQueued => "agent_queued",

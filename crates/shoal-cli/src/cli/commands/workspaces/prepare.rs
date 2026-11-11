@@ -44,15 +44,19 @@ pub(in crate::cli::commands) async fn prepare(
         workspace = link_pr(ctx, workspace, &pr, reporter).await?;
     }
     // A workspace created without setup runs none of its hooks.
-    if steps.post_setup && !workspace.setup_skipped {
-        reporter.step(Step::PostSetupStarted).await?;
-        run_post_setup_hook(ctx, &workspace, reporter)
-            .await
-            .map_err(|error| {
-                Failed(Failure::HookFailed {
-                    message: format!("{error:#}"),
-                })
-            })?;
+    if steps.post_setup {
+        if !workspace.setup_skipped {
+            reporter.step(Step::PostSetupStarted).await?;
+            run_post_setup_hook(ctx, &workspace, reporter)
+                .await
+                .map_err(|error| {
+                    Failed(Failure::HookFailed {
+                        message: format!("{error:#}"),
+                    })
+                })?;
+        }
+        // The agents waiting to start in the workspace may start now.
+        reporter.reached(Step::PostSetupEnded).await?;
     }
     let agent = match steps.agent {
         Some(launch) => {

@@ -24,7 +24,7 @@ impl Manager {
                 BlockerKind::Issue => LinkKind::Issue,
                 BlockerKind::Pr => LinkKind::Pr,
                 BlockerKind::CiRun => LinkKind::Ci,
-                BlockerKind::Space | BlockerKind::Launch => continue,
+                BlockerKind::Space | BlockerKind::Launch | BlockerKind::Setup => continue,
             };
             let lookup = match clearance(link, &target, &hosts, &account, &mut newest).await {
                 Ok(Clearance::Cleared(how)) => Lookup::Cleared(how),

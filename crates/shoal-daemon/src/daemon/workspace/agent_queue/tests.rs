@@ -11,6 +11,7 @@ use super::{Grant, OneShotStop, dispatch::START_GRACE, slots::Slot};
 use crate::client::assignments::Done;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
+use crate::protocol::operations::{Ended, Failure, OperationSpec, Preparation, Report, Step};
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -19,9 +20,10 @@ use crate::{
         workspace::{Manager, capacity::Activity},
         workspace_files::Attacher,
     },
-    model::{QueueAdmission, QueueRequest, Repository},
-    state::{ExecutionState, QueueKind, QueueState},
+    model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
+    state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
+use std::sync::Arc;
 
 pub(super) async fn register(
     manager: &Manager,
@@ -1434,4 +1436,93 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     tokio::time::timeout(Duration::from_secs(5), again.admitted())
         .await
         .unwrap();
+}
+
+/// A failed `child` workspace in `repo` with a launch waiting there, and the
+/// manager without an agent limit.
+async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspace, QueueEntry) {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_state(
+            &child.id,
+            WorkspaceState::Failed,
+            Some("setup failed".into()),
+        )
+        .await
+        .unwrap();
+    let launch = |now| QueueRequest {
+        workspace: Some(SpaceSelector::id(&child.id)),
+        ..request(&repo, "child", now)
+    };
+    // One that would start now needs the workspace ready.
+    manager.queue_add(launch(true)).await.unwrap_err();
+    let admission = manager.queue_add(launch(false)).await.unwrap();
+    let entry = admission.entry.unwrap();
+    assert!(!admission.start);
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
+    (temp, manager, child, entry)
+}
+
+/// Start a preparation of `workspace` that sets it up and runs its
+/// post-setup hook, as a retried setup does, readying it.
+async fn retry_setup(manager: &Manager, workspace: &Workspace) -> String {
+    manager
+        .set_state(&workspace.id, WorkspaceState::Ready, None)
+        .await
+        .unwrap();
+    let spec = OperationSpec::Prepare {
+        workspace: SpaceSelector::id(&workspace.id),
+        steps: Preparation {
+            setup: true,
+            post_setup: true,
+            ..Default::default()
+        },
+    };
+    manager.start_operation(spec, None, None).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_launch_in_a_workspace_whose_setup_failed_waits_until_its_hook_ran() {
+    let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
+    let operation = retry_setup(&manager, &child).await;
+    let _worker = crate::daemon::operations::fake::take(&operation);
+    // A ready workspace whose post-setup hook has yet to run holds it back.
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&entry.id));
+
+    let ended = Report::Step(Step::PostSetupEnded);
+    manager
+        .report_operation(&operation, ended, None)
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await[0].2, QueueState::Starting);
+    assert!(started(&entry.id));
+}
+
+#[tokio::test]
+async fn a_launch_keeps_waiting_when_its_workspaces_post_setup_hook_fails() {
+    let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
+    let operation = retry_setup(&manager, &child).await;
+    let worker = crate::daemon::operations::fake::take(&operation);
+    let failed = Ended::Failed(Failure::HookFailed {
+        message: "hook failed".into(),
+    });
+    let report = Report::Ended(failed);
+    manager
+        .report_operation(&operation, report, None)
+        .await
+        .unwrap();
+    worker.exit(0);
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&entry.id));
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(entries[0].blockers, vec!["setup of child".to_owned()]);
 }

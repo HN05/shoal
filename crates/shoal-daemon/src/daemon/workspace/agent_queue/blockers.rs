@@ -1,9 +1,11 @@
 //! What blocks a queued launch. A launch starts once every workspace blocking
 //! it is done at its current HEAD, every chat blocking it is done, either
 //! removed, every launch has opened its
-//! workspace, which then stands in for it, and every issue has closed or is
-//! done in a workspace of the repository that links it. It builds on the
-//! branch of the done blocker that contains the others.
+//! workspace, which then stands in for it, every issue has closed or is
+//! done in a workspace of the repository that links it, and the existing
+//! workspace it opens, if its setup had failed, has passed a post-setup hook
+//! since. It builds on the branch of the done blocker that contains the
+//! others.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceSelector};
 use std::collections::{HashMap, HashSet};
@@ -142,6 +144,20 @@ fn space_of(
     crate::daemon::store::exists(db, query, params![id, repository])
 }
 
+/// Hold back `entry` until a preparation of `workspace`, the one it opens,
+/// whose setup failed, gets past its post-setup hook.
+pub(super) fn wait_for_setup(
+    db: &Connection,
+    entry: &QueueEntryId,
+    workspace: &SpaceId,
+) -> Result<()> {
+    db.execute(
+        "INSERT OR IGNORE INTO agent_queue_blockers(entry_id,kind,target) VALUES (?1,?2,?3)",
+        params![entry, BlockerKind::Setup, workspace],
+    )?;
+    Ok(())
+}
+
 /// Let `workspace`, which launch `entry` opened, stand for the launch.
 pub(super) fn replace_launch(
     db: &Connection,
@@ -181,6 +197,23 @@ impl Manager {
             readiness.insert(entry, readiness_of(progress).await?);
         }
         Ok(readiness)
+    }
+
+    /// Let the launches waiting for the setup of `workspace` go, once a
+    /// preparation there got past its post-setup hook.
+    pub(crate) async fn release_setup_waits(&self, workspace: &SpaceId) -> Result<()> {
+        let workspace = workspace.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "DELETE FROM agent_queue_blockers WHERE kind=?1 AND target=?2",
+                    params![BlockerKind::Setup, workspace],
+                )?;
+                Ok(())
+            })
+            .await?;
+        self.agent_queue.wake();
+        Ok(())
     }
 
     /// The progress of each entry's blockers, looking each one up once.
@@ -225,6 +258,18 @@ impl Manager {
                     Some(workspace) => self.workspace_progress(workspace).await,
                     None => self.chat_progress(&id).await,
                 }
+            }
+            // The row goes once the setup is done.
+            BlockerKind::Setup => {
+                let workspace = SpaceId::from(target);
+                let name = self
+                    .store
+                    .run(move |db| workspace_by_id(db, &workspace))
+                    .await?
+                    .map(|workspace| workspace.name);
+                Ok(name.map_or(Progress::Complete, |name| {
+                    Progress::Waiting(format!("setup of {name}"))
+                }))
             }
             BlockerKind::Issue => {
                 let url = target.clone();

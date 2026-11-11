@@ -96,6 +96,7 @@ impl RecordedBlocker {
             BlockerKind::Issue => "issue",
             BlockerKind::Pr => "PR",
             BlockerKind::CiRun => "CI run",
+            BlockerKind::Setup => "setup of",
         };
         format!("{kind} {}", self.name)
     }
