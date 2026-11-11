@@ -42,7 +42,7 @@ pub(super) use setup::{
     SetUp, copy_ignored_worker, follow_setup, run_post_setup, setup, setup_workspace, skip_setup,
 };
 pub(super) use status::status;
-pub(super) use title::{request_title, title};
+pub(super) use title::{ask_title, request_title, title};
 pub(super) use unmerge::{unmerge, unmerge_branch, unmerge_worker};
 pub(super) use watch::watch_items;
 

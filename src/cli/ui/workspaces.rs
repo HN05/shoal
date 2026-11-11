@@ -416,6 +416,14 @@ pub async fn pick_workspace(
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
 }
 
+/// Pick a space among the workspaces and running chats, wherever this runs.
+pub async fn pick_any_space(ctx: &Context) -> Result<SpaceSelector> {
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let chats = crate::client::chats::list(&ctx.paths).await?;
+    let space = pick_space(ctx, workspaces, &chats, SPACE).await?;
+    Ok(SpaceSelector::Id(space))
+}
+
 /// The space, a workspace or chat, a command acts on: the one `explicit`
 /// names, else in the chat this process runs in the workspace below the chat
 /// that contains the current directory, as a workspace's process chooses one

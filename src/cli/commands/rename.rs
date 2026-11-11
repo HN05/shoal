@@ -1,5 +1,5 @@
-//! `shoal rename`: title a workspace or rename a chat, or ask its
-//! agent to choose.
+//! `shoal rename`: title a workspace or rename a chat, a picked one with
+//! what the user types, or ask its agent to choose.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
@@ -29,6 +29,22 @@ pub(super) async fn rename(
     match chosen_chat(ctx, space).await? {
         Ok(chat) => chat::rename(ctx, SpaceSelector::Id(chat), SpaceName::parse(&title)?).await,
         Err(workspace) => workspaces::title(ctx, Some(workspace), title).await,
+    }
+}
+
+/// Title a picked workspace, or rename a picked chat, with what the user
+/// types next.
+pub(super) async fn rename_picked(ctx: &Context) -> Result<i32> {
+    let space = ui::pick_any_space(ctx).await?;
+    match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
+        Some(PresentSpace::Chat(chat)) => {
+            let name = chat::ask_name(ctx).await?;
+            chat::rename(ctx, SpaceSelector::Id(chat.id), name).await
+        }
+        _ => {
+            let title = workspaces::ask_title(ctx).await?;
+            workspaces::title(ctx, Some(space), title).await
+        }
     }
 }
 

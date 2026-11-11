@@ -661,7 +661,8 @@ runs, while they still show the label Shoal gave them; one the user named keeps
 its label. Scoped callers may title their own workspace.
 `shoal rename --request [WORKSPACE]` sends the workspace's agent an
 [agent message](#agent-messages) asking it to choose the title and set it; it is
-refused while no agent runs there.
+refused while no agent runs there. `shoal rename` without arguments picks a
+workspace or running chat and asks for its title or name.
 
 `shoal start <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `-r`/`--repo` selects one explicitly and

@@ -753,6 +753,21 @@ fn log_without_a_space_shows_the_space_here_else_shoal_s() {
 }
 
 #[test]
+fn rename_without_arguments_picks_a_space_and_asks_for_its_title() {
+    let fixture = Fixture::new();
+    fixture.add("other");
+    let id = fixture.add("topic")["id"].as_str().unwrap().to_owned();
+    let (output, rows) = fixture.pick(&["rename"], &id, "Login retries\n");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("other"), "{rows}");
+    assert_eq!(
+        fixture.ok(&["status", "topic"])["workspace"]["title"],
+        "Login retries"
+    );
+    assert!(fixture.ok(&["status", "other"])["workspace"]["title"].is_null());
+}
+
+#[test]
 fn workspace_commands_select_from_a_deleted_current_directory() {
     use std::{ffi::CString, os::unix::process::CommandExt};
 

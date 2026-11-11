@@ -94,6 +94,7 @@ shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directo
 shoal branch rename fix-login fix/login      # Rename its branch and workspace together
 shoal rename fix-login "Login retries"  # Title the tabs Shoal opens for it
 shoal rename --request fix-login        # Ask its agent to choose the title
+shoal rename                            # Pick a workspace or chat, then type its title or name
 shoal start https://github.com/owner/repo/issues/68 # Create from an issue
 shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards

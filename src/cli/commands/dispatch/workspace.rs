@@ -47,7 +47,12 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             title: Some(title),
             request: false,
         } => rename::rename(&ctx, space, title).await,
-        // Only --request leaves out the title, and its single argument
+        WorkspaceCommand::Rename {
+            space: None,
+            title: None,
+            request: false,
+        } => rename::rename_picked(&ctx).await,
+        // Otherwise only --request leaves out the title, and its single argument
         // takes the title's place.
         WorkspaceCommand::Rename { space, title, .. } => {
             rename::request(

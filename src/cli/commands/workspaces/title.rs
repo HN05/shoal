@@ -44,6 +44,15 @@ pub(in crate::cli::commands) async fn title(
     Ok(0)
 }
 
+/// Ask for a workspace's title until it is valid.
+pub(in crate::cli::commands) async fn ask_title(ctx: &Context) -> Result<String> {
+    ui::input_until(ctx, "Title", None, |title| async move {
+        crate::validate::title(title.trim())?;
+        Ok(title)
+    })
+    .await
+}
+
 /// Show the retitled workspace's label on the places Shoal created for it,
 /// where they still show the label its previous title gave them.
 async fn relabel(ctx: &Context, retitled: &RetitledWorkspace) -> Result<()> {

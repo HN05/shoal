@@ -107,7 +107,8 @@ pub enum WorkspaceCommand {
     /// show, or a chat a new name.
     ///
     /// Without a space, titles the current workspace, else renames the chat
-    /// this runs in, else offers a picker. With --request, asks the space's
+    /// this runs in, else offers a picker. Without arguments, picks the space
+    /// and asks for its title or name. With --request, asks the space's
     /// running agent to choose a title or name that fits the work and set
     /// it. A chat's zmx session keeps its name; `shoal attach` finds it by
     /// the new one. `shoal branch rename` renames a workspace's Git branch
@@ -117,7 +118,6 @@ pub enum WorkspaceCommand {
         space: Option<SpaceSelector>,
         /// A workspace's title of at most 40 characters on one line, or a
         /// chat's name, free among workspaces and running chats.
-        #[arg(required_unless_present = "request")]
         title: Option<String>,
         /// Ask the space's agent to choose the title or name; a single
         /// argument then names the space.
