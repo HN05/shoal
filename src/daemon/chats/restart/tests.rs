@@ -226,7 +226,7 @@ async fn a_restarting_chat_refuses_a_stop() {
 
     let error = manager.stop_chat_for_resume(&chat, None).await.unwrap_err();
 
-    assert!(format!("{error:#}").contains("restarts now"), "{error:#}");
+    assert!(format!("{error:#}").contains("starts again"), "{error:#}");
     HELD.lock().unwrap().retain(|name| *name != chat.name);
     let _ = restart.await.unwrap();
 }

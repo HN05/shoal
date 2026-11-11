@@ -34,13 +34,19 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
     let claimed = (manager.store)
         .write(move |tx| claim_automatic(tx, &owner))
         .await?;
+    // Before the save lock goes, so a stop meanwhile refuses the chat.
+    for chat in &claimed {
+        manager.chat_agents.set_restoring(&chat.id, true);
+    }
     drop(saving);
     Ok(claimed
         .into_iter()
         .map(|chat| {
             let manager = manager.clone();
             tokio::spawn(async move {
-                match resume(&manager.paths, &chat).await {
+                let resumed = resume(&manager.paths, &chat).await;
+                manager.chat_agents.set_restoring(&chat.id, false);
+                match resumed {
                     Ok(Ok(())) => {}
                     // Its own failures reach the user from it.
                     Ok(Err(error)) => log!("chat {}: shoal resume failed: {error}", chat.id),

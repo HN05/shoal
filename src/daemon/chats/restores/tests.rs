@@ -137,3 +137,28 @@ async fn a_restore_sweep_during_a_save_waits_and_sees_the_shutdown() {
     let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Automatic));
 }
+
+/// A stop between the sweep's claim of a chat and its restore would find the
+/// chat stopped while the restore brings it back, so it is refused until the
+/// restore ends.
+#[tokio::test]
+async fn a_claimed_automatic_restore_refuses_a_stop_until_it_ends() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = named_chat(root.path(), &manager, "claimed").await;
+    manager.save_chats(ChatRestore::Automatic).await;
+    process.wait().unwrap();
+    HELD.lock().unwrap().push(chat.name.to_string());
+    let restores = restore_automatic(&manager).await.unwrap();
+
+    let error = manager.stop_chat_for_resume(&chat, None).await.unwrap_err();
+
+    assert!(format!("{error:#}").contains("starts again"), "{error:#}");
+    // `shoal stop --all` takes it, to report its refusal.
+    let targets = manager.chat_stop_targets().await.unwrap();
+    assert!(targets.iter().any(|target| target.id == chat.id));
+    HELD.lock().unwrap().retain(|name| *name != chat.name);
+    for restore in restores {
+        restore.await.unwrap();
+    }
+    manager.check_chat_stop(&chat).unwrap();
+}

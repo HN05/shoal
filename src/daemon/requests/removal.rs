@@ -15,7 +15,6 @@ use crate::{
     process::identity,
     protocol::{Body, QueuedLaunches, RemovalMethod},
     removal::InspectionPolicy,
-    state::ChatRestore,
 };
 
 pub(super) async fn handle(
@@ -131,12 +130,11 @@ pub(super) async fn handle(
 }
 
 /// The spaces `shoal stop --all` stops: the workspaces
-/// [`Manager::stop_targets`] selects, then the running chats and those whose
-/// automatic restore is pending.
+/// [`Manager::stop_targets`] selects, then the chats
+/// [`Manager::chat_stop_targets`] selects.
 async fn stop_targets(manager: &Manager) -> Result<Vec<PresentSpace>> {
     let workspaces = manager.stop_targets(QueuedLaunches::Cancel).await?;
-    let chats = (manager.chats().await?.into_iter())
-        .filter(|chat| matches!(chat.restore, None | Some(ChatRestore::Automatic)));
+    let chats = manager.chat_stop_targets().await?.into_iter();
     Ok((workspaces.into_iter().map(PresentSpace::Workspace))
         .chain(chats.map(PresentSpace::Chat))
         .collect())

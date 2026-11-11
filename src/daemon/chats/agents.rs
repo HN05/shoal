@@ -27,6 +27,8 @@ struct ChatAgent {
     /// The space whose process asked for the restart in progress, which
     /// stops the chat.
     stopped_by: Option<SpaceId>,
+    /// The daemon restores the chat on its own, as after a shutdown.
+    restoring: bool,
 }
 
 /// A request to restart a chat's agent.
@@ -144,9 +146,16 @@ impl ChatAgents {
             .collect()
     }
 
-    /// Whether a restart of the chat `id` is in progress.
-    pub(super) fn restarting(&self, id: &SpaceId) -> bool {
-        (self.lock().get(id)).is_some_and(|agent| agent.restarts.current.is_some())
+    /// Whether a restart, or a restore the daemon runs on its own, starts
+    /// the chat `id` again now.
+    pub(super) fn starting_again(&self, id: &SpaceId) -> bool {
+        (self.lock().get(id))
+            .is_some_and(|agent| agent.restarts.current.is_some() || agent.restoring)
+    }
+
+    /// Record whether the daemon restores the chat `id` on its own now.
+    pub(super) fn set_restoring(&self, id: &SpaceId, restoring: bool) {
+        self.lock().entry(id.to_owned()).or_default().restoring = restoring;
     }
 
     /// Record that the process of the space `stopped_by` asked for the

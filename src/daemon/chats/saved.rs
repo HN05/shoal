@@ -95,15 +95,26 @@ impl Manager {
         })
     }
 
-    /// Refuse a `shoal stop` of `chat` while a restart stops it to start it
-    /// again, which would bring it back.
+    /// Refuse a `shoal stop` of `chat` while a restart, or a restore the
+    /// daemon claimed on its own, starts it again, which would bring it back.
     pub(crate) fn check_chat_stop(&self, chat: &Chat) -> Result<()> {
         ensure!(
-            !self.chat_agents.restarting(&chat.id),
-            "chat {} restarts now; stop it once it runs again",
+            !self.chat_agents.starting_again(&chat.id),
+            "chat {} starts again now; stop it once it runs",
             chat.name
         );
         Ok(())
+    }
+
+    /// The chats `shoal stop --all` stops: those that run, come back on
+    /// their own, or start again now, whose stop is refused.
+    pub(crate) async fn chat_stop_targets(&self) -> Result<Vec<Chat>> {
+        let mut chats = self.chats().await?;
+        chats.retain(|chat| {
+            matches!(chat.restore, None | Some(ChatRestore::Automatic))
+                || self.chat_agents.starting_again(&chat.id)
+        });
+        Ok(chats)
     }
 
     /// [`Self::save_chat`] for `saving`, with no other save, handoff or
