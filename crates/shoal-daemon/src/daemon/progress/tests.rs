@@ -93,6 +93,7 @@ fn the_current_step_is_the_active_one_else_the_first_not_done() {
         steps: (states.iter())
             .map(|state| step("Step", *state, None))
             .collect(),
+        blockers: Vec::new(),
     };
     use StepState::{Active, Done, Pending};
     let current = |states: &[StepState]| plan(states).progress(UnixTime::EPOCH).current;
@@ -189,9 +190,10 @@ async fn changes_are_journaled_once_and_outlive_a_restart() {
     assert_eq!(progress.status.as_deref(), Some("Reproduced"));
     assert_eq!(
         progress.steps,
-        [Step {
+        [crate::client::progress::Step {
             name: "Reproduce".into(),
-            done: true
+            done: true,
+            blockers: Vec::new(),
         }]
     );
 
@@ -338,4 +340,82 @@ async fn a_done_summary_sets_the_status_line_with_the_completion_it_records() {
         .await;
     assert!(refused.is_err());
     assert_eq!(status().await.as_deref(), Some("Fix merged"));
+}
+
+/// The blocker events of the journal, as their kind and cause.
+async fn blocker_events(manager: &Manager) -> Vec<(EventKind, String)> {
+    (manager
+        .workspace_events(None, 100)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter_map(|item| match item {
+        EventItem::Event(event) => {
+            let blocker = event.details.blocker?;
+            Some((event.details.kind, blocker.blocker.cause()))
+        }
+        _ => None,
+    })
+    .collect()
+}
+
+#[tokio::test]
+async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
+    use crate::{client::progress::RecordedBlocker, model::Blocker, state::BlockerKind};
+    let (temp, manager) = manager().await;
+    let [blocked, api] = workspaces(&manager, &temp, ["blocked", "api"]).await;
+    let selector = SpaceSelector::id(&blocked.id);
+    let add = |blocker: Blocker, step: Option<usize>| ProgressChange::AddBlocker {
+        blocker,
+        step,
+        reason: "Needs it".into(),
+    };
+    let pr = "https://github.com/team/app/pull/8";
+    let run = "https://github.com/team/app/actions/runs/9";
+    for blocker in [
+        Blocker::Space("api".into()),
+        Blocker::Pr(pr.into()),
+        Blocker::CiRun(run.into()),
+    ] {
+        manager
+            .set_progress(&selector, add(blocker, None))
+            .await
+            .unwrap();
+    }
+    // A step it does not have, and the space itself, are refused.
+    let refused = [
+        add(Blocker::Pr(pr.into()), Some(1)),
+        add(Blocker::Space("blocked".into()), None),
+    ];
+    for change in refused {
+        assert!(manager.set_progress(&selector, change).await.is_err());
+    }
+    let progress = manager.space_progress(&selector).await.unwrap().unwrap();
+    let found: Vec<_> = (progress.blockers.iter())
+        .map(|blocker: &RecordedBlocker| (blocker.kind, blocker.target.as_str()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (BlockerKind::Space, api.id.as_str()),
+            (BlockerKind::Pr, pr),
+            (BlockerKind::CiRun, run)
+        ]
+    );
+    assert!(progress.blocked());
+    // A removal names a space by name, as it was added.
+    let remove = ProgressChange::RemoveBlocker {
+        blocker: Blocker::Space("api".into()),
+        step: None,
+    };
+    manager.set_progress(&selector, remove).await.unwrap();
+    assert_eq!(
+        blocker_events(&manager).await,
+        [
+            (EventKind::BlockerAdded, "space api".into()),
+            (EventKind::BlockerAdded, format!("PR {pr}")),
+            (EventKind::BlockerAdded, format!("CI run {run}")),
+            (EventKind::BlockerRemoved, "space api".into()),
+        ]
+    );
 }

@@ -1,14 +1,16 @@
 //! Where a space's agent is in its work: a status line in the agent's own
-//! words and the steps of its plan, which its plan tool keeps through
-//! Shoal's hooks or `shoal progress --steps` sets.
+//! words, the steps of its plan, which its plan tool keeps through Shoal's
+//! hooks or `shoal progress --steps` sets, and what blocks the space or its
+//! steps, which `shoal progress --add-blocker` records.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     connection::{Daemon, request},
+    model::Blocker,
     protocol::AgentMethod,
     space_names::SpaceSelector,
-    state::states,
+    state::{BlockerKind, states},
     time::UnixTime,
 };
 
@@ -24,6 +26,9 @@ pub struct Progress {
     /// The index of the step under way: the one the agent's plan tool marks
     /// in progress, else the first not done; none once every step is done.
     pub current: Option<usize>,
+    /// What blocks the whole space.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<RecordedBlocker>,
     /// When it last changed.
     pub updated_at: UnixTime,
 }
@@ -32,6 +37,25 @@ impl Progress {
     /// How many steps are done.
     pub fn done(&self) -> usize {
         self.steps.iter().filter(|step| step.done).count()
+    }
+
+    /// Whether the space is blocked: something blocks it, or every step
+    /// that is not done.
+    pub fn blocked(&self) -> bool {
+        let mut open = self.steps.iter().filter(|step| !step.done).peekable();
+        !self.blockers.is_empty()
+            || (open.peek().is_some() && open.all(|step| !step.blockers.is_empty()))
+    }
+
+    /// Every blocker, the space's first, each with the step it blocks.
+    pub fn all_blockers(&self) -> impl Iterator<Item = (Option<&Step>, &RecordedBlocker)> {
+        let space = self.blockers.iter().map(|blocker| (None, blocker));
+        let steps = (self.steps.iter()).flat_map(|step| {
+            step.blockers
+                .iter()
+                .map(move |blocker| (Some(step), blocker))
+        });
+        space.chain(steps)
     }
 
     /// The step under way.
@@ -44,6 +68,37 @@ impl Progress {
 pub struct Step {
     pub name: String,
     pub done: bool,
+    /// What blocks this step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<RecordedBlocker>,
+}
+
+/// What blocks a space or one of its steps, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordedBlocker {
+    pub kind: BlockerKind,
+    /// The space's ID, or the issue's, PR's or CI run's URL.
+    pub target: String,
+    /// The space's name, or the URL.
+    pub name: String,
+    /// One line on why it blocks.
+    pub reason: String,
+    /// Why the last lookup of it failed, which keeps it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_failed: Option<String>,
+}
+
+impl RecordedBlocker {
+    /// What it is, as in `issue https://…` or `space api`.
+    pub fn cause(&self) -> String {
+        let kind = match self.kind {
+            BlockerKind::Space | BlockerKind::Launch => "space",
+            BlockerKind::Issue => "issue",
+            BlockerKind::Pr => "PR",
+            BlockerKind::CiRun => "CI run",
+        };
+        format!("{kind} {}", self.name)
+    }
 }
 
 states!(
@@ -89,6 +144,20 @@ pub enum ProgressChange {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         removed: bool,
     },
+    /// Record that `blocker` blocks the space, or its step numbered `step`
+    /// from 1 as `shoal progress` shows the steps, for `reason`.
+    AddBlocker {
+        blocker: Blocker,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<usize>,
+        reason: String,
+    },
+    /// Remove `blocker` from the space, or from its step numbered `step`.
+    RemoveBlocker {
+        blocker: Blocker,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<usize>,
+    },
 }
 
 /// Apply `change` to the progress of `space`, answering with the progress
@@ -106,7 +175,7 @@ pub async fn get(daemon: &impl Daemon, space: SpaceSelector) -> Result<Option<Pr
     request(daemon, AgentMethod::Progress { space }).await
 }
 
-/// A status line or step name: a nonempty single line without control
+/// A status line, step name or blocker reason: a nonempty single line without control
 /// characters, as an alert's.
 pub fn validate_line(kind: &str, value: &str) -> Result<()> {
     anyhow::ensure!(

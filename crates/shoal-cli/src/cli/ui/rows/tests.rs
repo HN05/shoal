@@ -530,6 +530,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
     let step = |name: &str, done| Step {
         name: name.into(),
         done,
+        blockers: Vec::new(),
     };
     let mut working = workspace("a", "working", "working", WorkspaceState::Ready);
     working.links.issue_title = Some("Fix the login timeout".into());
@@ -540,6 +541,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
             step("Raise the query limit to thirty seconds or more", false),
         ],
         current: Some(1),
+        blockers: Vec::new(),
         updated_at: crate::time::UnixTime::EPOCH,
     });
     let mut planned = workspace("a", "planned", "planned", WorkspaceState::Ready);
@@ -548,6 +550,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
         status: None,
         steps: vec![step("Sketch", true)],
         current: None,
+        blockers: Vec::new(),
         updated_at: crate::time::UnixTime::EPOCH,
     });
     let rows = workspace_tree_rows(

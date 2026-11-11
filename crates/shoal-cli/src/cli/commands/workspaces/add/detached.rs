@@ -123,7 +123,10 @@ fn runs_its_own_way(settings: &Effective, plan: &AddPlan) -> bool {
 fn blocked_by(blockers: &[Blocker]) -> String {
     let names: Vec<_> = (blockers.iter())
         .map(|blocker| match blocker {
-            Blocker::Space(name) | Blocker::Issue(name) => name.as_str(),
+            Blocker::Space(name)
+            | Blocker::Issue(name)
+            | Blocker::Pr(name)
+            | Blocker::CiRun(name) => name.as_str(),
         })
         .collect();
     names.join(", ")

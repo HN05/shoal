@@ -101,7 +101,9 @@ fn single_lines(change: ProgressChange) -> Option<ProgressChange> {
             state,
             removed,
         },
-        status @ ProgressChange::Status(_) => status,
+        other @ (ProgressChange::Status(_)
+        | ProgressChange::AddBlocker { .. }
+        | ProgressChange::RemoveBlocker { .. }) => other,
     })
 }
 

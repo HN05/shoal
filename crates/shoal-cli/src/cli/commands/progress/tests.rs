@@ -29,9 +29,11 @@ fn steps_number_from_one_and_mark_the_current_step() {
             .map(|at| crate::client::progress::Step {
                 name: format!("Step {at}"),
                 done: at < 3,
+                blockers: Vec::new(),
             })
             .collect(),
         current: Some(2),
+        blockers: Vec::new(),
         updated_at: crate::time::UnixTime::EPOCH,
     };
     let lines = step_lines(&progress, Palette::stdout(true));

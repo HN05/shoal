@@ -300,6 +300,20 @@ pub(crate) fn record_progress(
     record_with(db, id, EventKind::ProgressChanged, "progress", progress)
 }
 
+/// Record that a blocker of the space `id` was added, removed or cleared.
+pub(crate) fn record_blocker(
+    db: &Connection,
+    id: &SpaceId,
+    kind: EventKind,
+    blocker: &crate::client::events::BlockerEvent,
+) -> Result<()> {
+    ensure!(matches!(
+        kind,
+        EventKind::BlockerAdded | EventKind::BlockerRemoved | EventKind::BlockerCleared
+    ));
+    record_with(db, id, kind, "blocker", blocker)
+}
+
 /// Record that the agent of the space `id` started, stopped or exited. An
 /// execution's agent ends once: a stop that saved it for a restore, then its
 /// wrapper's end, records one stop.

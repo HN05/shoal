@@ -1,7 +1,8 @@
-//! Each space's progress: the status line its agent sets and the steps of
-//! its plan, as its plan tool reports them or `shoal progress --steps` sets
-//! them. The record outlives the agent until the space goes; each change is
-//! a `progress_changed` event, and none notifies anyone.
+//! Each space's progress: the status line its agent sets, the steps of its
+//! plan, as its plan tool reports them or `shoal progress --steps` sets
+//! them, and what blocks the space or its steps. The record outlives the
+//! agent until the space goes; each change is a `progress_changed` event,
+//! and each blocker added or removed an event of its own.
 use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -9,11 +10,14 @@ use serde::{Deserialize, Serialize};
 
 use super::workspace::Manager;
 use crate::client::{
-    progress::{self, MAX_STEPS, PlanStep, Progress, ProgressChange, Step, StepState},
+    events::{BlockerEvent, EventKind},
+    progress::{self, MAX_STEPS, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
     space_names::SpaceSelector,
 };
 use crate::time::UnixTime;
 
+mod blockers;
+mod naming;
 mod publish;
 pub(crate) mod section;
 
@@ -26,10 +30,46 @@ struct Plan {
     status: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     steps: Vec<PlanStep>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    blockers: Vec<blockers::Stored>,
+}
+
+/// A change to a space's plan, with the blockers it names looked up.
+enum Change {
+    Plan(ProgressChange),
+    AddBlocker {
+        blocker: RecordedBlocker,
+        step: Option<usize>,
+    },
+    RemoveBlocker {
+        named: blockers::Named,
+        step: Option<usize>,
+    },
 }
 
 impl Plan {
+    /// The plan after `change`, which keeps its first [`MAX_STEPS`] steps
+    /// and the blockers of the steps it keeps, and the blocker events it
+    /// journals.
+    fn applied(self, change: Change) -> Result<(Self, Vec<(EventKind, BlockerEvent)>)> {
+        Ok(match change {
+            Change::Plan(change) => (self.changed(change), Vec::new()),
+            Change::AddBlocker { blocker, step } => {
+                let (plan, added) = self.with_blocker(blocker, step)?;
+                let event = plan.event(&added, None);
+                (plan, vec![(EventKind::BlockerAdded, event)])
+            }
+            Change::RemoveBlocker { named, step } => {
+                let (plan, removed) = self.without_blocker(&named, step)?;
+                let event = plan.event(&removed, None);
+                (plan, vec![(EventKind::BlockerRemoved, event)])
+            }
+        })
+    }
+
     /// The plan after `change`, which keeps its first [`MAX_STEPS`] steps.
+    /// Blocker changes need their blockers looked up, so only
+    /// [`Self::applied`] takes them.
     fn changed(mut self, change: ProgressChange) -> Self {
         match change {
             ProgressChange::Status(status) => self.status = status,
@@ -41,8 +81,10 @@ impl Plan {
                 state,
                 removed,
             } => self.change(&key, name, state, removed),
+            ProgressChange::AddBlocker { .. } | ProgressChange::RemoveBlocker { .. } => {}
         }
         self.steps.truncate(MAX_STEPS);
+        self.prune_blockers();
         self
     }
 
@@ -75,7 +117,7 @@ impl Plan {
     }
 
     fn is_empty(&self) -> bool {
-        self.status.is_none() && self.steps.is_empty()
+        self.status.is_none() && self.steps.is_empty() && self.blockers.is_empty()
     }
 
     /// The plan as clients see it, changed last at `updated_at`.
@@ -87,12 +129,10 @@ impl Plan {
         Progress {
             status: self.status.clone(),
             steps: (self.steps.iter())
-                .map(|step| Step {
-                    name: step.name.clone(),
-                    done: step.state == StepState::Done,
-                })
+                .map(|step| blockers::step(self, step, step.state == StepState::Done))
                 .collect(),
             current,
+            blockers: self.space_blockers(),
             updated_at,
         }
     }
@@ -133,13 +173,16 @@ fn mark_published(db: &Connection, id: &SpaceId, plan: &Plan) -> Result<()> {
 fn save(
     tx: &Transaction<'_>,
     id: &SpaceId,
-    change: ProgressChange,
+    change: Change,
     now: UnixTime,
 ) -> Result<Option<Progress>> {
     let before = stored(tx, id)?.map(|(plan, _)| plan).unwrap_or_default();
-    let after = before.clone().changed(change);
+    let (after, events) = before.clone().applied(change)?;
     if after == before {
         return Ok(None);
+    }
+    for (kind, event) in &events {
+        super::events::record_blocker(tx, id, *kind, event)?;
     }
     tx.execute(
         "INSERT INTO space_progress(space_id,record,updated_at) VALUES (?1,?2,?3)
@@ -164,7 +207,7 @@ pub(crate) fn record_status(
     let Some(status) = status else {
         return Ok(false);
     };
-    let change = ProgressChange::Status(Some(status.to_owned()));
+    let change = Change::Plan(ProgressChange::Status(Some(status.to_owned())));
     Ok(save(tx, id, change, now)?.is_some())
 }
 
@@ -181,6 +224,10 @@ fn validate(change: &ProgressChange) -> Result<()> {
             name.as_deref()
                 .map_or(Ok(()), |name| progress::validate_line("step names", name))
         }
+        ProgressChange::AddBlocker { reason, .. } => {
+            progress::validate_line("blocker reasons", reason)
+        }
+        ProgressChange::RemoveBlocker { .. } => Ok(()),
     }
 }
 
@@ -209,7 +256,9 @@ impl Manager {
         change: ProgressChange,
     ) -> Result<Option<Progress>> {
         validate(&change)?;
-        let id = self.space(selector).await?.id().to_owned();
+        let space = self.space(selector).await?;
+        let change = self.looked_up(&space, change).await?;
+        let id = space.id().to_owned();
         let now = UnixTime::now();
         let query = id.clone();
         let (changed, progress) = (self.store)

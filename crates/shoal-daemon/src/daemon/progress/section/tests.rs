@@ -8,9 +8,11 @@ fn progress(status: Option<&str>, steps: &[(&str, bool)]) -> Progress {
             .map(|(name, done)| Step {
                 name: (*name).to_owned(),
                 done: *done,
+                blockers: Vec::new(),
             })
             .collect(),
         current: None,
+        blockers: Vec::new(),
         updated_at: crate::time::UnixTime::EPOCH,
     }
 }

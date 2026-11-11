@@ -67,6 +67,8 @@ pub(super) fn record(
     for blocker in blockers {
         let (kind, target) = match blocker {
             Blocker::Issue(url) => (BlockerKind::Issue, url.clone()),
+            Blocker::Pr(url) => (BlockerKind::Pr, url.clone()),
+            Blocker::CiRun(url) => (BlockerKind::CiRun, url.clone()),
             Blocker::Space(selector) => space(db, Some(entry), repository, selector)?,
         };
         db.execute(
@@ -220,6 +222,8 @@ impl Manager {
                     .await?;
                 self.issue_progress(target, linked).await
             }
+            // Only the forge says when these clear; the poll forgets them then.
+            BlockerKind::Pr | BlockerKind::CiRun => Ok(Progress::Waiting(target)),
         }
     }
 

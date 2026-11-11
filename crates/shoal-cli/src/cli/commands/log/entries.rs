@@ -113,6 +113,9 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::ChildCreated => fixed("Child created", child(event)),
         EventKind::ChildRemoved => fixed("Child removed", child(event)),
         EventKind::JobEnded => fixed("CI job ended", job(event)),
+        EventKind::BlockerAdded => fixed("Blocker added", blocker(event)),
+        EventKind::BlockerRemoved => fixed("Blocker removed", blocker(event)),
+        EventKind::BlockerCleared => fixed("Blocker cleared", blocker(event)),
         EventKind::Ready => fixed("Setup finished", String::new()),
         EventKind::SetupFailed => fixed("Setup failed", error(event)),
         EventKind::Retained => fixed("Removal failed", error(event)),
@@ -147,6 +150,22 @@ fn progress(event: &EventDetails) -> String {
         Some(status) => format!("{steps}: {status}"),
         None => steps,
     }
+}
+
+/// A blocker's cause, the step it blocks, its reason, and what cleared it.
+fn blocker(event: &EventDetails) -> String {
+    let Some(event) = &event.blocker else {
+        return String::new();
+    };
+    let mut text = event.blocker.cause();
+    if let Some(step) = &event.step {
+        text += &format!(" on step {step}");
+    }
+    text += &format!(": {}", event.blocker.reason);
+    if let Some(cleared) = &event.cleared {
+        text += &format!("; {cleared}");
+    }
+    text
 }
 
 /// Where a workspace started and the space it is below.

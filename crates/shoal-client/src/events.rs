@@ -143,6 +143,12 @@ states!(EventKind {
     AlertSent => "alert_sent",
     /// The space's agent changed its status line or plan steps.
     ProgressChanged => "progress_changed",
+    /// A blocker was recorded on the space or one of its steps.
+    BlockerAdded => "blocker_added",
+    /// A blocker was removed, by request or with the space's completion.
+    BlockerRemoved => "blocker_removed",
+    /// What a blocker names cleared, which removed it.
+    BlockerCleared => "blocker_cleared",
     /// A space was created below the space, which `child` names.
     ChildCreated => "child_created",
     /// A space below the space was removed.
@@ -315,6 +321,9 @@ pub struct EventDetails {
     /// The CI job Shoal ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub job: Option<Box<JobEndedEvent>>,
+    /// The blocker added, removed or cleared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<Box<BlockerEvent>>,
 }
 
 impl EventDetails {
@@ -343,6 +352,18 @@ mod present_or_null {
     ) -> Result<Option<Option<T>>, D::Error> {
         Option::deserialize(deserializer).map(Some)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockerEvent {
+    #[serde(flatten)]
+    pub blocker: crate::progress::RecordedBlocker,
+    /// The name of the step it blocks; none for the space.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    /// What cleared it, for a cleared one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleared: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

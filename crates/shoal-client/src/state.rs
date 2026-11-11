@@ -269,6 +269,10 @@ states!(BlockerKind {
     Launch => "launch",
     /// An issue, by URL.
     Issue => "issue",
+    /// A PR, by URL.
+    Pr => "pr",
+    /// A CI run, by URL.
+    CiRun => "ci_run",
 });
 states!(AgentState: ValueEnum {
     /// The agent is working on a turn.

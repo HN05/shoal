@@ -138,8 +138,12 @@ pub enum Blocker {
     /// A space, or for a launch a queued launch of the same repository, by
     /// name or ID.
     Space(String),
-    /// An issue, by URL.
+    /// An issue, by URL, or by number in the space's repository.
     Issue(String),
+    /// A PR, by URL.
+    Pr(String),
+    /// A CI run, by URL.
+    CiRun(String),
 }
 
 /// An agent launch `shoal start` asks the daemon to admit or queue. The plan
