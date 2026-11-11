@@ -26,6 +26,7 @@ pub(crate) struct Gates {
     proposal_files: Mutex<()>,
     announcements: Mutex<()>,
     git: Keyed<Mutex<()>>,
+    creations: Keyed<Mutex<()>>,
     fetches: Keyed<Mutex<()>>,
     message_files: Keyed<Mutex<()>>,
     forge_hosts: Keyed<Mutex<()>>,
@@ -125,6 +126,26 @@ impl Gates {
     /// must not already hold it.
     pub(crate) async fn lock_git(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
         self.git.gate(repository_id.as_str()).lock_owned().await
+    }
+
+    /// Hold the creation gate of the new workspace `id` until creation
+    /// settles it, so that creation can release the repository's Git gate
+    /// before it clones the seed. Creation takes it while it still holds the
+    /// Git gate under which it recorded the workspace.
+    pub(crate) async fn lock_creation(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
+        self.creations.gate(id.as_str()).lock_owned().await
+    }
+
+    /// Wait until the creation of the workspace `id`, recorded in
+    /// `repository_id`, has ended, or return at once when none runs.
+    /// Callers must not hold the repository's Git gate.
+    pub(crate) async fn wait_for_creation(&self, repository_id: &RepositoryId, id: &SpaceId) {
+        // Under the Git gate, creation either has yet to record the
+        // workspace or already holds its creation gate.
+        let git = self.lock_git(repository_id).await;
+        let creation = self.creations.gate(id.as_str());
+        drop(git);
+        drop(creation.lock().await);
     }
 
     /// Hold the repository's fetch gate while a sync fetches its remotes, so

@@ -511,6 +511,10 @@ impl Manager {
                 })
             }
             ExecutionKind::Setup => {
+                // Not before the seed build, which creation applies last.
+                (self.gates)
+                    .wait_for_creation(&workspace.repository_id, &workspace.id)
+                    .await;
                 let git_guard = self.gates.lock_git(&workspace.repository_id).await;
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;

@@ -47,7 +47,7 @@ impl Manager {
         base: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        let (repo, _guard) = self.lock_repository(repository).await?;
+        let (repo, git) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &branch).await?;
         let source = self.converted_source(&repo, &branch, base).await?;
         // An existing branch goes under its local name, without its remote,
@@ -65,7 +65,7 @@ impl Manager {
             converts: Some(converting),
             ..Default::default()
         };
-        let created = (self.create_branch_workspace(&repo, name, branch, source, new)).await;
+        let created = (self.create_branch_workspace(&repo, name, branch, source, new, git)).await;
         if created.is_err() {
             self.give_chat_back(&repo, &chat).await;
         }

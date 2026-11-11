@@ -2,6 +2,7 @@ use super::*;
 use crate::daemon::test_support::{
     commit, git, install_test_script, manager, native_cloning, repository,
 };
+use crate::state::WorkspaceState;
 use std::path::PathBuf;
 
 fn modified(path: &Path) -> std::time::SystemTime {
@@ -407,4 +408,40 @@ async fn removal_keeps_a_symlinked_seed_worktree() {
     std::os::unix::fs::symlink(&moved, layout.worktree()).unwrap();
     assert!(manager.remove_repository(&repo.id).await.is_err());
     assert!(moved.join("seed.sh").exists());
+}
+
+#[tokio::test]
+async fn a_start_releases_the_git_gate_before_its_seed_step() {
+    let (temp, manager) = manager().await;
+    configure(&manager, NO_PRESSURE).await;
+    let (_, repo) = seeded(&manager, temp.path(), "#!/bin/sh\nmkdir -p out\n").await;
+    // A swap holds the snapshot, so the start's seed step waits.
+    let slot = manager.seeds.slot(&repo.id);
+    let swap = slot.snapshot.clone().lock_owned().await;
+    let creating = tokio::spawn({
+        let manager = manager.clone();
+        let id = repo.id.clone();
+        async move { (manager.create_workspace(&id, "feature".into(), None, None, None)).await }
+    });
+    // Creation records the workspace under the Git gate.
+    let id = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            if let Some(workspace) = manager.list_workspaces().await.unwrap().pop() {
+                return workspace.id;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("creation records the workspace");
+    let git = tokio::time::timeout(Duration::from_secs(60), manager.gates.lock_git(&repo.id))
+        .await
+        .expect("creation releases the Git gate before its seed step");
+    drop(git);
+    let workspace = manager.workspace_by_id(&id).await.unwrap();
+    assert_eq!(workspace.state, WorkspaceState::Preparing);
+    crate::test_support::assert_pending(manager.gates.wait_for_creation(&repo.id, &id)).await;
+    drop(swap);
+    let workspace = creating.await.unwrap().unwrap();
+    assert_eq!(workspace.state, WorkspaceState::Ready);
 }

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{Manager, NewWorkspace, restore::RestoredFiles};
+use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
@@ -89,7 +89,7 @@ impl Manager {
     ) -> Result<Workspace> {
         self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
-        let (repo, _guard) = self.lock_repository(repository).await?;
+        let (repo, git) = self.lock_repository(repository).await?;
         let source = self.copy_source(source).await?;
         ensure!(
             source.repository_id == repo.id,
@@ -100,7 +100,7 @@ impl Manager {
         let result = self
             .materialize_copy_worktree(&repo, &workspace, &source, new.git_profile)
             .await;
-        self.settle_creation(&workspace, result).await
+        self.settle_creation(&repo, &workspace, result, git).await
     }
 
     /// The workspace `request` names, live, or removed when it names a
@@ -274,15 +274,15 @@ impl Manager {
     }
 
     /// Create the copy's worktree with its source's files, then take its
-    /// starting checkpoint, returning whether setup is still needed.
+    /// starting checkpoint.
     async fn materialize_copy_worktree(
         &self,
         repo: &Repository,
         workspace: &Workspace,
         source: &Source,
         git_profile: Option<&str>,
-    ) -> Result<bool> {
-        let needs_setup = match &source.files {
+    ) -> Result<Configured> {
+        let configured = match &source.files {
             SourceFiles::Worktree(path) => {
                 self.clone_source(repo, workspace, path, &source.head, git_profile)
                     .await?
@@ -302,13 +302,13 @@ impl Manager {
         let index = git::checkpoint::index_tree(&workspace.path).await?;
         self.record_copied_from(&workspace.id, source, starting.number, index)
             .await?;
-        Ok(needs_setup)
+        Ok(configured)
     }
 
     /// Give the new worktree the index, worktree config and files of the
-    /// live worktree at `source` at `head`, then `git_profile` when given,
-    /// returning whether setup is still needed. The source's ignored files
-    /// take the place of the seed build and `setup.copy_ignored`.
+    /// live worktree at `source` at `head`, then `git_profile` when given.
+    /// The source's ignored files take the place of the seed build and
+    /// `setup.copy_ignored`.
     async fn clone_source(
         &self,
         repo: &Repository,
@@ -316,7 +316,7 @@ impl Manager {
         source: &std::path::Path,
         head: &str,
         git_profile: Option<&str>,
-    ) -> Result<bool> {
+    ) -> Result<Configured> {
         let path = &workspace.path;
         git::copy::add_worktree(&repo.path, path, workspace.branch.as_deref(), head).await?;
         // Recorded before the files are cloned, so a restart can verify and
@@ -328,19 +328,21 @@ impl Manager {
             crate::git_profile::apply(path, config.machine.git_profiles.profile(name)?).await?;
         }
         let settings = self.workspace_settings_from(&config, workspace).await?;
-        Ok(settings.setup.command.is_some() || settings.hooks.pre_setup.is_some())
+        Ok(Configured {
+            needs_setup: settings.setup.command.is_some() || settings.hooks.pre_setup.is_some(),
+            seed: None,
+        })
     }
 
     /// Check out the checkpoint's HEAD and write its `files` into the new
-    /// worktree, configured as any new workspace's, returning whether setup
-    /// is still needed.
+    /// worktree, configured as any new workspace's.
     async fn check_out_copy(
         &self,
         repo: &Repository,
         workspace: &Workspace,
         files: &RestoredFiles,
         git_profile: Option<&str>,
-    ) -> Result<bool> {
+    ) -> Result<Configured> {
         match &workspace.branch {
             Some(branch) => {
                 let head = Some(files.head.as_str());
@@ -348,7 +350,7 @@ impl Manager {
             }
             None => git::detached::add_workspace(&repo.path, &workspace.path, &files.head).await?,
         }
-        self.configure_worktree(repo, workspace, Some(files), git_profile)
+        self.configure_worktree(workspace, Some(files), git_profile)
             .await
     }
 

@@ -129,8 +129,9 @@ impl Manager {
 pub(super) struct RemovalRules {
     /// A pending rename, which removing a deleted worktree releases.
     pub(super) allow_pending_rename: bool,
-    /// A preparing workspace whose setup never started; the caller excludes
-    /// its creation by holding the repository's Git gate.
+    /// A preparing workspace whose setup never started; the caller waited
+    /// for its creation to end and holds the repository's Git gate, under
+    /// which setup starts.
     pub(super) awaiting_setup: bool,
     /// A workspace with holds the user placed, whose removal would release
     /// them.

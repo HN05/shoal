@@ -400,7 +400,7 @@ impl Manager {
         new: super::NewWorkspace<'_>,
         files: Option<super::restore::RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
-        let (repo, _guard) = self.lock_repository(repository).await?;
+        let (repo, git) = self.lock_repository(repository).await?;
         let options = NewWorktreeOptions {
             git_profile: new.git_profile,
             path: new.path.as_deref(),
@@ -430,6 +430,7 @@ impl Manager {
                     files,
                 },
                 new,
+                git,
             )
             .await?;
         Ok(OpenedWorkspace {

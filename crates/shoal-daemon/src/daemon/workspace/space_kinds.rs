@@ -151,9 +151,9 @@ impl Manager {
 
     /// Reserve the space `id` for `removal`. A manual removal also takes a
     /// workspace whose setup never started, as when the command creating it
-    /// was interrupted; it waits on the repository's Git gate for that
-    /// creation to end and reads the workspace again, which creation has
-    /// since finished recording.
+    /// was interrupted; it waits for that creation to end, then takes the
+    /// repository's Git gate, under which setup starts, and reads the
+    /// workspace again, which creation has since finished recording.
     pub(in crate::daemon::workspace) async fn reserve_space(
         &self,
         id: &crate::client::space_ids::SpaceId,
@@ -165,6 +165,9 @@ impl Manager {
                 let manual = matches!(removal, Removal::Manual { .. });
                 let awaiting_setup = manual && workspace.state == WorkspaceState::Preparing;
                 let _created = if awaiting_setup {
+                    (self.gates)
+                        .wait_for_creation(&workspace.repository_id, &workspace.id)
+                        .await;
                     let created = self.gates.lock_git(&workspace.repository_id).await;
                     workspace = self.workspace_by_id(&workspace.id).await?;
                     Some(created)

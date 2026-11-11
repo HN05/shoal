@@ -17,6 +17,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
+use tokio::sync::OwnedMutexGuard;
 
 /// Where a new workspace goes, its Git profile, and what it leaves out.
 #[derive(Debug, Default)]
@@ -30,6 +31,15 @@ pub(crate) struct NewWorkspace<'a> {
     /// The chat it replaces, taking its ID, number, name and place in the
     /// tree, instead of going below `parent`.
     pub converts: Option<crate::daemon::conversions::Converting>,
+}
+
+/// A worktree Git created and Shoal configured, which settling seeds.
+pub(super) struct Configured {
+    /// Whether setup is still needed.
+    pub needs_setup: bool,
+    /// The worktree's settings, under which it starts from the seed build,
+    /// or `None` for a worktree that takes no seed.
+    pub seed: Option<crate::config::Effective>,
 }
 
 pub(super) enum WorkspaceSource {
@@ -58,7 +68,7 @@ impl Manager {
         base: Option<String>,
         new: NewWorkspace<'_>,
     ) -> Result<Workspace> {
-        let (repo, _guard) = self.lock_repository(repository).await?;
+        let (repo, git) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
         let branch = self.available_branch(&repo, &name).await?;
         self.create_branch_workspace(
@@ -67,6 +77,7 @@ impl Manager {
             branch,
             WorkspaceSource::New { base, parent: None },
             new,
+            git,
         )
         .await
     }
@@ -115,7 +126,9 @@ impl Manager {
             .await
     }
 
-    // The caller holds the per-repository Git gate through materialization.
+    /// Create the workspace `name` on `branch` from `source`, where and as
+    /// `new` says, under the repository's Git gate `git`, which settling
+    /// releases.
     pub(super) async fn create_branch_workspace(
         &self,
         repo: &crate::model::Repository,
@@ -123,6 +136,7 @@ impl Manager {
         branch: String,
         source: WorkspaceSource,
         new: NewWorkspace<'_>,
+        git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
         let NewWorkspace {
             git_profile,
@@ -186,12 +200,45 @@ impl Manager {
         {
             result = Err(error);
         }
-        self.settle_creation(&workspace, result).await
+        self.settle_creation(repo, &workspace, result, git).await
+    }
+
+    /// Settle the creation of the recorded `workspace`, whose worktree was
+    /// `materialized` under the repository's Git gate `git`: release the
+    /// gate, start a configured worktree from the seed build, then record
+    /// how creation went. Removal and setup wait for it to end.
+    pub(super) async fn settle_creation(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        materialized: Result<Configured>,
+        git: OwnedMutexGuard<()>,
+    ) -> Result<Workspace> {
+        let _creation = self.gates.lock_creation(&workspace.id).await;
+        // Other starts' Git operations need not wait for this clone.
+        drop(git);
+        let materialized = self.seed_worktree(repo, workspace, materialized).await;
+        self.record_creation(workspace, materialized).await
+    }
+
+    /// Start the `materialized` worktree of `workspace` from the seed build
+    /// when it takes one, returning whether setup is still needed.
+    async fn seed_worktree(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        materialized: Result<Configured>,
+    ) -> Result<bool> {
+        let configured = materialized?;
+        if let Some(settings) = &configured.seed {
+            self.apply_seed(repo, workspace, settings).await;
+        }
+        Ok(configured.needs_setup)
     }
 
     /// Record how materializing the recorded `workspace` went: ready, or
     /// preparing while it needs setup, or failed.
-    pub(super) async fn settle_creation(
+    async fn record_creation(
         &self,
         workspace: &Workspace,
         materialized: Result<bool>,
@@ -338,15 +385,15 @@ impl Manager {
             .await
     }
 
-    /// Create and configure the worktree, returning whether setup is still
-    /// needed. A restore's files go in before the workspace can be used.
+    /// Create and configure the worktree. A restore's files go in before the
+    /// workspace can be used.
     async fn materialize_worktree(
         &self,
         repo: &crate::model::Repository,
         workspace: &Workspace,
         source: WorkspaceSource,
         git_profile: Option<&str>,
-    ) -> Result<bool> {
+    ) -> Result<Configured> {
         if let WorkspaceSource::Existing { branch, .. } = &source {
             self.materialize_branch(repo, branch).await?;
         }
@@ -363,20 +410,17 @@ impl Manager {
             WorkspaceSource::Existing { files, .. } => files.as_ref(),
             WorkspaceSource::New { .. } => None,
         };
-        self.configure_worktree(repo, workspace, files, git_profile)
-            .await
+        self.configure_worktree(workspace, files, git_profile).await
     }
 
     /// Record the new worktree's identity, write a restore's files into it,
-    /// then apply its Git profile and the seed build, returning whether setup
-    /// is still needed.
+    /// then apply its Git profile, leaving the seed build to settling.
     pub(super) async fn configure_worktree(
         &self,
-        repo: &Repository,
         workspace: &Workspace,
         files: Option<&restore::RestoredFiles>,
         git_profile: Option<&str>,
-    ) -> Result<bool> {
+    ) -> Result<Configured> {
         self.record_worktree_identity(workspace).await?;
         if let Some(files) = files {
             restore::write_files(&workspace.path, files).await?;
@@ -385,10 +429,12 @@ impl Manager {
         let settings = self.workspace_settings_from(&config, workspace).await?;
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
-        self.apply_seed(repo, workspace, &settings).await;
-        Ok(settings.setup.command.is_some()
-            || settings.hooks.pre_setup.is_some()
-            || settings.setup.copy_ignored)
+        Ok(Configured {
+            needs_setup: settings.setup.command.is_some()
+                || settings.hooks.pre_setup.is_some()
+                || settings.setup.copy_ignored,
+            seed: Some(settings),
+        })
     }
 
     /// Select the effective base for the source branch.

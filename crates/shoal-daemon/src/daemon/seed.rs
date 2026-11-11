@@ -206,8 +206,7 @@ impl Manager {
     }
 
     /// Replace the snapshot with the outputs the seed worktree built, cloning
-    /// them and deleting the replaced snapshot outside the Git gate, which
-    /// creation holds while it starts from the snapshot.
+    /// them and deleting the replaced snapshot outside the Git gate.
     async fn freeze_seed(
         &self,
         repo: &Repository,
@@ -223,8 +222,8 @@ impl Manager {
         off_runtime::run(move || retired.remove_retired()).await
     }
 
-    /// Make `staged` the snapshot of the seed worktree built at `tip`, under
-    /// the Git gate, so creation never sees a partial swap.
+    /// Make `staged` the snapshot of the seed worktree built at `tip`,
+    /// checked under the Git gate while the repository is available.
     async fn install_snapshot(
         &self,
         repo: &Repository,
@@ -244,8 +243,7 @@ impl Manager {
     }
 
     /// Give each repository's current snapshot a spare clone of its outputs,
-    /// which the next new workspace takes instead of cloning them while it
-    /// holds the Git gate.
+    /// which the next new workspace takes instead of cloning them.
     pub async fn refill_spares(&self) {
         let repositories = match self.repositories().await {
             Ok(repositories) => repositories,
@@ -289,7 +287,7 @@ impl Manager {
 
     /// Start a new worktree from its repository's seed snapshot when the
     /// worktree's own settings describe the build that made it. The caller
-    /// holds the repository's Git gate.
+    /// holds the workspace's creation gate and not the repository's Git gate.
     pub(super) async fn apply_seed(
         &self,
         repo: &Repository,
@@ -303,6 +301,8 @@ impl Manager {
             let Some(plan) = Plan::new(repo, &layout, settings).await? else {
                 return Ok(());
             };
+            let slot = self.seeds.slot(&repo.id);
+            let _snapshot = slot.snapshot.lock().await;
             let Some(snapshot) = Snapshot::open(&layout)? else {
                 return Ok(());
             };

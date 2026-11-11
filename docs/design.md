@@ -1024,11 +1024,12 @@ workspaces: a shared directory serialises or corrupts concurrent builds, while a
 copy-on-write clone costs no space until a branch rewrites a file and needs no
 tool support. The daemon owns a locked, detached seed worktree in the repository
 directory, builds it when the branch moves and freezes the configured outputs as
-a snapshot, so a running build never reaches a workspace. Creation runs under the
-repository Git gate, where a clone of a large build tree takes seconds per
-workspace, so the daemon keeps one spare clone of the snapshot ready: creation
-moves it into the new worktree, a background task clones the next, and creation
-clones only when no spare is ready. A new snapshot is cloned and the old one
+a snapshot, so a running build never reaches a workspace. A clone of a large
+build tree takes minutes, so creation clones after its Git operations, outside
+the repository Git gate, and the workspace is neither ready nor set up until the
+clone ends. The daemon also keeps one spare clone of the snapshot ready:
+creation moves it into the new worktree, a background task clones the next, and
+creation clones only when no spare is ready. A new snapshot is cloned and the old one
 deleted outside the gate, which it takes only to swap them. Creation restores the
 seed's modification times on tracked files its commit left unchanged, since
 mtime-based tools otherwise treat every freshly checked-out file as new.

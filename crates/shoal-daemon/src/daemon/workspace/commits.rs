@@ -6,7 +6,7 @@ use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result};
 
-use super::{Manager, restore::RestoredFiles};
+use super::{Manager, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -18,6 +18,7 @@ use crate::{
     protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
 };
+use tokio::sync::OwnedMutexGuard;
 
 /// The commit a workspace at a commit starts at, what it was made for, and
 /// the directory and name it derives from them.
@@ -53,8 +54,9 @@ impl Manager {
         // process reaches only its own repository.
         self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
-        let (repo, _guard) = self.lock_repository(repository).await?;
-        self.create_at_start(&repo, parent, start, options).await
+        let (repo, git) = self.lock_repository(repository).await?;
+        self.create_at_start(&repo, parent, start, options, git)
+            .await
     }
 
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
@@ -74,7 +76,7 @@ impl Manager {
     ) -> Result<OpenedWorkspace> {
         self.ensure_parent_repository(&repository, parent.as_ref())
             .await?;
-        let (repo, _guard) = self.lock_repository(repository).await?;
+        let (repo, git) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
             if let Some(parent) = parent.as_ref().filter(|_| confined) {
                 anyhow::ensure!(
@@ -105,19 +107,20 @@ impl Manager {
         }
         let start = CommitStart::PullHead(head);
         Ok(OpenedWorkspace {
-            workspace: self.create_at_start(&repo, parent, start, options).await?,
+            workspace: (self.create_at_start(&repo, parent, start, options, git)).await?,
             reused: false,
         })
     }
 
-    /// Create a workspace at `start` in `repo`, whose Git gate the caller
-    /// holds, as [`Self::create_commit_workspace`] does.
+    /// Create a workspace at `start` in `repo` under its Git gate `git`, as
+    /// [`Self::create_commit_workspace`] does.
     async fn create_at_start(
         &self,
         repo: &Repository,
         parent: Option<SpaceId>,
         start: CommitStart,
         options: CreationOptions,
+        git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
         // Recorded below its parent, a workspace or a chat, with its
         // record, so one whose creation fails is still there.
@@ -140,7 +143,7 @@ impl Manager {
         let result = self
             .materialize_commit_worktree(repo, &workspace, &head, None)
             .await;
-        self.settle_creation(&workspace, result).await
+        self.settle_creation(repo, &workspace, result, git).await
     }
 
     /// Create the workspace a CI job runs in, in `directory` and named
@@ -155,7 +158,7 @@ impl Manager {
         commit: &str,
         reference: Option<&str>,
     ) -> Result<Workspace> {
-        let (repo, _guard) = self.lock_repository(repository_id).await?;
+        let (repo, git) = self.lock_repository(repository_id).await?;
         fetch_job_commit(&repo, commit, reference).await?;
         let at = StartingCommit {
             commit: commit.to_owned(),
@@ -172,7 +175,7 @@ impl Manager {
         let result = self
             .materialize_commit_worktree(&repo, &workspace, commit, None)
             .await;
-        self.settle_creation(&workspace, result).await
+        self.settle_creation(&repo, &workspace, result, git).await
     }
 
     /// The workspace at a commit of `repository_id` made for PR `number` or
@@ -332,7 +335,7 @@ impl Manager {
         at: StartingCommit,
         files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
-        let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
+        let (repo, git) = self.lock_repository(&removed.repository_id).await?;
         let diff_ref = surviving_ref(&repo, removed.base_ref.as_deref()).await?;
         // Its directory comes from where it started, never its name.
         let directory = at.directory_seed();
@@ -355,7 +358,7 @@ impl Manager {
         let result = self
             .materialize_commit_worktree(&repo, &workspace, head, files.as_ref())
             .await;
-        self.settle_creation(&workspace, result).await
+        self.settle_creation(&repo, &workspace, result, git).await
     }
 
     /// Record a new workspace at a commit in a directory named after
@@ -384,16 +387,16 @@ impl Manager {
     }
 
     /// Check out `head` and configure the worktree with `files` written into
-    /// it, returning whether setup is still needed.
+    /// it.
     async fn materialize_commit_worktree(
         &self,
         repo: &Repository,
         workspace: &Workspace,
         head: &str,
         files: Option<&RestoredFiles>,
-    ) -> Result<bool> {
+    ) -> Result<Configured> {
         git::detached::add_workspace(&repo.path, &workspace.path, head).await?;
-        self.configure_worktree(repo, workspace, files, None).await
+        self.configure_worktree(workspace, files, None).await
     }
 
     /// Resolve `start` in `repo`: the commit, what it was made for and the
