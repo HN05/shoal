@@ -136,9 +136,13 @@ pub fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>) -> Str
 }
 
 /// What the agent of a chat that became `workspace` is told, carrying on
-/// from a fork of the chat's session when `forked`, before its mode's
-/// instructions.
-pub fn converted_prompt(workspace: &Workspace, forked: bool) -> String {
+/// from a fork of the chat's session when `forked`, followed by `handoff`,
+/// before its mode's instructions.
+pub fn converted_prompt(
+    workspace: &Workspace,
+    forked: bool,
+    handoff: Option<&str>,
+) -> String {
     let mut prompt = format!(
         "Shoal converted this chat into a workspace. You now work in its worktree at {} on branch {}.",
         workspace.path.display(),
@@ -149,6 +153,10 @@ pub fn converted_prompt(workspace: &Workspace, forked: bool) -> String {
     } else {
         " The chat's session is not available here: read the space's linked issue to see where the work stands."
     });
+    if let Some(handoff) = handoff {
+        prompt.push_str("\n\n");
+        prompt.push_str(handoff);
+    }
     prompt
 }
 

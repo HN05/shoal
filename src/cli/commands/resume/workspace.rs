@@ -125,7 +125,7 @@ async fn restore(
     let mut records = vec![path];
     if session.converted {
         records.extend(commands.into_iter().map(|command| command.path));
-        return start_converted(ctx, workspace, &session, records).await;
+        return start_converted(ctx, workspace, &session, handoff.as_deref(), records).await;
     }
     if let Some(copied) = session.copied {
         records.extend(commands.into_iter().map(|command| command.path));
@@ -211,11 +211,13 @@ async fn start_copied(
 /// Start the agent of `session` in a workspace that was a chat: from a fork
 /// of the session it reported there, or as a new agent when it reported none
 /// or cannot start from a fork, told what the space is now and its mode's
-/// instructions; it consumes `records` once it has started.
+/// instructions, and about the stopped commands `handoff` describes; it
+/// consumes `records` once it has started.
 async fn start_converted(
     ctx: &Context,
     workspace: &Workspace,
     session: &LastSession,
+    handoff: Option<&str>,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
     let agent = &session.agent;
@@ -232,7 +234,7 @@ async fn start_converted(
         .session
         .clone()
         .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
-    let message = crate::execution::recovery::converted_prompt(workspace, fork.is_some());
+    let message = crate::execution::recovery::converted_prompt(workspace, fork.is_some(), handoff);
     let options = crate::cli::agents::LaunchOptions {
         replaces: records,
         fork,

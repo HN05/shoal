@@ -701,3 +701,22 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let other_last = LastSession::all(&paths, &other).unwrap();
     assert_eq!(other_last[0].narrowing, agent.narrowing);
 }
+
+#[test]
+fn a_converted_workspaces_agent_is_told_its_place_and_the_stopped_commands() {
+    let workspace = Workspace::new_record(
+        "repo".into(),
+        "talk".into(),
+        "/work/fix-login".into(),
+        Some("fix-login".into()),
+        crate::state::WorkspaceState::Ready,
+    );
+
+    let told = converted_prompt(&workspace, true, Some("handoff"));
+
+    assert!(
+        told.contains("/work/fix-login") && told.contains("fix-login"),
+        "{told}"
+    );
+    assert!(told.ends_with("\n\nhandoff"), "{told}");
+}
