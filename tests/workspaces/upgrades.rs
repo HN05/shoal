@@ -12,21 +12,10 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     fs::write(path.join("resume.sh"), fake_agent_script("restored")).unwrap();
     // The wrapper starts from an installed link to an earlier release, a copy
     // of the daemon's binary in the target directory, where it may be cloned.
-    // A child copies it, so parallel spawns cannot inherit its writable
-    // descriptor and cause ETXTBSY when the wrapper executes it.
     let target = Path::new(support::shoal_binary()).parent().unwrap();
     let releases = tempfile::tempdir_in(target).unwrap();
     let earlier = releases.path().join("shoal");
-    let copied = support::isolated(releases.path(), "cp")
-        .arg(support::shoal_binary())
-        .arg(&earlier)
-        .output()
-        .unwrap();
-    assert!(
-        copied.status.success(),
-        "copy shoal: {}",
-        String::from_utf8_lossy(&copied.stderr)
-    );
+    support::copy_shoal_binary(&earlier);
     let installed = fixture.root.path().join("installed/shoal");
     fs::create_dir_all(installed.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(&earlier, &installed).unwrap();

@@ -56,18 +56,6 @@ fn success(output: Output) -> Vec<u8> {
     output.stdout
 }
 
-fn copy_executable(home: &Path, destination: &Path) {
-    // Copy in a child so parallel command spawns cannot inherit the writable
-    // file descriptor and cause ETXTBSY when this test executes the fixture.
-    success(
-        support::isolated(home, "cp")
-            .arg(support::shoal_binary())
-            .arg(destination)
-            .output()
-            .unwrap(),
-    );
-}
-
 #[test]
 fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
     let home = tempfile::tempdir_in("/tmp").unwrap();
@@ -76,7 +64,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
     let bin = home.path().join("bin");
     fs::create_dir_all(package.join("libexec")).unwrap();
     fs::create_dir(&bin).unwrap();
-    copy_executable(home.path(), &package.join("libexec/shoal"));
+    support::copy_shoal_binary(&package.join("libexec/shoal"));
     write_skills(&package.join("skills"), "version one");
     symlink(&package, &stable).unwrap();
     symlink(stable.join("skills"), package.join("libexec/shoal-skills")).unwrap();
@@ -157,7 +145,7 @@ fn relative_packaged_skill_link_installs_copies_that_follow_homebrew_upgrades() 
         let package = cellar.join(version);
         write_skills(&package.join(skills), version);
         fs::create_dir_all(package.join("libexec")).unwrap();
-        copy_executable(home.path(), &package.join("libexec/shoal"));
+        support::copy_shoal_binary(&package.join("libexec/shoal"));
         symlink(
             "../../../../opt/shoal/share/shoal/skills",
             package.join("libexec/shoal-skills"),

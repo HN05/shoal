@@ -39,26 +39,37 @@ pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<
     let parent = path.parent().unwrap();
     fs::create_dir_all(parent).unwrap();
     // Copy to a fresh file so an earlier fixture can still be executing.
-    // Close its writable descriptor before copying in a child, so parallel
-    // spawns cannot inherit it and cause ETXTBSY when executing the fixture.
     let destination = tempfile::NamedTempFile::new_in(parent)
         .unwrap()
         .into_temp_path();
     let mut source = tempfile::NamedTempFile::new_in(parent).unwrap();
     source.write_all(script.as_ref()).unwrap();
-    let output = isolated(parent, "cp")
-        .arg(source.path())
-        .arg(&destination)
+    copy_in_child(source.path(), &destination);
+    fs::set_permissions(&destination, fs::Permissions::from_mode(mode)).unwrap();
+    fs::rename(&destination, path).unwrap();
+}
+
+/// Copy the `shoal` binary to `destination`, an executable a test runs in
+/// place of the one Cargo built.
+pub fn copy_shoal_binary(destination: &Path) {
+    copy_in_child(Path::new(shoal_binary()), destination);
+}
+
+/// Copy `source` in a child, so parallel spawns cannot inherit a writable
+/// descriptor of `destination` and cause ETXTBSY when it is executed.
+fn copy_in_child(source: &Path, destination: &Path) {
+    let output = isolated(destination.parent().unwrap(), "cp")
+        .arg(source)
+        .arg(destination)
         .output()
         .unwrap();
     assert!(
         output.status.success(),
-        "install {}: {}",
-        path.display(),
+        "copy {} to {}: {}",
+        source.display(),
+        destination.display(),
         String::from_utf8_lossy(&output.stderr)
     );
-    fs::set_permissions(&destination, fs::Permissions::from_mode(mode)).unwrap();
-    fs::rename(&destination, path).unwrap();
 }
 
 /// A fake agent's script: it touches `marker` in its directory, then runs
