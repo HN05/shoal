@@ -403,6 +403,11 @@ impl Manager {
             Pending::Workspace { .. } => format!(
                 "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal resume {name}"
             ),
+            Pending::Chat { .. } if self.chat_by_id(id).await.is_ok_and(|chat| chat.is_some()) => {
+                format!(
+                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal resume {name}"
+                )
+            }
             Pending::Chat { .. } => format!(
                 "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {name} continues"
             ),
