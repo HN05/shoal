@@ -22,9 +22,13 @@ impl Manager {
         let running = match agents.as_slice() {
             [running] => running,
             [] => bail!("{name} is not in the agent queue and runs no agent"),
-            _ => bail!("{name} runs several agents; stop them with shoal stop {name}"),
+            _ => bail!(
+                "{name} runs several agents; stop them with shoal stop {}",
+                workspace.number
+            ),
         };
-        let manual = format!("use shoal stop {name} and shoal resume {name}");
+        let number = workspace.number;
+        let manual = format!("use shoal stop {number} and shoal resume {number}");
         let agent = running
             .agent
             .as_ref()

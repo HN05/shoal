@@ -146,7 +146,7 @@ pub(super) async fn add_planned(
         let with_agent = agent.agent.is_some();
         terminal::host_workspace(ctx, &started.workspace, with_agent, &label).await?;
     }
-    let name = started.workspace.name.clone();
+    let (name, number) = (started.workspace.name.clone(), started.workspace.number);
     let subject = (issue.as_ref().map(issues::Issue::subject))
         .or(prompt.map(crate::config::templates::Subject::told));
     let rest = AfterSetup {
@@ -161,7 +161,7 @@ pub(super) async fn add_planned(
     else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
-                "setup of {name} did not complete; retry it with `shoal setup {name}` or skip it with `shoal setup {name} --skip`"
+                "setup of {name} did not complete; retry it with `shoal setup {number}` or skip it with `shoal setup {number} --skip`"
             );
             queued_agents::fail(ctx, entry, &error).await;
         }

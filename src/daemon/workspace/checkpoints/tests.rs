@@ -68,7 +68,10 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
     let manager = &f.manager;
     f.write("scratch", "notes\n");
     let first = manager
-        .take_checkpoint(&"topic".into(), Some("before the change".into()))
+        .take_checkpoint(
+            &manager.named("topic").await,
+            Some("before the change".into()),
+        )
         .await
         .unwrap();
     assert_eq!(first.number, 1);
@@ -87,7 +90,7 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
     // A manual checkpoint repeats an unchanged state; an automatic one
     // extends the latest unexpired one instead.
     let second = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     assert_eq!(second.number, 2);
@@ -96,7 +99,7 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
     manager.checkpoint_after_agent(&f.workspace.id).await;
     let numbers = async || {
         manager
-            .checkpoints(&"topic".into(), None)
+            .checkpoints(&manager.named("topic").await, None)
             .await
             .unwrap()
             .unwrap()
@@ -110,14 +113,14 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
     manager.checkpoint_after_agent(&f.workspace.id).await;
     assert_eq!(numbers().await, [1, 3]);
     let listed = manager
-        .checkpoints(&"topic".into(), None)
+        .checkpoints(&manager.named("topic").await, None)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(listed[1].cause, CheckpointCause::AgentStopped);
     assert!(
         manager
-            .checkpoints(&"missing".into(), None)
+            .checkpoints(&manager.named("missing").await, None)
             .await
             .unwrap()
             .is_none()
@@ -129,12 +132,15 @@ async fn listings_come_in_pages_that_fit_a_protocol_frame() {
     let f = Fixture::new().await;
     let long = "n".repeat(NAME_LIMIT + 1);
     f.manager
-        .take_checkpoint(&"topic".into(), Some(long))
+        .take_checkpoint(&f.manager.named("topic").await, Some(long))
         .await
         .unwrap_err();
     let checkpoint = f
         .manager
-        .take_checkpoint(&"topic".into(), Some("n".repeat(NAME_LIMIT)))
+        .take_checkpoint(
+            &f.manager.named("topic").await,
+            Some("n".repeat(NAME_LIMIT)),
+        )
         .await
         .unwrap();
     let record = checkpoint.clone();
@@ -153,7 +159,7 @@ async fn listings_come_in_pages_that_fit_a_protocol_frame() {
     loop {
         let page = f
             .manager
-            .checkpoints(&"topic".into(), after)
+            .checkpoints(&f.manager.named("topic").await, after)
             .await
             .unwrap()
             .unwrap();
@@ -172,7 +178,7 @@ async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_st
     f.write("scratch", "notes\n");
     let count = async || {
         f.manager
-            .checkpoints(&"topic".into(), None)
+            .checkpoints(&f.manager.named("topic").await, None)
             .await
             .unwrap()
             .unwrap()
@@ -197,12 +203,12 @@ async fn agents_leave_no_checkpoint_while_another_lifecycle_operation_runs() {
         .unwrap();
     f.manager.checkpoint_after_agent(&f.workspace.id).await;
     f.manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&f.manager.named("topic").await, None)
         .await
         .unwrap_err();
     assert!(
         f.manager
-            .checkpoints(&"topic".into(), None)
+            .checkpoints(&f.manager.named("topic").await, None)
             .await
             .unwrap()
             .unwrap()
@@ -240,23 +246,23 @@ async fn numbers_are_never_reused_after_checkpoints_expire() {
     let f = Fixture::new().await;
     let manager = &f.manager;
     manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     let second = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     f.set_expiry(second.number, crate::time::UnixTime::from_seconds(0))
         .await;
     manager.expire_checkpoints().await.unwrap();
     let third = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     assert_eq!(third.number, 3);
     manager
-        .restore_checkpoint(&"topic".into(), second.number, None)
+        .restore_checkpoint(&manager.named("topic").await, second.number, None)
         .await
         .unwrap_err();
 }
@@ -268,7 +274,7 @@ async fn restore_returns_to_a_checkpoint_after_keeping_the_current_state() {
     f.write("tracked", "checkpointed\n");
     f.write("scratch", "notes\n");
     let checkpoint = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     let status = f.git(&["status", "--porcelain"]);
@@ -282,7 +288,7 @@ async fn restore_returns_to_a_checkpoint_after_keeping_the_current_state() {
     let later_status = f.git(&["status", "--porcelain"]);
 
     let restored = manager
-        .restore_checkpoint(&"topic".into(), checkpoint.number, None)
+        .restore_checkpoint(&manager.named("topic").await, checkpoint.number, None)
         .await
         .unwrap();
     assert_eq!(restored.checkpoint, checkpoint);
@@ -296,7 +302,11 @@ async fn restore_returns_to_a_checkpoint_after_keeping_the_current_state() {
 
     // The replaced state is a checkpoint like any other.
     manager
-        .restore_checkpoint(&"topic".into(), restored.replaced.number, None)
+        .restore_checkpoint(
+            &manager.named("topic").await,
+            restored.replaced.number,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(f.git(&["rev-parse", "HEAD"]), later);
@@ -304,7 +314,7 @@ async fn restore_returns_to_a_checkpoint_after_keeping_the_current_state() {
     assert_eq!(f.read("untracked").as_deref(), Some("later\n"));
 
     manager
-        .restore_checkpoint(&"topic".into(), 99.into(), None)
+        .restore_checkpoint(&manager.named("topic").await, 99.into(), None)
         .await
         .unwrap_err();
 }
@@ -314,15 +324,18 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
     let f = Fixture::new().await;
     let manager = &f.manager;
     let checkpoint = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     let refused = async |own: Option<&Caller>| {
         manager
-            .restore_checkpoint(&"topic".into(), checkpoint.number, own)
+            .restore_checkpoint(&manager.named("topic").await, checkpoint.number, own)
             .await
             .unwrap_err();
-        let workspace = manager.workspace(&"topic".into()).await.unwrap();
+        let workspace = manager
+            .workspace(&manager.named("topic").await)
+            .await
+            .unwrap();
         assert_eq!(workspace.state, WorkspaceState::Ready);
     };
 
@@ -349,7 +362,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
         }),
     };
     manager
-        .restore_checkpoint(&"topic".into(), checkpoint.number, Some(&own))
+        .restore_checkpoint(&manager.named("topic").await, checkpoint.number, Some(&own))
         .await
         .unwrap();
 
@@ -376,12 +389,12 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
     let manager = &f.manager;
     f.write("scratch", "notes\n");
     let first = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     f.write("scratch", "more notes\n");
     let second = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
 
@@ -427,11 +440,11 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
     let manager = &f.manager;
     f.write("scratch", "notes\n");
     let start = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     let later = manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&manager.named("topic").await, None)
         .await
         .unwrap();
     let (id, number) = (f.workspace.id.clone(), start.number);
@@ -452,7 +465,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
         .await;
     manager.expire_checkpoints().await.unwrap();
     let listed = manager
-        .checkpoints(&"topic".into(), None)
+        .checkpoints(&manager.named("topic").await, None)
         .await
         .unwrap()
         .unwrap();
@@ -463,7 +476,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
         [git::checkpoint::reference(&start.commit)]
     );
     let copied = manager
-        .workspace(&"topic".into())
+        .workspace(&manager.named("topic").await)
         .await
         .unwrap()
         .copied_from

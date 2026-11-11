@@ -98,7 +98,7 @@ fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
         )?,
         "execution {} has not ended; stop it with shoal stop {} first",
         restore.execution,
-        restore.target.name
+        restore.target.id
     );
     ensure!(
         restore.state == QueueState::Queued

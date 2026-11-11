@@ -92,7 +92,7 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
     assert!(calls_of(&fixture, &["workspace", "create"]).is_empty());
     assert_eq!(
         calls_of(&fixture, &["tab", "create"])[0][2..4],
-        ["--workspace", "w3"]
+        ["--workspace", &fixture.id("w3")]
     );
 }
 
@@ -107,7 +107,7 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     for args in [
         vec!["start", repo, "shell"],
         vec!["start", "--chat", repo, "--name", "talk", "--agent", "pi"],
-        vec!["pi", "agent"],
+        vec!["pi", &fixture.id("agent")],
     ] {
         fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap_or_default();
         let (output, transcript) = plain_terminal(&fixture, &args);
@@ -202,9 +202,9 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let queued: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(queued["state"], "queued", "{queued}");
-    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
-    fixture.ok(&["rm", "--wait", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first"), "--yes"]);
     // The daemon's worker opens the tab on the session the caller chose.
     let sessions = fixture.root.path().join("herdr-list-sessions");
     wait_until("the queued start to look up its workspace", || {
@@ -226,7 +226,7 @@ fn demos_without_a_herdr_pane_open_in_the_repository_workspace() {
         "demo",
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sleep",
         "600",
@@ -240,7 +240,7 @@ fn demos_without_a_herdr_pane_open_in_the_repository_workspace() {
     assert_eq!(tab[2..4], ["--workspace", "w7"], "{tab:?}");
     assert!(tab.iter().any(|arg| arg == "--no-focus"), "{tab:?}");
     assert_eq!(calls_of(&fixture, &["pane", "run", "w1:p9"]).len(), 1);
-    fixture.ok(&["demo", "stop", "--workspace", "tried"]);
+    fixture.ok(&["demo", "stop", "--workspace", &fixture.id("tried")]);
 }
 
 #[test]
@@ -257,18 +257,18 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
         "demo",
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sleep",
         "600",
     ]);
     assert_eq!(started["host"], "terminal", "{started}");
-    fixture.ok(&["demo", "stop", "--workspace", "tried"]);
+    fixture.ok(&["demo", "stop", "--workspace", &fixture.id("tried")]);
     // A queued start without a host is refused before the child exists.
     let refused = fixture.run(&[
         "run",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         support::shoal_binary(),
         "start",

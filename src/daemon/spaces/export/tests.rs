@@ -79,7 +79,7 @@ async fn written_pid(file: &Path) -> u32 {
 async fn export(manager: &Manager, selector: &str, file: &Path) -> anyhow::Result<ExportedSpace> {
     manager
         .export_space(
-            &SpaceSelector::parse(selector),
+            &manager.named(selector).await,
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.to_owned(),
@@ -428,7 +428,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
         .unwrap();
     let refused = manager
         .copy_space(
-            &"plan-cache".into(),
+            &manager.named("plan-cache").await,
             Some(1.into()),
             root.path().join("refused.shoal"),
         )
@@ -441,7 +441,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
     let file = root.path().join("plan-cache.shoal");
 
     let exported = manager
-        .copy_space(&"plan-cache".into(), None, file.clone())
+        .copy_space(&manager.named("plan-cache").await, None, file.clone())
         .await
         .unwrap();
     assert!(exported.manifest.copy.is_some());
@@ -464,7 +464,7 @@ async fn a_chat_without_a_session_has_none_to_fork() {
 
     assert!(
         manager
-            .copy_space(&"talk".into(), None, file.clone())
+            .copy_space(&manager.named("talk").await, None, file.clone())
             .await
             .is_err()
     );

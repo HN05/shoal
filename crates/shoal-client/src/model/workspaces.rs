@@ -248,6 +248,11 @@ impl Workspace {
         self.branch.as_deref().unwrap_or(&self.name)
     }
 
+    /// Its number with its name, as text that names it does.
+    pub fn label(&self) -> String {
+        crate::space_names::label(self.number, &self.name)
+    }
+
     /// Its worktree directory's name, the last part of its path, which
     /// `{workspace}` and its terminal session take since it never changes.
     pub fn directory_name(&self) -> &str {

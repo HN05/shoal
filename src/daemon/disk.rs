@@ -460,7 +460,7 @@ async fn stop_executions(
                     NotificationKind::AgentStopped,
                     format!(
                         "Stopped tracked commands: {low}; free disk space, then shoal resume {} lists them",
-                        workspace.name
+                        workspace.number
                     ),
                 )
             }

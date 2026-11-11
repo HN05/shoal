@@ -34,7 +34,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
         agent: fixture
             .command()
             .env("BROKEN_TREE", "1")
-            .args(["claude", "renewed"])
+            .args(["claude", &fixture.id("renewed")])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -44,7 +44,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     wait_until("agent to start", || path.join("agent-started").exists());
     let old = wait_registered_execution(&fixture, "renewed")["id"].clone();
 
-    let restarted = fixture.ok(&["restart", "renewed"]);
+    let restarted = fixture.ok(&["restart", &fixture.id("renewed")]);
     let [agent_restarted] = restarted["restarted"].as_array().unwrap().as_slice() else {
         panic!("expected one restarted agent: {restarted}");
     };
@@ -69,7 +69,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
             .all(|alert| alert["kind"] != "agent_exited"),
         "{alerts}"
     );
-    fixture.ok(&["stop", "renewed"]);
+    fixture.ok(&["stop", &fixture.id("renewed")]);
     wait_zmx_sessions_ended(fixture.root.path());
 }
 
@@ -108,7 +108,7 @@ fn restart_restores_a_chat_in_a_new_place() {
 
         // It answers once the chat runs again, in the zmx session it opened,
         // which is the chat's own.
-        let restarted = fixture.ok(&["restart", "talk"]);
+        let restarted = fixture.ok(&["restart", &fixture.id("talk")]);
         assert_eq!(
             restarted["restarted"],
             serde_json::json!([{
@@ -127,7 +127,7 @@ fn restart_restores_a_chat_in_a_new_place() {
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["restore"], Value::Null, "{chats}");
-    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 
@@ -141,7 +141,12 @@ fn restart_gives_a_workspaces_agent_permissions() {
     let workspace = fixture.add("narrowed");
     let running = Running::start(&fixture, "narrowed", &workspace);
     let first = wait_registered_execution(&fixture, "narrowed")["id"].clone();
-    let output = fixture.run(&["restart", "narrowed", "--permission", "pushes=propose"]);
+    let output = fixture.run(&[
+        "restart",
+        &fixture.id("narrowed"),
+        "--permission",
+        "pushes=propose",
+    ]);
     assert!(!output.status.success(), "{output:?}");
     assert!(!running.path.join("restored").exists());
     assert_eq!(wait_registered_execution(&fixture, "narrowed")["id"], first);
@@ -155,17 +160,17 @@ fn restart_gives_a_workspaces_agent_permissions() {
     ];
     for (args, given) in steps {
         let _ = fs::remove_file(running.path.join("restored"));
-        fixture.ok(&[&["restart", "narrowed"][..], args].concat());
+        fixture.ok(&[&["restart", &fixture.id("narrowed")][..], args].concat());
         wait_until("agent to restore", || {
             running.path.join("restored").exists()
         });
-        let status = fixture.ok(&["status", "narrowed"]);
+        let status = fixture.ok(&["status", &fixture.id("narrowed")]);
         assert_eq!(
             &status["workspace"]["narrowing"], given,
             "{args:?}: {status}"
         );
     }
-    let status = fixture.ok(&["status", "narrowed"]);
+    let status = fixture.ok(&["status", &fixture.id("narrowed")]);
     assert_eq!(
         status["permissions"]["merge"]["value"], "direct",
         "{status}"
@@ -194,10 +199,20 @@ fn restart_gives_a_chats_agent_permissions() {
             )
         });
         wait_until("chat started", || home.join("chat-started").exists());
-        let output = fixture.run(&["restart", "talk", "--permission", "pushes=propose"]);
+        let output = fixture.run(&[
+            "restart",
+            &fixture.id("talk"),
+            "--permission",
+            "pushes=propose",
+        ]);
         assert!(!output.status.success(), "{output:?}");
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["restore"], Value::Null);
-        fixture.ok(&["restart", "talk", "--permission", "push=propose"]);
+        fixture.ok(&[
+            "restart",
+            &fixture.id("talk"),
+            "--permission",
+            "push=propose",
+        ]);
         let (output, transcript) = chat.join().unwrap();
         assert!(output.status.success(), "{output:?}\n{transcript}");
     });
@@ -206,14 +221,19 @@ fn restart_gives_a_chats_agent_permissions() {
 
     let wider = serde_json::json!({"push": "propose", "api_writes": "direct"});
     fs::remove_file(&restored).unwrap();
-    fixture.ok(&["restart", "talk", "--permission", "api_writes=direct"]);
+    fixture.ok(&[
+        "restart",
+        &fixture.id("talk"),
+        "--permission",
+        "api_writes=direct",
+    ]);
     wait_until("chat restored again", || restored.exists());
     assert_eq!(narrowing(), wider);
     fs::remove_file(&restored).unwrap();
-    fixture.ok(&["restart", "talk"]);
+    fixture.ok(&["restart", &fixture.id("talk")]);
     wait_until("chat restored a third time", || restored.exists());
     assert_eq!(narrowing(), wider);
-    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 
@@ -270,29 +290,35 @@ fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
     let home = fixture.root.path().to_owned();
     let zmx = home.join("bin/zmx");
     let repo = fixture.repo.to_str().unwrap();
-    let child = fixture.ok(&["start", repo, "child", "--parent", parent.name()]);
+    let child = fixture.ok(&[
+        "start",
+        repo,
+        "child",
+        "--parent",
+        &fixture.id(parent.name()),
+    ]);
     let agent = Running::start(&fixture, "child", &child);
     let restored = agent.path.join("restored");
     // No new wrapper can start, so the restart leaves the agent stopped.
     let failed_restart = |restarter: &dyn Fn(&[&str]) -> Output| {
         install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
-        let output = restarter(&["restart", "child"]);
+        let output = restarter(&["restart", &fixture.id("child")]);
         assert!(!output.status.success(), "{output:?}");
         install_test_script(&zmx, terminal_zmx());
     };
 
     failed_restart(&|args| fixture.run(args));
-    let output = parent.run(&fixture, &["resume", "child"]);
+    let output = parent.run(&fixture, &["resume", &fixture.id("child")]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
-    fixture.ok(&["resume", "child"]);
+    fixture.ok(&["resume", &fixture.id("child")]);
     wait_until("the user's restore", || restored.exists());
     fs::remove_file(&restored).unwrap();
 
     failed_restart(&|args| parent.run(&fixture, args));
-    parent.ok(&fixture, &["resume", "child"]);
+    parent.ok(&fixture, &["resume", &fixture.id("child")]);
     wait_until("the parent's restore", || restored.exists());
-    fixture.ok(&["stop", "child"]);
+    fixture.ok(&["stop", &fixture.id("child")]);
     drop(agent);
     wait_zmx_sessions_ended(&home);
 }
@@ -375,15 +401,21 @@ impl Parent {
 fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     let home = fixture.root.path().to_owned();
     let repo = fixture.repo.to_str().unwrap();
-    let child = fixture.ok(&["start", repo, "child", "--parent", parent.name()]);
+    let child = fixture.ok(&[
+        "start",
+        repo,
+        "child",
+        "--parent",
+        &fixture.id(parent.name()),
+    ]);
     fixture.add("other");
     let mut agent = Running::start(fixture, "child", &child);
     for refused in [parent.name(), "other"] {
-        let output = parent.run(fixture, &["restart", refused]);
+        let output = parent.run(fixture, &["restart", &fixture.id(refused)]);
         assert!(!output.status.success(), "{refused}: {output:?}");
     }
 
-    let restarted = parent.ok(fixture, &["restart", "child"]);
+    let restarted = parent.ok(fixture, &["restart", &fixture.id("child")]);
     assert_eq!(restarted["restarted"][0]["space"], "child", "{restarted}");
     wait_until("agent to restore", || agent.path.join("restored").exists());
     assert!(
@@ -403,19 +435,19 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
                     "--name",
                     "talk",
                     "--parent",
-                    parent.name(),
+                    &fixture.id(parent.name()),
                 ]),
                 "",
             )
         });
         wait_until("chat started", || home.join("chat-started").exists());
-        let restarted = parent.ok(fixture, &["restart", "talk"]);
+        let restarted = parent.ok(fixture, &["restart", &fixture.id("talk")]);
         assert_eq!(restarted["restarted"][0]["space"], "talk", "{restarted}");
         let (output, transcript) = chat.join().unwrap();
         assert!(output.status.success(), "{output:?}\n{transcript}");
     });
     wait_until("chat restored", || home.join("chat-restored").exists());
-    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);
     drop(agent);
     wait_zmx_sessions_ended(&home);
 }
@@ -442,14 +474,14 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
                     "--name",
                     "talk",
                     "--parent",
-                    parent.name(),
+                    &fixture.id(parent.name()),
                 ]),
                 "",
             )
         });
         wait_until("chat started", || home.join("chat-started").exists());
         install_test_script(&zmx, FAILING_ZMX);
-        let output = fixture.run(&["restart", "talk"]);
+        let output = fixture.run(&["restart", &fixture.id("talk")]);
         assert!(!output.status.success(), "{output:?}");
         chat.join().unwrap();
     });
@@ -462,24 +494,24 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
             .count()
     };
     let failed = failed_restores();
-    let output = parent.run(fixture, &["resume", "talk"]);
+    let output = parent.run(fixture, &["resume", &fixture.id("talk")]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
     assert!(!restored.exists());
     // The refusal comes before a place opens, so no restore failed.
     assert_eq!(failed_restores(), failed);
 
-    fixture.ok(&["resume", "talk"]);
+    fixture.ok(&["resume", &fixture.id("talk")]);
     wait_until("the user's restore", || restored.exists());
     fs::remove_file(&restored).unwrap();
     install_test_script(&zmx, FAILING_ZMX);
-    let output = parent.run(fixture, &["restart", "talk"]);
+    let output = parent.run(fixture, &["restart", &fixture.id("talk")]);
     assert!(!output.status.success(), "{output:?}");
     install_test_script(&zmx, terminal_zmx());
-    let resumed = parent.ok(fixture, &["resume", "talk"]);
+    let resumed = parent.ok(fixture, &["resume", &fixture.id("talk")]);
     assert_eq!(resumed["chats"][0]["chat"], "talk", "{resumed}");
     wait_until("the parent's restore", || restored.exists());
-    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 
@@ -510,7 +542,7 @@ impl<'a> Running<'a> {
         .unwrap();
         let agent = fixture
             .command()
-            .args(["claude", workspace])
+            .args(["claude", &fixture.id(workspace)])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -533,7 +565,7 @@ impl<'a> Running<'a> {
 impl Drop for Running<'_> {
     fn drop(&mut self) {
         let _ = (self.fixture.command())
-            .args(["stop", self.workspace])
+            .args(["stop", &self.fixture.id(self.workspace)])
             .output();
         if try_wait_for(|| self.agent.try_wait().ok().flatten()).is_none() {
             let _ = self.agent.kill();

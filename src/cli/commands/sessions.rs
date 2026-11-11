@@ -29,7 +29,7 @@ pub(super) async fn attach(
     ensure!(ctx.interactive(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
     let sessions = (target.attachable(ctx, session.as_deref()).await?)
-        .map_err(|protection| anyhow!("{}", stopped_agent(target.name(), &protection)))?;
+        .map_err(|protection| anyhow!("{}", stopped_agent(&target, &protection)))?;
     let session = match (session, sessions.as_slice()) {
         (Some(name), _) => sessions
             .iter()
@@ -51,7 +51,7 @@ pub(super) async fn attach(
             ui::pick_choice(ctx, "Attach session> ", &choices)?
         }
     };
-    if terminal::attach(target.name(), session).await? {
+    if terminal::attach(&target.number().to_string(), session).await? {
         target.record_detach(ctx).await;
     }
     Ok(0)
@@ -88,9 +88,7 @@ impl Target {
             return Self::space(ctx, chats, id).await;
         }
         if let Some(name) = name {
-            return match (chats.into_iter())
-                .find(|chat| name.selects(&chat.id, &chat.name, chat.number))
-            {
+            return match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
                 Some(chat) => Ok(Self::Chat(Box::new(chat))),
                 None => Self::workspace(ctx, Some(name), Fallback::CurrentDirectory).await,
             };
@@ -180,6 +178,13 @@ impl Target {
         }
     }
 
+    fn number(&self) -> crate::client::space_ids::SpaceNumber {
+        match self {
+            Self::Workspace(inspection) => inspection.workspace.number,
+            Self::Chat(chat) => chat.number,
+        }
+    }
+
     /// Where the daemon recorded the target running, with its agents.
     fn places(&self) -> Vec<Recorded<'_>> {
         match self {
@@ -209,11 +214,14 @@ impl Target {
     }
 }
 
-/// Why `name`'s agent, which `protection` stopped, cannot be attached to.
-fn stopped_agent(name: &str, protection: &Protection) -> String {
+/// Why `target`'s agent, which `protection` stopped, cannot be attached to.
+fn stopped_agent(target: &Target, protection: &Protection) -> String {
     format!(
-        "{name}'s agent is stopped ({}) and resumes once {}; `shoal queue start --attach {name}` resumes it now and attaches",
-        protection.reason, protection.resumes_when
+        "{}'s agent is stopped ({}) and resumes once {}; `shoal queue start --attach {}` resumes it now and attaches",
+        target.name(),
+        protection.reason,
+        protection.resumes_when,
+        target.number()
     )
 }
 

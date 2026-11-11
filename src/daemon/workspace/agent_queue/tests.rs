@@ -295,9 +295,17 @@ async fn only_waiting_entries_can_be_removed() {
         .queue_remove(&starting.name, None)
         .await
         .unwrap_err();
-    let removed = manager.queue_remove("waiting", None).await.unwrap();
+    let removed = manager
+        .queue_remove(&manager.queued("waiting").await, None)
+        .await
+        .unwrap();
     assert_eq!(removed.name, "waiting");
-    assert!(manager.queue_remove("waiting", None).await.is_err());
+    assert!(
+        manager
+            .queue_remove(&manager.queued("waiting").await, None)
+            .await
+            .is_err()
+    );
     assert!(manager.queued_plan(&starting.id).await.is_ok());
 }
 
@@ -862,7 +870,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     // Without a limit the daemon still starts it rather than the caller.
     let admission = manager
         .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::parse(&child.name)),
+            workspace: Some(SpaceSelector::id(&child.id)),
             ..request(&repo, "child", false)
         })
         .await
@@ -890,7 +898,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
 
     manager
         .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::parse(&child.name)),
+            workspace: Some(SpaceSelector::id(&child.id)),
             ..request(&other, "foreign", false)
         })
         .await
@@ -973,9 +981,9 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         )
         .await;
     for (workspace, allowed) in [
-        (Some(&child.name), true),
-        (Some(&parent.name), false),
-        (Some(&sibling.name), false),
+        (Some(&child.id), true),
+        (Some(&parent.id), false),
+        (Some(&sibling.id), false),
         (None, false),
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
@@ -990,7 +998,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     } // Only the user starts one regardless of the limits.
     let mut method = crate::protocol::QueueMethod::QueueAdd {
         request: QueueRequest {
-            workspace: Some(SpaceSelector::parse(&child.name)),
+            workspace: Some(SpaceSelector::id(&child.id)),
             ..request(&repo, "launch", true)
         },
     };
@@ -1072,7 +1080,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
         .set_agent_state(
-            &SpaceSelector::from(&idle.name),
+            &SpaceSelector::id(&idle.id),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
             None,
@@ -1088,7 +1096,10 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     // Until its processes are proven stopped the agent keeps its slot.
     let held = add(&manager, &repo, "held").await;
     assert!(!held.start);
-    manager.queue_remove("held", None).await.unwrap();
+    manager
+        .queue_remove(&manager.queued("held").await, None)
+        .await
+        .unwrap();
     let restoring = await_restore(&manager, &execution).await;
     // Healthy readings do not restore it, and its slot is free for a launch.
     publish_recovery(&manager);
@@ -1102,7 +1113,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     // An update makes it due; it waits for the launch's slot like a launch.
     manager
         .send_agent_message(
-            &SpaceSelector::from(&idle.name),
+            &SpaceSelector::id(&idle.id),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -1135,7 +1146,7 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
         .set_agent_state(
-            &SpaceSelector::from(&idle.name),
+            &SpaceSelector::id(&idle.id),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
             None,
@@ -1176,7 +1187,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
         .set_agent_state(
-            &SpaceSelector::from(&idle.name),
+            &SpaceSelector::id(&idle.id),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
             None,
@@ -1194,7 +1205,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let restoring = await_restore(&manager, &execution).await;
     manager
         .send_agent_message(
-            &SpaceSelector::from(&idle.name),
+            &SpaceSelector::id(&idle.id),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,

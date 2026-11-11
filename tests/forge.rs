@@ -83,6 +83,12 @@ fn json_output(mut command: Command, args: &[&str]) -> Value {
 }
 
 impl Fixture {
+    /// The ID of the space named `name`, which commands select it by,
+    /// since a name never does.
+    fn id(&self, name: &str) -> String {
+        support::daemon_client::space_id(self.root.path(), name)
+    }
+
     /// `config` names the forge's host as `{forge}` and its type as `{type}`;
     /// unless `config` sets the host's table, its type is pinned and the user
     /// has the token `usertoken` there.
@@ -211,7 +217,7 @@ impl Fixture {
 
     /// The `topic` workspace's directory.
     fn topic(&self) -> PathBuf {
-        let status = self.ok(&["status", "topic"]);
+        let status = self.ok(&["status", &self.id("topic")]);
         PathBuf::from(status["workspace"]["path"].as_str().unwrap())
     }
 
@@ -272,7 +278,7 @@ fn item_actions_send_rest_requests_and_record_events() {
             ],
             "PUT repos/team/project/issues/8/labels": {"body": []},
         }));
-        let action = json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+        let action = json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
             "action": {"action": "edit", "add_labels": ["ready"]}}});
         let response = fixture.request(action);
         assert_eq!(response["type"], "item", "{response}");
@@ -318,8 +324,10 @@ fn item_actions_send_rest_requests_and_record_events() {
             format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
             "POST repos/team/project/issues/8/comments": {"status": 403, "body": {"message": "no write access"}},
         }));
-        let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
-            "item": "8", "action": {"action": "comment", "body": "hi"}}}));
+        let refused = fixture.request(
+            json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr",
+            "item": "8", "action": {"action": "comment", "body": "hi"}}}),
+        );
         assert_eq!(refused["type"], "error");
         assert!(
             refused["data"]["message"]
@@ -339,7 +347,7 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
     let put = "PUT repos/team/project/issues/8/labels";
     let edit = |add: &str| {
         fixture.request(
-            json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+            json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
             "action": {"action": "edit", "add_labels": [add]}}}),
         )
     };
@@ -417,7 +425,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
             {"name": "priority/high", "description": "", "exclusive": true},
         ])
     );
-    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", "topic"]);
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", &fixture.id("topic")]);
     assert_eq!(
         reviewers,
         json!([
@@ -441,7 +449,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
     fixture.respond(responses);
     let labels = fixture.ok_in_topic(&["repo", "labels"]);
     assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
-    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", "topic"]);
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", &fixture.id("topic")]);
     assert_eq!(
         reviewers,
         json!([{"name": "kim", "display_name": "Kim Lee", "team": false}])
@@ -472,7 +480,7 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
             {"body": [{"slug": "core", "name": "Core"}]},
         "GET repos/team/project/pulls/8": {"body": pr},
     }));
-    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", "topic"]);
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", &fixture.id("topic")]);
     assert_eq!(
         reviewers,
         json!([
@@ -559,7 +567,8 @@ fn apps_read_forge_items_through_the_daemon() {
         scope: None,
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let workspace = || ItemContext::Workspace("topic".parse().unwrap());
+    let topic = fixture.id("topic");
+    let workspace = || ItemContext::Workspace(topic.parse().unwrap());
     let repository = fixture.ok(&["repo", "ls"])[0]["id"]
         .as_str()
         .unwrap()
@@ -677,7 +686,7 @@ fn apps_read_forge_items_through_the_daemon() {
 
     // A workspace's agent reads as its agent account, and only from its
     // workspace.
-    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+    let scope = fixture.ok(&["internal", "env", &fixture.id("topic")])["SHOAL_SCOPE_TOKEN"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -756,7 +765,7 @@ fn apps_read_forge_items_through_the_daemon() {
 /// Add the label `ready` to PR 8 of the workspace's repository.
 fn label_pr(fixture: &Fixture) -> Value {
     fixture.request(
-        json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+        json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
         "action": {"action": "edit", "add_labels": ["ready"]}}}),
     )
 }
@@ -829,7 +838,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     assert_eq!(requests[0][2], "Bearer enterprise", "{requests:?}");
     // A pasted link of the host names its forge before anything is asked.
     let url = "https://ghe.invalid/team/project/pull/8";
-    let linked = fixture.ok(&["link", url, "related", "--space", "topic"]);
+    let linked = fixture.ok(&["link", url, "related", "--space", &fixture.id("topic")]);
     assert_eq!(linked["registered"], true, "{linked}");
     keys(&fixture);
 
@@ -887,7 +896,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
         ],
     );
     let url = "https://gitlab.invalid/team/project/issues/7";
-    let linked = fixture.ok(&["link", url, "related", "--space", "topic"]);
+    let linked = fixture.ok(&["link", url, "related", "--space", &fixture.id("topic")]);
     assert_eq!(linked["registered"], true, "{linked}");
 
     git(
@@ -987,7 +996,7 @@ fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
     assert_eq!(chat["type"], "chat", "{chat}");
     // Nothing linked marks the chat itself, at its checkout's HEAD.
     let head = git(&fixture.repo, &["rev-parse", "HEAD"]);
-    let marks = fixture.ok(&["ready", "--space", "planning"]);
+    let marks = fixture.ok(&["ready", "--space", &fixture.id("planning")]);
     assert_eq!(marks[0]["url"], Value::Null, "{marks}");
     assert_eq!(marks[0]["head"], head.trim(), "{marks}");
     let inbox = fixture.ok(&["inbox"]);
@@ -1000,8 +1009,15 @@ fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
     let mut pr = pull(9, "open", "Fix", &[]);
     pr["head"]["sha"] = json!("prhead");
     fixture.respond(json!({"GET repos/team/project/pulls/9": {"body": pr}}));
-    fixture.ok(&["link", "pr", "9", "assigned", "--space", "planning"]);
-    let marks = fixture.ok(&["ready", "--space", "planning"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "9",
+        "assigned",
+        "--space",
+        &fixture.id("planning"),
+    ]);
+    let marks = fixture.ok(&["ready", "--space", &fixture.id("planning")]);
     let url = format!("{}/pulls/9", fixture.web);
     assert_eq!(
         (&marks[0]["url"], &marks[0]["head"]),
@@ -1015,7 +1031,13 @@ fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
         (&json!(url), &json!("prhead")),
         "{chats}"
     );
-    fixture.ok(&["ready", "--undo", "--no-draft", "--space", "planning"]);
+    fixture.ok(&[
+        "ready",
+        "--undo",
+        "--no-draft",
+        "--space",
+        &fixture.id("planning"),
+    ]);
     let chats = fixture.request(json!("list_chats"));
     assert_eq!(chats["data"][0].get("review"), None, "{chats}");
     agent.kill().unwrap();
@@ -1040,8 +1062,10 @@ fn changes_use_the_agent_account_and_merges_the_users() {
             "POST graphql": {"body": {"data": {}}},
         }));
         let act = |action: Value| {
-            fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
-                "item": "8", "action": action}}))
+            fixture.request(
+                json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr",
+                "item": "8", "action": action}}),
+            )
         };
         assert_eq!(
             act(json!({"action": "comment", "body": "hi"}))["type"],
@@ -1071,7 +1095,13 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
         format!("POST {endpoint}/update?style=merge"): {"body": null},
     }));
     let updated = fixture.ok(&[
-        "pr", "update", "8", "--space", "topic", "--method", "rebase",
+        "pr",
+        "update",
+        "8",
+        "--space",
+        &fixture.id("topic"),
+        "--method",
+        "rebase",
     ]);
     assert_eq!(
         updated["url"],
@@ -1082,7 +1112,7 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
     let scoped = fixture.run(&[
         "run",
         "--workspace",
-        "topic",
+        &fixture.id("topic"),
         "--",
         shoal,
         "pr",
@@ -1117,12 +1147,12 @@ fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
         "GET repos/team/project/pulls/8.diff": {"body": diff},
         "POST repos/team/project/pulls/8/reviews": {"body": {"id": 5}},
     }));
-    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+    let scope = fixture.ok(&["internal", "env", &fixture.id("topic")])["SHOAL_SCOPE_TOKEN"]
         .as_str()
         .unwrap()
         .to_owned();
     let review = |verdict: &str, comments: Value| {
-        json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+        json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
             "action": {"action": "review", "verdict": verdict, "body": "Close",
                 "comments": comments}}})
     };
@@ -1201,12 +1231,26 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
         })
     };
     fixture.respond(responses("open", &[]));
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let first = fixture.ok(&["watch", "pr", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let first = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
     fixture.requests();
 
-    let unjudged = fixture.run(&["pr", "review", "--space", "topic", "--body", "Hm"]);
+    let unjudged = fixture.run(&[
+        "pr",
+        "review",
+        "--space",
+        &fixture.id("topic"),
+        "--body",
+        "Hm",
+    ]);
     assert!(!unjudged.status.success(), "{unjudged:?}");
     let file = fixture.root.path().join("comments.json");
     fs::write(
@@ -1218,7 +1262,7 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
         "pr",
         "review",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--comment",
         "--line",
         "src/a.rs:2",
@@ -1242,7 +1286,7 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
 
     // The agent's own review is not reported back beside the closing.
     fixture.respond(responses("closed", &[5]));
-    let closed = fixture.ok(&["watch", "pr", "--space", "topic"]);
+    let closed = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     let kinds: Vec<_> = closed["updates"]
         .as_array()
         .unwrap()
@@ -1269,16 +1313,30 @@ fn watches_do_not_report_a_forgejo_reviewer_request_as_a_review() {
         })
     };
     fixture.respond(responses("open", json!([])));
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let first = fixture.ok(&["watch", "pr", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let first = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
 
-    fixture.ok(&["pr", "edit", "--space", "topic", "--add-reviewer", "lead"]);
+    fixture.ok(&[
+        "pr",
+        "edit",
+        "--space",
+        &fixture.id("topic"),
+        "--add-reviewer",
+        "lead",
+    ]);
     // Forgejo records the request as a review with no body or comments.
     let request = json!([{"id": 3, "body": "", "state": "REQUEST_REVIEW",
         "comments_count": 0, "user": {"login": "lead"}}]);
     fixture.respond(responses("closed", request));
-    let closed = fixture.ok(&["watch", "pr", "--space", "topic"]);
+    let closed = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     let kinds: Vec<_> = closed["updates"]
         .as_array()
         .unwrap()
@@ -1302,7 +1360,7 @@ fn review_threads_take_replies_and_ask_before_resolving_without_one() {
         "POST graphql": {"body": threads(json!([{"databaseId": 5}]))},
         format!("POST {endpoint}/comments/5/replies"): {"body": {}},
     }));
-    let pr = ["--space", "topic", "8"];
+    let pr = ["--space", &fixture.id("topic"), "8"];
 
     // Without a reply, a non-interactive resolve asks for one or for --yes.
     let unanswered = fixture.run(&[&["pr", "resolve", "5"][..], &pr].concat());
@@ -1372,7 +1430,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
             "position": 4, "original_position": 0, "resolver": null}]},
         format!("POST {endpoint}/reviews/3/comments"): {"body": {}},
     }));
-    let pr = ["--space", "topic", "8"];
+    let pr = ["--space", &fixture.id("topic"), "8"];
     fixture.ok(&[&["pr", "reply", "5", "--body", "Kept"][..], &pr].concat());
     assert!(fixture.requests().contains(&json!([
         format!("POST {endpoint}/reviews/3/comments"),
@@ -1410,7 +1468,7 @@ fn forgejo_views_keep_reviews_whose_comments_fail_and_retry_busy_lookups() {
             [{"status": 503, "body": {"message": "busy"}}, {"body": comment}],
         format!("GET {endpoint}/reviews/4/comments"): {"status": 403, "body": {"message": "no"}},
     }));
-    let view = &fixture.ok(&["view", "pr", "8", "--space", "topic"])[0];
+    let view = &fixture.ok(&["view", "pr", "8", "--space", &fixture.id("topic")])[0];
     assert_eq!(view["pr"]["auto_merge"], json!({"method": null}), "{view}");
     let reviews = view["reviews"].as_array().unwrap();
     assert_eq!(reviews[0]["comments"][0]["body"], "Nit", "{view}");
@@ -1447,7 +1505,14 @@ fn pr_views_count_the_base_commits_the_head_lacks() {
             compare: {"body": count},
             "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
         }));
-        let args = ["view", "pr", "8", "--space", "topic", "--no-comments"];
+        let args = [
+            "view",
+            "pr",
+            "8",
+            "--space",
+            &fixture.id("topic"),
+            "--no-comments",
+        ];
         let view = &fixture.ok(&args)[0];
         assert_eq!(view["pr"]["behind"], 3, "{view}");
 
@@ -1482,7 +1547,14 @@ fn pr_views_count_the_base_commits_the_head_lacks() {
         format!("GET {endpoint}"): {"body": request},
         format!("GET {endpoint}?include_diverged_commits_count=true"): {"body": counted},
     }));
-    let args = ["view", "pr", "8", "--space", "topic", "--no-comments"];
+    let args = [
+        "view",
+        "pr",
+        "8",
+        "--space",
+        &fixture.id("topic"),
+        "--no-comments",
+    ];
     let view = &fixture.ok(&args)[0];
     assert_eq!(view["pr"]["behind"], 2, "{view}");
 }
@@ -1494,7 +1566,14 @@ fn pr_views_list_the_reviewers() {
     closed["requested_reviewers"] = json!([{"login": "kim"}]);
     closed["requested_reviewers_teams"] = json!([{"name": "core"}]);
     fixture.respond(json!({"GET repos/team/project/pulls/8": {"body": closed}}));
-    let args = ["view", "pr", "8", "--space", "topic", "--no-comments"];
+    let args = [
+        "view",
+        "pr",
+        "8",
+        "--space",
+        &fixture.id("topic"),
+        "--no-comments",
+    ];
     let view = &fixture.ok(&args)[0];
     assert_eq!(
         view["pr"]["reviewers"],
@@ -1520,7 +1599,7 @@ fn views_count_reactions_and_mark_the_logins_own() {
         "GET repos/team/project/issues/comments/9/reactions":
             {"body": vec![reaction("eyes", "ann"); 50]},
     }));
-    let view = &fixture.ok(&["view", "issue", "3", "--space", "topic"])[0];
+    let view = &fixture.ok(&["view", "issue", "3", "--space", &fixture.id("topic")])[0];
     assert_eq!(
         view["reactions"],
         json!([{"content": "+1", "count": 2, "reacted": true},
@@ -1538,7 +1617,7 @@ fn views_count_reactions_and_mark_the_logins_own() {
     // Without a token, a public repository's reactions are still listed.
     fixture.write_config("");
     fixture.ok(&["daemon", "reload"]);
-    let view = &fixture.ok(&["view", "issue", "3", "--space", "topic"])[0];
+    let view = &fixture.ok(&["view", "issue", "3", "--space", &fixture.id("topic")])[0];
     assert_eq!(view["reactions"][0]["reacted"], false, "{view}");
     assert!(view.get("errors").is_none(), "{view}");
     assert!(
@@ -1562,14 +1641,22 @@ fn views_read_another_repositorys_item_by_its_url() {
         "GET repos/team/tool/issues/comments/9/reactions": {"body": []},
     }));
     let url = fixture.web.replace("team/project", "team/tool") + "/issues/5";
-    let view = &fixture.ok(&["view", &url, "--space", "topic"])[0];
+    let view = &fixture.ok(&["view", &url, "--space", &fixture.id("topic")])[0];
     assert_eq!(view["url"], url, "{view}");
     assert_eq!(view["title"], "Crash", "{view}");
     assert_eq!(view["comments"][0]["body"], "Same", "{view}");
     assert!(view.get("errors").is_none(), "{view}");
     assert_eq!(scoped(&fixture, &["view", &url])[0]["title"], "Crash");
     // Watching it stays limited to the workspace's repository.
-    let watched = fixture.run(&["watch", "issue", &url, "--space", "topic", "--timeout", "1"]);
+    let watched = fixture.run(&[
+        "watch",
+        "issue",
+        &url,
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "1",
+    ]);
     assert!(!watched.status.success(), "{watched:?}");
 }
 
@@ -1601,7 +1688,7 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
         "DELETE repos/team/project/issues/comments/6/reactions/3": {"status": 204},
         "GET repos/team/project/issues/8/reactions?per_page=100&page=1": {"body": [own(4, "heart")]},
     }));
-    let pr = ["--space", "topic", "8"];
+    let pr = ["--space", &fixture.id("topic"), "8"];
     let added = fixture.ok(&[&["pr", "react", "+1", "--comment", "5"][..], &pr].concat());
     assert_eq!(added["number"], 8, "{added}");
     fixture.ok(&[
@@ -1615,7 +1702,7 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
     // before anything is sent.
     let missing = fixture.run(&[&["pr", "react", "+1", "--comment", "99"][..], &pr].concat());
     assert!(!missing.status.success(), "{missing:?}");
-    let issue = ["issue", "react", "+1", "--space", "topic", "8"];
+    let issue = ["issue", "react", "+1", "--space", &fixture.id("topic"), "8"];
     assert!(!fixture.run(&issue).status.success());
     let mut writes = writes(&fixture);
     // The PR's review threads are read by GraphQL.
@@ -1669,7 +1756,7 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
             {"body": [{"content": "heart", "user": {"login": "Me"}}]},
         "DELETE repos/team/project/issues/comments/9/reactions": {"body": null},
     }));
-    let target = ["--space", "topic", "3"];
+    let target = ["--space", &fixture.id("topic"), "3"];
     fixture.ok(&[&["issue", "react", "eyes"][..], &target].concat());
     fixture.ok(&[
         &["issue", "react", "heart", "--comment", "9", "--remove"][..],
@@ -1709,13 +1796,27 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
         "PATCH repos/team/project/issues/comments/2":
             {"body": {"id": 2, "body": "Fixed", "user": {"login": "me"}}},
     }));
-    fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-    fixture.ok(&["watch", "issue", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "issue",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
     let note = fixture.root.path().join("note.md");
     fs::write(&note, "Fixed").unwrap();
     let edit = |comment: &str| {
         let body = note.to_str().unwrap();
-        let args = ["issue", "comment", "--space", "topic", "--edit", comment];
+        let args = [
+            "issue",
+            "comment",
+            "--space",
+            &fixture.id("topic"),
+            "--edit",
+            comment,
+        ];
         fixture.run(&[&args[..], &["--body-file", body]].concat())
     };
     let edited = edit("2");
@@ -1745,7 +1846,7 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
         "GET repos/team/project/issues/8": issue("closed"),
         "GET repos/team/project/issues/8/comments?limit=50&page=1": comments("Fixed"),
     }));
-    let closed = fixture.ok(&["watch", "issue", "--space", "topic"]);
+    let closed = fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
     let kinds: Vec<_> = closed["updates"]
         .as_array()
         .unwrap()
@@ -1774,7 +1875,15 @@ fn github_comment_edits_reach_inline_comments() {
         "PATCH repos/team/project/pulls/comments/5": {"body": {"id": 5, "body": "Why?"}},
     }));
     let edited = fixture.ok(&[
-        "pr", "comment", "--space", "topic", "8", "--edit", "5", "--body", "Why?",
+        "pr",
+        "comment",
+        "--space",
+        &fixture.id("topic"),
+        "8",
+        "--edit",
+        "5",
+        "--body",
+        "Why?",
     ]);
     assert_eq!(edited["number"], 8, "{edited}");
     let mut writes = writes(&fixture);
@@ -1820,7 +1929,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "comment",
         "8",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--body-file",
         &note,
         "--attach",
@@ -1852,7 +1961,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "comment",
         "8",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--attach",
         text.to_str().unwrap(),
     ]);
@@ -1872,7 +1981,15 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         ])
         .arg(&deleted)
         .arg(support::shoal_binary())
-        .args(["pr", "comment", "8", "--space", "topic", "--body", "Done"])
+        .args([
+            "pr",
+            "comment",
+            "8",
+            "--space",
+            &fixture.id("topic"),
+            "--body",
+            "Done",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -1902,7 +2019,15 @@ fn gitlab_uploads_send_a_form_as_the_agent() {
         format!("POST {project}/uploads"): {"status": 201, "body": {"url": "/uploads/1/login.png"}},
         format!("POST {project}/merge_requests/8/notes"): {"status": 201, "body": {"id": 5}},
     }));
-    fixture.ok(&["pr", "comment", "8", "--space", "topic", "--attach", &image]);
+    fixture.ok(&[
+        "pr",
+        "comment",
+        "8",
+        "--space",
+        &fixture.id("topic"),
+        "--attach",
+        &image,
+    ]);
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -1962,7 +2087,7 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
         "comment",
         "8",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--body-file",
         &note,
         "--attach",
@@ -2014,7 +2139,15 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
 
     // An edit without a description adds the files after the current one.
     let alt = format!("{image}#Login screen");
-    fixture.ok(&["issue", "edit", "3", "--space", "topic", "--attach", &alt]);
+    fixture.ok(&[
+        "issue",
+        "edit",
+        "3",
+        "--space",
+        &fixture.id("topic"),
+        "--attach",
+        &alt,
+    ]);
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -2032,7 +2165,15 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
     // A new issue opens naming its files, which then go into its description.
     let body = format!("Seen with ![]({image})");
     let opened = fixture.ok(&[
-        "issue", "open", "--space", "topic", "--title", "Flaky", "--body", &body, "--attach",
+        "issue",
+        "open",
+        "--space",
+        &fixture.id("topic"),
+        "--title",
+        "Flaky",
+        "--body",
+        &body,
+        "--attach",
         &image,
     ]);
     assert_eq!(opened["created"], true);
@@ -2069,7 +2210,15 @@ fn forgejo_sends_a_comments_files_again_while_the_forge_is_busy() {
         format!("PATCH {comments}"): [{"status": 502, "body": "bad gateway"}, {"body": {}}],
     }));
     fixture.ok(&[
-        "pr", "comment", "8", "--space", "topic", "--body", "Seen", "--attach", &image,
+        "pr",
+        "comment",
+        "8",
+        "--space",
+        &fixture.id("topic"),
+        "--body",
+        "Seen",
+        "--attach",
+        &image,
     ]);
     let sent: Vec<_> = fixture
         .requests()
@@ -2109,7 +2258,8 @@ fn forgejo_refuses_files_its_settings_refuse_before_posting() {
             &["pr", "comment", "8", "--body", "Seen"][..],
             &["issue", "open", "--title", "Flaky"],
         ] {
-            let refused = fixture.run(&[args, &["--space", "topic", "--attach", file]].concat());
+            let refused =
+                fixture.run(&[args, &["--space", &fixture.id("topic"), "--attach", file]].concat());
             assert!(
                 String::from_utf8_lossy(&refused.stderr).contains(refusal),
                 "{refused:?}"
@@ -2141,12 +2291,26 @@ fn watches_read_every_page_of_a_discussion() {
         }))
     };
     respond("first");
-    fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-    let first = fixture.ok(&["watch", "issue", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "issue",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let first = fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
     // Only the second page changes; the timeout is a hang guard.
     respond("edited");
-    let edited = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    let edited = fixture.ok(&[
+        "watch",
+        "issue",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     assert_eq!(edited["updates"][0]["kind"], "comment", "{edited}");
 }
 
@@ -2159,11 +2323,18 @@ fn watches_deliver_item_activity_while_git_fails_in_the_worktree() {
         "GET repos/team/project/issues/8/comments?limit=50&page=1":
             {"body": [{"id": 1, "body": "Hello?"}]},
     }));
-    fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
+    fixture.ok(&[
+        "link",
+        "issue",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let workspace = fixture.ok(&["status", &fixture.id("topic")])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".git"), "gitdir: missing\n").unwrap();
-    let result = fixture.ok(&["watch", "--space", "topic", "--timeout", "600"]);
+    let result = fixture.ok(&["watch", "--space", &fixture.id("topic"), "--timeout", "600"]);
     let updates = result["updates"].as_array().unwrap();
     assert!(
         updates.iter().any(|update| update["kind"] == "comment"),
@@ -2188,14 +2359,35 @@ fn watches_report_a_failed_item_lookup_without_failing() {
         "GET repos/team/project/issues/8": issue,
         comments: {"body": [{"id": 1, "body": "Hello?"}]},
     }));
-    fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-    let first = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    fixture.ok(&[
+        "link",
+        "issue",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let first = fixture.ok(&[
+        "watch",
+        "issue",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
 
     fixture.respond(json!({
         "GET repos/team/project/issues/8": {"status": 404, "body": {"message": "gone"}},
     }));
-    let failed = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    let failed = fixture.ok(&[
+        "watch",
+        "issue",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     let updates = failed["updates"].as_array().unwrap();
     assert_eq!(updates.len(), 1, "{failed}");
     assert_eq!(updates[0]["kind"], "lookup_failed", "{failed}");
@@ -2207,7 +2399,7 @@ fn watches_report_a_failed_item_lookup_without_failing() {
         "issue",
         "8",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--timeout",
         "600",
     ]);
@@ -2217,7 +2409,14 @@ fn watches_report_a_failed_item_lookup_without_failing() {
         "GET repos/team/project/issues/8": issue,
         comments: {"body": [{"id": 1, "body": "Hello?"}, {"id": 2, "body": "Back"}]},
     }));
-    let recovered = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    let recovered = fixture.ok(&[
+        "watch",
+        "issue",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     let updates = recovered["updates"].as_array().unwrap();
     assert_eq!(updates.len(), 1, "{recovered}");
     assert_eq!(updates[0]["kind"], "comment", "{recovered}");
@@ -2238,8 +2437,15 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "GET repos/team/project/issues/8": issue("open"),
         "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1]),
     }));
-    fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-    let first = fixture.ok(&["watch", "issue", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "issue",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let first = fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
 
     fixture.respond(json!({
@@ -2250,7 +2456,14 @@ fn watches_do_not_report_the_agents_own_comments_back() {
     let note = fixture.root.path().join("note.md");
     fs::write(&note, "comment 2").unwrap();
     let body = note.to_str().unwrap();
-    fixture.ok(&["issue", "comment", "--space", "topic", "--body-file", body]);
+    fixture.ok(&[
+        "issue",
+        "comment",
+        "--space",
+        &fixture.id("topic"),
+        "--body-file",
+        body,
+    ]);
     // A comment posted before attaching its files failed is the agent's too.
     let [_, image, _] = attachment_files(&fixture);
     fixture.respond(json!({
@@ -2260,7 +2473,14 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "POST repos/team/project/issues/comments/3/assets?name=login.png":
             {"status": 422, "body": {"message": "refused"}},
     }));
-    let failed = fixture.run(&["issue", "comment", "--space", "topic", "--attach", &image]);
+    let failed = fixture.run(&[
+        "issue",
+        "comment",
+        "--space",
+        &fixture.id("topic"),
+        "--attach",
+        &image,
+    ]);
     let stderr = String::from_utf8_lossy(&failed.stderr);
     assert!(!failed.status.success(), "{stderr}");
     // Closing in the web interface is someone else's change; the agent's own
@@ -2269,7 +2489,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "GET repos/team/project/issues/8": issue("closed"),
         "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1, 2, 3]),
     }));
-    let closed = fixture.ok(&["watch", "issue", "--space", "topic"]);
+    let closed = fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
     let kinds: Vec<_> = closed["updates"]
         .as_array()
         .unwrap()
@@ -2300,13 +2520,20 @@ fn watches_read_unchanged_items_as_not_modified() {
             }))
         };
         respond("open");
-        fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
-        let first = fixture.ok(&["watch", "issue", "--space", "topic"]);
+        fixture.ok(&[
+            "link",
+            "issue",
+            "8",
+            "assigned",
+            "--space",
+            &fixture.id("topic"),
+        ]);
+        let first = fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
         assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
         fixture.requests();
         // The remembered discussion stands for the one the forge did not send.
         respond("closed");
-        let closed = fixture.ok(&["watch", "issue", "--space", "topic"]);
+        let closed = fixture.ok(&["watch", "issue", "--space", &fixture.id("topic")]);
         assert_eq!(closed["updates"].as_array().unwrap().len(), 1, "{closed}");
         assert_eq!(closed["updates"][0]["kind"], "closed", "{closed}");
         let log = fs::read_to_string(fixture.root.path().join("forge/requests.jsonl")).unwrap();
@@ -2344,10 +2571,17 @@ fn a_rate_limited_forge_slows_watches_instead_of_failing_lookups() {
                 "state": "open", "body": "", "labels": [], "pull_request": null}},
             discussion_page(forge, 8): refusal,
         }));
-        fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
+        fixture.ok(&[
+            "link",
+            "issue",
+            "8",
+            "assigned",
+            "--space",
+            &fixture.id("topic"),
+        ]);
         let mut watch = fixture
             .command()
-            .args(["--json", "watch", "issue", "--space", "topic"])
+            .args(["--json", "watch", "issue", "--space", &fixture.id("topic")])
             .stdout(std::process::Stdio::piped())
             .spawn()
             .unwrap();
@@ -2395,13 +2629,13 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         "GET repos/team/project/issues/9": {"body": pr_issue},
         "GET repos/team/project/pulls/9": {"body": pr.clone()},
     }));
-    fixture.ok(&["link", "8", "assigned", "--space", "topic"]);
-    fixture.ok(&["link", "#9", "assigned", "--space", "topic"]);
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    fixture.ok(&["link", "8", "assigned", "--space", &fixture.id("topic")]);
+    fixture.ok(&["link", "#9", "assigned", "--space", &fixture.id("topic")]);
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
-    let marks = fixture.ok(&["ready", "#9", "--space", "topic"]);
+    let marks = fixture.ok(&["ready", "#9", "--space", &fixture.id("topic")]);
     assert_eq!(marks[0]["kind"], "pr", "{marks}");
     // Once the PR merges, `ready` marks only the issue and says why.
     let mut merged = pull(9, "merged", "Fix", &[]);
@@ -2410,22 +2644,29 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         "GET repos/team/project/issues/8": {"body": issue},
         "GET repos/team/project/pulls/9": {"body": merged},
     }));
-    let output = fixture.run(&["ready", "--space", "topic", "--json"]);
+    let output = fixture.run(&["ready", "--space", &fixture.id("topic"), "--json"]);
     assert!(output.status.success(), "{output:?}");
     let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(marks.as_array().unwrap().len(), 1, "{marks}");
     assert_eq!(marks[0]["kind"], "issue", "{marks}");
-    fixture.ok(&["unlink", "8", "assigned", "--space", "topic"]);
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    fixture.ok(&["unlink", "8", "assigned", "--space", &fixture.id("topic")]);
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert!(links["issue"].is_null(), "{links}");
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
     // Recorded relations name the kind without asking the forge, as forges
     // with separate issue and PR numbers need.
-    fixture.ok(&["link", "pr", "10", "related", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "10",
+        "related",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     fixture.respond(json!({}));
     fixture.requests();
-    fixture.ok(&["unlink", "10", "related", "--space", "topic"]);
+    fixture.ok(&["unlink", "10", "related", "--space", &fixture.id("topic")]);
     // The daemon's background syncs and polls may ask about other items.
     let asked: Vec<Value> = fixture
         .requests()
@@ -2437,7 +2678,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         })
         .collect();
     assert!(asked.is_empty(), "{asked:?}");
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
 }
 
@@ -2455,16 +2696,36 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
         "GET repos/team/project/commits/head/status?limit=50":
             {"body": {"total_count": 0, "statuses": []}},
     }));
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(links["prs"], json!([format!("{}/pulls/8", fixture.web)]));
-    let watched = fixture.ok(&["watch", "pr", "--space", "topic"]);
+    let watched = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     assert_eq!(watched["updates"][0]["kind"], "comment", "{watched}");
 
     // `view` shows every linked item with its relations.
-    fixture.ok(&["link", "pr", "10", "related", "--space", "topic"]);
-    fixture.ok(&["link", "pr", "8", "opened", "--space", "topic"]);
-    let output = fixture.run(&["view", "--space", "topic", "--no-comments", "--json"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "10",
+        "related",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    fixture.ok(&["link", "pr", "8", "opened", "--space", &fixture.id("topic")]);
+    let output = fixture.run(&[
+        "view",
+        "--space",
+        &fixture.id("topic"),
+        "--no-comments",
+        "--json",
+    ]);
     let shown: Value = serde_json::from_slice(&output.stdout).unwrap();
     let relations: Vec<_> = (shown.as_array().unwrap().iter())
         .map(|item| (item["url"].clone(), item["relations"].clone()))
@@ -2498,16 +2759,23 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         "GET repos/team/project/issues/3": {"body": issue},
         "POST repos/team/project/issues/3/comments": {"body": {}},
     }));
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     fixture.requests();
 
-    let nothing = fixture.run(&["pr", "edit", "--space", "topic"]);
+    let nothing = fixture.run(&["pr", "edit", "--space", &fixture.id("topic")]);
     assert!(!nothing.status.success(), "{nothing:?}");
     let edited = fixture.ok(&[
         "pr",
         "edit",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--title=-New",
         "--add-label",
         "ready",
@@ -2534,7 +2802,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         "comment",
         "3",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--body-file",
         note.to_str().unwrap(),
     ]);
@@ -2547,7 +2815,13 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     // Merging is the user's: a workspace process is refused before any request.
     let shoal = support::shoal_binary();
     let merge = ["pr", "merge", "--method", "rebase"];
-    let scoped = fixture.run(&[&["run", "--workspace", "topic", "--", shoal][..], &merge].concat());
+    let scoped = fixture.run(
+        &[
+            &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
+            &merge,
+        ]
+        .concat(),
+    );
     assert!(!scoped.status.success(), "{scoped:?}");
     assert!(fixture.requests().is_empty());
 }
@@ -2575,7 +2849,7 @@ fn issue_edits_set_assignees_and_milestones_that_views_show() {
         "edit",
         "3",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--add-assignee",
         "sam",
         "--remove-assignee",
@@ -2596,7 +2870,14 @@ fn issue_edits_set_assignees_and_milestones_that_views_show() {
     fixture.respond(json!({
         "GET repos/team/project/issues/3": {"body": issue(&["sam"], json!({"id": 9, "title": "v2"}))},
     }));
-    let args = ["view", "issue", "3", "--space", "topic", "--no-comments"];
+    let args = [
+        "view",
+        "issue",
+        "3",
+        "--space",
+        &fixture.id("topic"),
+        "--no-comments",
+    ];
     let view = &fixture.ok(&args)[0];
     assert_eq!(
         (&view["assignees"], &view["milestone"]),
@@ -2609,7 +2890,7 @@ fn issue_edits_set_assignees_and_milestones_that_views_show() {
         "edit",
         "3",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--milestone",
         "v2",
         "--clear-milestone",
@@ -2641,7 +2922,14 @@ fn issues_open_with_labels_and_link_on_request() {
             &[]
         };
         let open = [
-            "issue", "open", "--space", "topic", "--title", "Flaky", "--label", "bug",
+            "issue",
+            "open",
+            "--space",
+            &fixture.id("topic"),
+            "--title",
+            "Flaky",
+            "--label",
+            "bug",
         ];
         let opened = fixture.ok(&[&open[..], link].concat());
         let url = format!("{}/issues/40", fixture.web);
@@ -2651,7 +2939,7 @@ fn issues_open_with_labels_and_link_on_request() {
         assert_eq!(opened["linked"], forge == Forge::GitHub);
         // Linked or not, the issue is recorded as opened by the workspace.
         assert_eq!(
-            fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
+            fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["opened"],
             json!([{"kind": "issue", "url": url, "title": "Flaky"}])
         );
         let sent: Vec<_> = fixture
@@ -2669,7 +2957,7 @@ fn issues_open_with_labels_and_link_on_request() {
                         json!({"title": "Flaky", "body": "", "labels": ["bug"]})
                     )]
                 );
-                let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+                let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
                 assert_eq!(links["issue"], url);
                 assert_eq!(links["issue_title"], "Flaky");
             }
@@ -2714,7 +3002,14 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
         }));
         let expected = if forge == Forge::GitHub {
-            fixture.ok(&["link", "issue", "34", "assigned", "--space", "topic"]);
+            fixture.ok(&[
+                "link",
+                "issue",
+                "34",
+                "assigned",
+                "--space",
+                &fixture.id("topic"),
+            ]);
             json!({"title": "Fix API timeout", "body": "Closes #34", "head": "topic",
                 "base": "main", "draft": false})
         } else {
@@ -2722,7 +3017,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
         };
         fixture.requests();
 
-        let opened = fixture.ok(&["pr", "open", "--workspace", "topic"]);
+        let opened = fixture.ok(&["pr", "open", "--workspace", &fixture.id("topic")]);
         let url = format!(
             "{}/{}/9",
             fixture.web,
@@ -2743,16 +3038,17 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             .find(|request| request[0] == "POST repos/team/project/pulls")
             .unwrap();
         assert_eq!(created[1], expected);
-        let path = fixture.ok(&["status", "topic"])["workspace"]["path"].clone();
+        let path = fixture.ok(&["status", &fixture.id("topic")])["workspace"]["path"].clone();
         assert_eq!(
             git(&remote, &["rev-parse", "refs/heads/topic"]),
             git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
         );
-        let links = fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"].clone();
+        let links =
+            fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["prs"].clone();
         assert_eq!(links, json!([url]));
 
         // An open PR for the branch is linked instead of opening another.
-        fixture.ok(&["unlink", "pr", "assigned", "--space", "topic"]);
+        fixture.ok(&["unlink", "pr", "assigned", "--space", &fixture.id("topic")]);
         let mut responses: Value =
             serde_json::from_str(&fs::read_to_string(root.join("forge/responses.json")).unwrap())
                 .unwrap();
@@ -2760,7 +3056,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
         fork["head"]["repo"]["full_name"] = json!("someone/project");
         responses[list] = json!({"body": [fork, pull(9, "open", "Fix", &[])]});
         fixture.respond(responses);
-        let found = fixture.ok(&["pr", "open", "--workspace", "topic"]);
+        let found = fixture.ok(&["pr", "open", "--workspace", &fixture.id("topic")]);
         assert_eq!(
             (&found["url"], &found["created"]),
             (&json!(url), &json!(false))
@@ -2798,7 +3094,7 @@ fn pr_open_pushes_to_a_fork_and_opens_the_pr_from_it() {
     }));
     fixture.requests();
 
-    let result = fixture.ok(&["pr", "open", "--workspace", "topic"]);
+    let result = fixture.ok(&["pr", "open", "--workspace", &fixture.id("topic")]);
     assert_eq!(result["created"], json!(true));
     let created = fixture
         .requests()
@@ -2806,7 +3102,7 @@ fn pr_open_pushes_to_a_fork_and_opens_the_pr_from_it() {
         .find(|request| request[0] == "POST repos/team/project/pulls")
         .unwrap();
     assert_eq!(created[1]["head"], "someone:topic");
-    let path = fixture.ok(&["status", "topic"])["workspace"]["path"].clone();
+    let path = fixture.ok(&["status", &fixture.id("topic")])["workspace"]["path"].clone();
     assert_eq!(
         git(&fork, &["rev-parse", "refs/heads/topic"]),
         git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
@@ -2823,10 +3119,10 @@ fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
         &fixture.repo,
         &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
     );
-    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", &fixture.id("topic")])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap());
     let refused = || {
-        let output = fixture.run(&["pr", "open", "--workspace", "topic"]);
+        let output = fixture.run(&["pr", "open", "--workspace", &fixture.id("topic")]);
         assert!(!output.status.success(), "{output:?}");
         let pushed = support::isolated(root, "git")
             .args([
@@ -2866,7 +3162,7 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
         "merge",
         "8",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--method",
         "squash",
         "--delete-branch",
@@ -2907,8 +3203,13 @@ fn delete_branch_deletes_an_ended_prs_branch_unless_it_moved() {
     };
     let branch = |commit: &str| json!({"body": {"commit": {"id": commit}}});
     let delete = |args: &[&str]| {
-        let output =
-            fixture.run(&[&["pr", "delete-branch", "8", "--space", "topic"], args].concat());
+        let output = fixture.run(
+            &[
+                &["pr", "delete-branch", "8", "--space", &fixture.id("topic")],
+                args,
+            ]
+            .concat(),
+        );
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         (output.status.success(), stdout, stderr)
@@ -2962,7 +3263,7 @@ fn delete_branch_deletes_an_ended_prs_branch_unless_it_moved() {
     let scoped = fixture.run(&[
         "run",
         "--workspace",
-        "topic",
+        &fixture.id("topic"),
         "--",
         shoal,
         "pr",
@@ -2987,7 +3288,8 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
     let open = json!({"body": pull(8, "open", "Fix", &[])});
     fixture.respond(responses(open.clone()));
     let merge = |args: &[&str]| {
-        let output = fixture.run(&[&["pr", "merge", "8", "--space", "topic"], args].concat());
+        let output =
+            fixture.run(&[&["pr", "merge", "8", "--space", &fixture.id("topic")], args].concat());
         let text = String::from_utf8_lossy(&output.stdout).into_owned();
         (output.status.success(), text)
     };
@@ -3139,11 +3441,11 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
             .all(|request| request[2] == "token usertoken")
     );
 
-    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+    let scope = fixture.ok(&["internal", "env", &fixture.id("topic")])["SHOAL_SCOPE_TOKEN"]
         .as_str()
         .unwrap()
         .to_owned();
-    let method = json!({"list_items": {"workspace": "topic", "kind": "pr",
+    let method = json!({"list_items": {"workspace": fixture.id("topic"), "kind": "pr",
         "search": {"state": "closed", "labels": ["bug"], "author": "dev", "text": "crash",
             "limit": 5}}});
     let result = fixture.request_as(method, Some(&scope));
@@ -3199,13 +3501,20 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
         "GET repos/team/project/issues/34": {"body": {"number": 34, "state": "open",
             "title": "Assignment", "body": "", "labels": []}},
     }));
-    fixture.ok(&["link", "issue", "34", "assigned", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "issue",
+        "34",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     fixture.requests();
     let output = fixture.run(&[
         "issue",
         "open",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--title",
         "Follow-up",
         "--link",
@@ -3219,9 +3528,9 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut responses = failed_check_responses();
     fixture.respond(responses.clone());
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
-    let method = json!({"check_log": {"workspace": "topic", "selection": {"kind": "pr", "input": "8"}, "check": "rust"}});
+    let method = json!({"check_log": {"workspace": fixture.id("topic"), "selection": {"kind": "pr", "input": "8"}, "check": "rust"}});
     let result = fixture.request_as(method.clone(), Some(scope));
     assert_eq!(result["type"], "check_log", "{result}");
     assert_eq!(result["data"]["failed_step"], "Main Test");
@@ -3271,7 +3580,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
         "HEAD",
     ]);
     let mut other = method.clone();
-    other["check_log"]["workspace"] = json!("other");
+    other["check_log"]["workspace"] = json!(fixture.id("other"));
     assert_eq!(
         fixture.request_as(other, Some(scope))["data"]["code"],
         "scope_denied"
@@ -3364,7 +3673,14 @@ fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_check
             (job, log, responses)
         };
         fixture.respond(responses);
-        let read = ["view", "pr", "8", "--space", "topic", "--check"];
+        let read = [
+            "view",
+            "pr",
+            "8",
+            "--space",
+            &fixture.id("topic"),
+            "--check",
+        ];
         let result = fixture.ok(&[&read[..], &["rust"]].concat());
         assert_eq!(result["job_url"], job, "{result}");
         assert_eq!(result["text"], "assertion failed\n", "{result}");
@@ -3408,7 +3724,7 @@ esac
 "#,
     );
     let result = fixture.request(json!({"check_log": {
-        "workspace": "topic", "selection": {"kind": "pr", "input": "8"}, "check": "rust"
+        "workspace": fixture.id("topic"), "selection": {"kind": "pr", "input": "8"}, "check": "rust"
     }}));
     let message = result["data"]["message"].as_str().unwrap();
     assert!(message.contains("exceeded"), "{result}");
@@ -3425,10 +3741,26 @@ fn view_prints_check_logs_and_reports_lookup_errors() {
         }
         fixture.respond(responses);
         if available {
-            let log = fixture.ok(&["view", "pr", "8", "--space", "topic", "--check", "rust"]);
+            let log = fixture.ok(&[
+                "view",
+                "pr",
+                "8",
+                "--space",
+                &fixture.id("topic"),
+                "--check",
+                "rust",
+            ]);
             assert_eq!(log["failed_step"], "Main Test");
         } else {
-            let result = fixture.run(&["view", "pr", "8", "--space", "topic", "--check", "rust"]);
+            let result = fixture.run(&[
+                "view",
+                "pr",
+                "8",
+                "--space",
+                &fixture.id("topic"),
+                "--check",
+                "rust",
+            ]);
             assert!(!result.status.success());
         }
     }
@@ -3529,10 +3861,18 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet(ou
         ]
     }});
     fixture.respond(responses);
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     fixture.requests();
+    let topic_id = fixture.id("topic");
     for no_comments in [false, true] {
-        let mut args = vec!["view", "--space", "topic"];
+        let mut args = vec!["view", "--space", &topic_id];
         if no_comments {
             args.push("--no-comments");
         }
@@ -3604,7 +3944,15 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
             json!({"body": [{"id": 1, "body": "A review is ready", "user": {"login": "bot"}}]});
         responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
         fixture.respond(responses);
-        let result = fixture.ok(&["watch", "pr", "8", "--space", "topic", "--timeout", "60"]);
+        let result = fixture.ok(&[
+            "watch",
+            "pr",
+            "8",
+            "--space",
+            &fixture.id("topic"),
+            "--timeout",
+            "60",
+        ]);
         let updates = result["updates"].as_array().unwrap();
         assert!(
             updates.iter().any(|update| update["kind"] == "comment"),
@@ -3641,7 +3989,14 @@ fn status_finds_the_chats_that_link_a_pr() {
     fixture.respond(
         json!({"GET repos/team/project/pulls/12": {"body": pull(12, "open", "Fix", &[])}}),
     );
-    fixture.ok(&["link", "pr", "12", "assigned", "--space", "planning"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "12",
+        "assigned",
+        "--space",
+        &fixture.id("planning"),
+    ]);
 
     let found = fixture.ok(&["status", "pr", "12"]);
     let found = found.as_array().unwrap();
@@ -3681,15 +4036,37 @@ fn a_chats_watch_reports_the_failed_step_of_a_check() {
     responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
     fixture.respond(responses);
     // The chat reads the check's log from its repository's checkout.
-    let result = fixture.ok(&["watch", "pr", "8", "--space", "planning", "--timeout", "60"]);
+    let result = fixture.ok(&[
+        "watch",
+        "pr",
+        "8",
+        "--space",
+        &fixture.id("planning"),
+        "--timeout",
+        "60",
+    ]);
     let ci = (result["updates"].as_array().unwrap().iter())
         .find(|update| update["kind"] == "ci_completed")
         .unwrap_or_else(|| panic!("{result}"));
     let message = ci["message"].as_str().unwrap();
     assert!(message.contains("Main Test"), "{message}");
     // Without a number the log is the chat's linked PR's.
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "planning"]);
-    let log = fixture.ok(&["view", "pr", "--space", "planning", "--check", "rust"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("planning"),
+    ]);
+    let log = fixture.ok(&[
+        "view",
+        "pr",
+        "--space",
+        &fixture.id("planning"),
+        "--check",
+        "rust",
+    ]);
     assert!(
         log["text"].as_str().unwrap().contains("assertion failed"),
         "{log}"
@@ -3720,13 +4097,33 @@ fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
             ]}},
         "GET repos/team/project/actions/jobs/34/logs": {"body": "assertion failed\n"},
     }));
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let views = fixture.ok(&["view", "pr", "--no-comments", "--space", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let views = fixture.ok(&[
+        "view",
+        "pr",
+        "--no-comments",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     let logs = views[0]["check_logs"].as_array().unwrap();
     assert_eq!(logs.len(), 1, "{views}");
     assert_eq!(logs[0]["name"], "rust");
     assert_eq!(logs[0]["text"], "assertion failed\n");
-    let result = fixture.ok(&["watch", "pr", "--space", "topic", "--timeout", "60"]);
+    let result = fixture.ok(&[
+        "watch",
+        "pr",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "60",
+    ]);
     let message = |name: &str| {
         result["updates"]
             .as_array()
@@ -3768,8 +4165,10 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
         "POST repos/team/project/actions/runs/2/cancel": {"status": 202},
     }));
     let ci = |action: &str, checks: Value| {
-        fixture.request(json!({"ci_action": {"workspace": "topic", "item": "8",
-            "action": action, "checks": checks}}))
+        fixture.request(
+            json!({"ci_action": {"workspace": fixture.id("topic"), "item": "8",
+            "action": action, "checks": checks}}),
+        )
     };
     let posts = || {
         fixture
@@ -3814,13 +4213,21 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     assert!(posts().is_empty());
 
     let rerun = fixture.ok(&[
-        "ci", "rerun", "--pr", "8", "--check", "rust", "--space", "topic",
+        "ci",
+        "rerun",
+        "--pr",
+        "8",
+        "--check",
+        "rust",
+        "--space",
+        &fixture.id("topic"),
     ]);
     assert_eq!(rerun["checks"], json!(["rust"]), "{rerun}");
     assert_eq!(posts(), ["POST repos/team/project/actions/jobs/11/rerun"]);
 
     // A registered checkout acts too, but links nothing to default to.
-    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let repository =
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["repository_id"].clone();
     let in_checkout = |item: Value| {
         fixture.request(json!({"ci_action": {"checkout": repository, "item": item,
             "action": "rerun", "checks": ["rust"]}}))
@@ -3850,11 +4257,11 @@ fn forgejo_ci_cancels_runs_and_reruns_jobs_from_release_17_as_the_scoped_agent()
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     });
     fixture.respond(responses.clone());
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let ci = |action: &str| {
         fixture.request_as(
-            json!({"ci_action": {"workspace": "topic", "item": "8", "action": action,
+            json!({"ci_action": {"workspace": fixture.id("topic"), "item": "8", "action": action,
                 "checks": []}}),
             Some(scope),
         )
@@ -3921,7 +4328,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         "run",
         "deps.yml",
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--input",
         "level=full",
         "--input",
@@ -3938,11 +4345,11 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
     );
 
     // Workspace processes start runs only on their own branch.
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let start = |branch: &str| {
         fixture.request_as(
-            json!({"start_ci_run": {"workspace": "topic", "workflow": "deps.yml",
+            json!({"start_ci_run": {"workspace": fixture.id("topic"), "workflow": "deps.yml",
                 "branch": branch, "inputs": {}}}),
             Some(scope),
         )
@@ -3956,7 +4363,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         writes(&fixture),
         [json!([dispatch, {"ref": "topic", "inputs": {}}])]
     );
-    let unscoped = fixture.request(json!({"start_ci_run": {"workspace": "topic",
+    let unscoped = fixture.request(json!({"start_ci_run": {"workspace": fixture.id("topic"),
         "workflow": "deps.yml", "branch": "main", "inputs": {}}}));
     assert_eq!(unscoped["data"]["branch"], "main", "{unscoped}");
 
@@ -3986,7 +4393,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
     }));
     // A workflow's page in the workspace's repository runs on its branch.
     let page = "https://github.com/team/project/actions/workflows/deps.yml";
-    let started = fixture.ok(&["ci", "run", page, "--space", "topic"]);
+    let started = fixture.ok(&["ci", "run", page, "--space", &fixture.id("topic")]);
     assert_eq!(
         started,
         json!({"workflow": "deps.yml", "branch": "topic"}),
@@ -3994,7 +4401,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
     );
     // A workflow file's URL also names the branch.
     let file = "https://github.com/team/project/blob/release/1/.github/workflows/deps.yml";
-    let started = fixture.ok(&["ci", "run", file, "--space", "topic"]);
+    let started = fixture.ok(&["ci", "run", file, "--space", &fixture.id("topic")]);
     assert_eq!(started["branch"], "release/1", "{started}");
     assert_eq!(
         writes(&fixture),
@@ -4026,7 +4433,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
         "run",
         "https://github.com/other/tool/actions/workflows/ci.yml",
         "--space",
-        "topic",
+        &fixture.id("topic"),
     ]);
     assert!(
         String::from_utf8_lossy(&output.stdout).contains(
@@ -4048,7 +4455,7 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
     }));
     let other = fixture.web.replace("/team/project", "/other/project");
     let page = format!("{other}/actions?workflow=deps.yml");
-    let started = fixture.ok(&["ci", "run", &page, "--space", "topic"]);
+    let started = fixture.ok(&["ci", "run", &page, "--space", &fixture.id("topic")]);
     assert_eq!(
         (&started["branch"], &started["url"], &started["linked"]),
         (
@@ -4058,7 +4465,7 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
         ),
         "{started}"
     );
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(links["opened"][0]["url"], started["url"], "{links}");
     assert_eq!(
         writes(&fixture),
@@ -4066,7 +4473,7 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
     );
 
     // Workspace processes start runs only in their repository, on their branch.
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let own_file = format!(
         "{}/src/branch/main/.forgejo/workflows/deps.yml",
@@ -4180,8 +4587,11 @@ fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
 
     // With nothing linked, runs are listed and start on the default branch,
     // and the chat follows the run it started.
-    assert_eq!(fixture.ok(&["ci", "ls", "--space", "planning"]), json!([]));
-    let started = fixture.ok(&["ci", "run", "deps.yml", "--space", "planning"]);
+    assert_eq!(
+        fixture.ok(&["ci", "ls", "--space", &fixture.id("planning")]),
+        json!([])
+    );
+    let started = fixture.ok(&["ci", "run", "deps.yml", "--space", &fixture.id("planning")]);
     assert_eq!(
         (&started["branch"], &started["linked"]),
         (&json!("main"), &json!(true)),
@@ -4196,11 +4606,18 @@ fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
     assert_eq!(opened[0]["url"], started["url"], "{chats}");
 
     // A linked PR's head is where its runs and checks are.
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "planning"]);
-    let runs = fixture.ok(&["ci", "ls", "--space", "planning"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("planning"),
+    ]);
+    let runs = fixture.ok(&["ci", "ls", "--space", &fixture.id("planning")]);
     let url = format!("{}/actions/runs/2765", fixture.web);
     assert_eq!(runs[0]["url"], url, "{runs}");
-    let cancelled = fixture.ok(&["ci", "cancel", "--space", "planning"]);
+    let cancelled = fixture.ok(&["ci", "cancel", "--space", &fixture.id("planning")]);
     assert_eq!(cancelled["checks"], json!(["rust"]), "{cancelled}");
     assert_eq!(
         writes(&fixture),
@@ -4220,7 +4637,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
     fixture.respond(json!({
         dispatch: {"status": 201, "body": {"id": 9331, "run_number": 2765, "jobs": ["audit"]}},
     }));
-    let started = fixture.ok(&["ci", "run", "deps.yml", "--space", "topic"]);
+    let started = fixture.ok(&["ci", "run", "deps.yml", "--space", &fixture.id("topic")]);
     assert_eq!(
         started["url"],
         format!("{}/actions/runs/2765", fixture.web),
@@ -4232,13 +4649,13 @@ fn forgejo_ci_runs_link_the_run_they_start() {
     );
     // The run is linked as opened, so watches follow it.
     assert_eq!(started["linked"], true, "{started}");
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(
         links["opened"],
         json!([{"kind": "ci", "url": started["url"], "title": "deps.yml"}]),
         "{links}"
     );
-    let output = fixture.run(&["ci", "run", "--space", "topic"]);
+    let output = fixture.run(&["ci", "run", "--space", &fixture.id("topic")]);
     assert!(!output.status.success(), "{output:?}");
 }
 
@@ -4261,11 +4678,18 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     respond("running");
     let url = format!("{}/actions/runs/2765", fixture.web);
     // Assigned items drive completion, so a run is only opened or related.
-    let output = fixture.run(&["link", "ci", "2765", "assigned", "--space", "topic"]);
+    let output = fixture.run(&[
+        "link",
+        "ci",
+        "2765",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert!(!output.status.success(), "{output:?}");
     let job = format!("{url}/jobs/0");
-    fixture.ok(&["link", &job, "related", "--space", "topic"]);
-    let viewed = fixture.ok(&["view", "--space", "topic"]);
+    fixture.ok(&["link", &job, "related", "--space", &fixture.id("topic")]);
+    let viewed = fixture.ok(&["view", "--space", &fixture.id("topic")]);
     assert_eq!(
         (&viewed[0]["kind"], &viewed[0]["url"], &viewed[0]["state"]),
         (&json!("ci"), &json!(url), &json!("running")),
@@ -4280,10 +4704,24 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     }
 
     // A running run has nothing to report, so this wait can only time out.
-    let running = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "1"]);
+    let running = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "1",
+    ]);
     assert_eq!(running["updates"], json!([]), "{running}");
     respond("failure");
-    let finished = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "600"]);
+    let finished = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     let update = &finished["updates"][0];
     assert_eq!(
         (&update["url"], &update["kind"]),
@@ -4293,18 +4731,46 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     let message = update["message"].as_str().unwrap_or_default();
     assert!(message.contains("Tests"), "{finished}");
     // The run's watch has ended, but it stays linked.
-    let output = fixture.run(&["watch", "ci", "--space", "topic", "--timeout", "600"]);
+    let output = fixture.run(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     assert!(!output.status.success(), "{output:?}");
-    let viewed = fixture.ok(&["view", "ci", "--space", "topic"]);
+    let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("topic")]);
     assert_eq!(viewed[0]["state"], "failed", "{viewed}");
-    let output = fixture.run(&["ready", "ci", "--space", "topic"]);
+    let output = fixture.run(&["ready", "ci", "--space", &fixture.id("topic")]);
     assert!(!output.status.success(), "{output:?}");
-    fixture.ok(&["unlink", "ci", "2765", "related", "--space", "topic"]);
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    fixture.ok(&[
+        "unlink",
+        "ci",
+        "2765",
+        "related",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
     // Unlinking drops the run's cursor, so linking it again watches it afresh.
-    fixture.ok(&["link", "ci", "2765", "opened", "--space", "topic"]);
-    let again = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "600"]);
+    fixture.ok(&[
+        "link",
+        "ci",
+        "2765",
+        "opened",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let again = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     assert_eq!(again["updates"][0]["kind"], "ci_completed", "{again}");
 }
 
@@ -4337,9 +4803,23 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     respond("running");
     let run = format!("{}/actions/runs/2765", fixture.web);
     let pr = format!("{}/pulls/9", fixture.web);
-    fixture.ok(&["link", "ci", "2765", "related", "--space", "planning"]);
-    fixture.ok(&["link", "pr", "9", "assigned", "--space", "planning"]);
-    let selected = fixture.request(json!({"select_items": {"chat": "planning",
+    fixture.ok(&[
+        "link",
+        "ci",
+        "2765",
+        "related",
+        "--space",
+        &fixture.id("planning"),
+    ]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "9",
+        "assigned",
+        "--space",
+        &fixture.id("planning"),
+    ]);
+    let selected = fixture.request(json!({"select_items": {"chat": fixture.id("planning"),
         "selection": {"kind": null, "input": null}}}));
     let urls: Vec<&Value> = selected["data"]["items"]
         .as_array()
@@ -4353,24 +4833,65 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     let links = &chats["data"][0]["links"];
     assert_eq!(links["prs"], json!([pr]), "{chats}");
     assert_eq!(links["related"][0]["url"], json!(run), "{chats}");
-    let viewed = fixture.ok(&["view", "ci", "--space", "planning"]);
+    let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("planning")]);
     assert_eq!(viewed[0]["state"], "running", "{viewed}");
 
     // The chat watches its run until it finishes, as a workspace does.
-    let running = fixture.ok(&["watch", "ci", "--space", "planning", "--timeout", "1"]);
+    let running = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("planning"),
+        "--timeout",
+        "1",
+    ]);
     assert_eq!(running["updates"], json!([]), "{running}");
     respond("failure");
-    let finished = fixture.ok(&["watch", "ci", "--space", "planning", "--timeout", "600"]);
+    let finished = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("planning"),
+        "--timeout",
+        "600",
+    ]);
     assert_eq!(finished["updates"][0]["kind"], "ci_completed", "{finished}");
-    fixture.ok(&["unlink", "pr", "9", "assigned", "--space", "planning"]);
-    fixture.ok(&["unlink", "ci", "2765", "related", "--space", "planning"]);
+    fixture.ok(&[
+        "unlink",
+        "pr",
+        "9",
+        "assigned",
+        "--space",
+        &fixture.id("planning"),
+    ]);
+    fixture.ok(&[
+        "unlink",
+        "ci",
+        "2765",
+        "related",
+        "--space",
+        &fixture.id("planning"),
+    ]);
     // A bare number names the kind of the chat's item under any relation,
     // without asking the forge.
-    fixture.ok(&["link", "pr", "11", "related", "--space", "planning"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "11",
+        "related",
+        "--space",
+        &fixture.id("planning"),
+    ]);
     fixture.requests();
-    fixture.ok(&["unlink", "11", "related", "--space", "planning"]);
+    fixture.ok(&[
+        "unlink",
+        "11",
+        "related",
+        "--space",
+        &fixture.id("planning"),
+    ]);
     assert_eq!(fixture.requests(), Vec::<Value>::new());
-    let selected = fixture.request(json!({"select_items": {"chat": "planning",
+    let selected = fixture.request(json!({"select_items": {"chat": fixture.id("planning"),
         "selection": {"kind": null, "input": null}}}));
     assert_eq!(selected["data"]["items"], json!([]), "{selected}");
     agent.kill().unwrap();
@@ -4398,23 +4919,42 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
         "POST repos/team/project/actions/runs/21/approve": {"status": 201},
     }));
     let waiting = json!([{"url": url(21), "workflow": "ci.yml"}]);
-    let view = &fixture.ok(&["view", "pr", "8", "--no-comments", "--space", "topic"])[0];
+    let view = &fixture.ok(&[
+        "view",
+        "pr",
+        "8",
+        "--no-comments",
+        "--space",
+        &fixture.id("topic"),
+    ])[0];
     assert_eq!(view["pr"]["checks"], json!([]), "{view}");
     assert_eq!(view["pr"]["waiting_runs"], waiting, "{view}");
-    fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
-    let status = fixture.ok(&["status", "topic"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let status = fixture.ok(&["status", &fixture.id("topic")]);
     assert_eq!(status["prs"][0]["waiting_runs"], waiting, "{status}");
     fixture.requests();
 
     // Approving lets a contributor's code run, so it is the user's decision.
     let shoal = support::shoal_binary();
     let approve = ["ci", "approve", "--pr", "8"];
-    let scoped =
-        fixture.run(&[&["run", "--workspace", "topic", "--", shoal][..], &approve].concat());
+    let scoped = fixture.run(
+        &[
+            &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
+            &approve,
+        ]
+        .concat(),
+    );
     assert!(!scoped.status.success(), "{scoped:?}");
     assert!(fixture.requests().is_empty());
 
-    let approved = fixture.ok(&["ci", "approve", "--space", "topic"]);
+    let approved = fixture.ok(&["ci", "approve", "--space", &fixture.id("topic")]);
     assert_eq!(approved, json!({"approved": [url(21)]}));
     let posts = fixture
         .requests()
@@ -4429,7 +4969,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
             "Bearer usertoken"
         ])]
     );
-    let output = fixture.run(&["ci", "approve", "22", "--space", "topic"]);
+    let output = fixture.run(&["ci", "approve", "22", "--space", &fixture.id("topic")]);
     assert!(!output.status.success(), "{output:?}");
     assert!(writes(&fixture).is_empty());
 }
@@ -4447,11 +4987,32 @@ fn a_watched_run_waiting_for_approval_reports_once_it_has_run() {
     };
     // GitHub reports a held run as completed, but it has yet to run.
     respond("action_required");
-    fixture.ok(&["link", "ci", url, "related", "--space", "topic"]);
-    let held = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "1"]);
+    fixture.ok(&[
+        "link",
+        "ci",
+        url,
+        "related",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    let held = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "1",
+    ]);
     assert_eq!(held["updates"], json!([]), "{held}");
     respond("success");
-    let finished = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "600"]);
+    let finished = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
     assert_eq!(finished["updates"][0]["kind"], "ci_completed", "{finished}");
 }
 
@@ -4476,14 +5037,28 @@ fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() 
         "GET repos/team/project/actions/runs?limit=50&page=2&head_sha=head":
             {"body": {"workflow_runs": [run(2766, true)], "total_count": 51}},
     }));
-    let view = &fixture.ok(&["view", "pr", "8", "--no-comments", "--space", "topic"])[0];
+    let view = &fixture.ok(&[
+        "view",
+        "pr",
+        "8",
+        "--no-comments",
+        "--space",
+        &fixture.id("topic"),
+    ])[0];
     assert_eq!(
         view["pr"]["waiting_runs"],
         json!([{"url": format!("{}/actions/runs/2766", fixture.web), "workflow": "ci.yml"}]),
         "{view}"
     );
     fixture.requests();
-    let output = fixture.run(&["ci", "approve", "--pr", "8", "--space", "topic"]);
+    let output = fixture.run(&[
+        "ci",
+        "approve",
+        "--pr",
+        "8",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert!(!output.status.success(), "{output:?}");
     assert!(fixture.requests().is_empty());
 }
@@ -4510,7 +5085,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
         &format!("{url}/job/34"),
         "--failed",
         "--space",
-        "topic",
+        &fixture.id("topic"),
     ]);
     assert_eq!(rerun, json!({"url": url, "action": "rerun"}));
     assert_eq!(
@@ -4522,11 +5097,11 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     );
 
     // Workspace processes act only on runs of their own branch.
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let act = |run: &str, action: &str, scope| {
         fixture.request_as(
-            json!({"ci_run_action": {"workspace": "topic", "run": run, "action": action,
+            json!({"ci_run_action": {"workspace": fixture.id("topic"), "run": run, "action": action,
                 "failed": false}}),
             scope,
         )
@@ -4603,10 +5178,10 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
     );
 
     // Inside one, it is viewed, linked and watched like a run of its own.
-    let viewed = fixture.ok(&["view", &other, "--space", "topic"]);
+    let viewed = fixture.ok(&["view", &other, "--space", &fixture.id("topic")]);
     assert_eq!(viewed[0]["url"], other, "{viewed}");
-    fixture.ok(&["link", &other, "related", "--space", "topic"]);
-    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    fixture.ok(&["link", &other, "related", "--space", &fixture.id("topic")]);
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(
         links["related"],
         json!([{"kind": "ci", "url": other, "title": "deps.yml"}]),
@@ -4617,7 +5192,7 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         "ci",
         &other,
         "--space",
-        "topic",
+        &fixture.id("topic"),
         "--timeout",
         "600",
     ]);
@@ -4627,18 +5202,18 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         (&json!(other), &json!("ci_completed")),
         "{watched}"
     );
-    fixture.ok(&["unlink", &other, "related", "--space", "topic"]);
+    fixture.ok(&["unlink", &other, "related", "--space", &fixture.id("topic")]);
 
     // Workspace processes read, link and act only within their repository.
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     for method in [
         json!({"view_ci_run": {"run": other}}),
-        json!({"ci_run_jobs": {"workspace": "topic", "run": other}}),
+        json!({"ci_run_jobs": {"workspace": fixture.id("topic"), "run": other}}),
         json!({"ci_run_action": {"run": other, "action": "cancel", "failed": false}}),
-        json!({"link_item": {"space": "topic", "kind": "ci", "url": other,
+        json!({"link_item": {"space": fixture.id("topic"), "kind": "ci", "url": other,
             "relation": "related"}}),
-        json!({"watch_items": {"space": "topic", "selection": {"kind": "ci",
+        json!({"watch_items": {"space": fixture.id("topic"), "selection": {"kind": "ci",
             "input": other}, "timeout_secs": 1}}),
     ] {
         let refused = fixture.request_as(method.clone(), Some(scope));
@@ -4664,7 +5239,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     }));
     let url = format!("{}/actions/runs/2765", fixture.web);
-    let cancel = fixture.ok(&["ci", "cancel", &url, "--space", "topic"]);
+    let cancel = fixture.ok(&["ci", "cancel", &url, "--space", &fixture.id("topic")]);
     assert_eq!(cancel["url"], url, "{cancel}");
     assert_eq!(
         writes(&fixture),
@@ -4674,7 +5249,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
         ])]
     );
     // The fixture's server runs Forgejo 11, which cannot rerun.
-    let output = fixture.run(&["ci", "rerun", "2765", "--space", "topic"]);
+    let output = fixture.run(&["ci", "rerun", "2765", "--space", &fixture.id("topic")]);
     assert!(!output.status.success(), "{output:?}");
     assert!(fixture.requests().is_empty());
 
@@ -4690,7 +5265,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
         "POST repos/team/project/actions/jobs/18345/rerun": {"status": 204},
         "POST repos/team/project/actions/jobs/18346/rerun": {"status": 204},
     }));
-    let rerun = fixture.ok(&["ci", "rerun", "2765", "--space", "topic"]);
+    let rerun = fixture.ok(&["ci", "rerun", "2765", "--space", &fixture.id("topic")]);
     assert_eq!(rerun["url"], url, "{rerun}");
     assert_eq!(
         writes(&fixture),
@@ -4699,7 +5274,14 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
             null
         ])]
     );
-    fixture.ok(&["ci", "rerun", "2765", "--failed", "--space", "topic"]);
+    fixture.ok(&[
+        "ci",
+        "rerun",
+        "2765",
+        "--failed",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert_eq!(
         writes(&fixture),
         [
@@ -4743,7 +5325,7 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
             {"body": {"workflow_runs": [run], "total_count": 1}},
     }));
     let url = format!("{}/actions/runs/2765", fixture.web);
-    let view = fixture.ok(&["view", "ci", "2765", "--space", "topic"]);
+    let view = fixture.ok(&["view", "ci", "2765", "--space", &fixture.id("topic")]);
     assert_eq!(view["url"], url, "{view}");
     assert_eq!(
         (&view["state"], &view["branch"], &view["workflow"]),
@@ -4767,12 +5349,28 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     assert_eq!(logs[0]["truncated"], true);
     assert!(audit.ends_with(logs[0]["text"].as_str().unwrap()), "{view}");
 
-    let log = fixture.ok(&["view", "ci", &url, "--job", "build", "--space", "topic"]);
+    let log = fixture.ok(&[
+        "view",
+        "ci",
+        &url,
+        "--job",
+        "build",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert_eq!(
         (&log["text"], &log["truncated"]),
         (&json!(built), &json!(false))
     );
-    let log = fixture.ok(&["view", "ci", &url, "--job", "audit", "--space", "topic"]);
+    let log = fixture.ok(&[
+        "view",
+        "ci",
+        &url,
+        "--job",
+        "audit",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert_eq!(log["text"], audit);
 
     // The workspace's branch is listed unless another is named.
@@ -4784,14 +5382,14 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
         "--limit",
         "5",
         "--space",
-        "topic",
+        &fixture.id("topic"),
     ]);
     assert_eq!(
         runs,
         json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed"}])
     );
     // A PR's runs are those on its head commit.
-    let runs = fixture.ok(&["ci", "ls", "--pr", "#8", "--space", "topic"]);
+    let runs = fixture.ok(&["ci", "ls", "--pr", "#8", "--space", &fixture.id("topic")]);
     assert_eq!(runs[0]["url"], url, "{runs}");
     let output = fixture.run(&["ci", "ls", "--pr", "8", "--branch", "topic"]);
     assert!(!output.status.success());
@@ -4823,7 +5421,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
             json!({"body": {"total_count": 1001, "jobs": jobs}});
     }
     fixture.respond(responses);
-    let view = fixture.ok(&["view", "ci", "12", "--space", "topic"]);
+    let view = fixture.ok(&["view", "ci", "12", "--space", &fixture.id("topic")]);
     assert_eq!(view["jobs"].as_array().unwrap().len(), 1001);
     // The failed job on the last page is the one whose log is read, though a
     // successful job shares its name.
@@ -4834,9 +5432,25 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         (&json!("test"), &json!("boom\n"))
     );
 
-    let output = fixture.run(&["view", "ci", "12", "--job", "test", "--space", "topic"]);
+    let output = fixture.run(&[
+        "view",
+        "ci",
+        "12",
+        "--job",
+        "test",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert!(!output.status.success(), "{output:?}");
-    let log = fixture.ok(&["view", "ci", "12", "--job-id", "1001", "--space", "topic"]);
+    let log = fixture.ok(&[
+        "view",
+        "ci",
+        "12",
+        "--job-id",
+        "1001",
+        "--space",
+        &fixture.id("topic"),
+    ]);
     assert_eq!(log["text"], "boom\n", "{log}");
 
     // A run's job log and a PR's check log are selected apart.
@@ -4854,7 +5468,14 @@ fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
     let shoal = support::shoal_binary();
     let output = fixture.run(
         &[
-            &["run", "--workspace", "topic", "--", shoal, "--json"][..],
+            &[
+                "run",
+                "--workspace",
+                &fixture.id("topic"),
+                "--",
+                shoal,
+                "--json",
+            ][..],
             args,
         ]
         .concat(),
@@ -4876,7 +5497,7 @@ fn writes(fixture: &Fixture) -> Vec<Value> {
 /// The workspace's new agent messages.
 fn messages(fixture: &Fixture) -> Vec<String> {
     fixture
-        .ok(&["messages", "topic"])
+        .ok(&["messages", &fixture.id("topic")])
         .as_array()
         .unwrap()
         .iter()
@@ -4925,7 +5546,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
 
     // A worktree replaced while the proposal waits is refused before
     // anything is sent, and the proposal stays.
-    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", &fixture.id("topic")])["workspace"].clone();
     let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
     let owner = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, "another-workspace\n").unwrap();
@@ -4946,7 +5567,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     );
     assert_eq!(fixture.ok(&["approvals"]), json!([]));
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Flaky test"}])
     );
     let told = messages(&fixture);
@@ -4955,7 +5576,14 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert!(told[0].ends_with(&format!("{url} was opened.")), "{told:?}");
 
     // The user opens directly whatever the setting says.
-    let direct = fixture.ok(&["issue", "open", "--space", "topic", "--title", "Flaky test"]);
+    let direct = fixture.ok(&[
+        "issue",
+        "open",
+        "--space",
+        &fixture.id("topic"),
+        "--title",
+        "Flaky test",
+    ]);
     assert_eq!(direct["created"], true);
 }
 
@@ -5086,7 +5714,7 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
         "{chats}"
     );
     let told: Vec<_> = (fixture
-        .ok(&["messages", "planning"])
+        .ok(&["messages", &fixture.id("planning")])
         .as_array()
         .unwrap()
         .iter())
@@ -5120,15 +5748,17 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
         "name": "lead", "agent": "claude", "pid": agent.id()}}));
     let chat = chat["data"]["id"].as_str().unwrap().to_owned();
     let repo = fixture.repo.to_str().unwrap();
-    fixture.ok(&["start", repo, "helper", "--parent", "lead"]);
-    let working = fixture.request(json!({"set_agent_state": {"workspace": "helper",
-        "state": "working"}}));
+    fixture.ok(&["start", repo, "helper", "--parent", &fixture.id("lead")]);
+    let working = fixture.request(
+        json!({"set_agent_state": {"workspace": fixture.id("helper"),
+        "state": "working"}}),
+    );
     assert_eq!(working["type"], "agent_status", "{working}");
     let shoal = support::shoal_binary();
     let open = [
         "run",
         "--workspace",
-        "helper",
+        &fixture.id("helper"),
         "--",
         shoal,
         "--json",
@@ -5243,7 +5873,7 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
 
     // The remaining proposal belongs to the repository, so it stays when the
     // workspace goes and opens through the repository's checkout.
-    fixture.ok(&["rm", "--wait", "topic", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("topic"), "--yes"]);
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["number"].as_str().unwrap().to_owned(), flaky);
@@ -5298,7 +5928,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
         "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
         "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
     }));
-    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", &fixture.id("topic")])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let head = || git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
 
@@ -5313,7 +5943,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     );
     assert!(writes(&fixture).is_empty());
     assert_eq!(
-        fixture.ok(&["status", "topic"])["cleanup_reason"]["reason"],
+        fixture.ok(&["status", &fixture.id("topic")])["cleanup_reason"]["reason"],
         "pr_proposal"
     );
 
@@ -5383,7 +6013,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
             {"title": "Fix", "body": "", "head": "topic", "base": "main", "draft": false}])]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["prs"],
         json!([url])
     );
     assert!(messages(&fixture)[0].contains(&url));
@@ -5416,7 +6046,7 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
         ]);
     }
     config(&["config", "remote.pushDefault", "alice"]);
-    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", &fixture.id("topic")])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
     let mut opened = pull(9, "open", "Fix", &[]);
@@ -5634,7 +6264,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         let renamed = fixture.run(&[
             "run",
             "--workspace",
-            from,
+            &fixture.id(from),
             "--",
             shoal,
             "--json",
@@ -5654,7 +6284,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         [json!(["PUT repos/team/project/issues/9/labels", {"labels": ["bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["prs"],
         json!([url])
     );
 }
@@ -5740,10 +6370,11 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
     let (output, stderr) = open_in(&fixture.repo, &["--label", "type/bug", "--link"]);
     assert!(!output.status.success(), "{stderr}");
     // A workspace process acts from its own workspace.
-    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let repository =
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["repository_id"].clone();
     let method = json!({"open_issue": {"checkout": repository, "repository": null,
         "link": false, "issue": {"title": "Flaky", "body": "", "labels": ["type/bug"]}}});
-    let scope = fixture.ok(&["internal", "env", "topic"])["SHOAL_SCOPE_TOKEN"].clone();
+    let scope = fixture.ok(&["internal", "env", &fixture.id("topic")])["SHOAL_SCOPE_TOKEN"].clone();
     let scoped = fixture.request_as(method, scope.as_str());
     assert_eq!(scoped["type"], "error", "{scoped}");
     assert!(writes(&fixture).is_empty());
@@ -5760,7 +6391,7 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
             {"title": "Flaky", "body": "", "labels": ["type/bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["opened"],
         json!([])
     );
 }
@@ -5915,10 +6546,22 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
     // A workspace process acts only from its own workspace.
     let shoal = support::shoal_binary();
     let close = ["issue", "close", "40", "--repo", "repo"];
-    refused(&[&["run", "--workspace", "topic", "--", shoal][..], &close].concat());
+    refused(
+        &[
+            &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
+            &close,
+        ]
+        .concat(),
+    );
     // Where --repo names any repository, it stays a forge repository for one.
     let list = ["issue", "ls", "--repo", "repo"];
-    refused(&[&["run", "--workspace", "topic", "--", shoal][..], &list].concat());
+    refused(
+        &[
+            &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
+            &list,
+        ]
+        .concat(),
+    );
     assert!(writes(&fixture).is_empty());
 
     // A path names the repository from the current directory, and a name
@@ -5940,7 +6583,8 @@ fn checkout_merges_go_out_without_the_agent_account() {
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
         format!("POST {endpoint}/merge"): {"body": {}},
     }));
-    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let repository =
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["repository_id"].clone();
     let merged = fixture.request(json!({"item_action": {"checkout": repository, "kind": "pr",
         "item": "8", "action": {"action": "merge", "method": "rebase", "delete_branch": false}}}));
     assert_eq!(merged["type"], "item", "{merged}");
@@ -6009,7 +6653,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
 
     // Another repository's issue cannot be the workspace's assignment.
     let shoal = support::shoal_binary();
-    let exec = ["run", "--workspace", "topic", "--", shoal];
+    let exec = ["run", "--workspace", &fixture.id("topic"), "--", shoal];
     let linked = fixture.run(&[&exec[..], &open, &["--link"]].concat());
     assert!(!linked.status.success(), "{linked:?}");
 
@@ -6023,7 +6667,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
             {"title": "Wrong finding", "body": "", "labels": ["bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Wrong finding"}])
     );
     let told = messages(&fixture);
@@ -6047,7 +6691,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
     let denied = fixture.run(&[&exec[..], &open].concat());
     assert!(!denied.status.success(), "{denied:?}");
     assert!(writes(&fixture).is_empty());
-    let direct = fixture.ok(&[&open[..], &["--space", "topic"]].concat());
+    let direct = fixture.ok(&[&open[..], &["--space", &fixture.id("topic")]].concat());
     assert_eq!(direct["url"], url);
 }
 
@@ -6085,7 +6729,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
         [json!(["POST repos/them/tool/issues", {"title": "Crash", "body": "", "labels": []}])]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Crash"}])
     );
 }
@@ -6180,7 +6824,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     let output = fixture.run(&[
         "run",
         "--workspace",
-        "topic",
+        &fixture.id("topic"),
         "--",
         shoal,
         "forge",
@@ -6301,7 +6945,7 @@ fn gitlab_downloads_read_an_upload_from_its_api_route() {
 fn the_git_credential_helper_answers_scoped_processes_with_the_agent_token() {
     let broken = "[machine.forges.\"broken.example\"]\ntype = \"forgejo\"\nagent_token = { cmd = [\"false\"] }\n";
     let fixture = Fixture::new(Forge::GitHub, &format!("{AGENT_TOKEN}{broken}"));
-    let exported = fixture.ok(&["internal", "env", "topic"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let fill = |scope: Option<&str>, protocol: &str, host: &str| {
         let mut command = fixture.command();

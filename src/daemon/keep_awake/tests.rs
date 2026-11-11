@@ -35,7 +35,7 @@ async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model:
 
 async fn report(manager: &Manager, workspace: &crate::model::Workspace, state: AgentState) {
     manager
-        .set_agent_state(&SpaceSelector::from(&workspace.name), state, None, None)
+        .set_agent_state(&SpaceSelector::id(&workspace.id), state, None, None)
         .await
         .unwrap();
 }
@@ -99,7 +99,7 @@ async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
     let parent = workspace(&manager, &temp).await;
     let child = manager
         .split_workspace(
-            &SpaceSelector::from(&parent.name),
+            &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
             Default::default(),

@@ -149,7 +149,7 @@ impl Manager {
             .map_err(|error| format!("{error:#}"));
         restored
             .and_then(|ended| ended)
-            .map_err(|error| anyhow!("{error}; restore it with shoal resume {}", chat.name))?;
+            .map_err(|error| anyhow!("{error}; restore it with shoal resume {}", chat.number))?;
         let restored = self.chat_by_id(&chat.id).await?;
         Ok(restored.and_then(|chat| chat.origin))
     }

@@ -42,7 +42,7 @@ async fn agent(
 
 async fn refused(manager: &Manager, workspace: &Workspace, caller: Option<&ExecutionId>) -> bool {
     manager
-        .agent_session(&SpaceSelector::from(&workspace.name), caller)
+        .agent_session(&SpaceSelector::id(&workspace.id), caller)
         .await
         .is_err()
 }
@@ -71,7 +71,7 @@ async fn a_fork_starts_from_the_callers_agent_or_the_only_one() {
     };
     assert_eq!(
         manager
-            .agent_session(&SpaceSelector::from(&workspace.name), None)
+            .agent_session(&SpaceSelector::id(&workspace.id), None)
             .await
             .unwrap(),
         only
@@ -83,7 +83,7 @@ async fn a_fork_starts_from_the_callers_agent_or_the_only_one() {
     assert!(refused(&manager, &workspace, Some(&ExecutionId::from("elsewhere"))).await);
     assert_eq!(
         manager
-            .agent_session(&SpaceSelector::from(&workspace.name), Some(&own))
+            .agent_session(&SpaceSelector::id(&workspace.id), Some(&own))
             .await
             .unwrap(),
         AgentSession {

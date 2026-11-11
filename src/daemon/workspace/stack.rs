@@ -103,16 +103,18 @@ pub(crate) fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCau
     Ok(())
 }
 
-/// A workspace of the repository named by number, ID or name, else by
+/// A workspace of the repository selected by number or ID, else by
 /// branch.
 fn base_workspace(
     db: &Connection,
     repository_id: &RepositoryId,
     selector: &str,
 ) -> Result<SpaceId> {
-    if let Some((crate::model::SpaceKind::Workspace, id)) =
-        crate::daemon::spaces::selected(db, &SpaceSelector::parse(selector))?
-    {
+    let selected = match SpaceSelector::parse(selector) {
+        Ok(selector) => crate::daemon::spaces::selected(db, &selector)?,
+        Err(_) => None,
+    };
+    if let Some((crate::model::SpaceKind::Workspace, id)) = selected {
         ensure_base(db, repository_id, &id, selector)?;
         return Ok(id);
     }

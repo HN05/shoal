@@ -164,16 +164,16 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
             },
         )
         .await;
-    for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
+    for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {
         for mut method in [
             NotificationMethod::SendMessage {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 message: "hello".into(),
                 attachments: Vec::new(),
                 sender_chat: None,
             },
             NotificationMethod::WithdrawMessage {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 id: 1,
             },
         ] {
@@ -244,7 +244,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {
         assert!(
             manager
-                .withdraw_message(&SpaceSelector::parse(workspace.as_str()), id)
+                .withdraw_message(&SpaceSelector::from(workspace.as_str()), id)
                 .await
                 .is_err()
         );
@@ -463,7 +463,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     );
     assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
     let attached = manager
-        .attached_files(&SpaceSelector::from(&child.name))
+        .attached_files(&SpaceSelector::id(&child.id))
         .await
         .unwrap();
     assert_eq!(
@@ -561,7 +561,7 @@ async fn a_message_to_the_user_sends_a_limited_number_of_files() {
     assert!(sent.is_err());
     assert!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()

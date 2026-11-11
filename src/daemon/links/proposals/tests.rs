@@ -263,7 +263,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     manager.save_proposal(edited).await.unwrap();
 
     let withdrawn = manager
-        .withdraw_approval(&SpaceSelector::from(&workspace.name), proposed.number)
+        .withdraw_approval(&SpaceSelector::id(&workspace.id), proposed.number)
         .await
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);

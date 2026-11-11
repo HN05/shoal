@@ -49,7 +49,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .unwrap();
     let middle = manager
         .split_workspace(
-            &SpaceSelector::from(&root.name),
+            &SpaceSelector::id(&root.id),
             "middle".into(),
             None,
             Default::default(),
@@ -70,7 +70,11 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     assert_eq!(leaf.parent, Some(space(&middle)));
     assert_eq!(leaf.base_workspace, Some(reference(&middle)));
     assert_eq!(
-        manager.workspace(&"root".into()).await.unwrap().children,
+        manager
+            .workspace(&manager.named("root").await)
+            .await
+            .unwrap()
+            .children,
         [space(&middle)]
     );
     assert_eq!(
@@ -222,9 +226,9 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         options: Default::default(),
     };
     for (target, allowed) in [
-        (&child.name, true),
-        (&parent.name, false),
-        (&sibling.name, false),
+        (child.id.as_str(), true),
+        (parent.id.as_str(), false),
+        (sibling.id.as_str(), false),
     ] {
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut split(target))
@@ -251,7 +255,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .await
         .unwrap();
     let mut done = AssignmentMethod::MarkDone {
-        space: SpaceSelector::parse(&grandchild.name),
+        space: SpaceSelector::id(&grandchild.id),
         done: Default::default(),
         sender_chat: None,
     };
@@ -303,9 +307,9 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         unsaved: UnsavedWork::default(),
     };
     for (target, allowed) in [
-        (&child.name, true),
-        (&parent.name, false),
-        (&sibling.name, false),
+        (child.id.as_str(), true),
+        (parent.id.as_str(), false),
+        (sibling.id.as_str(), false),
     ] {
         for mut method in [check(target), remove(target)] {
             let authorized =
@@ -466,10 +470,10 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     };
     let restore = |workspace: &str, execution: &str| restore_now(workspace, execution, false);
     for (target, allowed) in [
-        (&child.name, true),
-        (&grandchild.name, true),
-        (&parent.name, false),
-        (&sibling.name, false),
+        (child.id.as_str(), true),
+        (grandchild.id.as_str(), true),
+        (parent.id.as_str(), false),
+        (sibling.id.as_str(), false),
     ] {
         for mut method in [stop(target, false), restore(target, "ours")] {
             let authorized =
@@ -497,18 +501,18 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             },
         )
         .await;
-    let mut method = restore(&grandchild.name, "ours");
+    let mut method = restore(grandchild.id.as_str(), "ours");
     crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut method)
         .await
         .unwrap();
-    let mut method = restore(&child.name, "ours");
+    let mut method = restore(child.id.as_str(), "ours");
     assert!(
         crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut method)
             .await
             .is_err()
     );
     // Only the user can tell that an execution Shoal cannot prove ended did.
-    let mut acknowledged = stop(&child.name, true);
+    let mut acknowledged = stop(child.id.as_str(), true);
     let authorized =
         crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut acknowledged).await;
     assert!(authorized.is_err());
@@ -664,7 +668,12 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
         )
         .await;
     assert!(split.is_err());
-    assert!(manager.workspace(&"child".into()).await.is_err());
+    assert!(
+        manager
+            .workspace(&manager.named("child").await)
+            .await
+            .is_err()
+    );
     assert!(
         manager
             .workspace_by_id(&parent.id)
@@ -977,21 +986,19 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         )
         .await;
     for (workspace, allowed) in [(&child, true), (&parent, false), (&sibling, false)] {
-        let name = || workspace.name.clone();
+        let name = || SpaceSelector::id(&workspace.id);
         // Interrupting and continuing type into the agent's terminal once
         // its agents are listed.
         let methods = [
             AgentMethod::SendAgentMessage {
-                space: name().into(),
+                space: name(),
                 message: "Rebase onto main".into(),
                 attachments: Vec::new(),
                 sender_chat: None,
             },
-            AgentMethod::WorkspaceAgents {
-                workspace: name().into(),
-            },
+            AgentMethod::WorkspaceAgents { workspace: name() },
             AgentMethod::InterruptTurn {
-                workspace: name().into(),
+                workspace: name(),
                 execution: "e1".into(),
             },
         ];
@@ -1906,7 +1913,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     let listed = manager
-        .approval_requests(Some(&SpaceSelector::from(&chat.name)))
+        .approval_requests(Some(&SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
     assert_eq!(listed.len(), 1);
@@ -2433,7 +2440,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
             .await;
     }
     let mut acquire = Operation::Hold(HoldMethod::HoldAcquire {
-        workspace: SpaceSelector::parse(&child.name),
+        workspace: SpaceSelector::id(&child.id),
         name: "review".into(),
         reason: None,
     });

@@ -28,11 +28,12 @@ impl Manager {
             .removed_workspaces()
             .await?
             .into_iter()
-            .find(|removed| selector.names(&removed.workspace_id, &removed.name));
+            .find(|removed| selector.given_id() == Some(&removed.workspace_id));
         match removed {
             Some(removed) => anyhow::bail!(
-                "workspace {name} was removed, so nothing runs to keep; export it without --keep, or shoal restore {name} opens it again",
-                name = removed.name
+                "workspace {} was removed, so nothing runs to keep; export it without --keep, or shoal restore {} opens it again",
+                removed.name,
+                removed.workspace_id
             ),
             None => Err(error),
         }

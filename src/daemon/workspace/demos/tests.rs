@@ -80,7 +80,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     assert_eq!(all[0].execution_id, web.plan.id);
     assert_eq!(all[0].launch, launch("web"));
     let own = manager
-        .demos(Some(&SpaceSelector::from(&second.name)))
+        .demos(Some(&SpaceSelector::id(&second.id)))
         .await
         .unwrap();
     assert_eq!(own.len(), 1);
@@ -156,7 +156,7 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .unwrap();
 
     manager
-        .stop_demos(&SpaceSelector::from(&first.name), Some("web".into()))
+        .stop_demos(&SpaceSelector::id(&first.id), Some("web".into()))
         .await
         .unwrap();
     assert!(*web.stop.borrow_and_update());
@@ -165,14 +165,14 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
     assert_eq!(request.save, Save::Nothing);
 
     manager
-        .stop_demos(&SpaceSelector::from(&first.name), None)
+        .stop_demos(&SpaceSelector::id(&first.id), None)
         .await
         .unwrap();
     assert!(*tui.stop.borrow_and_update());
     assert!(!*command.stop.borrow_and_update());
     assert!(
         manager
-            .stop_demos(&SpaceSelector::from(&first.name), Some("Bad".into()))
+            .stop_demos(&SpaceSelector::id(&first.id), Some("Bad".into()))
             .await
             .is_err()
     );
@@ -204,7 +204,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         matches!(list, DemoMethod::ListDemos { workspace: Some(own) } if own == SpaceSelector::id(&first.id))
     );
     let mut stop = DemoMethod::StopDemos {
-        workspace: SpaceSelector::parse(&first.name),
+        workspace: SpaceSelector::id(&first.id),
         name: None,
     };
     scope::authorize(&manager, Some(&"scope".into()), &mut stop)
@@ -212,10 +212,10 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         .unwrap();
     for mut method in [
         DemoMethod::ListDemos {
-            workspace: Some(SpaceSelector::parse(&second.name)),
+            workspace: Some(SpaceSelector::id(&second.id)),
         },
         DemoMethod::StopDemos {
-            workspace: SpaceSelector::parse(&second.name),
+            workspace: SpaceSelector::id(&second.id),
             name: None,
         },
     ] {
@@ -352,7 +352,7 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     drop(started);
     manager.detach_execution(&id).await;
     manager
-        .stop_demos(&SpaceSelector::from(&first.name), None)
+        .stop_demos(&SpaceSelector::id(&first.id), None)
         .await
         .unwrap();
     assert!(
@@ -388,7 +388,7 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     drop(started);
     manager.detach_execution(&id).await;
     manager
-        .stop_demos(&SpaceSelector::from(&first.name), None)
+        .stop_demos(&SpaceSelector::id(&first.id), None)
         .await
         .unwrap();
     assert!(

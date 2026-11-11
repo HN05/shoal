@@ -160,7 +160,7 @@ pub struct StartArgs {
         conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
     pub in_workspace: Option<Option<SpaceSelector>>,
-    /// The space the new one goes below, by name or number; defaults to the
+    /// The space the new one goes below, by number or ID; defaults to the
     /// space this runs in, else none.
     #[arg(long, value_name = "SPACE")]
     pub parent: Option<SpaceSelector>,

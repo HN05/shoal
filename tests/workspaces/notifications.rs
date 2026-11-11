@@ -12,12 +12,30 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     fixture.add("holder");
     fixture.add("waiter");
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
-    fixture.ok(&["acquire", "resource", "lock", "--workspace", "holder"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "lock",
+        "--workspace",
+        &fixture.id("holder"),
+    ]);
     for _ in 0..2 {
-        let busy = fixture.run(&["acquire", "resource", "lock", "--workspace", "waiter"]);
+        let busy = fixture.run(&[
+            "acquire",
+            "resource",
+            "lock",
+            "--workspace",
+            &fixture.id("waiter"),
+        ]);
         assert_eq!(busy.status.code(), Some(2));
     }
-    let taken = fixture.ok(&["acquire", "port", "web", "--workspace", "holder"])["port"]
+    let taken = fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("holder"),
+    ])["port"]
         .as_u64()
         .unwrap();
     let moved = fixture.ok(&[
@@ -25,7 +43,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         "port",
         "web",
         "--workspace",
-        "waiter",
+        &fixture.id("waiter"),
         "--port",
         &taken.to_string(),
         "--on-conflict",
@@ -36,7 +54,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     install_test_script(bin.join("claude"), "#!/bin/sh\nexit 7\n");
     let agent = fixture
         .command()
-        .args(["claude", "waiter"])
+        .args(["claude", &fixture.id("waiter")])
         .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
@@ -44,7 +62,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     // Plain commands are the user's own; only agent shortcuts announce their exit.
     assert!(
         fixture
-            .run(&["run", "--workspace", "waiter", "--", "true"])
+            .run(&["run", "--workspace", &fixture.id("waiter"), "--", "true"])
             .status
             .success()
     );
@@ -60,7 +78,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         .args([
             "run",
             "--workspace",
-            "holder",
+            &fixture.id("holder"),
             "--",
             support::shoal_binary(),
             "alerts",
@@ -134,7 +152,13 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     // Once read, the same conflict is news again.
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "lock", "--workspace", "waiter"])
+            .run(&[
+                "acquire",
+                "resource",
+                "lock",
+                "--workspace",
+                &fixture.id("waiter")
+            ])
             .status
             .code(),
         Some(2)
@@ -233,7 +257,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     assert!(output.status.success(), "{output:?}");
     for args in [
         &["alerts", "withdraw", &id][..],
-        &["alerts", "send", "hello", "--space", "other"][..],
+        &["alerts", "send", "hello", "--space", &fixture.id("other")][..],
         &["alerts", "send", "two\nlines"],
         &["alerts"],
     ] {
@@ -258,7 +282,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
             &serde_json::json!("PR #12 is ready to merge")
         )]
     );
-    assert!(fixture.ok(&["status", "sender"])["completion"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("sender")])["completion"].is_null());
 }
 
 #[test]
@@ -375,7 +399,7 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
             "--integration",
             "claude",
         ])
-        .args(["--space", "planning"])
+        .args(["--space", &fixture.id("planning")])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -397,13 +421,13 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
         .command()
         .current_dir(&fixture.repo)
         .args(["internal", "wake", "--agent", &agent.id().to_string()])
-        .args(["--space", "planning"])
+        .args(["--space", &fixture.id("planning")])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     let sent = fixture.request(serde_json::json!({"send_agent_message":{
-        "space": "planning", "message": "Plan the next step"
+        "space": fixture.id("planning"), "message": "Plan the next step"
     }}));
     assert_eq!(sent["type"], "ok", "{sent}");
     // A hang guard only: the message ends the wait.
@@ -422,9 +446,12 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
 fn a_title_request_reaches_only_a_running_agent() {
     let fixture = Fixture::new();
     fixture.add("titled");
-    let output = fixture.run(&["rename", "--request", "titled"]);
+    let output = fixture.run(&["rename", "--request", &fixture.id("titled")]);
     assert!(!output.status.success());
-    assert_eq!(fixture.ok(&["messages", "titled"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["messages", &fixture.id("titled")]),
+        serde_json::json!([])
+    );
 
     // The agent runs until the test releases it.
     let bin = fixture.root.path().join("stub-bin");
@@ -440,7 +467,7 @@ fn a_title_request_reaches_only_a_running_agent() {
     );
     let mut agent = fixture
         .command()
-        .args(["claude", "titled"])
+        .args(["claude", &fixture.id("titled")])
         .env("PATH", fixture.restricted_path(&bin))
         .stdout(Stdio::null())
         .spawn()
@@ -449,9 +476,9 @@ fn a_title_request_reaches_only_a_running_agent() {
     wait_until("the agent to start", || started.exists());
     // An identical request the agent has not read yet collapses.
     for _ in 0..2 {
-        fixture.ok(&["rename", "--request", "titled"]);
+        fixture.ok(&["rename", "--request", &fixture.id("titled")]);
     }
-    let messages = fixture.ok(&["messages", "titled"]);
+    let messages = fixture.ok(&["messages", &fixture.id("titled")]);
     assert_eq!(messages.as_array().unwrap().len(), 1, "{messages}");
     fs::write(&release, "").unwrap();
     assert!(agent.wait().unwrap().success());
@@ -496,7 +523,10 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
             "on_start": {"workspaces": [], "chats": []}
         })
     );
-    assert_eq!(fixture.ok(&["messages", "idle"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["messages", &fixture.id("idle")]),
+        serde_json::json!([])
+    );
     agent.kill().unwrap();
     agent.wait().unwrap();
     for conflicting in [["--all", "--space"], ["--all", "--repo"]] {
@@ -522,22 +552,31 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         "send",
         "Stop the dev server",
         "--space",
-        "receiver",
+        &fixture.id("receiver"),
     ]);
     let output = scoped_command(
         &fixture,
         "receiver",
-        &["messages", "send", "hello", "--space", "receiver"],
+        &[
+            "messages",
+            "send",
+            "hello",
+            "--space",
+            &fixture.id("receiver"),
+        ],
     );
     assert!(!output.status.success(), "agents cannot send: {output:?}");
-    let output = scoped_command(&fixture, "receiver", &["messages", "other"]);
+    let output = scoped_command(&fixture, "receiver", &["messages", &fixture.id("other")]);
     assert!(!output.status.success(), "{output:?}");
     let output = scoped_command(&fixture, "receiver", &["messages"]);
     assert!(output.status.success(), "{output:?}");
     let messages: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(messages[0]["message"], "Stop the dev server");
     assert_eq!(messages.as_array().unwrap().len(), 1);
-    assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["messages", &fixture.id("receiver")]),
+        serde_json::json!([])
+    );
 
     // Agent hooks print nothing without messages, then deliver new ones as
     // context for the event they answer.
@@ -547,7 +586,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
             .args([
                 "run",
                 "--workspace",
-                "receiver",
+                &fixture.id("receiver"),
                 "--",
                 support::shoal_binary(),
             ])
@@ -568,7 +607,13 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     };
     let event = r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#;
     assert_eq!(hook(event), "");
-    fixture.ok(&["messages", "send", "Free disk space", "--space", "receiver"]);
+    fixture.ok(&[
+        "messages",
+        "send",
+        "Free disk space",
+        "--space",
+        &fixture.id("receiver"),
+    ]);
     let output: Value = serde_json::from_str(&hook(event)).unwrap();
     let delivered = &output["hookSpecificOutput"];
     assert_eq!(delivered["hookEventName"], "PostToolUse", "{output}");
@@ -589,7 +634,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         "--body-file",
         body,
         "--space",
-        "receiver",
+        &fixture.id("receiver"),
     ]);
     let output: Value = serde_json::from_str(&hook(event)).unwrap();
     let context = output["hookSpecificOutput"]["additionalContext"].as_str();
@@ -606,11 +651,18 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         "send",
         "Rebase onto main",
         "--space",
-        "receiver",
+        &fixture.id("receiver"),
     ]);
     let output = fixture
         .command()
-        .args(["run", "--workspace", "receiver", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("receiver"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(concat!(
             r#""$0" internal agent-state idle >/dev/null && "#,
             r#""$0" internal wake --agent "$1"; woke=$?; "#,
@@ -645,24 +697,24 @@ fn messages_carry_copies_of_attached_files() {
             "--attach",
             "shot.png#Login screen",
             "--space",
-            "receiver",
+            &fixture.id("receiver"),
         ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     fs::remove_file(fixture.root.path().join("shot.png")).unwrap();
-    let messages = fixture.ok(&["messages", "receiver"]);
+    let messages = fixture.ok(&["messages", &fixture.id("receiver")]);
     assert_eq!(messages[0]["message"], "");
     let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
     assert!(copy.starts_with(fixture.shoal_dir()), "{copy:?}");
     assert_eq!(fs::read_to_string(copy).unwrap(), "image");
     // The workspace's files list the copy after the message is read.
-    let files = fixture.ok(&["files", "receiver"]);
+    let files = fixture.ok(&["files", &fixture.id("receiver")]);
     assert_eq!(files[0]["name"], "shot.png", "{files}");
     assert_eq!(files[0]["source"], "message", "{files}");
     assert_eq!(files[0]["title"], "Login screen", "{files}");
     assert_eq!(files[0]["path"], messages[0]["attachments"][0], "{files}");
-    let paths = fixture.run(&["files", "receiver", "--path"]);
+    let paths = fixture.run(&["files", &fixture.id("receiver"), "--path"]);
     assert_eq!(
         String::from_utf8(paths.stdout).unwrap().trim(),
         copy.display().to_string()
@@ -679,23 +731,32 @@ fn messages_reach_a_chat_with_their_files() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["messages", "send", "Look at this", "--space", "planning"])
+        .args([
+            "messages",
+            "send",
+            "Look at this",
+            "--space",
+            &fixture.id("planning"),
+        ])
         .args(["--attach", "shot.png#Login screen"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let messages = fixture.ok(&["messages", "planning"]);
+    let messages = fixture.ok(&["messages", &fixture.id("planning")]);
     assert_eq!(messages[0]["message"], "Look at this", "{messages}");
     let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
     assert_eq!(fs::read_to_string(copy).unwrap(), "image");
-    let files = fixture.ok(&["files", "planning"]);
+    let files = fixture.ok(&["files", &fixture.id("planning")]);
     assert_eq!(files[0]["source"], "message", "{files}");
-    assert_eq!(fixture.ok(&["messages", "planning"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["messages", &fixture.id("planning")]),
+        serde_json::json!([])
+    );
     // A workspace process cannot send to a chat.
     let output = scoped_command(
         &fixture,
         "worker",
-        &["messages", "send", "hi", "--space", "planning"],
+        &["messages", "send", "hi", "--space", &fixture.id("planning")],
     );
     assert!(!output.status.success(), "{output:?}");
     agent.kill().unwrap();
@@ -710,7 +771,14 @@ fn files_add_attaches_copies_without_a_message() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["--json", "files", "add", "notes.md", "--space", "receiver"])
+        .args([
+            "--json",
+            "files",
+            "add",
+            "notes.md",
+            "--space",
+            &fixture.id("receiver"),
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -719,7 +787,7 @@ fn files_add_attaches_copies_without_a_message() {
     assert!(added[0].get("title").is_none(), "{added}");
     let copy = Path::new(added[0]["path"].as_str().unwrap());
     assert_eq!(fs::read_to_string(copy).unwrap(), "plan");
-    assert_eq!(fixture.ok(&["files", "receiver"]), added);
+    assert_eq!(fixture.ok(&["files", &fixture.id("receiver")]), added);
     // A title follows the path after #, and the list shows it.
     fs::write(fixture.root.path().join("chart.html"), "<svg/>").unwrap();
     let output = fixture
@@ -728,10 +796,10 @@ fn files_add_attaches_copies_without_a_message() {
         .args([
             "--json",
             "files",
-            "add",
+            &fixture.id("add"),
             "chart.html#Latency by region",
             "--space",
-            "receiver",
+            &fixture.id("receiver"),
         ])
         .output()
         .unwrap();
@@ -739,16 +807,37 @@ fn files_add_attaches_copies_without_a_message() {
     let titled: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(titled[0]["name"], "chart.html", "{titled}");
     assert_eq!(titled[0]["title"], "Latency by region", "{titled}");
-    let deleted = fixture.ok(&["files", "rm", "chart.html", "--space", "receiver"]);
+    let deleted = fixture.ok(&[
+        "files",
+        "rm",
+        "chart.html",
+        "--space",
+        &fixture.id("receiver"),
+    ]);
     assert_eq!(deleted, titled);
-    assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["messages", &fixture.id("receiver")]),
+        serde_json::json!([])
+    );
     // A missing file fails before anything is picked or copied.
-    let missing = fixture.run(&["files", "add", "missing.md", "--space", "receiver"]);
+    let missing = fixture.run(&[
+        "files",
+        "add",
+        "missing.md",
+        "--space",
+        &fixture.id("receiver"),
+    ]);
     assert!(!missing.status.success(), "{missing:?}");
 
     // An idle workspace's files go without asking; every workspace's only
     // once confirmed.
-    let deleted = fixture.ok(&["files", "rm", "notes.md", "--space", "receiver"]);
+    let deleted = fixture.ok(&[
+        "files",
+        "rm",
+        "notes.md",
+        "--space",
+        &fixture.id("receiver"),
+    ]);
     assert_eq!(deleted, added);
     assert!(!copy.exists());
     let unconfirmed = fixture.run(&["files", "rm", "--all"]);
@@ -802,9 +891,9 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     in_chat(&["files", "add", "draft.md"]);
     let deleted = in_chat(&["files", "rm", "draft.md", "--yes"]);
     assert_eq!(deleted[0]["name"], "draft.md", "{deleted}");
-    // The user reaches them by the chat's name, which completion offers,
-    // or picks the chat among the spaces.
-    assert_eq!(fixture.ok(&["files", "planning"]), added);
+    // The user reaches them by the chat's number or ID, which completion
+    // offers, or picks the chat among the spaces.
+    assert_eq!(fixture.ok(&["files", &fixture.id("planning")]), added);
     let state = fixture.root.path().join("state");
     let words = [
         "shoal",
@@ -814,7 +903,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         "add",
         "report.md",
         "--space",
-        "pl",
+        "",
     ];
     let completed = fixture
         .command()
@@ -826,10 +915,8 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         .unwrap();
     assert!(completed.status.success(), "{completed:?}");
     let completed = String::from_utf8(completed.stdout).unwrap();
-    assert!(
-        completed.lines().any(|line| line == "planning"),
-        "{completed}"
-    );
+    let number = response["data"]["number"].to_string();
+    assert!(completed.lines().any(|line| line == number), "{completed}");
     let (output, rows) = fixture.pick(&["files", "--print"], &chat, "");
     assert!(output.status.success(), "{output:?}");
     assert!(
@@ -845,15 +932,15 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     // with when they go.
     agent.kill().unwrap();
     agent.wait().unwrap();
-    let stopped = fixture.ok(&["files", "planning"]);
+    let stopped = fixture.ok(&["files", &fixture.id("planning")]);
     assert!(stopped[0]["expires_at"].is_null(), "{stopped}");
-    fixture.ok(&["resume", "planning", "--discard"]);
-    let kept = fixture.ok(&["files", "planning"]);
+    fixture.ok(&["resume", &fixture.id("planning"), "--discard"]);
+    let kept = fixture.ok(&["files", &chat]);
     assert_eq!(kept[0]["path"], added[0]["path"], "{kept}");
     assert!(kept[0]["expires_at"].is_i64(), "{kept}");
     assert_eq!(kept[0]["chat"], "planning", "{kept}");
     assert_eq!(fs::read_to_string(&copy).unwrap(), "Plan");
-    let deleted = fixture.ok(&["files", "rm", "--space", "planning"]);
+    let deleted = fixture.ok(&["files", "rm", "--space", &chat]);
     assert_eq!(deleted[0]["path"], added[0]["path"], "{deleted}");
     assert!(!copy.exists());
 }
@@ -864,9 +951,14 @@ fn done_hands_back_files_that_shoal_files_lists() {
     let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     fixture.add("audit");
     fs::write(fixture.root.path().join("report.md"), "No leaks").unwrap();
-    let missing = fixture.run(&["done", "audit", "--attach", "/missing/report.md"]);
+    let missing = fixture.run(&[
+        "done",
+        &fixture.id("audit"),
+        "--attach",
+        "/missing/report.md",
+    ]);
     assert!(!missing.status.success(), "{missing:?}");
-    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("audit")])["completion"].is_null());
 
     let output = fixture
         .command()
@@ -874,7 +966,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
         .args([
             "--json",
             "done",
-            "audit",
+            &fixture.id("audit"),
             "--attach",
             "report.md#Audit findings",
         ])
@@ -886,7 +978,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
         completion["results"][0]["name"], "report.md",
         "{completion}"
     );
-    let files = fixture.ok(&["files", "audit"]);
+    let files = fixture.ok(&["files", &fixture.id("audit")]);
     assert_eq!(files[0]["source"], "result", "{files}");
     assert_eq!(files[0]["title"], "Audit findings", "{files}");
     let result = files[0]["path"].as_str().unwrap();
@@ -899,7 +991,7 @@ fn files_rm_refuses_unknown_names_before_asking() {
     fixture.add("busy");
     let mut command = fixture
         .command()
-        .args(["run", "--workspace", "busy", "--"])
+        .args(["run", "--workspace", &fixture.id("busy"), "--"])
         .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -907,7 +999,14 @@ fn files_rm_refuses_unknown_names_before_asking() {
         .unwrap();
     wait_registered_execution(&fixture, "busy");
     // Without --yes a running workspace would ask first; the name fails sooner.
-    let output = fixture.run(&["--json", "files", "rm", "missing.md", "--space", "busy"]);
+    let output = fixture.run(&[
+        "--json",
+        "files",
+        "rm",
+        "missing.md",
+        "--space",
+        &fixture.id("busy"),
+    ]);
     command.kill().unwrap();
     command.wait().unwrap();
     assert!(!output.status.success(), "{output:?}");
@@ -926,7 +1025,14 @@ fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
     // The hook reads the lifetime from the environment the agent runs with.
     let output = fixture
         .command()
-        .args(["run", "--workspace", "cached", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("cached"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(concat!(
             r#""$0" internal agent-state idle --ends-turn claude >/dev/null && "#,
             r#""$0" status --json"#
@@ -953,13 +1059,26 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     let output = scoped_command(
         &fixture,
         "reporter",
-        &["internal", "agent-state", "waiting", "--space", "other"],
+        &[
+            "internal",
+            "agent-state",
+            "waiting",
+            "--space",
+            &fixture.id("other"),
+        ],
     );
     assert!(!output.status.success(), "{output:?}");
     // The execution reports, then lists itself while its state is current.
     let output = fixture
         .command()
-        .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("reporter"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" --json status"#)
         .arg(support::shoal_binary())
         .output()
@@ -971,7 +1090,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
         "{shown}"
     );
     assert!(
-        fixture.ok(&["status", "reporter"])["workspace"]
+        fixture.ok(&["status", &fixture.id("reporter")])["workspace"]
             .get("agent_state")
             .is_none()
     );
@@ -1004,7 +1123,14 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
     // The scope names the workspace, so the hook never reads where it runs.
     let output = fixture
         .command()
-        .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("reporter"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(concat!(
             r#"cd "$1/locked/inside" && chmod 000 "$1/locked" && "#,
             r#""$0" internal agent-state waiting >/dev/null; reported=$?; "#,
@@ -1028,14 +1154,20 @@ fn a_failed_turn_state_report_alerts_the_user() {
     fixture.add("reporter");
     fixture.add("other");
     for report in [
-        &["internal", "agent-state", "waiting", "--space", "other"][..],
+        &[
+            "internal",
+            "agent-state",
+            "waiting",
+            "--space",
+            &fixture.id("other"),
+        ][..],
         &[
             "internal",
             "turn-failed",
             "--integration",
             "claude",
             "--space",
-            "other",
+            &fixture.id("other"),
         ],
     ] {
         let output = scoped_command(&fixture, "reporter", report);
@@ -1059,7 +1191,13 @@ fn agent_state_reports_from_an_input_that_never_closes() {
     fixture.add("reporter");
     let mut child = fixture
         .command()
-        .args(["internal", "agent-state", "waiting", "--space", "reporter"])
+        .args([
+            "internal",
+            "agent-state",
+            "waiting",
+            "--space",
+            &fixture.id("reporter"),
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -1075,7 +1213,7 @@ fn agent_state_reports_from_an_input_that_never_closes() {
     let output = child.wait_with_output().unwrap();
     assert!(status.is_some_and(|status| status.success()), "{output:?}");
     assert_eq!(
-        fixture.ok(&["status", "reporter"])["workspace"]["agent_state"]["state"],
+        fixture.ok(&["status", &fixture.id("reporter")])["workspace"]["agent_state"]["state"],
         "waiting"
     );
 }
@@ -1091,7 +1229,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(marks[0]["url"].is_null() && marks[0]["stale"] == false);
     for args in [
-        &["ready", "--space", "other"][..],
+        &["ready", "--space", &fixture.id("other")][..],
         &["ready", "pr"],
         &["ready", "--undo", "pr", "12"],
     ] {
@@ -1123,7 +1261,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     // An outdated mark no longer needs the user.
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert_eq!(
-        fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
+        fixture.ok(&["status", &fixture.id("reviewed")])["workspace"]["review"][0]["stale"],
         true
     );
 
@@ -1138,7 +1276,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         1
     );
     assert!(
-        fixture.ok(&["status", "reviewed"])["workspace"]
+        fixture.ok(&["status", &fixture.id("reviewed")])["workspace"]
             .get("review")
             .is_none()
     );
@@ -1200,7 +1338,7 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
     assert_eq!(asked["space"], "planning", "{asked}");
     let id = asked["number"].as_str().unwrap().to_owned();
     // The user sees it under the chat's name, and the answer reaches the chat.
-    let listed = fixture.ok(&["questions", "--space", "planning"]);
+    let listed = fixture.ok(&["questions", "--space", &fixture.id("planning")]);
     assert_eq!(
         listed["questions"][0]["number"], asked["number"],
         "{listed}"
@@ -1244,7 +1382,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             "SQLite",
         ])
         .args(["--choice", "SQLite", "--choice", "Postgres"])
-        .args(["--space", "asker", "--wait"])
+        .args(["--space", &fixture.id("asker"), "--wait"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -1269,7 +1407,10 @@ fn agents_wait_for_the_answer_to_their_question() {
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(answered["answer"], "Postgres");
     // The wait printed the answer, so its message is not delivered again.
-    assert_eq!(fixture.ok(&["messages", "renamed"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["messages", &fixture.id("renamed")]),
+        serde_json::json!([])
+    );
     assert_eq!(
         fixture.ok(&["questions"]),
         serde_json::json!({"questions": [], "omitted": 0})
@@ -1309,7 +1450,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             "None",
             "--wait",
         ])
-        .args(["--space", space, "--resume", &item])
+        .args(["--space", &fixture.id(space), "--resume", &item])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();

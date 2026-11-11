@@ -190,6 +190,7 @@ fn workspace(root: &std::path::Path, name: &str, done: bool) -> Workspace {
         crate::state::WorkspaceState::Ready,
     );
     workspace.done = done;
+    workspace.number = if done { 7 } else { 3 }.into();
     workspace
 }
 
@@ -242,11 +243,11 @@ fn done_workspaces_are_named_since_resume_all_skips_them() {
         workspace(root.path(), "finished", true),
     );
     let (open_only, done_only) = (continuation(&[&open]), continuation(&[&done]));
-    assert!(open_only.contains("--all") && !open_only.contains("finished"));
-    assert!(done_only.contains("finished") && !done_only.contains("--all"));
+    assert!(open_only.contains("--all") && !open_only.contains("resume 7"));
+    assert!(done_only.contains("resume 7") && !done_only.contains("--all"));
     let both = continuation(&[&open, &done]);
     assert!(
-        both.contains("--all") && both.contains("finished"),
+        both.contains("--all") && both.contains("resume 7"),
         "{both}"
     );
 }

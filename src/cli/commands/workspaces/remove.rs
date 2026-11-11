@@ -22,8 +22,8 @@ pub(in crate::cli::commands) async fn remove(
     wait: bool,
 ) -> Result<i32> {
     // A number always names a space, never a queued launch.
-    if let [SpaceSelector::IdOrName(selector)] = names.as_slice()
-        && let Some(code) = queued_agents::remove(ctx, selector).await?
+    if let [SpaceSelector::Id(selector)] = names.as_slice()
+        && let Some(code) = queued_agents::remove(ctx, selector.as_str()).await?
     {
         return Ok(code);
     }

@@ -88,33 +88,30 @@ pub(super) async fn pick_place(ctx: &Context, selector: &str) -> Result<QueuePla
 /// running agent can move.
 async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>> {
     let entries = queued_agents::entries(ctx).await?;
-    let named: Vec<_> = entries
-        .into_iter()
-        .filter(|entry| entry.id == selector || entry.name == selector)
-        .collect();
-    match named.as_slice() {
-        [] => {
+    match entries.into_iter().find(|entry| entry.id == selector) {
+        None => {
             movable_agent(ctx, selector).await?;
             Ok(None)
         }
-        [entry] => {
+        Some(entry) => {
             ensure!(
                 entry.state == QueueState::Queued,
                 "{} is already starting",
                 entry.name
             );
-            Ok(Some(entry.clone()))
+            Ok(Some(entry))
         }
-        _ => bail!("several queue entries are named {selector}; pass the entry ID"),
     }
 }
 
 /// Refuse a workspace `selector` names unless the one agent running there
 /// can restore in place, as the daemon checks again before stopping it.
 async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
+    let not_queued = || format!("{selector} is not in the agent queue");
+    let workspace = SpaceSelector::parse(selector).with_context(not_queued)?;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
         .await
-        .with_context(|| format!("{selector} is not in the agent queue"))?
+        .with_context(not_queued)?
         .workspace;
     let name = &workspace.name;
     let agents = crate::client::agents::all(&ctx.paths)
@@ -127,7 +124,10 @@ async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
     let running = match agents.as_slice() {
         [running] => running,
         [] => bail!("{name} is not in the agent queue and runs no agent"),
-        _ => bail!("{name} runs several agents; stop them with shoal stop {name}"),
+        _ => bail!(
+            "{name} runs several agents; stop them with shoal stop {}",
+            workspace.number
+        ),
     };
     match skip_reason(&workspace, running) {
         Some(reason) => bail!("{name} cannot move: {reason}"),

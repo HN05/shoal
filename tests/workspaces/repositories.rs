@@ -29,7 +29,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
             .unwrap(),
         directory
     );
-    fixture.ok(&["rm", "--wait", "cloned"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("cloned")]);
     assert!(clone.is_dir());
     // No workspace name can collide with the clone's directory.
     let main = fixture.ok(&["start", &url, "main"]);
@@ -407,7 +407,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     let output = fixture.run(&[
         "run",
         "--workspace",
-        "moving",
+        &fixture.id("moving"),
         "--",
         "git",
         "status",
@@ -441,7 +441,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let old = PathBuf::from(workspace["path"].as_str().unwrap());
     let agent = fixture
         .command()
-        .args(["claude", "moving"])
+        .args(["claude", &fixture.id("moving")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -456,7 +456,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
         .args([
             "run",
             "--workspace",
-            "building",
+            &fixture.id("building"),
             "--",
             "sh",
             "-c",
@@ -476,7 +476,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
 
     // Without confirmation nothing stops.
     assert!(!fixture.run(&["move", "root", "~/moved"]).status.success());
-    let running = fixture.ok(&["status", "moving"]);
+    let running = fixture.ok(&["status", &fixture.id("moving")]);
     assert!(
         !running["executions"].as_array().unwrap().is_empty(),
         "{running}"
@@ -491,7 +491,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     assert_eq!(moved.as_array().unwrap().len(), 1, "{moved}");
     assert!(agent.wait_with_output().unwrap().status.success());
     command.wait_with_output().unwrap();
-    let resumed = fixture.ok(&["resume", "building"]);
+    let resumed = fixture.ok(&["resume", &fixture.id("building")]);
     let argv = &resumed["commands"][0]["commands"][0];
     assert_eq!(argv[0], "sh", "{resumed}");
     let path = fs::canonicalize(fixture.root.path())
@@ -511,7 +511,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     );
     let old_directory = old.parent().unwrap().to_str().unwrap();
     assert!(trusted["projects"][old_directory].is_null(), "{trusted}");
-    fixture.ok(&["stop", "moving"]);
+    fixture.ok(&["stop", &fixture.id("moving")]);
 }
 
 #[test]
@@ -762,7 +762,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
     fixture.ok(&["start", ssh_url, "alias", "--base", "HEAD"]);
-    fixture.ok(&["rm", "--wait", "alias"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("alias")]);
 }
 
 #[test]
@@ -832,21 +832,33 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     fs::write(first_path.join("dirty"), "uncommitted work").unwrap();
     fs::write(first_path.join(".shoal.toml"), "[resources.local-lock]\n").unwrap();
     fs::write(fixture.repo.join("untracked"), "repo changes").unwrap();
-    fixture.ok(&["acquire", "port", "web", "--workspace", "first"]);
-    fixture.ok(&["acquire", "resource", "local-lock", "--workspace", "first"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "local-lock",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     fixture.ok(&[
         "acquire",
         "resource",
         "global-lock",
         "--workspace",
-        "second",
+        &fixture.id("second"),
     ]);
     let declined = fixture.run(&["repo", "rm", "doomed"]);
     assert!(!declined.status.success());
     let scoped = fixture.run(&[
         "run",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--",
         support::shoal_binary(),
         "repo",
@@ -857,14 +869,14 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!scoped.status.success());
     let mut command = fixture
         .command()
-        .args(["run", "--workspace", "first", "--"])
+        .args(["run", "--workspace", &fixture.id("first"), "--"])
         .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
     wait_until("execution registration", || {
-        !fixture.ok(&["status", "first"])["executions"]
+        !fixture.ok(&["status", &fixture.id("first")])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -1175,13 +1187,25 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     fs::write(&input, "[ports.web]\n").unwrap();
     let saved = fixture.save_local_config(id, &input);
     let workspace = fixture.add("worker");
-    let port = fixture.ok(&["acquire", "port", "web", "--workspace", "worker"]);
-    let resource = fixture.ok(&["acquire", "resource", "lock", "--workspace", "worker"]);
+    let port = fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("worker"),
+    ]);
+    let resource = fixture.ok(&[
+        "acquire",
+        "resource",
+        "lock",
+        "--workspace",
+        &fixture.id("worker"),
+    ]);
     fixture.ok(&[
         "acquire",
         "sim",
         "--workspace",
-        "worker",
+        &fixture.id("worker"),
         "--clean",
         "--reason",
         "repository removal test",
@@ -1191,11 +1215,11 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     assert!(fixture.repo.exists());
     assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "worker"])["reserved"][0],
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("worker")])["reserved"][0],
         port
     );
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "worker"])["leases"][0],
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("worker")])["leases"][0],
         resource
     );
     fixture.restart();
@@ -1298,7 +1322,7 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
     assert!(output.status.success(), "{output:?}");
 
     // The agent works in a workspace on the setup branch, in setup mode.
-    let workspace = &fixture.ok(&["status", "shoal-setup"])["workspace"];
+    let workspace = &fixture.ok(&["status", &fixture.id("shoal-setup")])["workspace"];
     assert_eq!(workspace["branch"], "shoal-setup", "{workspace}");
     assert_eq!(workspace["mode"], "setup", "{workspace}");
     // It is told where the local config goes, which lies in the
@@ -1360,7 +1384,7 @@ fn repository_setup_starts_its_agent_past_max_agents() {
     assert!(!chat_args(&fixture).is_empty());
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 
-    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
 }
 

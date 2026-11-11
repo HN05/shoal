@@ -27,7 +27,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
         chat: true,
         // Without a value, before another flag.
         in_workspace: Some(None),
-        parent: Some(SpaceSelector::parse("7")),
+        parent: Some(SpaceSelector::from("7")),
         here: true,
         issue: Some(Some("12".into())),
         agent: Some("codex".parse().unwrap()),
@@ -49,7 +49,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
     assert_round_trips(StartArgs {
         recorded_narrowing: Some(narrowing),
         chat: true,
-        in_workspace: Some(Some(SpaceSelector::parse("worker"))),
+        in_workspace: Some(Some(SpaceSelector::from("4"))),
         // Without a value, last before --.
         issue: Some(None),
         args: vec!["task".into()],

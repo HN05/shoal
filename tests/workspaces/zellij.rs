@@ -487,7 +487,7 @@ fn zellij_log() -> String {
 
 /// The names of `workspace`'s sessions, as `shoal status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", workspace])["sessions"]
+    fixture.ok(&["status", &fixture.id(workspace)])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -496,7 +496,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", workspace])["executions"]
+    fixture.ok(&["status", &fixture.id(workspace)])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -520,7 +520,7 @@ fn wait_for_agent(fixture: &Fixture, workspace: &str) {
         {
             return false;
         }
-        let status = fixture.ok(&["status", workspace]);
+        let status = fixture.ok(&["status", &fixture.id(workspace)]);
         status["setup_finished"] == true
             && status["executions"]
                 .as_array()
@@ -556,7 +556,7 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     };
     add_inside(&fixture, &mut zellij, "placed");
     // Where no client shows the user's session, Shoal opens one of its own.
-    let status = fixture.ok(&["status", "placed"]);
+    let status = fixture.ok(&["status", &fixture.id("placed")]);
     assert_eq!(status["places"][0]["group"], "caller", "{status}");
     // A listing can still miss the tab Shoal saw open.
     wait_until("the tab Shoal opened to show", || {
@@ -566,14 +566,17 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
 
     // An agent in the user's own pane is recorded where it runs, but the
     // pane stays the user's.
-    zellij.type_shoal(&fixture, "run --workspace placed -- sleep 600");
+    zellij.type_shoal(
+        &fixture,
+        &format!("run --workspace {} -- sleep 600", fixture.id("placed")),
+    );
     wait_until("the user's command to run", || {
         executions(&fixture, "placed") == 2
     });
     // Agents outlive the client, and the tab closes without one.
     zellij.detach();
     assert_eq!(executions(&fixture, "placed"), 2);
-    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
     wait_until("the tab Shoal opened to close", || {
         !zellij.tabs().contains(&"placed".to_owned())
     });
@@ -597,7 +600,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
         zellij.panes("caller").len() == 2
     });
 
-    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
     wait_until("the split Shoal opened to close", || {
         zellij.panes("caller").len() == 1
     });
@@ -615,7 +618,7 @@ fn zellij_off_leaves_launches_from_its_panes_to_zmx() {
     };
     fixture.add("plain");
     let (output, transcript) = fixture.terminal_command(
-        zellij.inside(fixture.command().args(["pi", "plain"])),
+        zellij.inside(fixture.command().args(["pi", &fixture.id("plain")])),
         "",
         true,
     );
@@ -635,12 +638,12 @@ fn removal_leaves_a_pane_recorded_on_an_earlier_server() {
     // under the same ID; additions show a current record's pane closing.
     fixture.add("earlier");
     let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-        "workspace": "earlier",
+        "workspace": fixture.id("earlier"),
         "origin": {"host": "zellij", "group": "caller", "place": format!("caller:{USERS}"),
             "owned": true, "data": {"socket_dir": zellij.sockets.path()}, "instance": "1:1"},
     }}));
     assert!(recorded.get("error").is_none(), "{recorded}");
-    fixture.ok(&["rm", "--wait", "earlier", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("earlier"), "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(zellij.pane_open("caller", USERS));
 }
@@ -671,7 +674,7 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
         wait_for_agent(&fixture, "outside");
         assert!(zellij.sessions().contains(&"outside".to_owned()));
         assert_eq!(sessions(&fixture, "outside"), ["outside"]);
-        fixture.ok(&["rm", "--wait", "outside", "--yes"]);
+        fixture.ok(&["rm", "--wait", &fixture.id("outside"), "--yes"]);
         wait_until("the session Shoal opened to end", || {
             !zellij.sessions().contains(&"outside".to_owned())
         });
@@ -684,7 +687,7 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
 /// The place Shoal recorded for `workspace`, with `pane` of the user's
 /// session in its stead: on the same server instance.
 fn place_beside(fixture: &Fixture, workspace: &str, pane: &str) -> Value {
-    let mut place = fixture.ok(&["status", workspace])["places"][0].clone();
+    let mut place = fixture.ok(&["status", &fixture.id(workspace)])["places"][0].clone();
     place["place"] = format!("caller:{pane}").into();
     place
 }
@@ -723,11 +726,11 @@ fn a_workspace_title_relabels_the_tab_shoal_opened_leaving_the_users() {
     // The user's own tab, recorded as the workspace's, shows the name the
     // user gave it.
     let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-        "workspace": "placed", "origin": place_beside(&fixture, "placed", USERS),
+        "workspace": fixture.id("placed"), "origin": place_beside(&fixture, "placed", USERS),
     }}));
     assert!(recorded.get("error").is_none(), "{recorded}");
 
-    fixture.ok(&["rename", "placed", "Login retries"]);
+    fixture.ok(&["rename", &fixture.id("placed"), "Login retries"]);
     assert_eq!(zellij.tabs(), [users_tab, "Login retries".to_owned()]);
 }
 
@@ -756,8 +759,8 @@ fn chat_rename_relabels_a_zellij_tab_that_still_shows_the_old_name() {
     start("talk", &zellij.new_tab("talk"));
     start("notes", USERS);
 
-    fixture.ok(&["rename", "talk", "topic"]);
-    fixture.ok(&["rename", "notes", "other"]);
+    fixture.ok(&["rename", &fixture.id("talk"), "topic"]);
+    fixture.ok(&["rename", &fixture.id("notes"), "other"]);
     let tabs = zellij.tabs();
     assert!(tabs.contains(&"topic".to_owned()), "{tabs:?}");
     assert!(tabs.contains(&users_tab), "{tabs:?}");
@@ -785,7 +788,7 @@ fn demos_open_in_sessions_of_their_own_outside_zellij_and_take_input() {
     demo(&[
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sh",
         "-c",
@@ -798,17 +801,23 @@ fn demos_open_in_sessions_of_their_own_outside_zellij_and_take_input() {
         .unwrap_or_else(|| panic!("{sessions:?}"))
         .clone();
     let screen = || {
-        demo(&["screen", "demo", "--workspace", "tried"])["screen"]
+        demo(&["screen", "demo", "--workspace", &fixture.id("tried")])["screen"]
             .as_str()
             .unwrap()
             .to_owned()
     };
     wait_until("the demo to run", || screen().contains("ready"));
-    demo(&["send", "demo", "--workspace", "tried", "hello;\r"]);
+    demo(&[
+        "send",
+        "demo",
+        "--workspace",
+        &fixture.id("tried"),
+        "hello;\r",
+    ]);
     wait_until("the demo to read its input", || {
         screen().contains("got hello;")
     });
-    demo(&["stop", "--workspace", "tried"]);
+    demo(&["stop", "--workspace", &fixture.id("tried")]);
     wait_until("the demo's session to end", || {
         !zellij.sessions().contains(&own)
     });

@@ -513,7 +513,7 @@ pub(in crate::cli) async fn run_agent(
                 ..start
             };
             let session = attaches.run_agent(&start, owner, &agent.name).await?;
-            report_detach(attaches, &workspace.name, &session).await?
+            report_detach(attaches, &workspace.number.to_string(), &session).await?
         }
         AgentRun::Place(places) => {
             let place = places.open(&start).await?;
@@ -603,8 +603,14 @@ pub(in crate::cli) async fn start_chat(
     };
     if let Some(attaches) = attaches {
         let session = attaches.run_chat(&start).await?;
-        if report_detach(attaches, name, &session).await? {
-            recent::record_chat_attach(ctx, &SpaceSelector::from(name)).await;
+        let chat = recent::session_chat(ctx, host.host.name(), &session).await;
+        // Before the chat records its session, `-` is where it returns to.
+        let space = chat.as_ref().map(|chat| chat.number.to_string());
+        let space = space.as_deref().unwrap_or(SpaceSelector::PREVIOUS);
+        if report_detach(attaches, space, &session).await?
+            && let Some(chat) = chat
+        {
+            recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
         }
         return Ok(ChatStarted::Shown);
     }

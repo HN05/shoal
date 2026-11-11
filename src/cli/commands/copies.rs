@@ -24,7 +24,7 @@ pub(super) struct Copied {
 }
 
 /// What `args` copy; `None` when they ask for no copy. The workspace is the
-/// one `--copy` names, by name, ID or number, else the current one, else
+/// one `--copy` selects, by number or ID, else the current one, else
 /// one picked; only with `--checkpoint` may it be a removed one.
 pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copied>> {
     if !args.is_set() {
@@ -34,7 +34,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         ui::select_workspace(ctx, args.copy.flatten(), Fallback::CurrentDirectory).await?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let live = (workspaces.into_iter())
-        .find(|workspace| selector.selects(&workspace.id, &workspace.name, workspace.number));
+        .find(|workspace| selector.selects(&workspace.id, workspace.number));
     let (workspace, repository, named) = match live {
         Some(workspace) => (
             workspace.id,
@@ -55,7 +55,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     }))
 }
 
-/// The ID of the removed workspace `selector` names, by name or ID, of its
+/// The ID of the removed workspace `selector` selects by ID, of its
 /// repository, and its branch or else its name.
 async fn removed(
     ctx: &Context,
@@ -64,7 +64,7 @@ async fn removed(
     let removed = crate::client::removal::removed(&ctx.paths).await?;
     let removed = removed
         .into_iter()
-        .find(|removed| selector.names(&removed.workspace_id, &removed.name))
+        .find(|removed| selector.given_id() == Some(&removed.workspace_id))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
     let named = removed.checkpoint.branch.unwrap_or(removed.name.into());
     Ok((removed.workspace_id, removed.repository_id, named))

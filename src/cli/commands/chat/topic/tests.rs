@@ -50,7 +50,7 @@ fn options(narrowing: Narrowing) -> Options {
         fork: true,
         restore: Some(SpaceId::from("c1")),
         handoff: None,
-        parent: Some(SpaceSelector::parse("7")),
+        parent: Some(SpaceSelector::from("7")),
         narrowing,
     }
 }
@@ -109,7 +109,7 @@ fn a_chat_in_a_workspace_reopens_there() {
         Some("feature".into()),
         crate::state::WorkspaceState::Ready,
     );
-    workspace.id = "worker-id".into();
+    workspace.id = "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09".into();
     let topic = Topic::workspace(workspace.clone(), &"plan".into());
     assert_eq!(topic.name, "worker-chat");
     let agent: Agent = "claude".parse().unwrap();
@@ -130,7 +130,9 @@ fn a_chat_in_a_workspace_reopens_there() {
     let start = parsed_start(topic.relaunch.command_line(named));
     assert_eq!(
         start.in_workspace,
-        Some(Some(SpaceSelector::parse("worker-id")))
+        Some(Some(SpaceSelector::from(
+            "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09"
+        )))
     );
     assert_eq!((start.mode, start.repository), (Some("plan".into()), None));
 }

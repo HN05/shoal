@@ -35,7 +35,7 @@ pub enum BranchCommand {
 pub enum BaseCommand {
     /// Record the workspace whose branch this workspace builds on.
     Set {
-        /// Workspace number, name or ID, or a branch, in the same repository;
+        /// Workspace number or ID, or a branch, in the same repository;
         /// omit to choose one.
         base: Option<String>,
         #[arg(short = 'w', long)]
@@ -113,8 +113,9 @@ pub enum ReviewCommand {
     /// The reviewer runs once in the background, read-only, and its findings
     /// arrive as a message.
     Run {
-        /// Space to review, a workspace's changes or a chat's linked PR, or a PR URL.
-        space: Option<SpaceSelector>,
+        /// Space to review, a workspace's changes or a chat's linked PR, by
+        /// number or ID, or a PR URL.
+        space: Option<String>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
         #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "space", value_parser = item_reference)]
         pr: Option<String>,

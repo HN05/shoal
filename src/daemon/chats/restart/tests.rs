@@ -77,7 +77,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     let error = restart.await.unwrap_err();
 
     assert!(
-        format!("{error:#}").contains("shoal resume unrestored"),
+        format!("{error:#}").contains(&format!("shoal resume {}", chat.number)),
         "{error:#}"
     );
     assert!(!process.wait().unwrap().success());

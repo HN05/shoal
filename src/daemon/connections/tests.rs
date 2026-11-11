@@ -63,7 +63,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     };
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask.clone(),
             Vec::new(),
             &Attacher::User,
@@ -90,7 +90,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         }
     });
     let await_answer = || QuestionMethod::AwaitAnswer {
-        space: SpaceSelector::parse(&workspace.name),
+        space: SpaceSelector::id(&workspace.id),
         item: question.number.item,
         ask: ask.clone(),
     };
@@ -109,7 +109,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         narrowing: Default::default(),
         mode: None,
         model: Default::default(),
-        workspace: SpaceSelector::parse(&workspace.name),
+        workspace: SpaceSelector::id(&workspace.id),
         wrapper: wrapper.clone(),
         kind: crate::daemon::workspace::ExecutionKind::Command,
         agent: None,

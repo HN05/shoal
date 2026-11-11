@@ -49,7 +49,7 @@ async fn workspace(manager: &Manager, root: &std::path::Path, name: &str) -> Wor
 /// The turn state and interruption of the workspace's only agent.
 async fn turn(manager: &Manager, workspace: &Workspace) -> (Option<AgentState>, bool) {
     let agents = manager
-        .workspace_agents(&SpaceSelector::from(&workspace.name))
+        .workspace_agents(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [agent] = agents.as_slice() else {
@@ -72,7 +72,7 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
     );
 
     let status = manager
-        .interrupt_turn(&SpaceSelector::from(&workspace.name), id.clone())
+        .interrupt_turn(&SpaceSelector::id(&workspace.id), id.clone())
         .await
         .unwrap();
     assert_eq!(status.state, AgentState::Idle);
@@ -92,7 +92,7 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
     );
 
     manager
-        .interrupt_turn(&SpaceSelector::from(&workspace.name), id.clone())
+        .interrupt_turn(&SpaceSelector::id(&workspace.id), id.clone())
         .await
         .unwrap();
     manager
@@ -113,7 +113,7 @@ async fn an_interrupt_names_an_agent_of_the_workspace() {
     let workspace = workspace(&manager, temp.path(), "fix").await;
     let other = workspace_with_agent(&manager, temp.path()).await;
     manager
-        .interrupt_turn(&SpaceSelector::from(&workspace.name), other)
+        .interrupt_turn(&SpaceSelector::id(&workspace.id), other)
         .await
         .unwrap_err();
 }
@@ -166,7 +166,7 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .await
         .unwrap();
     manager
-        .interrupt_turn(&SpaceSelector::from(&workspace.name), id.clone())
+        .interrupt_turn(&SpaceSelector::id(&workspace.id), id.clone())
         .await
         .unwrap();
     wait(true).await.expect("wait ended").unwrap();

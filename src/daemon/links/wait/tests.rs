@@ -37,7 +37,7 @@ use crate::{
 impl Manager {
     async fn wait_prs(&self, selector: &str, seconds: Option<u64>) -> Result<Updates> {
         self.wait_items(
-            &SpaceSelector::parse(selector),
+            &SpaceSelector::from(selector),
             &Selection {
                 kind: Some(LinkKind::Pr),
                 input: None,

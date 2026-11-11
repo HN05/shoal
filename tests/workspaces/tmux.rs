@@ -145,7 +145,7 @@ impl Drop for TmuxServer {
 
 /// The names of `workspace`'s sessions, as `shoal status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", workspace])["sessions"]
+    fixture.ok(&["status", &fixture.id(workspace)])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -154,7 +154,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", workspace])["executions"]
+    fixture.ok(&["status", &fixture.id(workspace)])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -172,7 +172,7 @@ fn wait_for_agent(fixture: &Fixture, workspace: &str) {
             .iter()
             .any(|listed| listed["name"] == workspace)
             && executions(fixture, workspace) == 1
-            && fixture.ok(&["status", workspace])["setup_finished"] == true
+            && fixture.ok(&["status", &fixture.id(workspace)])["setup_finished"] == true
     });
 }
 
@@ -201,11 +201,15 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
 
     // An agent in the user's own pane is recorded where it runs, but the
     // pane stays the user's.
-    tmux.type_shoal(&fixture, &tmux.users, "run --workspace placed -- sleep 600");
+    tmux.type_shoal(
+        &fixture,
+        &tmux.users,
+        &format!("run --workspace {} -- sleep 600", fixture.id("placed")),
+    );
     wait_until("the user's command to run", || {
         executions(&fixture, "placed") == 2
     });
-    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
     wait_until("the window Shoal opened to close", || {
         !tmux.windows().contains(&"placed".to_owned())
     });
@@ -237,7 +241,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
     assert_eq!(tmux.windows(), windows);
     assert_eq!(tmux.panes().len(), 2);
 
-    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
     wait_until("the split Shoal opened to close", || {
         tmux.panes().len() == 1
     });
@@ -256,7 +260,7 @@ fn tmux_off_leaves_launches_from_its_panes_to_zmx() {
     };
     fixture.add("plain");
     let (output, transcript) = fixture.terminal_command(
-        tmux.inside(fixture.command().args(["pi", "plain"])),
+        tmux.inside(fixture.command().args(["pi", &fixture.id("plain")])),
         "",
         true,
     );
@@ -275,7 +279,7 @@ fn removal_closes_a_recorded_pane_only_on_the_server_that_created_it() {
     let record = |workspace: &str, pane: &str, instance: &str| {
         fixture.add(workspace);
         let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-            "workspace": workspace,
+            "workspace": fixture.id(workspace),
             "origin": {"host": "tmux", "place": pane, "owned": true,
                 "data": {"socket": tmux.socket}, "instance": instance},
         }}));
@@ -286,13 +290,13 @@ fn removal_closes_a_recorded_pane_only_on_the_server_that_created_it() {
     // A record from before the server restarted names another pane now
     // under the same ID.
     record("earlier", &users, "1:1");
-    fixture.ok(&["rm", "--wait", "earlier", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("earlier"), "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(tmux.pane_open(&users));
 
     let opened = tmux.lines(&["split-window", "-d", "-P", "-F", "#{pane_id}"])[0].clone();
     record("current", &opened, &instance);
-    fixture.ok(&["rm", "--wait", "current", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("current"), "--yes"]);
     wait_until("the recorded pane to close", || !tmux.pane_open(&opened));
     assert!(tmux.pane_open(&users));
 }
@@ -324,12 +328,12 @@ fn a_workspace_title_from_outside_tmux_relabels_the_window_on_its_recorded_serve
     let opened = tmux.new_window("titled");
     for pane in [&opened, &tmux.users] {
         let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-            "workspace": "titled", "origin": tmux.origin(pane),
+            "workspace": fixture.id("titled"), "origin": tmux.origin(pane),
         }}));
         assert!(recorded.get("error").is_none(), "{recorded}");
     }
 
-    fixture.ok(&["rename", "titled", "Login retries"]);
+    fixture.ok(&["rename", &fixture.id("titled"), "Login retries"]);
     assert_eq!(tmux.windows(), ["mine", "Login retries"]);
 }
 
@@ -353,8 +357,8 @@ fn chat_rename_relabels_a_tmux_window_that_still_shows_the_old_name() {
     start("talk", &tmux.new_window("talk"));
     start("notes", &tmux.users);
 
-    fixture.ok(&["rename", "talk", "topic"]);
-    fixture.ok(&["rename", "notes", "other"]);
+    fixture.ok(&["rename", &fixture.id("talk"), "topic"]);
+    fixture.ok(&["rename", &fixture.id("notes"), "other"]);
     assert_eq!(tmux.windows(), ["mine", "topic"]);
 }
 
@@ -381,7 +385,7 @@ fn demos_open_in_the_configured_session_outside_tmux_and_take_input() {
     demo(&[
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sh",
         "-c",
@@ -390,7 +394,7 @@ fn demos_open_in_the_configured_session_outside_tmux_and_take_input() {
     let sessions = tmux.lines(&["list-sessions", "-F", "#{session_name}"]);
     assert!(sessions.contains(&"demos".to_owned()), "{sessions:?}");
     let screen = || {
-        demo(&["screen", "demo", "--workspace", "tried"])["screen"]
+        demo(&["screen", "demo", "--workspace", &fixture.id("tried")])["screen"]
             .as_str()
             .unwrap()
             .to_owned()
@@ -405,11 +409,17 @@ fn demos_open_in_the_configured_session_outside_tmux_and_take_input() {
         .unwrap_or_else(|| panic!("{panes:?}"));
     let output = tmux.tmux(&["copy-mode", "-t", pane]);
     assert!(output.status.success(), "{output:?}");
-    demo(&["send", "demo", "--workspace", "tried", "hello;\r"]);
+    demo(&[
+        "send",
+        "demo",
+        "--workspace",
+        &fixture.id("tried"),
+        "hello;\r",
+    ]);
     wait_until("the demo to read its input", || {
         screen().contains("got hello;")
     });
-    demo(&["stop", "--workspace", "tried"]);
+    demo(&["stop", "--workspace", &fixture.id("tried")]);
     wait_until("the demo's window to close", || {
         !tmux
             .lines(&["list-windows", "-t", "demos", "-F", "#{window_name}"])

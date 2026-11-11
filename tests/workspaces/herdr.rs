@@ -202,7 +202,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     // The tab's shell, not the caller's, enters the workspace after the agent.
     let tab_directive = herdr_tab_directive(&fixture);
-    let workspace = fixture.ok(&["status", "herdr-agent"]);
+    let workspace = fixture.ok(&["status", &fixture.id("herdr-agent")]);
     assert_eq!(
         fs::read_to_string(&tab_directive).unwrap(),
         format!("{}\n", workspace["workspace"]["path"].as_str().unwrap())
@@ -457,7 +457,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         if args[1] == "34" {
-            fixture.ok(&["rm", "--wait", "34-fix-api-timeout", "--yes"]);
+            fixture.ok(&["rm", "--wait", &fixture.id("34-fix-api-timeout"), "--yes"]);
             wait_for_herdr_close(&fixture);
         }
     }
@@ -531,7 +531,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         assert!(!fixture.root.path().join("injected").exists());
-        fixture.ok(&["rm", "--wait", "topic", "--yes"]);
+        fixture.ok(&["rm", "--wait", &fixture.id("topic"), "--yes"]);
         wait_for_herdr_close(&fixture);
     }
 }
@@ -540,7 +540,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
 fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
     fixture
         .command()
-        .args(["--json", "rename", workspace, title])
+        .args(["--json", "rename", &fixture.id(workspace), title])
         .env("HERDR_ENV", "1")
         .env("HERDR_WORKSPACE_ID", "w1")
         .env("HERDR_TAB_ID", "w1:t9")
@@ -579,7 +579,7 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
         &["tab", "rename", "w1:t9", "Agent tab names"]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["title"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["title"],
         "Agent tab names"
     );
 
@@ -753,7 +753,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let (worker, transcript) =
         fixture.interactive_command(herdr_worker_command(&fixture).env("SHELL", shell), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
-    let workspace = fixture.ok(&["status", "herdr-shell"]);
+    let workspace = fixture.ok(&["status", &fixture.id("herdr-shell")]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("shell-cwd"))
             .unwrap()
@@ -761,7 +761,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
         workspace["workspace"]["path"].as_str().unwrap()
     );
     assert_eq!(herdr_changes(&fixture).len(), 3);
-    fixture.ok(&["rm", "--wait", "herdr-shell", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("herdr-shell"), "--yes"]);
     wait_for_herdr_close(&fixture);
 }
 
@@ -834,7 +834,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?}");
     assert_eq!(herdr_changes(&fixture).len(), 3);
-    fixture.ok(&["done", "retain"]);
+    fixture.ok(&["done", &fixture.id("retain")]);
     assert_eq!(herdr_changes(&fixture).len(), 3);
     // Enable closure, then fail setup before the agent can start.
     fs::write(
@@ -938,16 +938,16 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
         fixture.root.path().join("happy-exited").exists()
     });
     wait_until("Happy execution reporting", || {
-        fixture.ok(&["status", "happy-tab"])["executions"]
+        fixture.ok(&["status", &fixture.id("happy-tab")])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
     });
     assert_eq!(herdr_changes(&fixture).len(), 3);
     fixture.restart();
-    fixture.ok(&["done", "happy-tab"]);
+    fixture.ok(&["done", &fixture.id("happy-tab")]);
     wait_for_herdr_close(&fixture);
-    assert!(fixture.ok(&["status", "happy-tab"])["completion"].is_object());
+    assert!(fixture.ok(&["status", &fixture.id("happy-tab")])["completion"].is_object());
 }
 
 #[test]
@@ -1055,7 +1055,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     // A server Shoal cannot reach keeps the record for the next sweep.
     let unreachable = fixture.root.path().join("herdr-unreachable");
     fs::write(&unreachable, "").unwrap();
-    fixture.ok(&["rm", "--wait", "tabbed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("tabbed"), "--yes"]);
     assert!(closes(&fixture) >= 1);
     assert!(recorded(&fixture));
     let alerts = fixture.ok(&["alerts"]);
@@ -1099,8 +1099,8 @@ fn chat_rename_relabels_a_herdr_tab_that_still_shows_the_old_name() {
     )
     .unwrap();
 
-    fixture.ok(&["rename", "talk", "topic"]);
-    fixture.ok(&["rename", "mine", "other"]);
+    fixture.ok(&["rename", &fixture.id("talk"), &fixture.id("topic")]);
+    fixture.ok(&["rename", &fixture.id("mine"), &fixture.id("other")]);
     let renames: Vec<_> = herdr_calls(&fixture)
         .into_iter()
         .filter(|call| call.starts_with(&["tab".to_owned(), "rename".to_owned()]))
@@ -1125,7 +1125,7 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     let calls_since = |count: usize| herdr_calls(&fixture)[count..].to_vec();
 
     // Outside Herdr, the tab is focused and a client attaches its session.
-    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    let (output, transcript) = fixture.interactive(&["attach", &fixture.id("talk")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(
         calls_since(0),
@@ -1139,7 +1139,7 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     // In a pane of the same server, focusing the tab shows it.
     let before = herdr_calls(&fixture).len();
     let mut same = fixture.command();
-    same.args(["attach", "talk"])
+    same.args(["attach", &fixture.id("talk")])
         .env("HERDR_ENV", "1")
         .env("HERDR_SOCKET_PATH", socket)
         .env("HERDR_PANE_ID", "w1:p1");
@@ -1154,7 +1154,7 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     let before = herdr_calls(&fixture).len();
     let mut other = fixture.command();
     other
-        .args(["attach", "talk"])
+        .args(["attach", &fixture.id("talk")])
         .env("HERDR_ENV", "1")
         .env("HERDR_SOCKET_PATH", "/herdr/other/herdr.sock")
         .env("HERDR_PANE_ID", "w1:p1");
@@ -1171,14 +1171,14 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     fs::remove_file(home.join("herdr-calls")).unwrap();
     let config = home.join(".config/shoal/config.toml");
     fs::write(&config, "[terminal.herdr]\nenabled = false\n").unwrap();
-    let (output, _) = fixture.interactive(&["attach", "talk"], "");
+    let (output, _) = fixture.interactive(&["attach", &fixture.id("talk")], "");
     assert!(!output.status.success());
     assert!(!home.join("herdr-calls").exists());
     fs::remove_file(&config).unwrap();
 
     // A closed pane leaves nothing to attach.
     fs::write(home.join("closed-panes"), "w1:p4\n").unwrap();
-    let (output, _) = fixture.interactive(&["attach", "talk"], "");
+    let (output, _) = fixture.interactive(&["attach", &fixture.id("talk")], "");
     assert!(!output.status.success());
 }
 
@@ -1191,14 +1191,14 @@ fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
     fixture.add("other");
     let record = |workspace: &str, place: &str| {
         let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-            "workspace": workspace,
+            "workspace": fixture.id(workspace),
             "origin": {"host": "herdr", "group": "w1", "place": place,
                        "data": {"HERDR_SESSION": "work"}},
         }}));
         assert!(recorded.get("error").is_none(), "{recorded}");
     };
     record("other", "w1:p4");
-    let (output, transcript) = fixture.interactive(&["attach", "other"], "");
+    let (output, transcript) = fixture.interactive(&["attach", &fixture.id("other")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let previous = || {
         let before = herdr_calls(&fixture).len();
@@ -1213,7 +1213,7 @@ fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
     assert_eq!(previous(), "w1:t4");
     // Outside Herdr, an agent launch opens a tab and attaches its session.
     let mut launch = fixture.command();
-    launch.args(["claude", "shown"]);
+    launch.args(["claude", &fixture.id("shown")]);
     let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
     assert!(output.status.success(), "{output:?}\n{transcript}");
     // The fake Herdr runs no worker to record the tab it opened.
@@ -1227,7 +1227,7 @@ fn attach_previous_returns_to_a_herdr_tab_after_its_client_detaches() {
     install_fake_herdr(&fixture);
     fixture.add("tabbed");
     let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-        "workspace": "tabbed",
+        "workspace": fixture.id("tabbed"),
         "origin": {"host": "herdr", "group": "w1", "place": "w1:p4",
                    "data": {"HERDR_SESSION": "work"}},
     }}));
@@ -1238,7 +1238,7 @@ fn attach_previous_returns_to_a_herdr_tab_after_its_client_detaches() {
             .filter(|call| call[..] == ["session", "attach", "work"])
             .count()
     };
-    let (output, transcript) = fixture.interactive(&["attach", "tabbed"], "");
+    let (output, transcript) = fixture.interactive(&["attach", &fixture.id("tabbed")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), 1);
     let (output, transcript) = fixture.interactive(&["attach", "-"], "");

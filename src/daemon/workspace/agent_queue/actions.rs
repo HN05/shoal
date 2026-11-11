@@ -26,23 +26,15 @@ use crate::{
 };
 
 impl Manager {
-    /// The entry `selector` names by ID or name among those `caller` may
-    /// act on, if one does.
+    /// The entry with the ID `selector` among those `caller` may act on, if
+    /// one has it.
     async fn find_entry(
         &self,
         selector: &str,
         caller: Option<&Caller>,
     ) -> Result<Option<QueueEntry>> {
         let entries = self.reachable_queue(caller).await?;
-        let mut matches = entries
-            .into_iter()
-            .filter(|entry| entry.id == selector || entry.name == selector);
-        let entry = matches.next();
-        ensure!(
-            matches.next().is_none(),
-            "several queue entries are named {selector}; pass the entry ID"
-        );
-        Ok(entry)
+        Ok(entries.into_iter().find(|entry| entry.id == selector))
     }
 
     async fn selected_entry(&self, selector: &str, caller: Option<&Caller>) -> Result<QueueEntry> {

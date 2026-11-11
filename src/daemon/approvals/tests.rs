@@ -155,14 +155,16 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
             .decide_approval(id, approve, None, Default::default(), None)
             .await?;
         assert_eq!(decision.status, status);
-        let messages = manager.agent_messages(&"worker".into()).await?;
+        let messages = manager
+            .agent_messages(&manager.named("worker").await)
+            .await?;
         let ids: Vec<_> = messages.iter().map(|m| m.id).collect();
         assert_eq!(
             messages.into_iter().map(|m| m.message).collect::<Vec<_>>(),
             [decision.decision_message()]
         );
         manager
-            .mark_agent_messages_delivered(&"worker".into(), ids)
+            .mark_agent_messages_delivered(&manager.named("worker").await, ids)
             .await?;
         let retry = manager
             .decide_approval(id, approve, None, Default::default(), None)
@@ -172,7 +174,12 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
             serde_json::to_value(&decision)?
         );
         // Repeating a decision does not tell the agent again.
-        assert!(manager.agent_messages(&"worker".into()).await?.is_empty());
+        assert!(
+            manager
+                .agent_messages(&manager.named("worker").await)
+                .await?
+                .is_empty()
+        );
         assert!(
             manager
                 .decide_approval(id, !approve, None, Default::default(), None)
@@ -197,7 +204,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     );
     // A decision chosen from a shown request does not reach another
     // request holding its number.
-    let shown = manager.approval_requests(Some(&"worker".into())).await?;
+    let shown = (manager.approval_requests(Some(&manager.named("worker").await))).await?;
     manager
         .decide_approval(
             item(1, 1),
@@ -351,13 +358,13 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     let unseen = request().await;
     assert!(
         manager
-            .withdraw_approval(&SpaceSelector::from(&other.name), unseen.number)
+            .withdraw_approval(&SpaceSelector::id(&other.id), unseen.number)
             .await
             .is_err()
     );
 
     let withdrawn = manager
-        .withdraw_approval(&SpaceSelector::from(&workspace.name), unseen.number)
+        .withdraw_approval(&SpaceSelector::id(&workspace.id), unseen.number)
         .await
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
@@ -366,7 +373,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     let default = proposals::ProposalDecision::default;
     let decided = manager.decide_approval(unseen.number, true, None, default(), None);
     assert!(decided.await.is_err());
-    let selected = SpaceSelector::from(&workspace.name);
+    let selected = SpaceSelector::id(&workspace.id);
     let withdrawn = manager.withdraw_approval(&selected, unseen.number);
     assert!(withdrawn.await.is_err());
 
@@ -380,7 +387,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         .await
         .unwrap();
     manager
-        .withdraw_approval(&SpaceSelector::from(&workspace.name), shown.number)
+        .withdraw_approval(&SpaceSelector::id(&workspace.id), shown.number)
         .await
         .unwrap();
     let unread = manager.notifications(true, 50).await.unwrap();
@@ -393,9 +400,9 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         execution: None,
     };
     manager.executions.issue_scope("scope".into(), caller).await;
-    for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
+    for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {
         let mut method = crate::protocol::ApprovalMethod::WithdrawApproval {
-            space: SpaceSelector::parse(target),
+            space: SpaceSelector::from(target),
             number: shown.number,
         };
         let authorized =
@@ -436,7 +443,7 @@ async fn a_chat_withdraws_only_its_own_requests() {
         .unwrap();
     assert!(
         manager
-            .withdraw_approval(&SpaceSelector::from(&chat.name), request.number)
+            .withdraw_approval(&SpaceSelector::id(&chat.id), request.number)
             .await
             .is_err()
     );
@@ -462,7 +469,7 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
         .unwrap()
         .unwrap();
     manager
-        .withdraw_approval(&SpaceSelector::from(&workspace.name), request.number)
+        .withdraw_approval(&SpaceSelector::id(&workspace.id), request.number)
         .await
         .unwrap();
     // The allocation announces the request it recorded only now.

@@ -108,7 +108,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 "port",
                 "web",
                 "--workspace",
-                &name,
+                &fixture.id(&name),
                 "--reason",
                 "server",
             ]);
@@ -118,7 +118,14 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             fs::write(&claude_config, "{}").unwrap();
             let output = fixture
                 .command()
-                .args(["--json", "happy-claude", &name, "--", "--model", "test"])
+                .args([
+                    "--json",
+                    "happy-claude",
+                    &fixture.id(&name),
+                    "--",
+                    "--model",
+                    "test",
+                ])
                 .env("HAPPY_RECORD", &record)
                 .output()
                 .unwrap();
@@ -143,7 +150,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         let execution_id = launch["execution_id"].as_str().unwrap();
         let log = PathBuf::from(launch["log"].as_str().unwrap());
         assert!(log.starts_with(fixture.root.path().join("state/workspaces")));
-        let inspection = fixture.ok(&["status", &name]);
+        let inspection = fixture.ok(&["status", &fixture.id(&name)]);
         let executions = inspection["executions"].as_array().unwrap();
         assert_eq!(executions.len(), 1, "{inspection}");
         assert_eq!(executions[0]["id"], execution_id);
@@ -170,7 +177,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         assert!(!recorded.contains("scope=\n"), "{recorded}");
         assert!(recorded.contains("stdin=eof\nstdout=notty\n"), "{recorded}");
         if agent == "claude" {
-            let port = fixture.ok(&["leases", "port", "--workspace", &name])["reserved"][0]["port"]
+            let port = fixture.ok(&["leases", "port", "--workspace", &fixture.id(&name)])["reserved"][0]["port"]
                 .as_u64()
                 .unwrap();
             assert!(recorded.contains(&format!("port={port}\n")), "{recorded}");
@@ -182,18 +189,19 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         assert!(text.contains("happy stderr"), "{text}");
         assert!(process_alive(pid));
 
+        let id = fixture.id(&name);
         match operation {
-            "rm" => fixture.ok(&[operation, "--wait", &name]),
-            _ => fixture.ok(&[operation, &name]),
+            "rm" => fixture.ok(&[operation, "--wait", &id]),
+            _ => fixture.ok(&[operation, &id]),
         };
         wait_until("happy to exit", || !process_alive(pid));
         if operation == "stop" {
             assert_eq!(
-                fixture.ok(&["status", &name])["executions"],
+                fixture.ok(&["status", &fixture.id(&name)])["executions"],
                 serde_json::json!([])
             );
             assert!(log.exists());
-            fixture.ok(&["rm", "--wait", &name]);
+            fixture.ok(&["rm", "--wait", &fixture.id(&name)]);
         }
         assert!(
             !log.parent().unwrap().exists(),
@@ -303,7 +311,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
         }
         let pid = launch["pid"].as_u64().unwrap() as u32;
-        fixture.ok(&["rm", "--wait", &name, "--yes"]);
+        fixture.ok(&["rm", "--wait", &fixture.id(&name), "--yes"]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
     }
@@ -382,7 +390,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         fixture.add(&name);
         let output = fixture
             .command()
-            .args(["--json", "happy-codex", &name, "--", "--yolo"])
+            .args(["--json", "happy-codex", &fixture.id(&name), "--", "--yolo"])
             .env("HAPPY_RECORD", &record)
             .env("HAPPY_SERVER_URL", &server.url)
             .output()
@@ -468,7 +476,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         );
 
         let pid = launch["pid"].as_u64().unwrap() as u32;
-        fixture.ok(&["rm", "--wait", &name]);
+        fixture.ok(&["rm", "--wait", &fixture.id(&name)]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
     }
@@ -482,7 +490,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     fixture.add("unseeded");
     let output = fixture
         .command()
-        .args(["--json", "happy-codex", "unseeded"])
+        .args(["--json", "happy-codex", &fixture.id("unseeded")])
         .env("HAPPY_RECORD", &record)
         .env("HAPPY_SERVER_URL", &server.url)
         // Launched from inside another seeded session: its attachment must not leak.
@@ -499,7 +507,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let recorded = fs::read_to_string(&record).unwrap();
     assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
     let pid = launch["pid"].as_u64().unwrap() as u32;
-    fixture.ok(&["rm", "--wait", "unseeded"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("unseeded")]);
     wait_until("happy to exit", || !process_alive(pid));
 
     // A seeded session that no launch will ever attach to is deleted again.
@@ -512,7 +520,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let launch_orphan = || {
         fixture
             .command()
-            .args(["--json", "happy-codex", "orphan"])
+            .args(["--json", "happy-codex", &fixture.id("orphan")])
             .env("HAPPY_SERVER_URL", &server.url)
             // Only the fixture directory and system tools: a real happy must not be found.
             .env(
@@ -801,10 +809,10 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
     };
     happy_launch(&start(&["placed"]));
     fixture.add("finished");
-    fixture.ok(&["done", "finished"]);
-    happy_launch(&start(&["next", "--after", "finished"]));
-    fixture.ok(&["stop", "placed"]);
-    fixture.ok(&["stop", "next"]);
+    fixture.ok(&["done", &fixture.id("finished")]);
+    happy_launch(&start(&["next", "--after", &fixture.id("finished")]));
+    fixture.ok(&["stop", &fixture.id("placed")]);
+    fixture.ok(&["stop", &fixture.id("next")]);
 }
 
 /// Without a terminal, an agent Happy runs starts here only when the agent
@@ -846,7 +854,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     assert_eq!(entry["state"], "queued", "{stdout}");
     assert!(!record.exists());
     // It waits as a launch in the workspace it set up, which it keeps.
-    let status = fixture.ok(&["status", "happy"]);
+    let status = fixture.ok(&["status", &fixture.id("happy")]);
     assert_eq!(
         fixture.ok(&["queue"])[0]["opens"],
         status["workspace"]["id"]
@@ -856,6 +864,6 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
         "{status}"
     );
     fixture.ok(&["queue", "cancel", entry["id"].as_str().unwrap()]);
-    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
 }

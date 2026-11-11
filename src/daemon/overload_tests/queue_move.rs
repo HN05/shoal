@@ -11,7 +11,7 @@ async fn a_moved_agent_restores_in_its_wrapper_whatever_the_overload_policy() {
     set_recovery(&manager, false).await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
-    let moved = bounded(manager.queue_move(&workspace.name, QueuePlace::Last, None))
+    let moved = bounded(manager.queue_move(workspace.id.as_str(), QueuePlace::Last, None))
         .await
         .unwrap();
     assert!(moved.stopped);

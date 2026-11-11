@@ -112,9 +112,8 @@ impl Manager {
             Ok(space) => return Ok(space.id().clone()),
             Err(error) => error,
         };
-        let name = selector.id_or_name().map(str::to_owned);
-        let removed = match name {
-            Some(name) => self.store.run(move |db| removed(db, &name)).await?,
+        let removed = match selector.given_id().cloned() {
+            Some(id) => self.store.run(move |db| removed(db, &id)).await?,
             None => None,
         };
         removed.ok_or(error)
@@ -157,19 +156,16 @@ fn shown(events: Vec<LogEntry>, filter: LogFilter, limit: u32) -> Vec<LogEntry> 
     shown
 }
 
-/// The removed space whose last name or ID is `name`, the most recently
-/// removed first.
-fn removed(db: &Connection, name: &str) -> Result<Option<SpaceId>> {
+/// The removed space `id`, while the journal keeps its removal.
+fn removed(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
             "SELECT space_id FROM workspace_events
-             WHERE json_extract(record,'$.kind') IN (?2,'chat_ended')
-                 AND (space_id=?1 OR COALESCE(json_extract(record,'$.name'),
-                     json_extract(record,'$.chat.name'))=?1)
+             WHERE json_extract(record,'$.kind') IN (?2,'chat_ended') AND space_id=?1
                  AND space_id NOT IN (SELECT id FROM workspaces)
                  AND space_id NOT IN (SELECT id FROM chats)
              ORDER BY id DESC LIMIT 1",
-            params![name, EventKind::Removed],
+            params![id, EventKind::Removed],
             |row| row.get(0),
         )
         .optional()?)

@@ -65,7 +65,7 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
                 }
                 ensure!(
                     current.is_some(),
-                    "{0} has no agent session to attach; shoal status {0} shows whether its agent runs, and shoal alerts why it did not start",
+                    "{} has no agent session to attach; shoal status {id} shows whether its agent runs, and shoal alerts why it did not start",
                     entry.name
                 );
             }
@@ -74,9 +74,10 @@ async fn agent_terminal_session(ctx: &Context, entry: &QueueEntry) -> Result<(Sp
             }
             None => {}
         }
+        let attach = workspace.as_ref().map_or("", SpaceId::as_str);
         ensure!(
             tokio::time::Instant::now() < deadline,
-            "{0} has no agent session after {1} seconds; shoal attach {0} attaches once it has one",
+            "{} has no agent session after {} seconds; shoal attach {attach} attaches once it has one",
             entry.name,
             WAIT.as_secs()
         );

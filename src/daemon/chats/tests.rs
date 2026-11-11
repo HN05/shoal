@@ -196,7 +196,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
     assert_eq!(chat.session, None);
     let reported = manager
         .set_agent_state(
-            &"reporter".into(),
+            &manager.named("reporter").await,
             crate::state::AgentState::Idle,
             None,
             Some("session-1".into()),
@@ -478,7 +478,10 @@ async fn chats_and_workspaces_share_one_namespace() {
             .await
             .is_err()
     );
-    manager.remove_chat(&"talk".into(), None).await.unwrap();
+    manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap();
     manager
         .check_creation(&repo.id, Some("talk"), None, options)
         .await
@@ -675,13 +678,16 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
     // A removal the user confirmed for fewer spaces than are below it takes
     // none of them, and the chat stays.
     manager
-        .remove_chat(&"talk".into(), Some(vec![opened.id.clone()]))
+        .remove_chat(&manager.named("talk").await, Some(vec![opened.id.clone()]))
         .await
         .unwrap_err();
     assert!(manager.workspace_by_id(&split.id).await.is_ok());
-    assert!(manager.chat(&"talk".into()).await.is_ok());
+    assert!(manager.chat(&manager.named("talk").await).await.is_ok());
 
-    let removed = manager.remove_chat(&"talk".into(), None).await.unwrap();
+    let removed = manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap();
     assert_eq!(removed.chat.id, chat.id);
     assert_eq!(removed.children, ["split", "opened"]);
     assert!(manager.workspace_by_id(&opened.id).await.is_err());
@@ -730,7 +736,10 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
         .await
         .unwrap_err();
     // It is the chat's to inspect and remove, and goes with the chat.
-    let broken = manager.workspace(&"broken".into()).await.unwrap();
+    let broken = manager
+        .workspace(&manager.named("broken").await)
+        .await
+        .unwrap();
     assert_eq!(broken.state, crate::state::WorkspaceState::Failed);
     assert_eq!(broken.parent.map(|parent| parent.id), Some(chat.id));
 }
@@ -816,7 +825,7 @@ async fn the_diff_base_names_only_the_workspaces_own_worktree() {
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
     let base = manager
-        .diff_base(&SpaceSelector::from(&workspace.name))
+        .diff_base(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(base.path, workspace.path);
@@ -828,7 +837,7 @@ async fn the_diff_base_names_only_the_workspaces_own_worktree() {
     crate::daemon::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
     assert!(
         manager
-            .diff_base(&SpaceSelector::from(&workspace.name))
+            .diff_base(&SpaceSelector::id(&workspace.id))
             .await
             .is_err()
     );
@@ -849,7 +858,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         .unwrap();
     let chat = manager
         .start_chat_in_workspace(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
             std::process::id(),
@@ -873,25 +882,30 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         })
     };
     let diff = Operation::from(WorkspaceMethod::DiffBase {
-        workspace: SpaceSelector::parse(&workspace.name),
+        workspace: SpaceSelector::id(&workspace.id),
     });
     let items = Operation::from(ItemMethod::SelectItems {
-        context: ItemContext::Workspace(SpaceSelector::parse(&workspace.name)),
+        context: ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
         selection: Selection::default(),
         elsewhere: false,
     });
-    for mut read in [status(&workspace.name), diff, items] {
+    for mut read in [status(workspace.id.as_str()), diff, items] {
         authorize(&manager, Some(&"chat".into()), &mut read)
             .await
             .unwrap();
     }
     let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {
-        workspace: SpaceSelector::parse(&workspace.name),
+        workspace: SpaceSelector::id(&workspace.id),
         base: None,
     });
     let refused = authorize(&manager, Some(&"chat".into()), &mut change).await;
     assert!(refused.is_err());
-    let refused = authorize(&manager, Some(&"chat".into()), &mut status(&other.name)).await;
+    let refused = authorize(
+        &manager,
+        Some(&"chat".into()),
+        &mut status(other.id.as_str()),
+    )
+    .await;
     assert!(refused.is_err());
 }
 
@@ -904,7 +918,7 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
     );
     let chat = manager
         .start_chat_in_workspace(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
             process.id(),

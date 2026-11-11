@@ -111,13 +111,9 @@ fn a_chat_in_a_workspace_takes_no_repository() {
 #[test]
 fn a_copy_refuses_a_pr_or_branch_link_but_takes_an_issue() {
     let fits = |args: &[&str]| ensure_copy_fits(&start(args)).is_ok();
-    assert!(fits(&["repo", "--copy", "topic"]));
+    assert!(fits(&["repo", "--copy", "4"]));
     assert!(fits(&["https://forge.example/o/r/issues/7", "--copy"]));
-    assert!(!fits(&[
-        "https://forge.example/o/r/pulls/8",
-        "--copy",
-        "topic"
-    ]));
+    assert!(!fits(&["https://forge.example/o/r/pulls/8", "--copy", "4"]));
     assert!(!fits(&[
         "https://forge.example/o/r/src/branch/feature",
         "--checkpoint",

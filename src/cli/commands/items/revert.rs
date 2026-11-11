@@ -75,7 +75,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
         .with_context(|| {
             format!(
                 "{} reverts {}, but opening its PR failed; retry with shoal pr open --workspace {}",
-                reverting.name, merged.item.url, reverting.name
+                reverting.name, merged.item.url, reverting.number
             )
         })?;
     finish(ctx, &reverting).await?;

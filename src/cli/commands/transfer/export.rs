@@ -302,6 +302,13 @@ impl Checked {
         }
     }
 
+    fn id(&self) -> &crate::client::space_ids::SpaceId {
+        match self {
+            Self::Workspace(check) => &check.workspace.id,
+            Self::Chat(chat) => &chat.id,
+        }
+    }
+
     /// The space with its kind, as a confirmation names it.
     fn label(&self) -> String {
         match self {
@@ -499,6 +506,11 @@ pub(super) struct PlannedExport {
 impl PlannedExport {
     pub(super) fn name(&self) -> &crate::client::space_names::SpaceName {
         self.check.name()
+    }
+
+    /// The space's ID, which selects the workspace once it is removed.
+    pub(super) fn id(&self) -> &crate::client::space_ids::SpaceId {
+        self.check.id()
     }
 
     /// The chat the export ends, which keeps no record here once it ends,

@@ -210,11 +210,11 @@ fn continuation(waiting: &[&Workspace]) -> String {
         commands.push("shoal resume --all".to_owned());
     }
     if !done.is_empty() {
-        let names: Vec<&str> = done
+        let numbers: Vec<String> = done
             .iter()
-            .map(|workspace| workspace.name.as_str())
+            .map(|workspace| workspace.number.to_string())
             .collect();
-        commands.push(format!("shoal resume {}", names.join(" ")));
+        commands.push(format!("shoal resume {}", numbers.join(" ")));
     }
     if commands.is_empty() {
         "the agent queue restores its agents".into()

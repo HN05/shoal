@@ -78,14 +78,14 @@ async fn a_scoped_app_reaches_only_its_workspace_tree() {
     let own = daemon.workspace("own").await;
     let other = daemon.workspace("other").await;
     let agent = daemon.scoped(&own).await;
-    assert_eq!(inspect(&agent, "own").await.unwrap().id, own.id);
+    assert_eq!(inspect(&agent, own.id.as_str()).await.unwrap().id, own.id);
     assert_eq!(
         code(inspect(&agent, other.id.as_str()).await),
         ErrorCode::ScopeDenied
     );
     // A workspace's agent asks to hold its own workspace.
     let hold = HoldMethod::HoldAcquire {
-        workspace: "own".into(),
+        workspace: SpaceSelector::id(&own.id),
         name: "review".into(),
         reason: Some("open in Quay".into()),
     };
@@ -112,7 +112,7 @@ async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
         ErrorCode::UnsavedWork
     );
     let check = RemovalMethod::CheckRemoval {
-        workspace: "dirty".into(),
+        workspace: SpaceSelector::id(&workspace.id),
         include_changes: false,
     };
     let check: RemovalCheck = connection::request(&app, check).await.unwrap();
@@ -134,9 +134,9 @@ async fn done_renames_and_links_go_through_the_protocol() {
     };
     let completion: Completion = connection::request(&app, done).await.unwrap();
     assert!(!completion.head.is_empty());
-    assert!(inspect(&app, "first").await.unwrap().done);
+    assert!(inspect(&app, workspace.id.as_str()).await.unwrap().done);
     let rename = |branch: &str| WorkspaceMethod::RenameWorkspace {
-        workspace: "first".into(),
+        workspace: SpaceSelector::id(&workspace.id),
         branch: branch.into(),
     };
     assert_eq!(
@@ -177,7 +177,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     let question = daemon
         .manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask,
             Vec::new(),
             &Attacher::User,
@@ -263,10 +263,10 @@ async fn an_app_queues_an_agent_once_it_can_run() {
         "[agents.probe]\ncommand = [\"true\"]\n",
     )
     .await;
-    daemon.workspace("worker").await;
+    let worker = daemon.workspace("worker").await;
     let app = daemon.connector();
     let queue = |agent: &str| QueueMethod::QueueAgent {
-        workspace: "worker".into(),
+        workspace: SpaceSelector::id(&worker.id),
         agent: agent.into(),
         prompt: Some("Fix the build".into()),
     };
@@ -290,7 +290,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
         base: Some("HEAD".into()),
         options: Default::default(),
     };
-    connection::request::<Workspace>(&app, split).await.unwrap();
+    let child = connection::request::<Workspace>(&app, split).await.unwrap();
     let agent = daemon.scoped(&parent).await;
     let queue_in = |workspace: &str| QueueMethod::QueueAgent {
         workspace: workspace.into(),
@@ -298,10 +298,10 @@ async fn an_app_queues_an_agent_once_it_can_run() {
         prompt: None,
     };
     assert_eq!(
-        code(connection::request::<QueueEntry>(&agent, queue_in("parent")).await),
+        code(connection::request::<QueueEntry>(&agent, queue_in(parent.id.as_str())).await),
         ErrorCode::ScopeDenied
     );
-    let child: QueueEntry = connection::request(&agent, queue_in("child"))
+    let child: QueueEntry = connection::request(&agent, queue_in(child.id.as_str()))
         .await
         .unwrap();
     assert_eq!(child.agent, "probe");
@@ -397,7 +397,10 @@ async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() 
 async fn only_the_user_reopens_a_recorded_workspace_for_a_launch() {
     let daemon = TestDaemon::start().await;
     let existing = daemon.workspace("api").await;
-    let mut reopen = start_workspace(&daemon, WorkspaceStart::Workspace("api".into()));
+    let mut reopen = start_workspace(
+        &daemon,
+        WorkspaceStart::Workspace(SpaceSelector::id(&existing.id)),
+    );
     if let OperationMethod::StartWorkspace { base, .. } = &mut reopen {
         *base = None;
     }
@@ -407,14 +410,20 @@ async fn only_the_user_reopens_a_recorded_workspace_for_a_launch() {
         ErrorCode::ScopeDenied
     );
     let app = daemon.connector();
-    let based = start_workspace(&daemon, WorkspaceStart::Workspace("api".into()));
+    let based = start_workspace(
+        &daemon,
+        WorkspaceStart::Workspace(SpaceSelector::id(&existing.id)),
+    );
     assert!(
         connection::request::<StartedWorkspace>(&app, based)
             .await
             .is_err(),
         "a recorded workspace takes no base"
     );
-    let mut reopen = start_workspace(&daemon, WorkspaceStart::Workspace("api".into()));
+    let mut reopen = start_workspace(
+        &daemon,
+        WorkspaceStart::Workspace(SpaceSelector::id(&existing.id)),
+    );
     if let OperationMethod::StartWorkspace { base, .. } = &mut reopen {
         *base = None;
     }
@@ -464,8 +473,10 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         );
     }
     assert_eq!(code(inspect(&app, "api").await), ErrorCode::NotFound);
+    // A workspace's agent starts workspaces below its own.
+    let parent = daemon.workspace("parent").await;
     let split = |agent| OperationMethod::StartSplit {
-        workspace: "parent".into(),
+        workspace: SpaceSelector::id(&parent.id),
         name: Some("child".into()),
         copy: None,
         base: Some("HEAD".into()),
@@ -474,8 +485,6 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         agent,
         env: None,
     };
-    // A workspace's agent starts workspaces below its own.
-    let parent = daemon.workspace("parent").await;
     let agent = daemon.scoped(&parent).await;
     let started: StartedWorkspace = connection::request(&agent, create(None, None))
         .await
@@ -595,7 +604,7 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     let own = daemon.workspace("own").await;
     let merge = OperationMethod::StartOperation {
         spec: OperationSpec::Merge {
-            workspace: "own".into(),
+            workspace: SpaceSelector::id(&own.id),
             options: Default::default(),
         },
         env: None,

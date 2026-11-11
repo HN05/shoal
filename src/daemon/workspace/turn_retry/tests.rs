@@ -105,7 +105,7 @@ async fn retry(manager: &Manager, workspace: &Workspace) -> Option<TurnRetry> {
 async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure: TurnFailure) {
     let status = manager
         .report_turn_failure(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             failure,
             Some(execution.into()),
             None,
@@ -119,7 +119,7 @@ async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure
 async fn report(manager: &Manager, workspace: &Workspace, execution: &str, state: AgentState) {
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             state,
             Some(execution.into()),
             None,
@@ -147,7 +147,7 @@ fn secs(seconds: u64) -> Duration {
 
 async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
     manager
-        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .into_iter()
@@ -281,7 +281,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     .await;
     manager
         .mark_done(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
         )
@@ -290,7 +290,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     assert_eq!(retry(&manager, &workspace).await, None);
     // Withdrawing completion does not bring the old retry back.
     manager
-        .undo_done(&SpaceSelector::from(&workspace.name))
+        .undo_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(deliver_now(&manager).await, None);
@@ -304,7 +304,7 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
         manager
             .send_agent_message(
-                &SpaceSelector::from(&full.name),
+                &SpaceSelector::id(&full.id),
                 format!("unread {n}"),
                 Vec::new(),
                 &Attacher::User,
@@ -470,7 +470,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     // The proxy's report arrives first, as it does for Codex.
     manager
         .report_upstream_reset(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             execution.clone(),
             Some(reset),
         )
@@ -500,7 +500,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     assert!(early.due_at < reset, "{early:?}");
     manager
         .report_upstream_reset(
-            &SpaceSelector::from(&other.name),
+            &SpaceSelector::id(&other.id),
             execution.clone(),
             Some(reset),
         )
@@ -514,7 +514,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     // A reset that has passed holds nothing back.
     manager
         .report_upstream_reset(
-            &SpaceSelector::from(&other.name),
+            &SpaceSelector::id(&other.id),
             execution.clone(),
             Some(UnixTime::EPOCH),
         )
@@ -523,7 +523,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     assert_eq!(retry(&manager, &other).await.unwrap().due_at, held.due_at);
     // Once the upstream answers again, a later failure backs off as its own.
     manager
-        .report_upstream_reset(&SpaceSelector::from(&other.name), execution.clone(), None)
+        .report_upstream_reset(&SpaceSelector::id(&other.id), execution.clone(), None)
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, None);
@@ -539,7 +539,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     assert!(transient.due_at < reset, "{transient:?}");
     manager
         .report_upstream_reset(
-            &SpaceSelector::from(&other.name),
+            &SpaceSelector::id(&other.id),
             execution.clone(),
             Some(reset),
         )
@@ -560,7 +560,7 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
     let reset = UnixTime::from_seconds(4_000_000_000_000);
     manager
         .report_upstream_reset(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             execution.clone(),
             Some(reset),
         )

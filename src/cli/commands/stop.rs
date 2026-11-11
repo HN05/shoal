@@ -37,8 +37,8 @@ pub(super) async fn run(
         return stop_all(ctx).await;
     }
     // A number always names a space, never a queued launch.
-    if let [SpaceSelector::IdOrName(selector)] = targets.space.as_slice()
-        && let Some(code) = queued_agents::remove_new(ctx, selector).await?
+    if let [SpaceSelector::Id(selector)] = targets.space.as_slice()
+        && let Some(code) = queued_agents::remove_new(ctx, selector.as_str()).await?
     {
         return Ok(code);
     }

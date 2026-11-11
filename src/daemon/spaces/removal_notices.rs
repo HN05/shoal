@@ -60,7 +60,7 @@ impl Announced<'_> {
             SpaceKind::Chat => format!("chat {removal}"),
             SpaceKind::Workspace if matches!(cleanup, Cleanup::DeletedWorktree) => removal,
             SpaceKind::Workspace => {
-                format!("{removal}; restore it with shoal restore {}", self.name)
+                format!("{removal}; restore it with shoal restore {}", self.id)
             }
         }
     }

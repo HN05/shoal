@@ -26,7 +26,12 @@ fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output,
     if json {
         command.arg("--json");
     }
-    command.args(["acquire", kind, "--workspace", "worker"]);
+    command.args([
+        "acquire",
+        kind,
+        "--workspace",
+        "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09",
+    ]);
     if kind == "resource" {
         command.args(["workers", "--member", "builder"]);
     } else {

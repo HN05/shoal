@@ -89,6 +89,13 @@ pub struct Chat {
     pub converted: bool,
 }
 
+impl Chat {
+    /// Its number with its name, as text that names it does.
+    pub fn label(&self) -> String {
+        crate::space_names::label(self.number, &self.name)
+    }
+}
+
 /// Where a new chat runs: its repository's registered checkout, the
 /// worktree of a workspace in it, or for a chat without a repository,
 /// `root_dir`.

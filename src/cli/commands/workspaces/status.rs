@@ -20,11 +20,11 @@ use crate::{
 
 pub(in crate::cli::commands) async fn status(
     ctx: &Context,
-    space: Option<SpaceSelector>,
+    space: Option<String>,
     item: Option<String>,
 ) -> Result<i32> {
-    let first = space.as_ref().map(ToString::to_string);
-    let Some(target) = status_target(first.as_deref(), item)? else {
+    let Some(target) = status_target(space.as_deref(), item)? else {
+        let space = space.as_deref().map(SpaceSelector::parse).transpose()?;
         let space = match space {
             Some(space) => ui::select_space_here(ctx, Some(space)).await?,
             None => match space_here(ctx).await? {

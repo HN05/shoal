@@ -37,7 +37,7 @@ async fn long_file_listings_go_in_pages() {
     let answer = handle(
         &manager,
         FileMethod::ListFiles {
-            space: SpaceSelector::parse(&workspace.name),
+            space: SpaceSelector::id(&workspace.id),
         },
         None,
     )
@@ -74,7 +74,7 @@ async fn deleting_by_name_needs_a_workspace() {
     std::fs::write(&file, "plan").unwrap();
     manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.into()],
             &Attacher::User,
         )
@@ -96,7 +96,7 @@ async fn deleting_by_name_needs_a_workspace() {
     );
     assert_eq!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .len(),

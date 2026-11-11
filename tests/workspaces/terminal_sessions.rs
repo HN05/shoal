@@ -14,13 +14,13 @@ fn removal_and_cleanup_leave_a_session_the_user_opened() -> anyhow::Result<()> {
     let output = fixture
         .command()
         .env("ZMX_SESSION", "mine")
-        .args(["claude", "guest"])
+        .args(["claude", &fixture.id("guest")])
         .output()?;
     assert!(output.status.success(), "{output:?}");
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
     assert!(sessions.contains("shoal.workspace="), "{sessions}");
     assert!(!sessions.contains("shoal.created="), "{sessions}");
-    fixture.ok(&["rm", "--wait", "guest", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("guest"), "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(!zmx_calls(&fixture).iter().any(|call| call[0] == "kill"));
     Ok(())
@@ -34,7 +34,9 @@ struct Shortcut<'a> {
 
 impl Drop for Shortcut<'_> {
     fn drop(&mut self) {
-        let _ = self.fixture.run(&["stop", "new-owner", "--yes"]);
+        let _ = self
+            .fixture
+            .run(&["stop", &self.fixture.id("new-owner"), "--yes"]);
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -48,7 +50,7 @@ fn start_shortcut<'a>(fixture: &'a Fixture, command: &mut Command) -> anyhow::Re
     let shortcut = Shortcut {
         fixture,
         child: command
-            .args(["claude", "new-owner"])
+            .args(["claude", &fixture.id("new-owner")])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -89,11 +91,11 @@ fn an_agent_shortcut_replaces_reused_zmx_ownership() -> anyhow::Result<()> {
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
     assert!(sessions.contains(&format!("shoal.workspace={new_id}")));
     assert!(!sessions.contains("shoal.demo="));
-    fixture.ok(&["rm", "--wait", "old-owner", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("old-owner"), "--yes"]);
     assert!(!zmx_calls(&fixture).iter().any(|call| call[0] == "kill"));
     assert!(agent.child.try_wait()?.is_none());
     drop(agent);
-    fixture.ok(&["rm", "--wait", "new-owner", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("new-owner"), "--yes"]);
     assert!(
         zmx_calls(&fixture)
             .iter()
@@ -125,8 +127,8 @@ fn assert_failed_labelling_refuses_launches(
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("repository path"))?;
     for args in [
-        vec!["claude", "new-owner"],
-        vec!["resume", "new-owner", "--focus"],
+        vec!["claude", &fixture.id("new-owner")],
+        vec!["resume", &fixture.id("new-owner"), "--focus"],
         vec![
             "start",
             "--chat",
@@ -150,7 +152,7 @@ fn assert_failed_labelling_refuses_launches(
         assert!(!fixture.root.path().join("new-agent-started").exists());
         assert_eq!(fs::read_to_string(&recovery)?, saved);
         assert_eq!(
-            fixture.ok(&["status", "new-owner"])["executions"],
+            fixture.ok(&["status", &fixture.id("new-owner")])["executions"],
             serde_json::json!([])
         );
     }
@@ -215,7 +217,14 @@ fn failed_zmx_handoffs_exclude_cross_state_reassignment() -> anyhow::Result<()> 
                 .command()
                 .env("HANDOFF_FAIL", stage)
                 .env("HANDOFF_AFTER", "same")
-                .args(["demo", "start", "--workspace", "failed", "--", "true"])
+                .args([
+                    "demo",
+                    "start",
+                    "--workspace",
+                    &original.id("failed"),
+                    "--",
+                    "true",
+                ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()?,
@@ -242,7 +251,7 @@ fn failed_zmx_handoffs_exclude_cross_state_reassignment() -> anyhow::Result<()> 
                 .env("ZMX_SESSION", session)
                 .env("HANDOFF_TEST_ROOT", home)
                 .env_remove("ZMX_DIR")
-                .args(["claude", "new-owner"])
+                .args(["claude", &other.id("new-owner")])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()?,
@@ -278,7 +287,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
     let output = original
         .command()
         .env("ZMX_SESSION", "reused")
-        .args(["claude", "old-owner"])
+        .args(["claude", &original.id("old-owner")])
         .output()?;
     assert!(output.status.success(), "{output:?}");
     let other = Fixture::new();
@@ -293,7 +302,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
     let mut removal = PausedTerminalCall {
         child: original
             .command()
-            .args(["rm", "--wait", "old-owner", "--yes"])
+            .args(["rm", "--wait", &original.id("old-owner"), "--yes"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?,
@@ -316,7 +325,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
             .env("ZMX_SESSION", "reused")
             .env("ZMX_TEST_ROOT", home)
             .env_remove("ZMX_DIR")
-            .args(["claude", "new-owner"])
+            .args(["claude", &other.id("new-owner")])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?,
@@ -366,7 +375,7 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         state.join("resumed-agent.recovery.json"),
         r#"{"agent":"pi"}"#,
     )?;
-    fixture.ok(&["resume", "resumed"]);
+    fixture.ok(&["resume", &fixture.id("resumed")]);
     // The watcher has the daemon close the session Shoal recorded creating.
     let watched = || fs::read_to_string(home.join("zmx-calls")).unwrap_or_default();
     wait_until("the session's end", || {
@@ -383,7 +392,7 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         "{sent:?}"
     );
     assert!(
-        fixture.ok(&["status", "resumed"])["workspace"]["done"]
+        fixture.ok(&["status", &fixture.id("resumed")])["workspace"]["done"]
             .as_bool()
             .unwrap_or_default()
     );
@@ -412,18 +421,33 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
             .args(args)
             .output()
     };
-    let export = in_session("sessioned", &["move", "export", "sessioned", "-o", "-"])?;
+    let export = in_session(
+        "sessioned",
+        &["move", "export", &fixture.id("sessioned"), "-o", "-"],
+    )?;
     assert!(!export.status.success());
     let removal = in_session(
         "sessioned",
-        &["rm", "--wait", "sessioned", "other", "--yes"],
+        &[
+            "rm",
+            "--wait",
+            &fixture.id("sessioned"),
+            &fixture.id("other"),
+            "--yes",
+        ],
     )?;
     assert!(!removal.status.success());
     assert_eq!(fixture.ok(&["list"]).as_array().map(Vec::len), Some(2));
     // Another session goes on with the batch.
     let removal = in_session(
         "elsewhere",
-        &["rm", "--wait", "sessioned", "other", "--yes"],
+        &[
+            "rm",
+            "--wait",
+            &fixture.id("sessioned"),
+            &fixture.id("other"),
+            "--yes",
+        ],
     )?;
     assert!(removal.status.success(), "{removal:?}");
     Ok(())
@@ -442,7 +466,7 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     let export = |pane: &str| {
         fixture
             .command()
-            .args(["move", "export", "tabbed", "-o", "-"])
+            .args(["move", "export", &fixture.id("tabbed"), "-o", "-"])
             .env("HERDR_ENV", "1")
             .env("HERDR_TAB_ID", "w1:t9")
             .env("HERDR_PANE_ID", pane)

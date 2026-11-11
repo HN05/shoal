@@ -48,7 +48,7 @@ pub enum WorkspaceCommand {
         /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
         /// resource.
         #[arg(value_name = "TARGET")]
-        space: Option<SpaceSelector>,
+        space: Option<String>,
         /// Number, URL, or resource name after pr, issue, ci or resource.
         #[arg(value_parser = item_reference)]
         item: Option<String>,
@@ -60,7 +60,7 @@ pub enum WorkspaceCommand {
     /// Without a space, shows the log of the space this runs in, else
     /// Shoal's: every space's entries, each naming its space, with the
     /// daemon's starts and stops, config reloads and cleanup runs. A removed
-    /// space is named by its last name while its log lasts. Entries print
+    /// space is selected by its ID while its log lasts. Entries print
     /// oldest first, by local time.
     Log {
         space: Option<SpaceSelector>,

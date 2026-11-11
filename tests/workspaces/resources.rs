@@ -13,13 +13,19 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         "port",
         "web",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--reason",
         "Frontend dev server",
     ]);
     assert_eq!(web["env_var"], "SHOAL_PORT_WEB");
     assert_eq!(
-        fixture.ok(&["acquire", "port", "web", "--workspace", "first"]),
+        fixture.ok(&[
+            "acquire",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("first")
+        ]),
         web
     );
     let port = web["port"].to_string();
@@ -30,7 +36,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
                 "port",
                 "web",
                 "--workspace",
-                "second",
+                &fixture.id("second"),
                 "--port",
                 &port
             ])
@@ -42,14 +48,14 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         "port",
         "api",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--env",
         "API_PORT",
     ]);
     let output = fixture.run(&[
         "run",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--",
         "sh",
         "-c",
@@ -61,7 +67,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         format!("{}:{}", web["port"], api["port"])
     );
     assert_eq!(
-        fixture.ok(&["status", "first"])["ports"]
+        fixture.ok(&["status", &fixture.id("first")])["ports"]
             .as_array()
             .unwrap()
             .len(),
@@ -70,12 +76,12 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     let nested = fixture.run(&[
         "run",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--",
         support::shoal_binary(),
         "run",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--",
         "sh",
         "-c",
@@ -88,15 +94,20 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     );
     let path = Path::new(first["path"].as_str().unwrap());
     fs::write(path.join("dirty"), "keep").unwrap();
-    assert!(!fixture.run(&["rm", "--wait", "first"]).status.success());
+    assert!(
+        !fixture
+            .run(&["rm", "--wait", &fixture.id("first")])
+            .status
+            .success()
+    );
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "first"])["reserved"]
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("first")])["reserved"]
             .as_array()
             .unwrap()
             .len(),
         2
     );
-    fixture.ok(&["rm", "--wait", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first"), "--yes"]);
     assert_eq!(
         fixture.ok(&["leases", "port", "--all"])[0]["reserved"],
         serde_json::json!([])
@@ -106,16 +117,22 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         "port",
         "web",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--port",
         &port,
     ]);
-    fixture.ok(&["release", "port", "web", "--workspace", "second"]);
+    fixture.ok(&[
+        "release",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("second"),
+    ]);
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "second"])["reserved"],
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("second")])["reserved"],
         serde_json::json!([])
     );
-    fixture.ok(&["rm", "--wait", "second"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("second")]);
 }
 
 #[test]
@@ -131,7 +148,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
                 "port",
                 "occupied",
                 "--workspace",
-                "ports",
+                &fixture.id("ports"),
                 "--port",
                 &occupied
             ])
@@ -150,7 +167,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
                     "port",
                     &format!("server{i}"),
                     "--workspace",
-                    "ports",
+                    &fixture.id("ports"),
                 ])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -169,15 +186,15 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
         let reservation: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert!(numbers.insert(reservation["port"].as_u64().unwrap()));
     }
-    let before = fixture.ok(&["leases", "port", "--workspace", "ports"]);
+    let before = fixture.ok(&["leases", "port", "--workspace", &fixture.id("ports")]);
     assert!(fixture.run(&["daemon", "stop"]).status.success());
     fixture.daemon.child.wait().unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "ports"]),
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("ports")]),
         before
     );
-    fixture.ok(&["rm", "--wait", "ports"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("ports")]);
 }
 
 #[test]
@@ -192,12 +209,24 @@ fn repository_config_sets_the_automatic_port_range() {
     )
     .unwrap();
     assert_eq!(
-        fixture.ok(&["acquire", "port", "web", "--workspace", "ranged"])["port"],
+        fixture.ok(&[
+            "acquire",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("ranged")
+        ])["port"],
         first
     );
     assert!(
         !fixture
-            .run(&["acquire", "port", "api", "--workspace", "ranged"])
+            .run(&[
+                "acquire",
+                "port",
+                "api",
+                "--workspace",
+                &fixture.id("ranged")
+            ])
             .status
             .success()
     );
@@ -209,12 +238,24 @@ fn repository_config_sets_the_automatic_port_range() {
     };
     save(&format!("[ports]\nstart={second}\nend={second}\n"));
     assert_eq!(
-        fixture.ok(&["acquire", "port", "api", "--workspace", "ranged"])["port"],
+        fixture.ok(&[
+            "acquire",
+            "port",
+            "api",
+            "--workspace",
+            &fixture.id("ranged")
+        ])["port"],
         second
     );
     // The layered range must stay nonempty: `end = 1` under the file's `start`.
     save("[ports]\nend=1\n");
-    let output = fixture.run(&["acquire", "port", "db", "--workspace", "ranged"]);
+    let output = fixture.run(&[
+        "acquire",
+        "port",
+        "db",
+        "--workspace",
+        &fixture.id("ranged"),
+    ]);
     assert!(!output.status.success());
 }
 
@@ -237,8 +278,16 @@ fn port_range_exhaustion_and_release() -> bool {
     let number = held.port;
     let fixture = Fixture::with_config(Some(&format!("[ports]\nstart={number}\nend={number}\n")));
     fixture.add("limited");
-    let acquire =
-        |name: &str| fixture.run(&["--json", "acquire", "port", name, "--workspace", "limited"]);
+    let acquire = |name: &str| {
+        fixture.run(&[
+            "--json",
+            "acquire",
+            "port",
+            name,
+            "--workspace",
+            &fixture.id("limited"),
+        ])
+    };
     assert!(!acquire("web").status.success());
     drop(held);
     let Some(lease) = port_lease(acquire("web")) else {
@@ -246,12 +295,18 @@ fn port_range_exhaustion_and_release() -> bool {
     };
     assert_eq!(lease["port"], number);
     assert!(!acquire("api").status.success());
-    fixture.ok(&["release", "port", "web", "--workspace", "limited"]);
+    fixture.ok(&[
+        "release",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("limited"),
+    ]);
     let Some(lease) = port_lease(acquire("api")) else {
         return false;
     };
     assert_eq!(lease["port"], number);
-    fixture.ok(&["rm", "--wait", "limited"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("limited")]);
     true
 }
 
@@ -278,7 +333,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
     assert_eq!(workspaces[1]["name"], "healthy");
     // Port reservations read no configuration, so only resources can fail here.
     let noun = "resource";
-    let mut expected = fixture.ok(&["leases", noun, "--workspace", "healthy"]);
+    let mut expected = fixture.ok(&["leases", noun, "--workspace", &fixture.id("healthy")]);
     expected["workspace"] = workspaces[1].clone();
     let args = ["leases", noun, "--all"];
     let output = fixture.command().arg("--json").args(args).output().unwrap();
@@ -323,14 +378,14 @@ fn catalog_lists_configuration_where_simulators_are_unavailable() {
         "#!/bin/sh\necho 'xcrun: unable to find simctl' >&2\nexit 1\n",
     );
     fixture.add("worker");
-    let catalog = fixture.ok(&["catalog", "--workspace", "worker"]);
+    let catalog = fixture.ok(&["catalog", "--workspace", &fixture.id("worker")]);
     assert!(catalog["simulators"]["policy"]["profiles"]["phone"].is_object());
     assert!(catalog["simulators"]["inventory_error"].is_string());
     assert_eq!(catalog["simulators"]["runtimes"], serde_json::json!([]));
     assert_eq!(catalog["resources"]["pools"][0]["name"], "signing");
     assert!(
         fixture
-            .run(&["catalog", "sim", "--workspace", "worker"])
+            .run(&["catalog", "sim", "--workspace", &fixture.id("worker")])
             .status
             .success()
     );
@@ -372,7 +427,7 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     let overview: Value = serde_json::from_slice(&overview.stdout).unwrap();
     assert_eq!(overview["reserved"], serde_json::json!([]));
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "configured"]),
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("configured")]),
         overview
     );
     let catalog = fixture
@@ -390,13 +445,13 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
         "port",
         "web",
         "--workspace",
-        "configured",
+        &fixture.id("configured"),
     ]);
     assert_eq!(proposal.status.code(), Some(2));
     let proposal: Value = serde_json::from_slice(&proposal.stdout).unwrap();
     assert_eq!(proposal["reserved"], false);
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "configured"])["reserved"],
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("configured")])["reserved"],
         serde_json::json!([])
     );
     let accepted = fixture.ok(&[
@@ -404,39 +459,57 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
         "port",
         "web",
         "--workspace",
-        "configured",
+        &fixture.id("configured"),
         "--port",
         &proposal["suggested_port"].to_string(),
     ]);
     assert_eq!(accepted["env_var"], "PORT");
     assert_eq!(
-        fixture.ok(&["acquire", "port", "web", "--workspace", "configured"]),
+        fixture.ok(&[
+            "acquire",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("configured")
+        ]),
         accepted
     );
-    fixture.ok(&["release", "port", "web", "--workspace", "configured"]);
+    fixture.ok(&[
+        "release",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("configured"),
+    ]);
     let automatic = fixture.ok(&[
         "acquire",
         "port",
         "web",
         "--workspace",
-        "configured",
+        &fixture.id("configured"),
         "--on-conflict",
         "auto",
     ]);
     assert_ne!(automatic["port"], preferred);
     assert_eq!(
-        fixture.ok(&["acquire", "port", "web", "--workspace", "configured"]),
+        fixture.ok(&[
+            "acquire",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("configured")
+        ]),
         automatic
     );
     fs::create_dir(path.join(".shoal")).unwrap();
     fs::rename(path.join(".shoal.toml"), path.join(".shoal/config.toml")).unwrap();
-    fixture.ok(&["catalog", "port", "--workspace", "configured"]);
+    fixture.ok(&["catalog", "port", "--workspace", &fixture.id("configured")]);
     // Both together are rejected, so neither names the port, and the
     // workspace's config says why.
     fs::write(path.join(".shoal.toml"), "").unwrap();
-    let catalog = fixture.ok(&["catalog", "port", "--workspace", "configured"]);
+    let catalog = fixture.ok(&["catalog", "port", "--workspace", &fixture.id("configured")]);
     assert!(catalog["configured"].get("web").is_none(), "{catalog}");
-    let show = fixture.run(&["config", "show", "configured"]);
+    let show = fixture.run(&["config", "show", &fixture.id("configured")]);
     assert!(show.status.success());
     let warning = String::from_utf8(show.stderr).unwrap();
     assert!(
@@ -462,7 +535,13 @@ capacity = 2
 fn acquire_selects_the_lease_kind() {
     let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
     fixture.add("first");
-    fixture.ok(&["acquire", "port", "web", "--workspace", "first"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     let lease = fixture.ok(&[
         "acquire",
         "resource",
@@ -472,18 +551,24 @@ fn acquire_selects_the_lease_kind() {
         "--name",
         "tests",
         "--workspace",
-        "first",
+        &fixture.id("first"),
     ]);
     assert_eq!(lease["resource"], "beta");
     // A repo acquisition never selects another kind of member.
-    let repo = fixture.run(&["acquire", "repo", "signing", "--workspace", "first"]);
+    let repo = fixture.run(&[
+        "acquire",
+        "repo",
+        "signing",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     assert!(!repo.status.success());
-    let leases = fixture.ok(&["leases", "--workspace", "first"]);
+    let leases = fixture.ok(&["leases", "--workspace", &fixture.id("first")]);
     assert_eq!(leases["ports"]["reserved"][0]["name"], "web");
     assert_eq!(leases["resources"]["leases"].as_array().unwrap().len(), 1);
     assert_eq!(leases["resources"]["leases"][0]["name"], "tests");
     let count = |args: &[&str], key: &str| {
-        fixture.ok(&[&["leases"], args, &["--workspace", "first"]].concat())[key]
+        fixture.ok(&[&["leases"], args, &["--workspace", &fixture.id("first")]].concat())[key]
             .as_array()
             .unwrap()
             .len()
@@ -511,10 +596,11 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
         vec!["acquire", "resource", "devices", "--name", "b"],
         vec!["acquire", "resource", "signing"],
     ] {
-        fixture.ok(&[args, vec!["--workspace", "first"]].concat());
+        fixture.ok(&[args, vec!["--workspace", &fixture.id("first")]].concat());
     }
     let released = |args: &[&str]| {
-        fixture.ok(&[&["release", "--workspace", "first"], args].concat())["released"].clone()
+        fixture.ok(&[&["release", "--workspace", &fixture.id("first")], args].concat())["released"]
+            .clone()
     };
     // A named lease must match the requested kind.
     let mismatch = fixture.run(&[
@@ -524,7 +610,7 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
         "--name",
         "a",
         "--workspace",
-        "first",
+        &fixture.id("first"),
     ]);
     assert!(!mismatch.status.success());
     assert_eq!(
@@ -545,11 +631,11 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
     );
     assert!(
         !fixture
-            .run(&["release", "--workspace", "first"])
+            .run(&["release", "--workspace", &fixture.id("first")])
             .status
             .success()
     );
-    let inspection = fixture.ok(&["status", "first"]);
+    let inspection = fixture.ok(&["status", &fixture.id("first")]);
     assert!(inspection["ports"].as_array().unwrap().is_empty());
     assert!(inspection["resources"].as_array().unwrap().is_empty());
 }
@@ -560,10 +646,22 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
     fixture.add("first");
     fixture.add("second");
     fixture.add("third");
-    let first = fixture.ok(&["acquire", "resource", "devices", "--workspace", "first"]);
+    let first = fixture.ok(&[
+        "acquire",
+        "resource",
+        "devices",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     assert_eq!(first["resource"], "alpha");
     assert_eq!(
-        fixture.ok(&["acquire", "resource", "devices", "--workspace", "first"]),
+        fixture.ok(&[
+            "acquire",
+            "resource",
+            "devices",
+            "--workspace",
+            &fixture.id("first")
+        ]),
         first
     );
     assert_eq!(
@@ -573,7 +671,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
                 "resource",
                 "devices",
                 "--workspace",
-                "second",
+                &fixture.id("second"),
                 "--member",
                 "alpha",
             ])
@@ -586,7 +684,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "resource",
         "devices",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--member",
         "beta",
     ]);
@@ -596,7 +694,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "resource",
         "devices",
         "--workspace",
-        "third",
+        &fixture.id("third"),
         "--member",
         "beta",
     ]);
@@ -610,7 +708,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "resource",
         "devices",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--name",
         "default",
     ]);
@@ -619,11 +717,11 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "resource",
         "devices",
         "--workspace",
-        "third",
+        &fixture.id("third"),
         "--member",
         "beta",
     ]);
-    let overview = fixture.ok(&["leases", "resource", "--workspace", "third"]);
+    let overview = fixture.ok(&["leases", "resource", "--workspace", &fixture.id("third")]);
     let pool = overview["pools"]
         .as_array()
         .unwrap()
@@ -644,7 +742,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "resource",
         "devices",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--name",
         "default",
     ]);
@@ -653,7 +751,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "resource",
         "devices",
         "--workspace",
-        "third",
+        &fixture.id("third"),
         "--member",
         "beta",
         "--name",
@@ -662,25 +760,43 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "Parallel job",
     ]);
     assert_eq!(
-        fixture.ok(&["status", "third"])["resources"]
+        fixture.ok(&["status", &fixture.id("third")])["resources"]
             .as_array()
             .unwrap()
             .len(),
         2
     );
-    let lock = fixture.ok(&["acquire", "resource", "signing", "--workspace", "first"]);
+    let lock = fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     assert_eq!(lock["resource"], "signing");
     assert_eq!(lock["scope"], "global");
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "signing", "--workspace", "second"])
+            .run(&[
+                "acquire",
+                "resource",
+                "signing",
+                "--workspace",
+                &fixture.id("second")
+            ])
             .status
             .code(),
         Some(2)
     );
-    fixture.ok(&["rm", "--wait", "first"]);
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "second"]);
-    fixture.ok(&["rm", "--wait", "third"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first")]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("second"),
+    ]);
+    fixture.ok(&["rm", "--wait", &fixture.id("third")]);
     let overviews = fixture.ok(&["leases", "resource", "--all"]);
     let mut device_leases = overviews
         .as_array()
@@ -704,7 +820,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
                     "resource",
                     "workers",
                     "--workspace",
-                    "worker",
+                    &fixture.id("worker"),
                     "--name",
                     &format!("job-{i}"),
                 ])
@@ -743,7 +859,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
             "resource",
             "workers",
             "--workspace",
-            "worker",
+            &fixture.id("worker"),
             "--name",
             "waiter",
             "--queue",
@@ -758,7 +874,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         "resource",
         "workers",
         "--workspace",
-        "worker",
+        &fixture.id("worker"),
         "--name",
         successes[0]["name"].as_str().unwrap(),
     ]);
@@ -768,7 +884,12 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         "retain",
     )
     .unwrap();
-    assert!(!fixture.run(&["rm", "--wait", "worker"]).status.success());
+    assert!(
+        !fixture
+            .run(&["rm", "--wait", &fixture.id("worker")])
+            .status
+            .success()
+    );
     assert_eq!(
         fixture.ok(&["leases", "resource", "--all"])[0]["leases"]
             .as_array()
@@ -776,7 +897,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
             .len(),
         3
     );
-    fixture.ok(&["rm", "--wait", "worker", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("worker"), "--yes"]);
     assert!(
         fixture
             .ok(&["leases", "resource", "--all"])
@@ -795,11 +916,23 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
     let second = fixture.add("second");
     let first_path = Path::new(first["path"].as_str().unwrap());
     let second_path = Path::new(second["path"].as_str().unwrap());
-    let lease = fixture.ok(&["acquire", "resource", "signing", "--workspace", "first"]);
+    let lease = fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     assert!(lease["scope"].as_str().unwrap().starts_with("repo/"));
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "signing", "--workspace", "second"])
+            .run(&[
+                "acquire",
+                "resource",
+                "signing",
+                "--workspace",
+                &fixture.id("second")
+            ])
             .status
             .code(),
         Some(2)
@@ -812,9 +945,15 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
         ),
     )
     .unwrap();
-    let conflict = fixture.run(&["acquire", "resource", "signing", "--workspace", "second"]);
+    let conflict = fixture.run(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("second"),
+    ]);
     assert!(!conflict.status.success());
-    let overview = fixture.ok(&["leases", "resource", "--workspace", "second"]);
+    let overview = fixture.ok(&["leases", "resource", "--workspace", &fixture.id("second")]);
     let signing = overview["pools"]
         .as_array()
         .unwrap()
@@ -832,31 +971,40 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
         "resource",
         "signing",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--reason",
         "still signing",
     ]);
     assert_eq!(renewed["id"], lease["id"]);
     assert_eq!(renewed["created_at"], lease["created_at"]);
     assert_eq!(renewed["reason"], "still signing");
-    assert_eq!(fixture.ok(&["status", "first"])["resources"][0], renewed);
+    assert_eq!(
+        fixture.ok(&["status", &fixture.id("first")])["resources"][0],
+        renewed
+    );
     fs::remove_file(first_path.join(".shoal.toml")).unwrap();
     fixture.ok(&[
         "release",
         "resource",
         "signing",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--name",
         "default",
     ]);
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "second"]);
     fixture.ok(&[
         "acquire",
         "resource",
         "signing",
         "--workspace",
-        "second",
+        &fixture.id("second"),
+    ]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("second"),
         "--name",
         "another",
     ]);
@@ -887,13 +1035,37 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     commit_resource_config(&other, "[resources.local]\ncapacity=1\n");
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let second = fixture.ok(&["start", other.to_str().unwrap(), "second"]);
-    let local_first = fixture.ok(&["acquire", "resource", "local", "--workspace", "first"]);
-    let local_second = fixture.ok(&["acquire", "resource", "local", "--workspace", "second"]);
+    let local_first = fixture.ok(&[
+        "acquire",
+        "resource",
+        "local",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
+    let local_second = fixture.ok(&[
+        "acquire",
+        "resource",
+        "local",
+        "--workspace",
+        &fixture.id("second"),
+    ]);
     assert_ne!(local_first["scope"], local_second["scope"]);
-    fixture.ok(&["acquire", "resource", "machine", "--workspace", "first"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "machine",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "machine", "--workspace", "second"])
+            .run(&[
+                "acquire",
+                "resource",
+                "machine",
+                "--workspace",
+                &fixture.id("second")
+            ])
             .status
             .code(),
         Some(2)
@@ -901,7 +1073,13 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     let scoped = |args: &[&str]| {
         fixture
             .command()
-            .args(["run", "--workspace", "first", "--", support::shoal_binary()])
+            .args([
+                "run",
+                "--workspace",
+                &fixture.id("first"),
+                "--",
+                support::shoal_binary(),
+            ])
             .args(args)
             .output()
             .unwrap()
@@ -913,7 +1091,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
             "resource",
             "local",
             "--workspace",
-            "second",
+            &fixture.id("second"),
             "--name",
             "default"
         ])
@@ -921,7 +1099,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
         .success()
     );
     assert!(
-        !scoped(&["leases", "resource", "--workspace", "second"])
+        !scoped(&["leases", "resource", "--workspace", &fixture.id("second")])
             .status
             .success()
     );
@@ -939,14 +1117,20 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
         "[resources.machine]\ncapacity=10\n",
     )
     .unwrap();
-    let conflict = fixture.run(&["acquire", "resource", "machine", "--workspace", "second"]);
+    let conflict = fixture.run(&[
+        "acquire",
+        "resource",
+        "machine",
+        "--workspace",
+        &fixture.id("second"),
+    ]);
     assert!(!conflict.status.success());
     fixture.ok(&[
         "release",
         "resource",
         "local",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--name",
         "default",
     ]);
@@ -962,13 +1146,19 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
         "resource",
         "cache",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--mode",
         "read",
     ]);
     assert_eq!(first["mode"], "read");
     assert_eq!(
-        fixture.ok(&["acquire", "resource", "cache", "--workspace", "first"]),
+        fixture.ok(&[
+            "acquire",
+            "resource",
+            "cache",
+            "--workspace",
+            &fixture.id("first")
+        ]),
         first
     );
     assert!(
@@ -978,7 +1168,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
                 "resource",
                 "cache",
                 "--workspace",
-                "first",
+                &fixture.id("first"),
                 "--mode",
                 "write"
             ])
@@ -995,7 +1185,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
                     "resource",
                     "cache",
                     "--workspace",
-                    "second",
+                    &fixture.id("second"),
                     "--mode",
                     "read",
                     "--name",
@@ -1015,7 +1205,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let overview = fixture.ok(&["leases", "resource", "--workspace", "first"]);
+    let overview = fixture.ok(&["leases", "resource", "--workspace", &fixture.id("first")]);
     let pool = &overview["pools"][0];
     assert_eq!(pool["used"], 1);
     assert_eq!(pool["available"], 0);
@@ -1029,7 +1219,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
                 "resource",
                 "cache",
                 "--workspace",
-                "second",
+                &fixture.id("second"),
                 "--mode",
                 "write"
             ])
@@ -1042,7 +1232,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
         "resource",
         "cache",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--name",
         "default",
     ]);
@@ -1053,14 +1243,20 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
             "resource",
             "cache",
             "--workspace",
-            "second",
+            &fixture.id("second"),
             "--name",
             &format!("reader-{i}"),
         ]);
     }
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "cache", "--workspace", "first"])
+            .run(&[
+                "acquire",
+                "resource",
+                "cache",
+                "--workspace",
+                &fixture.id("first")
+            ])
             .status
             .code(),
         Some(2)
@@ -1070,11 +1266,17 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
         "resource",
         "cache",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--name",
         "reader-15",
     ]);
-    let writer = fixture.ok(&["acquire", "resource", "cache", "--workspace", "first"]);
+    let writer = fixture.ok(&[
+        "acquire",
+        "resource",
+        "cache",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     assert_eq!(writer["mode"], "write");
     for mode in ["read", "write"] {
         assert_eq!(
@@ -1084,7 +1286,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
                     "resource",
                     "cache",
                     "--workspace",
-                    "second",
+                    &fixture.id("second"),
                     "--mode",
                     mode
                 ])
@@ -1093,16 +1295,16 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
             Some(2)
         );
     }
-    let status = fixture.ok(&["leases", "resource", "--workspace", "second"]);
+    let status = fixture.ok(&["leases", "resource", "--workspace", &fixture.id("second")]);
     assert_eq!(status["pools"][0]["resources"][0]["writers"], 1);
     assert_eq!(status["pools"][0]["resources"][0]["read_available"], false);
-    fixture.ok(&["rm", "--wait", "first"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "cache",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--mode",
         "read",
     ]);
@@ -1119,9 +1321,9 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "resource",
         "mixed",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--member",
-        "worker",
+        &fixture.id("worker"),
         "--name",
         "job",
     ]);
@@ -1130,7 +1332,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "resource",
         "mixed",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--mode",
         "read",
         "--name",
@@ -1142,7 +1344,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "resource",
         "mixed",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--mode",
         "read",
         "--name",
@@ -1157,7 +1359,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
                     "resource",
                     "mixed",
                     "--workspace",
-                    "owner",
+                    &fixture.id("owner"),
                     "--member",
                     resource,
                     "--name",
@@ -1174,7 +1376,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
             "resource",
             "mixed",
             "--workspace",
-            "owner",
+            &fixture.id("owner"),
             "--member",
             resource,
             "--mode",
@@ -1189,7 +1391,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "resource",
         "mixed",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--name",
         "job",
     ]);
@@ -1198,14 +1400,14 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "resource",
         "mixed",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--mode",
         "write",
         "--name",
         "writer",
     ]);
     assert_eq!(writer["resource"], "b");
-    let overview = fixture.ok(&["leases", "resource", "--workspace", "owner"]);
+    let overview = fixture.ok(&["leases", "resource", "--workspace", &fixture.id("owner")]);
     assert_eq!(overview["pools"][0]["used"], 2);
     assert_eq!(overview["pools"][0]["resources"][0]["read_available"], true);
     assert_eq!(
@@ -1228,7 +1430,7 @@ fn rwlock_claims_are_atomic_across_readers_and_writers() {
                     "resource",
                     "cache",
                     "--workspace",
-                    "owner",
+                    &fixture.id("owner"),
                     "--mode",
                     if i % 2 == 0 { "write" } else { "read" },
                     "--name",
@@ -1275,7 +1477,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
         "resource",
         "cache",
         "--workspace",
-        "reader",
+        &fixture.id("reader"),
         "--mode",
         "read",
     ]);
@@ -1284,7 +1486,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
         "resource",
         "index",
         "--workspace",
-        "writer",
+        &fixture.id("writer"),
         "--mode",
         "write",
     ]);
@@ -1296,7 +1498,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
             "resource",
             "cache",
             "--workspace",
-            "reader",
+            &fixture.id("reader"),
             "--mode",
             "read"
         ]),
@@ -1308,7 +1510,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
             "resource",
             "index",
             "--workspace",
-            "writer",
+            &fixture.id("writer"),
             "--mode",
             "write"
         ]),
@@ -1321,7 +1523,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
                 "resource",
                 "index",
                 "--workspace",
-                "reader",
+                &fixture.id("reader"),
                 "--mode",
                 "read"
             ])
@@ -1338,7 +1540,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
             "resource",
             "cache",
             "--workspace",
-            "writer",
+            &fixture.id("writer"),
             "--mode",
             "write",
             "--queue",
@@ -1351,9 +1553,14 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
     assert!(waiter.try_wait().unwrap().is_none());
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("unfinished"), "retain").unwrap();
-    assert!(!fixture.run(&["rm", "--wait", "reader"]).status.success());
+    assert!(
+        !fixture
+            .run(&["rm", "--wait", &fixture.id("reader")])
+            .status
+            .success()
+    );
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "reader"])["leases"][0],
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("reader")])["leases"][0],
         lease
     );
     fixture.ok(&[
@@ -1361,7 +1568,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
         "resource",
         "cache",
         "--workspace",
-        "reader",
+        &fixture.id("reader"),
         "--name",
         "default",
     ]);
@@ -1387,7 +1594,7 @@ fn resource_renewals_reject_scope_drift_before_allocating() {
         "resource",
         "cache",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--mode",
         "read",
     ];
@@ -1402,7 +1609,7 @@ fn resource_renewals_reject_scope_drift_before_allocating() {
     let rejected = fixture.run(&args);
     assert!(!rejected.status.success());
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "owner"])["leases"],
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("owner")])["leases"],
         serde_json::json!([original])
     );
     fixture.ok(&[
@@ -1410,7 +1617,7 @@ fn resource_renewals_reject_scope_drift_before_allocating() {
         "resource",
         "cache",
         "--workspace",
-        "owner",
+        &fixture.id("owner"),
         "--name",
         "default",
     ]);
@@ -1425,7 +1632,7 @@ fn resource_renewals_reject_scope_drift_before_allocating() {
     fixture.restart();
     assert!(!fixture.run(&args).status.success());
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "owner"])["leases"],
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("owner")])["leases"],
         serde_json::json!([local])
     );
 }
@@ -1440,7 +1647,7 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
     let output = fixture.run(&[
         "run",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--",
         binary,
         "--json",
@@ -1458,14 +1665,14 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
             .run(&[
                 "run",
                 "--workspace",
-                "second",
+                &fixture.id("second"),
                 "--",
                 binary,
                 "release",
                 "resource",
                 "cache",
                 "--workspace",
-                "first",
+                &fixture.id("first"),
                 "--name",
                 "default",
             ])
@@ -1476,12 +1683,18 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
     fs::write(path.join(".shoal.toml"), "[resources.cache]\ncapacity=2\n").unwrap();
     assert!(
         !fixture
-            .run(&["acquire", "resource", "cache", "--workspace", "second"])
+            .run(&[
+                "acquire",
+                "resource",
+                "cache",
+                "--workspace",
+                &fixture.id("second")
+            ])
             .status
             .success()
     );
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "second"])["pools"][0]["configuration_matches"],
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("second")])["pools"][0]["configuration_matches"],
         false
     );
     // Release still works when its own definition is removed entirely.
@@ -1491,12 +1704,18 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
         "resource",
         "cache",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--name",
         "default",
     ]);
     assert_eq!(
-        fixture.ok(&["acquire", "resource", "cache", "--workspace", "second"])["mode"],
+        fixture.ok(&[
+            "acquire",
+            "resource",
+            "cache",
+            "--workspace",
+            &fixture.id("second")
+        ])["mode"],
         "permit"
     );
 }
@@ -1524,19 +1743,28 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
     fixture.add("consumer");
     fixture.add("other-consumer");
-    let catalog = fixture.ok(&["catalog", "repo", "--workspace", "consumer"]);
+    let catalog = fixture.ok(&["catalog", "repo", "--workspace", &fixture.id("consumer")]);
     assert_eq!(catalog["pools"][0]["resources"]["server"]["repo"], "server");
     assert_eq!(
-        fixture.ok(&["catalog", "resource", "--workspace", "consumer"]),
+        fixture.ok(&[
+            "catalog",
+            "resource",
+            "--workspace",
+            &fixture.id("consumer")
+        ]),
         serde_json::json!({"pools": []})
     );
     assert!(
-        fixture.ok(&["leases", "repo", "--workspace", "consumer"])["leases"]
+        fixture.ok(&["leases", "repo", "--workspace", &fixture.id("consumer")])["leases"]
             .as_array()
             .unwrap()
             .is_empty()
     );
-    let output = scoped_command(&fixture, "consumer", &["acquire", "repo", "server"]);
+    let output = scoped_command(
+        &fixture,
+        "consumer",
+        &["acquire", "repo", &fixture.id("server")],
+    );
     assert!(
         output.status.success(),
         "{}",
@@ -1547,9 +1775,15 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     assert_eq!(lease["repository"]["id"], registration["id"]);
     assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
     for args in [
-        vec!["acquire", "repo", "server", "--workspace", "consumer"],
-        vec!["leases", "repo", "--workspace", "consumer"],
-        vec!["status", "consumer"],
+        vec![
+            "acquire",
+            "repo",
+            &fixture.id("server"),
+            "--workspace",
+            &fixture.id("consumer"),
+        ],
+        vec!["leases", "repo", "--workspace", &fixture.id("consumer")],
+        vec!["status", &fixture.id("consumer")],
     ] {
         let rendered = fixture.run(&args);
         assert!(rendered.status.success());
@@ -1559,8 +1793,14 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
         fs::read_to_string(related.join("DESIGN.MD")).unwrap(),
         "server design\n"
     );
-    fixture.ok(&["acquire", "repo", "server", "--workspace", "other-consumer"]);
-    let overview = fixture.ok(&["leases", "repo", "--workspace", "consumer"]);
+    fixture.ok(&[
+        "acquire",
+        "repo",
+        &fixture.id("server"),
+        "--workspace",
+        &fixture.id("other-consumer"),
+    ]);
+    let overview = fixture.ok(&["leases", "repo", "--workspace", &fixture.id("consumer")]);
     assert_eq!(overview["pools"][0]["used"], 1);
     assert_eq!(overview["pools"][0]["resources"][0]["readers"], 2);
     assert_eq!(
@@ -1570,9 +1810,9 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     let write = fixture.run(&[
         "acquire",
         "resource",
-        "server",
+        &fixture.id("server"),
         "--workspace",
-        "consumer",
+        &fixture.id("consumer"),
         "--mode",
         "write",
         "--name",
@@ -1581,7 +1821,13 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     assert!(!write.status.success());
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["acquire", "repo", "server", "--workspace", "consumer"]),
+        fixture.ok(&[
+            "acquire",
+            "repo",
+            &fixture.id("server"),
+            "--workspace",
+            &fixture.id("consumer")
+        ]),
         lease
     );
     let removal = fixture.run(&["repo", "rm", "server", "--yes"]);
@@ -1593,14 +1839,20 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
         "[resources.server]\nkind='repo'\nrepo='missing'\n",
     );
     assert_eq!(
-        fixture.ok(&["acquire", "repo", "server", "--workspace", "consumer"]),
+        fixture.ok(&[
+            "acquire",
+            "repo",
+            &fixture.id("server"),
+            "--workspace",
+            &fixture.id("consumer")
+        ]),
         lease
     );
     set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
     let before = git(&related, &["status", "--porcelain"]);
     let head = git(&related, &["rev-parse", "HEAD"]);
     let worktrees = git(&related, &["worktree", "list", "--porcelain"]);
-    fixture.ok(&["rm", "--wait", "consumer", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("consumer"), "--yes"]);
     assert_eq!(git(&related, &["status", "--porcelain"]), before);
     assert_eq!(git(&related, &["rev-parse", "HEAD"]), head);
     assert_eq!(
@@ -1610,9 +1862,9 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     fixture.ok(&[
         "release",
         "repo",
-        "server",
+        &fixture.id("server"),
         "--workspace",
-        "other-consumer",
+        &fixture.id("other-consumer"),
         "--name",
         "default",
     ]);
@@ -1627,7 +1879,12 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
     fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "server"]);
     set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
     fixture.add("consumer");
-    let args = ["acquire", "resource", "--workspace", "consumer"];
+    let args = [
+        "acquire",
+        "resource",
+        "--workspace",
+        &fixture.id("consumer"),
+    ];
     let (output, rows) = fixture.pick(&args, "workers", "");
     assert!(output.status.success(), "{output:?}");
     assert!(
@@ -1636,13 +1893,13 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
     );
     assert!(!rows.contains("server\t"), "{rows:?}");
     let (output, rows) = fixture.pick(
-        &["acquire", "repo", "--workspace", "consumer"],
+        &["acquire", "repo", "--workspace", &fixture.id("consumer")],
         "server",
         "",
     );
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
-    let pools: Vec<_> = fixture.ok(&["status", "consumer"])["resources"]
+    let pools: Vec<_> = fixture.ok(&["status", &fixture.id("consumer")])["resources"]
         .as_array()
         .unwrap()
         .iter()
@@ -1656,13 +1913,18 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
 fn acquire_port_picks_an_omitted_configured_port() {
     let fixture = Fixture::new();
     fixture.add("server");
-    let none = fixture.run(&["acquire", "port", "--workspace", "server"]);
+    let none = fixture.run(&["acquire", "port", "--workspace", &fixture.id("server")]);
     assert!(!none.status.success(), "{none:?}");
     set_repository_toml(&fixture, "[ports.web]\n[ports.api]\n");
-    let (output, rows) = fixture.pick(&["acquire", "port", "--workspace", "server"], "web", "");
+    let (output, rows) = fixture.pick(
+        &["acquire", "port", "--workspace", &fixture.id("server")],
+        "web",
+        "",
+    );
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("api\t") && rows.contains("web\t"), "{rows:?}");
-    let reserved = fixture.ok(&["leases", "port", "--workspace", "server"])["reserved"].clone();
+    let reserved =
+        fixture.ok(&["leases", "port", "--workspace", &fixture.id("server")])["reserved"].clone();
     assert_eq!(reserved.as_array().unwrap().len(), 1, "{reserved}");
     assert_eq!(reserved[0]["name"], "web");
 }
@@ -1686,18 +1948,24 @@ fn repository_resources_select_registrations_by_remote_url() {
         "[resources.server]\nkind='repo'\nrepo='git@example.test:team/server.git'\n",
     );
     fixture.add("consumer");
-    let lease = fixture.ok(&["acquire", "repo", "server", "--workspace", "consumer"]);
+    let lease = fixture.ok(&[
+        "acquire",
+        "repo",
+        &fixture.id("server"),
+        "--workspace",
+        &fixture.id("consumer"),
+    ]);
     assert_eq!(lease["repository"]["id"], registration["id"]);
     assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
-    let repos = fixture.ok(&["leases", "repo", "--workspace", "consumer"]);
+    let repos = fixture.ok(&["leases", "repo", "--workspace", &fixture.id("consumer")]);
     assert_eq!(repos["pools"][0]["name"], "server");
     assert_eq!(repos["leases"][0]["id"], lease["id"]);
     fixture.ok(&[
         "release",
         "repo",
-        "server",
+        &fixture.id("server"),
         "--workspace",
-        "consumer",
+        &fixture.id("consumer"),
         "--name",
         "default",
     ]);
@@ -1705,7 +1973,13 @@ fn repository_resources_select_registrations_by_remote_url() {
         &fixture,
         "[resources.server]\nkind='repo'\nrepo='https://example.test/team/other.git'\n",
     );
-    let missing = fixture.run(&["acquire", "repo", "server", "--workspace", "consumer"]);
+    let missing = fixture.run(&[
+        "acquire",
+        "repo",
+        &fixture.id("server"),
+        "--workspace",
+        &fixture.id("consumer"),
+    ]);
     assert!(!missing.status.success());
 }
 
@@ -1723,10 +1997,16 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         &fixture,
         "[resources.server]\nkind='repo'\nrepo='missing'\n",
     );
-    let missing = fixture.run(&["acquire", "repo", "server", "--workspace", "consumer"]);
+    let missing = fixture.run(&[
+        "acquire",
+        "repo",
+        &fixture.id("server"),
+        "--workspace",
+        &fixture.id("consumer"),
+    ]);
     assert!(!missing.status.success());
     assert!(
-        fixture.ok(&["status", "consumer"])["resources"]
+        fixture.ok(&["status", &fixture.id("consumer")])["resources"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -1737,7 +2017,13 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     );
     let moved = fixture.root.path().join("moved-server");
     fs::rename(&related, &moved).unwrap();
-    let unavailable = fixture.run(&["acquire", "repo", "server", "--workspace", "consumer"]);
+    let unavailable = fixture.run(&[
+        "acquire",
+        "repo",
+        &fixture.id("server"),
+        "--workspace",
+        &fixture.id("consumer"),
+    ]);
     assert!(!unavailable.status.success());
     fs::rename(&moved, &related).unwrap();
     let pending = pending_approval(scoped_command(
@@ -1746,7 +2032,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         &[
             "acquire",
             "repo",
-            "server",
+            &fixture.id("server"),
             "--reason",
             "Read server contract",
         ],
@@ -1774,14 +2060,18 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         "--name",
         "server",
     ]);
-    let changed = scoped_command(&fixture, "consumer", &["acquire", "repo", "server"]);
+    let changed = scoped_command(
+        &fixture,
+        "consumer",
+        &["acquire", "repo", &fixture.id("server")],
+    );
     assert!(!changed.status.success());
     fixture.ok(&[
         "release",
         "repo",
-        "server",
+        &fixture.id("server"),
         "--workspace",
-        "consumer",
+        &fixture.id("consumer"),
         "--name",
         "default",
     ]);
@@ -1791,7 +2081,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         &[
             "acquire",
             "repo",
-            "server",
+            &fixture.id("server"),
             "--reason",
             "Read replacement contract",
         ],
@@ -1801,7 +2091,11 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         "--approve",
         pending["number"].as_str().unwrap(),
     ]);
-    let granted = scoped_command(&fixture, "consumer", &["acquire", "repo", "server"]);
+    let granted = scoped_command(
+        &fixture,
+        "consumer",
+        &["acquire", "repo", &fixture.id("server")],
+    );
     assert!(
         granted.status.success(),
         "{}",

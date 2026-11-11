@@ -144,6 +144,41 @@ impl Manager {
             .await
     }
 
+    /// The selector of the space named `name`, as tests name the spaces
+    /// they make: a workspace, a chat, else a removed workspace, by its ID,
+    /// since a name never selects one. A name no space has selects nothing.
+    pub async fn named(&self, name: &str) -> crate::client::space_names::SpaceSelector {
+        let workspaces = self.list_workspaces().await.unwrap();
+        let chats = self.chats().await.unwrap();
+        let removed = self.removed_workspaces().await.unwrap();
+        let id = (workspaces.into_iter())
+            .find(|workspace| workspace.name == name)
+            .map(|workspace| workspace.id)
+            .or_else(|| {
+                (chats.into_iter())
+                    .find(|chat| chat.name == name)
+                    .map(|chat| chat.id)
+            })
+            .or_else(|| {
+                (removed.into_iter())
+                    .find(|removed| removed.name == name)
+                    .map(|removed| removed.workspace_id)
+            })
+            .unwrap_or_else(SpaceId::generate);
+        crate::client::space_names::SpaceSelector::Id(id)
+    }
+
+    /// The ID of the queue entry named `name`, as tests name the entries
+    /// they queue, since a name never selects one, else the ID of the space
+    /// of that name, whose agents a queue command may act on.
+    pub async fn queued(&self, name: &str) -> String {
+        let entries = self.queue_entries().await.unwrap();
+        match entries.into_iter().find(|entry| entry.name == name) {
+            Some(entry) => entry.id.to_string(),
+            None => self.named(name).await.to_string(),
+        }
+    }
+
     /// Move the repository's checkout to `path` and record it there, as an
     /// earlier version may have registered it.
     pub async fn move_checkout(&self, id: &RepositoryId, path: &Path) -> anyhow::Result<()> {

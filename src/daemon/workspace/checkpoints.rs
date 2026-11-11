@@ -201,12 +201,13 @@ impl Manager {
         number: CheckpointNumber,
     ) -> Result<Checkpoint> {
         let (id, name) = (workspace.id.clone(), workspace.name.clone());
+        let space = workspace.number;
         self.store
             .run(move |db| find(db, &id, number))
             .await?
             .with_context(|| {
                 format!(
-                    "workspace {name} has no checkpoint {number}; shoal restore {name} lists them"
+                    "workspace {name} has no checkpoint {number}; shoal restore {space} lists them"
                 )
             })
     }
@@ -292,7 +293,7 @@ impl Manager {
         if let Some(execution) = self.other_execution(&workspace.id, own_execution).await? {
             bail!(
                 "execution {execution} runs in the workspace; stop it with shoal stop {} first",
-                workspace.name
+                workspace.number
             );
         }
         self.verify_worktree(workspace).await?;

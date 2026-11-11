@@ -113,7 +113,8 @@ impl Fixture {
     // Exercise persisted/manual acknowledgement compatibility without retaining
     // the removed CLI spelling.
     pub(crate) fn acknowledge(&self, workspace: &str) -> Value {
-        self.request(serde_json::json!({"set_pr":{"space":workspace,"clear":false}}))
+        let space = self.id(workspace);
+        self.request(serde_json::json!({"set_pr":{"space":space,"clear":false}}))
     }
 
     pub(crate) fn request(&self, method: Value) -> Value {
@@ -173,6 +174,7 @@ impl Fixture {
     }
 
     pub(crate) fn rename(&self, workspace: &str, branch: &str) -> Value {
+        let workspace = self.id(workspace);
         self.request(
             serde_json::json!({"rename_workspace":{"workspace":workspace,"branch":branch}}),
         )
@@ -228,6 +230,23 @@ impl Fixture {
     }
     pub(crate) fn add(&self, name: &str) -> Value {
         self.ok(&["start", self.repo.to_str().unwrap(), name])
+    }
+
+    /// The ID of the agent queue's entry named `name`, which queue commands
+    /// select it by, since a name never does.
+    pub(crate) fn queued(&self, name: &str) -> String {
+        let entries = self.ok(&["queue"]);
+        let entry = (entries.as_array().unwrap().iter()).find(|entry| entry["name"] == name);
+        entry.map_or_else(
+            || name.to_owned(),
+            |entry| entry["id"].as_str().unwrap().to_owned(),
+        )
+    }
+
+    /// The ID of the space named `name`, which commands select it by,
+    /// since a name never does.
+    pub(crate) fn id(&self, name: &str) -> String {
+        support::daemon_client::space_id(self.root.path(), name)
     }
 
     /// `~/shoal`, the default parent of every repository directory.
@@ -510,8 +529,9 @@ fn daemon_launch(root: &Path) -> Command {
 }
 
 pub(crate) fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
+    let workspace = fixture.id(workspace);
     wait_for("registered execution with a child", || {
-        let inspection = fixture.ok(&["status", workspace]);
+        let inspection = fixture.ok(&["status", &workspace]);
         inspection["executions"]
             .as_array()
             .unwrap()
@@ -557,9 +577,10 @@ pub(crate) fn scoped_hook(
     command: &str,
     input: Value,
 ) -> String {
+    let workspace = fixture.id(workspace);
     let mut child = fixture
         .command()
-        .args(["run", "--workspace", workspace, "--"])
+        .args(["run", "--workspace", &workspace, "--"])
         .args([support::shoal_binary(), "internal", command])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -578,12 +599,13 @@ pub(crate) fn scoped_hook(
 }
 
 pub(crate) fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
+    let workspace = fixture.id(workspace);
     fixture
         .command()
         .args([
             "run",
             "--workspace",
-            workspace,
+            &workspace,
             "--",
             support::shoal_binary(),
             "--json",

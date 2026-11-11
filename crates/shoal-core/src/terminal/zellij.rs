@@ -100,8 +100,8 @@ impl Places for Zellij {
         "Zellij tabs"
     }
 
-    fn background_place(&self, name: &str) -> String {
-        format!("in the background in Zellij; attach with `shoal attach {name}`")
+    fn background_place(&self, _name: &str) -> String {
+        "in the background in Zellij; `shoal attach` offers it".into()
     }
 
     fn origin(&self) -> Option<Origin> {

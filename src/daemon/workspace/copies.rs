@@ -200,14 +200,14 @@ impl Manager {
         name: &str,
         number: CheckpointNumber,
     ) -> Result<Checkpoint> {
-        let id = id.to_owned();
+        let owned = id.to_owned();
         let checkpoint = self
             .store
-            .run(move |db| super::checkpoints::find(db, &id, number))
+            .run(move |db| super::checkpoints::find(db, &owned, number))
             .await?;
         let Some(checkpoint) = checkpoint else {
             anyhow::bail!(
-                "workspace {name} has no checkpoint {number}; shoal restore {name} lists them"
+                "workspace {name} has no checkpoint {number}; shoal restore {id} lists them"
             );
         };
         ensure!(

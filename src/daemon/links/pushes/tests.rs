@@ -237,7 +237,7 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     );
     assert_eq!(
         manager
-            .agent_messages(&"worker".into())
+            .agent_messages(&manager.named("worker").await)
             .await
             .unwrap()
             .len(),
@@ -273,7 +273,7 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
     assert!(outdated.operation.is_none());
     assert_eq!(
         manager
-            .agent_messages(&"worker".into())
+            .agent_messages(&manager.named("worker").await)
             .await
             .unwrap()
             .len(),

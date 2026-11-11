@@ -79,7 +79,7 @@ fn a_saved_chats_open_question_stays_in_the_inbox() {
     fixture.restart();
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["question"]["space"], "talk", "{inbox}");
-    let listed = fixture.ok(&["questions", "--space", "talk"]);
+    let listed = fixture.ok(&["questions", "--space", &fixture.id("talk")]);
     assert_eq!(listed["questions"][0]["space"], "talk", "{listed}");
 }
 
@@ -102,7 +102,14 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     fixture.add("worker");
     let output = fixture
         .command()
-        .args(["run", "--workspace", "worker", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("worker"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume talk --discard; exit $?"#)
         .arg(support::shoal_binary())
         .output()
@@ -147,8 +154,12 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         "[agents.claude]\ncommand = ['./agent.txt']\n",
     )
     .unwrap();
-    let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["resume", &fixture.id("talk"), "--focus"]),
+        "",
+    );
     assert!(!output.status.success(), "{output:?}\n{transcript}");
     let saved = fixture.ok(&["list", "--chats"]);
     assert_eq!(saved[0]["restore"], "resume", "{saved}");
@@ -164,8 +175,12 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     fs::remove_file(fixture.repo.join(".shoal.toml")).unwrap();
     fs::remove_file(fixture.repo.join("agent.txt")).unwrap();
 
-    let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["resume", &fixture.id("talk"), "--focus"]),
+        "",
+    );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
@@ -231,7 +246,12 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     let worker = fixture.add("worker");
     stop_agent(&fixture, &worker);
     // A list naming a chat and a workspace acts on both.
-    discarded_both(&fixture.ok(&["resume", "talk", "worker", "--discard"]));
+    discarded_both(&fixture.ok(&[
+        "resume",
+        &fixture.id("talk"),
+        &fixture.id("worker"),
+        "--discard",
+    ]));
     assert_eq!(fixture.ok(&["list", "--chats"]), Value::Array(vec![]));
     // `--all` takes the saved chats too.
     save_chat(&mut fixture);
@@ -260,7 +280,12 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         fixture.ok(&["list", "--chats"]);
         saves(&fixture) > saved
     });
-    fixture.ok(&["resume", "talk", "worker", "--discard"]);
+    fixture.ok(&[
+        "resume",
+        &fixture.id("talk"),
+        &fixture.id("worker"),
+        "--discard",
+    ]);
     // The picker offers the saved chats after the workspaces with stopped
     // work.
     let chat = save_chat(&mut fixture);
@@ -407,7 +432,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
     let renamed = rename_in(&other["path"], "replanning");
     assert_eq!(renamed, chat.as_str());
     assert_eq!(
-        fixture.ok(&["status", "other"])["workspace"]["title"],
+        fixture.ok(&["status", &fixture.id("other")])["workspace"]["title"],
         Value::Null
     );
     for agent in [&mut agent, &mut nested_agent] {
@@ -443,7 +468,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
     let own = fixture.add("own");
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
 
-    let status = fixture.ok(&["status", "planning"]);
+    let status = fixture.ok(&["status", &fixture.id("planning")]);
     assert_eq!(status["kind"], "chat", "{status}");
     assert_eq!(status["chat"]["id"], chat.as_str(), "{status}");
     assert_eq!(status["sessions"], serde_json::json!([]), "{status}");
@@ -451,7 +476,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
         assert_eq!(status.get(worktree), None, "{worktree}: {status}");
     }
 
-    let status = fixture.ok(&["status", "own"]);
+    let status = fixture.ok(&["status", &fixture.id("own")]);
     assert_eq!(status["kind"], "workspace", "{status}");
     assert_eq!(status["workspace"]["id"], own["id"], "{status}");
     assert_eq!(status["setup_finished"], true, "{status}");
@@ -461,7 +486,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
         let output = fixture.run(&[
             "run",
             "--workspace",
-            "own",
+            &fixture.id("own"),
             "--",
             support::shoal_binary(),
             "status",
@@ -477,7 +502,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
 fn the_inbox_acts_on_a_chats_ready_row_as_a_chat() {
     let fixture = Fixture::new();
     let (mut agent, _) = start_test_chat(&fixture, "planning");
-    fixture.ok(&["ready", "--space", "planning"]);
+    fixture.ok(&["ready", "--space", &fixture.id("planning")]);
     // Presses $KEY on the first row whose ID starts with $PICK.
     install_test_script(
         fixture.root.path().join("bin/fzf"),
@@ -523,14 +548,19 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     fs::write(&report, "plan\n").unwrap();
     // The branch and demo options are a workspace's.
     for flag in ["--integrated", "--keep-demos"] {
-        let output = fixture.run(&["done", "planning", flag]);
+        let output = fixture.run(&["done", &fixture.id("planning"), flag]);
         assert!(!output.status.success(), "{flag}: {output:?}");
     }
     // Done again at the same HEAD with nothing new changes nothing.
-    fixture.ok(&["done", "planning"]);
-    let output = fixture.run(&["done", "planning"]);
+    fixture.ok(&["done", &fixture.id("planning")]);
+    let output = fixture.run(&["done", &fixture.id("planning")]);
     assert!(!output.status.success(), "{output:?}");
-    let completion = fixture.ok(&["done", "planning", "--attach", report.to_str().unwrap()]);
+    let completion = fixture.ok(&[
+        "done",
+        &fixture.id("planning"),
+        "--attach",
+        report.to_str().unwrap(),
+    ]);
     assert_eq!(completion["cleanup"], false, "{completion}");
     assert_eq!(
         completion["results"][0]["name"], "report.md",
@@ -551,7 +581,7 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
         "{alerts}"
     );
     // The user attached the report; the chat's agent attaches its own.
-    let files = fixture.ok(&["files", "planning"]);
+    let files = fixture.ok(&["files", &fixture.id("planning")]);
     assert_eq!(files[0]["name"], "report.md", "{files}");
     assert_eq!(files[0]["attached_by"]["kind"], "user", "{files}");
     let notes = fixture.root.path().join("notes.md");
@@ -564,15 +594,15 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let files = fixture.ok(&["files", "planning"]);
+    let files = fixture.ok(&["files", &fixture.id("planning")]);
     assert_eq!(files[1]["name"], "notes.md", "{files}");
     assert_eq!(files[1]["attached_by"]["kind"], "chat", "{files}");
     let completion: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let withdrawn = fixture.ok(&["done", "--undo", "planning"]);
+    let withdrawn = fixture.ok(&["done", "--undo", &fixture.id("planning")]);
     assert_eq!(withdrawn["withdrawn"]["results"], completion["results"]);
     let finished = fixture.ok(&["list", "--chats", "--status", "finished"]);
     assert!(!finished.to_string().contains("planning"), "{finished}");
-    let output = fixture.run(&["done", "--undo", "planning"]);
+    let output = fixture.run(&["done", "--undo", &fixture.id("planning")]);
     assert!(!output.status.success(), "{output:?}");
     agent.kill().unwrap();
     agent.wait().unwrap();
@@ -591,7 +621,7 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
 
-    let completion = fixture.ok(&["done", "planning"]);
+    let completion = fixture.ok(&["done", &fixture.id("planning")]);
     assert_eq!(completion["cleanup"], true, "{completion}");
     // The user hears once the removal finished.
     wait_until("completion cleanup to remove the chat", || {
@@ -837,7 +867,7 @@ fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Resu
     assert!(sessions.contains("user.label=keep"), "{sessions}");
     assert!(!sessions.contains("shoal.workspace="), "{sessions}");
     assert!(!sessions.contains("shoal.demo="), "{sessions}");
-    fixture.ok(&["rm", "--wait", "old-owner", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("old-owner"), "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(
         !zmx_calls(&fixture)
@@ -934,7 +964,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "chat-worker",
     ]);
     assert_eq!(reopened["parent"], Value::Null);
-    let removed = fixture.ok(&["rm", "--wait", CHAT_NAME]);
+    let removed = fixture.ok(&["rm", "--wait", &fixture.id(CHAT_NAME)]);
     assert_eq!(removed["chat"]["id"], *chat, "{removed}");
     assert!(removed["children"].is_null(), "{removed}");
     assert_eq!(fixture.ok(&["list"])[0]["name"], "chat-worker");
@@ -953,7 +983,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    fixture.ok(&["split", "below", "--workspace", "opened"]);
+    fixture.ok(&["split", "below", "--workspace", &fixture.id("opened")]);
     // Another chat runs in the opened workspace's worktree.
     let mut resident = support::isolated(fixture.root.path(), "sleep")
         .arg("600")
@@ -962,18 +992,24 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .unwrap();
     let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository, "workspace": "opened", "name": "reading",
+        "repository": repository, "workspace": fixture.id("opened"), "name": "reading",
         "agent": "claude", "pid": resident.id()
     }}));
     assert_eq!(response["type"], "chat", "{response}");
 
     // Removing the chat asks first, naming what it takes.
-    let (output, prompt) = fixture.interactive(&["rm", "--wait", "planning"], "n\n");
+    let (output, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("planning")], "n\n");
     assert!(!output.status.success(), "{prompt}");
     assert!(prompt.contains("opened, reading, below"), "{prompt}");
 
     // Naming the resident chat too removes it once, with the chat above it.
-    let removed = fixture.ok(&["rm", "--wait", "planning", "reading", "--yes"]);
+    let removed = fixture.ok(&[
+        "rm",
+        "--wait",
+        &fixture.id("planning"),
+        &fixture.id("reading"),
+        "--yes",
+    ]);
     assert_eq!(removed["failed"], serde_json::json!([]), "{removed}");
     let chats = removed["chats"].as_array().unwrap();
     assert_eq!(chats.len(), 1, "{removed}");
@@ -1003,10 +1039,10 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     };
     let output = add(&fixture.repo, "opened");
     assert!(output.status.success(), "{output:?}");
-    fixture.ok(&["split", "below", "--workspace", "opened"]);
+    fixture.ok(&["split", "below", "--workspace", &fixture.id("opened")]);
 
     // One parent link names the chat or the workspace above, of either kind.
-    let opened = fixture.ok(&["status", "opened"]);
+    let opened = fixture.ok(&["status", &fixture.id("opened")]);
     assert_eq!(opened["workspace"]["parent"]["id"], chat.as_str());
     assert_eq!(opened["workspace"]["parent"]["kind"], "chat");
     assert_eq!(opened["workspace"]["children"][0]["name"], "below");
@@ -1092,9 +1128,15 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
             "agent-state",
             "working",
             "--space",
-            "chat-worker",
+            &fixture.id("chat-worker"),
         ]);
-        fixture.ok(&["alerts", "send", "--space", "chat-worker", "Tests pass"]);
+        fixture.ok(&[
+            "alerts",
+            "send",
+            "--space",
+            &fixture.id("chat-worker"),
+            "Tests pass",
+        ]);
         fs::write(home.join("worker-reported"), "").unwrap();
         chat.join().unwrap()
     });
@@ -1127,17 +1169,19 @@ fn a_chats_agent_is_scoped_to_the_chat_and_the_spaces_below_it() {
         format!(
             r#"#!/bin/sh
 shoal='{}'
-run() {{ name=$1; shift; "$shoal" "$@" </dev/null >/dev/null 2>"$HOME/$name.err"; echo $? > "$HOME/$name"; }}
-run start start "$PWD" below
-run stop stop --interrupt below
+run() {{ name=$1; shift; "$shoal" "$@" </dev/null >"$HOME/$name.out" 2>"$HOME/$name.err"; echo $? > "$HOME/$name"; }}
+run start --json start "$PWD" below
+below=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$HOME/start.out")
+run stop stop --interrupt "$below"
 run rename rename renamed
 run alerts alerts
 run repo repo add "$HOME"
-run outside messages send --space outside hello
+run outside messages send --space {} hello
 run takeover start "$PWD" --existing outside
-run remove rm below --yes --wait
+run remove rm "$below" --yes --wait
 "#,
-            support::shoal_binary()
+            support::shoal_binary(),
+            fixture.id("outside")
         ),
     );
     let (output, transcript) = fixture.terminal_command(
@@ -1171,7 +1215,7 @@ run remove rm below --yes --wait
         .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(names, ["outside"]);
-    assert!(fixture.ok(&["status", "outside"])["workspace"]["parent"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("outside")])["workspace"]["parent"].is_null());
 }
 
 /// A chat's agent adds a workspace with an agent, which the daemon starts
@@ -1184,7 +1228,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n\"$shoal\" start \"$PWD\" later --agent codex --after worker 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\nworker=$(head -n 1 \"$HOME/add.json\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')\n\"$shoal\" start \"$PWD\" later --agent codex --after \"$worker\" 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
             support::shoal_binary()
         ),
     );
@@ -1211,7 +1255,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     assert_eq!(reports.len(), 2, "{added}");
     assert_eq!(reports[0]["name"], "worker", "{added}");
     assert_eq!(reports[1]["agent"], "codex", "{added}");
-    let worker = fixture.ok(&["status", "worker"]);
+    let worker = fixture.ok(&["status", &fixture.id("worker")]);
     assert_eq!(
         worker["workspace"]["parent"]["name"], "planning",
         "{worker}"
@@ -1229,7 +1273,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
         let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
         let code = fs::read_to_string(home.join(name)).unwrap();
         assert_eq!(code.trim(), "1", "{error}");
-        assert!(!fixture.run(&["status", name]).status.success());
+        assert!(!fixture.run(&["status", &fixture.id(name)]).status.success());
     }
     // The chat's own session is not relabelled as the worker's.
     let id = worker["workspace"]["id"].as_str().unwrap();
@@ -1273,7 +1317,7 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
     let report: Value = serde_json::from_str(added.lines().next().unwrap_or_default())
         .unwrap_or_else(|_| panic!("{added}\n{error}"));
     assert_eq!(report["name"], "12-clarify-retries", "{added}");
-    let worker = fixture.ok(&["status", "12-clarify-retries"]);
+    let worker = fixture.ok(&["status", &fixture.id("12-clarify-retries")]);
     assert_eq!(
         worker["workspace"]["parent"]["name"], "planning",
         "{worker}"
@@ -1295,7 +1339,7 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     let repo = fixture.repo.to_str().unwrap();
     let added = scoped_command(&fixture, "parent", &["start", repo, "--issue", "12"]);
     assert!(added.status.success(), "{added:?}");
-    let worker = fixture.ok(&["status", "12-clarify-retries"]);
+    let worker = fixture.ok(&["status", &fixture.id("12-clarify-retries")]);
     assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
     // Planning the issue reads it there too.
     let planned = scoped_command(
@@ -1321,7 +1365,14 @@ fn a_background_place_below_its_starter_takes_the_handed_scope() {
     // ancestors, without the token in its own environment.
     let place = fixture
         .command()
-        .args(["run", "--workspace", "parent", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("parent"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(
             "printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HANDOFF/scope\"; unset SHOAL_SCOPE_TOKEN; \
              exec \"$SHOAL\" --json start --chat \"$REPO\" --here --name sub --agent claude \
@@ -1372,7 +1423,7 @@ fn any_space_opens_any_kind_of_child() {
     let below = scoped_command(&fixture, "parent", &["start", repo, "below"]);
     assert!(below.status.success(), "{below:?}");
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
-    let status = fixture.ok(&["status", "below"]);
+    let status = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(parent(&status["workspace"]).as_deref(), Some("parent"));
     // ...but not a chat in its own terminal, whose processes would be its
     // own...
@@ -1384,7 +1435,7 @@ fn any_space_opens_any_kind_of_child() {
     assert!(!here.status.success(), "{here:?}");
     // ...nor one in the worktree of a workspace outside its tree...
     fixture.add("other");
-    let args = ["start", "--in", "other", "--agent", "claude"];
+    let args = ["start", "--in", &fixture.id("other"), "--agent", "claude"];
     let outside = scoped_command(&fixture, "parent", &args);
     assert!(!outside.status.success(), "{outside:?}");
     // ...rather a chat below it, which opens in the background, as its agent
@@ -1422,7 +1473,7 @@ fn any_space_opens_any_kind_of_child() {
     assert_eq!(parent(&chat("nested")).as_deref(), Some("sub"), "{chats}");
     assert_eq!(chat("nested")["parent"]["kind"], "chat");
     // Removing the workspace takes every space below it, deepest first.
-    let removed = fixture.ok(&["rm", "--wait", "parent", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", &fixture.id("parent"), "--yes"]);
     let children: Vec<_> = (removed["children"].as_array().unwrap().iter())
         .map(|name| name.as_str().unwrap().to_owned())
         .collect();
@@ -1479,7 +1530,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     );
     assert!(middle.status.success(), "{middle:?}");
     wait_until("the chat's workspace", || home.join("chat-ready").exists());
-    let deep = fixture.ok(&["status", "deep"]);
+    let deep = fixture.ok(&["status", &fixture.id("deep")]);
     assert_eq!(deep["workspace"]["parent"]["name"], "middle", "{deep}");
     let chats = fixture.ok(&["list", "--chats"]);
     let middle = chats[0]["id"].as_str().unwrap().to_owned();
@@ -1489,7 +1540,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     // the agent of the workspace below asks for.
     let mut worker = fixture
         .command()
-        .args(["claude", "deep"])
+        .args(["claude", &fixture.id("deep")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .spawn()
@@ -1500,8 +1551,14 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     let request = fixture.ok(&["approvals", asked["request"]["number"].as_str().unwrap()]);
     assert_eq!(request["decider"], middle.as_str(), "{request}");
     // The chat coordinates it: the workspace's activity reaches the chat.
-    fixture.ok(&["alerts", "send", "--space", "deep", "Tests pass"]);
-    let messages = fixture.ok(&["messages", "middle"]);
+    fixture.ok(&[
+        "alerts",
+        "send",
+        "--space",
+        &fixture.id("deep"),
+        "Tests pass",
+    ]);
+    let messages = fixture.ok(&["messages", &middle]);
     assert!(messages.to_string().contains("Tests pass"), "{messages}");
     // The workspace's process reaches neither the chat nor the workspace
     // above it.
@@ -1509,14 +1566,14 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
         let refused = scoped_command(
             &fixture,
             "deep",
-            &["messages", "send", "--space", space, "hi"],
+            &["messages", "send", "--space", &fixture.id(space), "hi"],
         );
         assert!(!refused.status.success(), "{space}: {refused:?}");
     }
     fs::write(home.join("release"), "").unwrap();
     assert!(worker.wait().unwrap().success());
     // Removing the top workspace takes the chat and the workspace below it.
-    let removed = fixture.ok(&["rm", "--wait", "top", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", &fixture.id("top"), "--yes"]);
     assert_eq!(
         removed["children"],
         serde_json::json!(["deep", "middle"]),
@@ -1593,7 +1650,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     install_recording_agent(&fixture, "claude");
     fixture.add("worker");
     let worktree = fs::canonicalize(
-        fixture.ok(&["status", "worker"])["workspace"]["path"]
+        fixture.ok(&["status", &fixture.id("worker")])["workspace"]["path"]
             .as_str()
             .unwrap(),
     )
@@ -1658,7 +1715,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     assert!(diff.status.success(), "{diff:?}");
     let diff = String::from_utf8_lossy(&diff.stdout);
     assert!(diff.contains("+changed by the workspace's agent"), "{diff}");
-    let view = in_chat(&["view", "--space", "worker", "--no-comments"]);
+    let view = in_chat(&["view", "--space", &fixture.id("worker"), "--no-comments"]);
     assert!(view.status.success(), "{view:?}");
     let change = in_chat(&["branch", "base", "clear"]);
     assert!(!change.status.success(), "{change:?}");
@@ -1668,13 +1725,13 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "--chat",
         fixture.repo.to_str().unwrap(),
         "--workspace",
-        "worker",
+        &fixture.id("worker"),
     ]);
     assert!(!both.status.success(), "{both:?}");
 
     // Each status names the other.
     assert_eq!(
-        fixture.ok(&["status", "worker"])["chats"][0]["name"],
+        fixture.ok(&["status", &fixture.id("worker")])["chats"][0]["name"],
         "worker-chat"
     );
 
@@ -1682,7 +1739,9 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     assert_eq!(chats[0]["restore"], "resume", "{chats}");
     fs::remove_file(home.join("chat-cwd")).unwrap();
     let (output, transcript) = fixture.interactive_command(
-        fixture.command().args(["resume", "worker-chat", "--focus"]),
+        fixture
+            .command()
+            .args(["resume", &fixture.id("worker-chat"), "--focus"]),
         "",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -1692,10 +1751,10 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     );
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
 
-    let (no, prompt) = fixture.interactive(&["rm", "--wait", "worker"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("worker")], "n\n");
     assert!(!no.status.success());
     assert!(prompt.contains("worker-chat"), "{prompt}");
-    let removed = fixture.run(&["rm", "--wait", "worker", "--yes"]);
+    let removed = fixture.run(&["rm", "--wait", &fixture.id("worker"), "--yes"]);
     assert!(removed.status.success(), "{removed:?}");
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 }
@@ -2005,10 +2064,10 @@ fn attach_returns_to_chats_by_name() {
             .unwrap()
     };
 
-    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    let (output, transcript) = fixture.interactive(&["attach", &fixture.id("talk")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "second"]);
-    let (output, transcript) = fixture.interactive(&["attach", "plan-7"], "");
+    let (output, transcript) = fixture.interactive(&["attach", &fixture.id("plan-7")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "first"]);
 
@@ -2030,7 +2089,7 @@ fn attach_returns_to_chats_by_name() {
     // A chat without a session says where it runs instead, whether named or
     // taken as its checkout's only chat.
     let mut named = fixture.command();
-    named.args(["attach", "quiet"]);
+    named.args(["attach", &fixture.id("quiet")]);
     let mut current = fixture.command();
     current.current_dir(&other).arg("attach");
     for command in [&mut named, &mut current] {
@@ -2072,12 +2131,12 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
 
     // By name; the zmx session keeps its name, and attach finds it by the
     // chat's new one.
-    let renamed = fixture.ok(&["rename", "talk", "topic"]);
+    let renamed = fixture.ok(&["rename", &fixture.id("talk"), "topic"]);
     assert_eq!(renamed["id"], talk.as_str());
     assert_eq!(renamed["name"], "topic");
-    let (output, transcript) = fixture.interactive(&["attach", "topic"], "");
+    let (output, transcript) = fixture.interactive(&["attach", &fixture.id("topic")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let output = fixture.run(&["rename", "repo-plan-7", "topic"]);
+    let output = fixture.run(&["rename", &fixture.id("repo-plan-7"), "topic"]);
     assert!(!output.status.success());
 
     // The chat this runs in, as its agent would.
@@ -2101,7 +2160,7 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     let output = fixture
         .command()
         .current_dir(&fixture.repo)
-        .args(["rename", "calm", "bad/name"])
+        .args(["rename", &fixture.id("calm"), "bad/name"])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -2121,7 +2180,7 @@ fn a_name_request_reaches_the_chats_agent() {
         "pid": std::process::id()
     }}));
     let chat = response["data"]["id"].as_str().unwrap().to_owned();
-    let output = fixture.run(&["rename", "--request", "talk"]);
+    let output = fixture.run(&["rename", "--request", &chat]);
     assert!(output.status.success(), "{output:?}");
     // The chat's agent reads it as a message from the user, about no
     // workspace.

@@ -92,7 +92,10 @@ pub(super) async fn start(
     };
     let launch = place(ctx, &settings, &workspace, &chosen, provided).await?;
     let running = await_record(ctx, &workspace, &launch).await?;
-    let opening = format!("shoal demo {} --workspace {}", chosen.name, workspace.name);
+    let opening = format!(
+        "shoal demo {} --workspace {}",
+        chosen.name, workspace.number
+    );
     if crate::env::is_scoped() {
         let message = format!("Demo {} is running; open it with {opening}", chosen.name);
         let space = workspace.id.clone();

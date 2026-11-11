@@ -61,7 +61,7 @@ enum Change {
 fn find<'a>(workspaces: &'a [Workspace], selector: &SpaceSelector) -> Result<&'a Workspace> {
     workspaces
         .iter()
-        .find(|w| selector.selects(&w.id, &w.name, w.number))
+        .find(|w| selector.selects(&w.id, w.number))
         .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
 }
 

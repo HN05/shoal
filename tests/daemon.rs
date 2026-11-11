@@ -745,13 +745,14 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let repo = git_fixture::init_repo(root.path(), "repo", &[]);
     run(&["repo", "add", repo.to_str().unwrap()]);
     run(&["start", repo.to_str().unwrap(), "keep-running"]);
+    let keep_running = support::daemon_client::space_id(root.path(), "keep-running");
     let marker = root.path().join("started");
     let finish = root.path().join("finish");
     let mut execution = command(root.path())
         .args([
             "run",
             "--workspace",
-            "keep-running",
+            &keep_running,
             "--",
             "sh",
             "-c",
@@ -788,7 +789,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
             .contains(replacement.to_str().unwrap())
     );
     let inspection: Value =
-        serde_json::from_slice(&run(&["--json", "status", "keep-running"]).stdout).unwrap();
+        serde_json::from_slice(&run(&["--json", "status", &keep_running]).stdout).unwrap();
     assert_eq!(inspection["executions"][0]["state"], "running");
     assert!(execution.try_wait().unwrap().is_none());
     fs::write(&finish, "").unwrap();
@@ -828,7 +829,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         .args([
             "run",
             "--workspace",
-            "keep-running",
+            &keep_running,
             "--",
             "sh",
             "-c",
@@ -853,7 +854,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     wait_until("execution to reattach", || {
         assert!(execution.try_wait().unwrap().is_none());
         let inspection: Value =
-            serde_json::from_slice(&run(&["--json", "status", "keep-running"]).stdout).unwrap();
+            serde_json::from_slice(&run(&["--json", "status", &keep_running]).stdout).unwrap();
         inspection["executions"][0]["state"] == "running"
     });
     fs::write(&finish, "").unwrap();
@@ -894,12 +895,25 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "unknown workspace: gone",
         ),
         (
-            vec!["run", "--workspace", "worker", "--", "true"],
+            vec![
+                "run",
+                "--workspace",
+                "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09",
+                "--",
+                "true",
+            ],
             json!({"type": "error", "data": {"code": "execution_failed", "message": "failed: detail"}}),
             "execution_failed: failed: detail",
         ),
         (
-            vec!["--json", "run", "--workspace", "worker", "--", "true"],
+            vec![
+                "--json",
+                "run",
+                "--workspace",
+                "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09",
+                "--",
+                "true",
+            ],
             json!({"type": "error", "data": {"code": "future_code", "message": "failed: detail"}}),
             "future_code: failed: detail",
         ),

@@ -150,7 +150,7 @@ fn done_remains_available_to_agents() {
 
 #[test]
 fn config_show_and_reference_are_available_to_workspace_processes() {
-    let show = Cli::try_parse_from(["shoal", "config", "show", "workspace"]).unwrap();
+    let show = Cli::try_parse_from(["shoal", "config", "show", "4"]).unwrap();
     assert!(!show.command.unwrap().is_administrative());
     let reference = Cli::try_parse_from(["shoal", "config", "reference"]).unwrap();
     assert!(!reference.command.unwrap().is_administrative());
@@ -347,16 +347,16 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
     let inside = start(&["--in", "--mode", "chat"]).unwrap();
     assert_eq!(inside.in_workspace, Some(None));
     // A positional issue reaches the start, which refuses a repository.
-    let on_issue = start(&["37", "--in", "worker"]).unwrap();
+    let on_issue = start(&["37", "--in", "4"]).unwrap();
     assert_eq!(on_issue.repository.as_deref(), Some("37"));
-    assert_eq!(on_issue.in_workspace, Some(Some("worker".into())));
+    assert_eq!(on_issue.in_workspace, Some(Some("4".into())));
     // A chat has no worktree to create, and a workspace no chat name.
     for refused in [
         &["--chat", "--worktree"][..],
         &["--chat", "repo", "topic"],
         &["--chat", "--now"],
         &["--chat", "--fork"],
-        &["--in", "worker", "--base", "main"],
+        &["--in", "4", "--base", "main"],
         &["--worktree", "--name", "talk"],
         &["--restore", "c1", "--name", "talk"],
     ] {
@@ -367,8 +367,8 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
 #[test]
 fn a_kept_export_narrows_to_a_checkpoint_of_one_space() {
     let parse = |args: &[&str]| Cli::try_parse_from(["shoal", "move", "export"].iter().chain(args));
-    assert!(parse(&["topic", "--keep", "--checkpoint", "3", "-o", "f"]).is_ok());
-    assert!(parse(&["topic", "--checkpoint", "3", "-o", "f"]).is_err());
+    assert!(parse(&["4", "--keep", "--checkpoint", "3", "-o", "f"]).is_ok());
+    assert!(parse(&["4", "--checkpoint", "3", "-o", "f"]).is_err());
     let all = ["--repo", "app", "--all", "--keep", "-o", "d"];
     assert!(parse(&all).is_ok());
     assert!(parse(&[&all[..], &["--checkpoint", "3"]].concat()).is_err());

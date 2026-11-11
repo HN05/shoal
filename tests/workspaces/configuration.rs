@@ -52,7 +52,7 @@ fn config_show_reports_effective_values_and_their_layers() {
     .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
-    let report = fixture.ok(&["config", "show", "layered-config"]);
+    let report = fixture.ok(&["config", "show", &fixture.id("layered-config")]);
     let entry = |key: &str| {
         report
             .as_array()
@@ -147,7 +147,8 @@ fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
 fn global_config_changes_reload_a_running_daemon() {
     let fixture = Fixture::with_tools(None, true);
     fixture.add("worker");
-    let policy = || fixture.ok(&["catalog", "sim", "--workspace", "worker"])["policy"].clone();
+    let policy =
+        || fixture.ok(&["catalog", "sim", "--workspace", &fixture.id("worker")])["policy"].clone();
     assert!(policy()["default"].is_null());
     let result = fixture.ok(&[
         "config",
@@ -161,7 +162,7 @@ fn global_config_changes_reload_a_running_daemon() {
     ]);
     assert_eq!(result["daemon_reloaded"], true);
     assert_eq!(policy()["default"], "phone");
-    let catalog = fixture.ok(&["catalog", "--workspace", "worker"]);
+    let catalog = fixture.ok(&["catalog", "--workspace", &fixture.id("worker")]);
     assert_eq!(catalog["simulators"]["policy"], policy());
     // Hand edits apply on an explicit reload; an invalid file keeps the running config.
     let config = fixture.root.path().join(".config/shoal/config.toml");
@@ -219,7 +220,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     assert_eq!(edited["config"], saved["path"]);
     let agent = || {
         fixture
-            .ok(&["config", "show", "worker"])
+            .ok(&["config", "show", &fixture.id("worker")])
             .as_array()
             .unwrap()
             .iter()
@@ -341,7 +342,8 @@ fn local_config_is_a_file_shared_by_every_workspace_and_read_in_place() {
     }
     for name in ["first", "second"] {
         assert_eq!(
-            fixture.ok(&["catalog", "port", "--workspace", name])["configured"]["web"]["env"],
+            fixture.ok(&["catalog", "port", "--workspace", &fixture.id(name)])["configured"]["web"]
+                ["env"],
             "LOCAL_PORT"
         );
     }
@@ -359,7 +361,8 @@ fn local_config_is_a_file_shared_by_every_workspace_and_read_in_place() {
             .starts_with("# Local preferences\n")
     );
     assert_eq!(
-        fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"]["web"]["env"],
+        fixture.ok(&["catalog", "port", "--workspace", &fixture.id("first")])["configured"]["web"]
+            ["env"],
         "EDITED"
     );
     // An edit that leaves an invalid file changes nothing.
@@ -384,7 +387,8 @@ fn local_config_is_a_file_shared_by_every_workspace_and_read_in_place() {
         "[ports.checked_in]\nenv='CHECKED_IN'\n",
     )
     .unwrap();
-    let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
+    let configured =
+        fixture.ok(&["catalog", "port", "--workspace", &fixture.id("first")])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 2);
     assert_eq!(configured["web"]["env"], "EDITED");
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
@@ -392,13 +396,14 @@ fn local_config_is_a_file_shared_by_every_workspace_and_read_in_place() {
     fs::write(&local, "invalid TOML").unwrap();
     assert!(
         !fixture
-            .run(&["catalog", "port", "--workspace", "first"])
+            .run(&["catalog", "port", "--workspace", &fixture.id("first")])
             .status
             .success()
     );
     // An empty file sets nothing, so every option falls through.
     fs::write(&local, "").unwrap();
-    let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
+    let configured =
+        fixture.ok(&["catalog", "port", "--workspace", &fixture.id("first")])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 1);
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
     assert!(fixture.clear_local_config(id)["toml"].is_null());
@@ -433,7 +438,7 @@ fn local_config_scripts_live_beside_it_and_go_with_the_repository() {
     git(&other_path, &["init", "-b", "main"]);
     let other = fixture.ok(&["repo", "add", other_path.to_str().unwrap()]);
     assert!(fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["toml"].is_null());
-    fixture.ok(&["rm", "--wait", "scripted", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("scripted"), "--yes"]);
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!directory.exists());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
@@ -546,10 +551,10 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
-    let failed = fixture.ok(&["status", "unknown"]);
+    let failed = fixture.ok(&["status", &fixture.id("unknown")]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
-    fixture.ok(&["rm", "--wait", "unknown", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("unknown"), "--yes"]);
 }
 
 #[test]
@@ -591,7 +596,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
         fixture.repo.to_str().unwrap(),
         "bad-profile",
         "--git-profile",
-        "unknown",
+        &fixture.id("unknown"),
     ]);
     assert!(!output.status.success());
     assert_eq!(fixture.ok(&["list"]), before);
@@ -622,7 +627,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
         .env("GIT_CONFIG_VALUE_0", "12")
         .env("GIT_AUTHOR_EMAIL", "inherited@example.invalid")
         .env("GIT_COMMITTER_NAME", "Inherited Name")
-        .args(["claude", "agent-git"])
+        .args(["claude", &fixture.id("agent-git")])
         .output()
         .unwrap();
     assert!(
@@ -643,7 +648,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     let output = fixture.run(&[
         "run",
         "--workspace",
-        "agent-git",
+        &fixture.id("agent-git"),
         "--",
         "git",
         "config",
@@ -656,7 +661,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
         format!("{commands}[agent]\ngit_profile = 'missing'\n"),
     )
     .unwrap();
-    let output = fixture.run(&["claude", "agent-git"]);
+    let output = fixture.run(&["claude", &fixture.id("agent-git")]);
     assert!(!output.status.success());
 }
 
@@ -682,8 +687,16 @@ fn agents_git_over_https_uses_the_hosts_agent_token() {
     )
     .unwrap();
 
-    let agent = fixture.run(&["claude", "agent-login"]);
-    let other = fixture.run(&["run", "--workspace", "agent-login", "--", "sh", "-c", fill]);
+    let agent = fixture.run(&["claude", &fixture.id("agent-login")]);
+    let other = fixture.run(&[
+        "run",
+        "--workspace",
+        &fixture.id("agent-login"),
+        "--",
+        "sh",
+        "-c",
+        fill,
+    ]);
 
     assert!(agent.status.success(), "{agent:?}");
     let stdout = String::from_utf8(agent.stdout).unwrap();

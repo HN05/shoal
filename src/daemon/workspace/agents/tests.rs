@@ -389,7 +389,7 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
             .await;
         manager
             .set_agent_state(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 state,
                 Some(execution.plan.id.clone()),
                 None,
@@ -470,7 +470,7 @@ async fn overload_stops_attached_agents_only_after_the_others() {
         };
         manager
             .set_agent_state(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 state,
                 Some(id.clone()),
                 None,
@@ -478,7 +478,7 @@ async fn overload_stops_attached_agents_only_after_the_others() {
             .await
             .unwrap();
         manager
-            .report_attached(&SpaceSelector::from(&workspace.name), &id, attached)
+            .report_attached(&SpaceSelector::id(&workspace.id), &id, attached)
             .await
             .unwrap();
         executions.push(execution);
@@ -523,7 +523,7 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
             Duration::ZERO,
         )
         .await;
-    let selected = SpaceSelector::from(&workspace.name);
+    let selected = SpaceSelector::id(&workspace.id);
     let report = |state| manager.set_agent_state(&selected, state, Some(id.clone()), None);
     report(AgentState::Idle).await.unwrap();
     let turns = manager.agent_turns().await.unwrap();

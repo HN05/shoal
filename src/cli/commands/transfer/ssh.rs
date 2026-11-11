@@ -123,7 +123,7 @@ async fn move_one(
     planned: PlannedExport,
     resume: bool,
 ) -> Result<Imported> {
-    let name = planned.name().to_owned();
+    let (name, id) = (planned.name().to_owned(), planned.id().clone());
     let chat = planned.chat().cloned();
     let file = planned.export(ctx).await?;
     let error = match remote.import(&file, resume).await {
@@ -132,7 +132,7 @@ async fn move_one(
     };
     let Some(chat) = chat else {
         return Err(error.context(format!(
-            "{name} is removed here; shoal restore {name} opens it here again, unless {} opened it",
+            "{name} is removed here; shoal restore {id} opens it here again, unless {} opened it",
             remote.host
         )));
     };

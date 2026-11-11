@@ -250,24 +250,25 @@ fn enabled_places<'a>(
 }
 
 /// Show `session` in this terminal through the host that keeps it, then
-/// say how to return to it by `name` when it outlives the attach. Returns
-/// whether its place still has a session once shown.
-pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<bool> {
+/// say how to return to it with `shoal attach <space>` when it outlives the
+/// attach. Returns whether its place still has a session once shown.
+pub(in crate::cli) async fn attach(space: &str, session: &Session) -> Result<bool> {
     let host = named(session.place.host);
     let (Some(places), Some(sessions)) = (host.places(), host.sessions()) else {
         anyhow::bail!("{} keeps no sessions", host.name());
     };
     places.show(&session.place, &session.name).await?;
-    report_detach(sessions, name, &session.name).await?;
+    report_detach(sessions, space, &session.name).await?;
     Ok(still_open(sessions, &session.place).await)
 }
 
-/// Say how to return to `session`, one `host` attached this terminal to, by
-/// `name` when it still runs after this terminal left it, and whether it does.
-pub(super) async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<bool> {
+/// Say how to return to `session`, one `host` attached this terminal to,
+/// with `shoal attach <space>` when it still runs after this terminal left
+/// it, and whether it does.
+pub(super) async fn report_detach(host: &dyn Sessions, space: &str, session: &str) -> Result<bool> {
     let running = host.left_running(session).await?;
     if running {
-        eprintln!("shoal: detached from {session}; run `shoal attach {name}` to return");
+        eprintln!("shoal: detached from {session}; run `shoal attach {space}` to return");
     }
     Ok(running)
 }

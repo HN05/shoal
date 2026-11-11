@@ -15,14 +15,12 @@ use crate::{
     fsutil::atomic::{Permissions, ReplaceOptions},
     model::Chat,
     paths::Paths,
+    sessions::HostName,
 };
-
-/// The workspace argument that names the previous workspace.
-pub const PREVIOUS: &str = "-";
 
 /// Whether `selector` is `-`, which names the previous space.
 pub fn is_previous(selector: &SpaceSelector) -> bool {
-    matches!(selector, SpaceSelector::IdOrName(text) if text == PREVIOUS)
+    *selector == SpaceSelector::Previous
 }
 
 /// The history `attach -` reads, which every command that shows a
@@ -177,10 +175,20 @@ pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
     let Ok(chats) = crate::client::chats::list(&ctx.paths).await else {
         return;
     };
-    let named = |chat: &&Chat| selector.selects(&chat.id, &chat.name, chat.number);
+    let named = |chat: &&Chat| selector.selects(&chat.id, chat.number);
     if let Some(chat) = chats.iter().find(named) {
         let _ = History::update(&ctx.paths, |history| history.record(ATTACH, &chat.id));
     }
+}
+
+/// The chat that runs in the session `session` of `host`, which a chat
+/// Shoal started there records as its place once it runs; none before or
+/// when the chats cannot be listed.
+pub async fn session_chat(ctx: &Context, host: HostName, session: &str) -> Option<Chat> {
+    let chats = crate::client::chats::list(&ctx.paths).await.ok()?;
+    chats.into_iter().find(|chat| {
+        (chat.origin.as_ref()).is_some_and(|place| place.host == host && place.id() == session)
+    })
 }
 
 /// Failing to keep the history never fails the command.

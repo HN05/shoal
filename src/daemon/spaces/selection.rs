@@ -1,4 +1,4 @@
-//! Resolving the space a request names, by its number, ID or name, over
+//! Resolving the space a request names, by its number or ID, over
 //! workspaces and chats alike, and refusing the other kind where a request
 //! needs one.
 use crate::client::space_ids::SpaceId;
@@ -98,15 +98,15 @@ pub(crate) fn selected(
     db: &Connection,
     selector: &SpaceSelector,
 ) -> Result<Option<(SpaceKind, SpaceId)>> {
-    let (id, name, number) = match selector {
-        SpaceSelector::Number(number) => (None, None, Some(*number)),
-        SpaceSelector::IdOrName(text) => (Some(text.as_str()), Some(text.as_str()), None),
-        SpaceSelector::Id(id) => (Some(id.as_str()), None, None),
+    let (id, number) = match selector {
+        SpaceSelector::Number(number) => (None, Some(*number)),
+        SpaceSelector::Id(id) => (Some(id), None),
+        SpaceSelector::Previous => (None, None),
     };
     Ok(db
         .query_row(
-            "SELECT kind, id FROM spaces WHERE id=?1 OR name=?2 OR number=?3 LIMIT 1",
-            params![id, name, number],
+            "SELECT kind, id FROM spaces WHERE id=?1 OR number=?2 LIMIT 1",
+            params![id, number],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?)

@@ -55,7 +55,7 @@ fn every_agent_takes_a_place_among_all_the_run_selected() {
 fn a_restart_names_the_place_its_agent_moved_to() {
     let session = Origin::created(HostName::Zmx, "api".into());
     let moved = restarted("api", "(1/2)", None, Some(&session));
-    assert!(moved.contains("shoal attach api"), "{moved}");
+    assert!(moved.contains("in a detached zmx session"), "{moved}");
     // An agent in its earlier place, or outside a terminal host, is
     // reported without one.
     let kept = restarted("api", "(1/2)", Some(&session), Some(&session));
@@ -66,13 +66,14 @@ fn a_restart_names_the_place_its_agent_moved_to() {
 #[test]
 fn an_interruption_names_the_restarts_that_go_on() {
     assert!(!interruption(&[], None).contains("shoal restart"));
-    let pending = ["api".into(), "web".into()];
+    let pending = [(1.into(), "api".into()), (4.into(), "web".into())];
     let plain = interruption(&pending, None);
-    assert!(plain.contains("shoal restart api web "), "{plain}");
+    assert!(plain.contains("of 1 api, 4 web go on"), "{plain}");
+    assert!(plain.contains("shoal restart 1 4 "), "{plain}");
     // The command keeps to the agents the run selected.
     let selected = interruption(&pending, Some(&"codex".into()));
     assert!(
-        selected.contains("shoal restart api web --agent codex "),
+        selected.contains("shoal restart 1 4 --agent codex "),
         "{selected}"
     );
 }

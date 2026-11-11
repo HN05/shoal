@@ -80,7 +80,7 @@ impl Manager {
             NotificationKind::ChatRestoreFailed,
             format!(
                 "Could not restore chat {}: {error}; restore it with shoal resume {}",
-                chat.name, chat.name
+                chat.name, chat.number
             ),
         )
         .await;

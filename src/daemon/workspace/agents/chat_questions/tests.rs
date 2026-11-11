@@ -73,7 +73,7 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
     let end_turn = async |message| {
         manager
             .end_agent_turn(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 Some(id.clone()),
                 None,
                 ending(message),
@@ -86,7 +86,7 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
 
     manager
-        .mark_chat_question(&SpaceSelector::from(&workspace.name), Some(&id))
+        .mark_chat_question(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap();
     end_turn("Which database should the cache use?\n\nI recommend SQLite.").await;
@@ -107,7 +107,7 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
     assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
 
     let closed = manager
-        .reply_in_chat(&SpaceSelector::from(&workspace.name), Some(&id))
+        .reply_in_chat(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap();
     assert_eq!(closed, [asked[0].number]);
@@ -121,12 +121,12 @@ async fn asking_the_same_in_the_chat_again_consumes_the_mark() {
     let (_root, manager, workspace, id, _other) = agent().await;
     let ask_in_chat = async |message| {
         manager
-            .mark_chat_question(&SpaceSelector::from(&workspace.name), Some(&id))
+            .mark_chat_question(&SpaceSelector::id(&workspace.id), Some(&id))
             .await
             .unwrap();
         manager
             .end_agent_turn(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 Some(id.clone()),
                 None,
                 ending(message),
@@ -143,7 +143,7 @@ async fn asking_the_same_in_the_chat_again_consumes_the_mark() {
     // The repeat consumed the mark, so the next turn asks nothing.
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Some(id.clone()),
             None,
             ending("Waiting for your answer."),
@@ -157,12 +157,12 @@ async fn asking_the_same_in_the_chat_again_consumes_the_mark() {
 async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
     let (_root, manager, workspace, id, _other) = agent().await;
     manager
-        .mark_chat_question(&SpaceSelector::from(&workspace.name), Some(&id))
+        .mark_chat_question(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap();
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Some(id.clone()),
             None,
             TurnEnd::default(),
@@ -177,7 +177,7 @@ async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
         .await
         .unwrap();
     let message = &manager
-        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()[0]
         .message;
@@ -193,16 +193,16 @@ async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
 async fn a_reply_during_the_turn_clears_its_mark() {
     let (_root, manager, workspace, id, _other) = agent().await;
     manager
-        .mark_chat_question(&SpaceSelector::from(&workspace.name), Some(&id))
+        .mark_chat_question(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap();
     manager
-        .reply_in_chat(&SpaceSelector::from(&workspace.name), Some(&id))
+        .reply_in_chat(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap();
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Some(id),
             None,
             ending("Which one?"),
@@ -217,7 +217,7 @@ async fn only_the_workspaces_own_agent_asks_in_its_chat() {
     let (_root, manager, _workspace, id, other) = agent().await;
     for execution in [Some(&id), None] {
         manager
-            .mark_chat_question(&SpaceSelector::from(&other.name), execution)
+            .mark_chat_question(&SpaceSelector::id(&other.id), execution)
             .await
             .unwrap_err();
     }
@@ -227,7 +227,7 @@ async fn only_the_workspaces_own_agent_asks_in_its_chat() {
 async fn a_mark_outlasts_the_agent_reconnecting_to_a_restarted_daemon() {
     let (_root, manager, workspace, id, _other) = agent().await;
     manager
-        .mark_chat_question(&SpaceSelector::from(&workspace.name), Some(&id))
+        .mark_chat_question(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap();
     // Reattachment tracks the agent anew.
@@ -243,7 +243,7 @@ async fn a_mark_outlasts_the_agent_reconnecting_to_a_restarted_daemon() {
         .await;
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Some(id),
             None,
             ending("Which one?"),
@@ -257,7 +257,7 @@ async fn a_mark_outlasts_the_agent_reconnecting_to_a_restarted_daemon() {
 async fn an_agent_without_shoals_turn_end_hook_asks_on_the_command_line() {
     let (_root, manager, workspace, id, _other) = agent_named("custom").await;
     manager
-        .mark_chat_question(&SpaceSelector::from(&workspace.name), Some(&id))
+        .mark_chat_question(&SpaceSelector::id(&workspace.id), Some(&id))
         .await
         .unwrap_err();
 }
@@ -309,12 +309,12 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .await
         .unwrap();
     manager
-        .mark_chat_question(&SpaceSelector::from(&child.name), Some(&id))
+        .mark_chat_question(&SpaceSelector::id(&child.id), Some(&id))
         .await
         .unwrap();
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&child.name),
+            &SpaceSelector::id(&child.id),
             Some(id.clone()),
             None,
             ending("Which one?"),
@@ -323,7 +323,7 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .unwrap();
     let question = manager.questions(None).await.unwrap().questions.remove(0);
     manager
-        .reply_in_chat(&SpaceSelector::from(&child.name), Some(&id))
+        .reply_in_chat(&SpaceSelector::id(&child.id), Some(&id))
         .await
         .unwrap();
     let received: Vec<_> = manager
@@ -370,7 +370,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     };
     let asked = manager
         .ask_question(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             ask,
             Vec::new(),
             &Attacher::User,
@@ -382,7 +382,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         (chat.id.as_str(), "planning")
     );
     let listed = manager
-        .questions(Some(&SpaceSelector::from(&chat.name)))
+        .questions(Some(&SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
     assert_eq!(listed.questions, std::slice::from_ref(&asked));
@@ -407,12 +407,12 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
 
     // The chat marks its own turn, which no execution tracks.
     manager
-        .mark_chat_question(&SpaceSelector::from(&chat.name), None)
+        .mark_chat_question(&SpaceSelector::id(&chat.id), None)
         .await
         .unwrap();
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             None,
             None,
             ending("Which cache?"),
@@ -424,19 +424,19 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     assert!(asked[0].in_chat);
     assert_eq!(asked[0].space, "planning");
     let closed = manager
-        .reply_in_chat(&SpaceSelector::from(&chat.name), None)
+        .reply_in_chat(&SpaceSelector::id(&chat.id), None)
         .await
         .unwrap();
     assert_eq!(closed, [asked[0].number]);
 
     // An open question stays while the chat is stopped and goes with it.
     manager
-        .mark_chat_question(&SpaceSelector::from(&chat.name), None)
+        .mark_chat_question(&SpaceSelector::id(&chat.id), None)
         .await
         .unwrap();
     manager
         .end_agent_turn(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             None,
             None,
             ending("Which queue?"),

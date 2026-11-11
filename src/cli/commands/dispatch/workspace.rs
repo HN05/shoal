@@ -57,7 +57,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
         WorkspaceCommand::Rename { space, title, .. } => {
             rename::request(
                 &ctx,
-                title.map(|title| SpaceSelector::parse(&title)).or(space),
+                title
+                    .map(|title| SpaceSelector::parse(&title))
+                    .transpose()?
+                    .or(space),
             )
             .await
         }

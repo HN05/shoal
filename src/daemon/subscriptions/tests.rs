@@ -496,14 +496,14 @@ mod streams {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
-        let topic = |space: &str| LogTopic {
-            space: Some(SpaceSelector::parse(space)),
+        let topic = |space: &SpaceId| LogTopic {
+            space: Some(SpaceSelector::id(space)),
             filter: LogFilter::Entries,
             limit: 50,
         };
-        let refused = Subscription::follow_log(daemon.scoped(&own).await, topic("other")).await;
+        let refused = Subscription::follow_log(daemon.scoped(&own).await, topic(&other.id)).await;
         assert!(refused.is_err());
-        let mut subscription = Subscription::follow_log(daemon.scoped(&own).await, topic("own"))
+        let mut subscription = Subscription::follow_log(daemon.scoped(&own).await, topic(&own.id))
             .await
             .unwrap();
         let records = snapshot(&mut subscription).await;
@@ -543,7 +543,7 @@ mod streams {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let topic = LogTopic {
-            space: Some(SpaceSelector::parse("own")),
+            space: Some(SpaceSelector::id(&own.id)),
             filter: LogFilter::Entries,
             limit: 50,
         };

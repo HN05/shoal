@@ -31,7 +31,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
         b"pipe:custom\nliteral $HOME\ntwo words\n--flag\n"
     );
     assert_eq!(
-        fixture.ok(&["status", "custom"])["executions"],
+        fixture.ok(&["status", &fixture.id("custom")])["executions"],
         serde_json::json!([])
     );
     fs::write(
@@ -39,11 +39,17 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
         "[commands]\ncheck = ['printf', '%s', 'from worktree']\n",
     )
     .unwrap();
-    assert_eq!(fixture.run(&["check", "custom"]).stdout, b"from worktree");
+    assert_eq!(
+        fixture.run(&["check", &fixture.id("custom")]).stdout,
+        b"from worktree"
+    );
     let saved = fixture.root.path().join("commands.toml");
     fs::write(&saved, "[commands]\ncheck = ['printf', '%s', 'saved']\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
-    assert_eq!(fixture.run(&["check", "custom"]).stdout, b"saved");
+    assert_eq!(
+        fixture.run(&["check", &fixture.id("custom")]).stdout,
+        b"saved"
+    );
 }
 
 #[test]
@@ -60,7 +66,7 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
             };
         }
         command
-            .args(["edit", "editing", "--", "--flag"])
+            .args(["edit", &fixture.id("editing"), "--", "--flag"])
             .output()
             .unwrap()
     };
@@ -109,7 +115,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
-    let output = fixture.run(&["run", "list", "--workspace", "run-command"]);
+    let output = fixture.run(&["run", "list", "--workspace", &fixture.id("run-command")]);
     assert!(
         output.status.success(),
         "{}",
@@ -150,7 +156,12 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let output = fixture
         .command()
         .current_dir(path)
-        .args(["--json", "run", "--workspace", "other-commands"])
+        .args([
+            "--json",
+            "run",
+            "--workspace",
+            &fixture.id("other-commands"),
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -159,7 +170,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     assert!(!listed.iter().any(|entry| entry["name"] == "worktree"));
     assert!(
         !fixture
-            .run(&["run", "--workspace", "missing-workspace"])
+            .run(&["run", "--workspace", &fixture.id("missing-workspace")])
             .status
             .success()
     );
@@ -216,11 +227,11 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
                 vec!["bogus", "-h"],
                 vec!["bogus", "--help"],
                 vec!["bogus", "--all"],
-                vec!["bogus", "command-target"],
+                vec!["bogus", &fixture.id("command-target")],
                 vec!["bogus", "missing"],
                 vec!["bogus", "--", "x"],
                 vec!["run", "bogus"],
-                vec!["run", "bogus", "--workspace", "command-target"],
+                vec!["run", "bogus", "--workspace", &fixture.id("command-target")],
             ] {
                 let output = fixture
                     .command()
@@ -254,12 +265,13 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
         .output()
         .unwrap();
     assert!(!flag.status.success(), "{flag:?}");
-    let output = fixture.run(&["local-check", "command-target", "--", "extra"]);
+    let output = fixture.run(&["local-check", &fixture.id("command-target"), "--", "extra"]);
     assert_eq!(output.stdout, b"repository commandextra", "{output:?}");
     // Help names the defining workspace before or after the flag.
+    let target = fixture.id("command-target");
     for args in [
-        ["local-check", "-h", "command-target"],
-        ["local-check", "command-target", "--help"],
+        ["local-check", "-h", &target],
+        ["local-check", &target, "--help"],
     ] {
         let help = fixture.run(&args);
         assert!(help.status.success(), "{args:?}: {help:?}");
@@ -279,10 +291,10 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
     for directory in [fixture.root.path(), path] {
         for args in [
             vec!["lease"],
-            vec!["lease", "command-target"],
+            vec!["lease", &fixture.id("command-target")],
             vec!["lease", "12"],
             vec!["run", "lease"],
-            vec!["run", "lease", "--workspace", "command-target"],
+            vec!["run", "lease", "--workspace", &fixture.id("command-target")],
             vec!["run", "lease", "--workspace", "12"],
         ] {
             let output = fixture
@@ -302,7 +314,7 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
         "[commands]\nports = ['printf', '%s', 'configured command']\n",
     )
     .unwrap();
-    let output = fixture.run(&["ports", "command-target"]);
+    let output = fixture.run(&["ports", &fixture.id("command-target")]);
     assert!(output.status.success());
     assert_eq!(output.stdout, b"configured command");
 }

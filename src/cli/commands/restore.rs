@@ -220,11 +220,11 @@ impl ReopenedExt for Reopened {
             0 => String::new(),
             1 => format!(
                 "; shoal resume {} continues its stopped agent",
-                workspace.name
+                workspace.number
             ),
             _ => format!(
                 "; shoal resume {} continues its stopped agents",
-                workspace.name
+                workspace.number
             ),
         };
         format!(
@@ -249,7 +249,7 @@ impl ReopenedExt for Reopened {
             Ok(queued) => self.queued = Some(queued),
             Err(error) => eprintln!(
                 "warning: cannot queue the stopped agents; shoal resume {} restores them: {error:#}",
-                self.workspace.name
+                self.workspace.number
             ),
         }
     }

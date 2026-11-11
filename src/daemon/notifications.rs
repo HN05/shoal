@@ -219,12 +219,13 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
         kind: row.get(3)?,
         message: row.get(4)?,
         read: row.get(5)?,
+        space_id: row.get(6)?,
         files: crate::daemon::store::json_column(row, "files")?.unwrap_or_default(),
     })
 }
 
 const COLUMNS: &str = concat!(
-    "id,created_at,workspace,kind,message,read,",
+    "id,created_at,workspace,kind,message,read,workspace_id,",
     sent_files!("notifications.files")
 );
 

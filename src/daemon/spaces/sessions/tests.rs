@@ -62,7 +62,10 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
         .create_workspace(&repo.id, "work".into(), None, None, None)
         .await?;
     assert_eq!(
-        manager.space_sessions(&"work".into()).await?.sessions,
+        manager
+            .space_sessions(&manager.named("work").await)
+            .await?
+            .sessions,
         Vec::new()
     );
 
@@ -93,7 +96,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
         .write(&manager.paths, &workspace.id)?;
     }
 
-    let sessions = manager.space_sessions(&"work".into()).await?;
+    let sessions = manager.space_sessions(&manager.named("work").await).await?;
     assert_eq!(
         sessions.sessions,
         vec![
@@ -125,20 +128,26 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
         )
         .await?;
     assert_eq!(
-        manager.space_sessions(&"planning".into()).await?.sessions,
+        manager
+            .space_sessions(&manager.named("planning").await)
+            .await?
+            .sessions,
         Vec::new()
     );
 
     manager
         .set_agent_state(
-            &"planning".into(),
+            &manager.named("planning").await,
             AgentState::Idle,
             None,
             Some("c1".into()),
         )
         .await?;
     assert_eq!(
-        manager.space_sessions(&"planning".into()).await?.sessions,
+        manager
+            .space_sessions(&manager.named("planning").await)
+            .await?
+            .sessions,
         vec![ReportedSession {
             agent: "claude".into(),
             session: "c1".into(),

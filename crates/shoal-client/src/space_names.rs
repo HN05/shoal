@@ -96,6 +96,12 @@ pub fn suffixed_directory(name: &str, suffix: u64) -> String {
     name
 }
 
+/// A space's number with its name, such as `3 Fix login`, as text that
+/// names a space gives them, since names can repeat.
+pub fn label(number: SpaceNumber, name: &SpaceName) -> String {
+    format!("{number} {name}")
+}
+
 /// `names` joined by `separator`, as a message lists them.
 pub fn join(names: &[SpaceName], separator: &str) -> String {
     let names: Vec<&str> = names.iter().map(SpaceName::as_str).collect();
@@ -210,25 +216,45 @@ impl PartialEq<SpaceName> for String {
     }
 }
 
-/// What names a space where a command takes one: its number, when all
-/// digits, else its ID or name. Text reads as one of those two. Within one
-/// process, a stored ID that code passes on selects by ID alone, so it never
-/// reads as a name; sent to the daemon, it is text again.
+/// What selects a space where a command takes one: its number, when all
+/// digits, else its ID, or `-` for the previous space a command acted on.
+/// A name never selects a space, since names can repeat.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum SpaceSelector {
     Number(SpaceNumber),
-    IdOrName(String),
     Id(SpaceId),
+    /// `-`, which the CLI resolves to the space it acted on before.
+    Previous,
 }
 
 impl SpaceSelector {
-    /// What `text` selects: its number when all digits, else its ID or
-    /// name. Empty text selects nothing.
-    pub fn parse(text: &str) -> Self {
+    /// The text that stands for the previous space.
+    pub const PREVIOUS: &str = "-";
+
+    /// What `text` someone typed selects: its number when all digits,
+    /// else its ID, refusing text that is neither.
+    pub fn parse(text: &str) -> Result<Self> {
+        let selector = Self::read(text);
+        if let Self::Id(id) = &selector {
+            anyhow::ensure!(
+                uuid::Uuid::try_parse(id.as_str()).is_ok(),
+                "a space is selected by its number or ID, not `{text}`"
+            );
+        }
+        Ok(selector)
+    }
+
+    /// What recorded `text`, such as a request's, selects: its number when
+    /// all digits, else the ID it gives, which selects nothing when no
+    /// space has it.
+    fn read(text: &str) -> Self {
+        if text == Self::PREVIOUS {
+            return Self::Previous;
+        }
         match text.parse() {
             Ok(number) if all_digits(text) => Self::Number(number),
-            _ => Self::IdOrName(text.to_owned()),
+            _ => Self::Id(SpaceId::from(text.to_owned())),
         }
     }
 
@@ -237,31 +263,21 @@ impl SpaceSelector {
         Self::Id(id.clone())
     }
 
-    /// The ID or name it gives; none for a number, which selects only a
-    /// space that exists, never a removed one.
-    pub fn id_or_name(&self) -> Option<&str> {
+    /// The ID it gives; none for a number, which selects only a space that
+    /// exists, never a removed one.
+    pub fn given_id(&self) -> Option<&SpaceId> {
         match self {
-            Self::Number(_) => None,
-            Self::IdOrName(text) => Some(text),
-            Self::Id(id) => Some(id.as_str()),
+            Self::Id(id) => Some(id),
+            Self::Number(_) | Self::Previous => None,
         }
     }
 
-    /// Whether it gives this ID or name, as it selects a removed space,
-    /// which has no number.
-    pub fn names(&self, id: &SpaceId, name: &str) -> bool {
-        match self {
-            Self::Number(_) => false,
-            Self::IdOrName(text) => text == id || text == name,
-            Self::Id(selected) => selected == id,
-        }
-    }
-
-    /// Whether it selects the space with this ID, name and number.
-    pub fn selects(&self, id: &SpaceId, name: &str, number: SpaceNumber) -> bool {
+    /// Whether it selects the space with this ID and number.
+    pub fn selects(&self, id: &SpaceId, number: SpaceNumber) -> bool {
         match self {
             Self::Number(selected) => *selected == number,
-            _ => self.names(id, name),
+            Self::Id(selected) => selected == id,
+            Self::Previous => false,
         }
     }
 }
@@ -270,8 +286,8 @@ impl std::fmt::Display for SpaceSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Number(number) => write!(f, "{number}"),
-            Self::IdOrName(text) => f.write_str(text),
             Self::Id(id) => f.write_str(id.as_str()),
+            Self::Previous => f.write_str(Self::PREVIOUS),
         }
     }
 }
@@ -280,19 +296,28 @@ impl std::str::FromStr for SpaceSelector {
     type Err = anyhow::Error;
 
     fn from_str(value: &str) -> Result<Self> {
-        anyhow::ensure!(
-            !value.is_empty(),
-            "a space is named by its number, name or ID"
-        );
-        Ok(Self::parse(value))
+        Self::parse(value)
     }
 }
 
+/// Arguments parse as text someone typed, whatever other conversions a
+/// build offers.
+#[cfg(feature = "clap")]
+impl clap::builder::ValueParserFactory for SpaceSelector {
+    type Parser = fn(&str) -> Result<Self>;
+
+    fn value_parser() -> Self::Parser {
+        Self::parse
+    }
+}
+
+/// A request's selector, which the client that sent it already checked.
 impl TryFrom<String> for SpaceSelector {
     type Error = anyhow::Error;
 
     fn try_from(value: String) -> Result<Self> {
-        value.parse()
+        anyhow::ensure!(!value.is_empty(), "a space is selected by its number or ID");
+        Ok(Self::read(&value))
     }
 }
 
@@ -302,15 +327,15 @@ impl From<SpaceSelector> for String {
     }
 }
 
-impl From<&SpaceName> for SpaceSelector {
-    fn from(name: &SpaceName) -> Self {
-        Self::IdOrName(name.0.clone())
+impl From<&SpaceId> for SpaceSelector {
+    fn from(id: &SpaceId) -> Self {
+        Self::id(id)
     }
 }
 
-impl From<SpaceName> for SpaceSelector {
-    fn from(name: SpaceName) -> Self {
-        Self::IdOrName(name.0)
+impl From<SpaceId> for SpaceSelector {
+    fn from(id: SpaceId) -> Self {
+        Self::Id(id)
     }
 }
 
@@ -320,8 +345,8 @@ impl PartialEq<str> for SpaceSelector {
     fn eq(&self, other: &str) -> bool {
         match self {
             Self::Number(number) => other.parse() == Ok(*number),
-            Self::IdOrName(text) => text == other,
             Self::Id(id) => id == other,
+            Self::Previous => other == Self::PREVIOUS,
         }
     }
 }
@@ -340,11 +365,12 @@ impl PartialEq<String> for SpaceSelector {
     }
 }
 
-/// Selectors tests write as literals.
+/// Selectors tests write as literals: a number, or else an ID, which tests
+/// need not write as one Shoal generates.
 #[cfg(any(test, feature = "test-support"))]
 impl From<&str> for SpaceSelector {
     fn from(value: &str) -> Self {
-        Self::parse(value)
+        Self::read(value)
     }
 }
 

@@ -21,7 +21,7 @@ fn a_scoped_start_refuses_a_detached_agent_without_zmx_before_creating_the_child
         .args([
             "run",
             "--workspace",
-            "parent",
+            &fixture.id("parent"),
             "--",
             support::shoal_binary(),
             "start",
@@ -49,7 +49,7 @@ fn start_refuses_an_unavailable_agent_before_creating_the_child() {
         fixture.repo.to_str().unwrap(),
         "child",
         "--parent",
-        "parent",
+        &fixture.id("parent"),
         "--agent",
         "droid",
     ]);
@@ -62,7 +62,14 @@ fn start_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child
     let fixture = Fixture::new();
     fixture.add("parent");
     let repo = fixture.repo.to_str().unwrap();
-    let output = fixture.run(&["start", repo, "child", "--parent", "parent", "--fork"]);
+    let output = fixture.run(&[
+        "start",
+        repo,
+        "child",
+        "--parent",
+        &fixture.id("parent"),
+        "--fork",
+    ]);
     assert!(!output.status.success());
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
@@ -97,7 +104,7 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
     fixture.add("parent");
     let output = fixture
         .command()
-        .args(["claude", "parent"])
+        .args(["claude", &fixture.id("parent")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -155,14 +162,14 @@ fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
     fixture.add("parent");
     let output = fixture
         .command()
-        .args(["claude", "parent"])
+        .args(["claude", &fixture.id("parent")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let home = fixture.root.path();
     let errors = fs::read_to_string(home.join("copy.err")).unwrap();
-    let copy = &fixture.ok(&["status", "parent-copy"])["workspace"];
+    let copy = &fixture.ok(&["status", &fixture.id("parent-copy")])["workspace"];
     assert_eq!(copy["branch"], "parent-copy", "{copy} {errors}");
     assert_eq!(copy["copied_from"]["workspace"]["name"], "parent", "{copy}");
     let path = Path::new(copy["path"].as_str().unwrap());
@@ -197,7 +204,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
     let output = fixture.run(&[
         "run",
         "--workspace",
-        "parent",
+        &fixture.id("parent"),
         "--",
         support::shoal_binary(),
         "start",
@@ -207,7 +214,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
         "waiter",
     ]);
     assert!(!output.status.success(), "{output:?}");
-    let child = &fixture.ok(&["status", "child"])["workspace"];
+    let child = &fixture.ok(&["status", &fixture.id("child")])["workspace"];
     assert_eq!(child["state"], "ready", "{child}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
@@ -242,7 +249,7 @@ fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
         install_test_script_with_mode(
             &stub,
             r#"#!/bin/sh
-"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json status "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
+"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json status > "$SHOAL_TEST_INSPECTION" || exit 99
 test -f tracked || exit 98
 test -z "$SHOAL_SHELL_DIRECTIVE" || exit 97
 printf '%s\n' "$PWD" "$SHOAL_WORKSPACE" "$@"
@@ -261,7 +268,6 @@ exit 7
             .env("PATH", fixture.restricted_path(&bin))
             .env("SHOAL_TEST_BIN", support::shoal_binary())
             .env("SHOAL_TEST_STATE", fixture.root.path().join("state"))
-            .env("SHOAL_TEST_NAME", name)
             .env("SHOAL_TEST_INSPECTION", &inspection)
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
             .output()
@@ -270,7 +276,7 @@ exit 7
         let during: Value = serde_json::from_slice(&fs::read(&inspection).unwrap()).unwrap();
         assert_eq!(during["workspace"]["name"], name);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
-        let after = fixture.ok(&["status", name]);
+        let after = fixture.ok(&["status", &fixture.id(name)]);
         assert_eq!(after["executions"], serde_json::json!([]));
         let path = after["workspace"]["path"].as_str().unwrap();
         assert!(Path::new(path).join("tracked").exists());
@@ -323,7 +329,12 @@ exit 7
             .unwrap()
     };
     assert!(!add("missing-agent").status.success());
-    assert!(!fixture.run(&["status", "missing-agent"]).status.success());
+    assert!(
+        !fixture
+            .run(&["status", &fixture.id("missing-agent")])
+            .status
+            .success()
+    );
 
     // A launch that fails only once it starts leaves the worktree for retry.
     fs::write(
@@ -333,7 +344,7 @@ exit 7
     .unwrap();
     let output = add("failed-agent");
     assert!(!output.status.success());
-    let workspace = fixture.ok(&["status", "failed-agent"]);
+    let workspace = fixture.ok(&["status", &fixture.id("failed-agent")]);
     assert!(
         Path::new(workspace["workspace"]["path"].as_str().unwrap())
             .join("tracked")
@@ -401,7 +412,13 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         );
         let output = fixture
             .command()
-            .args([agent, "shortcut", "--", "--version", "hello with spaces"])
+            .args([
+                agent,
+                &fixture.id("shortcut"),
+                "--",
+                "--version",
+                "hello with spaces",
+            ])
             .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
@@ -457,7 +474,7 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
     let directory = fs::canonicalize(path.parent().unwrap()).unwrap();
     let directory = directory.to_str().unwrap();
     let bin = fixture.root.path().join("directory-bin");
-    for agent in ["codex", "claude", "pi"] {
+    for agent in ["codex", &fixture.id("claude"), "pi"] {
         let stub = bin.join(agent);
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
@@ -471,7 +488,7 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
     ] {
         let output = fixture
             .command()
-            .args([agent, "directories", "--", "user prompt"])
+            .args([agent, &fixture.id("directories"), "--", "user prompt"])
             .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
@@ -506,7 +523,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     )
     .unwrap();
     let bin = fixture.root.path().join("model-bin");
-    for agent in ["codex", "claude", "pi"] {
+    for agent in ["codex", &fixture.id("claude"), "pi"] {
         install_test_script_with_mode(
             bin.join(agent),
             "#!/bin/sh\nprintf '%s\\0' \"$@\" \"effort=${CLAUDE_CODE_EFFORT_LEVEL-unset}\"\n",
@@ -569,7 +586,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         "{codex:?}"
     );
     // A tool without a template refuses the model `[agent]` sets for it.
-    let output = launch(&["pi", "models"]);
+    let output = launch(&["pi", &fixture.id("models")]);
     assert!(!output.status.success(), "{output:?}");
     // An addition refuses it before creating anything.
     let output = launch(&[
@@ -602,7 +619,7 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
     )
     .unwrap();
     let bin = fixture.root.path().join("template-bin");
-    for agent in ["codex", "claude"] {
+    for agent in ["codex", &fixture.id("claude")] {
         let stub = bin.join(agent);
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
@@ -642,10 +659,10 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
         } else {
             format!("global instructions instructions\n\n{expected}")
         };
-        for agent in ["codex", "claude"] {
+        for agent in ["codex", &fixture.id("claude")] {
             let output = fixture
                 .command()
-                .args([agent, "instructions", "--", "user prompt"])
+                .args([agent, &fixture.id("instructions"), "--", "user prompt"])
                 .env("PATH", fixture.restricted_path(&bin))
                 .output()
                 .unwrap();
@@ -716,7 +733,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
             let mut command = fixture.command();
             command.args(["open", "--app", program]);
             if explicit {
-                command.arg("desktop");
+                command.arg(fixture.id("desktop"));
             } else {
                 command.current_dir(path);
             }
@@ -739,7 +756,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
                 )
             );
             assert_eq!(
-                fixture.ok(&["status", "desktop"])["executions"],
+                fixture.ok(&["status", &fixture.id("desktop")])["executions"],
                 serde_json::json!([])
             );
         }
@@ -751,13 +768,13 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
             .args([
                 "run",
                 "--workspace",
-                "desktop",
+                &fixture.id("desktop"),
                 "--",
                 support::shoal_binary(),
                 "open",
                 "--app",
                 app,
-                "other",
+                &fixture.id("other"),
             ])
             .env("PATH", fixture.restricted_path(&bin))
             .output()
@@ -776,7 +793,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
     let open = |bin: &Path| {
         fixture
             .command()
-            .args(["open", "desktop"])
+            .args(["open", &fixture.id("desktop")])
             .env("PATH", fixture.restricted_path(bin))
             .output()
             .unwrap()
@@ -804,7 +821,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
     // runner's own installation.
     let output = fixture
         .command()
-        .args(["open", "--app", "codex", "desktop"])
+        .args(["open", "--app", "codex", &fixture.id("desktop")])
         .env("PATH", fixture.system_path())
         .output()
         .unwrap();
@@ -866,9 +883,19 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
 
     for workspace in ["early", "first"] {
-        assert!(fixture.run(&["claude", workspace]).status.success());
+        assert!(
+            fixture
+                .run(&["claude", &fixture.id(workspace)])
+                .status
+                .success()
+        );
     }
-    assert!(!fixture.run(&["claude", "late"]).status.success());
+    assert!(
+        !fixture
+            .run(&["claude", &fixture.id("late")])
+            .status
+            .success()
+    );
     assert!(home.join("claude-late/.claude.json").exists());
     let root: Value =
         serde_json::from_str(&fs::read_to_string(home.join("claude-first/.claude.json")).unwrap())
@@ -905,7 +932,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     )
     .unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
-    fixture.ok(&["rm", "--wait", "early", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("early"), "--yes"]);
     fs::write(second_path.join("fail-removal"), "busy").unwrap();
     assert!(
         !fixture
@@ -955,7 +982,13 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
         "profiled",
     ]);
     fixture.add("profiled");
-    let port = fixture.ok(&["acquire", "port", "web", "--workspace", "profiled"]);
+    let port = fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("profiled"),
+    ]);
     let reserved = format!("WEB_PORT={}", port["port"]);
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
@@ -966,7 +999,7 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let launch = |agent: &str| {
         let output = fixture
             .command()
-            .args([agent, "profiled"])
+            .args([agent, &fixture.id("profiled")])
             .env("INHERITED_TOKEN", "secret")
             .output()
             .unwrap();
@@ -1067,7 +1100,12 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let config = home.join(".claude.json");
 
     // First launch creates a trusted entry even before Claude has a config.
-    assert!(fixture.run(&["claude", "trusted"]).status.success());
+    assert!(
+        fixture
+            .run(&["claude", &fixture.id("trusted")])
+            .status
+            .success()
+    );
     let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     for path in keys {
         assert_eq!(
@@ -1079,7 +1117,12 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
-    assert!(fixture.run(&["claude", "trusted"]).status.success());
+    assert!(
+        fixture
+            .run(&["claude", &fixture.id("trusted")])
+            .status
+            .success()
+    );
     let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(root["numStartups"], 1);
     for path in keys {
@@ -1096,7 +1139,7 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     fs::write(&config, r#"{"projects": {}}"#).unwrap();
     let output = fixture
         .command()
-        .args(["claude", "trusted"])
+        .args(["claude", &fixture.id("trusted")])
         .env("CLAUDE_CONFIG_DIR", &config_dir)
         .output()
         .unwrap();
@@ -1117,7 +1160,7 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     // A bad override warns and still launches.
     let output = fixture
         .command()
-        .args(["claude", "trusted"])
+        .args(["claude", &fixture.id("trusted")])
         .env("CLAUDE_CONFIG_DIR", "relative")
         .output()
         .unwrap();
@@ -1152,8 +1195,8 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
     // The tracked agent in the current workspace, the named one, and the app.
     for args in [
         &["codex"][..],
-        &["codex", "trusted"],
-        &["open", "--app", "codex", "trusted"],
+        &["codex", &fixture.id("trusted")],
+        &["open", "--app", "codex", &fixture.id("trusted")],
     ] {
         for overridden in [false, true] {
             let config_dir = home.join("custom-codex");
@@ -1200,7 +1243,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 
     // Malformed settings remain untouched and only produce a warning.
     fs::write(&config, "projects = []\n").unwrap();
-    let output = fixture.run(&["codex", "trusted"]);
+    let output = fixture.run(&["codex", &fixture.id("trusted")]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fs::read_to_string(config).unwrap(), "projects = []\n");
 }
@@ -1252,14 +1295,14 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
-        let inspection = fixture.ok(&["status", "298-pick-agent"]);
+        let inspection = fixture.ok(&["status", &fixture.id("298-pick-agent")]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         if choice == "No agent" {
             assert!(!agent_args.exists());
             // The shared review picker also accepts the choice without a launch.
             let (output, transcript) =
-                fixture.interactive(&["review", "run", "298-pick-agent"], "");
+                fixture.interactive(&["review", "run", &fixture.id("298-pick-agent")], "");
             assert!(output.status.success(), "{output:?}\n{transcript}");
             assert!(!agent_args.exists());
         } else {
@@ -1267,7 +1310,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             assert!(prompt.contains("Issue context"), "{prompt}");
             fs::remove_file(&agent_args).unwrap();
         }
-        fixture.ok(&["rm", "--wait", "298-pick-agent", "--yes"]);
+        fixture.ok(&["rm", "--wait", &fixture.id("298-pick-agent"), "--yes"]);
     }
 
     // A regular add uses the same picker when no agent was named or configured.
@@ -1324,7 +1367,13 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     fs::write(path.join(".shoal.toml"),
         "[agents.claude]\ncommand = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\n[agents.codex]\ncommand = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
     ).unwrap();
-    let output = fixture.run(&["claude", "configured-agent", "--", "{path}", "two words"]);
+    let output = fixture.run(&[
+        "claude",
+        &fixture.id("configured-agent"),
+        "--",
+        "{path}",
+        "two words",
+    ]);
     assert!(
         output.status.success(),
         "{}",
@@ -1341,7 +1390,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         "run",
         "claude",
         "--workspace",
-        "configured-agent",
+        &fixture.id("configured-agent"),
         "--",
         "{path}",
         "two words",
@@ -1354,7 +1403,13 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
             path.display()
         )
     );
-    let output = fixture.run(&["codex", "configured-agent", "--", "--model", "example"]);
+    let output = fixture.run(&[
+        "codex",
+        &fixture.id("configured-agent"),
+        "--",
+        "--model",
+        "example",
+    ]);
     assert!(output.status.success());
     assert_eq!(
         strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
@@ -1364,7 +1419,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         "run",
         "codex",
         "--workspace",
-        "configured-agent",
+        &fixture.id("configured-agent"),
         "--",
         "--model",
         "example",
@@ -1519,7 +1574,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     ];
     let output = fixture.run(&[&start[..], &given[..]].concat());
     assert_eq!(output.status.code(), Some(7), "{output:?}");
-    let status = fixture.ok(&["status", "narrowed"]);
+    let status = fixture.ok(&["status", &fixture.id("narrowed")]);
     assert_eq!(
         status["workspace"]["narrowing"],
         serde_json::json!({"push": "propose", "merge": "direct"}),
@@ -1553,7 +1608,14 @@ fn start_gives_the_agent_permissions_and_records_them() {
     assert_eq!(fixture.ok(&["list"]), before);
     // A chat takes a value wider than its mode's too.
     let chat = [
-        "start", "--chat", repo, "--mode", "plan", "--agent", "helper", "--here",
+        "start",
+        "--chat",
+        repo,
+        "--mode",
+        &fixture.id("plan"),
+        "--agent",
+        "helper",
+        "--here",
     ];
     let mut command = fixture.command();
     command
@@ -1598,11 +1660,12 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
         "[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'exit 0']\n",
     ));
     let workspace = fixture.add("stopped");
-    let narrowing = || fixture.ok(&["status", "stopped"])["workspace"]["narrowing"].clone();
+    let narrowing =
+        || fixture.ok(&["status", &fixture.id("stopped")])["workspace"]["narrowing"].clone();
     let resume = |args: &[&str]| {
         let resume = [
             "resume",
-            "stopped",
+            &fixture.id("stopped"),
             "--execution",
             "stopped-agent",
             "--focus",
@@ -1624,7 +1687,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
         .command()
         .args([
             "resume",
-            "stopped",
+            &fixture.id("stopped"),
             "--now",
             "--permission",
             "api_writes=deny",
@@ -1657,12 +1720,12 @@ fn queued_restore_narrowing(args: &[&str]) -> Value {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let workspace = fixture.add("stopped");
     stop_narrowed_agent(&fixture, &workspace);
-    let queued = fixture.ok(&[&["resume", "stopped"][..], args].concat());
+    let queued = fixture.ok(&[&["resume", &fixture.id("stopped")][..], args].concat());
     assert_eq!(queued["queued"].as_array().unwrap().len(), 1, "{queued}");
     let path = Path::new(workspace["path"].as_str().unwrap());
     wait_until("the restore", || path.join("restored").exists());
-    let status = fixture.ok(&["status", "stopped"]);
-    fixture.ok(&["stop", "stopped"]);
+    let status = fixture.ok(&["status", &fixture.id("stopped")]);
+    fixture.ok(&["stop", &fixture.id("stopped")]);
     status["workspace"]["narrowing"].clone()
 }
 
@@ -1701,7 +1764,9 @@ fn resume_changes_the_permissions_a_stopped_chat_was_given() {
     let narrowing = |fixture: &Fixture| fixture.ok(&["list", "--chats"])[0]["narrowing"].clone();
     let resume = |fixture: &Fixture, args: &[&str]| {
         let mut command = fixture.command();
-        command.args(["resume", "talk", "--focus"]).args(args);
+        command
+            .args(["resume", &fixture.id("talk"), "--focus"])
+            .args(args);
         let (output, transcript) = fixture.interactive_command(&mut command, "");
         assert!(output.status.success(), "{output:?}\n{transcript}");
     };
@@ -1750,7 +1815,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
         let workspace: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
         let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
-        let status = fixture.ok(&["status", workspace["name"].as_str().unwrap()]);
+        let status = fixture.ok(&["status", workspace["id"].as_str().unwrap()]);
         (workspace, remove_guidance(&args), status)
     };
     let (workspace, args, status) = start(&["--mode", "triage", "--base", "HEAD"]);
@@ -1890,12 +1955,12 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let args =
         || remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap());
     for words in [
-        vec!["droid", "provider", "--", "user message"],
+        vec!["droid", &fixture.id("provider"), "--", "user message"],
         vec![
             "run",
             "droid",
             "--workspace",
-            "provider",
+            &fixture.id("provider"),
             "--",
             "user message",
         ],
@@ -1915,7 +1980,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[agents.droid]\ncommand = ['repo-droid']\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
-    let output = fixture.run(&["droid", "provider"]);
+    let output = fixture.run(&["droid", &fixture.id("provider")]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
 
@@ -1926,8 +1991,8 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     )
     .unwrap();
     for words in [
-        vec!["repo-only", "provider"],
-        vec!["run", "repo-only", "--workspace", "provider"],
+        vec!["repo-only", &fixture.id("provider")],
+        vec!["run", "repo-only", "--workspace", &fixture.id("provider")],
     ] {
         let output = fixture.run(&words);
         assert_eq!(output.status.code(), Some(7), "{words:?}: {output:?}");
@@ -1945,7 +2010,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     // Built-in providers without specialized launchers place the prompt the
     // same way.
     fs::copy(bin.join("fake-droid"), bin.join("opencode")).unwrap();
-    let output = fixture.run(&["opencode", "provider", "--", "user message"]);
+    let output = fixture.run(&["opencode", &fixture.id("provider"), "--", "user message"]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert_eq!(
         args(),
@@ -2260,7 +2325,7 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
             "plan",
             "--issue",
             "--agent",
-            "missing-agent",
+            &fixture.id("missing-agent"),
         ])
         .current_dir(&fixture.repo)
         .output()
@@ -2326,7 +2391,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
 
     // Entries move to a position and leave the queue when cancelled.
     fixture.ok(&["start", repo, "third", "--here", "--agent", "waiter"]);
-    let moved = fixture.ok(&["queue", "move", "third", "1"]);
+    let moved = fixture.ok(&["queue", "move", &fixture.queued("third"), "1"]);
     assert_eq!(moved["entry"]["position"], 1, "{moved}");
     assert_eq!(moved["stopped"], false, "{moved}");
     let names = |entries: serde_json::Value| -> Vec<String> {
@@ -2342,18 +2407,18 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let missing = fixture.run(&["queue", "move", "missing"]);
     assert!(!missing.status.success());
     // So does a workspace whose agent cannot restore in place.
-    let unrestorable = fixture.run(&["queue", "move", "first"]);
+    let unrestorable = fixture.run(&["queue", "move", &fixture.id("first")]);
     assert!(!unrestorable.status.success());
-    let cancelled = fixture.ok(&["queue", "cancel", "third"]);
+    let cancelled = fixture.ok(&["queue", "cancel", &fixture.queued("third")]);
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
     // So does one stopped, having nothing to save.
     fixture.ok(&["start", repo, "fourth", "--here", "--agent", "waiter"]);
-    let stopped = fixture.ok(&["stop", "fourth"]);
+    let stopped = fixture.ok(&["stop", &fixture.queued("fourth")]);
     assert_eq!(stopped["name"], "fourth", "{stopped}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
 
-    let removed = fixture.ok(&["rm", "--wait", "second"]);
+    let removed = fixture.ok(&["rm", "--wait", &fixture.queued("second")]);
     assert_eq!(removed["name"], "second", "{removed}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 
@@ -2372,19 +2437,19 @@ fn add_queues_agents_past_max_agents_until_removed() {
         .spawn()
         .unwrap();
     wait_until("the focused agent start", || started("focused"));
-    fixture.ok(&["stop", "focused"]);
+    fixture.ok(&["stop", &fixture.id("focused")]);
     focused.wait().unwrap();
-    fixture.ok(&["rm", "--wait", "focused", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("focused"), "--yes"]);
 
-    // A queued agent named like a workspace is removed only by its ID.
+    // A queued agent is removed by its entry's ID; its name selects nothing.
     let shared = fixture.ok(&["start", repo, "first", "--here", "--agent", "waiter"]);
     assert_eq!(shared["state"], "queued", "{shared}");
-    let ambiguous = fixture.run(&["rm", "--wait", "first", "--yes"]);
-    assert!(!ambiguous.status.success());
+    let named = fixture.run(&["rm", "--wait", "first", "--yes"]);
+    assert!(!named.status.success());
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     fixture.ok(&["rm", "--wait", shared["id"].as_str().unwrap()]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
-    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
 }
 
@@ -2443,7 +2508,7 @@ fn queue_start_attaches_to_the_started_agents_session() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["queue", "start", "--attach", "second"]),
+            .args(["queue", "start", "--attach", &fixture.queued("second")]),
         "",
         true,
     );
@@ -2472,15 +2537,15 @@ fn queue_start_attaches_to_the_started_agents_session() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["queue", "start", "--attach", "third"]),
+            .args(["queue", "start", "--attach", &fixture.queued("third")]),
         "",
         true,
     );
     assert!(!output.status.success(), "{output:?}\n{transcript}");
     assert!(transcript.contains("did not start"), "{transcript}");
 
-    fixture.ok(&["stop", "second"]);
-    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", &fixture.id("second")]);
+    fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
     wait_zmx_sessions_ended(home);
 }
@@ -2525,16 +2590,16 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     let queued: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(queued["state"], "queued", "{queued}");
     // Removal frees the slot, which a stopped agent keeps for its resume.
-    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
-    fixture.ok(&["rm", "--wait", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first"), "--yes"]);
     let recorded = fixture.root.path().join("queued-output");
     wait_until("the queued agent start", || recorded.exists());
     wait_until("the queued agent's record", || {
         !fs::read_to_string(&recorded).unwrap().is_empty()
     });
     assert_eq!(fs::read_to_string(&recorded).unwrap(), "text");
-    fixture.ok(&["stop", "second"]);
+    fixture.ok(&["stop", &fixture.id("second")]);
 }
 
 /// A start without a terminal, as from another agent's tool call run in a
@@ -2572,11 +2637,11 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     let started = fixture.root.path().join("waiter-started");
     wait_until("the detached agent start", || started.exists());
     wait_until("the detached agent's execution", || {
-        fixture.ok(&["status", "detached"])["executions"]
+        fixture.ok(&["status", &fixture.id("detached")])["executions"]
             .as_array()
             .is_some_and(|executions| !executions.is_empty())
     });
-    fixture.ok(&["stop", "detached"]);
+    fixture.ok(&["stop", &fixture.id("detached")]);
 }
 
 /// Without a terminal, as from another agent's tool call, `shoal resume
@@ -2606,15 +2671,19 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
     // A last session never waits for a slot, so it needs no --now.
-    for (args, path) in [&["first", "--now"][..], &["second"]].iter().zip(&paths) {
+    let (first, second) = (fixture.id("first"), fixture.id("second"));
+    for (args, path) in [&[first.as_str(), "--now"][..], &[second.as_str()]]
+        .iter()
+        .zip(&paths)
+    {
         let resumed = fixture.ok(&[&["resume"][..], args].concat());
         let queued = resumed["queued"].as_array().unwrap();
         assert_eq!(queued.len(), 1, "{resumed}");
         assert_eq!(queued[0]["state"], "starting", "{resumed}");
         wait_until("the restore", || path.join("restored").exists());
     }
-    fixture.ok(&["stop", "first"]);
-    fixture.ok(&["stop", "second"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
+    fixture.ok(&["stop", &fixture.id("second")]);
 }
 
 /// Without a terminal, a resume the daemon would start from the background
@@ -2636,7 +2705,7 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     fs::create_dir(&bin).unwrap();
     let output = fixture
         .command()
-        .args(["resume", "stopped", "--now"])
+        .args(["resume", &fixture.id("stopped"), "--now"])
         .env("PATH", fixture.restricted_path(&bin))
         .stdin(Stdio::null())
         .output()
@@ -2680,7 +2749,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         .unwrap();
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
-    fixture.ok(&["done", "finished"]);
+    fixture.ok(&["done", &fixture.id("finished")]);
 
     let queued = fixture.ok(&["resume", "--all"]);
     let names: Vec<_> = queued["queued"]
@@ -2705,8 +2774,8 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         "{sent:?}"
     );
 
-    fixture.ok(&["stop", "first"]);
-    fixture.ok(&["rm", "--wait", "first", "--yes"]);
+    fixture.ok(&["stop", &fixture.id("first")]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first"), "--yes"]);
     wait_until("the second restore", || paths[1].join("restored").exists());
     assert!(!paths[3].join("restored").exists());
     // Stopping everything also cancels the restore still waiting.

@@ -20,7 +20,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
         .await
         .unwrap();
     let first = manager
-        .workspace_environment(&SpaceSelector::from(&workspace.name))
+        .workspace_environment(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let second = manager

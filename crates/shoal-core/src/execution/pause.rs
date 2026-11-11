@@ -223,7 +223,7 @@ pub(super) fn record_stopped_command(
         Ok(_) => eprintln!(
             "shoal: command stopped{}; shoal resume {} lists it",
             stop.stated_reason(),
-            plan.workspace.name
+            plan.workspace.number
         ),
         Err(error) => eprintln!("warning: cannot record stopped command: {error:#}"),
     }

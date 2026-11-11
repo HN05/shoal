@@ -723,7 +723,7 @@ async fn the_coordinating_agent_hears_one_line() {
     for workspace in [&parent.id, &child.id] {
         manager
             .set_agent_state(
-                &SpaceSelector::parse(workspace.as_str()),
+                &SpaceSelector::from(workspace.as_str()),
                 AgentState::Working,
                 None,
                 None,
@@ -1079,7 +1079,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     manager.recover_reviews().await.unwrap();
     let workspace = &fixture.workspace.id;
     let delivered = manager
-        .agent_messages(&SpaceSelector::parse(workspace.as_str()))
+        .agent_messages(&SpaceSelector::from(workspace.as_str()))
         .await
         .unwrap()
         .len();
@@ -1087,7 +1087,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     // A later start that still cannot remove it delivers the review once.
     manager.recover_reviews().await.unwrap();
     let messages = manager
-        .agent_messages(&SpaceSelector::parse(workspace.as_str()))
+        .agent_messages(&SpaceSelector::from(workspace.as_str()))
         .await
         .unwrap();
     assert_eq!(messages.len(), delivered);

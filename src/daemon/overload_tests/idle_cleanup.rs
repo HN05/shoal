@@ -38,7 +38,7 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
     assert_eq!(agents[0].execution, id);
     assert_eq!(agents[0].record.turn, Some(AgentState::Idle));
     let restored = manager
-        .restore_workspace(&SpaceSelector::from(&workspace.name))
+        .restore_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let stopped =
@@ -98,7 +98,7 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     .await;
     let refused = manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -131,7 +131,7 @@ async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
             .unwrap()
             .is_none()
     );
-    bounded(manager.stop_workspace(&SpaceSelector::from(&workspace.name), StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -173,7 +173,7 @@ async fn stop_agent_in(
         .clone();
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             turn,
             Some(id.clone()),
             None,

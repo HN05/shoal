@@ -167,7 +167,7 @@ impl Drop for RexServer {
 
 /// The names of `workspace`'s sessions, as `shoal status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", workspace])["sessions"]
+    fixture.ok(&["status", &fixture.id(workspace)])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -176,7 +176,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", workspace])["executions"]
+    fixture.ok(&["status", &fixture.id(workspace)])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -221,7 +221,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     // status that says setup finished can still list setup's execution,
     // which it read first: only the agent's name tells its execution apart.
     wait_until("setup to finish with the agent running", || {
-        let status = fixture.ok(&["status", "placed"]);
+        let status = fixture.ok(&["status", &fixture.id("placed")]);
         status["setup_finished"] == true
             && status["executions"]
                 .as_array()
@@ -237,11 +237,15 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
 
     // An agent in the user's own block is recorded where it runs, but the
     // block stays the user's.
-    rex.type_shoal(&fixture, &users, "run --workspace placed -- sleep 600");
+    rex.type_shoal(
+        &fixture,
+        &users,
+        &format!("run --workspace {} -- sleep 600", fixture.id("placed")),
+    );
     wait_until("the user's command to run", || {
         executions(&fixture, "placed") == 2
     });
-    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
     wait_until("the window Shoal opened to close", || {
         !rex.windows(&session).contains(&"placed".to_owned())
     });
@@ -279,7 +283,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
             .iter()
             .any(|workspace| workspace["name"] == "placed")
             && executions(&fixture, "placed") == 1
-            && fixture.ok(&["status", "placed"])["setup_finished"] == true
+            && fixture.ok(&["status", &fixture.id("placed")])["setup_finished"] == true
     });
     // The split names itself, never the caller's window.
     assert_eq!(rex.windows(&session), windows);
@@ -290,7 +294,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     });
     assert_eq!(rex.windows(&session), windows);
 
-    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
     wait_until("the split Shoal opened to close", || {
         !rex.blocks(&session).contains(&"placed".to_owned())
     });
@@ -327,11 +331,11 @@ fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
     assert_eq!(response["type"], "chat", "{response}");
 
     label("talk");
-    fixture.ok(&["rename", "talk", "topic"]);
+    fixture.ok(&["rename", &fixture.id("talk"), "topic"]);
     assert_eq!(rex.windows(&session), ["topic"]);
     // A name the user gave stays.
     label("notes");
-    fixture.ok(&["rename", "topic", "other"]);
+    fixture.ok(&["rename", &fixture.id("topic"), "other"]);
     assert_eq!(rex.windows(&session), ["notes"]);
 }
 
@@ -354,7 +358,7 @@ fn a_workspace_title_relabels_a_block_that_still_shows_its_label() {
     };
     fixture.add("titled");
     let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-        "workspace": "titled",
+        "workspace": fixture.id("titled"),
         "origin": {"host": "rex", "group": session, "place": block, "owned": true,
             "data": {"server": rex.socket, "bin_dir": rex.program.parent().unwrap()}},
     }}));
@@ -363,11 +367,11 @@ fn a_workspace_title_relabels_a_block_that_still_shows_its_label() {
     // Shoal labelled the block with the branch, as the workspace had no
     // title.
     label("titled");
-    fixture.ok(&["rename", "titled", "Login retries"]);
+    fixture.ok(&["rename", &fixture.id("titled"), "Login retries"]);
     assert_eq!(rex.windows(&session), ["Login retries"]);
     // A name the user gave stays.
     label("notes");
-    fixture.ok(&["rename", "titled", "Login backoff"]);
+    fixture.ok(&["rename", &fixture.id("titled"), "Login backoff"]);
     assert_eq!(rex.windows(&session), ["notes"]);
 }
 
@@ -395,7 +399,7 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
     demo(&[
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sh",
         "-c",
@@ -412,7 +416,7 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
         .unwrap()
         .to_owned();
     let screen = || {
-        demo(&["screen", "demo", "--workspace", "tried"])["screen"]
+        demo(&["screen", "demo", "--workspace", &fixture.id("tried")])["screen"]
             .as_str()
             .unwrap()
             .to_owned()
@@ -421,12 +425,18 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
     send_until_shown(
         "the demo to read its input",
         || {
-            demo(&["send", "demo", "--workspace", "tried", "hello\r"]);
+            demo(&[
+                "send",
+                "demo",
+                "--workspace",
+                &fixture.id("tried"),
+                "hello\r",
+            ]);
         },
         screen,
         "got hello",
     );
-    demo(&["stop", "--workspace", "tried"]);
+    demo(&["stop", "--workspace", &fixture.id("tried")]);
     wait_until("the demo's window to close", || {
         !rex.windows(&session)
             .iter()
@@ -468,13 +478,21 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
     };
     fixture.add("gone");
     let (session, block) = rex.session("work", &fixture.repo);
-    rex.type_shoal(&fixture, &block, "run --workspace gone -- sleep 600");
+    rex.type_shoal(
+        &fixture,
+        &block,
+        &format!("run --workspace {} -- sleep 600", fixture.id("gone")),
+    );
     wait_until("the command's place to be recorded", || {
         sessions(&fixture, "gone").len() == 1
     });
     let attach = || {
         fixture.interactive_command(
-            rex.inside(fixture.command().args(["attach", "gone"]), &session, &block),
+            rex.inside(
+                fixture.command().args(["attach", &fixture.id("gone")]),
+                &session,
+                &block,
+            ),
             "",
         )
     };
@@ -499,7 +517,7 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
     let (session, block) = rex.session("mine", &fixture.repo);
     // Shoal created the block for another workspace.
     let recorded = fixture.request(serde_json::json!({"record_owned_place": {
-        "workspace": "owner",
+        "workspace": fixture.id("owner"),
         "origin": {"host": "rex", "place": block, "data": {
             "server": rex.socket.to_str().unwrap(),
             "bin_dir": rex.program.parent().unwrap().to_str().unwrap(),
@@ -509,14 +527,18 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
     // With Rex off, the agent runs in a zmx session, which must not take
     // the block's Rex variables for its own place.
     let (output, transcript) = fixture.terminal_command(
-        rex.inside(fixture.command().args(["pi", "plain"]), &session, &block),
+        rex.inside(
+            fixture.command().args(["pi", &fixture.id("plain")]),
+            &session,
+            &block,
+        ),
         "",
         true,
     );
     assert!(output.status.success(), "{output:?} {transcript}");
     let zmx_calls = fs::read_to_string(fixture.root.path().join("zmx-calls")).unwrap_or_default();
     assert!(zmx_calls.contains("attach"), "{zmx_calls} {transcript}");
-    fixture.ok(&["rm", "--wait", "plain", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("plain"), "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(rex.block_open(&block));
 }

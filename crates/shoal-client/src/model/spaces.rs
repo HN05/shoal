@@ -73,6 +73,11 @@ impl PresentSpace {
         }
     }
 
+    /// Its number with its name, as text that names it does.
+    pub fn label(&self) -> String {
+        crate::space_names::label(self.number(), self.name())
+    }
+
     /// Its repository; none for a chat without one.
     pub fn repository_id(&self) -> Option<&RepositoryId> {
         match self {
@@ -125,13 +130,13 @@ impl Spaces {
     /// The space `selector` names, by number, ID or name.
     pub fn find(&self, selector: &SpaceSelector) -> Option<PresentSpace> {
         let workspace = (self.workspaces.iter())
-            .find(|workspace| selector.selects(&workspace.id, &workspace.name, workspace.number));
+            .find(|workspace| selector.selects(&workspace.id, workspace.number));
         if let Some(workspace) = workspace {
             return Some(PresentSpace::Workspace(workspace.clone()));
         }
         self.chats
             .iter()
-            .find(|chat| selector.selects(&chat.id, &chat.name, chat.number))
+            .find(|chat| selector.selects(&chat.id, chat.number))
             .map(|chat| PresentSpace::Chat(chat.clone()))
     }
 

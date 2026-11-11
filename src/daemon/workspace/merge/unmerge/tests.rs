@@ -52,7 +52,7 @@ impl Fixture {
         let _guard = self.manager.gates.lock_git(&self.repo_id).await;
         let plan = self
             .manager
-            .prepare_merge(&SpaceSelector::parse(name), &MergeOptions::default())
+            .prepare_merge(&self.manager.named(name).await, &MergeOptions::default())
             .await
             .unwrap();
         crate::git::repo::finish_merge(plan.clone()).await.unwrap();
@@ -66,7 +66,7 @@ impl Fixture {
         let _guard = self.manager.gates.lock_git(&self.repo_id).await;
         let plan = self
             .manager
-            .prepare_unmerge(&SpaceSelector::parse(name))
+            .prepare_unmerge(&self.manager.named(name).await)
             .await?;
         let unmerged = crate::git::unmerge::finish_unmerge(plan.clone()).await;
         let change = RecordChange::Unmerge(Box::new(plan));
@@ -155,18 +155,21 @@ async fn a_removed_workspace_is_restored_before_its_merge_is_undone() {
         .unwrap();
     let error = f
         .manager
-        .unmerge_workspace(&"worker".into())
+        .unmerge_workspace(&SpaceSelector::id(&worker.id))
         .await
         .unwrap_err();
     assert!(
         error
             .to_string()
-            .contains("restore it with shoal restore worker"),
+            .contains(&format!("restore it with shoal restore {}", worker.id)),
         "{error:#}"
     );
     assert_ne!(f.main(), before);
 
-    f.manager.restore_workspace(&"worker".into()).await.unwrap();
+    f.manager
+        .restore_workspace(&f.manager.named("worker").await)
+        .await
+        .unwrap();
     f.unmerge("worker").await.unwrap();
     assert_eq!(f.main(), before);
     assert_eq!(rev(&f.repo, "worker"), head);
@@ -218,7 +221,9 @@ async fn unmerge_refuses_stacked_conflicting_and_pushed_merges_changing_nothing(
     let error = f.unmerge("first").await.unwrap_err();
     assert!(
         error.to_string().contains("later merge of stacked")
-            && error.to_string().contains("shoal unmerge stacked"),
+            && error
+                .to_string()
+                .contains(&format!("shoal unmerge {}", stacked.id)),
         "{error:#}"
     );
     assert_eq!(f.main(), main);
@@ -305,7 +310,11 @@ async fn a_commit_made_after_the_unmerge_was_planned_is_kept() {
     f.add("worker", "feature").await;
     f.merge("worker").await;
     let _guard = f.manager.gates.lock_git(&f.repo_id).await;
-    let plan = f.manager.prepare_unmerge(&"worker".into()).await.unwrap();
+    let plan = f
+        .manager
+        .prepare_unmerge(&f.manager.named("worker").await)
+        .await
+        .unwrap();
     write_commit(&f.repo, "later", "made meanwhile");
     let main = f.main();
     let error = crate::git::unmerge::finish_unmerge(plan).await.unwrap_err();
@@ -327,7 +336,11 @@ async fn a_merge_pushed_after_the_unmerge_was_planned_is_kept() {
     f.add("worker", "feature").await;
     f.merge("worker").await;
     let _guard = f.manager.gates.lock_git(&f.repo_id).await;
-    let plan = f.manager.prepare_unmerge(&"worker".into()).await.unwrap();
+    let plan = f
+        .manager
+        .prepare_unmerge(&f.manager.named("worker").await)
+        .await
+        .unwrap();
     git(&f.repo, &["push", "-q", "origin", "main"]);
     let main = f.main();
     let error = crate::git::unmerge::finish_unmerge(plan).await.unwrap_err();
@@ -376,7 +389,11 @@ async fn a_default_branch_checked_out_during_the_unmerge_is_left_as_it_is() {
     f.merge("worker").await;
     git(&f.repo, &["switch", "-q", "-c", "elsewhere"]);
     let _guard = f.manager.gates.lock_git(&f.repo_id).await;
-    let plan = f.manager.prepare_unmerge(&"worker".into()).await.unwrap();
+    let plan = f
+        .manager
+        .prepare_unmerge(&f.manager.named("worker").await)
+        .await
+        .unwrap();
     assert!(plan.checkout.is_none());
     git(&f.repo, &["switch", "-q", "main"]);
     let main = f.main();
@@ -399,7 +416,10 @@ async fn other_changes_to_main_after_a_refused_replay_rewrite_no_record() {
     f.merge("second").await;
     let plan = {
         let _guard = f.manager.gates.lock_git(&f.repo_id).await;
-        f.manager.prepare_unmerge(&"first".into()).await.unwrap()
+        f.manager
+            .prepare_unmerge(&f.manager.named("first").await)
+            .await
+            .unwrap()
     };
     // The worker refused; main then went back to before both merges and
     // gained one unrelated commit, as long as the history it replaced and

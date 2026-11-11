@@ -43,7 +43,14 @@ fn failed_demo_handoffs_only_close_the_original_known_session(after: &str) -> an
             .command()
             .env("HANDOFF_FAIL", stage)
             .env("HANDOFF_AFTER", after)
-            .args(["demo", "start", "--workspace", "failed", "--", "true"])
+            .args([
+                "demo",
+                "start",
+                "--workspace",
+                &fixture.id("failed"),
+                "--",
+                "true",
+            ])
             .output()?;
         assert!(!output.status.success(), "{stage}/{after}: {output:?}");
         let calls: Vec<Vec<String>> = fs::read_to_string(home.join("handoff-calls.jsonl"))?
@@ -90,7 +97,7 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     let started = demo(&[
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sh",
         "-c",
@@ -102,7 +109,7 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     wait_until("the demo to restart", || {
         fs::read_to_string(&runs).is_ok_and(|text| text.lines().count() >= 2)
     });
-    let listing = demo(&["ls", "--workspace", "tried"]);
+    let listing = demo(&["ls", "--workspace", &fixture.id("tried")]);
     assert_eq!(listing["running"].as_array().unwrap().len(), 1);
     let inbox = fixture.ok(&["inbox"]);
     let demos: Vec<_> = inbox
@@ -113,7 +120,7 @@ fn demos_restart_until_stopped_and_show_their_screen() {
         .collect();
     assert_eq!(demos.len(), 1, "{inbox}");
     assert_eq!(demos[0]["demo"]["name"], "demo");
-    let screen = demo(&["screen", "demo", "--workspace", "tried"]);
+    let screen = demo(&["screen", "demo", "--workspace", &fixture.id("tried")]);
     let text = screen["screen"].as_str().unwrap();
     assert!(text.contains("failing"), "{text}");
     // The agent's output setting stays out of what the user tries.
@@ -122,26 +129,26 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     let replaced = demo(&[
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "sh",
         "-c",
         "echo replaced; exec sleep 600",
     ]);
     assert_ne!(replaced["execution_id"], started["execution_id"]);
-    let listing = demo(&["ls", "--workspace", "tried"]);
+    let listing = demo(&["ls", "--workspace", &fixture.id("tried")]);
     assert_eq!(listing["running"].as_array().unwrap().len(), 1);
     assert_eq!(
         listing["running"][0]["execution_id"],
         replaced["execution_id"]
     );
-    fixture.ok(&["done", "tried", "--keep-demos"]);
-    let listing = demo(&["ls", "--workspace", "tried"]);
+    fixture.ok(&["done", &fixture.id("tried"), "--keep-demos"]);
+    let listing = demo(&["ls", "--workspace", &fixture.id("tried")]);
     assert_eq!(listing["running"].as_array().unwrap().len(), 1);
 
-    demo(&["stop", "demo", "--workspace", "tried"]);
+    demo(&["stop", "demo", "--workspace", &fixture.id("tried")]);
     wait_until("the demo to stop", || {
-        demo(&["ls", "--workspace", "tried"])["running"]
+        demo(&["ls", "--workspace", &fixture.id("tried")])["running"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -149,7 +156,13 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     assert!(
         !fixture
             .command()
-            .args(["demo", "screen", "demo", "--workspace", "tried"])
+            .args([
+                "demo",
+                &fixture.id("screen"),
+                "demo",
+                "--workspace",
+                &fixture.id("tried")
+            ])
             .output()
             .unwrap()
             .status
@@ -189,7 +202,7 @@ fn start_preset_demo(fixture: &Fixture, name: &str, preset: &str, variable: &str
             "--preset",
             preset,
             "--workspace",
-            "tried",
+            &fixture.id("tried"),
             "--",
             "sh",
             "-c",
@@ -206,9 +219,9 @@ fn finish_preset_demo(fixture: &Fixture, workspace: &Value, name: &str, value: &
         fs::read_to_string(&written).is_ok_and(|text| text.trim() == value)
     });
     // Completion stops every demo of the workspace.
-    fixture.ok(&["done", "tried"]);
+    fixture.ok(&["done", &fixture.id("tried")]);
     wait_until("the demos to stop", || {
-        demo(fixture, &["ls", "--workspace", "tried"])["running"]
+        demo(fixture, &["ls", "--workspace", &fixture.id("tried")])["running"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -223,15 +236,15 @@ fn web_demos_reserve_a_port_and_pass_it_as_port() {
     fixture.ok(&[
         "acquire",
         "port",
-        "other",
+        &fixture.id("other"),
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--env",
         "PORT",
     ]);
     let web = start_preset_demo(&fixture, "site", "web", "PORT");
     let port = web["environment"]["PORT"].as_str().unwrap().to_owned();
-    let leases = fixture.ok(&["leases", "port", "--workspace", "tried"]);
+    let leases = fixture.ok(&["leases", "port", "--workspace", &fixture.id("tried")]);
     assert!(
         leases.to_string().contains(&format!("\"port\":{port}")),
         "{leases}"
@@ -250,7 +263,9 @@ fn simulator_demos_share_the_workspace_simulator() {
         .as_str()
         .unwrap()
         .to_owned();
-    let leases = || fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"].clone();
+    let leases = || {
+        fixture.ok(&["leases", "sim", "--workspace", &fixture.id("tried")])["simulators"].clone()
+    };
     assert_eq!(leases()[0]["udid"], udid);
     // A second simulator demo runs on the same device.
     let widget = start_preset_demo(&fixture, "widget", "simulator", "SHOAL_SIM_UDID");
@@ -273,7 +288,7 @@ fn a_demo_outlives_the_command_that_started_it() {
         .args([
             "run",
             "--workspace",
-            "tried",
+            &fixture.id("tried"),
             "--",
             binary,
             "--json",
@@ -291,24 +306,24 @@ fn a_demo_outlives_the_command_that_started_it() {
     // Its completion scan finds none of its processes in the demo, so the
     // command finishes and the demo keeps running.
     wait_until("the starting command to finish", || {
-        fixture.ok(&["status", "tried"])["executions"]
+        fixture.ok(&["status", &fixture.id("tried")])["executions"]
             .as_array()
             .unwrap()
             .len()
             == 1
     });
-    let executions = fixture.ok(&["status", "tried"])["executions"].clone();
+    let executions = fixture.ok(&["status", &fixture.id("tried")])["executions"].clone();
     assert_eq!(executions[0]["state"], "running", "{executions}");
     assert_eq!(
-        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
+        demo(&fixture, &["ls", "--workspace", &fixture.id("tried")])["running"]
             .as_array()
             .unwrap()
             .len(),
         1
     );
-    demo(&fixture, &["stop", "--workspace", "tried"]);
+    demo(&fixture, &["stop", "--workspace", &fixture.id("tried")]);
     wait_until("the demo to stop", || {
-        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
+        demo(&fixture, &["ls", "--workspace", &fixture.id("tried")])["running"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -325,7 +340,7 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         &[
             "start",
             "--workspace",
-            "other",
+            &fixture.id("other"),
             "--",
             "sh",
             "-c",
@@ -344,8 +359,8 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     // An invalid name is refused before a workspace is chosen.
     for args in [
         vec!["demo", "stop", "Bad"],
-        vec!["demo", "screen", "Bad"],
-        vec!["demo", "send", "Bad", "q"],
+        vec!["demo", &fixture.id("screen"), "Bad"],
+        vec!["demo", &fixture.id("send"), "Bad", "q"],
     ] {
         let refused = fixture.run(&args);
         assert!(!refused.status.success(), "{args:?}");
@@ -355,7 +370,7 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     let refused = fixture.run(&[
         "run",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "env",
         "-u",
@@ -364,17 +379,17 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         "demo",
         "stop",
         "--workspace",
-        "other",
+        &fixture.id("other"),
     ]);
     assert!(!refused.status.success());
     assert_eq!(
-        demo(&fixture, &["ls", "--workspace", "other"])["running"]
+        demo(&fixture, &["ls", "--workspace", &fixture.id("other")])["running"]
             .as_array()
             .unwrap()
             .len(),
         1
     );
-    fixture.ok(&["rm", "--wait", "other", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("other"), "--yes"]);
     assert!(!log.exists());
 
     // A command that cannot run never reports a started demo.
@@ -382,13 +397,13 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         "demo",
         "start",
         "--workspace",
-        "tried",
+        &fixture.id("tried"),
         "--",
         "/nonexistent/program",
     ]);
     assert!(!missing.status.success());
     assert!(
-        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
+        demo(&fixture, &["ls", "--workspace", &fixture.id("tried")])["running"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -442,7 +457,7 @@ fn a_demo_opener_leaves_the_terminal_as_it_found_it() {
             "start",
             "site",
             "--workspace",
-            "tried",
+            &fixture.id("tried"),
             "--open",
             "stty -echo",
             "--",
@@ -459,7 +474,7 @@ fn a_demo_opener_leaves_the_terminal_as_it_found_it() {
         .args([
             "-c",
             r#"import fcntl, os, subprocess, sys, termios
-binary = sys.argv[1]
+binary, workspace = sys.argv[1:]
 os.setsid()
 fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 def terminal_settings():
@@ -468,12 +483,13 @@ def terminal_settings():
     return settings
 before = terminal_settings()
 group = os.tcgetpgrp(0)
-opened = subprocess.run([binary, 'demo', 'site', '--workspace', 'tried'], timeout=30)
+opened = subprocess.run([binary, 'demo', 'site', '--workspace', workspace], timeout=30)
 assert opened.returncode == 0, opened.returncode
 assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
 assert terminal_settings() == before, (before, terminal_settings())
 "#,
             support::shoal_binary(),
+            &fixture.id("tried"),
         ])
         .stdin(slave.try_clone().unwrap())
         .stdout(slave.try_clone().unwrap())
@@ -496,6 +512,6 @@ assert terminal_settings() == before, (before, terminal_settings())
     let _ = master.read_to_string(&mut transcript);
     assert!(finished.unwrap().success(), "{transcript}");
     // A stop only asks the wrapper, which ends after reporting to the daemon.
-    demo(&fixture, &["stop", "--workspace", "tried"]);
+    demo(&fixture, &["stop", "--workspace", &fixture.id("tried")]);
     processes.await_end();
 }

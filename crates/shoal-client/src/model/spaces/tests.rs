@@ -3,7 +3,7 @@ use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 
 #[test]
-fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
+fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({
         "id": "w1",
         "number": 3,
@@ -52,17 +52,16 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
         ],
     };
     let found = |selector: &str| {
-        let space = spaces.find(&SpaceSelector::parse(selector));
+        let space = spaces.find(&SpaceSelector::from(selector));
         space.map(|space| space.name().to_owned())
     };
     assert_eq!(found("w1").as_deref(), Some("worker"));
-    assert_eq!(found("worker").as_deref(), Some("worker"));
+    assert_eq!(found("worker"), None);
     assert_eq!(found("3").as_deref(), Some("worker"));
     assert_eq!(found("c1").as_deref(), Some("talk"));
     assert_eq!(found("2").as_deref(), Some("saved"));
-    assert_eq!(found("saved").as_deref(), Some("saved"));
+    assert_eq!(found("saved"), None);
     assert_eq!(found("4"), None);
-    assert_eq!(found("missing"), None);
 }
 
 #[test]

@@ -58,12 +58,12 @@ impl Target {
     /// A URL in the workspace position names a PR; `--repo` and posting
     /// apply only to PRs.
     pub fn new(
-        workspace: Option<SpaceSelector>,
+        workspace: Option<String>,
         pr: Option<String>,
         repository: Option<String>,
         post: Option<bool>,
     ) -> Result<Self> {
-        let url = workspace.as_ref().map(ToString::to_string);
+        let url = workspace.clone();
         let url = url.filter(|input| IssueInput::parse(input) == IssueInput::Url);
         let input = match (pr, url) {
             (Some(input), _) => input,
@@ -82,7 +82,7 @@ impl Target {
                     "--repo selects the repository of a PR; pass --pr or a URL"
                 );
                 return Ok(Target::Space {
-                    space: workspace,
+                    space: workspace.as_deref().map(SpaceSelector::parse).transpose()?,
                     post,
                 });
             }

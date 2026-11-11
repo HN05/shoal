@@ -120,7 +120,7 @@ pub enum SessionsCommand {
     /// chat, else offers a picker. The session of an agent Shoal stopped
     /// until its automatic restore is not offered.
     Attach {
-        /// Workspace or running chat, by number, name or ID; `-` for the one
+        /// Workspace or running chat, by number or ID; `-` for the one
         /// whose session this terminal last detached from.
         #[arg(id = "workspace", value_name = "TARGET")]
         target: Option<SpaceSelector>,
@@ -150,7 +150,7 @@ pub enum SessionsCommand {
 pub enum QueueCommand {
     /// Start a waiting entry now, regardless of the agent limits.
     Start {
-        /// Entry by workspace name or ID; omit to choose one.
+        /// Entry by its ID; omit to choose one.
         entry: Option<String>,
         /// Attach this terminal to the agent's session once it has one, as
         /// shoal attach does.
@@ -160,8 +160,8 @@ pub enum QueueCommand {
     /// Move an entry to another position, or stop a running agent and
     /// queue its restore there.
     Move {
-        /// Entry by workspace name or ID, or a workspace with a running
-        /// agent; omit to choose an entry.
+        /// Entry by its ID, or a workspace with a running agent by number or
+        /// ID; omit to choose an entry.
         entry: Option<String>,
         /// 1-based position as shoal queue numbers them, or last; omit to
         /// choose the entry to move in front of.
@@ -170,7 +170,7 @@ pub enum QueueCommand {
     },
     /// Cancel a waiting entry; a cancelled restore leaves its agent stopped.
     Cancel {
-        /// Entry by workspace name or ID; omit to choose one.
+        /// Entry by its ID; omit to choose one.
         entry: Option<String>,
     },
 }

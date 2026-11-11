@@ -43,7 +43,11 @@ impl Fixture {
     }
 
     async fn state(&self) -> WorkspaceState {
-        self.manager.workspace(&"topic".into()).await.unwrap().state
+        self.manager
+            .workspace(&self.manager.named("topic").await)
+            .await
+            .unwrap()
+            .state
     }
 }
 
@@ -52,14 +56,14 @@ async fn a_workspace_behind_its_pushed_branch_fast_forwards_once() {
     let f = Fixture::new().await;
     assert!(
         f.manager
-            .fast_forward_workspace(&"topic".into(), "topic")
+            .fast_forward_workspace(&f.manager.named("topic").await, "topic")
             .await
             .unwrap()
     );
     assert_eq!(f.head("topic"), f.pushed);
     assert!(
         !f.manager
-            .fast_forward_workspace(&"topic".into(), "topic")
+            .fast_forward_workspace(&f.manager.named("topic").await, "topic")
             .await
             .unwrap()
     );
@@ -72,7 +76,7 @@ async fn a_switched_workspace_is_refused_without_moving_its_branch() {
     let base = f.head("HEAD");
     git(&f.workspace.path, &["switch", "-c", "scratch"]);
     f.manager
-        .fast_forward_workspace(&"topic".into(), "topic")
+        .fast_forward_workspace(&f.manager.named("topic").await, "topic")
         .await
         .unwrap_err();
     assert_eq!(f.head("scratch"), base, "the checked-out branch stays");
@@ -80,7 +84,7 @@ async fn a_switched_workspace_is_refused_without_moving_its_branch() {
 
     git(&f.workspace.path, &["switch", "topic"]);
     f.manager
-        .fast_forward_workspace(&"topic".into(), "other")
+        .fast_forward_workspace(&f.manager.named("topic").await, "other")
         .await
         .unwrap_err();
     assert_eq!(f.head("topic"), base);

@@ -52,7 +52,7 @@ async fn every_route_records_one_added_event_per_file() {
     for _ in 0..2 {
         manager
             .send_agent_message(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 "See".into(),
                 vec![log.clone().into(), shot.clone().into()],
                 &Attacher::User,
@@ -62,7 +62,7 @@ async fn every_route_records_one_added_event_per_file() {
     }
     manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![crate::daemon::workspace_files::NewFile {
                 path: log.clone(),
                 title: Some("Crash log".into()),
@@ -94,7 +94,7 @@ async fn every_route_records_one_added_event_per_file() {
         ]
     );
     let listed = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let added = &events[2];
@@ -137,21 +137,21 @@ async fn every_deletion_records_one_removed_event_per_file() {
         std::fs::write(&path, name).unwrap();
         crate::daemon::workspace_files::NewFile::from(path)
     };
-    let attach = |space: String, name: &str| {
+    let attach = |space: SpaceId, name: &str| {
         let file = file(name);
         let manager = &manager;
         async move {
             manager
-                .add_attached_files(&SpaceSelector::parse(&space), vec![file], &Attacher::User)
+                .add_attached_files(&SpaceSelector::from(&space), vec![file], &Attacher::User)
                 .await
                 .unwrap();
         }
     };
     // `shoal files rm --all`, which also takes kept results, so goes first.
-    attach(workspace.name.to_string(), "idle.md").await;
+    attach(workspace.id.clone(), "idle.md").await;
     manager.remove_idle_files().await.unwrap();
-    attach(workspace.name.to_string(), "deleted.md").await;
-    attach(child.name.to_string(), "removed.md").await;
+    attach(workspace.id.clone(), "deleted.md").await;
+    attach(child.id.clone(), "removed.md").await;
     for result in ["expired.md", "low-disk.md"] {
         let audit = manager
             .split_workspace(
@@ -179,7 +179,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     // `shoal files rm`
     manager
         .remove_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec!["deleted.md".into()],
             vec![],
         )
@@ -268,7 +268,7 @@ async fn a_chats_file_events_name_the_chat() {
     std::fs::write(&report, "Plan").unwrap();
     manager
         .add_attached_files(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &Attacher::User,
         )
@@ -326,7 +326,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
     std::fs::write(&report, "Plan").unwrap();
     manager
         .add_attached_files(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &Attacher::User,
         )

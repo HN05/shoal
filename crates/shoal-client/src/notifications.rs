@@ -99,6 +99,9 @@ pub struct Notification {
     pub created_at: crate::time::UnixTime,
     /// Workspace name when the event happened; kept after removal.
     pub workspace: Option<SpaceName>,
+    /// The ID of that space, which selects it while it exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_id: Option<crate::space_ids::SpaceId>,
     pub kind: NotificationKind,
     pub message: String,
     pub read: bool,

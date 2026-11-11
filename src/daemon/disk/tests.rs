@@ -78,7 +78,10 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
             .await
             .unwrap();
     }
-    let held = manager.workspace(&"first".into()).await.unwrap();
+    let held = manager
+        .workspace(&manager.named("first").await)
+        .await
+        .unwrap();
     manager
         .acquire_hold(
             &SpaceSelector::id(&held.id),

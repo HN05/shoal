@@ -36,7 +36,14 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
         manager.chat(&number(chat.number)).await.unwrap().id,
         chat.id
     );
-    assert_eq!(manager.space(&"talk".into()).await.unwrap().id(), &chat.id);
+    assert_eq!(
+        manager
+            .space(&manager.named("talk").await)
+            .await
+            .unwrap()
+            .id(),
+        &chat.id
+    );
 
     let refused = manager.workspace(&number(chat.number)).await.unwrap_err();
     assert!(refused.to_string().contains("is a chat"), "{refused}");
@@ -45,7 +52,7 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
             .to_string()
             .contains(&format!("{} (talk)", chat.number))
     );
-    assert!(manager.chat(&"worker".into()).await.is_err());
+    assert!(manager.chat(&manager.named("worker").await).await.is_err());
     let missing = manager.space(&number(99.into())).await.unwrap_err();
     assert!(missing.to_string().contains("no space 99"), "{missing}");
 }
@@ -62,7 +69,7 @@ async fn a_stored_id_never_selects_a_space_by_name() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    assert!(manager.space(&"worker".into()).await.is_ok());
+    assert!(manager.space(&manager.named("worker").await).await.is_ok());
     assert!(
         manager
             .space(&SpaceSelector::Id("worker".into()))
@@ -89,5 +96,8 @@ async fn a_removed_workspace_keeps_no_number() {
         .unwrap();
     assert!(manager.space(&number).await.is_err());
     assert!(manager.restore_workspace(&number).await.is_err());
-    manager.restore_workspace(&"worker".into()).await.unwrap();
+    manager
+        .restore_workspace(&manager.named("worker").await)
+        .await
+        .unwrap();
 }

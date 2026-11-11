@@ -141,7 +141,10 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
     assert_eq!(handles(&jobs(&manager).await), ["a", "b"]);
 
     // A passed-over job stays with the forge for other runners.
-    manager.queue_remove("ci-rust-4", None).await.unwrap();
+    manager
+        .queue_remove(&manager.queued("ci-rust-4").await, None)
+        .await
+        .unwrap();
     manager.refresh_waiting_jobs().await.unwrap();
     assert_eq!(handles(&jobs(&manager).await), ["b"]);
 

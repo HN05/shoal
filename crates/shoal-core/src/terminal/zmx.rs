@@ -103,8 +103,8 @@ impl Places for Zmx {
         "detached zmx sessions"
     }
 
-    fn background_place(&self, name: &str) -> String {
-        format!("in a detached zmx session; attach with `shoal attach {name}`")
+    fn background_place(&self, _name: &str) -> String {
+        "in a detached zmx session; `shoal attach` offers it".into()
     }
 
     /// The session this process runs in, which the daemon records for its

@@ -45,3 +45,29 @@ pub fn protocol(root: &Path) -> u64 {
         .as_u64()
         .unwrap()
 }
+
+/// The ID of the space named `name`, as tests name the spaces they make: a
+/// workspace, a chat, else a removed workspace. A name never selects a
+/// space, so tests select one by what this returns; a name no space has
+/// gives itself, which selects nothing.
+pub fn space_id(root: &Path, name: &str) -> String {
+    let protocol = protocol(root);
+    let listed = |method: &str| {
+        let response = exchange(
+            root,
+            &json!({"protocol": protocol, "id": 1, "method": method}),
+        );
+        response["data"].as_array().cloned().unwrap_or_default()
+    };
+    let named = |space: &&Value| space["name"] == name;
+    let found = (listed("list_workspaces").iter().find(named))
+        .or(listed("list_chats").iter().find(named))
+        .map(|space| space["id"].clone())
+        .or_else(|| {
+            (listed("removed_workspaces").iter().find(named))
+                .map(|removed| removed["workspace_id"].clone())
+        });
+    found
+        .and_then(|id| id.as_str().map(str::to_owned))
+        .unwrap_or_else(|| name.to_owned())
+}

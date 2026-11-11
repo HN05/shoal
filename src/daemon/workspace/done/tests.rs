@@ -179,7 +179,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     // Repeating it closes a question asked since.
     manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             crate::daemon::questions::Ask {
                 question: "Anything more?".into(),
                 recommendation: "No".into(),
@@ -738,7 +738,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     // Done closes the questions asked before it.
     manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Anything else?"),
             Vec::new(),
             &Attacher::User,
@@ -755,7 +755,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .unwrap();
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Anything more?"),
             Vec::new(),
             &Attacher::User,
@@ -997,7 +997,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         async move {
             manager
                 .split_workspace(
-                    &SpaceSelector::parse(parent.as_str()),
+                    &SpaceSelector::from(parent.as_str()),
                     name.into(),
                     None,
                     Default::default(),

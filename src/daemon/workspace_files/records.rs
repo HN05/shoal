@@ -215,17 +215,16 @@ pub(crate) fn roots(db: &Connection) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The latest removed workspace or removed chat with that name or ID whose
-/// files are kept.
-pub(super) fn gone_space(db: &Connection, selector: &str) -> Result<Option<Space>> {
+/// The removed workspace or removed chat `id` whose files are kept.
+pub(super) fn gone_space(db: &Connection, id: &SpaceId) -> Result<Option<Space>> {
     Ok(db
         .query_row(
             &format!(
                 "SELECT space_id,space,repository_id,parent_id,root_dir FROM workspace_files
-                    WHERE (space_id=?1 OR space=?1) AND {GONE}
+                    WHERE space_id=?1 AND {GONE}
                     ORDER BY id DESC LIMIT 1"
             ),
-            [selector],
+            [id],
             space,
         )
         .optional()?)

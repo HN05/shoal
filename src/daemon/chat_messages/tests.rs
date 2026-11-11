@@ -236,7 +236,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     });
     manager
         .send_chat_message(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
             Vec::new(),
             &Attacher::User,

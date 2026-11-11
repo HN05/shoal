@@ -30,7 +30,12 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
         .await
         .unwrap();
     let unread = |status: SpaceStatus| status.attention.unread_notifications;
-    let before = unread(manager.space_status(&"own".into()).await.unwrap());
+    let before = unread(
+        manager
+            .space_status(&manager.named("own").await)
+            .await
+            .unwrap(),
+    );
 
     for (workspace, message) in [
         (Some("own"), "own"),
@@ -47,17 +52,23 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
     }
     manager
         .send_message(
-            &"planning".into(),
+            &manager.named("planning").await,
             "chat".into(),
             Vec::new(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    let status = manager.space_status(&"own".into()).await.unwrap();
+    let status = manager
+        .space_status(&manager.named("own").await)
+        .await
+        .unwrap();
     assert_eq!(unread(status), before + 1);
 
-    let status = manager.space_status(&"planning".into()).await.unwrap();
+    let status = manager
+        .space_status(&manager.named("planning").await)
+        .await
+        .unwrap();
     let SpaceDetail::Chat { chat: shown } = &status.space else {
         panic!("expected a chat: {:?}", status.space);
     };
@@ -95,17 +106,32 @@ async fn status_counts_the_spaces_own_open_questions() {
         choices: Vec::new(),
     };
     manager
-        .ask_question(&"planning".into(), ask, Vec::new(), &Attacher::User)
+        .ask_question(
+            &manager.named("planning").await,
+            ask,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
 
     let questions = |status: SpaceStatus| status.attention.open_questions;
     assert_eq!(
-        questions(manager.space_status(&"planning".into()).await.unwrap()),
+        questions(
+            manager
+                .space_status(&manager.named("planning").await)
+                .await
+                .unwrap()
+        ),
         1
     );
     assert_eq!(
-        questions(manager.space_status(&"own".into()).await.unwrap()),
+        questions(
+            manager
+                .space_status(&manager.named("own").await)
+                .await
+                .unwrap()
+        ),
         0
     );
 }

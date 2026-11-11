@@ -55,29 +55,33 @@ fn reading_a_name_validates_it() {
 }
 
 #[test]
-fn digits_select_a_number_and_other_text_an_id_or_name() {
-    let parse = |text: &str| text.parse::<SpaceSelector>().unwrap();
-    assert_eq!(parse("3"), SpaceSelector::Number(3.into()));
-    assert_eq!(
-        parse("fix-login"),
-        SpaceSelector::IdOrName("fix-login".into())
-    );
-    assert_eq!(parse("3a"), SpaceSelector::IdOrName("3a".into()));
-    assert!("".parse::<SpaceSelector>().is_err());
-    assert!(parse("3").selects(&SpaceId::from("id"), "name", 3.into()));
-    assert!(!parse("3").selects(&SpaceId::from("3"), "name", 4.into()));
-    assert!(parse("name").selects(&SpaceId::from("id"), "name", 4.into()));
-    assert!(!SpaceSelector::id(&SpaceId::from("name")).selects(
-        &SpaceId::from("id"),
-        "name",
-        4.into()
-    ));
-    let json = serde_json::to_string(&parse("3")).unwrap();
+fn digits_select_a_number_and_other_text_an_id() {
+    let parse = |text: &str| text.parse::<SpaceSelector>();
+    let id = "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09";
+    assert_eq!(parse("3").unwrap(), SpaceSelector::Number(3.into()));
+    assert_eq!(parse(id).unwrap(), SpaceSelector::Id(SpaceId::from(id)));
+    assert_eq!(parse("-").unwrap(), SpaceSelector::Previous);
+    for neither in ["", "fix-login", "3a", "Fix login"] {
+        let refused = parse(neither).unwrap_err().to_string();
+        assert!(refused.contains("number or ID"), "{neither}: {refused}");
+    }
+    let number = parse("3").unwrap();
+    assert!(number.selects(&SpaceId::from(id), 3.into()));
+    assert!(!number.selects(&SpaceId::from("3"), 4.into()));
+    let by_id = parse(id).unwrap();
+    assert!(by_id.selects(&SpaceId::from(id), 4.into()));
+    assert_eq!(by_id.given_id(), Some(&SpaceId::from(id)));
+    assert_eq!(number.given_id(), None);
+    let json = serde_json::to_string(&number).unwrap();
     assert_eq!(json, "\"3\"");
     assert_eq!(
         serde_json::from_str::<SpaceSelector>(&json).unwrap(),
-        parse("3")
+        number
     );
+    // A request's text selects what it gives, which the client checked.
+    let sent = serde_json::from_str::<SpaceSelector>("\"recorded\"").unwrap();
+    assert_eq!(sent, SpaceSelector::Id(SpaceId::from("recorded")));
+    assert!(serde_json::from_str::<SpaceSelector>("\"\"").is_err());
 }
 
 #[test]

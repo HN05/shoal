@@ -45,7 +45,7 @@ impl Stopped {
     /// Start the workspace's agent and wait until it runs.
     fn start_agent(&self, fixture: &Fixture) -> Child {
         let _ = fs::remove_file(self.path.join("started"));
-        let agent = spawn(fixture.command().args(["claude", self.name]));
+        let agent = spawn(fixture.command().args(["claude", &fixture.id(self.name)]));
         self.wait_running(fixture, "started");
         agent
     }
@@ -55,7 +55,7 @@ impl Stopped {
         let command = spawn(fixture.command().args([
             "run",
             "--workspace",
-            self.name,
+            &fixture.id(self.name),
             "--",
             "sh",
             "-c",
@@ -81,7 +81,7 @@ impl Stopped {
     }
 
     fn executions(&self, fixture: &Fixture) -> Vec<Value> {
-        let status = fixture.ok(&["status", self.name]);
+        let status = fixture.ok(&["status", &fixture.id(self.name)]);
         status["executions"].as_array().unwrap().clone()
     }
 
@@ -97,7 +97,7 @@ impl Stopped {
 
     /// Stop the workspace with `shoal stop` and wait for `children` to end.
     fn stop(&self, fixture: &Fixture, children: Vec<Child>) {
-        fixture.ok(&["stop", self.name]);
+        fixture.ok(&["stop", &fixture.id(self.name)]);
         for child in children {
             child.wait_with_output().unwrap();
         }
@@ -156,7 +156,7 @@ impl Stopped {
     fn resume(&self, fixture: &Fixture, args: &[&str]) -> Output {
         fixture
             .command()
-            .args(["resume", self.name])
+            .args(["resume", &fixture.id(self.name)])
             .args(args)
             .output()
             .unwrap()
@@ -186,14 +186,20 @@ fn names_the_command(handoff: &str) -> bool {
 fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     let fixture = Fixture::with_config(Some(AGENT));
     let workspace = Stopped::new(&fixture, "stopped");
-    fixture.ok(&["acquire", "port", "web", "--workspace", "stopped"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("stopped"),
+    ]);
     fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
-    let before = fixture.ok(&["status", "stopped"]);
+    let before = fixture.ok(&["status", &fixture.id("stopped")]);
     let agent = workspace.start_agent(&fixture);
     let command = workspace.start_command(&fixture);
     workspace.stop(&fixture, vec![agent, command]);
 
-    let after = fixture.ok(&["status", "stopped"]);
+    let after = fixture.ok(&["status", &fixture.id("stopped")]);
     assert_eq!(after["workspace"]["state"], before["workspace"]["state"]);
     assert_eq!(after["ports"].as_array().unwrap().len(), 1, "{after}");
     assert!(
@@ -293,7 +299,7 @@ fn resume_continues_an_agent_that_exited_on_its_own() {
     // The restored agent exited on its own too; finishing the assignment
     // forgets it.
     assert!(!workspace.last_sessions().is_empty());
-    fixture.ok(&["done", "stopped"]);
+    fixture.ok(&["done", &fixture.id("stopped")]);
     assert_eq!(workspace.last_sessions(), []);
     assert!(workspace.path.is_dir());
     assert!(!workspace.resume(&fixture, &["--focus"]).status.success());

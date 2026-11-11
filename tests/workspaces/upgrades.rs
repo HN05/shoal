@@ -41,7 +41,7 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let mut agent = Stopped {
         fixture: &fixture,
         agent: support::isolated(fixture.root.path(), &installed)
-            .args(["claude", "upgraded"])
+            .args(["claude", &fixture.id("upgraded")])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -52,7 +52,7 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let upgrade = installed.with_file_name("shoal.new");
     std::os::unix::fs::symlink(support::shoal_binary(), &upgrade).unwrap();
     fs::rename(&upgrade, &installed).unwrap();
-    fixture.ok(&["restart", "upgraded", "--in-place"]);
+    fixture.ok(&["restart", &fixture.id("upgraded"), "--in-place"]);
     wait_until("agent to restore", || path.join("restored").exists());
     // The wrapper's process runs the installed binary, which registered the
     // execution again and runs the restored agent.
@@ -63,7 +63,7 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let wrapper = String::from_utf8_lossy(&wrapper.stdout);
     assert!(wrapper.contains(" internal take-over "), "{wrapper}");
     // The daemon still stops it as the execution's wrapper.
-    fixture.ok(&["stop", "upgraded"]);
+    fixture.ok(&["stop", &fixture.id("upgraded")]);
     assert!(agent.agent.wait().unwrap().success());
 }
 
@@ -77,7 +77,11 @@ struct Stopped<'a> {
 impl Drop for Stopped<'_> {
     fn drop(&mut self) {
         // The wrapper ignores SIGTERM; the daemon stops it and its agent.
-        let _ = self.fixture.command().args(["stop", "upgraded"]).output();
+        let _ = self
+            .fixture
+            .command()
+            .args(["stop", &self.fixture.id("upgraded")])
+            .output();
         if try_wait_for(|| self.agent.try_wait().ok().flatten()).is_none() {
             let _ = self.agent.kill();
             let _ = self.agent.wait();

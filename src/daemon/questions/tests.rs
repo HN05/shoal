@@ -47,7 +47,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     let (_root, manager, workspace) = fixture().await;
     let first = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -56,7 +56,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
         .unwrap();
     let again = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -82,7 +82,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     assert!(
         manager
             .ask_question(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 ask("Which database?", &["SQLite"]),
                 Vec::new(),
                 &Attacher::User,
@@ -93,7 +93,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     assert!(
         manager
             .ask_question(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 ask("two\nlines", &[]),
                 Vec::new(),
                 &Attacher::User
@@ -108,7 +108,7 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &["SQLite", "Postgres"]),
             Vec::new(),
             &Attacher::User,
@@ -130,7 +130,7 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
         .unwrap();
     assert_eq!(answered.status.answer(), Some("Postgres"));
     let messages = manager
-        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(messages.len(), 1);
@@ -148,7 +148,7 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
     );
 
     let open = manager
-        .questions(Some(&SpaceSelector::from(&workspace.name)))
+        .questions(Some(&SpaceSelector::id(&workspace.id)))
         .await
         .unwrap();
     assert!(open.questions.is_empty());
@@ -197,7 +197,7 @@ async fn free_text_answers_may_span_lines() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -223,7 +223,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -236,7 +236,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .unwrap();
     let again = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -247,14 +247,14 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
 
     let message = answer_message(&answered);
     manager
-        .mark_agent_messages_delivered(&SpaceSelector::from(&workspace.name), vec![message])
+        .mark_agent_messages_delivered(&SpaceSelector::id(&workspace.id), vec![message])
         .await
         .unwrap();
     // Delivery deletes the question and frees its number.
     assert!(manager.question(question.number).await.is_err());
     let new = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -280,7 +280,7 @@ async fn questions_take_the_smallest_free_number_of_their_space() {
     ] {
         let question = manager
             .ask_question(
-                &SpaceSelector::from(&asker.name),
+                &SpaceSelector::id(&asker.id),
                 ask(text, &[]),
                 Vec::new(),
                 &Attacher::User,
@@ -299,7 +299,7 @@ async fn questions_take_the_smallest_free_number_of_their_space() {
         .unwrap();
     let next = manager
         .ask_question(
-            &SpaceSelector::from(&other.name),
+            &SpaceSelector::id(&other.id),
             ask("Which logger?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -309,14 +309,14 @@ async fn questions_take_the_smallest_free_number_of_their_space() {
     assert_eq!(next.number, item(second, 2));
     manager
         .mark_agent_messages_delivered(
-            &SpaceSelector::from(&other.name),
+            &SpaceSelector::id(&other.id),
             vec![answer_message(&answered)],
         )
         .await
         .unwrap();
     let reused = manager
         .ask_question(
-            &SpaceSelector::from(&other.name),
+            &SpaceSelector::id(&other.id),
             ask("Which scheduler?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -346,7 +346,7 @@ async fn a_wait_returns_the_answer() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -355,11 +355,11 @@ async fn a_wait_returns_the_answer() {
         .unwrap();
     let waiter = tokio::spawn({
         let manager = manager.clone();
-        let name = workspace.name.clone();
+        let id = workspace.id.clone();
         let ask = question.ask.clone();
         async move {
             manager
-                .await_answer(&SpaceSelector::from(&name), question.number.item, &ask)
+                .await_answer(&SpaceSelector::id(&id), question.number.item, &ask)
                 .await
         }
     });
@@ -377,7 +377,7 @@ async fn a_wait_returns_the_answer() {
     assert!(
         manager
             .await_answer(
-                &SpaceSelector::from(&other.name),
+                &SpaceSelector::id(&other.id),
                 question.number.item,
                 &question.ask
             )
@@ -390,14 +390,14 @@ async fn a_wait_returns_the_answer() {
     // anything differently.
     manager
         .mark_agent_messages_delivered(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![answer_message(&answered)],
         )
         .await
         .unwrap();
     let reused = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &["SQLite"]),
             Vec::new(),
             &Attacher::User,
@@ -408,7 +408,7 @@ async fn a_wait_returns_the_answer() {
     assert!(
         manager
             .await_answer(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 question.number.item,
                 &question.ask
             )
@@ -422,7 +422,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -444,7 +444,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
 
     manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which cache?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -479,24 +479,24 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             },
         )
         .await;
-    for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
+    for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {
         for mut method in [
             QuestionMethod::AskQuestion {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 ask: ask("Which database?", &[]),
                 attachments: Vec::new(),
                 sender_chat: None,
             },
             QuestionMethod::AwaitAnswer {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 item: 1,
                 ask: ask("Which database?", &[]),
             },
             QuestionMethod::ListQuestions {
-                space: Some(SpaceSelector::parse(target)),
+                space: Some(SpaceSelector::from(target)),
             },
             QuestionMethod::WithdrawQuestion {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 number: item(1.into(), 1),
                 shown: None,
             },
@@ -557,7 +557,7 @@ async fn listings_and_unread_answers_fit_one_response() {
     loop {
         let question = manager
             .ask_question(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 maximal(unread),
                 Vec::new(),
                 &Attacher::User,
@@ -574,7 +574,7 @@ async fn listings_and_unread_answers_fit_one_response() {
     }
     assert!(unread > 0);
     let messages = manager
-        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(messages.len(), unread);
@@ -587,7 +587,7 @@ async fn listings_and_unread_answers_fit_one_response() {
     let listing = loop {
         manager
             .ask_question(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 maximal(unread + open),
                 Vec::new(),
                 &Attacher::User,
@@ -613,7 +613,7 @@ async fn notifications_of_maximal_questions_fit_one_response() {
     for n in 0..50 {
         let question = manager
             .ask_question(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 maximal(n),
                 Vec::new(),
                 &Attacher::User,
@@ -653,7 +653,7 @@ async fn a_workspace_reserved_for_removal_takes_no_question() {
         .unwrap();
     let asked = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -668,7 +668,7 @@ async fn done_closes_a_question_it_cannot_read() {
     let (_root, manager, workspace) = fixture().await;
     let asked = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -696,7 +696,7 @@ async fn done_closes_open_questions_for_good() {
     let (_root, manager, workspace) = fixture().await;
     let answered = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -709,7 +709,7 @@ async fn done_closes_open_questions_for_good() {
         .unwrap();
     let open = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which cache?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -753,7 +753,7 @@ async fn done_closes_open_questions_for_good() {
     assert!(
         manager
             .await_answer(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 open.number.item,
                 &open.ask
             )
@@ -763,13 +763,13 @@ async fn done_closes_open_questions_for_good() {
 
     // Withdrawing completion leaves it closed, and its number stays taken.
     manager
-        .undo_done(&SpaceSelector::from(&workspace.name))
+        .undo_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
     let asked_again = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which cache?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -846,7 +846,7 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         .unwrap();
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -855,23 +855,23 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         .unwrap();
     let waiter = tokio::spawn({
         let manager = manager.clone();
-        let name = workspace.name.clone();
+        let id = workspace.id.clone();
         let ask = question.ask.clone();
         async move {
             manager
-                .await_answer(&SpaceSelector::from(&name), question.number.item, &ask)
+                .await_answer(&SpaceSelector::id(&id), question.number.item, &ask)
                 .await
         }
     });
     assert!(
         manager
-            .withdraw_question(&SpaceSelector::from(&other.name), question.number, None)
+            .withdraw_question(&SpaceSelector::id(&other.id), question.number, None)
             .await
             .is_err()
     );
 
     let withdrawn = manager
-        .withdraw_question(&SpaceSelector::from(&workspace.name), question.number, None)
+        .withdraw_question(&SpaceSelector::id(&workspace.id), question.number, None)
         .await
         .unwrap();
     assert!(matches!(withdrawn.status, QuestionStatus::Withdrawn { .. }));
@@ -891,14 +891,14 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
     );
     assert!(
         manager
-            .withdraw_question(&SpaceSelector::from(&workspace.name), question.number, None)
+            .withdraw_question(&SpaceSelector::id(&workspace.id), question.number, None)
             .await
             .is_err()
     );
     // Its number stays taken, and asking again asks anew.
     let again = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -914,7 +914,7 @@ async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -937,7 +937,7 @@ async fn withdrawing_a_shown_question_tells_the_user() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -950,7 +950,7 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&SpaceSelector::from(&workspace.name), question.number, None)
+        .withdraw_question(&SpaceSelector::id(&workspace.id), question.number, None)
         .await
         .unwrap();
     let unread = manager.notifications(true, 50).await.unwrap();
@@ -963,7 +963,7 @@ async fn a_withdrawn_question_is_never_announced_afterwards() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which database?", &[]),
             Vec::new(),
             &Attacher::User,
@@ -971,7 +971,7 @@ async fn a_withdrawn_question_is_never_announced_afterwards() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&SpaceSelector::from(&workspace.name), question.number, None)
+        .withdraw_question(&SpaceSelector::id(&workspace.id), question.number, None)
         .await
         .unwrap();
     // An announcement that lost the race to the withdrawal comes too late.
@@ -992,7 +992,7 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
         .collect();
     let asked = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which layout?", &["A", "B"]),
             layouts.clone(),
             &Attacher::User,
@@ -1007,7 +1007,7 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
     let listed = manager.questions(None).await.unwrap().questions;
     assert_eq!(listed, std::slice::from_ref(&asked));
     let attached = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert!(
@@ -1026,7 +1026,7 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
     // other files it is a different one.
     let again = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which layout?", &["A", "B"]),
             layouts.clone(),
             &Attacher::User,
@@ -1036,7 +1036,7 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
     assert_eq!(again, asked);
     let asked_otherwise = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which layout?", &["A", "B"]),
             layouts[..1].to_vec(),
             &Attacher::User,
@@ -1045,7 +1045,7 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
     assert!(asked_otherwise.is_err());
     // The refused question's copies go, and the asked one's stay.
     let after = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(after, attached);
@@ -1063,7 +1063,7 @@ async fn a_question_sends_a_limited_number_of_files() {
     let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
     let asked = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask("Which?", &[]),
             files,
             &Attacher::User,
@@ -1072,7 +1072,7 @@ async fn a_question_sends_a_limited_number_of_files() {
     assert!(asked.is_err());
     assert!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()

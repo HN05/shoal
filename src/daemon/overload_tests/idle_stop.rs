@@ -21,7 +21,7 @@ async fn idle_in_held_done_workspace(
         .clone();
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some(id.clone()),
             None,
@@ -75,7 +75,7 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
     manager.config_state.publish_disk_reading(Some(generation));
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -129,7 +129,7 @@ async fn an_idle_agent_with_a_background_command_keeps_running() {
     sweep(&manager).await;
     assert!(manager.agent_overload(&id).await.is_none());
     assert!(crate::process::identity::alive(&background).unwrap());
-    bounded(manager.stop_workspace(&SpaceSelector::from(&workspace.name), StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();

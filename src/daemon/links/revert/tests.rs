@@ -82,7 +82,7 @@ async fn a_chat_reverts_from_its_repositorys_checkout() {
         )
         .await;
     let merged = manager
-        .merged_pull(&SpaceSelector::from(&chat.name), Some("7".into()))
+        .merged_pull(&SpaceSelector::id(&chat.id), Some("7".into()))
         .await;
     for error in [reverted.unwrap_err(), merged.unwrap_err()] {
         assert!(

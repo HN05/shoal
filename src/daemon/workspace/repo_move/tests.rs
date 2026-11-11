@@ -759,7 +759,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     moving.await??;
     assert!(!cleaning.await??, "the results moved off the low place");
     let kept = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await?;
     assert!(kept[0].path.starts_with(root.join("origin")), "{kept:?}");
     assert!(kept[0].path.exists());
@@ -847,7 +847,7 @@ async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository()
     fs::write(&report, "Plan")?;
     manager
         .add_attached_files(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &Attacher::User,
         )
@@ -864,7 +864,7 @@ async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository()
     assert!(format!("{error:#}").contains("master"), "{error:#}");
 
     manager
-        .remove_attached_files(&"master".into(), Vec::new(), Vec::new())
+        .remove_attached_files(&SpaceSelector::id(&chat.id), Vec::new(), Vec::new())
         .await?;
     assert!(root.join(".attachments").is_dir());
     manager.move_repositories(Layout::Excluded).await?;

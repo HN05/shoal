@@ -39,14 +39,20 @@ fn caller(space: &str) -> Caller {
 }
 
 #[tokio::test]
-async fn a_removed_space_s_log_reads_by_its_last_name_with_the_default_filter() {
+async fn a_removed_space_s_log_reads_by_its_id_with_the_default_filter() {
     let (_temp, manager) = manager().await;
     manager
         .store
         .run(|db| Ok(db.execute_batch(JOURNAL)?))
         .await
         .unwrap();
-    let fix = SpaceSelector::parse("fix");
+    let fix = SpaceSelector::from("fix-id");
+    // A removed space's name selects nothing.
+    assert!(
+        (manager.space_log(&SpaceSelector::from("fix"), LogFilter::All, 50))
+            .await
+            .is_err()
+    );
     let entries = manager
         .space_log(&fix, LogFilter::Entries, 50)
         .await
@@ -67,7 +73,7 @@ async fn a_removed_space_s_log_reads_by_its_last_name_with_the_default_filter() 
         .await
         .unwrap();
     assert_eq!(kinds(&newest), [EventKind::AgentExited, EventKind::Removed]);
-    let parent = SpaceSelector::parse("plan");
+    let parent = SpaceSelector::from("plan");
     let parent = manager
         .space_log(&parent, LogFilter::Entries, 50)
         .await
@@ -77,7 +83,7 @@ async fn a_removed_space_s_log_reads_by_its_last_name_with_the_default_filter() 
         [EventKind::Created, EventKind::ChildRemoved]
     );
     assert!(
-        (manager.space_log(&SpaceSelector::parse("gone"), LogFilter::All, 50))
+        (manager.space_log(&SpaceSelector::from("gone"), LogFilter::All, 50))
             .await
             .is_err()
     );
@@ -93,7 +99,7 @@ async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
         .unwrap();
     let narrowed = |caller_space: &str, space: &str| {
         let manager = manager.clone();
-        let (caller, mut selector) = (caller(caller_space), Some(SpaceSelector::parse(space)));
+        let (caller, mut selector) = (caller(caller_space), Some(SpaceSelector::from(space)));
         async move {
             manager
                 .narrow_to_log(&caller, &mut selector)
@@ -102,11 +108,11 @@ async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
         }
     };
     assert_eq!(
-        narrowed("plan", "fix").await.unwrap(),
+        narrowed("plan", "fix-id").await.unwrap(),
         Some(SpaceSelector::id(&SpaceId::from("fix-id")))
     );
     assert!(narrowed("plan", "plan").await.is_ok());
-    assert!(narrowed("other", "fix").await.is_err());
+    assert!(narrowed("other", "fix-id").await.is_err());
     assert!(narrowed("plan", "other").await.is_err());
 }
 

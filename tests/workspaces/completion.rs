@@ -9,11 +9,11 @@ fn done_records_a_summary_that_status_shows() {
     // Completion without cleanup keeps the workspace to read.
     let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     fixture.add("audit");
-    let refused = fixture.run(&["done", "audit", "--summary", "two\nlines"]);
+    let refused = fixture.run(&["done", &fixture.id("audit"), "--summary", "two\nlines"]);
     assert!(!refused.status.success());
-    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
-    fixture.ok(&["done", "audit", "--summary", "No leak"]);
-    let status = fixture.ok(&["status", "audit"]);
+    assert!(fixture.ok(&["status", &fixture.id("audit")])["completion"].is_null());
+    fixture.ok(&["done", &fixture.id("audit"), "--summary", "No leak"]);
+    let status = fixture.ok(&["status", &fixture.id("audit")]);
     assert_eq!(status["completion"]["summary"], "No leak", "{status}");
 }
 
@@ -61,10 +61,10 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         fs::read_to_string(&events).unwrap(),
         "post_agent_exit|agent-work|helper|7|true|unset|unset\n"
     );
-    assert!(fixture.ok(&["status", "agent-work"])["completion"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("agent-work")])["completion"].is_null());
     assert_eq!(
         fixture
-            .run(&["run", "failing", "--workspace", "agent-work"])
+            .run(&["run", "failing", "--workspace", &fixture.id("agent-work")])
             .status
             .code(),
         Some(7)
@@ -105,7 +105,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     install_test_script(
         &hook,
         format!(
-            "#!/bin/sh\nexec '{}' --json done \"$SHOAL_WORKSPACE\"\n",
+            "#!/bin/sh\nexec '{}' --json done \"$SHOAL_WORKSPACE_ID\"\n",
             support::shoal_binary()
         ),
     );
@@ -126,7 +126,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     ]);
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
     wait_until("completion from exit hook", || {
-        fixture.ok(&["status", "agent-work"])["completion"]["cleanup"] == false
+        fixture.ok(&["status", &fixture.id("agent-work")])["completion"]["cleanup"] == false
     });
 }
 
@@ -199,7 +199,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     let completion = fixture.ok(&[
         "run",
         "--workspace",
-        "hooked",
+        &fixture.id("hooked"),
         "--",
         support::shoal_binary(),
         "--json",
@@ -229,9 +229,9 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     // Retention must survive removal of the configuration file later in this
     // test; otherwise the cleanup sweep can win the race against the last done.
     fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
-    fixture.ok(&["done", "hooked"]);
+    fixture.ok(&["done", &fixture.id("hooked")]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["status", "hooked"])["completion"]["error"].is_string()
+        fixture.ok(&["status", &fixture.id("hooked")])["completion"]["error"].is_string()
     });
     assert_eq!(
         fs::read_to_string(&events).unwrap(),
@@ -246,7 +246,10 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
         "[cleanup.done]\nenabled = false\n",
     )
     .unwrap();
-    assert_eq!(fixture.ok(&["done", "hooked"])["cleanup"], false);
+    assert_eq!(
+        fixture.ok(&["done", &fixture.id("hooked")])["cleanup"],
+        false
+    );
     assert!(
         fixture
             .ok(&["alerts", "--all"])
@@ -284,7 +287,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
     );
     let mut done = fixture
         .command()
-        .args(["done", "hooked"])
+        .args(["done", &fixture.id("hooked")])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -293,20 +296,32 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         fixture.root.path().join("done-started").exists()
     });
     assert_eq!(
-        fixture.ok(&["status", "hooked"])["completion"]["cleanup"],
+        fixture.ok(&["status", &fixture.id("hooked")])["completion"]["cleanup"],
         false
     );
     for args in [
-        vec!["setup", "hooked"],
-        vec!["rm", "--wait", "hooked", "--yes"],
-        vec!["acquire", "resource", "device", "--workspace", "hooked"],
+        vec!["setup", &fixture.id("hooked")],
+        vec!["rm", "--wait", &fixture.id("hooked"), "--yes"],
+        vec![
+            "acquire",
+            "resource",
+            "device",
+            "--workspace",
+            &fixture.id("hooked"),
+        ],
     ] {
         let output = fixture.run(&args);
         assert!(!output.status.success(), "{args:?}: {output:?}");
     }
     fs::write(&barrier, "release\n").unwrap();
     assert!(done.wait().unwrap().success());
-    fixture.ok(&["acquire", "resource", "device", "--workspace", "hooked"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "device",
+        "--workspace",
+        &fixture.id("hooked"),
+    ]);
 }
 
 #[test]
@@ -318,18 +333,30 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
         &fixture,
         &format!("hooks.post_done = '{}'\n", hook.display()),
     );
-    fixture.ok(&["acquire", "port", "web", "--workspace", "finished"]);
-    fixture.ok(&["acquire", "resource", "device", "--workspace", "finished"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("finished"),
+    ]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "device",
+        "--workspace",
+        &fixture.id("finished"),
+    ]);
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", "finished", "--"])
+        .args(["run", "--workspace", &fixture.id("finished"), "--"])
         .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "finished");
-    let completion = fixture.ok(&["done", "finished"]);
+    let completion = fixture.ok(&["done", &fixture.id("finished")]);
     assert_eq!(completion["cleanup"], true);
     wait_removed(&fixture, "finished");
     assert!(
@@ -359,12 +386,15 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
 fn agents_follow_a_keep_default_and_can_request_cleanup() {
     let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled=false\n"));
     fixture.add("keep-default");
-    assert_eq!(fixture.ok(&["done", "keep-default"])["cleanup"], false);
+    assert_eq!(
+        fixture.ok(&["done", &fixture.id("keep-default")])["cleanup"],
+        false
+    );
     // Agents can explicitly clean their own workspace despite a keep default.
     fixture.run(&[
         "run",
         "--workspace",
-        "keep-default",
+        &fixture.id("keep-default"),
         "--",
         support::shoal_binary(),
         "done",
@@ -379,12 +409,12 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
     let workspace = fixture.add("unfinished");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("work"), "retain").unwrap();
-    fixture.ok(&["done", "unfinished"]);
+    fixture.ok(&["done", &fixture.id("unfinished")]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["status", "unfinished"])["completion"]["error"].is_string()
+        fixture.ok(&["status", &fixture.id("unfinished")])["completion"]["error"].is_string()
     });
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "retain");
-    assert!(fixture.ok(&["status", "unfinished"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("unfinished")])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -435,11 +465,32 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
     };
     write_pr(&fixture, 1, "open", &earlier);
     write_pr(&fixture, 2, "open", head.trim());
-    fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
-    fixture.ok(&["link", "pr", "2", "assigned", "--space", "multi"]);
-    fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "1",
+        "assigned",
+        "--space",
+        &fixture.id("multi"),
+    ]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "2",
+        "assigned",
+        "--space",
+        &fixture.id("multi"),
+    ]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "1",
+        "assigned",
+        "--space",
+        &fixture.id("multi"),
+    ]);
     assert_eq!(
-        fixture.ok(&["status", "multi"])["pr_cleanup"]["urls"]
+        fixture.ok(&["status", &fixture.id("multi")])["pr_cleanup"]["urls"]
             .as_array()
             .unwrap()
             .len(),
@@ -449,7 +500,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
     fixture.ok(&[
         "run",
         "--workspace",
-        "multi",
+        &fixture.id("multi"),
         "--",
         support::shoal_binary(),
         "--json",
@@ -459,13 +510,13 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         "assigned",
     ]);
     assert_eq!(
-        fixture.ok(&["status", "multi"])["pr_cleanup"]["url"],
+        fixture.ok(&["status", &fixture.id("multi")])["pr_cleanup"]["url"],
         "https://github.com/team/project/pull/1"
     );
     fixture.ok(&[
         "run",
         "--workspace",
-        "multi",
+        &fixture.id("multi"),
         "--",
         support::shoal_binary(),
         "--json",
@@ -474,7 +525,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         "2",
         "assigned",
     ]);
-    fixture.ok(&["done", "multi"]);
+    fixture.ok(&["done", &fixture.id("multi")]);
     write_pr(&fixture, 1, "merged", &earlier);
     write_pr(&fixture, 2, "closed", head.trim());
     let root = fixture.root.path().to_owned();
@@ -486,16 +537,17 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
             .unwrap()
             .contains("GET repos/team/project/pulls/2\"")
     });
-    assert!(fixture.ok(&["status", "multi"])["pr_cleanup"]["merged_head"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("multi")])["pr_cleanup"]["merged_head"].is_null());
     write_pr(&fixture, 2, "merged", head.trim());
     fixture.restart();
     if cleanup {
         wait_removed(&fixture, "multi");
     } else {
         wait_until("confirmed merges", || {
-            fixture.ok(&["status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
+            fixture.ok(&["status", &fixture.id("multi")])["pr_cleanup"]["merged_head"]
+                == head.trim()
         });
-        let state = fixture.ok(&["status", "multi"]);
+        let state = fixture.ok(&["status", &fixture.id("multi")]);
         assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
         fixture.ok(&["alerts"]);
         // A changed default must not change a kept assignment.
@@ -506,7 +558,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         .unwrap();
         fixture.restart();
         assert_eq!(
-            fixture.ok(&["status", "multi"])["completion"]["cleanup"],
+            fixture.ok(&["status", &fixture.id("multi")])["completion"]["cleanup"],
             false
         );
     }
@@ -531,11 +583,12 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
 #[test]
 fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     let fixture = issue_fixture("github.com");
+    let issue_work_id = fixture.id("issue-work");
     let scoped = |fixture: &Fixture, args: &[&str]| {
         let mut command = vec![
             "run",
             "--workspace",
-            "issue-work",
+            &issue_work_id,
             "--",
             support::shoal_binary(),
             "--json",
@@ -547,13 +600,13 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         "acquire",
         "hold",
         "--workspace",
-        "issue-work",
+        &fixture.id("issue-work"),
         "--name",
         "review",
     ]);
     scoped(&fixture, &["done"]);
     assert_eq!(
-        fixture.ok(&["status", "issue-work"])["workspace"]["done"],
+        fixture.ok(&["status", &fixture.id("issue-work")])["workspace"]["done"],
         true
     );
     let undone = scoped(&fixture, &["done", "--undo"]);
@@ -561,21 +614,21 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     let refused = fixture.run(&[
         "run",
         "--workspace",
-        "issue-work",
+        &fixture.id("issue-work"),
         "--",
         support::shoal_binary(),
         "done",
         "--undo",
     ]);
     assert!(!refused.status.success());
-    let inspection = fixture.ok(&["status", "issue-work"]);
+    let inspection = fixture.ok(&["status", &fixture.id("issue-work")]);
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["done"], false);
     fixture.ok(&[
         "release",
         "hold",
         "--workspace",
-        "issue-work",
+        &fixture.id("issue-work"),
         "--name",
         "review",
     ]);

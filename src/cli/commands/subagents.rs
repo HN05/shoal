@@ -57,7 +57,7 @@ async fn own_workspace<'a>(ctx: &Context, workspaces: &'a [Workspace]) -> Result
     let own = ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?;
     workspaces
         .iter()
-        .find(|workspace| own.selects(&workspace.id, &workspace.name, workspace.number))
+        .find(|workspace| own.selects(&workspace.id, workspace.number))
         .context("the agent's workspace is not listed")
 }
 

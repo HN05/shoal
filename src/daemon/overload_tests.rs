@@ -684,7 +684,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
         .clone();
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             crate::state::AgentState::Idle,
             Some(id.clone()),
             None,
@@ -713,7 +713,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     manager.config_state.publish_disk_reading(Some(generation));
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,

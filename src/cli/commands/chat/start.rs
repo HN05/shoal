@@ -187,7 +187,7 @@ pub(in crate::cli::commands) async fn hosting_workspace(
     let workspace = crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
-        .find(|workspace| selector.selects(&workspace.id, &workspace.name, workspace.number))
+        .find(|workspace| selector.selects(&workspace.id, workspace.number))
         .with_context(|| format!("no space {selector}"))?;
     ensure_hosts_chat(&workspace)?;
     Ok(workspace)

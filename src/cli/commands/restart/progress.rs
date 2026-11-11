@@ -2,6 +2,7 @@
 //! its restart ends or is skipped, what goes on when it is interrupted, and
 //! with `--json` the object that lists them.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceNumber;
 use crate::client::space_names::{self, SpaceName};
 use std::collections::HashMap;
 
@@ -26,8 +27,8 @@ pub(super) struct Progress {
     /// How many agents the run reported on so far, and how many it selected.
     position: usize,
     total: usize,
-    /// The space of each agent to restart, by execution.
-    spaces: HashMap<ExecutionId, SpaceName>,
+    /// The number and name of each agent's space to restart, by execution.
+    spaces: HashMap<ExecutionId, (SpaceNumber, SpaceName)>,
 }
 
 impl Progress {
@@ -42,7 +43,8 @@ impl Progress {
                 .iter()
                 .map(|restart| {
                     let execution = restart.agent.execution.clone();
-                    (execution, restart.space.name().clone())
+                    let space = (restart.space.number(), restart.space.name().clone());
+                    (execution, space)
                 })
                 .collect(),
         }
@@ -108,7 +110,7 @@ impl Progress {
         agents: &[RunningAgent],
         agent: Option<&crate::agent::Agent>,
     ) -> Result<i32> {
-        let pending: Vec<SpaceName> = agents
+        let pending: Vec<(SpaceNumber, SpaceName)> = agents
             .iter()
             .filter(|agent| agent.restart.is_some())
             .filter_map(|agent| self.space_of(agent))
@@ -116,12 +118,13 @@ impl Progress {
         if !ctx.json {
             eprintln!("{}", interruption(&pending, agent));
         }
+        let pending = pending.into_iter().map(|(_, name)| name).collect();
         self.report(ctx, true, pending)?;
         Ok(130)
     }
 
     /// The space of `agent`, selected as the execution it runs or ran as.
-    fn space_of(&self, agent: &RunningAgent) -> Option<SpaceName> {
+    fn space_of(&self, agent: &RunningAgent) -> Option<(SpaceNumber, SpaceName)> {
         std::iter::once(&agent.execution)
             .chain(&agent.restarted_from)
             .find_map(|execution| self.spaces.get(execution).cloned())
@@ -164,17 +167,23 @@ fn restarted(
     }
 }
 
-fn interruption(pending: &[SpaceName], agent: Option<&crate::agent::Agent>) -> String {
+fn interruption(
+    pending: &[(SpaceNumber, SpaceName)],
+    agent: Option<&crate::agent::Agent>,
+) -> String {
     if pending.is_empty() {
         return "Interrupted".into();
     }
     let filter = agent
         .map(|agent| format!(" --agent {agent}"))
         .unwrap_or_default();
+    let joined = |each: fn(&(SpaceNumber, SpaceName)) -> String, separator| {
+        pending.iter().map(each).collect::<Vec<_>>().join(separator)
+    };
     format!(
         "Interrupted; the restarts of {} go on, and shoal restart {}{filter} reports on them",
-        space_names::join(pending, ", "),
-        space_names::join(pending, " ")
+        joined(|(number, name)| space_names::label(*number, name), ", "),
+        joined(|(number, _)| number.to_string(), " "),
     )
 }
 

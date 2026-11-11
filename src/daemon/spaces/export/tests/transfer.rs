@@ -85,7 +85,7 @@ async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
     assert!(
         manager
             .export_space(
-                &SpaceSelector::parse(workspace.as_str()),
+                &SpaceSelector::from(workspace.as_str()),
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,
                 file.clone(),
@@ -465,7 +465,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let file = directory.path().join("topic.shoal");
 
     let exported = manager
-        .copy_space(&SpaceSelector::from(&workspace.name), None, file.clone())
+        .copy_space(&SpaceSelector::id(&workspace.id), None, file.clone())
         .await
         .unwrap();
     assert!(exported.removal.is_none());
@@ -525,7 +525,7 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
 
     let exported = manager
         .copy_space(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Some(first.number),
             file.clone(),
         )
@@ -542,7 +542,7 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
     assert!(
         manager
             .copy_space(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 Some(99.into()),
                 directory.path().join("missing.shoal")
             )
@@ -568,7 +568,11 @@ async fn a_removed_workspace_has_nothing_to_copy() {
         .unwrap();
     let directory = tempfile::tempdir().unwrap();
     let refused = manager
-        .copy_space(&"topic".into(), None, directory.path().join("topic.shoal"))
+        .copy_space(
+            &manager.named("topic").await,
+            None,
+            directory.path().join("topic.shoal"),
+        )
         .await
         .unwrap_err();
     assert!(
@@ -587,7 +591,7 @@ async fn concurrent_imports_of_a_copy_take_branches_of_their_own() {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("topic.shoal");
     manager
-        .copy_space(&SpaceSelector::from(&workspace.name), None, file.clone())
+        .copy_space(&SpaceSelector::id(&workspace.id), None, file.clone())
         .await
         .unwrap();
     let bytes = fs::read(&file).unwrap();

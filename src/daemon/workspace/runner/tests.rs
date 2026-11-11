@@ -555,7 +555,12 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace(&"ci-rust-4".into()).await.is_err());
+    assert!(
+        manager
+            .workspace(&manager.named("ci-rust-4").await)
+            .await
+            .is_err()
+    );
     // It waits a while before admission tries it again, held by the pool.
     manager.dispatch_queue().await.unwrap();
     assert!(manager.admitted_jobs().await.unwrap().is_empty());
@@ -875,7 +880,7 @@ async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> Connecte
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::parse(workspace.as_str()),
+            workspace: SpaceSelector::from(workspace.as_str()),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -1054,7 +1059,12 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace(&"ci-rust-4".into()).await.is_err());
+    assert!(
+        manager
+            .workspace(&manager.named("ci-rust-4").await)
+            .await
+            .is_err()
+    );
     manager.agent_queue.suspend(false).await;
 }
 

@@ -211,7 +211,7 @@ impl Manager {
             ..Default::default()
         };
         self.begin_execution_placed(
-            &SpaceSelector::parse(selector),
+            &SpaceSelector::from(selector),
             wrapper,
             kind,
             caller,

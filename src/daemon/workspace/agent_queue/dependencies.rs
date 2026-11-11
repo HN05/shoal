@@ -4,7 +4,7 @@
 //! closed or is done in a workspace of the repository that links it. It
 //! builds on the branch of the done dependency that contains the others.
 use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceSelector};
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
@@ -19,7 +19,7 @@ use crate::{
     },
     forge::{ForgeRepo, account::Account},
     git,
-    model::{Dependency, Workspace},
+    model::{Dependency, SpaceKind, Workspace},
     state::{DependencyKind, QueueKind, QueueState},
 };
 
@@ -100,20 +100,24 @@ fn work(
     repository: &RepositoryId,
     selector: &str,
 ) -> Result<(DependencyKind, String)> {
-    let workspace: Option<SpaceId> = db
-        .query_row(
-            "SELECT id FROM workspaces WHERE repository_id=?1 AND (id=?2 OR name=?2)",
-            params![repository, selector],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if let Some(id) = workspace {
-        return Ok((DependencyKind::Workspace, id.into()));
+    let selected = match SpaceSelector::parse(selector) {
+        Ok(selector) => crate::daemon::spaces::selected(db, &selector)?,
+        Err(_) => None,
+    };
+    if let Some((SpaceKind::Workspace, id)) = selected {
+        let owned = crate::daemon::store::exists(
+            db,
+            "SELECT 1 FROM workspaces WHERE id=?1 AND repository_id=?2",
+            params![id, repository],
+        )?;
+        if owned {
+            return Ok((DependencyKind::Workspace, id.into()));
+        }
     }
     let launch: Option<(String, Option<String>)> = db
         .query_row(
             "SELECT id,COALESCE(workspace_id,opens_workspace_id) FROM agent_queue
-             WHERE repository_id=?1 AND kind=?3 AND (id=?2 OR name=?2) AND id IS NOT ?4",
+             WHERE repository_id=?1 AND kind=?3 AND id=?2 AND id IS NOT ?4",
             params![repository, selector, QueueKind::Launch, entry],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )

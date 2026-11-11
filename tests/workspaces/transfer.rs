@@ -25,7 +25,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
     let agent = fixture
         .command()
-        .args(["claude", "moving"])
+        .args(["claude", &fixture.id("moving")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -34,12 +34,18 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     wait_until("agent started", || path.join("agent-started").exists());
 
     let inside = path.join("moving.shoal");
-    let refused = fixture.run(&["move", "export", "moving", "-o", inside.to_str().unwrap()]);
+    let refused = fixture.run(&[
+        "move",
+        "export",
+        &fixture.id("moving"),
+        "-o",
+        inside.to_str().unwrap(),
+    ]);
     assert!(!refused.status.success());
     assert!(path.exists() && !inside.exists());
     let file = fixture.root.path().join("moving.shoal");
     let file = file.to_str().unwrap();
-    let exported = fixture.ok(&["move", "export", "moving", "-o", file]);
+    let exported = fixture.ok(&["move", "export", &fixture.id("moving"), "-o", file]);
     assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(exported["manifest"]["workspace"]["name"], "moving");
     assert!(exported["manifest"]["bundle"].as_bool().unwrap());
@@ -73,7 +79,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(record.exists());
     let resumed = fixture
         .command()
-        .args(["resume", "moving", "--focus"])
+        .args(["resume", &fixture.id("moving"), "--focus"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -102,7 +108,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     );
     let exported = fixture
         .command()
-        .args(["move", "export", "moving"])
+        .args(["move", "export", &fixture.id("moving")])
         .output()
         .unwrap();
     assert!(
@@ -170,7 +176,7 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
     .unwrap();
     let agent = fixture
         .command()
-        .args(["claude", "handed"])
+        .args(["claude", &fixture.id("handed")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -181,7 +187,13 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
     let repo = fixture.repo.to_str().unwrap();
     let export = |name: &str| {
         let file = fixture.root.path().join(name);
-        fixture.ok(&["move", "export", "handed", "-o", file.to_str().unwrap()]);
+        fixture.ok(&[
+            "move",
+            "export",
+            &fixture.id("handed"),
+            "-o",
+            file.to_str().unwrap(),
+        ]);
         file
     };
     let file = export("first.shoal");
@@ -287,7 +299,7 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     .unwrap();
     let agent = here
         .command()
-        .args(["claude", "handed"])
+        .args(["claude", &here.id("handed")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -298,15 +310,22 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
 
     // A machine ssh cannot reach removes nothing.
     let shoal = support::shoal_binary();
-    let refused = here.run(&["move", "ssh", "down", "handed", "--shoal", shoal]);
+    let refused = here.run(&["move", "ssh", "down", &here.id("handed"), "--shoal", shoal]);
     assert!(!refused.status.success());
     assert!(path.join("agent.sh").exists());
     // Neither does a Shoal ssh's PATH cannot find there.
-    let missing = here.run(&["move", "ssh", "mini", "handed", "--shoal", "missing-shoal"]);
+    let missing = here.run(&[
+        "move",
+        "ssh",
+        "mini",
+        &here.id("handed"),
+        "--shoal",
+        "missing-shoal",
+    ]);
     assert!(!missing.status.success());
     assert!(path.join("agent.sh").exists());
 
-    let moved = here.ok(&["move", "ssh", "mini", "handed", "--shoal", shoal]);
+    let moved = here.ok(&["move", "ssh", "mini", &here.id("handed"), "--shoal", shoal]);
     assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
     let imported = &moved["moved"][0];
@@ -335,8 +354,9 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
         })
         .collect();
     let shoal = support::shoal_binary();
+    let (first, second) = (here.id("first"), here.id("second"));
     let ssh = |extra: &[&'static str]| {
-        let mut args = vec!["move", "ssh", "mini", "first", "second", "--keep"];
+        let mut args = vec!["move", "ssh", "mini", &first, &second, "--keep"];
         args.extend(extra);
         args.extend(["--shoal", shoal]);
         args
@@ -393,7 +413,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         "acquire",
         "hold",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--name",
         "review",
     ]);
@@ -533,11 +553,26 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         .map(|name| PathBuf::from(fixture.add(name)["path"].as_str().unwrap()))
         .collect();
     let directory = fixture.root.path().join("exports");
-    let refused = fixture.run(&["move", "export", "first", "second", "-o", "-"]);
+    let refused = fixture.run(&[
+        "move",
+        "export",
+        &fixture.id("first"),
+        &fixture.id("second"),
+        "-o",
+        "-",
+    ]);
     assert!(!refused.status.success());
     assert!(paths.iter().all(|path| path.exists()));
     let output = directory.to_str().unwrap();
-    let exported = fixture.ok(&["move", "export", "first", "second", "-o", output, "--yes"]);
+    let exported = fixture.ok(&[
+        "move",
+        "export",
+        &fixture.id("first"),
+        &fixture.id("second"),
+        "-o",
+        output,
+        "--yes",
+    ]);
     assert_eq!(
         exported["exported"].as_array().unwrap().len(),
         2,
@@ -559,7 +594,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
     assert!(!refused.status.success(), "{refused:?}");
     assert!(rows.is_empty(), "{rows}");
     // An existing directory takes the workspaces the picker selects.
-    let third = fixture.ok(&["status", "third"])["workspace"]["id"]
+    let third = fixture.ok(&["status", &fixture.id("third")])["workspace"]["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -577,7 +612,7 @@ fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
     let temporary = fixture.root.path().join("cli-tmp");
     fs::create_dir(&temporary).unwrap();
     let exported = support::close_stdout(&mut fixture.command())
-        .args(["move", "export", "streamed", "-o", "-"])
+        .args(["move", "export", &fixture.id("streamed"), "-o", "-"])
         .env("TMPDIR", &temporary)
         .output()
         .unwrap();
@@ -603,7 +638,7 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let export = |pane: &str| {
         fixture
             .command()
-            .args(["move", "export", "tabbed", "-o", "-"])
+            .args(["move", "export", &fixture.id("tabbed"), "-o", "-"])
             .env("HERDR_ENV", "1")
             .env("HERDR_PANE_ID", pane)
             .output()
@@ -648,7 +683,13 @@ fn export_finishes_when_its_terminal_ends_after_the_removal() {
     let file = fixture.root.path().join("cut.shoal");
     let mut export = fixture
         .command()
-        .args(["move", "export", "cut", "-o", file.to_str().unwrap()])
+        .args([
+            "move",
+            "export",
+            &fixture.id("cut"),
+            "-o",
+            file.to_str().unwrap(),
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -687,7 +728,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", "carried"])
+        .args(["claude", &fixture.id("carried")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -706,7 +747,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
         assert!(output.status.success(), "{output:?}");
     };
 
-    let exported = fixture.ok(&["move", "export", "carried", "-o", file]);
+    let exported = fixture.ok(&["move", "export", &fixture.id("carried"), "-o", file]);
     // The import trusts the workspace's path for the agent it resumes there.
     let config = fixture.root.path().join(".claude.json");
     fs::remove_file(&config).unwrap();
@@ -733,7 +774,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     // --new-sessions starts the agent over on this machine too.
     fs::remove_file(path.join("resumed")).unwrap();
     fs::remove_file(file).unwrap();
-    let exported = fixture.ok(&["move", "export", "carried", "-o", file]);
+    let exported = fixture.ok(&["move", "export", &fixture.id("carried"), "-o", file]);
     assert_eq!(
         exported["manifest"]["sessions"]["last_sessions"][0]["session"], "carried-session",
         "{exported}"
@@ -760,7 +801,7 @@ fn export_carries_session_files_that_import_puts_back() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", "transcript"])
+        .args(["claude", &fixture.id("transcript")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -776,7 +817,7 @@ fn export_carries_session_files_that_import_puts_back() {
 
     let file = fixture.root.path().join("transcript.shoal");
     let file = file.to_str().unwrap();
-    let exported = fixture.ok(&["move", "export", "transcript", "-o", file]);
+    let exported = fixture.ok(&["move", "export", &fixture.id("transcript"), "-o", file]);
     let carried: Vec<_> = exported["manifest"]["session_files"]
         .as_array()
         .unwrap()
@@ -864,7 +905,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         fs::create_dir_all(&project).unwrap();
         let transcript = project.join("chat-session.jsonl");
         fs::write(&transcript, "{\"turn\":1}\n").unwrap();
-        let status = fixture.ok(&["status", "talk"]);
+        let status = fixture.ok(&["status", &fixture.id("talk")]);
         assert_eq!(
             (
                 &status["transcripts"][0]["path"],
@@ -887,10 +928,10 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
 
         // Ending a chat the user talks with needs a confirmation.
-        let unconfirmed = fixture.run(&["move", "export", "talk", "-o", file]);
+        let unconfirmed = fixture.run(&["move", "export", &fixture.id("talk"), "-o", file]);
         assert!(!unconfirmed.status.success(), "{unconfirmed:?}");
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
-        let exported = fixture.ok(&["move", "export", "talk", "-o", file, "--yes"]);
+        let exported = fixture.ok(&["move", "export", &fixture.id("talk"), "-o", file, "--yes"]);
         assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
         assert_eq!(exported["manifest"]["name"], "talk", "{exported}");
         assert_eq!(
@@ -943,7 +984,7 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude-moving", "profiled"])
+        .args(["claude-moving", &fixture.id("profiled")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -954,7 +995,7 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
 
     let file = fixture.root.path().join("profiled.shoal");
     let file = file.to_str().unwrap();
-    let exported = fixture.ok(&["move", "export", "profiled", "-o", file]);
+    let exported = fixture.ok(&["move", "export", &fixture.id("profiled"), "-o", file]);
     assert_eq!(
         exported["manifest"]["session_files"][0]["path"], "-elsewhere/profiled-session.jsonl",
         "{exported}"
@@ -995,7 +1036,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", "unplaced"])
+        .args(["claude", &fixture.id("unplaced")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -1005,7 +1046,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     fs::write(project.join("unplaced-session.jsonl"), "{}\n").unwrap();
     let file = fixture.root.path().join("unplaced.shoal");
     let file = file.to_str().unwrap();
-    fixture.ok(&["move", "export", "unplaced", "-o", file]);
+    fixture.ok(&["move", "export", &fixture.id("unplaced"), "-o", file]);
     fs::remove_dir_all(&project).unwrap();
     import_without_opening(&fixture, file, "unplaced");
 
@@ -1014,7 +1055,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     let restored = fixture
         .command()
         .env_remove("SHOAL_DEV_USER_FILES")
-        .args(["--json", "restore", "unplaced"])
+        .args(["--json", "restore", &fixture.id("unplaced")])
         .output()
         .unwrap();
     assert!(restored.status.success(), "{restored:?}");
@@ -1029,7 +1070,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
 
     // The workspace's next removal record lists them, so the next restore
     // puts them in place.
-    fixture.ok(&["rm", "--wait", "unplaced", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("unplaced"), "--yes"]);
     restore_with_user_files(&fixture, "unplaced");
     assert_eq!(
         fs::read_to_string(project.join("unplaced-session.jsonl")).unwrap(),
@@ -1074,7 +1115,7 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
     let restored = fixture
         .command()
         .env("SHOAL_DEV_USER_FILES", "1")
-        .args(["--json", "restore", workspace])
+        .args(["--json", "restore", &fixture.id(workspace)])
         .output()
         .unwrap();
     assert!(restored.status.success(), "{restored:?}");
@@ -1084,7 +1125,7 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
 fn exporting_a_parent_needs_its_children_exported_with_it() {
     let fixture = Fixture::new();
     let parent = PathBuf::from(fixture.add("parent")["path"].as_str().unwrap());
-    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let child = fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
     let child = PathBuf::from(child["path"].as_str().unwrap());
     let directory = fixture.root.path().join("exports");
     fs::create_dir(&directory).unwrap();
@@ -1095,12 +1136,19 @@ fn exporting_a_parent_needs_its_children_exported_with_it() {
         &[
             "move",
             "export",
-            "parent",
+            &fixture.id("parent"),
             "-o",
             file.to_str().unwrap(),
             "--yes",
         ][..],
-        &["move", "export", "parent", "-o", output, "--yes"],
+        &[
+            "move",
+            "export",
+            &fixture.id("parent"),
+            "-o",
+            output,
+            "--yes",
+        ],
     ] {
         let refused = fixture.run(args);
         assert!(!refused.status.success(), "{args:?}");
@@ -1108,7 +1156,15 @@ fn exporting_a_parent_needs_its_children_exported_with_it() {
     }
     // Exported together, the child comes from the checkpoint its parent's
     // removal kept, whichever goes first.
-    let exported = fixture.ok(&["move", "export", "parent", "child", "-o", output, "--yes"]);
+    let exported = fixture.ok(&[
+        "move",
+        "export",
+        &fixture.id("parent"),
+        &fixture.id("child"),
+        "-o",
+        output,
+        "--yes",
+    ]);
     assert_eq!(exported["failed"], serde_json::json!([]), "{exported}");
     for name in ["parent", "child"] {
         assert!(directory.join(format!("{name}.shoal")).exists(), "{name}");

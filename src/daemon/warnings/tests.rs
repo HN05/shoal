@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -48,7 +47,7 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
         let manager = manager.clone();
         async move {
             manager
-                .agent_messages(&SpaceSelector::parse(name))
+                .agent_messages(&manager.named(name).await)
                 .await
                 .unwrap()
                 .len()
@@ -61,9 +60,12 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
     warnings
         .warn(&manager, start, Signal::Memory, &memory(&settings))
         .await;
-    let delivered = manager.agent_messages(&"first".into()).await.unwrap();
+    let delivered = manager
+        .agent_messages(&manager.named("first").await)
+        .await
+        .unwrap();
     manager
-        .mark_agent_messages_delivered(&"first".into(), vec![delivered[0].id])
+        .mark_agent_messages_delivered(&manager.named("first").await, vec![delivered[0].id])
         .await
         .unwrap();
     // Within the interval, only an agent started since is warned again,
@@ -125,13 +127,16 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
             )
             .await;
         manager
-            .set_agent_state(&SpaceSelector::parse(name), turn, Some(id), None)
+            .set_agent_state(&manager.named(name).await, turn, Some(id), None)
             .await
             .unwrap();
         executions.push(execution);
     }
     // A tracked command runs beside the busy workspace's idle agent.
-    let busy = manager.workspace(&"busy".into()).await.unwrap();
+    let busy = manager
+        .workspace(&manager.named("busy").await)
+        .await
+        .unwrap();
     executions.push(
         manager
             .begin_execution(busy.id.as_str(), None, ExecutionKind::Command, None)
@@ -142,7 +147,7 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
         let manager = manager.clone();
         async move {
             manager
-                .unread_agent_messages(&SpaceSelector::parse(name))
+                .unread_agent_messages(&manager.named(name).await)
                 .await
                 .unwrap()
                 .wakes
@@ -156,7 +161,7 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
         .await;
     assert_eq!(
         manager
-            .agent_messages(&"resting".into())
+            .agent_messages(&manager.named("resting").await)
             .await
             .unwrap()
             .len(),
@@ -168,9 +173,12 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
     assert!(!wakes("working").await);
     assert!(wakes("busy").await);
     // An agent can free disk space without running anything.
-    let resting = manager.agent_messages(&"resting".into()).await.unwrap();
+    let resting = manager
+        .agent_messages(&manager.named("resting").await)
+        .await
+        .unwrap();
     manager
-        .mark_agent_messages_delivered(&"resting".into(), vec![resting[0].id])
+        .mark_agent_messages_delivered(&manager.named("resting").await, vec![resting[0].id])
         .await
         .unwrap();
     warnings

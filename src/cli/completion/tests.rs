@@ -105,14 +105,15 @@ async fn attach_candidates_child() -> Result<()> {
     );
     served?;
     let candidates = candidates?;
-    let names: BTreeSet<_> = candidates.iter().map(|value| value.get_value()).collect();
+    let numbers: BTreeSet<_> = candidates.iter().map(|value| value.get_value()).collect();
+    // `first`, `second`, `fourth` and the chat.
     assert_eq!(
-        names,
+        numbers,
         BTreeSet::from([
-            OsStr::new("first"),
-            OsStr::new("second"),
-            OsStr::new("fourth"),
-            OsStr::new("chat")
+            OsStr::new("1"),
+            OsStr::new("2"),
+            OsStr::new("4"),
+            OsStr::new("7")
         ])
     );
     Ok(())
@@ -184,7 +185,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             Body::Chats(vec![Chat {
                 narrowing: Default::default(),
                 mode: "chat".into(),
-                number: 1.into(),
+                number: 7.into(),
                 id: "c1".into(),
                 repository_id: Some("repo".into()),
                 name: "chat".into(),
@@ -228,7 +229,8 @@ fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
         ("w6", "sixth"),
     ]
     .into_iter()
-    .map(|(id, name)| {
+    .zip(1..)
+    .map(|((id, name), number)| {
         let mut workspace = Workspace::new_record(
             "repo".into(),
             name.into(),
@@ -237,6 +239,7 @@ fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
             WorkspaceState::Ready,
         );
         workspace.id = id.into();
+        workspace.number = number.into();
         workspace
     })
     .collect()
@@ -301,7 +304,8 @@ fn resume_completes_resumable_spaces() {
             )
         })
         .collect();
-    assert_eq!(offered, [("talk".into(), Some(STOPPED_CHAT.to_owned()))]);
+    let help = format!("talk ({STOPPED_CHAT})");
+    assert_eq!(offered, [("1".into(), Some(help))]);
 }
 
 #[test]

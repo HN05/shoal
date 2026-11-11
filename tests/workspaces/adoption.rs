@@ -35,7 +35,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     );
     let ordinary = fixture.add("ordinary");
     assert!(Path::new(ordinary["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
-    fixture.ok(&["rm", "--wait", "custom-topic", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("custom-topic"), "--yes"]);
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
@@ -121,17 +121,30 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
         fixture.repo.to_str().unwrap(),
     ]);
     assert_eq!(again["id"], w["id"]);
-    let output = fixture.run(&["run", "--workspace", "adopt-topic", "--", "cat", "tracked"]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        &fixture.id("adopt-topic"),
+        "--",
+        "cat",
+        "tracked",
+    ]);
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "work in progress\n"
     );
-    let diff = fixture.run(&["diff", "adopt-topic"]);
+    let diff = fixture.run(&["diff", &fixture.id("adopt-topic")]);
     assert!(diff.status.success());
     assert!(String::from_utf8_lossy(&diff.stdout).contains("+work in progress"));
     // Full ownership includes resource release and repository removal of this external path.
-    fixture.ok(&["acquire", "port", "test", "--workspace", "adopt-topic"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "test",
+        "--workspace",
+        &fixture.id("adopt-topic"),
+    ]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
     assert!(!path.exists());
     assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
@@ -305,7 +318,7 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
         .parent()
         .unwrap()
         .to_owned();
-    fixture.ok(&["rm", "--wait", output["name"].as_str().unwrap(), "--yes"]);
+    fixture.ok(&["rm", "--wait", output["id"].as_str().unwrap(), "--yes"]);
     let source = add("copy/second", "second worktree");
     fs::remove_dir_all(&directory).unwrap();
     std::os::unix::fs::symlink(&source, &directory).unwrap();

@@ -258,25 +258,25 @@ impl Manager {
     }
 
     /// The files attached to the workspace or chat `selector` names, or
-    /// kept for a removed space of that name, oldest first.
+    /// kept for the removed space of that ID, oldest first.
     pub async fn attached_files(&self, selector: &SpaceSelector) -> Result<Vec<AttachedFile>> {
         let space = self.file_space(selector).await?;
         self.store.run(move |db| records::list(db, &space.id)).await
     }
 
-    /// The workspace or chat `selector` names, or else the latest removed
-    /// space of that name or ID whose files are kept.
+    /// The workspace or chat `selector` names, or else the removed space of
+    /// that ID whose files are kept.
     pub(crate) async fn file_space(&self, selector: &SpaceSelector) -> Result<Space> {
         let error = match self.space(selector).await {
             Ok(space) => return Ok(space.into()),
             Err(error) => error,
         };
-        let Some(selector) = selector.id_or_name().map(str::to_owned) else {
+        let Some(id) = selector.given_id().cloned() else {
             return Err(error);
         };
         let gone = self
             .store
-            .run(move |db| records::gone_space(db, &selector))
+            .run(move |db| records::gone_space(db, &id))
             .await?;
         gone.ok_or(error)
     }

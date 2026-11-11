@@ -256,7 +256,7 @@ impl Manager {
             NotificationKind::RecoveryBlocked,
             format!(
                 "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal resume {} --execution {}",
-                record.agent, execution.id, workspace.name, workspace.name, execution.id
+                record.agent, execution.id, workspace.number, workspace.number, execution.id
             ),
         )
         .await;

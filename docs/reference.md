@@ -776,9 +776,12 @@ Every space, a workspace or a [chat](#chats), has a number no other space
 holds, the smallest free when it is created; it stays through renames and
 stops, and a later space may take it once the space is removed. `shoal status`
 shows it, and `--json` gives it as `number`. Every argument that takes a space
-selects it by that number, its name or its ID, so `shoal attach 3` and
-`--space 3` name space 3; a removed workspace has no number and is named by
-name or ID. `--after` is the one argument where a bare number names an issue
+selects it by that number or its ID, so `shoal attach 3` and `--space 3` name
+space 3, and `-` selects the space the command last acted on; other text is
+refused with "a space is selected by its number or ID". A name never selects
+a space, so names may repeat. A removed workspace has no number and is
+selected by its ID. Without a space, a terminal opens a picker that shows the
+names. `--after` is the one argument where a bare number names an issue
 instead.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
@@ -1889,7 +1892,7 @@ below the chat and in its repository, renames only its own chat, decides the req
 routed to it only with a grant, and opens issues only where its
 [permissions](#mode-permissions) let it open them directly. Merging, branch deletion, PR verdicts, CI
 approval, your notifications and administration stay with you. `--parent`
-names the space the chat goes below, by name, ID or number; a workspace's or a
+names the space the chat goes below, by number or ID; a workspace's or a
 chat's agent that starts a chat starts it below its own space, or below one
 under it that `--parent` names, in the background, and returns once the chat
 holds its own scope, or with the error that stopped it. Such an agent's
@@ -2215,8 +2218,8 @@ and leaves the agent stopped. Stopping the workspace or marking its assignment
 done cancels a pending one, and resuming or discarding the agent another way
 removes it.
 
-`--after` names work the launch waits for: a workspace or queued agent of the
-repository by name or ID, or an issue number or URL, so a bare number is an
+`--after` names work the launch waits for: a workspace of the repository by
+ID, a queued agent by its entry's ID, or an issue number or URL, so a bare number is an
 issue; repeat it for more. An issue launch also
 waits for the open issues its forge records as blocking it: Forgejo and GitHub
 issue dependencies and GitLab "is blocked by" links; when the forge cannot list
@@ -2260,9 +2263,8 @@ processes have not stopped yet. With `--attach` on a terminal it then waits, up
 to ten minutes since setup comes first, for the session the agent runs in and
 attaches to it as `shoal attach` does. `queue cancel` removes a waiting entry: a
 cancelled restore stops the waiting wrapper as `shoal stop` does and leaves the
-agent for `shoal resume`. `shoal rm` also removes a waiting launch by name or
-ID, and only by ID when a workspace has the same name; a starting entry belongs
-to its workspace. `queue move` moves a waiting entry to a 1-based position, or
+agent for `shoal resume`. `shoal rm` also removes a waiting launch by its ID;
+a starting entry belongs to its workspace. `queue move` moves a waiting entry to a 1-based position, or
 `last`; without a position on a terminal it picks the entry to place it in
 front of, or the last place. The order lasts across daemon restarts. Moving a
 workspace whose agent runs stops the agent as `shoal restart` does and places
@@ -2623,7 +2625,7 @@ records that workspace as the new workspace's base workspace.
 
 ```sh
 shoal branch base                        # Show the current workspace's base workspace
-shoal branch base set feature-a          # Record it by workspace number, name or branch
+shoal branch base set feature-a          # Record it by workspace number, ID or branch
 shoal branch base clear                  # Remove it
 shoal branch base set feature-a --workspace feature-b
 ```
@@ -3793,7 +3795,7 @@ restore their own workspace's checkpoints.
 workspaces or of an existing workspace's checkpoints and restore the one picked;
 without a terminal, or with `--json`, they list them instead, each removed
 workspace with the number of its removal's checkpoint. When
-`<workspace>` names a removed one, it opens the newest removed workspace with that name or ID on its branch and recorded base, which restores its stack link while the base
+`<workspace>` is a removed one's ID, it opens that removed workspace on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
@@ -5245,7 +5247,7 @@ attached files. With `--json` each line is the entry as
 [`shoal internal events`](#workspace-events) prints it.
 
 A removed space's log stays for `cleanup.restore.retention_days` after its
-removal and is named by the space's last name, as `shoal files` names it; a
+removal and is selected by the space's ID, as `shoal files` selects it; a
 restored workspace's log goes on from the removed one's. A space keeps its
 newest 500 agent turn states, progress changes and forge activity other than
 an item's closing, merging and reopening, so a busy space cannot push out another's
@@ -5539,12 +5541,12 @@ directory's `.attachments`, or for a chat without a repository that of the
 Results, and the files sent with alerts and
 questions, outlive the workspace: they stay for as
 long as its removal record, `cleanup.restore.retention_days` like its
-[checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
+[checkpoints](#checkpoints-and-restore), and `shoal files <id>` still lists
 them, with when they go, and deletes them with `rm`. A chat's files outlive
 the chat the same way: they stay for `cleanup.restore.retention_days` after it
-is removed, listed under its last name. Disk space cleanup
+is removed, listed under its ID. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
-the workspace's or chat's number, name or ID, a removed one's by name or ID; run from a chat's agent outside any workspace, `shoal files`, `add`
+the workspace's or chat's number or ID, a removed one's by ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.
 `--json` gives each as a record with `workspace` or `chat`, the name of what it
 is attached to, `source`, `path`, `bytes`, `title` when it has one, and

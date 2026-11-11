@@ -6,6 +6,7 @@ use crate::time::UnixTime;
 fn spaces() -> Spaces {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({
         "id": "w1",
+        "number": 3,
         "repository_id": "repo",
         "name": "worker",
         "path": "/worker",
@@ -13,10 +14,10 @@ fn spaces() -> Spaces {
         "state": "ready",
     }))
     .unwrap();
-    let chat = |id: &str, name: &str, restore| Chat {
+    let chat = |id: &str, number: u32, name: &str, restore| Chat {
         narrowing: Default::default(),
         mode: "chat".into(),
-        number: 1.into(),
+        number: number.into(),
         id: id.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
@@ -41,8 +42,8 @@ fn spaces() -> Spaces {
     Spaces {
         workspaces: vec![workspace],
         chats: vec![
-            chat("c1", "running", None),
-            chat("c2", "talk", Some(crate::state::ChatRestore::Resume)),
+            chat("c1", 1, "running", None),
+            chat("c2", 2, "talk", Some(crate::state::ChatRestore::Resume)),
         ],
     }
 }
@@ -50,23 +51,20 @@ fn spaces() -> Spaces {
 #[test]
 fn a_target_resolves_to_a_saved_chat_or_a_workspace() {
     let spaces = spaces();
-    let resolved = |selector: &str| resolve(&spaces, SpaceSelector::parse(selector)).unwrap();
+    let resolved = |selector: &str| resolve(&spaces, SpaceSelector::from(selector)).unwrap();
     assert_eq!(
-        resolved("worker"),
+        resolved("3"),
         Target::Workspace(SpaceSelector::id(&"w1".into()))
     );
-    assert!(matches!(resolved("talk"), Target::Chat(chat) if chat.id == "c2"));
     assert!(matches!(resolved("c2"), Target::Chat(chat) if chat.name == "talk"));
-    // A name no space has stays for the daemon to refuse.
+    // A selector no space answers stays for the daemon to refuse.
     assert_eq!(resolved("missing"), Target::Workspace("missing".into()));
-    assert!(resolve(&spaces, "running".into()).is_err());
+    assert!(resolve(&spaces, "c1".into()).is_err());
 }
 
 #[test]
 fn a_space_named_twice_is_selected_once() {
-    let selectors = ["talk", "worker", "c2", "w1"]
-        .map(SpaceSelector::parse)
-        .to_vec();
+    let selectors = ["c2", "3", "2", "w1"].map(SpaceSelector::from).to_vec();
     let selected = Selected::resolved(&spaces(), selectors).unwrap();
     assert_eq!(selected.chats.len(), 1);
     assert_eq!(

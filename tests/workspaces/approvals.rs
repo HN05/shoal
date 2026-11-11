@@ -25,7 +25,7 @@ fn execution_scope_limits_management_and_expires() {
     let scoped = |args: &[&str]| {
         fixture
             .command()
-            .args(["run", "--workspace", "worker", "--", binary])
+            .args(["run", "--workspace", &fixture.id("worker"), "--", binary])
             .args(args)
             .output()
             .unwrap()
@@ -52,7 +52,7 @@ fn execution_scope_limits_management_and_expires() {
         .args([
             "run",
             "--workspace",
-            "worker",
+            &fixture.id("worker"),
             "--",
             "sh",
             "-c",
@@ -61,16 +61,16 @@ fn execution_scope_limits_management_and_expires() {
         .spawn()
         .unwrap();
     wait_until("sibling execution", || sibling_started.exists());
-    let output = scoped(&["setup", "worker"]);
+    let output = scoped(&["setup", &fixture.id("worker")]);
     assert!(!output.status.success(), "{output:?}");
-    fixture.ok(&["stop", "worker"]);
+    fixture.ok(&["stop", &fixture.id("worker")]);
     assert!(!sibling.wait().unwrap().success());
     // An agent's output default does not reach the hook its setup runs.
     let output = fixture
         .command()
         .env("SHOAL_OUTPUT", "json")
-        .args(["run", "--workspace", "worker", "--", binary])
-        .args(["setup", "worker"])
+        .args(["run", "--workspace", &fixture.id("worker"), "--", binary])
+        .args(["setup", &fixture.id("worker")])
         .output()
         .unwrap();
     assert!(
@@ -87,7 +87,7 @@ fn execution_scope_limits_management_and_expires() {
         "hookhook"
     );
     assert_eq!(
-        fixture.ok(&["status", "worker"])["executions"],
+        fixture.ok(&["status", &fixture.id("worker")])["executions"],
         serde_json::json!([]),
         "hook survivors must not belong to the invoking execution"
     );
@@ -95,7 +95,7 @@ fn execution_scope_limits_management_and_expires() {
         scoped(&[
             "run",
             "--workspace",
-            "worker",
+            &fixture.id("worker"),
             "--",
             binary,
             "leases",
@@ -105,16 +105,23 @@ fn execution_scope_limits_management_and_expires() {
         .success()
     );
     for args in [
-        vec!["rm", "--wait", "worker", "--yes"],
-        vec!["stop", "worker"],
-        vec!["status", "other"],
-        vec!["run", "--workspace", "other", "--", "true"],
-        vec!["setup", "other"],
-        vec!["link", "pr", "42", "assigned", "--space", "other"],
-        vec!["unlink", "pr", "assigned", "--space", "other"],
-        vec!["done", "--undo", "other"],
-        vec!["done", "other", "--cleanup"],
-        vec!["config", "show", "other"],
+        vec!["rm", "--wait", &fixture.id("worker"), "--yes"],
+        vec!["stop", &fixture.id("worker")],
+        vec!["status", &fixture.id("other")],
+        vec!["run", "--workspace", &fixture.id("other"), "--", "true"],
+        vec!["setup", &fixture.id("other")],
+        vec![
+            "link",
+            "pr",
+            "42",
+            "assigned",
+            "--space",
+            &fixture.id("other"),
+        ],
+        vec!["unlink", "pr", "assigned", "--space", &fixture.id("other")],
+        vec!["done", "--undo", &fixture.id("other")],
+        vec!["done", &fixture.id("other"), "--cleanup"],
+        vec!["config", "show", &fixture.id("other")],
         vec![
             "config",
             "set",
@@ -130,7 +137,13 @@ fn execution_scope_limits_management_and_expires() {
             "--repo",
             fixture.repo.to_str().unwrap(),
         ],
-        vec!["acquire", "port", "web", "--workspace", "other"],
+        vec![
+            "acquire",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("other"),
+        ],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
         vec!["daemon", "stop"],
@@ -144,7 +157,7 @@ fn execution_scope_limits_management_and_expires() {
     let token = fixture.run(&[
         "run",
         "--workspace",
-        "worker",
+        &fixture.id("worker"),
         "--",
         "sh",
         "-c",
@@ -179,7 +192,7 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         "--recommend",
         "SQLite",
         "--space",
-        "agent",
+        &fixture.id("agent"),
     ]);
     install_test_script(fixture.root.path().join("bin/fzf"), "#!/bin/sh\nexit 77\n");
     for args in [
@@ -404,7 +417,7 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
         "--choice",
         "Postgres",
         "--space",
-        "asker",
+        &fixture.id("asker"),
     ]);
     let id = question["number"].as_str().unwrap().to_owned();
     assert_eq!(fixture.ok(&["questions", &id])["answer"], Value::Null);
@@ -418,6 +431,7 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
 fn question_prompt_accepts_the_recommendation_with_enter() {
     let fixture = Fixture::new();
     fixture.add("asker");
+    let asker_id = fixture.id("asker");
     for (recommendation, choices, input, expected) in [
         ("SQLite", vec![], "\n", "SQLite"),
         ("2", vec!["2", "4"], "\n", "2"),
@@ -433,7 +447,7 @@ fn question_prompt_accepts_the_recommendation_with_enter() {
             "--recommend",
             recommendation,
             "--space",
-            "asker",
+            &asker_id,
         ];
         for choice in choices {
             args.extend(["--choice", choice]);
@@ -557,13 +571,13 @@ fn release_cancels_pending_requests_without_leases() {
         "--name",
         "default",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
     ]);
     assert_eq!(
         released["released"],
         serde_json::json!([{"kind": "resource", "pool": "signing", "name": "default"}])
     );
-    let released = fixture.ok(&["release", "--workspace", "agent"]);
+    let released = fixture.ok(&["release", "--workspace", &fixture.id("agent")]);
     assert_eq!(
         released["released"],
         serde_json::json!([{"kind": "port", "name": "web"}, {"kind": "secret", "name": "TOKEN"}])
@@ -589,12 +603,12 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     let id = id.as_str();
     assert_eq!(pending["space"], "agent");
     assert_eq!(
-        fixture.ok(&["catalog", "resource", "--workspace", "agent"])["pools"][0]["resources"]["signing"]
-            ["requires_approval"],
+        fixture.ok(&["catalog", "resource", "--workspace", &fixture.id("agent")])["pools"][0]["resources"]
+            ["signing"]["requires_approval"],
         true
     );
     assert!(
-        fixture.ok(&["leases", "resource", "--workspace", "agent"])["pools"][0]["resources"][0]
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("agent")])["pools"][0]["resources"][0]
             .get("requires_approval")
             .is_none()
     );
@@ -604,7 +618,7 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     );
     assert_eq!(fixture.ok(&["approvals"])[0]["number"], pending["number"]);
     assert!(
-        fixture.ok(&["leases", "resource", "--workspace", "agent"])["leases"]
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("agent")])["leases"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -620,14 +634,24 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
             .success()
     );
     assert!(
-        !scoped_command(&fixture, "human", &["approvals", "--space", "agent"])
-            .status
-            .success()
+        !scoped_command(
+            &fixture,
+            "human",
+            &["approvals", "--space", &fixture.id("agent")]
+        )
+        .status
+        .success()
     );
     let other: Value =
         serde_json::from_slice(&scoped_command(&fixture, "human", &["approvals"]).stdout).unwrap();
     assert!(other.as_array().unwrap().is_empty());
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "human"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("human"),
+    ]);
     fixture.ok(&["approvals", "--approve", id]);
     fixture.restart();
     let busy: Value =
@@ -638,7 +662,7 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
         "resource",
         "signing",
         "--workspace",
-        "human",
+        &fixture.id("human"),
         "--name",
         "default",
     ]);
@@ -665,7 +689,7 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
         "resource",
         "signing",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
         "--name",
         "default",
     ]);
@@ -686,7 +710,7 @@ fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
         "resource",
         "devices",
         "--workspace",
-        "human",
+        &fixture.id("human"),
         "--member",
         "alpha",
     ]);
@@ -697,7 +721,7 @@ fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
     assert_eq!(pending["specification"]["member"], "alpha");
     assert_eq!(pending["specification"]["mode"], "permit");
     assert_eq!(fixture.ok(&["approvals"])[0], pending);
-    let overview = fixture.ok(&["leases", "resource", "--workspace", "agent"]);
+    let overview = fixture.ok(&["leases", "resource", "--workspace", &fixture.id("agent")]);
     assert_eq!(overview["pools"][0]["used"], 1);
     assert_eq!(overview["leases"], serde_json::json!([]));
     fixture.ok(&["approvals", "--approve", id]);
@@ -716,7 +740,7 @@ fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
         "resource",
         "devices",
         "--workspace",
-        "human",
+        &fixture.id("human"),
         "--name",
         "default",
     ]);
@@ -725,7 +749,7 @@ fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
     let lease: Value = serde_json::from_slice(&acquired.stdout).unwrap();
     assert_eq!(lease["resource"], "alpha");
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "agent"])["pools"][0]["used"],
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("agent")])["pools"][0]["used"],
         1
     );
 }
@@ -757,7 +781,7 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
         "resource",
         "cache",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
         "--name",
         "default",
     ]);
@@ -768,7 +792,7 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
         "resource",
         "cache",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
         "--name",
         "default",
     ]);
@@ -786,7 +810,7 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
         ],
     ));
     assert_ne!(write["number"], pending["number"]);
-    fixture.ok(&["rm", "--wait", "agent", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("agent"), "--yes"]);
     assert!(fixture.ok(&["approvals"]).as_array().unwrap().is_empty());
 }
 
@@ -802,7 +826,7 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
         let args = ["acquire", "port", "web", "--reason", "serve preview"];
         let pending = pending_approval(scoped_command(&fixture, "agent", &args));
         assert!(
-            fixture.ok(&["leases", "port", "--workspace", "agent"])["reserved"]
+            fixture.ok(&["leases", "port", "--workspace", &fixture.id("agent")])["reserved"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -829,7 +853,13 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
         );
         fixture.restart();
         assert!(scoped_command(&fixture, "agent", &args).status.success());
-        fixture.ok(&["release", "port", "web", "--workspace", "agent"]);
+        fixture.ok(&[
+            "release",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("agent"),
+        ]);
         let next = scoped_command(&fixture, "agent", &args);
         if lifetime == "workspace" {
             assert!(
@@ -840,7 +870,13 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
         } else {
             assert_eq!(pending_approval(next)["status"], "pending");
         }
-        fixture.ok(&["release", "port", "web", "--workspace", "agent"]);
+        fixture.ok(&[
+            "release",
+            "port",
+            "web",
+            "--workspace",
+            &fixture.id("agent"),
+        ]);
     }
 }
 
@@ -889,7 +925,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "--name",
         "default",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
     ]);
     fixture.restart();
     assert!(
@@ -903,7 +939,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "--name",
         "default",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
     ]);
     let clean = pending_approval(scoped_command(
         &fixture,
@@ -928,7 +964,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "--name",
         "default",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
     ]);
     let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
     assert!(!events.contains("\"erase\""));
@@ -937,7 +973,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         .args([
             "run",
             "--workspace",
-            "agent",
+            &fixture.id("agent"),
             "--",
             support::shoal_binary(),
             "--json",
@@ -968,7 +1004,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let history = fixture.ok(&["history", "sim", "--workspace", "agent"]);
+    let history = fixture.ok(&["history", "sim", "--workspace", &fixture.id("agent")]);
     assert_eq!(history[0]["status"], "acquired");
     assert_eq!(
         history
@@ -1009,7 +1045,7 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
         "--name",
         "default",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
     ]);
     assert_eq!(
         pending_approval(scoped_command(&fixture, "agent", &args))["status"],
@@ -1021,7 +1057,7 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
         "--name",
         "default",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
     ]);
 }
 
@@ -1034,7 +1070,7 @@ fn exported_scopes_request_simulator_approval_before_mutations() {
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("external");
-    let exported = fixture.ok(&["internal", "env", "external"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("external")]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported).unwrap();
     let acquire = |args: &[&str]| {
@@ -1055,7 +1091,7 @@ fn exported_scopes_request_simulator_approval_before_mutations() {
         "--name",
         "default",
         "--workspace",
-        "external",
+        &fixture.id("external"),
     ]);
     let clean = pending_approval(acquire(&["--clean", "--reason", "isolate app state"]));
     assert_eq!(clean["specification"]["clean"], true);
@@ -1104,7 +1140,7 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     let output = scoped_command(&fixture, "agent", &args);
     assert!(!output.status.success(), "{output:?}");
     assert!(
-        fixture.ok(&["leases", "resource", "--workspace", "agent"])["leases"]
+        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("agent")])["leases"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -1138,7 +1174,7 @@ fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
         "resource",
         "signing",
         "--workspace",
-        "agent",
+        &fixture.id("agent"),
         "--name",
         "default",
     ]);
@@ -1157,17 +1193,23 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let workspace = fixture.add("external");
     fixture.add("other");
-    let web = fixture.ok(&["acquire", "port", "web", "--workspace", "external"]);
+    let web = fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("external"),
+    ]);
     let api = fixture.ok(&[
         "acquire",
         "port",
         "api",
         "--workspace",
-        "external",
+        &fixture.id("external"),
         "--env",
         "API_PORT",
     ]);
-    let exported = fixture.ok(&["internal", "env", "external"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("external")]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported.clone()).unwrap();
     assert_eq!(exported["SHOAL_WORKSPACE_ID"], workspace["id"]);
@@ -1195,7 +1237,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         format!("{}|{}", web["port"], api["port"])
     );
     assert!(
-        fixture.ok(&["status", "external"])["executions"]
+        fixture.ok(&["status", &fixture.id("external")])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -1222,15 +1264,15 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     // its own.
     let below = scoped(&["start", fixture.repo.to_str().unwrap(), "below"]);
     assert!(below.status.success(), "{below:?}");
-    let below = fixture.ok(&["status", "below"]);
+    let below = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
     for args in [
-        vec!["rm", "--wait", "external", "--yes"],
-        vec!["rm", "--wait", "other", "--yes"],
+        vec!["rm", "--wait", &fixture.id("external"), "--yes"],
+        vec!["rm", "--wait", &fixture.id("other"), "--yes"],
         vec!["alerts"],
-        vec!["status", "other"],
+        vec!["status", &fixture.id("other")],
         vec!["internal", "env"],
-        vec!["internal", "env", "other"],
+        vec!["internal", "env", &fixture.id("other")],
         vec![
             "internal",
             "env",
@@ -1246,7 +1288,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let output = fixture
         .command()
         .envs(&values)
-        .args(["status", "external"])
+        .args(["status", &fixture.id("external")])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -1257,23 +1299,35 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     let fixture = Fixture::new();
     let workspace = fixture.add("external");
     fixture.add("other");
-    let first = fixture.ok(&["internal", "env", "external"]);
-    let second = fixture.ok(&["internal", "env", "external"]);
+    let first = fixture.ok(&["internal", "env", &fixture.id("external")]);
+    let second = fixture.ok(&["internal", "env", &fixture.id("external")]);
     let first_token = first["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let second_token = second["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let inspect = |token: &str| {
         fixture
             .command()
             .env("SHOAL_SCOPE_TOKEN", token)
-            .args(["status", "external"])
+            .args(["status", &fixture.id("external")])
             .output()
             .unwrap()
     };
-    let wrong_owner = fixture.run(&["internal", "env", "other", "--revoke", first_token]);
+    let wrong_owner = fixture.run(&[
+        "internal",
+        "env",
+        &fixture.id("other"),
+        "--revoke",
+        first_token,
+    ]);
     assert!(!wrong_owner.status.success());
     assert!(inspect(first_token).status.success());
     assert_eq!(
-        fixture.ok(&["internal", "env", "external", "--revoke", first_token])["revoked"],
+        fixture.ok(&[
+            "internal",
+            "env",
+            &fixture.id("external"),
+            "--revoke",
+            first_token
+        ])["revoked"],
         true
     );
     let revoked = inspect(first_token);
@@ -1284,15 +1338,22 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
         "preserve\n",
     )
     .unwrap();
-    assert!(!fixture.run(&["rm", "--wait", "external"]).status.success());
+    assert!(
+        !fixture
+            .run(&["rm", "--wait", &fixture.id("external")])
+            .status
+            .success()
+    );
     assert!(inspect(second_token).status.success());
-    fixture.ok(&["rm", "--wait", "external", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("external"), "--yes"]);
     let removed = inspect(second_token);
     assert!(!removed.status.success());
     // The branch had no commits, so removal deleted it too.
     fixture.ok(&["start", fixture.repo.to_str().unwrap(), "external"]);
     assert!(!inspect(second_token).status.success());
-    assert!(fixture.ok(&["internal", "env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
+    assert!(
+        fixture.ok(&["internal", "env", &fixture.id("external")])["SHOAL_SCOPE_TOKEN"].is_string()
+    );
 }
 
 #[test]
@@ -1363,7 +1424,7 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
             format!("url.shoal::{remote}.pushInsteadOf"),
         )
         .env("GIT_CONFIG_VALUE_0", remote)
-        .args(["run", "--workspace", "pusher", "--"])
+        .args(["run", "--workspace", &fixture.id("pusher"), "--"])
         .args([
             "git",
             "push",

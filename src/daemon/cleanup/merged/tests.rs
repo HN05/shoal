@@ -263,7 +263,11 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     assert_eq!(agent.execution, "saved");
     assert_eq!(agent.record, saved);
 
-    let restored = f.manager.restore_workspace(&"topic".into()).await.unwrap();
+    let restored = f
+        .manager
+        .restore_workspace(&f.manager.named("topic").await)
+        .await
+        .unwrap();
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
     let workspace = restored.opened.workspace;
     assert_eq!(

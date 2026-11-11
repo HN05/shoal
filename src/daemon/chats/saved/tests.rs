@@ -84,7 +84,12 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
     let saved = manager.chats().await.unwrap();
     assert_eq!(saved.len(), 1);
     assert_eq!(saved[0].restore, Some(ChatRestore::Automatic));
-    assert!(manager.running_chat(&"talk".into()).await.is_err());
+    assert!(
+        manager
+            .running_chat(&manager.named("talk").await)
+            .await
+            .is_err()
+    );
     assert_eq!(
         manager
             .workspace_by_id(&workspace.id)
@@ -147,7 +152,10 @@ async fn a_removed_saved_chat_ends() {
     let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
 
     manager.save_chats(ChatRestore::Resume).await;
-    let removed = manager.remove_chat(&"talk".into(), None).await.unwrap();
+    let removed = manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap();
 
     assert_eq!(removed.chat.id, chat.id);
     assert!(manager.chats().await.unwrap().is_empty());
@@ -318,7 +326,12 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     assert_eq!(saved.pid, chat.pid);
     // Nor is it removed, which would delete the files its agent uses, and
     // the workspace below it stays too.
-    assert!(manager.remove_chat(&"talk".into(), None).await.is_err());
+    assert!(
+        manager
+            .remove_chat(&manager.named("talk").await, None)
+            .await
+            .is_err()
+    );
     assert!(chat.tmp_dir.unwrap().exists());
     assert!(manager.workspace_by_id(&opened.id).await.is_ok());
 }
@@ -485,7 +498,10 @@ async fn a_survivor_in_the_chats_process_group_holds_it_saved() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains(&child.to_string()), "{error:#}");
-    let error = manager.remove_chat(&"talk".into(), None).await.unwrap_err();
+    let error = manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains(&child.to_string()), "{error:#}");
     assert!(chat.tmp_dir.unwrap().exists());
     drop(group);
@@ -573,7 +589,10 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
     leader.wait().unwrap();
 
-    let error = manager.remove_chat(&"talk".into(), None).await.unwrap_err();
+    let error = manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains(&child.to_string()), "{error:#}");
     assert!(chat.tmp_dir.unwrap().exists());
     drop(escaped);
@@ -660,7 +679,7 @@ async fn a_saved_chat_keeps_its_files_listed() {
     std::fs::write(&notes, "kept").unwrap();
     manager
         .add_attached_files(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             vec![notes.into()],
             &crate::daemon::workspace_files::Attacher::User,
         )
@@ -669,7 +688,10 @@ async fn a_saved_chat_keeps_its_files_listed() {
     manager.save_chats(ChatRestore::Resume).await;
     process.wait().unwrap();
 
-    let files = manager.attached_files(&"talk".into()).await.unwrap();
+    let files = manager
+        .attached_files(&manager.named("talk").await)
+        .await
+        .unwrap();
 
     assert_eq!(files.len(), 1);
     assert_eq!(files[0].name, "notes.md");
@@ -918,13 +940,19 @@ wait
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
     leader.wait().unwrap();
 
-    let error = manager.remove_chat(&"talk".into(), None).await.unwrap_err();
+    let error = manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap_err();
     assert!(
         error.to_string().contains(&descendant.to_string()),
         "{error:#}"
     );
     manager.stop_saved(&chat.id, &agent).await.unwrap();
-    manager.remove_chat(&"talk".into(), None).await.unwrap();
+    manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap();
     assert!(!chat.tmp_dir.unwrap().exists());
     drop(escaped);
     drop(group);
@@ -985,23 +1013,13 @@ async fn a_chat_a_removal_holds_takes_no_question() {
     let attacher = crate::daemon::workspace_files::Attacher::User;
     let reservation = manager.chat_removals.reserve(&chat.id).unwrap();
     manager
-        .ask_question(
-            &SpaceSelector::from(&chat.name),
-            ask(),
-            Vec::new(),
-            &attacher,
-        )
+        .ask_question(&SpaceSelector::id(&chat.id), ask(), Vec::new(), &attacher)
         .await
         .unwrap_err();
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     drop(reservation);
     manager
-        .ask_question(
-            &SpaceSelector::from(&chat.name),
-            ask(),
-            Vec::new(),
-            &attacher,
-        )
+        .ask_question(&SpaceSelector::id(&chat.id), ask(), Vec::new(), &attacher)
         .await
         .unwrap();
 }
@@ -1106,7 +1124,10 @@ async fn a_survivor_that_left_the_group_of_an_exited_agent_holds_the_chat() {
             .is_some()
     );
 
-    let error = manager.remove_chat(&"talk".into(), None).await.unwrap_err();
+    let error = manager
+        .remove_chat(&manager.named("talk").await, None)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains(&child.to_string()), "{error:#}");
     assert!(chat.tmp_dir.unwrap().exists());
     drop(escaped);

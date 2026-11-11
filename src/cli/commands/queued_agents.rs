@@ -183,9 +183,8 @@ pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<St
     ))
 }
 
-/// Remove `selector` from the queue when it names a waiting launch; `None`
-/// leaves it to workspace removal, which a starting entry belongs to. A name
-/// shared with a workspace or a chat is refused rather than guessed.
+/// Remove `selector` from the queue when it is a waiting launch's ID; `None`
+/// leaves it to workspace removal, which a starting entry belongs to.
 pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>> {
     remove_waiting(ctx, selector, |_| true).await
 }
@@ -204,26 +203,14 @@ async fn remove_waiting(
     selector: &str,
     takes: impl Fn(&QueueEntry) -> bool,
 ) -> Result<Option<i32>> {
-    let Some(entry) = entries(ctx).await?.into_iter().find(|entry| {
+    let found = entries(ctx).await?.into_iter().any(|entry| {
         entry.kind == QueueKind::Launch
             && entry.state == QueueState::Queued
-            && (entry.id == selector || entry.name == selector)
-            && takes(entry)
-    }) else {
+            && entry.id == selector
+            && takes(&entry)
+    });
+    if !found {
         return Ok(None);
-    };
-    if entry.id != selector
-        && let Some(space) = crate::client::workspaces::spaces(&ctx.paths)
-            .await?
-            .find(&SpaceSelector::parse(selector))
-    {
-        anyhow::bail!(
-            "{selector} names both a {} and a queued agent; pass the {} ID {} or the queued agent's ID {}",
-            space.kind(),
-            space.kind(),
-            space.id(),
-            entry.id
-        );
     }
     let entry = queue::remove(&ctx.paths, selector.to_owned()).await?;
     ctx.emit(

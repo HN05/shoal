@@ -12,10 +12,11 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
     fixture.add("first");
     let shoal = support::shoal_binary();
     // Completion for setup, run inside `first` through `depth` nested execs.
+    let first_id = fixture.id("first");
     let complete = |depth: usize| {
         let mut words = vec![];
         for _ in 0..depth {
-            words.extend([shoal, "run", "--workspace", "first", "--"]);
+            words.extend([shoal, "run", "--workspace", &first_id, "--"]);
         }
         words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=2"]);
         words.extend([shoal, "--", "shoal", "setup", ""]);
@@ -23,11 +24,14 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
         assert!(output.status.success(), "{output:?}");
         String::from_utf8(output.stdout).unwrap()
     };
+    // Spaces complete by number, described by their name.
     let own = complete(1);
-    assert!(own.lines().any(|line| line == "first"), "{own}");
+    assert!(own.lines().any(|line| line == "1:first"), "{own}");
     let nested = complete(2);
     assert!(
-        nested.lines().any(|line| line == "first:running"),
+        nested
+            .lines()
+            .any(|line| line.starts_with("1:first") && line.ends_with("running")),
         "{nested}"
     );
 }
@@ -38,13 +42,19 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     let first = fixture.add("first");
     fixture.add("second");
-    fixture.ok(&["acquire", "port", "web", "--workspace", "first"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("first"),
+    ]);
     fixture.ok(&[
         "acquire",
         "resource",
         "devices",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--name",
         "tests",
     ]);
@@ -82,16 +92,17 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    assert!(complete(&["status", "fi"], fixture.root.path()).contains(&"first".into()));
+    // Spaces complete by number.
+    assert!(complete(&["status", ""], fixture.root.path()).contains(&"1".into()));
     // A command taking several workspaces offers each one once.
-    let choices = complete(&["rm", "--wait", "first", ""], fixture.root.path());
-    assert!(choices.contains(&"second".into()), "{choices:?}");
-    assert!(!choices.contains(&"first".into()), "{choices:?}");
+    let choices = complete(&["rm", "--wait", "1", ""], fixture.root.path());
+    assert!(choices.contains(&"2".into()), "{choices:?}");
+    assert!(!choices.contains(&"1".into()), "{choices:?}");
     for words in [
-        vec!["run", "--workspace", "fi"],
-        vec!["link", "pr", "42", "assigned", "--space", "fi"],
+        vec!["run", "--workspace", ""],
+        vec!["link", "pr", "42", "assigned", "--space", ""],
     ] {
-        assert!(complete(&words, fixture.root.path()).contains(&"first".into()));
+        assert!(complete(&words, fixture.root.path()).contains(&"1".into()));
     }
     let choices = complete(&["repo", "rm", ""], fixture.root.path());
     let target = choices.iter().position(|v| v == "project").unwrap();
@@ -105,7 +116,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     // `--all` comes once, before a scope's workspaces, until it is typed.
     let choices = complete(&["resume", ""], fixture.root.path());
     assert_eq!(choices[0], "--all", "{choices:?}");
-    assert!(choices.contains(&"first".into()), "{choices:?}");
+    assert!(choices.contains(&"1".into()), "{choices:?}");
     assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
     // Resume describes each workspace by what it would restore.
     let resumable = || {
@@ -121,7 +132,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     };
     fixture.save_stopped_command(&first);
     let choices = resumable();
-    assert!(choices.contains("first:stopped: 1 command"), "{choices}");
+    assert!(choices.contains("1:first: stopped: 1 command"), "{choices}");
     // Other commands name why they would refuse a workspace.
     let described = |args: &[&str]| {
         let mut words = vec!["shoal"];
@@ -151,7 +162,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     ] {
         let choices = described(&args);
         assert!(
-            !choices.iter().any(|choice| choice.starts_with("second")),
+            !choices.iter().any(|choice| choice.starts_with("2:")),
             "{args:?} {choices:?}"
         );
     }
@@ -159,11 +170,11 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         "acquire",
         "hold",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--name",
         "review",
     ]);
-    assert!(described(&["release", "hold", "--workspace", ""]).contains(&"second".into()));
+    assert!(described(&["release", "hold", "--workspace", ""]).contains(&"2:second".into()));
     // A workspace that is not ready shows its state.
     let failed = fixture
         .command()
@@ -178,17 +189,22 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         .unwrap();
     assert!(!failed.status.success());
     let choices = described(&["run", "--workspace", ""]);
-    assert!(choices.contains(&"broken:failed".into()), "{choices:?}");
-    assert!(choices.contains(&"second".into()), "{choices:?}");
+    assert!(
+        choices
+            .iter()
+            .any(|choice| choice.starts_with("3:broken") && choice.ends_with("failed")),
+        "{choices:?}"
+    );
+    assert!(choices.contains(&"2:second".into()), "{choices:?}");
     fixture.ok(&[
         "release",
         "hold",
         "--workspace",
-        "second",
+        &fixture.id("second"),
         "--name",
         "review",
     ]);
-    assert!(described(&["run", "--workspace", ""]).contains(&"second".into()));
+    assert!(described(&["run", "--workspace", ""]).contains(&"2:second".into()));
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
@@ -196,7 +212,14 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let names = fixture
         .command()
         .env("SHOAL_STATE_DIR", fixture.root.path().join("state"))
-        .args(["--", "shoal", "run", "rev", "--workspace", "unknown"])
+        .args([
+            "--",
+            "shoal",
+            "run",
+            "rev",
+            "--workspace",
+            &fixture.id("unknown"),
+        ])
         .env("SHOAL_COMPLETE", "bash")
         .env("_CLAP_COMPLETE_INDEX", "2")
         .current_dir(cwd)
@@ -209,7 +232,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .any(|line| line == "review")
     );
     assert!(complete(&["rev"], cwd).contains(&"review".into()));
-    assert!(complete(&["review", "run", "fi"], cwd).contains(&"first".into()));
+    assert!(complete(&["review", "run", ""], cwd).contains(&"1".into()));
     assert!(complete(&["acquire", "port", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["release", "port", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["acquire", "resource", "d"], cwd).contains(&"devices".into()));
@@ -220,7 +243,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
                 "resource",
                 "devices",
                 "--workspace",
-                "first",
+                &fixture.id("first"),
                 "--member",
                 "b"
             ],
@@ -235,7 +258,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
                 "resource",
                 "devices",
                 "--workspace",
-                "first",
+                &fixture.id("first"),
                 "--name",
                 "t"
             ],
@@ -250,7 +273,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
                 "resource",
                 "devices",
                 "--workspace",
-                "unknown",
+                // An ID no workspace has.
+                "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09",
                 "--member",
                 "b",
             ],
@@ -258,13 +282,13 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         )
         .contains(&"beta".into())
     );
-    fixture.ok(&["rm", "--wait", "second"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("second")]);
     assert!(!complete(&["rm", "--wait", ""], cwd).contains(&"second".into()));
     fixture.add("second");
     let scoped = fixture.run(&[
         "run",
         "--workspace",
-        "first",
+        &fixture.id("first"),
         "--",
         "env",
         "SHOAL_COMPLETE=bash",
@@ -281,8 +305,9 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         String::from_utf8_lossy(&scoped.stderr)
     );
     let text = String::from_utf8(scoped.stdout).unwrap();
-    assert!(text.lines().any(|line| line == "first"), "{text}");
-    assert!(!text.lines().any(|line| line == "second"), "{text}");
+    // Only `first`, the scope's own workspace.
+    assert!(text.lines().any(|line| line == "1"), "{text}");
+    assert!(!text.lines().any(|line| line == "2"), "{text}");
     assert!(!fixture.root.path().join("wrong-state").exists());
 }
 
@@ -312,7 +337,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
                 .args([
                     "run",
                     "--workspace",
-                    "context-own",
+                    &fixture.id("context-own"),
                     "--",
                     "sh",
                     "-c",
@@ -372,9 +397,9 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         );
     }
     for args in [
-        vec!["status", "context-other"],
+        vec!["status", &fixture.id("context-other")],
         vec!["stop"],
-        vec!["config", "show", "context-other"],
+        vec!["config", "show", &fixture.id("context-other")],
     ] {
         let output = command(other_path, true, false)
             .args(&args)
@@ -406,21 +431,39 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     fs::write(path.join("tracked"), "changed\nagain\n").unwrap();
     fs::write(path.join("added"), "new\n").unwrap();
     git(path, &["add", "added"]);
-    fixture.ok(&["acquire", "port", "web", "--workspace", "summary"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("summary"),
+    ]);
     fixture.ok(&[
         "acquire",
         "resource",
         "devices",
         "--workspace",
-        "summary",
+        &fixture.id("summary"),
         "--name",
         "tests",
     ]);
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "summary"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("summary"),
+    ]);
     fixture.add("waiter");
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "signing", "--workspace", "waiter"])
+            .run(&[
+                "acquire",
+                "resource",
+                "signing",
+                "--workspace",
+                &fixture.id("waiter")
+            ])
             .status
             .code(),
         Some(2)
@@ -447,7 +490,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         .args([
             "run",
             "--workspace",
-            "summary",
+            &fixture.id("summary"),
             "--",
             "sh",
             "-c",
@@ -491,7 +534,10 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     );
     // The busy signing permit notified about the waiter, not this workspace.
     assert_eq!(status["unread_notifications"], 0);
-    assert_eq!(fixture.ok(&["status", "waiter"])["unread_notifications"], 1);
+    assert_eq!(
+        fixture.ok(&["status", &fixture.id("waiter")])["unread_notifications"],
+        1
+    );
     assert_eq!(status["prs"][0]["state"], Value::Null);
     assert!(status["prs"][0]["errors"][0].is_string(), "{status}");
 
@@ -512,7 +558,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             {"context": "ci / rust", "status": "success"}, {"context": "review", "status": "pending"}
         ]}),
     );
-    let status = fixture.ok(&["status", "summary"]);
+    let status = fixture.ok(&["status", &fixture.id("summary")]);
     assert_eq!(
         status["prs"][0]["url"],
         "https://forge.example/team/repo/pulls/7"
@@ -530,7 +576,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     assert_eq!(status["cleanup_reason"]["reason"], "pr_watch");
     assert!(status["prs"][0]["errors"][0].is_string(), "{status}");
 
-    let text = fixture.run(&["status", "summary"]);
+    let text = fixture.run(&["status", &fixture.id("summary")]);
     assert!(text.status.success());
     let text = String::from_utf8(text.stdout).unwrap();
     for expected in [
@@ -571,7 +617,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             .args([
                 "run",
                 "--workspace",
-                workspace,
+                &fixture.id(workspace),
                 "--",
                 support::shoal_binary(),
             ])
@@ -593,10 +639,16 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
 fn status_keeps_shared_state_when_the_worktree_is_missing() {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("missing-status");
-    fixture.ok(&["acquire", "port", "web", "--workspace", "missing-status"]);
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "web",
+        "--workspace",
+        &fixture.id("missing-status"),
+    ]);
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
 
-    let status = fixture.ok(&["status", "missing-status"]);
+    let status = fixture.ok(&["status", &fixture.id("missing-status")]);
     assert_eq!(status["workspace"]["name"], "missing-status");
     assert_eq!(status["ports"].as_array().unwrap().len(), 1);
     assert!(status["diff"].is_null());
@@ -623,13 +675,7 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
         for (cwd, explicit, json, expected, picker) in [
             (nested.as_path(), None, false, &own, false),
             (nested.as_path(), None, true, &own, false),
-            (
-                nested.as_path(),
-                Some("selection-other"),
-                false,
-                &other,
-                false,
-            ),
+            (nested.as_path(), other["id"].as_str(), false, &other, false),
             (nested.as_path(), other["id"].as_str(), true, &other, false),
             (fixture.root.path(), None, false, &other, true),
         ] {
@@ -761,10 +807,10 @@ fn rename_without_arguments_picks_a_space_and_asks_for_its_title() {
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("other"), "{rows}");
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["title"],
+        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["title"],
         "Login retries"
     );
-    assert!(fixture.ok(&["status", "other"])["workspace"]["title"].is_null());
+    assert!(fixture.ok(&["status", &fixture.id("other")])["workspace"]["title"].is_null());
 }
 
 #[test]
@@ -893,21 +939,26 @@ fn shell_function_navigates_after_add_and_away_after_rm(shell: &str) {
     let script = r#"
 set -e
 . "$INTEGRATION"
+# The ID of the workspace this shell is in, which commands select it by.
+here() {
+  shoal --json status | python3 -c 'import json,sys; print(json.load(sys.stdin)["workspace"]["id"])'
+}
 cd "$REPO"
 shoal start "$REPO" navigate
 test "${PWD##*/}" = navigate
+navigate=$(here)
 shoal_repo_dir="$(dirname "$PWD")"
 shoal start "$REPO" other
 test "${PWD##*/}" = other
-shoal cd navigate
+shoal cd "$navigate"
 shoal cd -
 test "${PWD##*/}" = other
 shoal cd -
 test "${PWD##*/}" = navigate
 cd "$REPO"
-shoal cd navigate
+shoal cd "$navigate"
 test "${PWD##*/}" = navigate
-if shoal run --workspace navigate -- sh -c 'exit 7'; then
+if shoal run --workspace "$navigate" -- sh -c 'exit 7'; then
   exit 1
 else
   test "$?" -eq 7
@@ -933,31 +984,34 @@ fi
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" acknowledged
 test "${PWD##*/}" = acknowledged
+acknowledged=$(here)
 printf 'retained' > untracked
 shoal done
 test "${PWD##*/}" = acknowledged
 shoal done --undo
 rm untracked
 shoal done
-until ! shoal status acknowledged >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal status "$acknowledged" >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" held
-shoal acquire hold --workspace held --name review
+held=$(here)
+shoal acquire hold --workspace "$held" --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
-shoal release hold --workspace held --name review
-until ! shoal status held >/dev/null 2>&1; do sleep 0.1; done
+shoal release hold --workspace "$held" --name review
+until ! shoal status "$held" >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" completed
+completed=$(here)
 printf 'keep me' > untracked
 shoal done --cleanup
 test "${PWD##*/}" = completed
 shoal done --undo
 rm untracked
 shoal done --cleanup
-until ! shoal status completed >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal status "$completed" >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
@@ -994,7 +1048,7 @@ fn interactive_navigation_reports_missing_shell_integration() {
     let fixture = Fixture::new();
     let workspace = fixture.add("existing");
 
-    let (cd, cd_stderr) = fixture.interactive(&["cd", "existing"], "");
+    let (cd, cd_stderr) = fixture.interactive(&["cd", &fixture.id("existing")], "");
     assert!(cd.status.success());
     assert_eq!(
         String::from_utf8(cd.stdout).unwrap(),
@@ -1002,7 +1056,7 @@ fn interactive_navigation_reports_missing_shell_integration() {
     );
     assert!(cd_stderr.contains("shell integration"), "{cd_stderr}");
 
-    let piped = fixture.run(&["cd", "existing"]);
+    let piped = fixture.run(&["cd", &fixture.id("existing")]);
     assert!(piped.status.success());
     assert!(piped.stderr.is_empty());
     assert_eq!(
@@ -1010,7 +1064,7 @@ fn interactive_navigation_reports_missing_shell_integration() {
         format!("{}\n", workspace["path"].as_str().unwrap())
     );
 
-    let json = fixture.ok(&["cd", "existing"]);
+    let json = fixture.ok(&["cd", &fixture.id("existing")]);
     assert_eq!(json["path"], workspace["path"]);
 }
 
@@ -1042,9 +1096,12 @@ fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
     let first_path = path(&first);
     let second_path = path(&second);
     assert!(
-        cd(Path::new(&first_path), &["--json", "cd", "second"])
-            .status
-            .success()
+        cd(
+            Path::new(&first_path),
+            &["--json", "cd", &fixture.id("second")]
+        )
+        .status
+        .success()
     );
     for (from, to) in [(&second_path, &first_path), (&first_path, &second_path)] {
         let output = cd(Path::new(from), &["--json", "cd", "-"]);
@@ -1059,7 +1116,7 @@ fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
         );
     }
     assert_eq!(fs::read_to_string(&directive).unwrap(), "");
-    fixture.ok(&["rm", "--wait", "first"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("first")]);
     let removed = cd(Path::new(&second_path), &["cd", "-"]);
     assert!(!removed.status.success());
     assert_eq!(fs::read_to_string(&directive).unwrap(), "");
@@ -1070,8 +1127,13 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     let fixture = Fixture::new();
     fixture.add("first");
     fixture.add("second");
-    fixture.ok(&["status", "first"]);
-    assert!(fixture.run(&["diff", "second"]).status.success());
+    fixture.ok(&["status", &fixture.id("first")]);
+    assert!(
+        fixture
+            .run(&["diff", &fixture.id("second")])
+            .status
+            .success()
+    );
     assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
     let unsupported = fixture.run(&["setup", "-"]);
     assert!(!unsupported.status.success());
@@ -1081,7 +1143,7 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
         .args([
             "run",
             "--workspace",
-            "first",
+            &fixture.id("first"),
             "--",
             binary,
             "--json",
@@ -1114,11 +1176,12 @@ head -n 1 "$HOME/picker-input"
 "#
                 ),
             );
+            let menu_worker_id = fixture.id("menu-worker");
             let args = if scoped {
                 vec![
                     "run",
                     "--workspace",
-                    "menu-worker",
+                    &menu_worker_id,
                     "--",
                     support::shoal_binary(),
                 ]
@@ -1235,7 +1298,7 @@ esac
         "--recommend",
         "SQLite",
         "--space",
-        "asker",
+        &fixture.id("asker"),
     ]);
     let id = asker["id"].as_str().unwrap();
     let listed = fixture.run(&["internal", "menu-rows", "inbox"]);
@@ -1271,19 +1334,32 @@ esac
         "{to_inbox}"
     );
     // Notifications name their workspace, and showing them marks them read.
-    fixture.ok(&["alerts", "send", "build finished", "--space", "asker"]);
+    fixture.ok(&[
+        "alerts",
+        "send",
+        "build finished",
+        "--space",
+        &fixture.id("asker"),
+    ]);
     let shown = fixture.run(&["internal", "menu-rows", "notifications"]);
     let shown = String::from_utf8(shown.stdout).unwrap();
     assert!(
-        shown.starts_with("notification:asker\t") && shown.contains("build finished"),
+        shown.starts_with(&format!("notification:{}\t", fixture.id("asker")))
+            && shown.contains("build finished"),
         "{shown}"
     );
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
     // A workspace process cannot see them, even having cleared its token.
-    fixture.ok(&["alerts", "send", "agent only", "--space", "asker"]);
+    fixture.ok(&[
+        "alerts",
+        "send",
+        "agent only",
+        "--space",
+        &fixture.id("asker"),
+    ]);
     let cleared = fixture
         .command()
-        .args(["run", "--workspace", "asker", "--", "sh", "-c"])
+        .args(["run", "--workspace", &fixture.id("asker"), "--", "sh", "-c"])
         // A second command keeps the scoped shell as the listing's parent.
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" internal menu-rows notifications; exit $?"#)
         .arg(support::shoal_binary())
@@ -1300,7 +1376,7 @@ esac
     // printed instead of the picker it could not act from.
     let cleared = fixture
         .command()
-        .args(["run", "--workspace", "asker", "--", "sh", "-c"])
+        .args(["run", "--workspace", &fixture.id("asker"), "--", "sh", "-c"])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" inbox --print; exit $?"#)
         .arg(support::shoal_binary())
         .output()
@@ -1312,7 +1388,7 @@ esac
     scoped.args([
         "run",
         "--workspace",
-        "asker",
+        &fixture.id("asker"),
         "--",
         support::shoal_binary(),
         "inbox",
@@ -1343,7 +1419,7 @@ esac
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     // A row Tab loaded is chosen like the first view's: Enter on a
     // notification enters its workspace.
-    let (output, transcript, _, _) = open("=notification:quiet", "");
+    let (output, transcript, _, _) = open(&format!("=notification:{}", fixture.id("quiet")), "");
     assert!(output.status.success(), "{transcript}");
     assert!(transcript.contains("quiet"), "{transcript}");
 }
@@ -1443,9 +1519,15 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     // Several workspaces resume together, each with stopped work.
     fixture.save_stopped_command(&first);
     fixture.save_stopped_command(&second);
-    let refused = fixture.run(&["resume", "first", "idle"]);
+    let refused = fixture.run(&["resume", &fixture.id("first"), &fixture.id("idle")]);
     assert!(!refused.status.success());
-    let refused = fixture.run(&["resume", "first", "second", "--execution", "any"]);
+    let refused = fixture.run(&[
+        "resume",
+        &fixture.id("first"),
+        &fixture.id("second"),
+        "--execution",
+        "any",
+    ]);
     assert!(!refused.status.success());
     let picked = format!(
         "{} {}",
@@ -1524,7 +1606,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     let foreign = fixture.ok(&["start", other.to_str().unwrap(), "foreign"]);
     let lower = lower["id"].as_str().unwrap();
     let (output, rows) = fixture.pick(
-        &["branch", "base", "set", "--workspace", "upper"],
+        &["branch", "base", "set", "--workspace", &fixture.id("upper")],
         lower,
         "",
     );
@@ -1533,7 +1615,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     assert!(!rows.contains(foreign["id"].as_str().unwrap()));
     assert_eq!(
-        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["status", &fixture.id("upper")])["workspace"]["base_workspace"]["name"],
         "lower"
     );
 }
@@ -1565,7 +1647,7 @@ fn work_lists_only_the_selected_statuses() {
     let fixture = Fixture::new();
     fixture.add("quiet");
     fixture.add("reviewed");
-    fixture.ok(&["ready", "--space", "reviewed"]);
+    fixture.ok(&["ready", "--space", &fixture.id("reviewed")]);
     let names = |statuses: &[&str]| -> Vec<_> {
         let mut args = vec!["list"];
         for status in statuses {
@@ -1650,7 +1732,7 @@ fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
         .args([
             "run",
             "--workspace",
-            "tracked",
+            &fixture.id("tracked"),
             "--",
             support::shoal_binary(),
             "--json",
@@ -1677,14 +1759,21 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap(),
         "Nothing needs you\n"
     );
-    fixture.ok(&["ready", "--space", "reviewed"]);
+    fixture.ok(&["ready", "--space", &fixture.id("reviewed")]);
     // The agent's state lasts while its execution runs, until `release`
     // exists; the loop's bound only keeps a failed test from leaving it behind.
     let release = fixture.root.path().join("release");
     let waiter_log = fixture.root.path().join("waiter.log");
     let mut waiter = fixture
         .command()
-        .args(["run", "--workspace", "waiter", "--", "sh", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("waiter"),
+            "--",
+            "sh",
+            "-c",
+        ])
         .arg(concat!(
             r#""$0" internal agent-state waiting && i=0 && "#,
             r#"until [ -e "$1" ] || [ $i -ge 3000 ]; do sleep 0.1; i=$((i + 1)); done"#
@@ -1717,7 +1806,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         "--recommend",
         "SQLite",
         "--space",
-        "asker",
+        &fixture.id("asker"),
     ]);
 
     let items = fixture.ok(&["inbox"]);
@@ -1765,13 +1854,13 @@ fn inbox_lists_what_needs_the_user_by_kind() {
 fn hold_release_picks_an_omitted_hold() {
     let fixture = Fixture::new();
     fixture.add("upper");
-    let none = fixture.run(&["release", "hold", "--workspace", "upper"]);
+    let none = fixture.run(&["release", "hold", "--workspace", &fixture.id("upper")]);
     assert!(!none.status.success());
     fixture.ok(&[
         "acquire",
         "hold",
         "--workspace",
-        "upper",
+        &fixture.id("upper"),
         "--name",
         "review",
     ]);
@@ -1779,16 +1868,20 @@ fn hold_release_picks_an_omitted_hold() {
         "acquire",
         "hold",
         "--workspace",
-        "upper",
+        &fixture.id("upper"),
         "--name",
         "demo",
         "--reason",
         "show",
     ]);
-    let (output, rows) = fixture.pick(&["release", "hold", "--workspace", "upper"], "demo", "");
+    let (output, rows) = fixture.pick(
+        &["release", "hold", "--workspace", &fixture.id("upper")],
+        "demo",
+        "",
+    );
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("demo\tdemo (show)") && rows.contains("review\t"));
-    let holds = fixture.ok(&["leases", "hold", "--workspace", "upper"]);
+    let holds = fixture.ok(&["leases", "hold", "--workspace", &fixture.id("upper")]);
     assert_eq!(holds.as_array().unwrap().len(), 1);
     assert_eq!(holds[0]["name"], "review");
 }

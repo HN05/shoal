@@ -81,8 +81,9 @@ pub(in crate::cli::commands) async fn request_title(
     let (workspace, agents) = turns::agents_of(ctx, selector).await?;
     ensure!(
         !agents.is_empty(),
-        "{name} has no running agent to ask; set its title with shoal rename {name} <TITLE>",
-        name = workspace.name
+        "{} has no running agent to ask; set its title with shoal rename {} <TITLE>",
+        workspace.name,
+        workspace.number
     );
     let message = TITLE_REQUEST.into();
     crate::client::agent_messages::send(

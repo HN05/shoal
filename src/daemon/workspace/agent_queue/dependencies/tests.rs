@@ -40,8 +40,8 @@ async fn entry(manager: &Manager, id: &QueueEntryId) -> QueueEntry {
         .unwrap()
 }
 
-fn work(name: &str) -> Dependency {
-    Dependency::Work(name.into())
+async fn work(manager: &Manager, name: &str) -> Dependency {
+    Dependency::Work(manager.queued(name).await)
 }
 
 async fn remove(manager: &Manager, workspace: &Workspace) {
@@ -62,7 +62,7 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let api = create(&manager, &repo, "api").await;
     // Without a limit a launch that waits for other work still queues.
-    let ui = add_after(&manager, &repo, "ui", vec![work("api")]).await;
+    let ui = add_after(&manager, &repo, "ui", vec![work(&manager, "api").await]).await;
     assert_eq!(ui.waiting_for, ["api"]);
 
     manager
@@ -108,7 +108,13 @@ async fn a_launch_dependency_follows_the_workspace_it_opens_until_removal() {
         .unwrap()
         .entry
         .unwrap();
-    let second = add_after(&manager, &repo, "second", vec![work("first")]).await;
+    let second = add_after(
+        &manager,
+        &repo,
+        "second",
+        vec![work(&manager, "first").await],
+    )
+    .await;
     assert_eq!(second.waiting_for, ["first"]);
 
     let opened = create(&manager, &repo, "first").await;
@@ -202,7 +208,10 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
         &manager,
         &repo,
         "apart",
-        vec![work("lower"), work("separate")],
+        vec![
+            work(&manager, "lower").await,
+            work(&manager, "separate").await,
+        ],
     )
     .await;
     for workspace in [&lower, &separate, &upper] {
@@ -218,7 +227,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
     // Complete dependencies start the launch in the caller, on the top one.
     let stacked = manager
         .queue_add(QueueRequest {
-            after: vec![work("lower"), work("upper")],
+            after: vec![work(&manager, "lower").await, work(&manager, "upper").await],
             ..request(&repo, "stacked", false)
         })
         .await
@@ -245,7 +254,10 @@ async fn dependencies_name_existing_work_other_than_the_launch() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
-    for after in [work("missing"), work("self")] {
+    for after in [
+        work(&manager, "missing").await,
+        work(&manager, "self").await,
+    ] {
         manager
             .queue_add(QueueRequest {
                 after: vec![after],
@@ -258,18 +270,18 @@ async fn dependencies_name_existing_work_other_than_the_launch() {
     // The CLI checks them before any prompt.
     let selector = crate::repository::Selector::from(&repo.id);
     manager
-        .check_dependencies(&selector, vec![work("missing")])
+        .check_dependencies(&selector, vec![work(&manager, "missing").await])
         .await
         .unwrap_err();
     create(&manager, &repo, "present").await;
     manager
-        .check_dependencies(&selector, vec![work("present")])
+        .check_dependencies(&selector, vec![work(&manager, "present").await])
         .await
         .unwrap();
     // Starting now cannot wait for work that is not done.
     manager
         .queue_add(QueueRequest {
-            after: vec![work("present")],
+            after: vec![work(&manager, "present").await],
             ..request(&repo, "now", true)
         })
         .await

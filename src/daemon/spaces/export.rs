@@ -173,13 +173,13 @@ impl Manager {
             .into_iter()
             .find(|removed| match &removal {
                 Some((id, _)) => &removed.workspace_id == id,
-                None => selector.names(&removed.workspace_id, &removed.name),
+                None => selector.given_id() == Some(&removed.workspace_id),
             })
             .with_context(|| format!("no space or restorable workspace {selector}"))?;
         ensure!(
             !removed.checkpoint.files_omitted,
             "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
-            removed.name
+            removed.workspace_id
         );
         let repo = self.repository(&removed.repository_id).await?;
         Ok(Prepared {

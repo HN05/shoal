@@ -227,7 +227,7 @@ impl Agent {
                 self.name,
                 protection.reason,
                 protection.resumes_when,
-                self.workspace
+                self.workspace_id
             );
         }
         anyhow::ensure!(
@@ -267,7 +267,7 @@ impl Manager {
             {
                 format!(
                     "restore with shoal resume {} --execution {execution_id}",
-                    workspace.name
+                    workspace.number
                 )
             } else {
                 "recovery record unavailable; inspect the workspace and relaunch the agent's saved session".into()
@@ -285,11 +285,11 @@ impl Manager {
                 Some(code) if complete => format!("{agent} exited with code {code}"),
                 Some(code) => format!(
                     "{agent} exited with code {code}, leaving processes behind; stop them with shoal stop {}",
-                    workspace.name
+                    workspace.number
                 ),
                 None => format!(
                     "{agent} disconnected without reporting; stop what remains of it with shoal stop {}",
-                    workspace.name
+                    workspace.number
                 ),
             }
         };

@@ -385,7 +385,7 @@ impl Manager {
                 let restart = agent.restarts.current.as_mut()?;
                 let waits = format!(
                     "{} restarts once its remaining processes exit: {issue}; shoal stop {} cancels the restart",
-                    agent.name, agent.workspace
+                    agent.name, agent.workspace_id
                 );
                 restart.waits = Some(waits.clone());
                 Some((std::mem::take(&mut restart.answers), waits))

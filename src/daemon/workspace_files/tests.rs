@@ -88,7 +88,7 @@ async fn files_from_outside_any_agent_are_the_users() {
     let attacher = manager.attacher(None, None).await;
     let [added] = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.into()],
             &attacher,
         )
@@ -135,7 +135,7 @@ async fn an_agents_files_name_its_kind_and_session() {
     std::fs::write(&log, "panic").unwrap();
     manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![notes.into()],
             &attacher,
         )
@@ -143,7 +143,7 @@ async fn an_agents_files_name_its_kind_and_session() {
         .unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![log.into()],
             &attacher,
@@ -179,7 +179,7 @@ async fn an_agents_files_name_its_kind_and_session() {
     let later = command_caller(&manager, &workspace, Some(&nested)).await;
     assert_eq!(manager.attacher(Some(&later), None).await, attacher);
     let files = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(files.len(), 2, "{files:?}");
@@ -211,7 +211,7 @@ async fn results_name_the_agent_that_handed_them_back() {
         .await
         .unwrap();
     let files = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [result] = files.as_slice() else {
@@ -236,7 +236,7 @@ async fn files_sent_with_messages_are_listed_until_removal() {
     std::fs::write(&file, "panic").unwrap();
     assert!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()
@@ -245,7 +245,7 @@ async fn files_sent_with_messages_are_listed_until_removal() {
     for _ in 0..2 {
         manager
             .send_agent_message(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.clone().into()],
                 &Attacher::User,
@@ -254,7 +254,7 @@ async fn files_sent_with_messages_are_listed_until_removal() {
             .unwrap();
     }
     let files = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [listed] = files.as_slice() else {
@@ -297,7 +297,7 @@ async fn added_files_need_no_message() {
     std::fs::write(&file, "port = 1").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.clone().into()],
             &Attacher::User,
         )
@@ -311,7 +311,7 @@ async fn added_files_need_no_message() {
     // Adding it again keeps the copy; sending it is a separate copy.
     manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.clone().into()],
             &Attacher::User,
         )
@@ -319,7 +319,7 @@ async fn added_files_need_no_message() {
         .unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.into()],
             &Attacher::User,
@@ -327,14 +327,14 @@ async fn added_files_need_no_message() {
         .await
         .unwrap();
     let files = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let sources: Vec<_> = files.iter().map(|file| file.source).collect();
     assert_eq!(sources, [FileSource::Added, FileSource::Message]);
     assert!(
         manager
-            .agent_messages(&SpaceSelector::from(&workspace.name))
+            .agent_messages(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .iter()
@@ -361,7 +361,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
     };
     manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![titled(&chart, "Latency by region")],
             &Attacher::User,
         )
@@ -370,7 +370,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
     // Adding it again without a title keeps the title.
     manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![chart.clone().into()],
             &Attacher::User,
         )
@@ -378,7 +378,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
         .unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![titled(&shot, "Login screen"), report.clone().into()],
             &Attacher::User,
@@ -403,7 +403,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
             .collect()
     };
     let listed = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(
@@ -418,7 +418,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
     // A new title replaces the old one.
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![titled(&chart, "Latency")],
             &Attacher::User,
         )
@@ -438,7 +438,7 @@ async fn a_title_that_is_not_one_line_copies_nothing() {
     std::fs::write(&file, "content").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![super::NewFile {
                 path: file,
                 title: Some("Latency\nby region".into()),
@@ -449,7 +449,7 @@ async fn a_title_that_is_not_one_line_copies_nothing() {
     assert!(added.is_err());
     assert!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()
@@ -465,7 +465,7 @@ async fn deleting_by_name_keeps_the_other_files() {
     std::fs::write(&shot, "image").unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.clone().into(), shot.into()],
             &Attacher::User,
@@ -475,7 +475,7 @@ async fn deleting_by_name_keeps_the_other_files() {
     assert!(
         manager
             .remove_attached_files(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 vec!["missing.txt".into()],
                 vec![]
             )
@@ -484,7 +484,7 @@ async fn deleting_by_name_keeps_the_other_files() {
     );
     let deleted = manager
         .remove_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec!["crash.log".into()],
             vec![],
         )
@@ -492,7 +492,7 @@ async fn deleting_by_name_keeps_the_other_files() {
         .unwrap();
     assert!(!deleted[0].path.exists());
     let left = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [kept] = left.as_slice() else {
@@ -504,7 +504,7 @@ async fn deleting_by_name_keeps_the_other_files() {
     // Sending the same files again copies the deleted one anew.
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.into(), temp.path().join("shot.png").into()],
             &Attacher::User,
@@ -514,7 +514,7 @@ async fn deleting_by_name_keeps_the_other_files() {
     assert!(deleted[0].path.exists());
     assert_eq!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .len(),
@@ -536,7 +536,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     for workspace in [&idle, &active, &unresolved] {
         manager
             .add_attached_files(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 vec![file.clone().into()],
                 &Attacher::User,
             )
@@ -565,7 +565,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     for spared in [&active, &unresolved] {
         assert_eq!(
             manager
-                .attached_files(&SpaceSelector::from(&spared.name))
+                .attached_files(&SpaceSelector::id(&spared.id))
                 .await
                 .unwrap()
                 .len(),
@@ -631,7 +631,10 @@ async fn results_outlive_removal_as_long_as_its_record() {
         .await
         .unwrap();
     manager.expire_results().await.unwrap();
-    let files = manager.attached_files(&"audit".into()).await.unwrap();
+    let files = manager
+        .attached_files(&SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
     let [kept] = files.as_slice() else {
         panic!("{files:?}");
     };
@@ -656,7 +659,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
             )
             .await;
         let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-            space: "audit".into(),
+            space: SpaceSelector::id(&child.id),
         });
         let authorized = scope::authorize(&manager, Some(&token.into()), &mut list).await;
         assert_eq!(authorized.is_ok(), allowed, "{token}");
@@ -673,7 +676,12 @@ async fn results_outlive_removal_as_long_as_its_record() {
         .unwrap();
     manager.expire_results().await.unwrap();
     assert!(!result.exists());
-    assert!(manager.attached_files(&"audit".into()).await.is_err());
+    assert!(
+        manager
+            .attached_files(&SpaceSelector::id(&child.id))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -734,7 +742,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
         )
         .await;
     let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-        space: "bottom".into(),
+        space: SpaceSelector::id(&bottom.id),
     });
     scope::authorize(&manager, Some(&"top".into()), &mut list)
         .await
@@ -749,7 +757,7 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
     std::fs::write(&file, "plan").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.into()],
             &Attacher::User,
         )
@@ -764,7 +772,7 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
     std::os::unix::fs::symlink(&elsewhere, directory).unwrap();
     assert!(
         manager
-            .remove_attached_files(&SpaceSelector::from(&workspace.name), vec![], vec![])
+            .remove_attached_files(&SpaceSelector::id(&workspace.id), vec![], vec![])
             .await
             .is_err()
     );
@@ -886,7 +894,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .await
         .unwrap();
     let files = manager
-        .attached_files(&SpaceSelector::from(&renamed.name))
+        .attached_files(&SpaceSelector::id(&renamed.id))
         .await
         .unwrap();
     assert_eq!(files[0].workspace, Some(renamed.name.clone()));
@@ -902,7 +910,7 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
     let files = vec![notes.into(), shot.into()];
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             files.clone(),
             &Attacher::User,
         )
@@ -917,11 +925,7 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
     std::fs::remove_file(elsewhere.join(added[0].path.strip_prefix(&directory).unwrap())).unwrap();
     assert!(
         manager
-            .add_attached_files(
-                &SpaceSelector::from(&workspace.name),
-                files,
-                &Attacher::User
-            )
+            .add_attached_files(&SpaceSelector::id(&workspace.id), files, &Attacher::User)
             .await
             .is_err()
     );
@@ -936,7 +940,7 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
     std::fs::write(&file, "plan").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.clone().into()],
             &Attacher::User,
         )
@@ -944,7 +948,7 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
         .unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.into()],
             &Attacher::User,
@@ -952,16 +956,12 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
         .await
         .unwrap();
     let deleted = manager
-        .remove_attached_files(
-            &SpaceSelector::from(&workspace.name),
-            vec![],
-            vec![added[0].id],
-        )
+        .remove_attached_files(&SpaceSelector::id(&workspace.id), vec![], vec![added[0].id])
         .await
         .unwrap();
     assert_eq!(deleted, added);
     let left = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [sent] = left.as_slice() else {
@@ -1025,7 +1025,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     std::fs::write(&env, "PORT=1").unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.into(), env.into()],
             &Attacher::User,
@@ -1033,7 +1033,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
         .await
         .unwrap();
     let copies: Vec<_> = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .into_iter()
@@ -1068,7 +1068,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     reopened.record_earlier_files().await.unwrap();
     assert!(
         reopened
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()
@@ -1083,7 +1083,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
         .unwrap();
     reopened.record_earlier_files().await.unwrap();
     let files = reopened
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let mut recorded: Vec<_> = files.iter().map(|file| file.path.clone()).collect();
@@ -1112,7 +1112,7 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     std::fs::write(&file, "plan").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![file.into()],
             &Attacher::User,
         )
@@ -1128,7 +1128,7 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     assert!(added[0].path.exists());
     assert_eq!(
         manager
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .len(),
@@ -1148,7 +1148,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     std::fs::write(&file, "panic").unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![file.into()],
             &Attacher::User,
@@ -1156,7 +1156,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
         .await
         .unwrap();
     let copy = manager
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()[0]
         .path
@@ -1179,7 +1179,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     assert!(failed.is_err(), "the unreadable directory fails the pass");
     reopened.record_earlier_files().await.unwrap();
     let files = reopened
-        .attached_files(&SpaceSelector::from(&workspace.name))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(files.len(), 1, "{files:?}");
@@ -1199,7 +1199,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     std::fs::write(&file, "panic").unwrap();
     manager
         .send_agent_message(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![file.into()],
             &Attacher::User,
@@ -1229,7 +1229,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     reopened.record_earlier_files().await.unwrap();
     assert_eq!(
         reopened
-            .attached_files(&SpaceSelector::from(&workspace.name))
+            .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .len(),
@@ -1389,7 +1389,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     std::fs::write(&report, "Plan").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &Attacher::User,
         )
@@ -1422,7 +1422,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         )
         .await;
     let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-        space: SpaceSelector::parse(&chat.name),
+        space: SpaceSelector::id(&chat.id),
     });
     assert!(
         scope::authorize(&manager, Some(&"worker".into()), &mut list)
@@ -1437,7 +1437,9 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         .await
         .unwrap();
     manager.expire_results().await.unwrap();
-    let files = manager.attached_files(&"planning".into()).await.unwrap();
+    let files = (manager.attached_files(&SpaceSelector::id(&chat.id)))
+        .await
+        .unwrap();
     let [kept] = files.as_slice() else {
         panic!("{files:?}");
     };
@@ -1477,13 +1479,20 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         let failed = manager.expire_results().await;
         set(0o700);
         assert!(failed.is_err());
-        let files = manager.attached_files(&"planning".into()).await.unwrap();
+        let files = (manager.attached_files(&SpaceSelector::id(&chat.id)))
+            .await
+            .unwrap();
         assert_eq!(files[0].chat.as_deref(), Some("planning"), "{files:?}");
         assert!(files[0].expires_at.is_some(), "{files:?}");
     }
     manager.expire_results().await.unwrap();
     assert!(!copy.exists());
-    assert!(manager.attached_files(&"planning".into()).await.is_err());
+    assert!(
+        manager
+            .attached_files(&manager.named("planning").await)
+            .await
+            .is_err()
+    );
     let left: i64 = manager
         .store
         .run(|db| Ok(db.query_row("SELECT COUNT(*) FROM ended_chats", [], |row| row.get(0))?))
@@ -1512,7 +1521,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     std::fs::write(&report, "Plan").unwrap();
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &Attacher::User,
         )
@@ -1553,7 +1562,12 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
         .unwrap();
     manager.expire_results().await.unwrap();
     assert!(!copy.exists());
-    assert!(manager.attached_files(&"master".into()).await.is_err());
+    assert!(
+        manager
+            .attached_files(&manager.named("master").await)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -1573,7 +1587,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
     let root_dir = manager.config().root_dir(&manager.paths).unwrap();
-    let space = SpaceSelector::from(&chat.name);
+    let space = SpaceSelector::id(&chat.id);
     let attach = |name: &str| {
         let file = temp.path().join(name);
         std::fs::write(&file, name).unwrap();
@@ -1619,7 +1633,12 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
         .unwrap();
     manager.expire_results().await.unwrap();
     assert!(!late.exists(), "{}", late.display());
-    assert!(manager.attached_files(&"master".into()).await.is_err());
+    assert!(
+        manager
+            .attached_files(&manager.named("master").await)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -1651,7 +1670,7 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     let attacher = manager.attacher(None, Some(&chat.id)).await;
     let added = manager
         .add_attached_files(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             vec![report.into()],
             &attacher,
         )

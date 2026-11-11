@@ -36,7 +36,7 @@ async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
 
 fn setup(workspace: &Workspace) -> OperationSpec {
     OperationSpec::Prepare {
-        workspace: SpaceSelector::parse(&workspace.name),
+        workspace: SpaceSelector::id(&workspace.id),
         steps: Preparation {
             setup: true,
             ..Default::default()

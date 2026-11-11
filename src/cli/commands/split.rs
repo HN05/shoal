@@ -114,7 +114,7 @@ async fn commit_owner(
             let repository = crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .into_iter()
-                .find(|workspace| parent.selects(&workspace.id, &workspace.name, workspace.number))
+                .find(|workspace| parent.selects(&workspace.id, workspace.number))
                 .map(|workspace| workspace.repository_id)
                 .ok_or_else(|| {
                     Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}"))

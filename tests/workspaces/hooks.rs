@@ -54,7 +54,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         fs::read_to_string(home.join("post-setup-ran")).unwrap(),
         format!("{}\nhooked\n", path.display())
     );
-    let inspection = fixture.ok(&["status", "hooked"]);
+    let inspection = fixture.ok(&["status", &fixture.id("hooked")]);
     assert_eq!(
         inspection["executions"],
         serde_json::json!([]),
@@ -81,11 +81,14 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .output()
         .unwrap();
     assert!(!output.status.success());
-    let failed = fixture.ok(&["status", "hook-fails"]);
+    let failed = fixture.ok(&["status", &fixture.id("hook-fails")]);
     assert_eq!(failed["workspace"]["state"], "ready");
     let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
     assert!(!failed_path.join("agent-started").exists());
-    assert_eq!(fixture.ok(&["setup", "hook-fails"])["state"], "ready");
+    assert_eq!(
+        fixture.ok(&["setup", &fixture.id("hook-fails")])["state"],
+        "ready"
+    );
     assert!(
         fs::read_to_string(home.join("post-setup-ran"))
             .unwrap()
@@ -94,7 +97,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 
     // The removal hook runs in the daemon before the worktree goes; failure retains it.
     fs::write(path.join("fail-removal"), "busy").unwrap();
-    let output = fixture.run(&["rm", "--wait", "hooked", "--yes"]);
+    let output = fixture.run(&["rm", "--wait", &fixture.id("hooked"), "--yes"]);
     assert!(!output.status.success());
     // The hook's own error reaches the user.
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -103,11 +106,11 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         fs::read_to_string(home.join("pre-remove-ran")).unwrap(),
         format!("{}\nhooked\n", path.display())
     );
-    let retained = fixture.ok(&["status", "hooked"]);
+    let retained = fixture.ok(&["status", &fixture.id("hooked")]);
     assert_eq!(retained["workspace"]["state"], "ready");
     assert!(path.join("tracked").exists());
     fs::remove_file(path.join("fail-removal")).unwrap();
-    fixture.ok(&["rm", "--wait", "hooked", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("hooked"), "--yes"]);
     assert!(!path.exists());
     assert!(
         !fixture
@@ -146,18 +149,24 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "resource",
         "signing",
         "--workspace",
-        "hooked",
+        &fixture.id("hooked"),
         "--reason",
         "test signing",
     ]);
     assert!(!output.status.success());
-    let inspection = fixture.ok(&["status", "hooked"]);
+    let inspection = fixture.ok(&["status", &fixture.id("hooked")]);
     let lease = &inspection["resources"][0];
     assert_eq!(lease["reason"], "test signing");
     assert_eq!(inspection["executions"], serde_json::json!([]));
     assert_eq!(
         fixture
-            .run(&["acquire", "resource", "signing", "--workspace", "waiter"])
+            .run(&[
+                "acquire",
+                "resource",
+                "signing",
+                "--workspace",
+                &fixture.id("waiter")
+            ])
             .status
             .code(),
         Some(2)
@@ -165,7 +174,13 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
     fixture.restart();
     fs::remove_file(path.join("post_resource_acquire-fails")).unwrap();
     assert_eq!(
-        &fixture.ok(&["acquire", "resource", "signing", "--workspace", "hooked"]),
+        &fixture.ok(&[
+            "acquire",
+            "resource",
+            "signing",
+            "--workspace",
+            &fixture.id("hooked")
+        ]),
         lease
     );
     let events = fs::read_to_string(fixture.root.path().join("post_resource_acquire")).unwrap();
@@ -181,16 +196,19 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
             "resource",
             "signing",
             "--workspace",
-            "hooked",
+            &fixture.id("hooked"),
             "--name",
             "default",
         ],
-        vec!["rm", "--wait", "hooked", "--yes"],
+        vec!["rm", "--wait", &fixture.id("hooked"), "--yes"],
     ] {
         let output = fixture.run(&args);
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("resource busy"));
-        assert_eq!(fixture.ok(&["status", "hooked"])["resources"][0], *lease);
+        assert_eq!(
+            fixture.ok(&["status", &fixture.id("hooked")])["resources"][0],
+            *lease
+        );
         assert!(path.exists());
     }
     fs::remove_file(path.join("pre_resource_release-fails")).unwrap();
@@ -205,15 +223,21 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "resource",
         "signing",
         "--workspace",
-        "hooked",
+        &fixture.id("hooked"),
         "--name",
         "default",
     ]);
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "waiter"]);
-    fixture.ok(&["rm", "--wait", "waiter", "--yes"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("waiter"),
+    ]);
+    fixture.ok(&["rm", "--wait", &fixture.id("waiter"), "--yes"]);
     let events = fs::read_to_string(fixture.root.path().join("pre_resource_release")).unwrap();
     assert_eq!(events.lines().count(), 4);
-    fixture.ok(&["rm", "--wait", "hooked", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("hooked"), "--yes"]);
 }
 
 #[test]
@@ -234,7 +258,13 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     fixture.add("hooked");
     let acquire = fixture
         .command()
-        .args(["acquire", "resource", "signing", "--workspace", "hooked"])
+        .args([
+            "acquire",
+            "resource",
+            "signing",
+            "--workspace",
+            &fixture.id("hooked"),
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -242,29 +272,35 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     wait_until("permit hook", || {
         fixture.root.path().join("hook-entered").exists()
     });
-    let leases = fixture.ok(&["status", "hooked"])["resources"].clone();
+    let leases = fixture.ok(&["status", &fixture.id("hooked")])["resources"].clone();
     assert_eq!(leases.as_array().unwrap().len(), 1);
     assert_eq!(leases[0]["resource"], "signing");
     for args in [
-        vec!["acquire", "resource", "signing", "--workspace", "hooked"],
+        vec![
+            "acquire",
+            "resource",
+            "signing",
+            "--workspace",
+            &fixture.id("hooked"),
+        ],
         vec![
             "release",
             "resource",
             "signing",
             "--workspace",
-            "hooked",
+            &fixture.id("hooked"),
             "--name",
             "default",
         ],
-        vec!["setup", "hooked"],
-        vec!["rm", "--wait", "hooked", "--yes"],
+        vec!["setup", &fixture.id("hooked")],
+        vec!["rm", "--wait", &fixture.id("hooked"), "--yes"],
     ] {
         let output = fixture.run(&args);
         assert!(!output.status.success(), "{output:?}");
     }
     fs::write(fixture.root.path().join("hook-continue"), "").unwrap();
     assert!(acquire.wait_with_output().unwrap().status.success());
-    fixture.ok(&["rm", "--wait", "hooked", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("hooked"), "--yes"]);
 }
 
 #[test]
@@ -372,7 +408,7 @@ printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
     assert_eq!(workspace["state"], "ready");
     let markers = fixture.root.path().join("hooks");
     assert_eq!(fs::read_to_string(&markers).unwrap(), "post_setup\n");
-    fixture.ok(&["rm", "--wait", "global-hooks", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("global-hooks"), "--yes"]);
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert_eq!(
         fs::read_to_string(&markers).unwrap(),
@@ -403,7 +439,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     fs::write(home.join("fail-before"), "").unwrap();
     let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "hooked"]);
     assert!(!output.status.success());
-    let inspection = fixture.ok(&["status", "hooked"]);
+    let inspection = fixture.ok(&["status", &fixture.id("hooked")]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
     assert_eq!(
@@ -411,7 +447,10 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         "before\n"
     );
     fs::remove_file(home.join("fail-before")).unwrap();
-    assert_eq!(fixture.ok(&["setup", "hooked"])["state"], "ready");
+    assert_eq!(
+        fixture.ok(&["setup", &fixture.id("hooked")])["state"],
+        "ready"
+    );
     assert_eq!(
         fs::read_to_string(home.join("setup-order")).unwrap(),
         "before\nbefore\nsetup\n"
@@ -423,7 +462,10 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         "hooks.pre_setup = '/usr/bin/true'\n",
     )
     .unwrap();
-    assert_eq!(fixture.ok(&["setup", "hooked"])["state"], "ready");
+    assert_eq!(
+        fixture.ok(&["setup", &fixture.id("hooked")])["state"],
+        "ready"
+    );
     fs::write(fixture.repo.join(".shoal.toml"), "").unwrap();
     git(&fixture.repo, &["add", ".shoal.toml"]);
     git(
@@ -443,8 +485,8 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         fs::read_to_string(home.join("setup-order")).unwrap(),
         "before\nbefore\nsetup\nbefore\n"
     );
-    fixture.ok(&["rm", "--wait", "hooked", "--yes"]);
-    fixture.ok(&["rm", "--wait", "hook-only", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("hooked"), "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("hook-only"), "--yes"]);
 }
 
 #[test]
@@ -475,7 +517,13 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     );
     let workspace = fixture.add("hooked");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "hooked"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("hooked"),
+    ]);
     let config = path.join(".shoal.toml");
     fs::write(
         &config,
@@ -484,7 +532,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     .unwrap();
     assert!(
         !fixture
-            .run(&["rm", "--wait", "hooked", "--yes"])
+            .run(&["rm", "--wait", &fixture.id("hooked"), "--yes"])
             .status
             .success()
     );
@@ -495,7 +543,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     )
     .unwrap();
     fs::write(fixture.root.path().join("fail-after"), "").unwrap();
-    let result = fixture.ok(&["rm", "--wait", "hooked", "--yes"]);
+    let result = fixture.ok(&["rm", "--wait", &fixture.id("hooked"), "--yes"]);
     assert_eq!(result["removed"], true);
     assert!(
         result["hook_error"]
@@ -503,7 +551,12 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
             .unwrap()
             .contains("external cleanup failed")
     );
-    assert!(!fixture.run(&["status", "hooked"]).status.success());
+    assert!(
+        !fixture
+            .run(&["status", &fixture.id("hooked")])
+            .status
+            .success()
+    );
     let notifications = fixture.ok(&["alerts"]);
     assert!(
         notifications
@@ -518,10 +571,16 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     );
     fs::remove_file(fixture.root.path().join("fail-after")).unwrap();
     fixture.add("next");
-    fixture.ok(&["acquire", "resource", "signing", "--workspace", "next"]);
+    fixture.ok(&[
+        "acquire",
+        "resource",
+        "signing",
+        "--workspace",
+        &fixture.id("next"),
+    ]);
     let missing = fixture.add("missing");
     fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
-    fixture.ok(&["rm", "--wait", "missing", "--yes"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("missing"), "--yes"]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("removed"))
             .unwrap()

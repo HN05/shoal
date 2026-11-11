@@ -298,7 +298,7 @@ async fn a_chat_without_a_repository_copies_a_workspace_of_any_repository() {
         execution: None,
     };
     let mut source = crate::protocol::CopySource {
-        workspace: SpaceSelector::parse(&user.name),
+        workspace: SpaceSelector::id(&user.id),
         checkpoint: None,
     };
     manager.copy_within(&caller, &mut source).await.unwrap();
@@ -328,7 +328,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         .await
         .unwrap();
     let message = || AgentMethod::SendAgentMessage {
-        space: "user".into(),
+        space: SpaceSelector::id(&user.id),
         message: "Rebase onto main".into(),
         attachments: Vec::new(),
         sender_chat: None,

@@ -30,7 +30,7 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
     let execution = started.plan.id.clone();
     let executions = || async {
         manager
-            .inspect_workspace(&SpaceSelector::from(&workspace.name))
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -42,7 +42,7 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
     };
     manager
         .report_proxy_retry(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             execution.clone(),
             Some(retry.clone()),
         )
@@ -53,18 +53,14 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
         Some(retry.clone())
     );
     manager
-        .report_proxy_retry(
-            &SpaceSelector::from(&workspace.name),
-            execution.clone(),
-            None,
-        )
+        .report_proxy_retry(&SpaceSelector::id(&workspace.id), execution.clone(), None)
         .await
         .unwrap();
     assert_eq!(manager.proxy_retry(&executions().await), None);
 
     manager
         .report_proxy_retry(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             execution.clone(),
             Some(retry),
         )

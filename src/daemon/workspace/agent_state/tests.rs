@@ -55,7 +55,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         })
         .await
         .unwrap();
-    let selected = SpaceSelector::from(&workspace.name);
+    let selected = SpaceSelector::id(&workspace.id);
     let report = |state| manager.set_agent_state(&selected, state, Some("agent".into()), None);
 
     let working = report(AgentState::Working).await.unwrap();
@@ -110,7 +110,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     // removal takes it without an event.
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             None,
             None,
@@ -148,7 +148,7 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
     set_execution(ExecutionState::Running).await.unwrap();
     let idle = manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some("agent".into()),
             None,
@@ -205,13 +205,9 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         )
         .await
         .unwrap();
-    for (target, allowed) in [
-        (&own.name, true),
-        (&other.name, false),
-        (&child.name, false),
-    ] {
+    for (target, allowed) in [(&own.id, true), (&other.id, false), (&child.id, false)] {
         let mut method = AgentMethod::SetAgentState {
-            workspace: SpaceSelector::parse(target),
+            workspace: SpaceSelector::from(target),
             state: AgentState::Waiting,
             session: None,
             turn_end: None,
@@ -227,7 +223,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
     // execution it reports for.
     for (execution, allowed) in [(None, true), (Some(ExecutionId::from("another")), false)] {
         let mut method = AgentMethod::ReportTurnFailure {
-            workspace: SpaceSelector::parse(&own.name),
+            workspace: SpaceSelector::id(&own.id),
             failure: TurnFailure::Overloaded,
             session: None,
             execution,
@@ -255,7 +251,7 @@ async fn a_failed_turn_leaves_the_agent_idle() {
     let workspace = workspace(&manager, &temp).await;
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             None,
             None,
@@ -264,7 +260,7 @@ async fn a_failed_turn_leaves_the_agent_idle() {
         .unwrap();
     let status = manager
         .report_turn_failure(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             TurnFailure::Overloaded,
             None,
             None,
@@ -305,7 +301,7 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
     for execution in [ExecutionId::from("stopped"), ExecutionId::from("exited")] {
         manager
             .set_agent_state(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 AgentState::Idle,
                 Some(execution.clone()),
                 None,
@@ -334,7 +330,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
         ..TurnEnd::default()
     };
     let ended = manager
-        .end_agent_turn(&SpaceSelector::from(&workspace.name), None, None, hour)
+        .end_agent_turn(&SpaceSelector::id(&workspace.id), None, None, hour)
         .await
         .unwrap();
     assert_eq!(ended.state, AgentState::Idle);
@@ -345,7 +341,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     // Another idle report, such as an idle prompt's, keeps the expiry.
     let repeated = manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             None,
             None,
@@ -356,7 +352,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     // Working drops it, and idle without an ended turn knows none.
     for state in [AgentState::Working, AgentState::Idle] {
         let status = manager
-            .set_agent_state(&SpaceSelector::from(&workspace.name), state, None, None)
+            .set_agent_state(&SpaceSelector::id(&workspace.id), state, None, None)
             .await
             .unwrap();
         assert_eq!(status.prompt_cache_expires_at, None, "{state:?}");
@@ -365,7 +361,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     // first makes the turn's end start a new `since`.
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             None,
             None,
@@ -374,7 +370,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
         .unwrap();
     let unknown = manager
         .end_agent_turn(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             None,
             None,
             TurnEnd::default(),
@@ -419,7 +415,7 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
     };
     let ended = manager
         .end_agent_turn(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             Some(started.plan.id),
             None,
             reported,

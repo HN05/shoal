@@ -191,7 +191,10 @@ impl Restart {
             // wrapper waiting for its restore does.
             match recovery::resumable(&ctx.paths, &workspace.id) {
                 Ok(true) if waits(&error).is_none() => {
-                    anyhow::anyhow!("{error:#}; restore it with shoal resume {}", workspace.name)
+                    anyhow::anyhow!(
+                        "{error:#}; restore it with shoal resume {}",
+                        workspace.number
+                    )
                 }
                 _ => error,
             }

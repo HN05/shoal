@@ -63,7 +63,7 @@ async fn discard(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<Chat> {
         below.is_empty(),
         "removing it also removes the spaces below it ({}); remove it with shoal rm {}",
         below.join(", "),
-        chat.name
+        chat.number
     );
     Ok(
         crate::client::chats::remove(&ctx.paths, &chat.id, Some(Vec::new()))

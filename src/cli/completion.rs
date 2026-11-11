@@ -14,7 +14,8 @@ use anyhow::{Context as _, Result};
 use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_ids::SpaceNumber;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::Agent,
     cli::{
@@ -130,7 +131,10 @@ pub fn command() -> Command {
                     .flatten()
                     .and_then(|mut args| args.next())
                     .filter(|arg| !arg.to_string_lossy().starts_with('-'))
-                    .and_then(|arg| arg.to_str().map(SpaceSelector::parse))
+                    .and_then(|arg| {
+                        arg.to_str()
+                            .and_then(|text| SpaceSelector::parse(text).ok())
+                    })
             });
         typed.named = leaf
             .try_get_many::<SpaceSelector>("workspace")
@@ -431,12 +435,13 @@ impl Typed {
         if matches!(target, Target::RestorableWorkspaces) {
             let removed = crate::client::removal::removed(&paths).await?;
             let existing = crate::client::workspaces::list(&paths).await?;
-            return Ok(removed
-                .into_iter()
-                .map(|workspace| workspace.name)
-                .chain(existing.into_iter().map(|workspace| workspace.name))
-                .map(CompletionCandidate::new)
-                .collect());
+            let removed = removed.into_iter().map(|workspace| {
+                let help = format!("{} (removed)", workspace.name);
+                CompletionCandidate::new(workspace.workspace_id.to_string()).help(Some(help.into()))
+            });
+            let existing = (existing.iter())
+                .map(|workspace| space_candidate(workspace.number, &workspace.name));
+            return Ok(removed.chain(existing).collect());
         }
         if matches!(target, Target::ApprovalRequests) {
             let requests = crate::client::approvals::list(&paths, None).await?;
@@ -467,10 +472,12 @@ impl Typed {
             let mut candidates: Vec<_> = workspaces
                 .iter()
                 .filter_map(|w| {
-                    let candidate = CompletionCandidate::new(&w.name);
+                    let candidate = space_candidate(w.number, &w.name);
                     match availability.fit(w) {
                         Fit::Accepted => Some(candidate),
-                        Fit::Refused(reason) => Some(candidate.help(Some(reason.into()))),
+                        Fit::Refused(reason) => {
+                            Some(candidate.help(Some(format!("{}: {reason}", w.name).into())))
+                        }
                         Fit::Hidden => None,
                     }
                 })
@@ -489,7 +496,8 @@ impl Typed {
                 .map(|w| {
                     let status = ui::resumable(&paths, &w.id)
                         .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
-                    CompletionCandidate::new(&w.name).help(Some(status.into()))
+                    let help = format!("{}: {status}", w.name);
+                    space_candidate(w.number, &w.name).help(Some(help.into()))
                 })
                 .collect();
             candidates.extend(stopped_chat_candidates(
@@ -569,28 +577,39 @@ async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
         .context("live completion lookup timed out")?
 }
 
-/// Every chat, by name, a stopped one described as such.
+/// A space as completion offers it: its number, which selects it, with
+/// its name, which does not, as its description.
+fn space_candidate(number: SpaceNumber, name: &SpaceName) -> CompletionCandidate {
+    CompletionCandidate::new(number.to_string()).help(Some(name.to_string().into()))
+}
+
+/// A chat by its number, described by its name and `kind`.
+fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
+    let help = format!("{} ({kind})", chat.name);
+    CompletionCandidate::new(chat.number.to_string()).help(Some(help.into()))
+}
+
+/// Every chat, a stopped one described as such.
 async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
     Ok(crate::client::chats::recorded(paths)
         .await?
-        .into_iter()
+        .iter()
         .map(|chat| {
-            let help = match chat.restore {
+            let kind = match chat.restore {
                 Some(_) => STOPPED_CHAT,
                 None => "chat",
             };
-            CompletionCandidate::new(chat.name).help(Some(help.into()))
+            chat_candidate(chat, kind)
         })
         .collect())
 }
 
-/// The stopped chats among `chats`, which `shoal resume` restores, by
-/// name.
+/// The stopped chats among `chats`, which `shoal resume` restores.
 fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
     chats
-        .into_iter()
+        .iter()
         .filter(|chat| chat.restore.is_some())
-        .map(|chat| CompletionCandidate::new(chat.name).help(Some(STOPPED_CHAT.into())))
+        .map(|chat| chat_candidate(chat, STOPPED_CHAT))
         .collect()
 }
 
@@ -622,15 +641,15 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
     }
 }
 
-/// The running chats with an agent session, by name.
+/// The running chats with an agent session.
 async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
     let chats = crate::client::chats::list(paths).await?;
     let places = super::commands::sessions::chat_places(&chats);
     let attachable = terminal::session_owners(&places);
     Ok(chats
-        .into_iter()
+        .iter()
         .filter(|chat| attachable.contains(&chat.id))
-        .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
+        .map(|chat| chat_candidate(chat, "chat"))
         .collect())
 }
 

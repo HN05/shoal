@@ -253,8 +253,8 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
         )
         .await;
     for (parent, allowed) in [
-        (Some(own.name.clone()), true),
-        (Some(other.name.clone()), false),
+        (Some(own.id.clone()), true),
+        (Some(other.id.clone()), false),
         // Without one it goes below the caller's own workspace.
         (None, true),
     ] {
@@ -346,7 +346,7 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     assert!(git(&checkout, &["branch", "--list", &workspace.name]).is_empty());
 
     let restored = manager
-        .restore_workspace(&SpaceSelector::from(&workspace.name))
+        .restore_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let reopened = restored.opened.workspace;
@@ -637,7 +637,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         .unwrap();
     git(&clone, &["update-ref", "-d", "refs/remotes/origin/release"]);
     let restored = manager
-        .restore_workspace(&SpaceSelector::from(&opened.workspace.name))
+        .restore_workspace(&SpaceSelector::id(&opened.workspace.id))
         .await
         .unwrap()
         .opened

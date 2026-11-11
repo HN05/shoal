@@ -44,7 +44,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
     assert_eq!(commit.base_workspace, None);
     assert_eq!(
         manager
-            .workspace(&"middle".into())
+            .workspace(&manager.named("middle").await)
             .await
             .unwrap()
             .stacked_workspaces,
@@ -62,7 +62,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
             .unwrap();
         assert_eq!(
             manager
-                .workspace(&"upper".into())
+                .workspace(&manager.named("upper").await)
                 .await
                 .unwrap()
                 .base_workspace,
@@ -137,14 +137,10 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
     let [lower, upper, foreign] = &workspaces[..] else {
         unreachable!()
     };
-    let set = |workspace: &str, base: Option<&str>| {
+    let set = |workspace: &crate::model::Workspace, base: Option<&str>| {
         let manager = manager.clone();
-        let (workspace, base) = (workspace.to_owned(), base.map(str::to_owned));
-        async move {
-            manager
-                .set_base_workspace(&SpaceSelector::parse(&workspace), base)
-                .await
-        }
+        let (workspace, base) = (SpaceSelector::id(&workspace.id), base.map(str::to_owned));
+        async move { manager.set_base_workspace(&workspace, base).await }
     };
 
     manager
@@ -157,9 +153,9 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
             },
         )
         .await;
-    for (target, allowed) in [(&upper.name, true), (&lower.name, false)] {
+    for (target, allowed) in [(&upper.id, true), (&lower.id, false)] {
         let mut method = crate::protocol::WorkspaceMethod::SetBaseWorkspace {
-            workspace: SpaceSelector::parse(target),
+            workspace: SpaceSelector::from(target),
             base: Some(lower.name.to_string()),
         };
         let authorized =
@@ -167,22 +163,23 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
         assert_eq!(authorized.is_ok(), allowed);
     }
 
-    let stacked = set("upper", Some("lower")).await.unwrap();
+    let stacked = set(upper, Some("lower")).await.unwrap();
     assert_eq!(stacked.base_workspace, Some(reference(lower)));
     for (workspace, base) in [
-        ("upper", Some(lower.id.as_str())),
-        ("lower", Some("upper")),
-        ("lower", Some("lower")),
-        ("upper", Some("foreign")),
-        ("upper", Some("missing")),
+        (upper, Some(lower.id.as_str())),
+        (lower, Some("upper")),
+        (lower, Some("lower")),
+        (upper, Some("foreign")),
+        (upper, Some("missing")),
     ] {
         assert!(
             set(workspace, base).await.is_err(),
-            "{workspace} on {base:?}"
+            "{} on {base:?}",
+            workspace.name
         );
     }
-    assert_eq!(set("upper", None).await.unwrap().base_workspace, None);
-    assert!(set(&foreign.name, None).await.is_err());
+    assert_eq!(set(upper, None).await.unwrap().base_workspace, None);
+    assert!(set(foreign, None).await.is_err());
 
     let events = manager.workspace_events(None, 100).await.unwrap();
     let changes: Vec<_> = events
@@ -209,6 +206,6 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
     );
     // A base is also named by its space's number.
     let number = lower.number.to_string();
-    let stacked = set("upper", Some(&number)).await.unwrap();
+    let stacked = set(upper, Some(&number)).await.unwrap();
     assert_eq!(stacked.base_workspace, Some(reference(lower)));
 }

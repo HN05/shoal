@@ -43,7 +43,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     let gate = manager.gates.lock_git(&repo.id).await;
     manager
         .remove_workspace(
-            &"removed".into(),
+            &manager.named("removed").await,
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -117,7 +117,7 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
     }
     manager
         .remove_workspace(
-            &"removed".into(),
+            &manager.named("removed").await,
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
         )
@@ -158,12 +158,12 @@ async fn removal_deletes_the_workspaces_derived_data_under_the_xcode_preset() {
     }
     let remove =
         |name| manager.remove_workspace(name, UnsavedWork::default(), InspectionPolicy::GitOnly);
-    let first = "first".into();
+    let first = manager.named("first").await;
     remove(&first).await.unwrap();
     assert!(!folders[0].exists());
     assert!(folders[1].exists());
     configure(&manager, "[cleanup]\ngrace_minutes = 0\n").await;
-    let second = "second".into();
+    let second = manager.named("second").await;
     remove(&second).await.unwrap();
     assert!(folders[1].exists(), "kept without the preset");
 }

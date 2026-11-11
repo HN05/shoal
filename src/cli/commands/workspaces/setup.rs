@@ -250,10 +250,10 @@ async fn handle_setup_failure(
     error: anyhow::Error,
 ) -> Result<Option<SetUp>> {
     let error = format!("{error:#}");
-    let name = &workspace.name;
+    let (name, number) = (&workspace.name, workspace.number);
     ensure!(
         ctx.interactive(),
-        "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, skip it with `shoal setup {name} --skip`, or delete with `shoal rm {name} --yes`"
+        "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {number}`, skip it with `shoal setup {number} --skip`, or delete with `shoal rm {number} --yes`"
     );
     eprintln!(
         "{} for {name}: {error}",
@@ -297,14 +297,14 @@ async fn report_setup_verification_failure(
 ) -> Result<Option<SetUp>> {
     let inspection =
         crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
-    let name = &workspace.name;
+    let (name, number) = (&workspace.name, workspace.number);
     let reason = inspection
         .workspace
         .error
         .as_deref()
         .unwrap_or("process state is unknown");
     let message = format!(
-        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Stop its processes with `shoal stop {name}`, then retry setup with `shoal setup {name}` or skip it with `shoal setup {name} --skip`.",
+        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Stop its processes with `shoal stop {number}`, then retry setup with `shoal setup {number}` or skip it with `shoal setup {number} --skip`.",
         workspace.path.display()
     );
     ensure!(ctx.interactive(), "{message}");
@@ -343,12 +343,12 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
         ..Default::default()
     };
     let reports = reconcile(ctx, workspace, options).await?;
-    let name = &workspace.name;
+    let (name, number) = (&workspace.name, workspace.number);
     ensure!(
         reports
             .iter()
             .all(|r| r.workspace.state == WorkspaceState::Ready),
-        "setup of {name} cannot be skipped: {}; stop its processes with `shoal stop {name}`, then retry",
+        "setup of {name} cannot be skipped: {}; stop its processes with `shoal stop {number}`, then retry",
         issues(&reports)
     );
     Ok(())

@@ -59,7 +59,7 @@ async fn agent(
         .await;
     manager
         .set_agent_state(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             setup.state,
             Some(execution.plan.id.clone()),
             None,
@@ -258,7 +258,7 @@ async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
     for state in [AgentState::Working, AgentState::Idle] {
         manager
             .set_agent_state(
-                &SpaceSelector::from(&workspace.name),
+                &SpaceSelector::id(&workspace.id),
                 state,
                 Some(id.clone()),
                 None,
@@ -285,7 +285,7 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     manager.stop_idle_agents().await.unwrap();
     assert!(*execution.stop.borrow());
     let woken = manager
-        .start_woken_turn(&SpaceSelector::from(&workspace.name), Some(id))
+        .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
         .await
         .unwrap();
     assert!(!woken, "the stop came first");

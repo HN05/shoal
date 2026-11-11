@@ -37,7 +37,7 @@ impl<'a> WorkspaceContext<'a> {
     /// Lists must already be daemon-filtered for scope. This selects context;
     /// authorization remains with the daemon. Explicit misses never infer a target.
     /// Execution adapters may forward explicit selectors directly to the daemon
-    /// without fetching a list; completion requires a known name or ID here.
+    /// without fetching a list; completion requires a known number or ID here.
     pub fn resolve(
         &self,
         explicit: Option<&SpaceSelector>,
@@ -45,9 +45,8 @@ impl<'a> WorkspaceContext<'a> {
         order: ScopeOrder,
     ) -> Option<&'a Workspace> {
         if let Some(selector) = explicit {
-            return (self.workspaces.iter()).find(|workspace| {
-                selector.selects(&workspace.id, &workspace.name, workspace.number)
-            });
+            return (self.workspaces.iter())
+                .find(|workspace| selector.selects(&workspace.id, workspace.number));
         }
         let scope = || scoped.then(|| self.workspaces.first()).flatten();
         match order {

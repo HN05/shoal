@@ -55,7 +55,7 @@ impl Fixture {
         place: CopyPlace,
     ) -> Result<Workspace> {
         let source = CopySource {
-            workspace: SpaceSelector::parse(&self.source.name),
+            workspace: SpaceSelector::id(&self.source.id),
             checkpoint,
         };
         let repository = (&self.source.repository_id).into();
@@ -147,7 +147,7 @@ async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
         &["update-ref", "refs/remotes/origin/fix", head.trim()],
     );
     let request = CopySource {
-        workspace: SpaceSelector::parse(&source.name),
+        workspace: SpaceSelector::id(&source.id),
         checkpoint: None,
     };
     let copy = f.manager.create_copy(
@@ -188,7 +188,7 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
     let f = Fixture::new().await;
     let checkpoint = f
         .manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&f.manager.named("topic").await, None)
         .await
         .unwrap();
     let kept = git(&f.source.path, &["diff", "HEAD"]);
@@ -239,7 +239,7 @@ async fn a_checkpoint_that_kept_head_only_is_refused() {
     let f = Fixture::new().await;
     let checkpoint = f
         .manager
-        .take_checkpoint(&"topic".into(), None)
+        .take_checkpoint(&f.manager.named("topic").await, None)
         .await
         .unwrap();
     let id = f.source.id.clone();
@@ -341,7 +341,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
     };
     for (workspace, allowed) in [(&f.source, true), (&child, true), (&other, false)] {
         let mut source = CopySource {
-            workspace: SpaceSelector::parse(&workspace.name),
+            workspace: SpaceSelector::id(&workspace.id),
             checkpoint: None,
         };
         let result = manager.copy_within(&caller, &mut source).await;
@@ -351,7 +351,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         }
     }
     let checkpoint = manager
-        .take_checkpoint(&"other".into(), None)
+        .take_checkpoint(&manager.named("other").await, None)
         .await
         .unwrap();
     manager
@@ -363,7 +363,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         .await
         .unwrap();
     let mut removed = CopySource {
-        workspace: SpaceSelector::parse(&other.name),
+        workspace: SpaceSelector::id(&other.id),
         checkpoint: Some(checkpoint.number),
     };
     assert!(manager.copy_within(&caller, &mut removed).await.is_err());

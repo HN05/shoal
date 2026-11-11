@@ -1298,7 +1298,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     narrowing: Default::default(),
                     mode: None,
                     model: Default::default(),
-                    workspace: SpaceSelector::parse(&target.name),
+                    workspace: SpaceSelector::id(&target.id),
                     kind: requested,
                     agent: None,
                     recover: false,
@@ -1576,7 +1576,7 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     assert_eq!(
         statuses(
             f.manager
-                .approval_requests(Some(&"worker".into()))
+                .approval_requests(Some(&f.manager.named("worker").await))
                 .await
                 .unwrap()
         ),
@@ -1596,7 +1596,7 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     assert_eq!(
         statuses(
             f.manager
-                .approval_requests(Some(&"worker".into()))
+                .approval_requests(Some(&f.manager.named("worker").await))
                 .await
                 .unwrap()
         ),
@@ -1605,7 +1605,11 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
             (next.number, DecisionStatus::Outdated)
         ]
     );
-    let messages = f.manager.agent_messages(&"worker".into()).await.unwrap();
+    let messages = f
+        .manager
+        .agent_messages(&f.manager.named("worker").await)
+        .await
+        .unwrap();
     assert!(
         messages
             .iter()
@@ -1650,7 +1654,7 @@ async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
     fs::write(&reference, saved).unwrap();
     let requests = f
         .manager
-        .approval_requests(Some(&"worker".into()))
+        .approval_requests(Some(&f.manager.named("worker").await))
         .await
         .unwrap();
     assert_eq!(requests.len(), 1);
@@ -1660,7 +1664,7 @@ async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
     );
     assert!(
         f.manager
-            .agent_messages(&"worker".into())
+            .agent_messages(&f.manager.named("worker").await)
             .await
             .unwrap()
             .is_empty()
@@ -1685,7 +1689,7 @@ async fn scoped_merge_skips_approval_when_configured() {
     assert!(started.plan.merge.is_some());
     assert!(
         f.manager
-            .approval_requests(Some(&"worker".into()))
+            .approval_requests(Some(&f.manager.named("worker").await))
             .await
             .unwrap()
             .is_empty()
@@ -1762,7 +1766,7 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     // The local request no longer covers a merge that pushes.
     let requests = f
         .manager
-        .approval_requests(Some(&"worker".into()))
+        .approval_requests(Some(&f.manager.named("worker").await))
         .await
         .unwrap();
     let replaced = requests
@@ -1897,7 +1901,7 @@ async fn unpushed_commits_count_against_a_remapped_upstream() {
     git(&f.repo, &["merge", "--ff-only", "origin/cache-other"]);
     let preview = f
         .manager
-        .preview_merge(&"worker".into(), true)
+        .preview_merge(&f.manager.named("worker").await, true)
         .await
         .unwrap();
     assert_eq!(preview.unpushed, 1);
@@ -1915,7 +1919,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
         push: true,
         confirmed: Some(
             f.manager
-                .preview_merge(&"worker".into(), true)
+                .preview_merge(&f.manager.named("worker").await, true)
                 .await
                 .unwrap()
                 .confirmation(),
@@ -1923,7 +1927,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     };
     let refused = async |options: &crate::model::MergeOptions| {
         f.manager
-            .prepare_merge(&"worker".into(), options)
+            .prepare_merge(&f.manager.named("worker").await, options)
             .await
             .is_err()
     };
@@ -1947,7 +1951,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     git(&f.repo, &["pull", "--ff-only"]);
     assert!(
         f.manager
-            .prepare_merge(&"worker".into(), &options)
+            .prepare_merge(&f.manager.named("worker").await, &options)
             .await
             .is_ok()
     );
@@ -1962,7 +1966,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     assert!(refused(&options).await);
     let plan = f
         .manager
-        .prepare_merge(&"worker".into(), &confirmed().await)
+        .prepare_merge(&f.manager.named("worker").await, &confirmed().await)
         .await;
     assert!(plan.unwrap().push.is_some());
 }
@@ -1987,7 +1991,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         push: false,
         confirmed: Some(
             f.manager
-                .preview_merge(&"worker".into(), false)
+                .preview_merge(&f.manager.named("worker").await, false)
                 .await
                 .unwrap()
                 .confirmation(),
@@ -2001,7 +2005,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         .await
         .unwrap();
     f.manager
-        .prepare_merge(&"worker".into(), &options)
+        .prepare_merge(&f.manager.named("worker").await, &options)
         .await
         .unwrap_err();
     // A question that named them lets the merge go ahead.
@@ -2010,7 +2014,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
     assert_eq!(named.changed_on_both_sides, ["version"]);
     assert!(
         f.manager
-            .prepare_merge(&"worker".into(), &options)
+            .prepare_merge(&f.manager.named("worker").await, &options)
             .await
             .is_ok()
     );
@@ -2030,7 +2034,7 @@ async fn merge_turned_off_refuses_runs_and_agent_requests() {
     merge_as_agent(&f, &workspace).await.unwrap_err();
     assert!(
         f.manager
-            .approval_requests(Some(&"worker".into()))
+            .approval_requests(Some(&f.manager.named("worker").await))
             .await
             .unwrap()
             .is_empty()
@@ -2123,17 +2127,14 @@ impl Manager {
         selector: &str,
         push: bool,
     ) -> anyhow::Result<crate::model::MergedBranch> {
-        let workspace = self.workspace(&SpaceSelector::parse(selector)).await?;
+        let selector = self.named(selector).await;
+        let workspace = self.workspace(&selector).await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
         let options = crate::model::MergeOptions {
             push,
             confirmed: None,
         };
-        crate::git::repo::finish_merge(
-            self.prepare_merge(&SpaceSelector::parse(selector), &options)
-                .await?,
-        )
-        .await
+        crate::git::repo::finish_merge(self.prepare_merge(&selector, &options).await?).await
     }
 }
 

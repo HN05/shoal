@@ -396,14 +396,14 @@ async fn scoped_callers_mark_only_their_own_workspace() {
             },
         )
         .await;
-    for (target, allowed) in [(&own.name, true), (&other.name, false)] {
+    for (target, allowed) in [(&own.id, true), (&other.id, false)] {
         for mut method in [
             AssignmentMethod::MarkReady {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 selection: Selection::default(),
             },
             AssignmentMethod::ClearReady {
-                space: SpaceSelector::parse(target),
+                space: SpaceSelector::from(target),
                 selection: Selection::default(),
                 draft: None,
             },

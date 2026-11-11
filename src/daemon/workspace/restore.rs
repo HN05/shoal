@@ -228,7 +228,7 @@ impl Manager {
             .with_context(|| {
                 format!(
                     "the imported workspace is recorded as removed; shoal restore {} retries",
-                    removed.name
+                    removed.workspace_id
                 )
             })
     }
@@ -380,11 +380,11 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
     ) -> Result<RemovedWorkspace> {
-        let name = (selector.id_or_name().map(str::to_owned)).with_context(|| {
-            format!("no restorable workspace {selector}; a removed workspace has no number, so name it by name or ID")
+        let id = (selector.given_id().cloned()).with_context(|| {
+            format!("no restorable workspace {selector}; a removed workspace has no number, so select it by its ID")
         })?;
         self.store
-            .write(move |tx| claim(tx, &name))
+            .write(move |tx| claim(tx, &id))
             .await?
             .with_context(|| {
                 format!("no restorable workspace {selector}; shoal restore lists them")
@@ -522,8 +522,8 @@ pub(super) const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_
 
 /// Find a removal record and keep it and its checkpoints for at least
 /// [`RESTORE_CLAIM`].
-fn claim(tx: &rusqlite::Transaction<'_>, selector: &str) -> Result<Option<RemovedWorkspace>> {
-    let Some(mut removed) = find(tx, selector)? else {
+fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedWorkspace>> {
+    let Some(mut removed) = find(tx, id)? else {
         return Ok(None);
     };
     let until = UnixTime::now() + RESTORE_CLAIM;
@@ -547,15 +547,14 @@ fn claim(tx: &rusqlite::Transaction<'_>, selector: &str) -> Result<Option<Remove
     Ok(Some(removed))
 }
 
-/// The unexpired removal record of a removed workspace, by name or ID; the
-/// newest wins when one name was removed more than once.
-fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
+/// The unexpired removal record of the removed workspace `id`.
+fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedWorkspace>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM removed_workspaces WHERE (workspace_id=?1 OR name=?1)
+            "SELECT record FROM removed_workspaces WHERE workspace_id=?1
                 AND expires_at > unixepoch() AND workspace_id NOT IN (SELECT id FROM workspaces)
                 ORDER BY rowid DESC LIMIT 1",
-            [selector],
+            [id],
             |row| row.get(0),
         )
         .optional()?;

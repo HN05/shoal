@@ -50,7 +50,7 @@ while True:
             .args([
                 "-c",
                 r#"import fcntl, os, pathlib, signal, subprocess, sys, termios, time
-binary, agent, mode = sys.argv[1:]
+binary, agent, mode, space = sys.argv[1:]
 os.setsid()
 fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 # Preserve deliberate caller customization too, rather than resetting to sane.
@@ -65,13 +65,13 @@ def terminal_settings():
     return settings
 before = terminal_settings()
 group = os.tcgetpgrp(0)
-command = [binary, 'run', '--workspace', 'terminal', '--', 'python3', agent, mode]
+command = [binary, 'run', '--workspace', space, '--', 'python3', agent, mode]
 child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 try:
     if mode in ('interrupt', 'stop'):
         import json
         workspace = pathlib.Path(json.loads(subprocess.check_output(
-            [binary, '--json', 'status', 'terminal'], text=True))['workspace']['path'])
+            [binary, '--json', 'status', space], text=True))['workspace']['path'])
         deadline = time.monotonic() + 10
         while not (workspace / 'raw-ready').exists():
             assert child.poll() is None, child.communicate()
@@ -80,7 +80,7 @@ try:
         if mode == 'interrupt':
             child.send_signal(signal.SIGTERM)
         else:
-            subprocess.run([binary, 'stop', 'terminal'], check=True, capture_output=True, timeout=15)
+            subprocess.run([binary, 'stop', space], check=True, capture_output=True, timeout=15)
     stdout, stderr = child.communicate(timeout=15)
     expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143}[mode]
     assert child.returncode == expected, (child.returncode, stdout, stderr)
@@ -95,6 +95,7 @@ finally:
                 support::shoal_binary(),
                 agent.to_str().unwrap(),
                 mode,
+                &fixture.id("terminal"),
             ])
             .stdin(slave.try_clone().unwrap())
             .stdout(Stdio::piped())
@@ -155,7 +156,7 @@ finally:
                 );
             }
         }
-        let workspace = fixture.ok(&["status", "terminal"]);
+        let workspace = fixture.ok(&["status", &fixture.id("terminal")]);
         fs::remove_file(
             Path::new(workspace["workspace"]["path"].as_str().unwrap()).join("raw-ready"),
         )
@@ -185,7 +186,14 @@ fn execution_lets_its_command_stop_for_the_terminal_where_shoal_ignores_that() {
     // Python starts its handlers from the signals the process inherits, and
     // unlike `ps -o sigignore`, this reads them on macOS too.
     let output = command
-        .args(["run", "--workspace", "stops", "--", "python3", "-c"])
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("stops"),
+            "--",
+            "python3",
+            "-c",
+        ])
         .arg(
             "import signal\n\
              print(*(signal.getsignal(s) == signal.SIG_IGN\n\
@@ -228,10 +236,10 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
     assert_eq!(output.stdout, b"pipe:execute");
     assert_eq!(output.stderr, b"error");
     assert_eq!(
-        fixture.ok(&["status", "execute"])["executions"],
+        fixture.ok(&["status", &fixture.id("execute")])["executions"],
         serde_json::json!([])
     );
-    fixture.ok(&["rm", "--wait", "execute"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("execute")]);
 }
 
 #[test]
@@ -245,7 +253,7 @@ fn configured_environment_renders_for_tracked_commands() {
         "port",
         "api",
         "--workspace",
-        "env-values",
+        &fixture.id("env-values"),
         "--env",
         "API_PORT",
     ]);
@@ -253,7 +261,7 @@ fn configured_environment_renders_for_tracked_commands() {
         .command()
         .args([
             "run",
-            "--workspace", "env-values",
+            "--workspace", &fixture.id("env-values"),
             "--",
             "sh",
             "-c",
@@ -277,7 +285,7 @@ fn configured_environment_renders_for_tracked_commands() {
         .args([
             "run",
             "--workspace",
-            "env-values",
+            &fixture.id("env-values"),
             "--",
             "sh",
             "-c",
@@ -293,7 +301,7 @@ fn configured_environment_renders_for_tracked_commands() {
         format!("{}|http://localhost:{}", port["port"], port["port"])
     );
     assert!(cache.ends_with("/.caches/shared/go"), "{cache}");
-    let exported = fixture.ok(&["internal", "env", "env-values"]);
+    let exported = fixture.ok(&["internal", "env", &fixture.id("env-values")]);
     assert_eq!(exported["API_PORT"], port["port"].to_string());
     assert_eq!(exported["SESSION"], "env-values");
     assert_eq!(
@@ -301,7 +309,7 @@ fn configured_environment_renders_for_tracked_commands() {
         format!("http://localhost:{}", port["port"])
     );
     assert_eq!(exported["GOCACHE"], cache);
-    fixture.ok(&["rm", "--wait", "env-values"]);
+    fixture.ok(&["rm", "--wait", &fixture.id("env-values")]);
     // The repository keeps its caches until cleanup empties them.
     assert!(Path::new(cache).join("entry").exists());
     let report = fixture.ok(&["cleanup", "caches"]);
@@ -323,7 +331,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .args([
                 "run",
                 "--workspace",
-                "running",
+                &fixture.id("running"),
                 "--",
                 "sh",
                 "-c",
@@ -334,7 +342,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .spawn()
             .unwrap();
         wait_until("execution registration", || {
-            !fixture.ok(&["status", "running"])["executions"]
+            !fixture.ok(&["status", &fixture.id("running")])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -350,7 +358,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
         let output = child.wait_with_output().unwrap();
         assert!(!output.status.success());
         if operation == "stop" {
-            fixture.ok(&["rm", "--wait", "running"]);
+            fixture.ok(&["rm", "--wait", &fixture.id("running")]);
         }
     }
 }

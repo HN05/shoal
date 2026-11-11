@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{Choice, View, execute::execute_command, linked::view_command, rows::Row};
 use crate::cli::commands::{approvals, service};
-use crate::client::space_names::{SpaceName, SpaceSelector};
+use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
 use crate::{
     cli::{
         Command,
@@ -111,9 +111,9 @@ pub(super) async fn command(ctx: &Context, action: Action, row: Row) -> Result<C
     }
     let space = row.space();
     ensure!(space.is_some(), "select a space for this action");
-    if let Some(chat) = chat_name(ctx, space.as_ref()).await? {
+    if let Some(chat) = chat_id(ctx, space.as_ref()).await? {
         return Ok(Choice::Run(Box::new(
-            chat_command(ctx, action, SpaceSelector::from(chat)).await?,
+            chat_command(ctx, action, SpaceSelector::Id(chat)).await?,
         )));
     }
     Ok(Choice::Run(Box::new(
@@ -121,15 +121,15 @@ pub(super) async fn command(ctx: &Context, action: Action, row: Row) -> Result<C
     )))
 }
 
-/// The name of the chat `space` names, if it is one, whose inbox rows only
+/// The ID of the chat `space` names, if it is one, whose inbox rows only
 /// some keys act on.
-async fn chat_name(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<SpaceName>> {
+async fn chat_id(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<SpaceId>> {
     let Some(space) = space else {
         return Ok(None);
     };
     Ok(
         match crate::client::workspaces::present_space(&ctx.paths, space).await? {
-            Some(PresentSpace::Chat(chat)) => Some(chat.name),
+            Some(PresentSpace::Chat(chat)) => Some(chat.id),
             _ => None,
         },
     )
@@ -181,19 +181,12 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                 approvals::decide_listed(ctx, number, created_at).await?,
             ));
         }
-        // A chat attaches by its name.
-        Row::NeedsInput(space) => {
-            let space = SpaceSelector::Id(space);
-            Command::Sessions(SessionsCommand::Attach {
-                target: Some(match chat_name(ctx, Some(&space)).await? {
-                    Some(chat) => SpaceSelector::from(chat),
-                    None => space,
-                }),
-                session: None,
-            })
-        }
+        Row::NeedsInput(space) => Command::Sessions(SessionsCommand::Attach {
+            target: Some(SpaceSelector::Id(space)),
+            session: None,
+        }),
         Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
-            space: Some(SpaceSelector::Id(workspace)),
+            space: Some(workspace.to_string()),
             item: None,
         }),
         Row::Ready {
@@ -213,14 +206,14 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             web: false,
         })),
         Row::Ready { space, url: None } => {
-            match chat_name(ctx, Some(&SpaceSelector::id(&space))).await? {
+            match chat_id(ctx, Some(&SpaceSelector::id(&space))).await? {
                 // A chat marked itself, so its agent says what is ready.
                 Some(chat) => Command::Sessions(SessionsCommand::Attach {
-                    target: Some(SpaceSelector::from(chat)),
+                    target: Some(SpaceSelector::Id(chat)),
                     session: None,
                 }),
                 None => Command::Workspace(WorkspaceCommand::Status {
-                    space: Some(SpaceSelector::Id(space)),
+                    space: Some(space.to_string()),
                     item: None,
                 }),
             }
@@ -244,10 +237,10 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {
             workspace: Some(SpaceSelector::id(&workspace)),
         }),
-        Row::Notification(name) => {
-            let name = name.context("the notification names no workspace")?;
+        Row::Notification(id) => {
+            ensure!(!id.is_empty(), "the notification names no workspace");
             Command::Workspace(WorkspaceCommand::Cd {
-                workspace: Some(SpaceSelector::from(name)),
+                workspace: Some(SpaceSelector::Id(id.into())),
             })
         }
         Row::Add => add(),
@@ -291,7 +284,7 @@ async fn workspace_command(
             wait: false,
         }),
         Action::Status => Command::Workspace(WorkspaceCommand::Status {
-            space: workspace,
+            space: workspace.map(|workspace| workspace.to_string()),
             item: None,
         }),
         Action::Stop => stop(workspace),

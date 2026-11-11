@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::OptionalExtension;
 
 use super::{clean_checkout, local_commit, records::RecordedMerge};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
@@ -27,16 +28,16 @@ impl Manager {
             Ok(workspace) => return Ok(workspace),
             Err(error) => error,
         };
-        let Some(selector) = selector.id_or_name().map(str::to_owned) else {
+        let Some(id) = selector.given_id().cloned() else {
             return Err(error);
         };
-        match self
-            .store
-            .run(move |db| removed_name(db, &selector))
-            .await?
-        {
+        let removed = self.store.run({
+            let id = id.clone();
+            move |db| removed_name(db, &id)
+        });
+        match removed.await? {
             Some(name) => bail!(
-                "workspace {name} was removed; restore it with shoal restore {name}, then unmerge it"
+                "workspace {name} was removed; restore it with shoal restore {id}, then unmerge it"
             ),
             None => Err(error),
         }
@@ -78,11 +79,11 @@ impl Manager {
 }
 
 /// The name of the removed workspace `selector` names by name or ID.
-fn removed_name(db: &rusqlite::Connection, selector: &str) -> Result<Option<String>> {
+fn removed_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
     Ok(db
         .query_row(
-            "SELECT name FROM removed_workspaces WHERE name=?1 OR workspace_id=?1",
-            [selector],
+            "SELECT name FROM removed_workspaces WHERE workspace_id=?1",
+            [id],
             |row| row.get(0),
         )
         .optional()?)
@@ -152,7 +153,7 @@ async fn ensure_replayable(
             bail!(
                 "the later merge of {} contains {branch}'s commits, so replaying it would bring them back; unmerge it first with shoal unmerge {}",
                 recorded.merge.branch,
-                recorded.merge.workspace
+                recorded.merge.workspace_id
             );
         }
     }

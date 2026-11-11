@@ -118,10 +118,7 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
             .await
             .unwrap();
         let check = manager
-            .check_removal(
-                &SpaceSelector::from(&workspace.name),
-                InspectionPolicy::GitOnly,
-            )
+            .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert_eq!(check.running_commands, 0);
@@ -141,10 +138,7 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
             .await
             .unwrap();
         let check = manager
-            .check_removal(
-                &SpaceSelector::from(&workspace.name),
-                InspectionPolicy::GitOnly,
-            )
+            .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert_eq!(check.running_commands, 2);

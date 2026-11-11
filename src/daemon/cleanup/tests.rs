@@ -338,7 +338,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .unwrap();
     let question = manager
         .ask_question(
-            &SpaceSelector::from(&workspace.name),
+            &SpaceSelector::id(&workspace.id),
             ask,
             Vec::new(),
             &Attacher::User,
@@ -590,11 +590,20 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
             .unwrap();
     }
     // An inspection failure is reported rather than read as nothing to do.
-    let broken = manager.workspace(&"broken".into()).await.unwrap();
+    let broken = manager
+        .workspace(&manager.named("broken").await)
+        .await
+        .unwrap();
     fs::remove_file(broken.path.join(".git")).unwrap();
-    let dirty = manager.workspace(&"dirty".into()).await.unwrap();
+    let dirty = manager
+        .workspace(&manager.named("dirty").await)
+        .await
+        .unwrap();
     fs::write(dirty.path.join("work"), "retain me").unwrap();
-    let held = manager.workspace(&"held".into()).await.unwrap();
+    let held = manager
+        .workspace(&manager.named("held").await)
+        .await
+        .unwrap();
     manager
         .acquire_hold(
             &SpaceSelector::id(&held.id),
@@ -1489,7 +1498,7 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     manager.stop_finished_chats().await.unwrap();
 
     let withdrawn = manager
-        .undo_space_done(&SpaceSelector::from(&chat.name))
+        .undo_space_done(&SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     assert!(withdrawn.cleanup);
@@ -1526,7 +1535,7 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
     };
     manager
         .ask_question(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             ask,
             Vec::new(),
             &Attacher::User,
@@ -1555,7 +1564,7 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
     };
     manager
         .ask_question(
-            &SpaceSelector::from(&chat.name),
+            &SpaceSelector::id(&chat.id),
             ask,
             Vec::new(),
             &Attacher::User,

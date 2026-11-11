@@ -99,7 +99,7 @@ async fn load_issue(ctx: &Context, chat: &SpaceSelector, input: &str) -> Result<
 async fn linked_issue_branch(ctx: &Context, chat: &SpaceSelector) -> Result<String> {
     let chats = crate::client::chats::list(&ctx.paths).await?;
     let linked = (chats.iter())
-        .find(|candidate| chat.selects(&candidate.id, &candidate.name, candidate.number))
+        .find(|candidate| chat.selects(&candidate.id, candidate.number))
         .and_then(|chat| chat.links.issue.clone())
         .context("name the workspace's branch, or pass --issue or link the chat's issue first")?;
     Ok(load_issue(ctx, chat, &linked).await?.branch_name())

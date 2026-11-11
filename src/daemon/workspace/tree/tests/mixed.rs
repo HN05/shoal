@@ -266,7 +266,12 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
         .await;
     assert!(created.is_err());
     // Refused before anything was created.
-    assert!(manager.workspace(&"foreign".into()).await.is_err());
+    assert!(
+        manager
+            .workspace(&manager.named("foreign").await)
+            .await
+            .is_err()
+    );
 }
 
 /// Start the chat `name` in the worktree of `workspace`, running as a
@@ -440,7 +445,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         narrowing: Default::default(),
         mode: None,
         repository: Some(repo.id.clone().into()),
-        workspace: Some(SpaceSelector::parse(&workspace.name)),
+        workspace: Some(SpaceSelector::id(&workspace.id)),
         name: "auditing".into(),
         agent: "claude".into(),
         pid: process.id(),
@@ -498,7 +503,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent: Some(SpaceSelector::parse(&parent.name)),
+        parent: Some(SpaceSelector::id(&parent.id)),
     };
     let mut method = below(&worker);
     crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
@@ -524,7 +529,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         git_profile: None,
         path: None,
         options: Default::default(),
-        parent: Some(SpaceSelector::parse(&parent.name)),
+        parent: Some(SpaceSelector::id(&parent.id)),
     };
     let mut method = check(&worker);
     crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
