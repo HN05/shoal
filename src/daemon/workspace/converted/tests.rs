@@ -260,3 +260,27 @@ async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
 
     assert_eq!(workspace.branch.as_deref(), Some("feature-2/login"));
 }
+
+#[tokio::test]
+async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    manager.save_chat(&talk.id, None).await.unwrap();
+    let converting = Converting {
+        chat: talk.clone(),
+        mode: ModeName::DEFAULT,
+    };
+
+    let refused = manager
+        .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
+        .await
+        .unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("stopped meanwhile"),
+        "{refused:#}"
+    );
+    let chat = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
+    assert!(chat.restore.is_some());
+}

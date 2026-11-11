@@ -3,7 +3,7 @@
 //! agent in the repository's checkout.
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::{Pending, record::ConvertedChat};
+use super::record::ConvertedChat;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::execution::recovery;
@@ -42,15 +42,9 @@ impl Manager {
                 )
             })?;
         let chat = self.converted_chat(&workspace.id, mode, execution).await?;
-        let (id, pending) = (
-            workspace.id.clone(),
-            Pending::Chat {
-                chat: Box::new(chat),
-                held: false,
-            },
-        );
+        let id = workspace.id.clone();
         self.store
-            .write(move |tx| super::record::record(tx, &id, &pending))
+            .write(move |tx| super::record::record_chat_conversion(tx, &id, chat))
             .await?;
         // The relocation waits for the agent's turn to end, which it may
         // have already.

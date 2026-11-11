@@ -349,8 +349,8 @@ impl Manager {
         };
         // Setup is no agent's, so a workspace still preparing after a
         // conversion has only the converting agent to stop.
-        if self.stop_converting_agent(&workspace.id, stop).await?
-            && workspace.state == WorkspaceState::Preparing
+        if workspace.state == WorkspaceState::Preparing
+            && self.stop_converting_agent(&workspace.id, stop).await?
         {
             return Ok(Vec::new());
         }
@@ -358,6 +358,9 @@ impl Manager {
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = async {
+            // Once reserved, so a conversion recorded meanwhile, which needs
+            // a ready workspace, is found here.
+            self.stop_converting_agent(&workspace.id, stop).await?;
             let stopping = self.unstopped_executions(&workspace.id).await?;
             // Before stopping, so an admission cannot start one after.
             let cancelled = match keep {

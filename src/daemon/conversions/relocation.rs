@@ -24,6 +24,7 @@ use crate::{
 };
 
 /// How a stop of a converting workspace's agents settles its conversion.
+#[derive(Clone, Copy)]
 pub(crate) struct ConversionStop<'a> {
     /// The space whose process stops them; none for the user or Shoal.
     pub stopped_by: Option<&'a SpaceId>,

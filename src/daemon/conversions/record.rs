@@ -243,11 +243,50 @@ pub(crate) fn forget(db: &Connection, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
+/// Record that the workspace `id` becomes `chat` once its agent's turn ends,
+/// while the workspace is ready and that agent's execution runs, as a stop,
+/// which first reserves the workspace, has not ended it.
+pub(crate) fn record_chat_conversion(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    chat: ConvertedChat,
+) -> Result<()> {
+    anyhow::ensure!(
+        crate::daemon::store::exists(
+            tx,
+            "SELECT 1 FROM workspaces JOIN executions ON executions.workspace_id=workspaces.id
+             WHERE workspaces.id=?1 AND workspaces.state=?2 AND executions.id=?3
+                AND executions.state=?4",
+            params![
+                id,
+                crate::state::WorkspaceState::Ready,
+                chat.execution,
+                crate::state::ExecutionState::Running
+            ],
+        )?,
+        "the workspace's agent was stopped meanwhile; it stays a workspace"
+    );
+    let pending = Pending::Chat {
+        chat: Box::new(chat),
+        held: false,
+    };
+    record(tx, id, &pending)
+}
+
 /// Replace the chat `id`, whose workspace row was just inserted under its
-/// ID, with that workspace: its questions and unread messages become the
-/// workspace's, and its agent's scope token reaches the workspace until the
-/// agent restarts there. Returns the row the chat had.
+/// ID, with that workspace, unless a stop saved the chat meanwhile: its
+/// questions and unread messages become the workspace's, and its agent's
+/// scope token reaches the workspace until the agent restarts there.
+/// Returns the row the chat had.
 pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow> {
+    anyhow::ensure!(
+        crate::daemon::store::exists(
+            tx,
+            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL",
+            [id]
+        )?,
+        "the chat was stopped meanwhile; it stays a chat"
+    );
     let row = chat_row(tx, id)?;
     tx.execute(
         "UPDATE questions SET workspace_id=chat_id,chat_id=NULL WHERE chat_id=?1",

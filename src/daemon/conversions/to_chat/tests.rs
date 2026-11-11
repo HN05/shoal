@@ -236,3 +236,42 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
     assert!(reopened.path.join("notes.txt").exists());
     assert!(manager.chat_by_id(&workspace.id).await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        session: None,
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    let id = workspace.id.clone();
+
+    let refused = (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::record_chat_conversion(tx, &id, chat))
+        .await
+        .unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("stopped meanwhile"),
+        "{refused:#}"
+    );
+    assert!(!manager.converting(&workspace.id).await.unwrap());
+}
