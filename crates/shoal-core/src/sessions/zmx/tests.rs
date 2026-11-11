@@ -1,14 +1,29 @@
 use super::*;
 
+/// What zmx 1.0.1 prints for `zmx version`.
+const VERSION: &str = "zmx\t\t1.0.1\nghostty_vt\tghostty-1.4.1-dev\n\
+    socket_dir\t/path with spaces \nlog_dir\t\t/logs\n";
+
 #[test]
 fn native_socket_directory_preserves_path_whitespace_and_requires_a_report() -> Result<()> {
     assert_eq!(
-        reported_socket_directory("zmx\t0.8.1\nsocket_dir\t\t/path with spaces \n")?,
+        reported_socket_directory(VERSION)?,
         std::path::PathBuf::from("/path with spaces ")
     );
     assert!(reported_socket_directory("socket_dir\t\n").is_err());
-    assert!(reported_socket_directory("zmx\t0.8.1\n").is_err());
+    assert!(reported_socket_directory("zmx\t\t1.0.1\n").is_err());
     Ok(())
+}
+
+#[test]
+fn versions_read_major_minor_and_patch() {
+    assert_eq!(parse_version(VERSION), Some((1, 0, 1)));
+    assert_eq!(parse_version("zmx\t0.8.1\n"), Some((0, 8, 1)));
+    assert_eq!(parse_version("zmx\t\t1.2.0-dev\n"), Some((1, 2, 0)));
+    assert_eq!(parse_version("zmx\t\tmain\n"), None);
+    assert_eq!(parse_version("socket_dir\t/tmp\n"), None);
+    assert!(parse_version("zmx\t\t1.0.0\n").is_some_and(|version| version < OLDEST));
+    assert!(parse_version("zmx\t\t1.0.10\n").is_some_and(|version| version >= OLDEST));
 }
 
 #[test]

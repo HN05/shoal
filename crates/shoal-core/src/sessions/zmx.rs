@@ -1,6 +1,6 @@
 //! zmx session discovery and termination, shared by launchers and cleanup.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use tokio::process::Command;
@@ -12,6 +12,9 @@ pub(crate) const CHAT_LABEL: &str = "shoal.chat";
 /// Set only when Shoal creates a session. Relabelling never adds it, so a
 /// session the user opened stays theirs after Shoal runs an agent in it.
 pub(crate) const CREATED: &str = "shoal.created=1";
+/// The oldest zmx Shoal supports. Since 1.0.0 a zmx reaches only servers of
+/// its own version, and 1.0.0's macOS release could not reach its own.
+const OLDEST: (u32, u32, u32) = (1, 0, 1);
 
 /// Serialize in-place ownership replacement with verified cleanup in the native
 /// namespace, regardless of which Shoal state directory initiated it.
@@ -24,23 +27,60 @@ async fn socket_directory() -> Result<std::path::PathBuf> {
     if let Some(directory) = std::env::var_os("ZMX_DIR").filter(|value| !value.is_empty()) {
         return Ok(directory.into());
     }
+    reported_socket_directory(&version().await?)
+}
+
+/// Refuse a zmx older than [`OLDEST`].
+pub(crate) async fn ensure_supported() -> Result<()> {
+    let version = version().await?;
+    if let Some(found) = parse_version(&version) {
+        ensure!(
+            found >= OLDEST,
+            "zmx {} is too old; Shoal needs zmx {}.{}.{} or later",
+            reported(&version, "zmx").unwrap_or_default(),
+            OLDEST.0,
+            OLDEST.1,
+            OLDEST.2
+        );
+    }
+    Ok(())
+}
+
+/// What `zmx version` prints: one tab-separated value per line.
+async fn version() -> Result<String> {
     let mut command = Command::new(Tool::Zmx.program());
     command.arg("version");
     let output = Run::new(command).checked().await?;
-    reported_socket_directory(&String::from_utf8_lossy(&output.stdout))
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 fn reported_socket_directory(version: &str) -> Result<std::path::PathBuf> {
+    reported(version, "socket_dir")
+        .map(Into::into)
+        .context("zmx did not report its socket directory")
+}
+
+/// The version `zmx version` reports, such as 1.0.1.
+fn parse_version(version: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = reported(version, "zmx")?.split('.').map(|part| {
+        let digits = part
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(part.len());
+        part[..digits].parse().ok()
+    });
+    Some((parts.next()??, parts.next()??, parts.next()??))
+}
+
+/// The value `zmx version` reports for `key`, when it reports one.
+fn reported<'a>(version: &'a str, key: &str) -> Option<&'a str> {
     version
         .lines()
         .filter_map(|line| line.split_once('\t'))
-        .find_map(|(key, value)| {
-            (key == "socket_dir")
+        .find_map(|(name, value)| {
+            (name == key)
                 .then(|| value.trim_start_matches('\t'))
                 .filter(|value| !value.is_empty())
         })
-        .map(Into::into)
-        .context("zmx did not report its socket directory")
 }
 
 /// End `session` with everything running in it.

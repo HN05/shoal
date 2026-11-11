@@ -240,7 +240,7 @@ fn in_session() -> bool {
 /// report the agent's exit status; the daemon still records the exit.
 async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -> Result<String> {
     // Launches check zmx before any work; resumed agents reach it here.
-    ensure_program(agent.name(), Tool::Zmx.program())?;
+    ensure_zmx(agent.name()).await?;
     let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach").arg("--labels").arg(format!(
@@ -257,6 +257,7 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -
 /// The session's Shoal records the chat there, labels the session with it and
 /// becomes its agent, as it would in place. Returns the session's name.
 async fn run_chat(start: &Start<'_>) -> Result<String> {
+    ensure_zmx("chat").await?;
     let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.args(["attach", "--labels", CREATED]);
@@ -277,6 +278,12 @@ fn attach_new(zmx: &mut Command, name: &str, start: &Start<'_>) {
     }
 }
 
+/// Refuse `what`, which starts a session, without a zmx Shoal supports.
+async fn ensure_zmx(what: &str) -> Result<()> {
+    ensure_program(what, Tool::Zmx.program())?;
+    crate::sessions::zmx::ensure_supported().await
+}
+
 /// A name for a new session called `label` that no session zmx keeps has.
 async fn unused_name(label: &str) -> Result<String> {
     let taken = list().await?.into_iter().map(|session| session.0).collect();
@@ -290,7 +297,7 @@ async fn unused_name(label: &str) -> Result<String> {
 /// login shell to show why it failed. `start`'s variables reach that shell,
 /// inert there. Returns the session's name.
 async fn start_detached(start: &Start<'_>) -> Result<String> {
-    ensure_program("background launch", Tool::Zmx.program())?;
+    ensure_zmx("background launch").await?;
     let name = unused_name(start.label).await?;
     run_in_new_session(
         &name,
@@ -313,7 +320,7 @@ async fn start_detached(start: &Start<'_>) -> Result<String> {
 /// Start `demo` in a new detached session, whose worker ends the session
 /// once the demo stops.
 async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
-    ensure_program("demo", Tool::Zmx.program())?;
+    ensure_zmx("demo").await?;
     let session = unused_name(demo.label).await?;
     let place = Origin::created(HostName::Zmx, session.clone());
     run_in_new_session(

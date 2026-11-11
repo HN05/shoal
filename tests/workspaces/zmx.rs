@@ -895,6 +895,21 @@ fn status_reports_a_session_zmx_cannot_reach_instead_of_dropping_it() {
 }
 
 #[test]
+fn terminal_agent_launches_refuse_a_zmx_older_than_1_0_1_before_opening_a_session() {
+    let fixture = Fixture::new();
+    fixture.add("persist");
+    install_fake_agents(&fixture, &["claude"]);
+    fs::write(fixture.root.path().join("zmx-version"), "0.8.1").unwrap();
+    let (output, transcript) =
+        fixture.terminal_command(fixture.command().args(["claude", "persist"]), "", true);
+    assert!(!output.status.success(), "{transcript}");
+    assert!(
+        !zmx_calls(&fixture).iter().any(|call| call[0] == "attach"),
+        "{transcript}"
+    );
+}
+
+#[test]
 fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     let fixture = Fixture::new();
     install_fake_agents(&fixture, &["claude"]);

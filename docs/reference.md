@@ -1182,7 +1182,13 @@ agent running. An agent Happy runs leaves the call at once anyway, so a
 caller outside Shoal launches it as before; the new workspace's own settings
 decide, once it is set up. For callers outside Shoal, `start --here` and `resume --focus`
 run the agent in place, returning its exit code. A launch that would start a zmx session refuses the agent when zmx is missing,
-as a missing agent executable does.
+as a missing agent executable does, or older than 1.0.1. A zmx reaches only
+sessions a zmx of its own version started: before upgrading from 0.8 or
+earlier, stop the agents in zmx sessions with `shoal stop`, and resume them
+after with `shoal resume`. Sessions an older zmx started keep running but are
+unreachable; Shoal reports them where it reads them, in `shoal status` and its
+cleanup notifications, until their processes end, which `shoal stop` does for
+an agent's.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
 [Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.

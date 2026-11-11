@@ -18,9 +18,10 @@ with `xattr -dr com.apple.quarantine shoal Shoal.app`, then put `shoal`, or a
 link to `Shoal.app/Contents/MacOS/shoal`, on your `PATH`. macOS keeps the bare
 binary's privacy grants only while it stays at the same path.
 Homebrew installs the additional tools for workspace management and interactive
-menus, but not zmx, the default terminal host: install it with
+menus, but not zmx 1.0.1 or later, the default terminal host: install it with
 `brew install neurosnap/tap/zmx`, or use [Herdr, Rex, tmux or Zellij](docs/reference.md#herdr)
-instead. For a downloaded binary, install
+instead. Upgrading zmx from 0.8 leaves the agents already running in its
+sessions out of Shoal's reach: [stop them first](docs/reference.md#agents). For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
 `shoal daemon install` starts the per-user
 daemon and writes a missing config with its defaults in `~/.config/shoal/`;
@@ -52,7 +53,7 @@ the daemon. Prebuilt binaries do not require Rust.
 | --- | --- |
 | Git 2.43+ (`git`) | Repository and branch operations |
 | [Worktrunk](https://worktrunk.dev/) (`wt`, tested with 0.81.0) | Creating and removing worktrees |
-| [zmx](https://github.com/neurosnap/zmx), unless `terminal.default_host` names another host | Agent sessions that keep running after you detach |
+| [zmx](https://github.com/neurosnap/zmx) 1.0.1+, unless `terminal.default_host` names another host | Agent sessions that keep running after you detach |
 | `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Describing processes and checking their terminals |
 | [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
 

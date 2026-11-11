@@ -609,7 +609,8 @@ pub(crate) fn set_repository_toml(fixture: &Fixture, text: &str) {
 /// one an attach creates stays listed after its command, as after a detach,
 /// once `$HOME/zmx-attach-detaches` exists.
 /// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
-/// recorded actions.
+/// recorded actions, as do version checks. It reports itself as zmx 1.0.1,
+/// or the version in `$HOME/zmx-version`.
 pub(crate) const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
 import fcntl, json, os, subprocess, sys, time
 from pathlib import Path
@@ -631,6 +632,12 @@ if args[:1] == ['worker']:
         (root / f"zmx-{os.environ['ZMX_SESSION']}.running").unlink(missing_ok=True)
 parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
     capture_output=True, text=True).stdout
+if args[:1] == ['version']:
+    (root / 'zmx-version-called').touch()
+    version = root / 'zmx-version'
+    print(f"zmx\t\t{version.read_text().strip() if version.exists() else '1.0.1'}")
+    print(f'socket_dir\t{root / "zmx"}')
+    sys.exit()
 log = 'zmx-watch-calls' if ' place-watch ' in parent else 'zmx-calls'
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
@@ -678,9 +685,6 @@ elif args[:1] == ['send']:
         subprocess.Popen([sys.executable, __file__, 'worker', args[2].rstrip('\r')], env=env,
             start_new_session=True,
             stdin=subprocess.DEVNULL, stdout=log, stderr=log)
-elif args[:1] == ['version']:
-    (root / 'zmx-version-called').touch()
-    print(f'socket_dir\t{root / "zmx"}')
 elif args[:1] == ['list']:
     sessions = root / 'zmx-sessions'
     listed = sessions.read_text() if sessions.exists() else 'no sessions found'

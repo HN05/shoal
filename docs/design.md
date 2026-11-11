@@ -1358,7 +1358,10 @@ own terminal state on attach, so terminal protocols such as images keep working,
 which multiplexers that re-render output through their own emulator, like tmux,
 break or support only in part; zmx therefore stays the default host. The daemon requires whichever host
 `terminal.default_host` names, so a user who sets another one need not install
-zmx. The tracked wrapper
+zmx. A launch refuses a zmx older than 1.0.1, as it does an old tmux or Zellij:
+since 1.0.0 a zmx reaches only servers of its own version, and 1.0.0's macOS
+release could not reach its own sessions. Shoal does not restart agents left in
+sessions an older zmx started; it reports those sessions as unreachable. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
 unchanged and the daemon still never touches terminal I/O. A failed detached
 handoff closes its session only while its process and creation time still match.

@@ -38,8 +38,11 @@ class Shoal < Formula
 
       Later shoal commands keep installed skills current.
 
-      Agents started from a terminal run in zmx sessions by default:
+      Agents started from a terminal run in zmx 1.0.1 or later by default:
         brew install neurosnap/tap/zmx
+      Sessions an older zmx started are unreachable after an upgrade, so
+      stop their agents with `shoal stop` before upgrading zmx and resume
+      them after with `shoal resume`.
     EOS
   end
 
