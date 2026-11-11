@@ -75,8 +75,9 @@ impl Manager {
     }
 
     /// Give back the chat `chat` whose workspace failed to be made, removing
-    /// what of its worktree was made. Failures are logged: the workspace
-    /// then stays, failed, for the user to remove.
+    /// what of its worktree was made once it is proven the workspace's.
+    /// Without that proof, or when a step fails, the workspace stays, failed,
+    /// for the user to remove, and the failure is logged.
     async fn give_chat_back(&self, repo: &Repository, chat: &crate::client::space_ids::SpaceId) {
         let id = chat.clone();
         let pending = self
@@ -94,6 +95,10 @@ impl Manager {
         if let Ok(workspace) = self.workspace_by_id(chat).await
             && workspace.path.exists()
         {
+            if let Err(error) = self.prove_own_worktree(&workspace).await {
+                crate::daemon::log!("worktree of {} kept: {error:#}", workspace.name);
+                return;
+            }
             let removed = worktrunk::remove(
                 &repo.path,
                 &self.paths.worktrunk_config(),
@@ -115,6 +120,19 @@ impl Manager {
         if let Err(error) = given {
             crate::daemon::log!("chat {chat} not given back: {error:#}");
         }
+    }
+
+    /// Refuse a worktree at the path of `workspace` that is not proven to
+    /// be its own: registered with the repository and of the identity it
+    /// recorded.
+    async fn prove_own_worktree(&self, workspace: &Workspace) -> Result<()> {
+        anyhow::ensure!(
+            self.is_registered_worktree(workspace).await?,
+            "{} is not a worktree of the repository",
+            workspace.path.display()
+        );
+        let current = self.workspace_by_id(&workspace.id).await?;
+        self.verify_worktree(&current).await
     }
 }
 
