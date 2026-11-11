@@ -342,40 +342,11 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     bounded(executing).await.unwrap().unwrap();
 }
 
-#[tokio::test]
-async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
-    let (root, manager) = manager().await;
-    let path = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
-        .await
-        .unwrap();
+/// The refusal of an agent's start in `workspace`, which leaves it no
+/// execution.
+async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspace) -> String {
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
-        .unwrap();
-    // Its agent stopped, and the relocation has yet to make it the chat.
-    let chat = crate::daemon::conversions::record::ConvertedChat {
-        agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
-        session: Some("s1".into()),
-        origin: None,
-        process: wrapper.clone(),
-        mode: crate::model::chat_mode(),
-        narrowing: Default::default(),
-        stopped_by: None,
-    };
-    let pending = crate::daemon::conversions::Pending::Chat {
-        chat: Box::new(chat),
-        held: true,
-    };
-    let id = workspace.id.clone();
-    (manager.store)
-        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
-        .await
         .unwrap();
     let (client, server) = UnixStream::pair().unwrap();
     let executing = tokio::spawn(execute(
@@ -397,14 +368,11 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
         },
         manager.gates.owned_operation().await,
     ));
-
     let response: Response = read(&mut BufReader::new(client)).await;
     bounded(executing).await.unwrap().unwrap();
-
     let Body::Error { message, .. } = response.body else {
         panic!("the agent was admitted: {:?}", response.body);
     };
-    assert!(message.contains("becomes a chat"), "{message}");
     let selector = SpaceSelector::id(&workspace.id);
     let executions = manager
         .inspect_workspace(&selector)
@@ -412,4 +380,70 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
         .unwrap()
         .executions;
     assert!(executions.is_empty(), "{executions:?}");
+    message
+}
+
+#[tokio::test]
+async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    // Its agent stopped, and the relocation has yet to make it the chat.
+    let chat = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution: crate::client::execution_ids::ExecutionId::generate(),
+        session: Some("s1".into()),
+        origin: None,
+        process: crate::process::identity::capture(std::process::id())
+            .unwrap()
+            .unwrap(),
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    let pending = crate::daemon::conversions::Pending::Chat {
+        chat: Box::new(chat),
+        held: true,
+    };
+    let id = workspace.id.clone();
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
+        .await
+        .unwrap();
+
+    let refused = refused_agent(&manager, &workspace).await;
+
+    assert!(refused.contains("becomes a chat"), "{refused}");
+}
+
+#[tokio::test]
+async fn no_agent_starts_in_a_workspace_a_chats_agent_moves_to() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (talk, _talk) =
+        crate::daemon::test_support::chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let converting = crate::daemon::conversions::Converting {
+        chat: talk,
+        mode: crate::config::modes::ModeName::DEFAULT,
+    };
+    // The chat's agent works on where it ran, its turn not yet ended.
+    let workspace = manager
+        .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
+        .await
+        .unwrap();
+
+    let refused = refused_agent(&manager, &workspace).await;
+
+    assert!(refused.contains("moves there"), "{refused}");
 }

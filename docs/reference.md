@@ -2024,8 +2024,10 @@ notification. A stop of the agent before then, such as `shoal stop`, keeps it
 down until the space that stopped it, or you, resume it: the space still
 converts, a workspace becoming a chat that stays stopped, and a chat's agent
 keeping its session as the workspace's last session. No new agent starts in
-a workspace that becomes a chat: `shoal resume` of it is refused until it is
-the chat, which `shoal resume` then continues. A space's agent converts only its own space; your terminal
+a converting space's workspace until its agent has moved: `shoal resume` of a
+workspace that becomes a chat is refused until it is the chat, which
+`shoal resume` then continues, and another agent's start in a chat's new
+workspace is refused until the chat's agent runs there. A space's agent converts only its own space; your terminal
 converts any space, by `--space` with its number or ID, or the current
 workspace, else a picker.
 

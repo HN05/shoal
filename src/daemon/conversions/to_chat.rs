@@ -55,9 +55,11 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// Admit an agent to the workspace `selector` names, unless it becomes a
-    /// chat, whose agent carries on there: the guard, held until the agent
-    /// is tracked, keeps it from becoming one meanwhile.
+    /// Admit an agent to the workspace `selector` names, unless it converts:
+    /// one that becomes a chat, whose agent carries on there, or a chat that
+    /// became it, whose agent's turn end, which another agent's reports
+    /// would hide, moves it there. The guard, held until the agent is
+    /// tracked, keeps the workspace from becoming a chat meanwhile.
     pub(crate) async fn admit_agent(
         &self,
         selector: &SpaceSelector,
@@ -66,13 +68,17 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         let pending = self.store.run(move |db| super::pending(db, &id)).await?;
-        if let Some(super::Pending::Chat { .. }) = pending {
-            bail!(
+        match pending {
+            Some(super::Pending::Chat { .. }) => bail!(
                 "workspace {} becomes a chat once its agent's turn ends; resume the agent in the chat then",
                 workspace.name
-            );
+            ),
+            Some(super::Pending::Workspace { .. }) => bail!(
+                "the agent of the chat that became workspace {} moves there once its turn ends; start another agent there then",
+                workspace.name
+            ),
+            None => Ok(admitted),
         }
-        Ok(admitted)
     }
 
     /// The stopped chat the workspace `id` becomes in `mode`, whose agent
