@@ -1106,9 +1106,10 @@ of a new space: the named workspace, by number, name or ID, else the current
 one, else a picker. Nothing is created: the workspace keeps its place in the
 tree, its name and its links, whose activity reaches the new agent, and the
 start reports its record and the agent's queue entry as a new workspace's
-does. The agent starts on the text after `--`, else the workspace's issue,
-followed by the mode's instructions, and without either waits for you; it sees
-the branch's commits and continues from them. The flags that start, queue and
+does. Arguments after `--` go to the agent as for any start; without them it
+starts on the workspace's issue, followed by the mode's instructions, and
+without an issue waits for you. It sees the branch's commits and continues from
+them; without an agent chosen, the start only reopens the workspace. The flags that start, queue and
 place an agent apply as to any start, while one that names what a new space
 starts as or on, such as `--parent`, `--name`, a repository or `--issue`, is
 refused; the issue's names `shoal link issue <number> assigned --space

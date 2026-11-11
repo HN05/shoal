@@ -25,7 +25,8 @@ use crate::{
 };
 
 /// Start `agent`, else on a terminal a picked one, as the worker of the
-/// existing `workspace`, on `options.prompt`, else the workspace's issue.
+/// existing `workspace`, with `args` forwarded as any start forwards them,
+/// else on the workspace's issue.
 /// The daemon refuses it while the workspace has an agent of its own.
 /// Without an agent it reopens the workspace, as a new workspace's start
 /// without one opens it.
@@ -33,6 +34,7 @@ pub(in crate::cli::commands) async fn start_worker(
     ctx: &Context,
     workspace: SpaceSelector,
     agent: Option<Agent>,
+    args: Vec<OsString>,
     mut options: AddOptions,
 ) -> Result<i32> {
     // Without its token, the daemon would take a workspace process's start
@@ -55,12 +57,12 @@ pub(in crate::cli::commands) async fn start_worker(
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = choose_add_agent(&settings, AgentLaunch::Add(agent)).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    // A task replaces the issue as the agent's subject.
-    let issue = match (&agent.agent, &options.prompt) {
-        (Some(_), None) => load_add_issue(ctx, &target, workspace.links.issue.clone()).await?,
-        _ => None,
+    // A task after `--` replaces the issue as the agent's subject.
+    let issue = match agent.agent.is_some() && args.is_empty() {
+        true => load_add_issue(ctx, &target, workspace.links.issue.clone()).await?,
+        false => None,
     };
-    let mut plan = worker_plan(&workspace, agent, issue.as_ref());
+    let mut plan = worker_plan(&workspace, agent, issue.as_ref(), args);
     start_as(&mut plan, &options, mode);
     let planned = Planned {
         plan,
@@ -72,7 +74,7 @@ pub(in crate::cli::commands) async fn start_worker(
 }
 
 /// Start the worker of `workspace`, which already has the branch a start
-/// named, as `--in` starts it, on the task `args` give, refusing what only
+/// named, as `--in` starts it, with `args` forwarded, refusing what only
 /// the new workspace of `creation`, on `issue` below `options.parent`, takes.
 pub(super) async fn start_on_branch(
     ctx: &Context,
@@ -80,7 +82,7 @@ pub(super) async fn start_on_branch(
     (creation, issue): (&Creation, Option<&str>),
     agent: AgentLaunch,
     args: Vec<OsString>,
-    mut options: AddOptions,
+    options: AddOptions,
 ) -> Result<i32> {
     let new_space = [
         ("--issue", issue.is_some()),
@@ -100,28 +102,17 @@ pub(super) async fn start_on_branch(
             workspace.branch.as_deref().unwrap_or_default()
         );
     }
-    options.prompt = task(args)?;
     let selector = SpaceSelector::id(&workspace.id);
-    start_worker(ctx, selector, agent.named(), options).await
+    start_worker(ctx, selector, agent.named(), args, options).await
 }
 
-/// The task the words after `--` give, if any.
-pub(in crate::cli::commands) fn task(words: Vec<OsString>) -> Result<Option<String>> {
-    let words = (words.into_iter())
-        .map(|word| {
-            word.into_string()
-                .map_err(|word| anyhow::anyhow!("the task {word:?} is not UTF-8"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok((!words.is_empty()).then(|| words.join(" ")))
-}
-
-/// The plan that starts `agent` in `workspace` on `issue`, opening its
-/// branch under its name and creating nothing.
+/// The plan that starts `agent` in `workspace` on `issue` with `args`,
+/// opening its branch under its name and creating nothing.
 fn worker_plan(
     workspace: &Workspace,
     agent: ResolvedAddAgent,
     issue: Option<&issues::Issue>,
+    args: Vec<OsString>,
 ) -> AddPlan {
     AddPlan {
         repository: (&workspace.repository_id).into(),
@@ -136,7 +127,7 @@ fn worker_plan(
         place_name: None,
         issue: issue.map(|issue| issue.url.clone()),
         agent,
-        args: Vec::new(),
+        args,
         prompt: None,
         mode: None,
         narrowing: Default::default(),

@@ -127,6 +127,8 @@ pub(super) async fn add_planned(
     // The agent this start runs itself, which its preparation leaves
     // waiting in the queue should setup fail.
     let has_agent = own.is_some();
+    // A start that names its workspace reports only its agent.
+    let named = workspace.is_some();
     let start = AddStart {
         creation,
         parent: parent.or(chat.map(SpaceSelector::Id)),
@@ -159,7 +161,7 @@ pub(super) async fn add_planned(
         agent: launch.clone(),
         waiting,
     };
-    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent).await?;
+    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, named).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
     let (queue_entry, waits) = match rest.waiting {
         Some(waiting) => (waiting.starting.clone(), waiting.failed()),
@@ -368,13 +370,15 @@ async fn start_add_workspace<'c>(
 }
 
 /// Follow the preparation of the started workspace, which sets it up, links
-/// its PR and queues its agent, before reporting it and entering it unless
-/// `agent` takes the terminal.
+/// its PR and queues its agent, before reporting it, unless the start
+/// `named` it, when only `--json` reports it, and entering it unless `agent`
+/// takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
     preparing: Preparing<'_, CommandPaths>,
     rest: &mut AfterSetup,
     agent: &ResolvedAddAgent,
+    named: bool,
 ) -> Result<Option<Prepared>> {
     let reused = preparing.reused();
     let Some(SetUp {
@@ -403,15 +407,16 @@ async fn finish_add_workspace(
         None => prepare_after_setup(ctx, workspace, reused, rest).await?,
     };
     let workspace = &prepared.workspace;
-    ctx.emit(
-        &format!(
-            "{} {} {}",
-            if reused { "Opened" } else { "Created" },
-            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::super::location_phrase(workspace),
-        ),
-        workspace,
-    )?;
+    ctx.show(workspace, |workspace| {
+        if !named {
+            outln!(
+                "{} {} {}",
+                if reused { "Opened" } else { "Created" },
+                Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
+                super::super::location_phrase(workspace),
+            );
+        }
+    })?;
     let starts = (post_setup.is_ok() && !waits).then_some(agent);
     if enters_added(ctx, workspace, starts).await? {
         shell::navigate(ctx, &workspace.path)?;

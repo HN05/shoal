@@ -16,7 +16,7 @@ mod waiting;
 
 use crate::client::space_names::SpaceSelector;
 pub(in crate::cli::commands) use agent::AgentLaunch;
-pub(in crate::cli::commands) use existing::{start_worker, task};
+pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
 pub(in crate::cli) use plan::item_context;

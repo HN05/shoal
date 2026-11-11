@@ -59,8 +59,8 @@ branch. `--base` naming another workspace's branch stacks the new workspace on
 it. A start that names no branch, issue, PR, existing branch or copy begins as
 a chat in its mode, `worker` by default, which `shoal convert workspace` makes
 a workspace once the work is known. `--in <workspace>` starts that existing
-workspace's own agent instead of a new space, on the task after `--`, else its
-issue, or a chat in its worktree in a chat mode such as `-m chat`; a workspace
+workspace's own agent instead of a new space, with the task after `--`, else on
+its issue, or a chat in its worktree in a chat mode such as `-m chat`; a workspace
 has one agent of its own, so starting another is refused while one runs,
 waits in the queue or is stopped there. `contribute` takes
 the same URLs for a repository the user does not maintain: it clones it, forks

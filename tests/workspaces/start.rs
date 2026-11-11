@@ -542,13 +542,14 @@ fn start_in_starts_an_existing_workspaces_worker_on_its_task() {
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8(output.stdout).unwrap();
     let launched = strip_shoal_arguments(&stdout, '\n');
-    // The agent runs in the workspace, told the task first.
-    let mut lines = launched.lines().skip_while(|line| *line != "existing");
-    assert_eq!(lines.next(), Some("existing"), "{launched}");
-    assert!(
-        lines
-            .next()
-            .is_some_and(|prompt| prompt.starts_with("Fix the login retries")),
+    // The agent runs in the workspace with the arguments after `--`.
+    let lines: Vec<_> = launched
+        .lines()
+        .skip_while(|line| *line != "existing")
+        .collect();
+    assert_eq!(
+        lines,
+        ["existing", "Fix the login", "retries"],
         "{launched}"
     );
     // No space was created.

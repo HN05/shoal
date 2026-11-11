@@ -600,8 +600,8 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
     workspaces::link::add(ctx, input, creation, agent, args.args, options).await
 }
 
-/// Start the worker of the existing workspace `--in` names, in `mode`, on
-/// the task after `--`, else the workspace's issue.
+/// Start the worker of the existing workspace `--in` names, in `mode`, with
+/// the arguments after `--`, else on the workspace's issue.
 async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
     let workspace = (args.in_workspace.flatten()).context("--in names no workspace")?;
     let (agent, fork) = match args.fork {
@@ -619,11 +619,11 @@ async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i
         model: args.model.into(),
         mode: Some(mode),
         narrowing: given(&args.permissions),
-        prompt: workspaces::task(args.args)?,
+        prompt: None,
         parent: None,
         fork,
     };
-    workspaces::start_worker(ctx, workspace, agent, options).await
+    workspaces::start_worker(ctx, workspace, agent, args.args, options).await
 }
 
 /// Refuse a copy beside a PR or branch link, which would open that branch
