@@ -78,7 +78,7 @@ impl Fixture {
             base: Base::start(root, &config, "repo", &[("tracked", "committed\n")]),
             web,
         };
-        fixture.ok(&["start", fixture.repo.to_str().unwrap(), "topic"]);
+        fixture.ok(&["start", fixture.repo.to_str().unwrap(), "--branch", "topic"]);
         git(&fixture.repo, &["remote", "add", "origin", &origin]);
         git(
             &fixture.repo,
@@ -3464,6 +3464,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "other",
         "--base",
         "HEAD",
@@ -5637,7 +5638,14 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
         "name": "lead", "agent": "claude", "pid": agent.id()}}));
     let chat = chat["data"]["id"].as_str().unwrap().to_owned();
     let repo = fixture.repo.to_str().unwrap();
-    fixture.ok(&["start", repo, "helper", "--parent", &fixture.id("lead")]);
+    fixture.ok(&[
+        "start",
+        repo,
+        "--branch",
+        "helper",
+        "--parent",
+        &fixture.id("lead"),
+    ]);
     let working = fixture.request(
         json!({"set_agent_state": {"workspace": fixture.id("helper"),
         "state": "working"}}),

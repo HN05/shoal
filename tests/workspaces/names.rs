@@ -121,6 +121,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "dependent",
         "--base",
         "original",
@@ -479,16 +480,15 @@ fn concurrent_adds_take_their_own_branches_and_directories() {
     let start = |branch: &str| {
         fixture
             .command()
-            .args(["start", fixture.repo.to_str().unwrap(), branch])
+            .args(["start", fixture.repo.to_str().unwrap(), "--branch", branch])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap()
     };
-    // Branches whose directories would share a name, and one branch twice,
-    // which the second start takes with a suffix: the workspaces keep the
-    // names they asked for.
-    let starts = ["shared/topic", "shared-topic", "shared", "shared"].map(start);
+    // Branches whose directories would share a name: each workspace gets a
+    // directory of its own and keeps the name it asked for.
+    let starts = ["shared/topic", "shared-topic", "other/shared-topic"].map(start);
     for started in starts {
         assert!(started.wait_with_output().unwrap().status.success());
     }
@@ -505,9 +505,12 @@ fn concurrent_adds_take_their_own_branches_and_directories() {
         .iter()
         .map(|(_, directory)| directory.clone())
         .collect();
-    assert_eq!(directories.len(), 4, "{spaces:?}");
+    assert_eq!(directories.len(), 3, "{spaces:?}");
     let names: Vec<_> = spaces.iter().map(|(name, _)| name.as_str()).collect();
-    assert_eq!(names, ["shared", "shared", "shared-topic", "shared/topic"]);
+    assert_eq!(
+        names,
+        ["other/shared-topic", "shared-topic", "shared/topic"]
+    );
 }
 
 #[test]
@@ -575,7 +578,7 @@ fn invalid_branch_names_fail_and_normalized_directories_take_suffixes() {
     ] {
         assert!(
             !fixture
-                .run(&["start", fixture.repo.to_str().unwrap(), branch])
+                .run(&["start", fixture.repo.to_str().unwrap(), "--branch", branch])
                 .status
                 .success(),
             "{branch}"

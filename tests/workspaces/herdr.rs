@@ -158,6 +158,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let args = [
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "herdr-agent",
         "--agent",
         "pi",
@@ -411,6 +412,7 @@ fn herdr_tabs_take_the_name_of_their_space() {
             vec![
                 "start",
                 fixture.repo.to_str().unwrap(),
+                "--branch",
                 "fix/short",
                 "--issue",
                 url,
@@ -425,18 +427,18 @@ fn herdr_tabs_take_the_name_of_their_space() {
             vec![
                 "start",
                 fixture.repo.to_str().unwrap(),
-                "--existing",
+                "--branch",
                 "fix/short",
                 "--agent",
                 "pi",
             ],
-            // The branch's workspace reopens under its name.
-            "fix/short",
+            // The branch's workspace takes the start under its name.
+            "Fix API timeout",
             "Fix API timeout",
             false,
         ),
     ] {
-        if !args.contains(&"--existing") {
+        if !args.contains(&"--branch") {
             args.extend(["--base", "HEAD"]);
         }
         let marker = fixture.root.path().join("fail-rename");
@@ -465,7 +467,7 @@ fn herdr_tabs_take_the_name_of_their_space() {
 }
 
 #[test]
-fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
+fn herdr_tab_name_templates_survive_handoff() {
     let fixture = Fixture::with_config(Some(
         "[terminal.herdr]\ntab_name = 'global'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
@@ -482,15 +484,14 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         "Literal {branch} $(touch injected)",
         "Details",
     ));
-    git(&fixture.repo, &["branch", "topic"]);
     for (issue, initial, renamed) in [
         (
             Some("https://github.com/team/project/issues/34"),
             "project topic #34: Literal {branch} $(touch injected)",
-            "project topic-2 #34: Literal {branch} $(touch injected)",
+            "project topic #34: Literal {branch} $(touch injected)",
         ),
-        // Removal deleted the first topic-2, which had no commits.
-        (None, "project topic #: ", "project topic-2 #: "),
+        // Removal deleted the first topic, which had no commits.
+        (None, "project topic #: ", "project topic #: "),
     ] {
         fixture.ok(&[
             "config",
@@ -503,6 +504,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         let mut args = vec![
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "topic",
             "--base",
             "HEAD",
@@ -561,6 +563,7 @@ fn a_rename_renames_the_herdr_tab_shoal_opened_for_it() {
     let args = [
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "topic",
         "--base",
         "HEAD",
@@ -666,7 +669,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         config.push_str("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
-        let mut args = vec!["start", fixture.repo.to_str().unwrap(), "focus"];
+        let mut args = vec!["start", fixture.repo.to_str().unwrap(), "--branch", "focus"];
         if let Some(agent) = agent {
             args.extend(["--agent", agent]);
         }
@@ -707,7 +710,11 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
     let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();
-    let args = |name| ["--json", "start", repo, name, "--agent", "pi", "--focus"];
+    let args = |name| {
+        [
+            "--json", "start", repo, "--branch", name, "--agent", "pi", "--focus",
+        ]
+    };
     let refused = fixture
         .command()
         .args(args("detached"))
@@ -731,6 +738,7 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
         "--json",
         "start",
         repo,
+        "--branch",
         "background",
         "--agent",
         "pi",
@@ -755,6 +763,7 @@ fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
         let mut args = vec![
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             name,
             "--agent",
             "pi",
@@ -788,7 +797,12 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
         &fixture,
-        &["start", fixture.repo.to_str().unwrap(), "herdr-shell"],
+        &[
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "herdr-shell",
+        ],
         "",
     );
     assert!(caller.status.success());
@@ -820,7 +834,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
     install_fake_herdr(&fixture);
     for (name, mode) in [("here", "here"), ("pipe", "pipe"), ("outside", "outside")] {
         let mut command = fixture.command();
-        command.args(["start", fixture.repo.to_str().unwrap(), name]);
+        command.args(["start", fixture.repo.to_str().unwrap(), "--branch", name]);
         if mode != "outside" {
             command
                 .env("HERDR_ENV", "1")
@@ -843,7 +857,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         fs::write(fixture.repo.join(".shoal.toml"), config).unwrap();
         let (output, _) = herdr_call(
             &fixture,
-            &["start", fixture.repo.to_str().unwrap(), name],
+            &["start", fixture.repo.to_str().unwrap(), "--branch", name],
             "",
         );
         assert!(output.status.success(), "{output:?}");
@@ -862,6 +876,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "retain",
             "--agent",
             "pi",
@@ -897,6 +912,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "failed-setup",
             "--agent",
             "pi",
@@ -920,6 +936,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "done-tab",
             "--agent",
             "pi",
@@ -957,6 +974,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "happy-tab",
             "--agent",
             "happy-claude",
@@ -1059,6 +1077,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "tabbed",
             "--agent",
             "pi",

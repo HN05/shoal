@@ -157,6 +157,34 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
 }
 
 #[test]
+fn start_completes_branches_of_the_current_repository() {
+    let home = tempfile::tempdir().unwrap();
+    let repo = home.path().join("repo");
+    fs::create_dir(&repo).unwrap();
+    let commit = [
+        "-c",
+        "user.name=Shoal Test",
+        "-c",
+        "user.email=shoal@example.invalid",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "initial",
+    ];
+    for args in [
+        &["init", "-b", "main"][..],
+        &commit,
+        &["branch", "feature/login"],
+    ] {
+        let git = support::isolated(&repo, "git").args(args).output().unwrap();
+        assert!(git.status.success(), "{git:?}");
+    }
+    let mut command = completion(home.path(), "bash", &["shoal", "start", "--branch", "feat"]);
+    command.current_dir(&repo);
+    assert_eq!(candidates(command), ["feature/login"]);
+}
+
+#[test]
 fn agents_without_installed_executables_are_not_completed() {
     let home = tempfile::tempdir().unwrap();
     // Happy is installed but not enabled, so neither it nor its agents complete.

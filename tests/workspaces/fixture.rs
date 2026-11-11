@@ -166,7 +166,7 @@ impl Fixture {
     }
 
     pub(crate) fn add(&self, name: &str) -> Value {
-        self.ok(&["start", self.repo.to_str().unwrap(), name])
+        self.ok(&["start", self.repo.to_str().unwrap(), "--branch", name])
     }
 
     /// The ID of the agent queue's entry named `name`, which queue commands

@@ -1047,7 +1047,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     git(&other, &["init", "-b", "main"]);
     commit_resource_config(&other, "[resources.local]\ncapacity=1\n");
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    let second = fixture.ok(&["start", other.to_str().unwrap(), "second"]);
+    let second = fixture.ok(&["start", other.to_str().unwrap(), "--branch", "second"]);
     let local_first = fixture.ok(&[
         "acquire",
         "resource",

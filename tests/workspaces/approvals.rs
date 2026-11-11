@@ -1262,7 +1262,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     }
     // A process with the exported environment opens workspaces only below
     // its own.
-    let below = scoped(&["start", fixture.repo.to_str().unwrap(), "below"]);
+    let below = scoped(&["start", fixture.repo.to_str().unwrap(), "--branch", "below"]);
     assert!(below.status.success(), "{below:?}");
     let below = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
@@ -1349,7 +1349,12 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     let removed = inspect(second_token);
     assert!(!removed.status.success());
     // The branch had no commits, so removal deleted it too.
-    fixture.ok(&["start", fixture.repo.to_str().unwrap(), "external"]);
+    fixture.ok(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "external",
+    ]);
     assert!(!inspect(second_token).status.success());
     assert!(
         fixture.ok(&["internal", "env", &fixture.id("external")])["SHOAL_SCOPE_TOKEN"].is_string()

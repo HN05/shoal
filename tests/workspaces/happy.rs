@@ -35,6 +35,7 @@ fn happy_agents_are_refused_until_enabled() {
         .args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "happy-off",
             "--here",
             "--agent",
@@ -63,6 +64,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                     "--json",
                     "start",
                     fixture.repo.to_str().unwrap(),
+                    "--branch",
                     &name,
                     "--here",
                     "--agent",
@@ -599,6 +601,7 @@ done
             "--json",
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "concurrent",
         ])
         .stdout(Stdio::piped())
@@ -834,10 +837,15 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
             .output()
             .unwrap()
     };
-    happy_launch(&start(&["placed"]));
+    happy_launch(&start(&["--branch", "placed"]));
     fixture.add("finished");
     fixture.ok(&["done", &fixture.id("finished")]);
-    happy_launch(&start(&["next", "--add-blocker", &fixture.id("finished")]));
+    happy_launch(&start(&[
+        "--branch",
+        "next",
+        "--add-blocker",
+        &fixture.id("finished"),
+    ]));
     fixture.ok(&["stop", &fixture.id("placed")]);
     fixture.ok(&["stop", &fixture.id("next")]);
 }
@@ -853,7 +861,9 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .args([
+            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -866,7 +876,15 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     });
     let output = fixture
         .command()
-        .args(["--json", "start", repo, "happy", "--agent", "happy-codex"])
+        .args([
+            "--json",
+            "start",
+            repo,
+            "--branch",
+            "happy",
+            "--agent",
+            "happy-codex",
+        ])
         .env("HAPPY_RECORD", &record)
         .env(
             "PATH",

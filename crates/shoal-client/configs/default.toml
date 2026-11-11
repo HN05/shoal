@@ -177,7 +177,7 @@ command = ["codex", "{args}"]
 # Offer happy-claude and happy-codex, which start detached Happy sessions.
 enabled = false
 
-# A custom agent: shoal start <repository> <branch> --agent droid. Its resume
+# A custom agent: shoal start <repository> --agent droid. Its resume
 # command must restore a session rather than repeat the initial prompt.
 # [agents.droid]
 # command = ["droid", "{args}"]

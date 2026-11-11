@@ -138,8 +138,7 @@ fn ensure_worker_fits(args: &StartArgs) -> Result<()> {
 /// The flags `args` sets that only a workspace takes.
 fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
     [
-        ("<branch>", args.branch.is_some()),
-        ("--existing", args.existing.is_some()),
+        ("--branch", args.branch.is_some()),
         ("--path", args.path.is_some()),
         ("--base", args.base.is_some()),
         ("--git-profile", args.git_profile.is_some()),
@@ -485,7 +484,7 @@ async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repos
 }
 
 /// Start the agent in a new or reopened workspace, or, for a start that
-/// names no branch, issue, PR, existing branch or copy, in a chat that its
+/// names no branch, issue, PR or copy, in a chat that its
 /// agent makes a workspace once it knows the work.
 async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
     let unsettled = args.clone();
@@ -509,7 +508,7 @@ pub(super) async fn as_chat(
 ) -> Result<i32> {
     if let Some(flag) = workspace_flags(&args).first() {
         anyhow::bail!(
-            "{flag} applies to a new workspace's branch; name the branch, since a start without one begins as a chat"
+            "{flag} applies to a new workspace's branch; name the branch with --branch, since a start without one begins as a chat"
         );
     }
     args.repository = None;
@@ -569,8 +568,10 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
     };
     let creation = Creation {
         path: args.path,
+        // Settled once the repository is known: it may name a branch that
+        // exists, or one a workspace has.
         branch: args.branch,
-        existing: args.existing,
+        existing: None,
         base: args.base,
         git_profile: args.git_profile,
         pr: None,
@@ -618,22 +619,11 @@ async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i
         model: args.model.into(),
         mode: Some(mode),
         narrowing: given(&args.permissions),
-        prompt: task(args.args)?,
+        prompt: workspaces::task(args.args)?,
         parent: None,
         fork,
     };
     workspaces::start_worker(ctx, workspace, agent, options).await
-}
-
-/// The task the words after `--` give, if any.
-fn task(words: Vec<std::ffi::OsString>) -> Result<Option<String>> {
-    let words = (words.into_iter())
-        .map(|word| {
-            word.into_string()
-                .map_err(|word| anyhow::anyhow!("the task {word:?} is not UTF-8"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok((!words.is_empty()).then(|| words.join(" ")))
 }
 
 /// Refuse a copy beside a PR or branch link, which would open that branch

@@ -40,11 +40,11 @@ workspace's issue, PRs and CI runs. Removing the workspace removes the chat.
 ```sh
 shoal repo ls
 shoal start https://github.com/owner/repo/issues/34 --agent claude
-shoal start my-project fix-login --agent codex
-shoal start my-project fix-ui --base fix-login --agent claude
+shoal start my-project --branch fix-login --agent codex
+shoal start my-project --branch fix-ui --base fix-login --agent claude
 shoal start my-project --mode plan --issue 42 --agent claude
 shoal start --issue 43 --agent claude
-shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
+shoal start my-project --branch api-part --agent codex -- "Move the API client into its own crate"
 shoal start --in 3 --agent claude
 shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```

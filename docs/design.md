@@ -653,8 +653,13 @@ branch as given, so the label a list or tab shows is the most telling one known
 at creation; only `shoal rename` changes it, so a label never shifts under the
 user. The workspace's portable directory name derives from the branch, suffixed while another workspace of any repository has that
 directory name, so a normalization collision touches no existing work. Branch
-conflicts get numeric suffixes on the blocking component only, never changing the
-workspace's name. Names Git reads as a revision
+conflicts of a name Shoal derives or splits get numeric suffixes on the blocking
+component only, never changing the workspace's name. `start --branch` takes the
+name as typed, as `git switch` does: an existing branch opens, in the workspace
+that has it when one does, through `--in`'s path, and a new one is created under
+exactly that name or refused, since a suffixed branch is not the one the user
+asked for; one flag replaces both the branch positional and `--existing`, so a
+start never decides from the user's spelling whether to open or create. Names Git reads as a revision
 instead of a branch, in either supported object format, get a leaf suffix on
 creation and an error on existing-branch selection. Ownership of a worktree's
 Git admin directory is proven by a marker naming the workspace, written there on
@@ -2398,9 +2403,10 @@ would write one session and a removal would delete files in use, and a restore
 whose agent does not start leaves the chat stopped and tells the user, who may
 not see the place it opened. Starts, renames, stops, restores and removals
 are journal events. A workspace a chat opens is its child in the one tree of
-spaces, unless it was split from a workspace, below which it stays; opening it
-outside a chat returns it to the user, so Shoal knows which chat coordinates
-which workers. Removing the chat first removes the spaces below it through the
+spaces, unless it was split from a workspace, below which it stays; reopening
+it outside a chat for its issue or a picked branch returns it to the user, so
+Shoal knows which chat coordinates which workers, while a start of its own
+agent, with `--in` or the `--branch` it has, leaves it where it is. Removing the chat first removes the spaces below it through the
 removal path of any space's children, and a stopped chat passes their events
 on up, to the user at the top, unless it waits for its automatic restore. A
 chat opens workspaces only in its own repository.

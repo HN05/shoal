@@ -69,6 +69,9 @@ struct Settings {
 enum Target {
     Commands,
     Repositories,
+    /// The branches of the current directory's repository, local and
+    /// remote-tracking, which `shoal start --branch` opens.
+    Branches,
     /// Workspaces, each described by why the command would refuse it.
     Workspaces(Need),
     /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
@@ -388,6 +391,9 @@ impl Typed {
                 current,
             ));
         }
+        if matches!(target, Target::Branches) {
+            return branch_candidates().await;
+        }
         if matches!(target, Target::RestorableWorkspaces) {
             let removed = crate::client::removal::removed(&paths).await?;
             let existing = crate::client::workspaces::list(&paths).await?;
@@ -505,6 +511,7 @@ impl Typed {
             }
             Target::Commands
             | Target::Repositories
+            | Target::Branches
             | Target::Workspaces(_)
             | Target::Spaces(_)
             | Target::ResumeSpaces
@@ -581,6 +588,7 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("id", _, "questions") | ("id", "questions", "withdraw") => Some(Target::Questions),
         ("name", _, "run") => Some(Target::Commands),
         ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
+        ("branch", _, "start") => Some(Target::Branches),
         ("workspace" | "space", _, "resume") => Some(Target::ResumeSpaces),
         ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
         ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces(need)),
@@ -608,6 +616,14 @@ async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionC
         .filter(|chat| attachable.contains(&chat.id))
         .map(|chat| chat_candidate(chat, "chat"))
         .collect())
+}
+
+/// The branches of the current directory's repository, as `--branch`
+/// opens them.
+async fn branch_candidates() -> Result<Vec<CompletionCandidate>> {
+    let root = crate::git::worktree_root(&std::env::current_dir()?).await?;
+    let names = crate::git::branch::selectors(std::path::Path::new(root.trim())).await?;
+    Ok(names.into_iter().map(CompletionCandidate::new).collect())
 }
 
 fn repository_candidates(

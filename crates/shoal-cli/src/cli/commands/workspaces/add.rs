@@ -1,5 +1,6 @@
 //! `shoal start`: plan a workspace, then open it here or hand it to a terminal host.
 mod agent;
+mod branch;
 mod detached;
 mod existing;
 mod finish;
@@ -15,7 +16,7 @@ mod waiting;
 
 use crate::client::space_names::SpaceSelector;
 pub(in crate::cli::commands) use agent::AgentLaunch;
-pub(in crate::cli::commands) use existing::start_worker;
+pub(in crate::cli::commands) use existing::{start_worker, task};
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
 pub(in crate::cli) use plan::item_context;
@@ -100,6 +101,10 @@ pub(in crate::cli::commands) async fn add(
     );
     let mut creation = absolute(ctx, creation)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
+    if let Some(workspace) = branch::settle(ctx, &target, &mut creation).await? {
+        let named = (&creation, issue.as_deref());
+        return existing::start_on_branch(ctx, workspace, named, agent, args, options).await;
+    }
     check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
     let blockers = named_blockers(ctx, &target, &options.blockers).await?;
     let settings = AddSettings::new(ctx, &target.selector);

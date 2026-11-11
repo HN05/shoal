@@ -146,7 +146,7 @@ pub struct StartArgs {
     pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
     /// Start in a chat whatever the mode's kind, as the place a chat opens in
     /// starts it, which shoal start passes.
-    #[arg(long, hide = true, conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
+    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub as_chat: bool,
     /// Start in this ready workspace instead of a new space: its worker in a
     /// mode that starts in a workspace, else a chat in its worktree; without
@@ -155,7 +155,7 @@ pub struct StartArgs {
         long = "in",
         num_args = 0..=1,
         value_name = "WORKSPACE",
-        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "skip_setup", "disposable", "copy", "checkpoint"]
+        conflicts_with_all = ["branch", "path", "base", "git_profile", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
     pub in_workspace: Option<Option<SpaceSelector>>,
     /// The space the new one goes below, by number or ID; defaults to the
@@ -181,11 +181,12 @@ pub struct StartArgs {
     /// arguments that named it.
     #[arg(skip)]
     pub checked_repository: Option<crate::repository::Selector>,
-    /// Git branch name; a portable workspace name is derived from it.
+    /// The branch to start on, as git switch takes it: an existing local
+    /// branch or remote/branch opens, in its workspace when one has it, as
+    /// --in does; any other name is a new branch, never suffixed. A
+    /// portable workspace name is derived from it.
+    #[arg(long, value_name = "NAME")]
     pub branch: Option<String>,
-    /// Use an existing local branch or remote/branch without creating a new branch.
-    #[arg(long, conflicts_with_all = ["branch", "issue", "copy", "checkpoint"])]
-    pub existing: Option<String>,
     /// The forge issue number or URL the agent starts on; a workspace's name
     /// derives from it. Without a value in plan mode, offers the open issues
     /// labelled [issue] plan_label.
@@ -194,9 +195,10 @@ pub struct StartArgs {
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
     pub path: Option<PathBuf>,
-    /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream;
-    /// a remote branch such as origin/feature is fetched first);
-    /// with --existing, the ref its changes are compared against.
+    /// Starting Git ref of a new branch (defaults to the repository's default
+    /// branch, refreshed from its upstream; a remote branch such as
+    /// origin/feature is fetched first); for an existing branch, the ref its
+    /// changes are compared against.
     #[arg(long, value_name = "REF")]
     pub base: Option<String>,
     /// Apply a named Git profile to the new worktree, overriding repository defaults.
@@ -232,7 +234,7 @@ pub struct StartArgs {
     pub model: ModelArgs,
     /// Agent session the chat continues, which shoal move import passes; it
     /// starts a chat whatever the mode's kind.
-    #[arg(long, hide = true, conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
+    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub session: Option<crate::client::agent::AgentSessionId>,
     /// Start from a fork of --session instead of continuing it, which shoal
     /// move import passes for a copy.
@@ -275,7 +277,6 @@ impl StartArgs {
             repository_override,
             checked_repository: _,
             branch,
-            existing,
             issue,
             path,
             base,
@@ -302,7 +303,6 @@ impl StartArgs {
         } = self;
         let mut line = CommandLine::of::<Self>(&["start"]);
         line.positional("repository", repository.as_ref());
-        line.positional("branch", branch.as_ref());
         line.values("mode", mode.as_ref().map(|mode| mode.as_str()));
         line.values(
             "permissions",
@@ -315,7 +315,7 @@ impl StartArgs {
         line.switch("here", *here);
         line.switch("focus", *focus);
         line.values("repository_override", repository_override);
-        line.values("existing", existing);
+        line.values("branch", branch);
         line.optional("issue", issue.as_ref().map(Option::as_ref));
         line.values("path", path);
         line.values("base", base);
@@ -411,7 +411,11 @@ pub struct ContributeArgs {
     pub focus: bool,
     /// Repository URL, or an issue, PR or branch URL.
     pub target: String,
-    /// Git branch name; a portable workspace name is derived from it.
+    /// The branch to start on, as git switch takes it: an existing local
+    /// branch or remote/branch opens, in its workspace when one has it, as
+    /// --in does; any other name is a new branch, never suffixed. A
+    /// portable workspace name is derived from it.
+    #[arg(long, value_name = "NAME")]
     pub branch: Option<String>,
     /// Start a built-in agent or a configured command after worktree creation.
     #[arg(short = 'a', long, value_parser = AgentParser)]

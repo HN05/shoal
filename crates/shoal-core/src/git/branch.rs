@@ -7,16 +7,7 @@ use crate::{fsutil::off_runtime, git, time::UnixTime};
 
 /// Local and remote branch names that can conflict with a new local branch.
 pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
-    let refs = git::run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname)",
-            git::LOCAL_REFS,
-            git::REMOTE_REFS,
-        ],
-    )
-    .await?;
+    let refs = branch_refs(repo).await?;
     Ok(refs
         .lines()
         .filter_map(|reference| {
@@ -28,6 +19,47 @@ pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
         })
         .map(str::to_owned)
         .collect())
+}
+
+/// The selectors that open an existing branch, as `git switch` takes them:
+/// every local branch, every remote one as `remote/branch`, and the bare
+/// name of a remote branch that no local branch or other remote has.
+pub async fn selectors(repo: &Path) -> Result<Vec<String>> {
+    Ok(switch_selectors(&branch_refs(repo).await?))
+}
+
+/// [`selectors`] of the branches whose full ref names `refs` lists.
+fn switch_selectors(refs: &str) -> Vec<String> {
+    let local: Vec<&str> = refs.lines().filter_map(git::strip_local).collect();
+    let remote: Vec<(&str, &str)> = (refs.lines())
+        .filter_map(|reference| git::strip_remote(reference)?.split_once('/'))
+        .filter(|(_, branch)| *branch != "HEAD")
+        .collect();
+    let unique = |name: &str| {
+        !local.contains(&name) && remote.iter().filter(|(_, branch)| *branch == name).count() == 1
+    };
+    let bare = (remote.iter())
+        .filter(|(_, branch)| unique(branch))
+        .map(|(_, branch)| (*branch).to_owned());
+    let qualified = (remote.iter()).map(|(remote, branch)| format!("{remote}/{branch}"));
+    (local.iter().map(|name| (*name).to_owned()))
+        .chain(qualified)
+        .chain(bare)
+        .collect()
+}
+
+/// Every local and remote-tracking branch's full ref name, one per line.
+async fn branch_refs(repo: &Path) -> Result<String> {
+    git::run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname)",
+            git::LOCAL_REFS,
+            git::REMOTE_REFS,
+        ],
+    )
+    .await
 }
 
 /// Names Git reads as a revision rather than as a branch: `@` is HEAD's
@@ -167,3 +199,6 @@ pub async fn fast_forward(repo: &Path, commit: &str) -> Result<String> {
     )
     .await
 }
+
+#[cfg(test)]
+mod tests;

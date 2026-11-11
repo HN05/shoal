@@ -197,7 +197,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
             fixture
                 .command()
                 .current_dir(&fixture.repo)
-                .args(["start", repo, "placed", "--agent", "pi"]),
+                .args(["start", repo, "--branch", "placed", "--agent", "pi"]),
             &session,
             &users,
         ),
@@ -274,7 +274,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
         );
         assert!(output.status.success(), "{output:?} {transcript}");
     };
-    launch(&["start", repo, "placed", "--agent", "pi"]);
+    launch(&["start", repo, "--branch", "placed", "--agent", "pi"]);
     wait_until("setup to finish with the agent running", || {
         fixture
             .ok(&["list"])

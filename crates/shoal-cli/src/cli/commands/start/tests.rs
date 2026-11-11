@@ -16,7 +16,7 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
     let chat = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Chat, Some(&"plan".into()));
     chat(&["repo", "--issue", "7", "--name", "talk"]).unwrap();
     for (args, flag) in [
-        (&["repo", "topic"][..], "<branch>"),
+        (&["repo", "--branch", "topic"][..], "--branch"),
         (&["repo", "--base", "main"], "--base"),
         (&["repo", "--path", "/work/x"], "--path"),
         (&["repo", "--skip-setup"], "--skip-setup"),
@@ -31,7 +31,7 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
     }
     let workspace =
         |args: &[&str]| ensure_fits(&start(args), SpaceKind::Workspace, Some(&"worker".into()));
-    workspace(&["repo", "topic", "--base", "main"]).unwrap();
+    workspace(&["repo", "--branch", "topic", "--base", "main"]).unwrap();
     workspace(&["repo", "--name", "Login retries"]).unwrap();
 }
 
@@ -167,7 +167,10 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
     let fits = |args: &[&str]| fitting_kind(&start(args));
     assert_eq!(fits(&["repo"]), None);
     assert_eq!(fits(&["https://forge.example/o/r/issues/7"]), None);
-    assert_eq!(fits(&["repo", "topic"]), Some(SpaceKind::Workspace));
+    assert_eq!(
+        fits(&["repo", "--branch", "topic"]),
+        Some(SpaceKind::Workspace)
+    );
     assert_eq!(
         fits(&["repo", "--base", "main"]),
         Some(SpaceKind::Workspace)

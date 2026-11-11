@@ -73,22 +73,22 @@ repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`;
 shoal repo add /path/to/project --name my-project
 shoal repo setup my-project   # Have an agent write its config, committed or local
 shoal config setup            # Have an agent write the global config for this machine
-shoal start my-project fix-login
+shoal start my-project --branch fix-login
 shoal run codex -w 3
 ```
 
 Use `shoal start my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
 
 ```sh
-shoal start my-project fix-api --base feature/api  # Branch from feature/api
-shoal start my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
+shoal start my-project --branch fix-api --base feature/api  # Branch from feature/api
+shoal start my-project --branch fix-api --base origin/feature/api  # Fetch the pushed branch first
 shoal branch base set feature-api --workspace 4        # Record that workspace 4 builds on feature-api
 shoal split fix-typo --workspace 4           # Create a child workspace for work in its own PR
 shoal start --copy 4 --fork                  # Try another approach from workspace 4's current files
 shoal start --copy 4 --checkpoint 3          # Start from workspace 4's checkpoint 3, live or removed
-shoal start my-project --existing origin/feature/api --agent codex
-shoal start my-project quick-fix --path ../quick-fix
-shoal start my-project fix-login --name "Login retries"  # Name it apart from its branch
+shoal start my-project --branch origin/feature/api --agent codex  # An existing branch opens
+shoal start my-project --branch quick-fix --path ../quick-fix
+shoal start my-project --branch fix-login --name "Login retries"  # Name it apart from its branch
 shoal adopt ../existing-worktree        # Take ownership, including automatic cleanup
 shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directory
 shoal branch rename 3 fix/login              # Rename its branch; its name stays
@@ -147,7 +147,7 @@ end. See the [runner](docs/reference.md#runner).
 ## Everyday commands
 
 After [adding an AI tool](docs/reference.md#agents), run
-`shoal start my-project fix-api --agent droid` or `shoal start <issue-url>`.
+`shoal start my-project --branch fix-api --agent droid` or `shoal start <issue-url>`.
 
 An agent starts in a mode, which decides what it is told and whether it gets a
 workspace or a chat: `worker`, the default, implements its subject in a
@@ -423,7 +423,7 @@ requests with `shoal approvals`, then use `shoal approvals --approve <S.N>` or
 requesting space's number and the request's, such as `3.2`.
 
 Select a named Git identity with `git_profile = "work"` in that file, or use
-`shoal start my-project feature --git-profile work`. Define the profile
+`shoal start my-project --branch feature --git-profile work`. Define the profile
 in global config; see [Git profiles](docs/reference.md#git-profiles).
 
 New workspaces get the repository checkout's ignored local files, such as `.env`;

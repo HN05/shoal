@@ -97,7 +97,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
     for (args, refusal) in [
         (config, "cannot administer"),
         ("questions 1.1 --answer yes", "without their scope token"),
-        ("start . child", "only with their scope token"),
+        ("start . --branch child", "only with their scope token"),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());

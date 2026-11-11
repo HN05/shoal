@@ -181,6 +181,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         .args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "broken",
             "--base",
             "not-a-ref",
@@ -950,11 +951,11 @@ here() {
   shoal --json status | python3 -c 'import json,sys; print(json.load(sys.stdin)["workspace"]["id"])'
 }
 cd "$REPO"
-shoal start "$REPO" navigate
+shoal start "$REPO" --branch navigate
 test "${PWD##*/}" = navigate
 navigate=$(here)
 shoal_repo_dir="$(dirname "$PWD")"
-shoal start "$REPO" other
+shoal start "$REPO" --branch other
 test "${PWD##*/}" = other
 shoal cd "$navigate"
 shoal cd -
@@ -988,7 +989,7 @@ if shoal cd -; then
   exit 1
 fi
 test "$PWD" = "$shoal_repo_dir"
-shoal start "$REPO" acknowledged
+shoal start "$REPO" --branch acknowledged
 test "${PWD##*/}" = acknowledged
 acknowledged=$(here)
 printf 'retained' > untracked
@@ -1000,7 +1001,7 @@ shoal done
 until ! shoal status "$acknowledged" >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
-shoal start "$REPO" held
+shoal start "$REPO" --branch held
 held=$(here)
 shoal acquire hold --workspace "$held" --name review
 shoal done --cleanup
@@ -1009,7 +1010,7 @@ shoal release hold --workspace "$held" --name review
 until ! shoal status "$held" >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
-shoal start "$REPO" completed
+shoal start "$REPO" --branch completed
 completed=$(here)
 printf 'keep me' > untracked
 shoal done --cleanup
@@ -1612,14 +1613,14 @@ fn omitted_repositories_come_from_the_current_checkout() {
     };
     let output = run(&["repo", "config"]);
     assert!(output.status.success(), "{output:?}");
-    let output = run(&["--json", "start", "--existing", "topic"]);
+    let output = run(&["--json", "start", "--branch", "topic"]);
     assert!(output.status.success(), "{output:?}");
     for args in [&["start"][..], &["repo", "rename"]] {
         assert!(!run(args).status.success(), "{args:?}");
     }
     // Following the hints passes the branch and the name, not a repository.
     let repo = fixture.repo.to_str().unwrap();
-    let output = run(&["--json", "start", repo, "fresh"]);
+    let output = run(&["--json", "start", repo, "--branch", "fresh"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
     let output = run(&["repo", "rename", repo, "renamed"]);
@@ -1634,7 +1635,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     fixture.add("upper");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    let foreign = fixture.ok(&["start", other.to_str().unwrap(), "foreign"]);
+    let foreign = fixture.ok(&["start", other.to_str().unwrap(), "--branch", "foreign"]);
     let lower = lower["id"].as_str().unwrap();
     let (output, rows) = fixture.pick(
         &["branch", "base", "set", "--workspace", &fixture.id("upper")],
@@ -1657,7 +1658,7 @@ fn work_lists_only_the_selected_repository() {
     fixture.add("local");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    fixture.ok(&["start", other.to_str().unwrap(), "foreign"]);
+    fixture.ok(&["start", other.to_str().unwrap(), "--branch", "foreign"]);
     let names = |repository: &str| -> Vec<_> {
         fixture
             .ok(&["list", "--repo", repository])
@@ -1938,6 +1939,7 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "missing",
             "--base",
             "not-a-ref",
@@ -2069,6 +2071,7 @@ fn text_listings_lead_with_the_ids_their_commands_take() {
     fixture.ok(&[
         "start",
         repo,
+        "--branch",
         "later",
         "--add-blocker",
         first,

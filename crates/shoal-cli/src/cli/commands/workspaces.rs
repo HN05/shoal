@@ -23,7 +23,7 @@ mod waiting;
 mod watch;
 
 pub(super) use add::{
-    AddOptions, AgentLaunch, StartsAsChat, add, check_target, link, start_worker,
+    AddOptions, AgentLaunch, StartsAsChat, add, check_target, link, start_worker, task,
 };
 pub(in crate::cli) use add::{execute_add, item_context, start_queued};
 pub(super) use adopt::adopt;

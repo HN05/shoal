@@ -44,6 +44,7 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     let failed = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "reserved",
         "--base",
         "does-not-exist",
@@ -231,7 +232,7 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     let repo = fixture.repo.to_str().unwrap();
     // The CLI shows what setup writes, as it did when it ran setup itself.
     fs::write(&release, "").unwrap();
-    let output = fixture.run(&["--json", "start", repo, "quick"]);
+    let output = fixture.run(&["--json", "start", repo, "--branch", "quick"]);
     assert!(output.status.success(), "{output:?}");
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("preparing"),
@@ -240,7 +241,7 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     fs::remove_file(&release).unwrap();
     let mut add = fixture
         .command()
-        .args(["--json", "start", repo, "slow"])
+        .args(["--json", "start", repo, "--branch", "slow"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -338,7 +339,13 @@ fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
     );
     let mut add = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "gated"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "gated",
+        ])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -376,7 +383,13 @@ fn interrupting_the_cli_stops_the_post_setup_hook_and_what_ignores_sigterm_below
     commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
     let mut add = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "hooked"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "hooked",
+        ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -461,6 +474,7 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
         let workspace = fixture.ok(&[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             &name,
             "--base",
             base,
@@ -481,6 +495,7 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
     let output = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "from-remote",
         "--base",
         "origin/topic",
@@ -510,6 +525,7 @@ fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
         let workspace = fixture.ok(&[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             &name,
             "--base",
             "origin/feature/api",
@@ -548,6 +564,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
             "--json",
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "prepared",
             "--here",
             "--agent",
@@ -590,7 +607,12 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
     fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
     fs::create_dir(fixture.repo.join("local")).unwrap();
     fs::write(fixture.repo.join("local/signing"), "team\n").unwrap();
-    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "copied"]);
+    let workspace = fixture.ok(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "copied",
+    ]);
     assert_eq!(workspace["state"], "ready");
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -607,7 +629,12 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
     assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=2\n");
 
     commit_resource_config(&fixture.repo, "setup.copy_ignored = false\n");
-    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "uncopied"]);
+    let workspace = fixture.ok(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "uncopied",
+    ]);
     assert_eq!(workspace["state"], "ready");
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert!(!path.join(".env").exists());
@@ -624,7 +651,12 @@ fn ignored_files_are_copied_whatever_git_location_setup_inherits() {
         "[env]\nGIT_WORK_TREE = '{workspace_path}'\nGIT_DIR = '{workspace_path}/.git'\n",
     );
     fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
-    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "copied"]);
+    let workspace = fixture.ok(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "copied",
+    ]);
     assert_eq!(workspace["state"], "ready");
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=1\n");
@@ -651,7 +683,12 @@ fn work_setup_skip_accepts_a_failed_setup() {
     )
     .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
-    let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "skipped"]);
+    let output = fixture.run(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "skipped",
+    ]);
     assert!(!output.status.success());
     assert_eq!(
         fixture.ok(&["status", &fixture.id("skipped")])["workspace"]["state"],
@@ -710,6 +747,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         "--json",
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "failed-setup",
         "--here",
         "--agent",
@@ -778,7 +816,7 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     let repo = fixture.repo.to_str().unwrap();
     // Without a terminal its preparation queues the agent, so no follower
     // leaves it waiting.
-    let output = fixture.run(&["start", repo, "failing", "--agent", "waiter"]);
+    let output = fixture.run(&["start", repo, "--branch", "failing", "--agent", "waiter"]);
     assert!(!output.status.success(), "{output:?}");
     let failed = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(failed["state"], "failed", "{failed}");
@@ -809,14 +847,19 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(kept["state"], "failed", "{kept}");
     // Other spaces beside it are refused before any setup runs.
-    fixture.ok(&["start", repo, "plain", "--skip-setup"]);
+    fixture.ok(&["start", repo, "--branch", "plain", "--skip-setup"]);
     let mixed = fixture.run(&["resume", &fixture.id("failing"), &fixture.id("plain")]);
     assert!(!mixed.status.success(), "{mixed:?}");
     let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(kept["state"], "failed", "{kept}");
 
     // Several failed setups resume together in one result.
-    assert!(!fixture.run(&["start", repo, "second"]).status.success());
+    assert!(
+        !fixture
+            .run(&["start", repo, "--branch", "second"])
+            .status
+            .success()
+    );
     let second = &fixture.ok(&["status", &fixture.id("second")])["workspace"];
     fs::write(
         Path::new(second["path"].as_str().unwrap()).join("fixed"),
@@ -853,7 +896,7 @@ fn a_failed_setup_leaves_the_agent_waiting_after_its_cli_exited() {
     // A start without a terminal runs its agent itself once setup ends.
     let mut start = fixture
         .command()
-        .args(["start", repo, "failing", "--agent", "waiter"])
+        .args(["start", repo, "--branch", "failing", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -889,7 +932,9 @@ fn a_retry_that_fails_again_keeps_the_agent_waiting() {
     let repo = fixture.repo.to_str().unwrap();
     // Retry, which fails again, then keep the workspace.
     let (output, transcript) = fixture.interactive(
-        &["start", repo, "failing", "--here", "--agent", "waiter"],
+        &[
+            "start", repo, "--branch", "failing", "--here", "--agent", "waiter",
+        ],
         "r\n\n",
     );
     assert!(!output.status.success(), "{transcript}");
@@ -919,7 +964,9 @@ fn a_retry_whose_post_setup_hook_fails_keeps_the_agent_waiting() {
     );
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = fixture.interactive(
-        &["start", repo, "failing", "--here", "--agent", "waiter"],
+        &[
+            "start", repo, "--branch", "failing", "--here", "--agent", "waiter",
+        ],
         "r\n",
     );
     assert!(!output.status.success(), "{transcript}");
@@ -957,6 +1004,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "ignored",
             "--agent",
             "codex",
@@ -983,7 +1031,12 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         Path::new(&ignored_path).join("agent-started").exists()
     });
     let (deleted, transcript) = fixture.interactive(
-        &["start", fixture.repo.to_str().unwrap(), "deleted"],
+        &[
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "deleted",
+        ],
         "d\ny\n",
     );
     assert!(!deleted.status.success(), "{transcript}");
@@ -1003,8 +1056,15 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         fixture.ok(&["status", &fixture.id("existing")])["workspace"]["state"],
         "ready"
     );
-    let (canceled, transcript) =
-        fixture.interactive(&["start", fixture.repo.to_str().unwrap(), "canceled"], "\n");
+    let (canceled, transcript) = fixture.interactive(
+        &[
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "canceled",
+        ],
+        "\n",
+    );
     assert!(!canceled.status.success(), "{transcript}");
     assert_eq!(
         fixture.ok(&["status", &fixture.id("canceled")])["workspace"]["state"],
@@ -1040,6 +1100,7 @@ Path('setup-result').write_text('complete')
         command.args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "survivor",
             "--agent",
             "pi",
@@ -1088,6 +1149,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
             "--json",
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "interrupted",
         ])
         .stdout(Stdio::null())
@@ -1260,6 +1322,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
             "--json",
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "custom-issue-name",
             "--base",
             "HEAD",
@@ -1441,6 +1504,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             "--json",
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "plain",
             "--base",
             "HEAD",
@@ -1694,7 +1758,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
     let args = [
         "start",
         fixture.repo.to_str().unwrap(),
-        "--existing",
+        "--branch",
         "coworker",
     ];
     let opened = fixture.ok(&args);
@@ -1720,37 +1784,28 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
         support::shoal_binary(),
         "start",
         fixture.repo.to_str().unwrap(),
-        "--existing",
+        "--branch",
         "elsewhere",
     ]);
     assert!(!output.status.success());
     assert!(fixture.ok(&["status", &fixture.id("elsewhere")])["workspace"]["parent"].is_null());
-    assert!(
-        !fixture
-            .run(&[
-                "start",
-                fixture.repo.to_str().unwrap(),
-                "other",
-                "--existing",
-                "coworker",
-            ])
-            .status
-            .success()
-    );
-    for flag in ["--base", "--issue"] {
-        assert!(
-            !fixture
-                .run(&[
+    // The workspace that has the branch takes the start, which refuses what
+    // only a new workspace takes.
+    for flag in [["--base", "HEAD"], ["--issue", "7"]] {
+        let output = fixture.run(
+            &[
+                &[
                     "start",
                     fixture.repo.to_str().unwrap(),
-                    "--existing",
+                    "--branch",
                     "coworker",
-                    flag,
-                    &fixture.id("other")
-                ])
-                .status
-                .success()
+                ][..],
+                &flag,
+            ]
+            .concat(),
         );
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("--in does"), "{flag:?}: {error}");
     }
 }
 
@@ -1865,6 +1920,7 @@ pub(crate) fn issue_fixture(host: &str) -> Fixture {
     fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "issue-work",
         "--issue",
         "316",
@@ -1886,7 +1942,7 @@ fn a_new_workspace_is_named_by_name_else_its_issue_else_its_branch() {
     assert_eq!(named["branch"], "issue-work", "{named}");
     // Without an issue, the branch names it as it is, and its directory
     // takes the branch cleaned up.
-    let plain = fixture.ok(&["start", repo, "fix/login", "--base", "HEAD"]);
+    let plain = fixture.ok(&["start", repo, "--branch", "fix/login", "--base", "HEAD"]);
     assert_eq!(plain["name"], "fix/login");
     assert!(
         plain["path"].as_str().unwrap().ends_with("/fix-login"),
@@ -1896,6 +1952,7 @@ fn a_new_workspace_is_named_by_name_else_its_issue_else_its_branch() {
     let typed = fixture.ok(&[
         "start",
         repo,
+        "--branch",
         "typed",
         "--base",
         "HEAD",
@@ -1905,7 +1962,7 @@ fn a_new_workspace_is_named_by_name_else_its_issue_else_its_branch() {
     assert_eq!(typed["name"], "Login retries");
     for refused in ["a\u{202e}b", "two\nlines", &"x".repeat(41)] {
         let output = fixture.run(&[
-            "start", repo, "refused", "--base", "HEAD", "--name", refused,
+            "start", repo, "--branch", "refused", "--base", "HEAD", "--name", refused,
         ]);
         assert!(!output.status.success(), "{refused:?}");
     }
@@ -1926,6 +1983,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
         let output = fixture.run(&[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "closed-work",
             "--issue",
             "316",
@@ -2290,7 +2348,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     );
     let ran = |hook: &str| fs::read_to_string(home.join(format!("{hook}-ran"))).unwrap_or_default();
     let repo = fixture.repo.to_str().unwrap();
-    let skipped = fixture.ok(&["start", repo, "skipped", "--skip-setup"]);
+    let skipped = fixture.ok(&["start", repo, "--branch", "skipped", "--skip-setup"]);
     assert_eq!(skipped["state"], "ready");
     assert_eq!(skipped["setup_skipped"], true);
     let at_commit = fixture.ok(&[
@@ -2309,7 +2367,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     assert_eq!(ran("pre-remove"), "");
 
     // Setup run later clears the mark, so the hooks around it run again.
-    fixture.ok(&["start", repo, "later", "--skip-setup"]);
+    fixture.ok(&["start", repo, "--branch", "later", "--skip-setup"]);
     let set_up = fixture.ok(&["setup", &fixture.id("later")]);
     assert_eq!(set_up["setup_skipped"], false);
     assert_eq!(
@@ -2321,7 +2379,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     // With only a post-setup hook, setup run later still clears the mark and
     // runs the hook.
     commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
-    fixture.ok(&["start", repo, "hooked", "--skip-setup"]);
+    fixture.ok(&["start", repo, "--branch", "hooked", "--skip-setup"]);
     let set_up = fixture.ok(&["setup", &fixture.id("hooked")]);
     assert_eq!(set_up["setup_skipped"], false);
     assert!(

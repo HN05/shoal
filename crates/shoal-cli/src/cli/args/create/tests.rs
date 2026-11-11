@@ -88,7 +88,7 @@ fn a_workspaces_start_parses_back_from_its_command_line() {
     });
     assert_round_trips(StartArgs {
         repository: Some("shoal".into()),
-        existing: Some("origin/feature".into()),
+        branch: Some("origin/feature".into()),
         now: true,
         ..Default::default()
     });

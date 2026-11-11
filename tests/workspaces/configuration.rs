@@ -496,7 +496,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     let existing = fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
-        "--existing",
+        "--branch",
         "existing",
     ]);
     let existing_path = Path::new(existing["path"].as_str().unwrap());
@@ -517,7 +517,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
-        "--existing",
+        "--branch",
         "existing",
     ]);
     assert_eq!(
@@ -550,7 +550,12 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
         "false"
     );
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
-    let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "unknown"]);
+    let output = fixture.run(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "unknown",
+    ]);
     assert!(!output.status.success());
     let failed = fixture.ok(&["status", &fixture.id("unknown")]);
     assert_eq!(failed["workspace"]["state"], "failed");
@@ -565,12 +570,15 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     ));
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     git(&fixture.repo, &["branch", "existing-profile"]);
-    for (existing, name) in [(false, "new-profile"), (true, "existing-profile")] {
-        let mut args = vec!["start", fixture.repo.to_str().unwrap()];
-        if existing {
-            args.push("--existing");
-        }
-        args.extend([name, "--git-profile", "manual"]);
+    for name in ["new-profile", "existing-profile"] {
+        let args = [
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            name,
+            "--git-profile",
+            "manual",
+        ];
         let workspace = fixture.ok(&args);
         let path = Path::new(workspace["path"].as_str().unwrap());
         assert_eq!(
@@ -580,7 +588,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
         let output = fixture.run(&[
             "start",
             fixture.repo.to_str().unwrap(),
-            "--existing",
+            "--branch",
             name,
             "--git-profile",
             "manual",
@@ -595,6 +603,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     let output = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "bad-profile",
         "--git-profile",
         "unknown",

@@ -18,6 +18,15 @@ pub(in crate::cli::commands) enum AgentLaunch {
     IssueDefault(Option<Agent>),
 }
 
+impl AgentLaunch {
+    /// The agent named, if any.
+    pub(super) fn named(self) -> Option<Agent> {
+        match self {
+            Self::Explicit(agent) | Self::Add(agent) | Self::IssueDefault(agent) => agent,
+        }
+    }
+}
+
 /// The effective settings of the repository a workspace is added in, or of
 /// the existing workspace a launch goes to, loaded on first use.
 pub(super) struct AddSettings<'a> {

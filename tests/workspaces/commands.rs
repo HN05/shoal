@@ -7,7 +7,12 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     let fixture = Fixture::with_config(Some(
         "[commands]\ncheck = ['sh', '-c', 'cat; printf \"%s\\n\" \"$SHOAL_WORKSPACE\" \"$@\"; test -n \"$SHOAL_SCOPE_TOKEN\" || exit 99; exit 7', 'check', 'literal $HOME']\n",
     ));
-    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "custom"]);
+    let workspace = fixture.ok(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "custom",
+    ]);
     let path = workspace["path"].as_str().unwrap();
     let mut child = fixture
         .command()

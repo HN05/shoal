@@ -163,7 +163,13 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     };
 
     let request = shoal()
-        .args(["--json", "start", repo.to_str().unwrap(), "before"])
+        .args([
+            "--json",
+            "start",
+            repo.to_str().unwrap(),
+            "--branch",
+            "before",
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -187,7 +193,13 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["daemon"]["pid"], daemon.child.id());
     let after = shoal()
-        .args(["--json", "start", repo.to_str().unwrap(), "after"])
+        .args([
+            "--json",
+            "start",
+            repo.to_str().unwrap(),
+            "--branch",
+            "after",
+        ])
         .output()
         .unwrap();
     assert!(after.status.success(), "{after:?}");

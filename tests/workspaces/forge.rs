@@ -2050,7 +2050,7 @@ fn restack_on_merge(github: bool, lower_prs: &[(u64, &str, &str)], upper_base: &
     ));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
+    fixture.ok(&["start", &repo, "--branch", "upper", "--base", "lower"]);
     let origin = if github {
         "git@github.com:team/project.git"
     } else {
@@ -2194,7 +2194,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
+    fixture.ok(&["start", &repo, "--branch", "upper", "--base", "lower"]);
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
     // Fail the requests whose URL contains the pattern in ~/fail, with

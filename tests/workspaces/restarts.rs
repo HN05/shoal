@@ -289,6 +289,7 @@ fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
     let child = fixture.ok(&[
         "start",
         repo,
+        "--branch",
         "child",
         "--parent",
         &fixture.id(parent.name()),
@@ -400,6 +401,7 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     let child = fixture.ok(&[
         "start",
         repo,
+        "--branch",
         "child",
         "--parent",
         &fixture.id(parent.name()),

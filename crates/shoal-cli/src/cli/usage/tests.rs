@@ -13,7 +13,7 @@ fn arguments_show_as_the_command_line_passes_them() {
         (&["attach"], "workspace", Some("<target>")),
         (&["release", "hold"], "name", Some("--name <name>")),
         (&["repo", "rm"], "repository", Some("<repository>")),
-        (&["start"], "branch", Some("<repository> <branch>")),
+        (&["start"], "branch", Some("--branch <name>")),
         (&["repo", "rename"], "name", Some("<repository> <name>")),
         (&["status"], "repository", None),
         (&["status", "no-such-command"], "workspace", None),

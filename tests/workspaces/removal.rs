@@ -320,6 +320,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
             .run(&[
                 "start",
                 fixture.repo.to_str().unwrap(),
+                "--branch",
                 "broken",
                 "--base",
                 "does-not-exist"
@@ -505,6 +506,7 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
     let divergent = fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "divergent",
         "--base",
         "HEAD",
@@ -880,12 +882,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
         ("--is-ancestor", vec!["merge", &fixture.id("worker")]),
         (
             "show-ref",
-            vec![
-                "start",
-                fixture.repo.to_str().unwrap(),
-                "--existing",
-                "main",
-            ],
+            vec!["start", fixture.repo.to_str().unwrap(), "--branch", "main"],
         ),
         (
             "--is-ancestor",
@@ -1095,7 +1092,7 @@ fn a_named_child_its_failed_parent_took_is_not_removed_again() {
 fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     let fixture = Fixture::new();
     let repo = fixture.repo.to_str().unwrap();
-    let workspace = fixture.ok(&["start", repo, "scratch", "--disposable"]);
+    let workspace = fixture.ok(&["start", repo, "--branch", "scratch", "--disposable"]);
     assert_eq!(workspace["disposable"], true);
     let path = PathBuf::from(workspace["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "changed\n").unwrap();
@@ -1121,7 +1118,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     // Its removal keeps nothing to export, which refuses a batch before
     // removing any of it.
     fixture.add("kept");
-    fixture.ok(&["start", repo, "scratch-2", "--disposable"]);
+    fixture.ok(&["start", repo, "--branch", "scratch-2", "--disposable"]);
     let directory = fixture.root.path().join("exports");
     let refused = fixture.run(&[
         "move",

@@ -51,7 +51,7 @@ use crate::client::space_names::SpaceSelector;
     about,
     disable_help_subcommand = true,
     help_template = help::template(),
-    after_help = "Start here (with a registered repository):\n  shoal start my-project fix-login\n  shoal run --workspace 3 -- cargo test\n  shoal status 3\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
+    after_help = "Start here (with a registered repository):\n  shoal start my-project --branch fix-login\n  shoal run --workspace 3 -- cargo test\n  shoal status 3\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
     #[arg(skip)]

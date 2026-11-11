@@ -647,8 +647,8 @@ Issue links and `shoal start <number>` require an open issue and derive
 “the”, within 32 characters; a title without ASCII words gives `issue-<number>`.
 Numbers use `--repo`, the current registered checkout or workspace, then an
 interactive repository picker. An existing association
-reopens its workspace; otherwise the derived local branch reopens as `--existing`
-would. Lookup and ownership failures create nothing. The command starts
+reopens its workspace; otherwise the derived local branch reopens as an existing
+`--branch` opens. Lookup and ownership failures create nothing. The command starts
 `-a`/`--agent`, else the configured `agent.default`, else an interactive agent picker.
 Choosing “No agent” creates the workspace without a launch. The issue prompt
 names the issue's number, title and URL, includes its description when it has
@@ -673,7 +673,7 @@ GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
 `start [<repository>] --issue <number-or-url>`, or `-i`, remains available with an optional
-branch name, finds the repository of an omitted `<repository>` as numbers and
+`--branch`, finds the repository of an omitted `<repository>` as numbers and
 links do, and launches an agent only with `--agent`.
 
 ```sh
@@ -682,8 +682,8 @@ shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo ls
 shoal repo                               # Interactive repository menu
-shoal start my-project fix-login
-shoal start my-project fix-api -a codex -- "Fix the API timeout"
+shoal start my-project --branch fix-login
+shoal start my-project --branch fix-api -a codex -- "Fix the API timeout"
 shoal start https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd 3                               # Enter through the shell function
@@ -1766,7 +1766,9 @@ cannot rename chats.
 [workspace events](#workspace-events) report its start, renames, stops,
 restores and removal. A workspace the chat's agent opens with `shoal start` is
 below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
-workspace is opened outside a chat, which returns it to you. The chat opens
+workspace is reopened outside a chat for its issue or a picked branch, which
+returns it to you; a start of its own agent, with `--in` or the `--branch` it
+has, leaves it where it is. The chat opens
 workspaces only in its own repository; one in another repository is refused.
 With `--agent`, the agent is queued once the workspace is set up, and the
 daemon starts it with the workspace's own scope when a slot is free, as for
@@ -2040,7 +2042,7 @@ stacked on that workspace, as with `--base`, so the agent builds on the
 finished work before it merges. With several done blockers it takes the one
 whose HEAD contains the others, and while they are on separate branches it
 waits until all but one have merged and their workspaces are gone. `--base` and
-`--existing` keep their own starting point, and `--now` and `--focus` cannot
+an existing `--branch` keep their own starting point, and `--now` and `--focus` cannot
 wait for blockers.
 
 `shoal queue` lists the entries of every repository, since positions apply
@@ -2293,8 +2295,8 @@ giving a child less than it has itself, or the user giving a worker more than
 its mode:
 
 ```sh
-shoal start my-project fix-login --permission push=propose --permission merge=propose
-shoal start my-project release --permission merge=direct
+shoal start my-project --branch fix-login --permission push=propose --permission merge=propose
+shoal start my-project --branch release --permission merge=direct
 ```
 
 Whoever gives a value must hold it: the user, from a terminal without a
@@ -2317,18 +2319,24 @@ replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
 expand in them.
 
 ### Branch and workspace names
-`shoal start <repository> [branch]` creates a literal Git branch. A start that
-names no branch, issue, PR, existing branch or copy, including the picker's
+`shoal start <repository> --branch <name>` opens the branch as `git switch`
+does: an existing local branch, or `remote/branch`, opens, and any other name
+creates a new branch under exactly that name, which a branch it would collide
+with refuses rather than suffixing it. A branch that already has a workspace
+takes the start into that workspace, as [`--in`](#agents) does, refusing what
+only a new workspace takes. A branch checked out elsewhere is refused. Names
+Shoal derives, such as an issue's, keep reopening their branch or workspace as
+the [issue start](#workspaces) describes. A start that
+names no branch, issue, PR or copy, including the picker's
 "Create a new branch" and a start without a terminal, begins as a
 [chat](#chats) in the chosen mode, `worker` by default, under the chat's
 default name; the mode's agent is told to make it a workspace with
 [`shoal convert workspace <branch>`](#convert-a-chat-or-a-workspace) once it
 knows the work, before it changes any files. Flags that only a new branch
 takes, such as `--base`, are refused there.
-`--existing <branch|remote/branch>` uses an existing one
-`--existing <branch|remote/branch>` uses an existing one (incompatible with the
-branch argument and `--issue`); its `--base` is the ref `diff` and `{diff_base}`
-compare against instead of the default branch, for new worktrees only. The picker
+For a new branch `--base` is its starting ref; for an existing one it is the ref
+`diff` and `{diff_base}` compare against instead of the default branch, for new
+worktrees only. The picker
 queries remotes for current branches. Local branches take precedence and remain
 unchanged; remote selections fetch and create tracking branches, or fast-forward
 a matching local tracking branch without discarding ahead commits. Ambiguous
@@ -2446,8 +2454,8 @@ shoal split --issue 42               # Branch named after the issue, which it li
 shoal split part-two --base fix-api  # Stacked on the parent's branch
 shoal split fix-typo --workspace 3
 shoal start --issue 43 --agent claude                  # Inside a workspace: a child with an agent of its own
-shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
-shoal start my-project api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
+shoal start my-project --branch api-part --agent codex -- "Move the API client into its own crate"
+shoal start my-project --branch api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
 shoal split --no-branch                # A child at the default branch, with no branch of its own
 shoal split --no-branch --base v1.4.0  # At a tag or commit
 ```
@@ -2734,13 +2742,14 @@ background place.
 
 ```sh
 shoal contribute https://github.com/owner/repo/issues/68  # Work on an issue
-shoal contribute https://github.com/owner/repo fix-typo --agent claude
+shoal contribute https://github.com/owner/repo --branch fix-typo --agent claude
 ```
 
-`shoal contribute <url> [branch]` creates a workspace in a repository you do not
+`shoal contribute <url> [--branch <name>]` creates a workspace in a repository you do not
 maintain. The URL names the repository, or an issue, PR or branch in it, which
 opens as `shoal start <link>` does; `--agent`, `--here`, `--focus` and `--now` work
-as for `start`, and without a branch or link the contribution begins as a chat,
+as for `start`, `--branch` opens or creates its branch as `start`'s does, and
+without a branch or link the contribution begins as a chat,
 as a [start without one](#branch-and-workspace-names) does. A repository that is already registered is used as it is.
 Otherwise Shoal clones it as a contribution, first checking whether your forge
 login can push to it. When it cannot, Shoal forks it into your account, reusing

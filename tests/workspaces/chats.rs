@@ -387,7 +387,13 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
     let output = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "opened"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "opened",
+        ])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
         .output()
@@ -407,7 +413,13 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
     let nested = response["data"]["id"].as_str().unwrap().to_owned();
     let output = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "deeper"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "deeper",
+        ])
         .env("SHOAL_CHAT", &nested)
         .stdin(Stdio::null())
         .output()
@@ -617,7 +629,13 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
     let output = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "opened"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "opened",
+        ])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
         .output()
@@ -903,7 +921,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text list > \"$HOME/chat-work\"\n\"$shoal\" --json list --chats > \"$HOME/chat-chats\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" --branch chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text list > \"$HOME/chat-work\"\n\"$shoal\" --json list --chats > \"$HOME/chat-chats\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
             support::shoal_binary()
         ),
     );
@@ -972,20 +990,6 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         .find(|event| event["kind"] == "chat_saved")
         .unwrap();
     assert_eq!(stopped["chat"]["id"], started["chat"]["id"]);
-
-    // Opening it outside a chat gives it back to the user, so removing the
-    // chat leaves it.
-    let reopened = fixture.ok(&[
-        "start",
-        fixture.repo.to_str().unwrap(),
-        "--existing",
-        "chat-worker",
-    ]);
-    assert_eq!(reopened["parent"], Value::Null);
-    let removed = fixture.ok(&["rm", "--wait", &fixture.id(CHAT_NAME)]);
-    assert_eq!(removed["chat"]["id"], *chat, "{removed}");
-    assert!(removed["children"].is_null(), "{removed}");
-    assert_eq!(fixture.ok(&["list"])[0]["name"], "chat-worker");
 }
 
 #[test]
@@ -995,7 +999,13 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     // The chat's agent opens a workspace, and a child is split from it.
     let output = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "opened"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "opened",
+        ])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
         .output()
@@ -1049,7 +1059,13 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     let add = |repository: &Path, name: &str| {
         fixture
             .command()
-            .args(["--json", "start", repository.to_str().unwrap(), name])
+            .args([
+                "--json",
+                "start",
+                repository.to_str().unwrap(),
+                "--branch",
+                name,
+            ])
             .env("SHOAL_CHAT", &chat)
             .stdin(Stdio::null())
             .output()
@@ -1080,7 +1096,13 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     // Refused before an agent's launch is planned or queued.
     let output = fixture
         .command()
-        .args(["--json", "start", other.to_str().unwrap(), "queued"])
+        .args([
+            "--json",
+            "start",
+            other.to_str().unwrap(),
+            "--branch",
+            "queued",
+        ])
         .args(["--agent", "missing-agent"])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
@@ -1097,6 +1119,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
                 "--text",
                 "start",
                 unregistered.to_str().unwrap(),
+                "--branch",
                 "third-work",
             ])
             .env("SHOAL_CHAT", &chat),
@@ -1123,7 +1146,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" start \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" start \"$PWD\" --branch chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
             support::shoal_binary()
         ),
     );
@@ -1188,14 +1211,14 @@ fn a_chats_agent_is_scoped_to_the_chat_and_the_spaces_below_it() {
             r#"#!/bin/sh
 shoal='{}'
 run() {{ name=$1; shift; "$shoal" "$@" </dev/null >"$HOME/$name.out" 2>"$HOME/$name.err"; echo $? > "$HOME/$name"; }}
-run start --json start "$PWD" below
+run start --json start "$PWD" --branch below
 below=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$HOME/start.out")
 run stop stop --interrupt "$below"
 run rename rename renamed
 run alerts alerts
 run repo repo add "$HOME"
 run outside messages send --space {} hello
-run takeover start "$PWD" --existing outside
+run takeover start "$PWD" --branch outside
 run remove rm "$below" --yes --wait
 "#,
             support::shoal_binary(),
@@ -1248,7 +1271,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\nworker=$(head -n 1 \"$HOME/add.json\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')\n\"$shoal\" start \"$PWD\" later --agent codex --add-blocker \"$worker\" 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" --branch worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\nworker=$(head -n 1 \"$HOME/add.json\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')\n\"$shoal\" start \"$PWD\" --branch later --agent codex --add-blocker \"$worker\" 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" --branch now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
             support::shoal_binary()
         ),
     );
@@ -1455,7 +1478,7 @@ fn any_space_opens_any_kind_of_child() {
     fixture.add("parent");
     // A workspace's agent opens a workspace below its own...
     let repo = fixture.repo.to_str().unwrap();
-    let below = scoped_command(&fixture, "parent", &["start", repo, "below"]);
+    let below = scoped_command(&fixture, "parent", &["start", repo, "--branch", "below"]);
     assert!(below.status.success(), "{below:?}");
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
     let status = fixture.ok(&["status", &fixture.id("below")]);
@@ -1551,7 +1574,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
              while [ ! -e \"$HOME/release\" ]; do sleep 0.1; done\n\
              exit 0\n\
              fi\n\
-             \"$shoal\" start \"$PWD\" deep </dev/null > \"$HOME/deep\" 2>&1\n\
+             \"$shoal\" start \"$PWD\" --branch deep </dev/null > \"$HOME/deep\" 2>&1\n\
              touch \"$HOME/chat-ready\"\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
@@ -1765,6 +1788,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "chat",
         fixture.repo.to_str().unwrap(),
         "--workspace",
+        "--branch",
         &fixture.id("worker"),
     ]);
     assert!(!both.status.success(), "{both:?}");

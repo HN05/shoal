@@ -59,13 +59,21 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             "shoal repo add http://other.example:3000/team/repo",
         ),
         (
-            vec!["start", "test", "new"],
-            vec!["start_workspace"],
+            vec!["start", "test", "--branch", "new"],
+            vec!["list_repositories", "list_workspaces", "start_workspace"],
             "creation reached",
         ),
         (
-            vec!["start", "test", "new", "--here", "--agent", "codex"],
-            vec!["layered_config test", "queue_add", "start_workspace"],
+            vec![
+                "start", "test", "--branch", "new", "--here", "--agent", "codex",
+            ],
+            vec![
+                "list_repositories",
+                "list_workspaces",
+                "layered_config test",
+                "queue_add",
+                "start_workspace",
+            ],
             "creation reached",
         ),
         // A contribution refuses a missing agent before it forks or clones.
@@ -84,13 +92,14 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec![
                 "start",
                 "test",
+                "--branch",
                 "new",
                 "--agent",
                 "codex",
                 "--add-blocker",
                 "missing",
             ],
-            vec!["list_repositories", "check_blockers"],
+            vec!["list_repositories", "list_workspaces", "check_blockers"],
             "neither a workspace nor a queued agent",
         ),
     ] {
@@ -283,6 +292,7 @@ impl FakeDaemon {
                     "issue_details" => json!({"type": "error", "data": {
                         "code": "operation_failed", "message": "issue number must be positive"
                     }}),
+                    "list_workspaces" => json!({"type": "workspaces", "data": []}),
                     "queue_add" => json!({"type": "queue_admission", "data": {
                         "start": true, "entry": null, "waiting": 0
                     }}),

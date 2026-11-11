@@ -49,7 +49,7 @@ pub async fn list(repo: &Path) -> Result<Vec<Branch>> {
     .collect();
     for remote in git::remotes(repo, git::run_isolated).await?.lines() {
         let heads = git::run_isolated(repo, &["ls-remote", "--heads", "--", remote])
-            .await.with_context(|| format!("could not list branches from {remote}; use --existing <local-branch> to work offline"))?;
+            .await.with_context(|| format!("could not list branches from {remote}; use --branch <local-branch> to work offline"))?;
         branches.extend(heads.lines().filter_map(|line| {
             let (_, reference) = line.split_once('\t')?;
             Some(Branch {

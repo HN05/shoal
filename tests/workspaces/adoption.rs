@@ -10,22 +10,19 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
         .path()
         .join("elsewhere/one off ' {{ branch }} path");
     let path = destination.to_str().unwrap();
-    let workspace = fixture.ok(&["start", repo, "custom/topic", "--path", path]);
+    let workspace = fixture.ok(&["start", repo, "--branch", "custom/topic", "--path", path]);
     assert_eq!(
         Path::new(workspace["path"].as_str().unwrap()),
         fs::canonicalize(path).unwrap()
     );
     assert_eq!(workspace["name"], "custom/topic");
-    assert_eq!(
-        fixture.ok(&["start", repo, "--existing", "custom/topic", "--path", path])["id"],
-        workspace["id"]
-    );
+    // The branch's workspace takes the start, which places nothing anew.
     assert!(
         !fixture
             .run(&[
                 "start",
                 repo,
-                "--existing",
+                "--branch",
                 "custom/topic",
                 "--path",
                 fixture.root.path().join("different").to_str().unwrap()
@@ -39,7 +36,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
-    fixture.ok(&["start", repo, "--existing", "existing-path", "--path", path]);
+    fixture.ok(&["start", repo, "--branch", "existing-path", "--path", path]);
 }
 
 #[test]
@@ -63,7 +60,14 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
         owned.parent().unwrap().to_path_buf(),
         fixture.root.path().to_path_buf(),
     ] {
-        let output = fixture.run(&["start", repo, "rejected", "--path", path.to_str().unwrap()]);
+        let output = fixture.run(&[
+            "start",
+            repo,
+            "--branch",
+            "rejected",
+            "--path",
+            path.to_str().unwrap(),
+        ]);
         assert!(!output.status.success(), "accepted {}", path.display());
     }
     assert_eq!(
@@ -329,6 +333,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
     fixture.ok(&[
         "start",
         repo,
+        "--branch",
         "custom",
         "--path",
         destination.to_str().unwrap(),
@@ -354,6 +359,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
                 .run(&[
                     "start",
                     repo,
+                    "--branch",
                     "rejected",
                     "--path",
                     protected.to_str().unwrap()

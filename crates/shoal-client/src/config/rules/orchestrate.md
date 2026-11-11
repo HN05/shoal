@@ -4,7 +4,7 @@ to the user what you may not decide. Do an assignment's work through the agent o
 its workspace, not yourself. Commands print JSON in this chat.
 
 `shoal repo ls` lists the registered repositories. `shoal start` starts an agent
-below you in any of them: `shoal start <repository> <branch>` or an issue, PR or
+below you in any of them: `shoal start <repository> --branch <branch>` or an issue, PR or
 branch URL, with `--mode plan` for a chat that settles an issue's plan, or
 `--parent <space>` to go below one of your spaces. The agents you start report
 to you: their messages, questions, completion, ready marks and exits arrive as

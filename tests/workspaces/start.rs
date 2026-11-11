@@ -26,6 +26,7 @@ fn a_scoped_start_refuses_a_detached_agent_without_zmx_before_creating_the_child
             support::shoal_binary(),
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "child",
             "--agent",
             "droid",
@@ -47,6 +48,7 @@ fn start_refuses_an_unavailable_agent_before_creating_the_child() {
     let output = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "child",
         "--parent",
         &fixture.id("parent"),
@@ -65,6 +67,7 @@ fn start_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child
     let output = fixture.run(&[
         "start",
         repo,
+        "--branch",
         "child",
         "--parent",
         &fixture.id("parent"),
@@ -90,8 +93,8 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
         format!(
             "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
              printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
-             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" refused --fork --agent pi 2> \"$HOME/refused.err\"\n\
-             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
+             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" --branch refused --fork --agent pi 2> \"$HOME/refused.err\"\n\
+             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" --branch child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
             shoal = support::shoal_binary(),
         ),
     )
@@ -209,6 +212,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
         support::shoal_binary(),
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "child",
         "--agent",
         "waiter",
@@ -227,7 +231,9 @@ fn a_scoped_start_refuses_to_run_its_agent_here() {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
     let repo = fixture.repo.to_str().unwrap();
-    let start = ["start", repo, "child", "--here", "--agent", "waiter"];
+    let start = [
+        "start", repo, "--branch", "child", "--here", "--agent", "waiter",
+    ];
     let output = scoped_command(&fixture, "parent", &start);
     assert!(!output.status.success(), "{output:?}");
     assert!(
@@ -251,6 +257,7 @@ fn a_scoped_start_queues_a_blocked_agent() {
     let start = [
         "start",
         repo,
+        "--branch",
         "child",
         "--agent",
         "waiter",
@@ -305,7 +312,13 @@ exit 7
     for (name, agent) in [("add-codex", "codex"), ("add-claude", "claude")] {
         let output = fixture
             .command()
-            .args(["start", fixture.repo.to_str().unwrap(), name, "--here"])
+            .args([
+                "start",
+                fixture.repo.to_str().unwrap(),
+                "--branch",
+                name,
+                "--here",
+            ])
             .args(["--agent", agent, "--", "literal spaces; $(false)"])
             .env("PATH", fixture.restricted_path(&bin))
             .env("SHOAL_TEST_BIN", support::shoal_binary())
@@ -337,6 +350,7 @@ exit 7
         .args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "bad-base",
             "--base",
             "missing-ref",
@@ -361,6 +375,7 @@ exit 7
             .args([
                 "start",
                 fixture.repo.to_str().unwrap(),
+                "--branch",
                 name,
                 "--here",
                 "--agent",
@@ -544,6 +559,48 @@ fn start_in_starts_an_existing_workspaces_worker_on_its_task() {
 }
 
 #[test]
+fn start_branch_opens_or_creates_its_branch_as_typed() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    git(&fixture.repo, &["branch", "kept"]);
+    git(&fixture.repo, &["branch", "topic"]);
+    let opened = fixture.ok(&["start", repo, "--branch", "kept"]);
+    assert_eq!(opened["branch"], "kept");
+    // A new branch takes the name as typed; one an existing branch blocks is
+    // refused rather than suffixed.
+    let created = fixture.ok(&["start", repo, "--branch", "fresh/part"]);
+    assert_eq!(created["branch"], "fresh/part");
+    let blocked = fixture.run(&["start", repo, "--branch", "topic/part"]);
+    assert!(!blocked.status.success(), "{blocked:?}");
+    // A branch a workspace has takes the start into it, which refuses what
+    // only a new workspace takes.
+    let into = fixture.run(&["start", repo, "--branch", "kept", "--name", "Other"]);
+    assert!(!into.status.success(), "{into:?}");
+    assert!(
+        String::from_utf8_lossy(&into.stderr).contains("--in"),
+        "{into:?}"
+    );
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+    // A remote branch reaches the workspace of its local name only where
+    // that branch tracks it.
+    let origin = fixture.root.path().join("origin.git");
+    git(
+        &fixture.repo,
+        &["clone", "--bare", ".", origin.to_str().unwrap()],
+    );
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    git(&fixture.repo, &["fetch", "origin"]);
+    let untracked = fixture.run(&["start", repo, "--branch", "origin/kept"]);
+    assert!(
+        String::from_utf8_lossy(&untracked.stderr).contains("does not track"),
+        "{untracked:?}"
+    );
+}
+
+#[test]
 fn start_in_refuses_a_second_worker_beside_a_running_one() {
     let fixture = Fixture::new();
     fixture.add("busy");
@@ -685,6 +742,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     let claude = arguments(launch(&[
         "start",
         repo,
+        "--branch",
         "models-claude",
         "--here",
         "--agent",
@@ -702,6 +760,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     let codex = arguments(launch(&[
         "start",
         repo,
+        "--branch",
         "models-codex",
         "--here",
         "--agent",
@@ -723,6 +782,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     let output = launch(&[
         "start",
         repo,
+        "--branch",
         "unsupported",
         "--agent",
         "pi",
@@ -1006,6 +1066,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "late",
         "--base",
         "side",
@@ -1321,6 +1382,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
     let workspace = fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "trusted",
         "--path",
         external.to_str().unwrap(),
@@ -1464,6 +1526,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         &[
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "plain",
             "--base",
             "HEAD",
@@ -1489,6 +1552,7 @@ fn a_picked_agent_without_its_session_host_creates_no_workspace() {
         fixture.command().args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "picked",
             "--base",
             "HEAD",
@@ -1507,7 +1571,12 @@ fn a_picked_agent_without_its_session_host_creates_no_workspace() {
 #[test]
 fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let fixture = Fixture::new();
-    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "configured-agent"]);
+    let workspace = fixture.ok(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "configured-agent",
+    ]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"),
         "[agents.claude]\ncommand = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\n[agents.codex]\ncommand = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
@@ -1674,6 +1743,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let output = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "custom-add",
         "--base",
         "HEAD",
@@ -1692,6 +1762,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let unknown = fixture.run(&[
         "start",
         fixture.repo.to_str().unwrap(),
+        "--branch",
         "unknown-agent",
         "--agent",
         "typo",
@@ -1713,7 +1784,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     install_test_script_with_mode(bin.join("fake-agent"), "#!/bin/sh\nexit 7\n", 0o700);
     let repo = fixture.repo.to_str().unwrap();
     let start = [
-        "--json", "start", repo, "narrowed", "--here", "--agent", "helper",
+        "--json", "start", repo, "--branch", "narrowed", "--here", "--agent", "helper",
     ];
     let given = [
         "--permission",
@@ -1747,6 +1818,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     let unknown = [
         "start",
         repo,
+        "--branch",
         "unknown",
         "--here",
         "--permission",
@@ -1976,7 +2048,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
     let before = fixture.ok(&["list"]);
     for args in [
         &["start", "38", "--repo", repo, "--mode", "missing"][..],
-        &["start", repo, "topic", "--mode", "missing"],
+        &["start", repo, "--branch", "topic", "--mode", "missing"],
     ] {
         let output = fixture.run(args);
         assert!(
@@ -2483,7 +2555,9 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .args([
+            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -2501,7 +2575,9 @@ fn add_queues_agents_past_max_agents_until_removed() {
     };
     wait_until("the first agent start", || started("first"));
 
-    let queued = fixture.ok(&["start", repo, "second", "--here", "--agent", "waiter"]);
+    let queued = fixture.ok(&[
+        "start", repo, "--branch", "second", "--here", "--agent", "waiter",
+    ]);
     assert_eq!(queued["state"], "queued", "{queued}");
     assert_eq!(queued["position"], 1, "{queued}");
     let entries = fixture.ok(&["queue"]);
@@ -2517,7 +2593,9 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 
     // Entries leave the queue when cancelled.
-    fixture.ok(&["start", repo, "third", "--here", "--agent", "waiter"]);
+    fixture.ok(&[
+        "start", repo, "--branch", "third", "--here", "--agent", "waiter",
+    ]);
     let names = |entries: serde_json::Value| -> Vec<String> {
         entries
             .as_array()
@@ -2531,7 +2609,9 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
     // So does one stopped, having nothing to save.
-    fixture.ok(&["start", repo, "fourth", "--here", "--agent", "waiter"]);
+    fixture.ok(&[
+        "start", repo, "--branch", "fourth", "--here", "--agent", "waiter",
+    ]);
     let stopped = fixture.ok(&["stop", &fixture.queued("fourth")]);
     assert_eq!(stopped["name"], "fourth", "{stopped}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
@@ -2542,12 +2622,14 @@ fn add_queues_agents_past_max_agents_until_removed() {
 
     // Without a terminal nothing shows a focused launch, so it is refused,
     // while one started now skips the queue.
-    let refused = fixture.run(&["start", repo, "focused", "--agent", "waiter", "--focus"]);
+    let refused = fixture.run(&[
+        "start", repo, "--branch", "focused", "--agent", "waiter", "--focus",
+    ]);
     assert!(!refused.status.success(), "{refused:?}");
     let mut focused = fixture
         .command()
         .args([
-            "start", repo, "focused", "--here", "--agent", "waiter", "--now",
+            "start", repo, "--branch", "focused", "--here", "--agent", "waiter", "--now",
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -2560,7 +2642,9 @@ fn add_queues_agents_past_max_agents_until_removed() {
     fixture.ok(&["rm", "--wait", &fixture.id("focused"), "--yes"]);
 
     // A queued agent is removed by its entry's ID; its name selects nothing.
-    let shared = fixture.ok(&["start", repo, "first", "--here", "--agent", "waiter"]);
+    let shared = fixture.ok(&[
+        "start", repo, "--branch", "shared", "--name", "first", "--here", "--agent", "waiter",
+    ]);
     assert_eq!(shared["state"], "queued", "{shared}");
     let named = fixture.run(&["rm", "--wait", "first", "--yes"]);
     assert!(!named.status.success());
@@ -2586,7 +2670,9 @@ fn queue_start_attaches_to_the_started_agents_session() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .args([
+            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -2603,7 +2689,9 @@ fn queue_start_attaches_to_the_started_agents_session() {
     });
     let output = fixture
         .command()
-        .args(["--json", "start", repo, "second", "--agent", "waiter"])
+        .args([
+            "--json", "start", repo, "--branch", "second", "--agent", "waiter",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -2648,7 +2736,9 @@ fn queue_start_attaches_to_the_started_agents_session() {
     install_test_script(&missing, "#!/bin/sh\n");
     let output = fixture
         .command()
-        .args(["--json", "start", repo, "third", "--agent", "missing"])
+        .args([
+            "--json", "start", repo, "--branch", "third", "--agent", "missing",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -2681,7 +2771,9 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .args([
+            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -2699,7 +2791,9 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     let output = fixture
         .command()
         .env("SHOAL_OUTPUT", "text")
-        .args(["--json", "start", repo, "second", "--agent", "recorder"])
+        .args([
+            "--json", "start", repo, "--branch", "second", "--agent", "recorder",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -2733,7 +2827,9 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     let repo = fixture.repo.to_str().unwrap();
     let output = fixture
         .command()
-        .args(["--json", "start", repo, "detached", "--agent", "waiter"])
+        .args([
+            "--json", "start", repo, "--branch", "detached", "--agent", "waiter",
+        ])
         .env("ZMX_SESSION", "outer")
         .stdin(Stdio::null())
         .output()

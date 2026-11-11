@@ -41,7 +41,13 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     );
     let output = fixture
         .command()
-        .args(["--json", "start", fixture.repo.to_str().unwrap(), "hooked"])
+        .args([
+            "--json",
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "hooked",
+        ])
         .env("SHOAL_SHELL_DIRECTIVE", home.join("directive"))
         .output()
         .unwrap();
@@ -72,6 +78,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .args([
             "start",
             fixture.repo.to_str().unwrap(),
+            "--branch",
             "hook-fails",
             "--here",
             "--agent",
@@ -437,7 +444,12 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let home = fixture.root.path();
     fs::write(home.join("fail-before"), "").unwrap();
-    let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "hooked"]);
+    let output = fixture.run(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "hooked",
+    ]);
     assert!(!output.status.success());
     let inspection = fixture.ok(&["status", &fixture.id("hooked")]);
     assert_eq!(inspection["workspace"]["state"], "failed");

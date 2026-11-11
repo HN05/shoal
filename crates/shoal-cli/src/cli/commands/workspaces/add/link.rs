@@ -95,7 +95,7 @@ async fn request(
     }
     ensure!(
         creation.branch.is_none() && creation.existing.is_none() && issue.is_none(),
-        "an item or branch link cannot be combined with a branch, --existing or --issue"
+        "an item or branch link cannot be combined with --branch or --issue"
     );
     let link = pasted.then(|| Link::parse(&positional)).transpose()?;
     let target = link.as_ref().map(|link| &link.target);

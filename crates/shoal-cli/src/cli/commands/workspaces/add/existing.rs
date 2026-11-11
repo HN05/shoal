@@ -1,6 +1,9 @@
-//! `shoal start --in` in a mode that starts in a workspace: the agent of an
-//! existing workspace, started as a new workspace's is, with no space
-//! created. The workspace keeps its place in the tree, its name and links.
+//! `shoal start --in` in a mode that starts in a workspace, or with a
+//! `--branch` a workspace already has: the agent of an existing workspace,
+//! started as a new workspace's is, with no space created. The workspace
+//! keeps its place in the tree, its name and links.
+use std::ffi::OsString;
+
 use anyhow::{Result, ensure};
 
 use super::{
@@ -21,9 +24,11 @@ use crate::{
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
 };
 
-/// Start `agent`, else the configured or a picked one, as the worker of the
+/// Start `agent`, else on a terminal a picked one, as the worker of the
 /// existing `workspace`, on `options.prompt`, else the workspace's issue.
 /// The daemon refuses it while the workspace has an agent of its own.
+/// Without an agent it reopens the workspace, as a new workspace's start
+/// without one opens it.
 pub(in crate::cli::commands) async fn start_worker(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -48,16 +53,12 @@ pub(in crate::cli::commands) async fn start_worker(
     let repository = Some(target.selector.clone());
     crate::cli::commands::permissions::ensure_held(ctx, repository, &options.narrowing).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
-    let agent = choose_add_agent(&settings, AgentLaunch::IssueDefault(agent)).await?;
+    let agent = choose_add_agent(&settings, AgentLaunch::Add(agent)).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    ensure!(
-        agent.agent.is_some(),
-        "a workspace's worker needs an agent; name one with --agent"
-    );
     // A task replaces the issue as the agent's subject.
-    let issue = match &options.prompt {
-        Some(_) => None,
-        None => load_add_issue(ctx, &target, workspace.links.issue.clone()).await?,
+    let issue = match (&agent.agent, &options.prompt) {
+        (Some(_), None) => load_add_issue(ctx, &target, workspace.links.issue.clone()).await?,
+        _ => None,
     };
     let mut plan = worker_plan(&workspace, agent, issue.as_ref());
     start_as(&mut plan, &options, mode);
@@ -68,6 +69,51 @@ pub(in crate::cli::commands) async fn start_worker(
         blockers,
     };
     super::start_planned(ctx, planned, &settings, options).await
+}
+
+/// Start the worker of `workspace`, which already has the branch a start
+/// named, as `--in` starts it, on the task `args` give, refusing what only
+/// the new workspace of `creation`, on `issue` below `options.parent`, takes.
+pub(super) async fn start_on_branch(
+    ctx: &Context,
+    workspace: Workspace,
+    (creation, issue): (&Creation, Option<&str>),
+    agent: AgentLaunch,
+    args: Vec<OsString>,
+    mut options: AddOptions,
+) -> Result<i32> {
+    let new_space = [
+        ("--issue", issue.is_some()),
+        ("--name", creation.options.name.is_some()),
+        ("--parent", options.parent.is_some()),
+        ("--base", creation.base.is_some()),
+        ("--path", creation.path.is_some()),
+        ("--git-profile", creation.git_profile.is_some()),
+        ("--copy", creation.copy.is_some()),
+        ("--skip-setup", creation.options.skip_setup),
+        ("--disposable", creation.options.disposable),
+    ];
+    if let Some((flag, _)) = new_space.iter().find(|(_, set)| *set) {
+        anyhow::bail!(
+            "{flag} applies to a new workspace, and workspace {} already has branch {}; the start goes into it as --in does",
+            workspace.number,
+            workspace.branch.as_deref().unwrap_or_default()
+        );
+    }
+    options.prompt = task(args)?;
+    let selector = SpaceSelector::id(&workspace.id);
+    start_worker(ctx, selector, agent.named(), options).await
+}
+
+/// The task the words after `--` give, if any.
+pub(in crate::cli::commands) fn task(words: Vec<OsString>) -> Result<Option<String>> {
+    let words = (words.into_iter())
+        .map(|word| {
+            word.into_string()
+                .map_err(|word| anyhow::anyhow!("the task {word:?} is not UTF-8"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok((!words.is_empty()).then(|| words.join(" ")))
 }
 
 /// The plan that starts `agent` in `workspace` on `issue`, opening its
