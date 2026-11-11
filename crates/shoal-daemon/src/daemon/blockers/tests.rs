@@ -119,8 +119,8 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
 async fn a_space_blocker_clears_once_that_space_is_done_or_removed() {
     let (temp, manager) = manager().await;
     let [blocked, api, docs] = workspaces(&manager, &temp, ["blocked", "api", "docs"]).await;
-    block(&manager, &blocked, Blocker::Space("api".into())).await;
-    block(&manager, &blocked, Blocker::Space("docs".into())).await;
+    block(&manager, &blocked, Blocker::Space(api.id.to_string())).await;
+    block(&manager, &blocked, Blocker::Space(docs.id.to_string())).await;
     let none = Lookups::new();
     assert!(
         manager

@@ -42,8 +42,8 @@ impl StepRef {
     }
 }
 
-/// The blockers a removal names: those of `kind` whose target or name is
-/// one of `names`.
+/// The blockers a removal names: those of `kind` whose target, a space's
+/// ID or an item's URL, is one of `names`.
 pub(super) struct Named {
     pub kind: BlockerKind,
     pub names: Vec<String>,
@@ -53,7 +53,7 @@ impl Named {
     fn matches(&self, blocker: &RecordedBlocker) -> bool {
         let kind = |kind| matches!(kind, BlockerKind::Space | BlockerKind::Launch);
         (blocker.kind == self.kind || (kind(blocker.kind) && kind(self.kind)))
-            && (self.names.iter()).any(|name| *name == blocker.target || *name == blocker.name)
+            && self.names.contains(&blocker.target)
     }
 }
 

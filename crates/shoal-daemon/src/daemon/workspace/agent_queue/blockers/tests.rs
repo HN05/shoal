@@ -229,7 +229,10 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
     // Done blockers start the launch in the caller, on the top one.
     let stacked = manager
         .queue_add(QueueRequest {
-            blockers: vec![space(&manager, "lower").await, space(&manager, "upper").await],
+            blockers: vec![
+                space(&manager, "lower").await,
+                space(&manager, "upper").await,
+            ],
             ..request(&repo, "stacked", false)
         })
         .await

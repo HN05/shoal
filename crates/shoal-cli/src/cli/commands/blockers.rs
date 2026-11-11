@@ -10,8 +10,8 @@ use crate::{
 };
 
 /// The blocker `input` names: an issue by number or URL, a PR or CI run by
-/// URL, and otherwise a space by name or ID. Unlike every other space
-/// argument, a bare number here is an issue, never a space's number.
+/// URL, and otherwise a space by its ID. Unlike every other space argument,
+/// a bare number here is an issue, never a space's number.
 pub(super) fn parse(input: &str) -> Result<Blocker> {
     let input = input.to_owned();
     Ok(match IssueInput::parse(&input) {

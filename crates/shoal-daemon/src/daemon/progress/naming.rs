@@ -1,4 +1,4 @@
-//! The blockers a progress change names, looked up: a space by name or ID,
+//! The blockers a progress change names, looked up: a space by its ID,
 //! an issue, PR or CI run by its URL, and an issue by its number in the
 //! blocked space's repository.
 use anyhow::{Context as _, Result, ensure};
@@ -52,7 +52,7 @@ impl Manager {
     ) -> Result<RecordedBlocker> {
         let (kind, target, name) = match blocker {
             Blocker::Space(selector) => {
-                let blocking = self.space(&SpaceSelector::parse(&selector)).await?;
+                let blocking = self.space(&SpaceSelector::parse(&selector)?).await?;
                 ensure!(blocking.id() != space.id(), "a space cannot block itself");
                 let id = blocking.id().to_string();
                 (BlockerKind::Space, id, blocking.name().to_string())
@@ -81,7 +81,7 @@ impl Manager {
 
     /// The blockers of `space` that `blocker` names: by what it says, and by
     /// what that looks up to when it still does, as a removed space no
-    /// longer does.
+    /// longer does, which its ID still names.
     async fn named_blocker(&self, space: &PresentSpace, blocker: Blocker) -> Named {
         let (kind, input) = match &blocker {
             Blocker::Space(input) => (BlockerKind::Space, input),

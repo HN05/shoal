@@ -2208,20 +2208,21 @@ fn a_restored_chat_with_messages_waiting_starts_a_turn_for_them() {
     let fixture = chat_session_fixture();
     let home = fixture.root.path().to_owned();
     save_running_chat(&fixture, |fixture| {
-        let output = fixture.run(&["stop", "talk"]);
+        let output = fixture.run(&["stop", &fixture.id("talk")]);
         assert!(output.status.success(), "{output:?}");
     });
+    let talk = fixture.id("talk");
     let output = fixture.run(&[
         "messages",
         "send",
         "--space",
-        "talk",
+        &talk,
         "What blocked you cleared",
     ]);
     assert!(output.status.success(), "{output:?}");
 
     let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
+        fixture.interactive_command(fixture.command().args(["resume", &talk, "--focus"]), "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");

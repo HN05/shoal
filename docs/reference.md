@@ -5151,7 +5151,7 @@ A blocker records what blocks the space, or one step of its plan with
 `--step`, numbered as `shoal progress` shows the steps, and why, in a
 `--reason` of one line. `--add-blocker` takes an issue by number or URL, so a
 bare number is an issue, never a space's number, a PR or CI run by URL, or a
-space, a workspace or a chat, by name or ID; adding it again replaces its
+space, a workspace or a chat, by its ID; adding it again replaces its
 reason. `--remove-blocker` names one the same way, and a space's coordinator
 removes one of a space below with `--space`. A step's blocker follows the
 step by the key its plan tool gave it, or by name when it has none, and goes

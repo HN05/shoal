@@ -393,7 +393,7 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
     let pr = "https://github.com/team/app/pull/8";
     let run = "https://github.com/team/app/actions/runs/9";
     for blocker in [
-        Blocker::Space("api".into()),
+        Blocker::Space(api.id.to_string()),
         Blocker::Pr(pr.into()),
         Blocker::CiRun(run.into()),
     ] {
@@ -405,7 +405,7 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
     // A step it does not have, and the space itself, are refused.
     let refused = [
         add(Blocker::Pr(pr.into()), Some(1)),
-        add(Blocker::Space("blocked".into()), None),
+        add(Blocker::Space(blocked.id.to_string()), None),
     ];
     for change in refused {
         assert!(manager.set_progress(&selector, change).await.is_err());
@@ -423,9 +423,9 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
         ]
     );
     assert!(progress.blocked());
-    // A removal names a space by name, as it was added.
+    // A removal names a space by its ID, as it was added.
     let remove = ProgressChange::RemoveBlocker {
-        blocker: Blocker::Space("api".into()),
+        blocker: Blocker::Space(api.id.to_string()),
         step: None,
     };
     manager.set_progress(&selector, remove).await.unwrap();

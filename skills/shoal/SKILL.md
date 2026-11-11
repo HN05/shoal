@@ -211,7 +211,7 @@ reads its children's progress on demand.
 
 `--add-blocker` records what blocks the space, or with `--step` one step as
 `shoal progress` numbers them: an issue by number or URL, a PR or CI run by
-URL, or a space by name or ID, with a one-line `--reason`. A step's blocker
+URL, or a space by its ID, with a one-line `--reason`. A step's blocker
 goes with the step when the plan drops it. A space is blocked while it has a
 blocker of its own or every step not done has one; lists show it `blocked`,
 and its coordinator, or the user, hears of it once. Once a blocked agent's
