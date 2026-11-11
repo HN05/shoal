@@ -362,11 +362,25 @@ impl PackagedWorkspaceExt for PackagedWorkspace {
 /// none.
 pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
     let session = chat.session.as_ref().map(AgentSessionId::as_str)?;
+    let (mode, agent) = (chat.mode.to_string(), chat.agent.to_string());
+    // A name is free text, so the command quotes what a shell would split.
+    let command = crate::shell::quote(&[
+        "shoal",
+        "start",
+        "--chat",
+        "--mode",
+        &mode,
+        repository,
+        "--name",
+        chat.name.as_str(),
+        "--agent",
+        &agent,
+        "--session",
+        session,
+    ]);
     Some(format!(
-        "chat {name} ended here; shoal start --chat --mode {mode} {repository} --name {name} --agent {agent} --session {session} continues it",
-        name = chat.name,
-        mode = chat.mode,
-        agent = chat.agent,
+        "chat {} ended here; {command} continues it",
+        chat.name
     ))
 }
 

@@ -450,3 +450,21 @@ fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
         );
     }
 }
+
+#[test]
+fn a_chat_continues_by_a_command_that_quotes_its_name() {
+    let chat: Chat = serde_json::from_value(serde_json::json!({
+        "id": "chat", "repository_id": "repo", "name": "shoal chat's $HOME", "agent": "claude",
+        "pid": 1, "started_at": 0, "session": "session",
+    }))
+    .unwrap();
+
+    let line = continue_chat(&chat, "my repo").unwrap();
+
+    assert!(
+        line.contains(
+            "shoal start --chat --mode chat 'my repo' --name 'shoal chat'\\''s $HOME' --agent claude --session session"
+        ),
+        "{line}"
+    );
+}
