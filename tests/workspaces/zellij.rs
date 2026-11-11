@@ -226,14 +226,16 @@ impl ZellijServer {
     }
 
     /// Every terminal pane of `session`, which lasts the test, with its
-    /// tab's name. Zellij can list nothing while it closes a tab, or report
-    /// a busy session missing, which is asked again.
+    /// tab's name. Zellij can list nothing or JSON that is not a list while
+    /// it closes a tab, or report a busy session missing, which is asked
+    /// again.
     fn panes(&self, session: &str) -> Vec<(String, String)> {
         wait_for("Zellij to list the panes", || self.listed_panes(session))
     }
 
     /// The terminal panes Zellij lists of `session`, and `None` when it
-    /// lists nothing or reports the session missing.
+    /// lists nothing, lists JSON that is not a list or reports the session
+    /// missing.
     fn listed_panes(&self, session: &str) -> Option<Vec<(String, String)>> {
         let output = self
             .zellij()
@@ -254,8 +256,7 @@ impl ZellijServer {
         let panes: Value = serde_json::from_slice(&output.stdout)
             .unwrap_or_else(|error| panic!("zellij list-panes: {error}: {output:?}"));
         let panes = panes
-            .as_array()
-            .unwrap()
+            .as_array()?
             .iter()
             .filter(|pane| pane["is_plugin"] == false)
             .map(|pane| {
