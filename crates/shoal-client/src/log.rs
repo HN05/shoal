@@ -87,7 +87,7 @@ impl LogEntry {
 }
 
 /// The workspace and chat events the log shows, apart from forge activity.
-const ENTRY_KINDS: [EventKind; 25] = [
+const ENTRY_KINDS: [EventKind; 28] = [
     EventKind::Created,
     EventKind::Renamed,
     EventKind::RemovalStarted,
@@ -112,6 +112,9 @@ const ENTRY_KINDS: [EventKind; 25] = [
     EventKind::ChildCreated,
     EventKind::ChildRemoved,
     EventKind::JobEnded,
+    EventKind::BlockerAdded,
+    EventKind::BlockerRemoved,
+    EventKind::BlockerCleared,
     // Recorded only by earlier versions, as `undone` records it now.
     EventKind::Continued,
 ];
