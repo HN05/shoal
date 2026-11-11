@@ -54,6 +54,14 @@ pub struct SpaceStatus {
     /// Why its permissions could not be resolved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions_error: Option<String>,
+    /// The workspaces of the CI jobs running for its PR, or a workspace's
+    /// branch.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jobs: Vec<Workspace>,
+    /// The CI jobs waiting to start for its PR, or a workspace's branch,
+    /// each with what holds it back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_jobs: Vec<super::QueueEntry>,
 }
 
 /// What awaits the user about a space.
@@ -176,13 +184,6 @@ pub struct WorktreeStatus {
     /// the committed HEAD; boxed to keep the response small.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changed_on_both_sides: Option<Box<ChangedOnBothSides>>,
-    /// The workspaces of the CI jobs running for its PR or branch.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub jobs: Vec<Workspace>,
-    /// The CI jobs waiting to start for its PR or branch, each with what
-    /// holds it back.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub waiting_jobs: Vec<super::QueueEntry>,
     /// The chats running or stopped in its worktree, by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chats: Vec<SpaceRef>,

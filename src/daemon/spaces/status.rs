@@ -38,6 +38,8 @@ impl Manager {
         let (space, records, origin) = self.space_detail(space).await?;
         let (prs, issue_status) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
+        let jobs = self.linked_job_workspaces(space.id()).await?;
+        let waiting_jobs = self.linked_waiting_jobs(space.id()).await?;
         Ok(SpaceStatus {
             space,
             issue: records.issue,
@@ -48,6 +50,8 @@ impl Manager {
             issue_status,
             permissions,
             permissions_error,
+            jobs,
+            waiting_jobs,
         })
     }
 

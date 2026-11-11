@@ -175,12 +175,13 @@ fn render_sync(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// What runs in the space: a workspace's executions and agent, and the
-/// sessions of either.
+/// What runs in the space: a workspace's executions and agent, the CI jobs
+/// for either, and the sessions of either.
 fn render_activity(view: &StatusView, palette: Palette) {
     if let Some(worktree) = view.status.space.worktree() {
         render_processes(worktree, palette);
     }
+    render_jobs(&view.status, palette);
     render_sessions(view, palette);
     render_transcripts(view, palette);
     if let Some(worktree) = view.status.space.worktree() {
@@ -245,7 +246,6 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
         ),
         None => outln!("Usage:         none"),
     }
-    render_jobs(status, palette);
     outln!("Leftovers:     {}", status.leftover_count);
     for leftover in &status.leftovers {
         outln!("  {}  {}", leftover.pid, leftover.command);
@@ -257,9 +257,10 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// The CI jobs running for the workspace's PR or branch, each with what its
-/// processes use, then those waiting, each with what holds it back.
-fn render_jobs(status: &WorktreeStatus, palette: Palette) {
+/// The CI jobs running for the space's PR, or a workspace's branch, each
+/// with what its processes use, then those waiting, each with what holds it
+/// back.
+fn render_jobs(status: &SpaceStatus, palette: Palette) {
     if !status.jobs.is_empty() {
         outln!("CI jobs:       {}", status.jobs.len());
     }
