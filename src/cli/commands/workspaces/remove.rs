@@ -3,6 +3,7 @@ use anyhow::{Result, ensure};
 
 use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{BackgroundRemoval, Removals, Removed};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{self, SpaceName, SpaceSelector};
 use crate::{
     cli::{
@@ -124,15 +125,17 @@ async fn remove_each(
     wait: bool,
 ) -> Result<i32> {
     let mut removed_chats = ui::Report::new("remove");
-    let mut taken: Vec<SpaceName> = Vec::new();
+    // Names repeat, so what a removal took is told by ID.
+    let below = |id: &SpaceId| spaces.taken_with(id).into_iter().map(|space| space.id);
+    let mut taken: Vec<SpaceId> = Vec::new();
     for chat in chats {
-        if taken.contains(&chat.name) {
+        if taken.contains(&chat.id) {
             continue;
         }
         match chats::remove(ctx, chat, spaces).await {
             Ok(removed) => {
                 let message = chats::message(&format!("Removed {}", chat.name), &removed);
-                taken.extend(removed.children.iter().cloned());
+                taken.extend(below(&chat.id));
                 removed_chats.done(ctx, &message, removed);
             }
             Err(error) => removed_chats.failed(ctx, &chat.name, &error),
@@ -142,11 +145,11 @@ async fn remove_each(
     let checks = ancestors_first(checks);
     // The spaces below a workspace whose removal failed, which it may have
     // taken before it failed.
-    let mut maybe_taken: Vec<SpaceName> = Vec::new();
+    let mut maybe_taken: Vec<SpaceId> = Vec::new();
     let mut report = ui::Report::new("remove");
     for check in checks {
-        let name = &check.workspace.name;
-        if taken.contains(name) || (maybe_taken.contains(name) && !present(ctx, &check).await?) {
+        let (name, id) = (&check.workspace.name, &check.workspace.id);
+        if taken.contains(id) || (maybe_taken.contains(id) && !present(ctx, &check).await?) {
             continue;
         }
         match remove_checked(ctx, &check, Some(name), wait).await {
@@ -156,11 +159,11 @@ async fn remove_each(
                     &format!("Removing {name}"),
                     &removed,
                 );
-                taken.extend(removed.children().iter().cloned());
+                taken.extend(below(id));
                 report.done(ctx, &message, removed);
             }
             Err(error) => {
-                maybe_taken.extend(check.children.iter().map(|child| child.name.clone()));
+                maybe_taken.extend(check.children.iter().map(|child| child.id.clone()));
                 report.failed(ctx, name, &error);
             }
         }

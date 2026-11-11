@@ -1197,3 +1197,21 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert!(!refused.status.success());
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn removing_a_parent_does_not_skip_another_target_its_child_shares_a_name_with() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let child = fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
+    let other = fixture.add("other");
+    let (child, other) = (child["id"].as_str().unwrap(), other["id"].as_str().unwrap());
+    for id in [child, other] {
+        fixture.ok(&["rename", id, "Same"]);
+    }
+    let parent = fixture.id("parent");
+
+    fixture.ok(&["rm", "--wait", &parent, other, "--yes"]);
+
+    let left = fixture.ok(&["list"]);
+    assert_eq!(left.as_array().unwrap().len(), 0, "{left}");
+}
