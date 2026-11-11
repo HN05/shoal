@@ -1,6 +1,7 @@
 //! An agent the daemon paused: why it stopped, its saved recovery record, and
 //! the wait for the daemon to restore it.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, io::Write, path::PathBuf};
 
 use anyhow::Result;
@@ -63,7 +64,7 @@ pub(super) async fn pause_agent(
             );
         }
         Ok(_) if !automatic => {
-            let restore = stop.manual_restore(&plan.workspace.name, &plan.id);
+            let restore = stop.manual_restore(&plan.workspace.id, &plan.id);
             let _ = writeln!(std::io::stderr(), "{restore}");
         }
         Ok(_) => {}
@@ -119,7 +120,7 @@ async fn await_restore(
                     "shoal: agent stopped{}; automatic restore cancelled{}; {}",
                     stop.stated_reason(),
                     cancelled.unwrap_or_default(),
-                    restore_steps(&plan.workspace.name, &plan.id, removed)
+                    restore_steps(&plan.workspace.id, &plan.id, removed)
                 );
             }
             Ok(AfterPause::Finish)
@@ -317,7 +318,7 @@ impl Halt {
     }
 
     /// The line for an agent that does not restore itself.
-    fn manual_restore(&self, workspace: &str, execution: &ExecutionId) -> String {
+    fn manual_restore(&self, workspace: &SpaceId, execution: &ExecutionId) -> String {
         let condition = match self {
             Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
             Self::Pause { .. } | Self::Ended { .. } | Self::Shutdown { .. } => String::new(),
@@ -334,14 +335,16 @@ impl Halt {
     }
 }
 
-/// How to restore the agent by hand: resume it, once its workspace is
-/// restored when it was `removed`.
-fn restore_steps(workspace: &str, execution: &ExecutionId, removed: bool) -> String {
-    let resume = format!("shoal resume {workspace} --execution {execution}");
+/// How to restore the agent by hand: resume it in the workspace `workspace`
+/// selects by ID, since names select nothing, or when it was `removed`,
+/// restore the workspace, which then says how to resume its agent.
+fn restore_steps(workspace: &SpaceId, execution: &ExecutionId, removed: bool) -> String {
     if removed {
-        format!("restore with shoal restore {workspace}, then {resume}")
+        format!(
+            "restore with shoal restore {workspace}, which then names the shoal resume that continues it"
+        )
     } else {
-        format!("restore with {resume}")
+        format!("restore with shoal resume {workspace} --execution {execution}")
     }
 }
 
