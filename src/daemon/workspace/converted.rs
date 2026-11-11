@@ -6,6 +6,7 @@ use anyhow::{Result, bail};
 use super::{Manager, NewWorkspace, branches::OpenTarget, creation::WorkspaceSource};
 use crate::git::existing_branch::BranchExt;
 use crate::{
+    config::modes::ModeName,
     daemon::conversions::Converting,
     git::{self, worktrunk},
     model::{Repository, Workspace},
@@ -40,17 +41,31 @@ impl Manager {
                 (branch.clone(), self.available_branch(&repo, &branch).await?)
             }
         };
-        let chat = converting.chat.id.clone();
+        let (chat, mode) = (converting.chat.id.clone(), converting.mode.clone());
         let new = NewWorkspace {
             options,
             converts: Some(converting),
             ..Default::default()
         };
-        let created = (self.create_branch_workspace(&repo, name, branch, source, new)).await;
+        let created = async {
+            let workspace =
+                (self.create_branch_workspace(&repo, name, branch, source, new)).await?;
+            self.ensure_worktree_mode(&workspace, &mode).await?;
+            Ok(workspace)
+        }
+        .await;
         if created.is_err() {
             self.give_chat_back(&repo, &chat).await;
         }
         created
+    }
+
+    /// Refuse `mode` for the agent of the converted `workspace` unless the
+    /// settings of its worktree, which may differ from the checkout's on its
+    /// branch, define it.
+    async fn ensure_worktree_mode(&self, workspace: &Workspace, mode: &ModeName) -> Result<()> {
+        let settings = self.workspace_settings(workspace).await?;
+        crate::daemon::conversions::ensure_mode(&settings, mode)
     }
 
     /// Where the worktree of a converted chat starts: the existing branch

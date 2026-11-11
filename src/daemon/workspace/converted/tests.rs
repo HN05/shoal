@@ -284,3 +284,34 @@ async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
     let chat = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     assert!(chat.restore.is_some());
 }
+
+#[tokio::test]
+async fn a_mode_the_branch_does_not_define_gives_the_chat_back() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let checkout = repo.path.clone();
+    crate::daemon::test_support::git(&checkout, &["branch", "bare"]);
+    std::fs::write(
+        checkout.join(".shoal.toml"),
+        "[modes.extra]\nkind = \"workspace\"\n",
+    )
+    .unwrap();
+    crate::daemon::test_support::git(&checkout, &["add", ".shoal.toml"]);
+    crate::daemon::test_support::git(&checkout, &["commit", "-qm", "Add a mode"]);
+    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let converting = Converting {
+        chat: talk.clone(),
+        mode: "extra".into(),
+    };
+
+    let refused = manager
+        .create_converted_workspace(converting, "bare".into(), None, Default::default())
+        .await
+        .unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("no mode extra"),
+        "{refused:#}"
+    );
+    assert!(manager.chat_by_id(&talk.id).await.unwrap().is_some());
+}
