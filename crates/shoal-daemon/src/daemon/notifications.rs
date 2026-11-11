@@ -35,7 +35,8 @@ impl NotificationKindExt for NotificationKind {
             Self::AgentMessage
             | Self::QuestionAsked
             | Self::QuestionWithdrawn
-            | Self::SpaceDone => Some(Source::Agent),
+            | Self::SpaceDone
+            | Self::SpaceBlocked => Some(Source::Agent),
             _ => None,
         }
     }

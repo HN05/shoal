@@ -5158,7 +5158,11 @@ step by the key its plan tool gave it, or by name when it has none, and goes
 with the step when the plan drops it. A space is blocked while it has a
 blocker of its own, or while every step that is not done has one. Adding and
 removing a blocker are `blocker_added` and `blocker_removed` events, which
-`shoal log` shows.
+`shoal log` shows. When a space becomes blocked, Shoal tells its
+coordinator, or the user when it has none, once, as a `space_blocked`
+notification naming the space and what blocks it, as it reports `shoal done`;
+nothing else about blockers notifies, and a space notifies again only once it
+becomes blocked again after it cleared.
 
 Every 30 seconds Shoal removes the blockers that cleared, each a
 `blocker_cleared` event naming what cleared it, and tells the space's agent

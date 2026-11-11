@@ -39,6 +39,8 @@ states!(NotificationKind {
     SpaceRemoved => "workspace_removed",
     /// An agent explicitly marked its space's work finished.
     SpaceDone => "workspace_done",
+    /// A space's progress came to record what blocks it.
+    SpaceBlocked => "space_blocked",
     /// An automatic removal was attempted and the workspace retained, or a
     /// cleanup pass failed.
     CleanupFailed => "cleanup_failed",

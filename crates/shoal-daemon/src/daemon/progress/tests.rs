@@ -444,3 +444,53 @@ async fn completion_removes_the_spaces_blockers() {
         .collect();
     assert_eq!(kinds, [EventKind::BlockerAdded, EventKind::BlockerRemoved]);
 }
+
+#[tokio::test]
+async fn becoming_blocked_notifies_once_until_the_space_clears() {
+    use crate::{daemon::notifications::NotificationKind, model::Blocker};
+    let (temp, manager) = manager().await;
+    let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
+    let selector = SpaceSelector::id(&blocked.id);
+    let steps = vec![
+        step("Fix", StepState::Pending, None),
+        step("Test", StepState::Pending, None),
+    ];
+    manager
+        .set_progress(&selector, ProgressChange::Steps(steps))
+        .await
+        .unwrap();
+    let pr = |number: u32| Blocker::Pr(format!("https://github.com/team/app/pull/{number}"));
+    let add = |number, step| ProgressChange::AddBlocker {
+        blocker: pr(number),
+        step,
+        reason: "Needs it".into(),
+    };
+    let notified = || async {
+        (manager.notifications(false, 20).await.unwrap().iter())
+            .filter(|notification| notification.kind == NotificationKind::SpaceBlocked)
+            .count()
+    };
+    // Other work remains.
+    manager
+        .set_progress(&selector, add(1, Some(1)))
+        .await
+        .unwrap();
+    assert_eq!(notified().await, 0);
+    manager
+        .set_progress(&selector, add(2, Some(2)))
+        .await
+        .unwrap();
+    assert_eq!(notified().await, 1);
+    // Still blocked: no further notice.
+    manager.set_progress(&selector, add(3, None)).await.unwrap();
+    assert_eq!(notified().await, 1);
+    for (number, step) in [(1, Some(1)), (2, Some(2)), (3, None)] {
+        let remove = ProgressChange::RemoveBlocker {
+            blocker: pr(number),
+            step,
+        };
+        manager.set_progress(&selector, remove).await.unwrap();
+    }
+    manager.set_progress(&selector, add(3, None)).await.unwrap();
+    assert_eq!(notified().await, 2);
+}

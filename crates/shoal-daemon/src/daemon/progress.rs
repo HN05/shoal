@@ -8,7 +8,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 
-use super::workspace::Manager;
+use super::{notifications::NotificationKind, workspace::Manager};
 use crate::client::{
     events::{BlockerEvent, EventKind},
     progress::{self, MAX_STEPS, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
@@ -227,6 +227,11 @@ pub(crate) fn record_status(
     Ok(save(tx, id, change, now)?.is_some())
 }
 
+/// Whether `progress` blocks its space.
+fn blocked(progress: Option<&Progress>) -> bool {
+    progress.is_some_and(Progress::blocked)
+}
+
 /// Remove every blocker of the space `id` at `now` in the caller's
 /// transaction, as its completion does, journaling each; whether any went.
 pub(crate) fn remove_blockers(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
@@ -290,9 +295,11 @@ impl Manager {
         let id = space.id().to_owned();
         let now = UnixTime::now();
         let query = id.clone();
-        let (changed, progress) = (self.store)
+        let (was_blocked, changed, progress) = (self.store)
             .write(move |db| {
+                let was_blocked = blocked(current(db, &query)?.as_ref());
                 Ok((
+                    was_blocked,
                     save(db, &query, change, now)?.is_some(),
                     current(db, &query)?,
                 ))
@@ -301,14 +308,37 @@ impl Manager {
         if changed {
             self.publications.request(&id);
         }
+        if let Some(progress) = progress.as_ref().filter(|_| !was_blocked) {
+            self.notify_blocked(space.name(), progress).await;
+        }
         Ok(progress)
+    }
+
+    /// Tell the coordinator of the space `name`, or the user without one,
+    /// that the space became blocked, naming what blocks it, unless
+    /// `progress` leaves it unblocked: a step blocker while other work
+    /// remains tells no one.
+    async fn notify_blocked(
+        &self,
+        name: &crate::client::space_names::SpaceName,
+        progress: &Progress,
+    ) {
+        if !progress.blocked() {
+            return;
+        }
+        let blockers: Vec<String> = (progress.all_blockers())
+            .map(|(_, blocker)| format!("{}: {}", blocker.cause(), blocker.reason))
+            .collect();
+        let message = format!("{name} is blocked by {}", blockers.join("; "));
+        self.notify(Some(name), NotificationKind::SpaceBlocked, message)
+            .await;
     }
 
     /// Whether the space `id` is blocked.
     pub(crate) async fn space_blocked(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         let progress = self.store.read(move |db| current(db, &id)).await?;
-        Ok(progress.is_some_and(|progress| progress.blocked()))
+        Ok(blocked(progress.as_ref()))
     }
 
     /// The progress of the space `selector` names.
