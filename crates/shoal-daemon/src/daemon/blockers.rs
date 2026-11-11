@@ -16,6 +16,11 @@ use crate::{
 
 mod forge;
 
+/// What Shoal tells an agent it stops because its space is blocked, which
+/// waits for the agent's restore and so starts its turn there.
+pub(crate) const STOPPED_BLOCKED: &str =
+    "Shoal stopped you while your work was blocked and restored you to continue it.";
+
 /// A blocker by its kind and target: a space's ID or an item's URL.
 pub(crate) type Target = (BlockerKind, String);
 

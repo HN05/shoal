@@ -368,6 +368,14 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         "a warm cache keeps no blocked agent"
     );
     assert!(manager.restore_waits_for_unblock(&workspace.id, &execution.plan.id));
+    // A message waits for its restore, which starts its turn however the
+    // space clears.
+    let waiting = manager.agent_messages(&selector).await.unwrap();
+    assert!(
+        waiting
+            .iter()
+            .any(|message| message.message == crate::daemon::blockers::STOPPED_BLOCKED)
+    );
     // Its stop notifies no one: the space's blocking does.
     let notifications = manager.notifications(false, 10).await.unwrap();
     assert!(
@@ -376,7 +384,12 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .any(|event| event.kind == NotificationKind::AgentStopped)
     );
     // Its waiting restore keeps the workspace from cleanup, unlike an idle
-    // agent's.
+    // agent's, even with no update left waiting for it.
+    let ids = waiting.iter().map(|message| message.id).collect();
+    manager
+        .mark_agent_messages_delivered(&selector, ids)
+        .await
+        .unwrap();
     let agent = crate::agent::Agent::from("claude");
     manager
         .queue_restore(&execution.plan.id, &agent, &workspace.id)

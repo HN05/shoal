@@ -145,11 +145,21 @@ impl Manager {
                     .collect()
             })
             .await;
-        for agent in stopped
-            .iter()
-            .filter(|agent| !agent.protection.is_blocked())
-        {
-            self.notify_protection_stop(agent).await;
+        for agent in &stopped {
+            match agent.protection.is_blocked() {
+                true => self.leave_blocked_message(agent).await,
+                false => self.notify_protection_stop(agent).await,
+            }
+        }
+    }
+
+    /// Leave the agent `agent`, stopped because its space is blocked, a
+    /// message its restore finds waiting, so the restore starts its turn
+    /// whatever cleared the space.
+    async fn leave_blocked_message(&self, agent: &StoppedAgent) {
+        let message = crate::daemon::blockers::STOPPED_BLOCKED.to_owned();
+        if let Err(error) = self.queue_agent_message(&agent.workspace_id, message).await {
+            crate::daemon::log!("blocked agent {} untold: {error:#}", agent.id);
         }
     }
 }

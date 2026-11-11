@@ -15,6 +15,7 @@ use super::{
     recorded, stopped,
 };
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::blockers::STOPPED_BLOCKED;
 use crate::{
     config::permissions::PermissionsConfig,
     daemon::{
@@ -162,6 +163,11 @@ impl Manager {
                 let Saved { running, released } =
                     save(tx, restore, Some(&chat), stopped_by.as_ref())?;
                 let saved = held || !running.is_empty();
+                // A message waits for the restored agent before the space
+                // can clear, so the restore starts its turn.
+                if blocked && saved {
+                    crate::daemon::chat_messages::insert_from_user(tx, &chat, STOPPED_BLOCKED)?;
+                }
                 // A save an interrupted daemon never stopped, or a stop that
                 // failed, may leave what a stopped chat owns running.
                 let stopping = match running.into_iter().next() {

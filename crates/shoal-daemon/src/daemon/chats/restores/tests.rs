@@ -214,6 +214,14 @@ async fn a_blocked_chat_stops_after_its_turn_and_restores_once_unblocked() {
     let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Automatic));
     assert_eq!(restore_saved(&manager).await, 0, "it waits while blocked");
+    // A message waits for the restore, however the space clears, so the
+    // restore starts a turn.
+    let waiting = manager.space_messages(&selector).await.unwrap();
+    assert!(
+        waiting
+            .iter()
+            .any(|message| message.message == crate::daemon::blockers::STOPPED_BLOCKED)
+    );
 
     let remove = ProgressChange::RemoveBlocker {
         blocker,
