@@ -17,8 +17,13 @@ impl Manager {
     /// blocked. A failure for one chat does not skip the others.
     pub(super) async fn save_blocked_chats(&self) -> Result<()> {
         for chat in self.chats().await? {
+            // The idle turn the checks below find quiet, read before them,
+            // which the save requires unchanged.
+            let Some(turn) = chat.agent_state.map(|status| status.since) else {
+                continue;
+            };
             if self.stops_blocked(&chat).await?
-                && let Err(error) = self.save_blocked_chat(&chat.id).await
+                && let Err(error) = self.save_blocked_chat(&chat.id, turn).await
             {
                 log!("blocked chat {} not saved: {error:#}", chat.id);
             }

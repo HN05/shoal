@@ -196,19 +196,31 @@ async fn a_blocked_chat_stops_after_its_turn_and_restores_once_unblocked() {
     );
 
     let session = Some(crate::agent::AgentSessionId::from("session"));
+    let idle = manager
+        .set_agent_state(&selector, AgentState::Idle, None, session.clone())
+        .await
+        .unwrap();
+    // The save checks the turn again under its locks, which may have
+    // started since the sweep found the chat quiet ...
     manager
         .set_agent_state(&selector, AgentState::Working, None, session.clone())
         .await
         .unwrap();
-    // The save checks the turn again, which may have started since the
-    // sweep chose the chat.
-    manager.save_blocked_chat(&chat.id).await.unwrap();
+    manager
+        .save_blocked_chat(&chat.id, idle.since)
+        .await
+        .unwrap();
     let running = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(running.restore, None, "a turn that started since keeps it");
-    manager
+    // ... or ended again, with work it started that the sweep never saw.
+    let idle = manager
         .set_agent_state(&selector, AgentState::Idle, None, session)
         .await
         .unwrap();
+    let earlier = idle.since - std::time::Duration::from_secs(1);
+    manager.save_blocked_chat(&chat.id, earlier).await.unwrap();
+    let running = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(running.restore, None, "a later turn keeps it");
     manager.save_blocked_chats().await.unwrap();
     process.wait().unwrap();
     let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();

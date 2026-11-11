@@ -83,8 +83,15 @@ impl Manager {
     /// Save the running chat `id`, whose agent ended its turn while its space
     /// is blocked, to come back on its own once nothing blocks it, unless
     /// its agent started a turn since or its space is no longer blocked.
-    pub(super) async fn save_blocked_chat(&self, id: &SpaceId) -> Result<()> {
-        (self.save_running_chat(id, None, Saving::Blocked).await).map(drop)
+    pub(super) async fn save_blocked_chat(
+        &self,
+        id: &SpaceId,
+        turn: crate::time::UnixTime,
+    ) -> Result<()> {
+        (self
+            .save_running_chat(id, None, Saving::Blocked(turn))
+            .await)
+            .map(drop)
     }
 
     /// Save `chat` for `shoal stop` as [`Self::save_chat`] does, and keep
@@ -143,10 +150,13 @@ impl Manager {
         let _saving = self.chat_saves.lock().await;
         let _handoffs = self.chat_handoffs.write().await;
         let stop = matches!(saving, Saving::Stop(_));
-        let blocked = matches!(saving, Saving::Blocked);
+        let blocked = match saving {
+            Saving::Blocked(turn) => Some(turn),
+            _ => None,
+        };
         let restore = match blocked {
-            true => ChatRestore::Automatic,
-            false => ChatRestore::Resume,
+            Some(_) => ChatRestore::Automatic,
+            None => ChatRestore::Resume,
         };
         if let Saving::Stop(chat) = saving {
             self.check_chat_stop(chat)?;
@@ -156,7 +166,9 @@ impl Manager {
         let stopped_by = stopped_by.cloned();
         let (saved, stopping, released) = (self.store)
             .write(move |tx| {
-                if blocked && !idle_and_blocked(tx, &chat)? {
+                if let Some(turn) = blocked
+                    && !idle_and_blocked(tx, &chat, turn)?
+                {
                     return Ok((false, None, Vec::new()));
                 }
                 let held = stop && hold_automatic(tx, &chat, stopped_by.as_ref())?;
@@ -165,7 +177,7 @@ impl Manager {
                 let saved = held || !running.is_empty();
                 // A message waits for the restored agent before the space
                 // can clear, so the restore starts its turn.
-                if blocked && saved {
+                if blocked.is_some() && saved {
                     crate::daemon::chat_messages::insert_from_user(tx, &chat, STOPPED_BLOCKED)?;
                 }
                 // A save an interrupted daemon never stopped, or a stop that
@@ -464,19 +476,25 @@ enum Saving<'a> {
     Restart,
     /// `shoal stop` of the chat, which stays down until `shoal resume`.
     Stop(&'a Chat),
-    /// Its agent ended a turn while its space is blocked; it comes back on
-    /// its own once nothing blocks the space.
-    Blocked,
+    /// Its agent ended a turn while its space is blocked, idle since this
+    /// time with no work in flight; it comes back on its own once nothing
+    /// blocks the space.
+    Blocked(crate::time::UnixTime),
 }
 
-/// Whether the agent of the chat `id` is idle and its space blocked, as
-/// they are when the save claims it: one that started a turn since it was
-/// chosen keeps running.
-fn idle_and_blocked(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<bool> {
+/// Whether the agent of the chat `id` is still idle since `turn`, the idle
+/// turn found with no work in flight, and its space blocked, as they are
+/// when the save claims it: one that worked another turn since, which may
+/// have left work running, keeps running.
+fn idle_and_blocked(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    turn: crate::time::UnixTime,
+) -> Result<bool> {
     let idle = crate::daemon::store::exists(
         tx,
-        "SELECT 1 FROM space_agent_state WHERE space_id=?1 AND state=?2",
-        params![id, crate::state::AgentState::Idle],
+        "SELECT 1 FROM space_agent_state WHERE space_id=?1 AND state=?2 AND since=?3",
+        params![id, crate::state::AgentState::Idle, turn],
     )?;
     let progress = crate::daemon::progress::current(tx, id)?;
     Ok(idle && progress.is_some_and(|progress| progress.blocked()))
