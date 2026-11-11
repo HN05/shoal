@@ -88,6 +88,7 @@ pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
         linked_issue: None,
         links: Vec::new(),
         workspace: None,
+        tells_resumed: false,
     }
 }
 

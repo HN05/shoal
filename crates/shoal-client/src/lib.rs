@@ -13,6 +13,7 @@ pub mod ci;
 pub mod cleanup;
 pub mod config;
 pub mod connection;
+pub mod conversions;
 pub mod demos;
 pub mod env;
 pub mod events;

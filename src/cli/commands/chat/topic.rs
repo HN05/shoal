@@ -30,6 +30,9 @@ pub(in crate::cli::commands) struct Topic {
     /// The workspace whose worktree the chat runs in, instead of the
     /// repository's checkout.
     pub workspace: Option<Workspace>,
+    /// Whether a session the chat continues is told the subject too, as
+    /// news, such as what its converted space is now.
+    pub tells_resumed: bool,
 }
 
 impl Topic {
@@ -46,6 +49,7 @@ impl Topic {
             linked_issue: None,
             links: Vec::new(),
             workspace: None,
+            tells_resumed: false,
         }
     }
 
@@ -61,6 +65,7 @@ impl Topic {
             linked_issue: None,
             links: Vec::new(),
             workspace: None,
+            tells_resumed: false,
         }
     }
 
@@ -81,6 +86,7 @@ impl Topic {
             linked_issue: None,
             links: Vec::new(),
             workspace: Some(workspace),
+            tells_resumed: false,
         }
     }
 
@@ -104,6 +110,20 @@ impl Topic {
             links: links.relations(),
             linked_issue: templates::IssueFields::linked(links),
             ..topic
+        }
+    }
+
+    /// This topic for a chat that was a workspace, whose session, which it
+    /// continues in `home`, is told so.
+    pub(in crate::cli::commands) fn converted(self, home: &std::path::Path) -> Self {
+        let told = format!(
+            "Shoal converted this workspace into a chat. You now work in the repository's checkout at {}. The workspace's worktree is gone; its branch stays, and shoal restore brings its files back from the checkpoint Shoal kept.",
+            home.display()
+        );
+        Self {
+            subject: Some(templates::Subject::told(told)),
+            tells_resumed: true,
+            ..self
         }
     }
 

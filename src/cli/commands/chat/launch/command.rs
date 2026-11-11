@@ -163,7 +163,8 @@ fn brief(
         home: topic.home(repo),
         delivery: agents::chat_delivery(settings, agent),
     };
-    let mut brief = match topic.subject.as_ref().filter(|_| !resumes) {
+    let told = (topic.subject.as_ref()).filter(|_| !resumes || topic.tells_resumed);
+    let mut brief = match told {
         Some(subject) => templates::brief(settings, &topic.mode, place, Some(subject))?,
         None => {
             let issue = (topic.subject.as_ref())

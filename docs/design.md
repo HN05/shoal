@@ -725,6 +725,24 @@ source's work: links, leases, holds, questions, ready marks, checkpoints or the
 session. Agents copy only within their scope, and a removed workspace's
 checkpoint, like reopening it, stays the user's.
 
+A space changes kind with `shoal convert`, since only its agent learns what the
+work is, and a merged workspace's conversation can still be worth keeping. The
+space stays the same: its row moves between `chats` and `workspaces` under the
+same ID and number in one transaction, the new row first, so what belongs to
+the space by ID, its links, tree, questions, files and progress, stays, and the
+removal triggers leave it while the space exists as the other kind. A chat
+becomes a workspace through the creation path every workspace on a branch
+takes, with the chat's record turned into the workspace's at insertion and
+given back if the worktree cannot be made; the worktree directory comes from
+the branch. A workspace becomes a chat through the shared removal path, which
+keeps a checkpoint and the branch and the spaces below, and commits the chat
+in place of the workspace's record. A conversion moves its agent only once its
+turn ends, so the command that asked for it finishes: the daemon records the
+pending conversion, which survives a restart, and one task watching agent
+states stops the agent and starts it again in the new place from a fork of
+its session, as `start --fork` and a copy's restore do, since a session
+resumed in another directory would not find its files there.
+
 A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching
 branches or creating worktrees Shoal does not own. Splitting creates a new

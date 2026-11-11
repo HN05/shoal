@@ -123,6 +123,10 @@ async fn restore(
 ) -> Result<i32> {
     let handoff = commands::handoff(&commands);
     let mut records = vec![path];
+    if session.converted {
+        records.extend(commands.into_iter().map(|command| command.path));
+        return start_converted(ctx, workspace, &session, records).await;
+    }
     if let Some(copied) = session.copied {
         records.extend(commands.into_iter().map(|command| command.path));
         return start_copied(
@@ -202,6 +206,44 @@ async fn start_copied(
     reports::starting_copied(agent, fork.is_some());
     let message = crate::execution::recovery::copied_prompt(copied, fork.is_some(), handoff);
     start_told(ctx, workspace, session, fork, message, records).await
+}
+
+/// Start the agent of `session` in a workspace that was a chat: from a fork
+/// of the session it reported there, or as a new agent when it reported none
+/// or cannot start from a fork, told what the space is now and its mode's
+/// instructions; it consumes `records` once it has started.
+async fn start_converted(
+    ctx: &Context,
+    workspace: &Workspace,
+    session: &LastSession,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
+    let agent = &session.agent;
+    let launch: crate::agent::Agent = agent
+        .name()
+        .parse()
+        .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+    )
+    .await?;
+    let fork = session
+        .session
+        .clone()
+        .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
+    let message = crate::execution::recovery::converted_prompt(workspace, fork.is_some());
+    let options = crate::cli::agents::LaunchOptions {
+        replaces: records,
+        fork,
+        model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
+        narrowing: session.narrowing,
+    };
+    let opening = crate::cli::agents::Opening::New {
+        mode: session.mode.clone(),
+        subject: Some(crate::config::templates::Subject::told(message)),
+    };
+    crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
 }
 
 /// Start the agent of `session` as a new agent is started, from a fork of

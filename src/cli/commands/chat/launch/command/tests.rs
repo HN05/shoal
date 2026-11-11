@@ -73,3 +73,25 @@ fn a_chat_whose_agent_cannot_fork_starts_a_new_session() {
     let opencode: Agent = "opencode".parse().unwrap();
     assert!(forked.of(&settings, &opencode).unwrap().is_empty());
 }
+
+#[test]
+fn a_converted_chat_is_told_what_its_space_is_while_it_continues_its_session() {
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let agent: Agent = "claude".parse().unwrap();
+    let repo = repository();
+    let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
+    let converted =
+        Topic::repository(&repo, &crate::config::modes::ModeName::CHAT).converted(&repo.path);
+    let repo = ChatRepository::Registered(repo);
+
+    let resumed = brief(&settings, &agent, &repo, &topic, true).unwrap();
+    let told = brief(&settings, &agent, &repo, &converted, true).unwrap();
+
+    assert_eq!(resumed.first_message, None);
+    let message = told
+        .first_message
+        .expect("a converted chat's first message");
+    assert!(message.contains("/repos/shoal"), "{message}");
+}

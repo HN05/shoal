@@ -179,6 +179,7 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "start",
     "contribute",
     "split",
+    "convert",
     "inbox",
     "list",
     "status",

@@ -1966,6 +1966,63 @@ events go on up, to you at the top, and one removed before receiving their
 events gives you the notifications they stand for. The chat's `parent` and
 `children` fields name the spaces above and below it.
 
+### Convert a chat or a workspace
+
+```sh
+shoal convert workspace fix-login        # This chat becomes a workspace on fix-login
+shoal convert workspace --issue 42       # On the branch the issue names, which it links
+shoal convert workspace                  # On the branch the chat's linked issue names
+shoal convert chat                       # This workspace becomes a chat in the checkout
+shoal convert chat --space 7 --mode plan # The user's terminal converts any space
+```
+
+`shoal convert workspace [BRANCH] [--issue N] [--base REF] [--skip-setup] [--mode MODE] [--space S]`
+turns a chat into a workspace, and `shoal convert chat [--mode MODE] [--space S]`
+turns a workspace into a chat. The space stays the same: it keeps its ID,
+number, name, parent, children, links and watched PRs, questions, attached
+files, progress and `TMPDIR`, and the [journal](#workspace-events) records a
+`converted` event instead of a new space. Unread messages go to the agent in
+the new place. Converting a space into the kind it already is, is refused.
+
+`convert workspace` takes `shoal split`'s branch arguments. With `BRANCH`, the
+workspace uses the local or remote branch of that name, which no workspace may
+hold, or creates it from the default branch or `--base`; without one, the issue
+`--issue` names, which it links, or else the chat's linked issue names the
+branch as [`shoal start --issue`](#workspaces) derives it, and a chat without
+either is refused. The worktree, its directory and setup are a new
+workspace's: the command follows setup as `shoal split` does and returns once the
+workspace is ready, or with its setup failure. A worktree that cannot be made
+gives the chat back. The workspace's mode and permissions are `--mode`'s,
+`worker` by default, with the permissions given to the chat's agent. A chat
+in a workspace's worktree (`shoal start --in`), one without a repository and a
+stopped chat are refused.
+
+`convert chat` removes the worktree as [`shoal rm`](#remove-a-workspace) does,
+with its removal hooks, once a [checkpoint](#checkpoints-and-restore) keeps its
+HEAD and unsaved files, so it asks nothing; one whose unsaved files no
+checkpoint can keep is refused. The branch stays, as a [kept
+branch](#kept-branches), and `shoal restore` brings the files back in a new
+workspace. Demos stop, and ports, resources, simulators and secrets are
+released; agents' holds and pending PR proposals and pushes go with the
+worktree, and chats in it are removed. It is refused while a hold the user
+placed keeps the workspace, while another workspace builds on its branch
+(`shoal branch base`), and while no agent runs there to carry on. The chat runs
+in the registered checkout, in `--mode`'s mode, `chat` by default.
+
+The command returns at once for a workspace that becomes a chat. Once the
+agent's current turn ends, as its hooks report, Shoal stops it where it ran and
+starts it in the new place from a fork of its session, as `shoal start --fork`
+starts one, so it carries on with its conversation: a chat that became a
+workspace resumes in the worktree as `shoal resume` continues a last session,
+and a workspace that became a chat restores in the checkout as a stopped chat
+does, where the agent ran when the terminal host still has that place, else in
+a background place. Its first message says what the space is now, with its path,
+and its branch for a workspace, followed by the mode's instructions. A restart
+that fails leaves the agent for `shoal resume` and records a `recovery_blocked`
+notification. A space's agent converts only its own space; your terminal
+converts any space, by `--space` with its number or ID, or the current
+workspace, else a picker.
+
 ### Master session
 
 `shoal start --mode orchestrate [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`

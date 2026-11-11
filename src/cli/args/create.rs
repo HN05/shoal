@@ -34,31 +34,97 @@ pub enum CreateCommand {
     /// issue and PR activity; the parent's cleanup waits until its children
     /// are removed. `shoal start` starts an agent of the child's own.
     Split {
-        /// Git branch name; a portable workspace name is derived from it.
-        /// A copy's defaults to the copied branch's name with -copy added.
-        #[arg(required_unless_present_any = ["issue", "no_branch", "copy", "checkpoint"])]
-        branch: Option<String>,
+        #[command(flatten)]
+        branch: BranchArgs,
         /// Create a workspace at a commit, with no branch of its own, for
         /// comparisons and research: at --base, a tag or commit, or the default
         /// branch. Without a parent workspace, the user owns it.
         #[arg(long, conflicts_with_all = ["branch", "issue"])]
         no_branch: bool,
-        /// Derive the branch name from a forge issue number or URL and link the issue.
-        #[arg(short = 'i', long, value_parser = item_reference)]
-        issue: Option<String>,
-        /// Starting Git ref (defaults to the repository's default branch, refreshed from its
-        /// upstream); the parent's branch stacks the child on it.
-        #[arg(long, value_name = "REF")]
-        base: Option<String>,
         /// Parent workspace; defaults to the current workspace or picker, or
         /// with --no-branch to none outside a workspace.
         #[arg(short = 'w', long)]
         workspace: Option<SpaceSelector>,
         #[command(flatten)]
         copy: CopyArgs,
-        #[command(flatten)]
-        creation: CreationArgs,
+        /// Nothing in it is worth keeping: every removal deletes it whatever it
+        /// holds, without asking or keeping a checkpoint, and deletes its branch.
+        #[arg(long)]
+        disposable: bool,
     },
+    /// Turn a chat into a workspace, or a workspace into a chat.
+    ///
+    /// The space stays the same: it keeps its number, name, parent,
+    /// children, links, questions, files and progress. Its agent restarts
+    /// in the new place once its current turn ends, carrying on with its
+    /// conversation. A space's agent converts only its own space.
+    Convert {
+        #[command(subcommand)]
+        command: ConvertCommand,
+    },
+}
+
+// What `shoal convert` turns a space into. A doc comment here would replace
+// the command's description.
+#[derive(Debug, Subcommand)]
+pub enum ConvertCommand {
+    /// Turn a chat into a workspace on a branch, with a worktree and setup.
+    ///
+    /// The branch is the local or remote one of that name, or a new one
+    /// from the default branch or --base; without a branch, --issue or the
+    /// chat's linked issue names it. A chat started in a workspace's
+    /// worktree stays a chat.
+    Workspace {
+        #[command(flatten)]
+        branch: BranchArgs,
+        /// The mode the agent restarts in, which sets the workspace's
+        /// permissions; defaults to worker.
+        #[arg(short = 'm', long)]
+        mode: Option<crate::config::modes::ModeName>,
+        /// The chat, by number or ID; defaults to the space this runs in,
+        /// else a picker.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
+    /// Turn a workspace into a chat in the repository's checkout.
+    ///
+    /// The worktree goes as shoal rm removes it, once a checkpoint keeps its
+    /// HEAD and unsaved files; the branch stays, and shoal restore brings
+    /// the files back. Demos stop, and ports, resources, simulators and
+    /// secrets are released. Refused while the user holds the workspace or
+    /// another workspace builds on its branch.
+    Chat {
+        /// The mode the agent restarts in; defaults to chat.
+        #[arg(short = 'm', long)]
+        mode: Option<crate::config::modes::ModeName>,
+        /// The workspace, by number or ID; defaults to the space this runs
+        /// in, else a picker.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
+}
+
+// The branch a new workspace works on, which `shoal split` and `shoal
+// convert workspace` take. A doc comment here would replace the description
+// of every command that flattens it.
+#[derive(Debug, Default, Clone, Args)]
+pub struct BranchArgs {
+    /// Git branch name; a portable workspace name is derived from it.
+    /// Without one, --issue names it; a copy's defaults to the copied
+    /// branch's name with -copy added.
+    pub branch: Option<String>,
+    /// Derive the branch name from a forge issue number or URL and link the issue.
+    #[arg(short = 'i', long, value_parser = item_reference)]
+    pub issue: Option<String>,
+    /// Starting Git ref of a new branch (defaults to the repository's
+    /// default branch, refreshed from its upstream); a parent's branch
+    /// stacks the child on it.
+    #[arg(long, value_name = "REF")]
+    pub base: Option<String>,
+    /// Skip setup.command, hooks.pre_setup, setup.copy_ignored, hooks.post_setup
+    /// and the removal hooks; `shoal setup` runs the setup later.
+    #[arg(long)]
+    pub skip_setup: bool,
 }
 
 // Arguments of `shoal start`.

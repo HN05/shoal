@@ -40,6 +40,7 @@ impl NeedExt for Need {
             | ["ci", ..] => Self::Any,
             ["setup"] => Self::Setup,
             ["status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
+            ["convert", ..] => Self::Any,
             ["checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,
             ["branch", "base", "clear"] => Self::Base,

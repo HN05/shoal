@@ -11,6 +11,7 @@ pub mod chat;
 pub mod cleanup;
 pub mod config;
 pub mod configured;
+pub mod convert;
 pub mod daemon;
 pub mod demo;
 pub mod download;

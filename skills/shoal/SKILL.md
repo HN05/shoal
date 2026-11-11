@@ -101,6 +101,27 @@ checkpoints' files instead; an untouched copy goes with cleanup. `shoal start
 `shoal rm <child>` removes a child, including one a split left `preparing`;
 one the user holds, or with such a space below it, is the user's to remove.
 
+## Convert a space
+
+```sh
+shoal convert workspace fix-login     # This chat becomes a workspace on fix-login
+shoal convert workspace --issue 42    # On the branch the issue names, which it links
+shoal convert chat                    # This workspace becomes a chat in the checkout
+```
+
+`convert` keeps the space, with its number, name, parent, children, links,
+questions, files and progress. `convert workspace` takes `split`'s branch
+arguments: an existing local or remote branch of that name, or a new one from
+the default branch or `--base`; without a branch, `--issue` or the chat's
+linked issue names it. It returns once the worktree is set up. `convert chat`
+removes the worktree as `shoal rm` does, keeping a checkpoint and the branch,
+and releases its ports, resources, simulators and secrets; the user's holds and
+a workspace building on its branch refuse it. Once the agent's turn ends,
+Shoal restarts it in the new place from a fork of its session, told what the
+space is now and its mode's instructions; `--mode` picks that mode, `worker`
+for a workspace and `chat` for a chat by default. An agent converts only its
+own space.
+
 ## Coordinate spaces below
 
 The agent of the nearest space above with an agent coordinates a space: its

@@ -135,6 +135,23 @@ pub fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>) -> Str
     prompt
 }
 
+/// What the agent of a chat that became `workspace` is told, carrying on
+/// from a fork of the chat's session when `forked`, before its mode's
+/// instructions.
+pub fn converted_prompt(workspace: &Workspace, forked: bool) -> String {
+    let mut prompt = format!(
+        "Shoal converted this chat into a workspace. You now work in its worktree at {} on branch {}.",
+        workspace.path.display(),
+        workspace.branch.as_deref().unwrap_or("-"),
+    );
+    prompt.push_str(if forked {
+        " This conversation continues the chat's."
+    } else {
+        " The chat's session is not available here: read the space's linked issue to see where the work stands."
+    });
+    prompt
+}
+
 /// What a restore command of agent `name` in `workspace` is built from:
 /// the message it continues with and the arguments that keep its model and
 /// effort.
