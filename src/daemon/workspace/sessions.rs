@@ -36,8 +36,7 @@ impl Manager {
     ) -> Result<()> {
         for session in host.sessions(&self.paths.state).await? {
             if session.space == *space {
-                self.close_session(host, &session.name, Owner::Space(session.space))
-                    .await;
+                self.close_session(host, &session.name, session.space).await;
             }
         }
         Ok(())
@@ -75,8 +74,7 @@ impl Manager {
     async fn cleanup_host_sessions(&self, host: &dyn crate::sessions::Host) -> Result<()> {
         for session in host.sessions(&self.paths.state).await? {
             if !self.space_exists(&session.space).await? {
-                self.close_session(host, &session.name, Owner::Space(session.space))
-                    .await;
+                self.close_session(host, &session.name, session.space).await;
             }
         }
         Ok(())
@@ -182,10 +180,22 @@ impl Manager {
             .await
     }
 
-    /// Close the session a host labelled as `owner`'s.
-    async fn close_session(&self, host: &dyn crate::sessions::Host, name: &str, owner: Owner) {
+    /// Close the session a host labelled as `space`'s, unless the daemon
+    /// records it as another space's: a chat or agent that took the session
+    /// over records it before it relabels the session. The record is read
+    /// under the lock takeovers hold.
+    async fn close_session(&self, host: &dyn crate::sessions::Host, name: &str, space: SpaceId) {
         let place = Origin::created(host.name(), name.to_owned());
-        if let Err(error) = host.close(&self.paths.state, &place, &owner).await {
+        let _ownership = self.place_ownership.lock().await;
+        let closed = match self.place_owner(&place).await {
+            Ok(Some((owner, _))) if owner != space => return,
+            Ok(_) => {
+                host.close(&self.paths.state, &place, &Owner::Space(space))
+                    .await
+            }
+            Err(error) => Err(error),
+        };
+        if let Err(error) = closed {
             self.session_cleanup_failed(None, &error).await;
         }
     }

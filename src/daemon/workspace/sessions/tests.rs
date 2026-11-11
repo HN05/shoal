@@ -905,3 +905,24 @@ async fn the_sweep_leaves_a_chats_places_while_it_is_recorded() -> Result<()> {
     assert_eq!(owners, [chat.id]);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_session_a_chat_recorded_taking_over_stays_open_until_it_relabels_it() -> Result<()> {
+    let (_root, manager, workspace, host) = fixture().await?;
+    // Each chat recorded its session before relabelling it: one still shows
+    // the workspace's label, the other a removed space's.
+    host.add("taken", workspace.id.as_str())?;
+    host.add("orphaned", "gone")?;
+    let mut chats = Vec::new();
+    for (name, session) in [("taker", "taken"), ("adopter", "orphaned")] {
+        let place = Origin::created(HostName::Zmx, session.into());
+        chats.push(chat_in(&manager, &workspace, name, place).await?);
+    }
+    manager
+        .close_space_places(&workspace.id, &workspace.name)
+        .await;
+    manager.cleanup_orphan_sessions().await;
+    assert!(host.closed()?.is_empty());
+    assert_eq!(manager.owned_places(None).await?.len(), 2);
+    Ok(())
+}
