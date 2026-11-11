@@ -217,14 +217,15 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     });
     assert!(rex.windows(&session).contains(&"placed".to_owned()));
     // Every rex call above was a client that has since disconnected; the
-    // agent keeps running in its block. Setup records its place too, so
-    // only once it finished is the one execution the agent's.
+    // agent keeps running in its block. Setup records its place too, and a
+    // status that says setup finished can still list setup's execution,
+    // which it read first: only the agent's name tells its execution apart.
     wait_until("setup to finish with the agent running", || {
         let status = fixture.ok(&["status", "placed"]);
         status["setup_finished"] == true
             && status["executions"]
                 .as_array()
-                .is_some_and(|runs| runs.len() == 1)
+                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
     });
     assert_eq!(sessions(&fixture, "placed"), ["placed"]);
     // The block starts with Shoal's launch step instead of having it typed.
