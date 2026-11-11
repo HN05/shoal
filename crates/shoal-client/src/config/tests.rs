@@ -461,11 +461,13 @@ fn only_a_mode_that_sets_idle_wake_minutes_wakes_its_idle_agents() {
             kind,
             repository: true,
         };
-        effective.idle_wake_minutes(mode).unwrap()
+        effective.idle_wake_minutes(mode)
     };
     let workspace = SpaceKind::Workspace;
     assert_eq!(minutes("", ModeName::DEFAULT, workspace), Some(60));
     assert_eq!(minutes("", ModeName::CHAT, SpaceKind::Chat), None);
+    // A mode the settings lack, such as one only a Markdown file names.
+    assert_eq!(minutes("", "triage".into(), workspace), None);
     // Setup waits for the user, whatever the worker's setting.
     assert_eq!(minutes("", ModeName::SETUP, workspace), None);
     let changed = "[modes.worker]\nidle_wake_minutes = 15\n[modes.chat]\nidle_wake_minutes = 5\n";

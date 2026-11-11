@@ -228,13 +228,11 @@ impl Effective {
     }
 
     /// How many minutes an agent of `mode` may stay idle before Shoal wakes
-    /// it; none when its mode never does.
-    pub fn idle_wake_minutes(
-        &self,
-        mode: crate::config::permissions::SpaceMode,
-    ) -> Result<Option<u64>> {
-        let mode = modes::resolve(&self.modes, mode.name, mode.kind, mode.repository)?;
-        Ok(Some(mode.idle_wake_minutes).filter(|minutes| *minutes > 0))
+    /// it; none when its mode never does. A mode only a Markdown file names,
+    /// which the daemon's settings leave out, sets none.
+    pub fn idle_wake_minutes(&self, mode: crate::config::permissions::SpaceMode) -> Option<u64> {
+        let mode = modes::resolve(&self.modes, mode.name, mode.kind, mode.repository).ok()?;
+        Some(mode.idle_wake_minutes).filter(|minutes| *minutes > 0)
     }
 
     /// The model and effort a launch of `agent` runs with: each

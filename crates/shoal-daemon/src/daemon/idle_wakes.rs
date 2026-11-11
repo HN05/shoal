@@ -89,9 +89,10 @@ impl Manager {
         let Some(mode) = space.mode() else {
             return Ok(None);
         };
-        self.present_space_settings(space)
+        Ok(self
+            .present_space_settings(space)
             .await?
-            .idle_wake_minutes(mode)
+            .idle_wake_minutes(mode))
     }
 }
 
