@@ -4,7 +4,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::{Key, current_directory, require_interactive};
 use crate::{cli::context::Context, tools::Tool};
@@ -240,7 +240,6 @@ pub(super) fn fzf_output(
     extra: &[String],
 ) -> Result<String> {
     require_interactive(ctx, prompt)?;
-    super::fzf::ensure_supported()?;
     let mut command = Command::new(Tool::Fzf.program());
     if current_directory()?.is_none() {
         command.current_dir("/");
@@ -280,7 +279,7 @@ pub(super) fn fzf_output(
     match output.status.code() {
         Some(0) => Ok(String::from_utf8(output.stdout)?),
         Some(1 | 130) => Err(SelectionCanceled.into()),
-        _ => bail!("picker failed: {}", output.status),
+        _ => Err(super::fzf::failure(output.status)),
     }
 }
 

@@ -1,8 +1,8 @@
-//! The oldest fzf pickers work with, and the check that refuses an older one
-//! before it opens.
-use std::process::Command;
+//! The oldest fzf pickers work with, and the error that names it when an
+//! older one fails.
+use std::process::{Command, ExitStatus};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, anyhow, ensure};
 
 use crate::tools::Tool;
 
@@ -11,13 +11,25 @@ use crate::tools::Tool;
 /// options pickers pass.
 const OLDEST: (u32, u32, u32) = (0, 63, 0);
 
-/// Refuse the installed fzf when it is older than [`OLDEST`].
-pub(super) fn ensure_supported() -> Result<()> {
+/// The error for a picker whose fzf exited with `status`, its own error:
+/// one naming the upgrade when the installed fzf is older than [`OLDEST`],
+/// which fails that way on an action it does not know. Only a failed picker
+/// asks fzf its version.
+pub(super) fn failure(status: ExitStatus) -> anyhow::Error {
+    let checked = installed_version().map_or(Ok(()), |reported| supported(&reported));
+    match checked {
+        Err(too_old) => too_old,
+        Ok(()) => anyhow!("picker failed: {status}"),
+    }
+}
+
+/// What `fzf --version` printed, when it ran.
+fn installed_version() -> Option<String> {
     let output = Command::new(Tool::Fzf.program())
         .arg("--version")
         .output()
-        .context("open picker; install fzf or supply an explicit target")?;
-    supported(&String::from_utf8_lossy(&output.stdout))
+        .ok()?;
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// Refuse the version `fzf --version` reported when it is older than
