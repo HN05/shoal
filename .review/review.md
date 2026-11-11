@@ -436,6 +436,11 @@ instead of the PR delivery guidance below.
   repeats a cross-kind verb, such as a `ci view`, a top-level command for an
   action on one kind of linked item, and a cross-kind verb that refuses a kind
   it applies to.
+- A refusal needs a very good reason: the request would act outside the
+  caller's scope or permissions, lose or damage work, or cannot be done at
+  all. Flag a new refusal whose reason is a limit of how Shoal is built, such
+  as a code path one kind of caller does not take, unless an issue tracks
+  supporting the request.
 - Commands refuse invalid given arguments before any prompt for omitted ones;
   interactive `start` has the daemon check its creation request first.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
