@@ -16,6 +16,7 @@ use crate::{
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
     sessions::Origin,
+    terminal::Session,
 };
 
 pub(super) async fn attach(
@@ -29,11 +30,27 @@ pub(super) async fn attach(
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
-    let (target, sessions, session) = match target.attachable(ctx, session.as_deref()).await? {
-        Ok(sessions) => (target, sessions, session),
-        Err(protection) => target.resumed(ctx, &protection).await?,
+    let sessions = target.sessions(ctx).await?;
+    let chosen = chosen_session(ctx, &target, session, &sessions)?.clone();
+    let (target, session) = match &chosen.stopped {
+        Some(protection) => target.resumed(ctx, protection).await?,
+        None => (target, chosen),
     };
-    let session = match (session, sessions.as_slice()) {
+    if terminal::attach(&target.number().to_string(), &session).await? {
+        target.record_detach(ctx).await;
+    }
+    Ok(0)
+}
+
+/// The one of `target`'s `sessions` that `named` names, its only one, or one
+/// picked among them.
+fn chosen_session<'a>(
+    ctx: &Context,
+    target: &Target,
+    named: Option<String>,
+    sessions: &'a [Session],
+) -> Result<&'a Session> {
+    Ok(match (named, sessions) {
         (Some(name), _) => sessions
             .iter()
             .find(|session| session.name == name)
@@ -41,10 +58,7 @@ pub(super) async fn attach(
         (None, []) => bail!("{}", target.without_sessions()),
         (None, [only]) => only,
         (None, several) => {
-            let labels: Vec<_> = several
-                .iter()
-                .map(crate::terminal::Session::label)
-                .collect();
+            let labels: Vec<_> = several.iter().map(Session::label).collect();
             let choices: Vec<_> = several
                 .iter()
                 .zip(&labels)
@@ -53,21 +67,16 @@ pub(super) async fn attach(
             ui::require_argument(ctx, "session", "session")?;
             ui::pick_choice(ctx, "Attach session> ", &choices)?
         }
-    };
-    if terminal::attach(&target.number().to_string(), session).await? {
-        target.record_detach(ctx).await;
-    }
-    Ok(0)
+    })
 }
 
 /// The name of the terminal session `shoal attach` takes in which the
 /// daemon recorded the agent of the workspace with the ID `id` running.
 pub(super) async fn agent_terminal_session(ctx: &Context, id: &SpaceId) -> Result<Option<String>> {
     let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
-    let sessions = target.attachable(ctx, None).await?.unwrap_or_default();
-    Ok(sessions
+    Ok((target.sessions(ctx).await?)
         .into_iter()
-        .find(|session| session.agent.is_some())
+        .find(|session| session.agent.is_some() && session.stopped.is_none())
         .map(|session| session.name))
 }
 
@@ -152,37 +161,30 @@ impl Target {
         }
     }
 
-    /// The target's sessions but those of agents Shoal stopped, or why not
-    /// as [`terminal::attachable`] gives it.
-    async fn attachable(
-        &self,
-        ctx: &Context,
-        named: Option<&str>,
-    ) -> Result<Result<Vec<crate::terminal::Session>, Protection>> {
+    /// The target's open sessions, each where an agent Shoal stopped waits
+    /// marked with why.
+    async fn sessions(&self, ctx: &Context) -> Result<Vec<Session>> {
         let settings = crate::client::workspaces::settings(&ctx.paths, self.config()).await?;
-        let sessions = terminal::sessions(&settings, &self.places()).await?;
-        Ok(terminal::attachable(sessions, named))
+        terminal::sessions(&settings, &self.places()).await
     }
 
-    /// The workspace, read again, once the agent `protection` stopped runs
-    /// again through its queued restore, with its sessions and the name of
-    /// the agent's; refused with what restores it when no restore waits.
-    async fn resumed(
-        self,
-        ctx: &Context,
-        protection: &Protection,
-    ) -> Result<(Self, Vec<crate::terminal::Session>, Option<String>)> {
+    /// The workspace, read again, and its agent's session once the agent
+    /// `protection` stopped runs again through its queued restore; refused
+    /// with what restores it when no restore waits.
+    async fn resumed(self, ctx: &Context, protection: &Protection) -> Result<(Self, Session)> {
         let refused = || anyhow!("{}", stopped_agent(&self, protection));
         let Self::Workspace(inspection) = &self else {
             return Err(refused());
         };
         let id = SpaceSelector::id(&inspection.workspace.id);
-        let session = (super::queue::resume_stopped(ctx, &inspection.workspace.id).await?)
+        let name = (super::queue::resume_stopped(ctx, &inspection.workspace.id).await?)
             .ok_or_else(refused)?;
         let target = Self::inspected(ctx, id).await?;
-        let sessions = (target.attachable(ctx, Some(&session)).await?)
-            .map_err(|protection| anyhow!("{}", stopped_agent(&target, &protection)))?;
-        Ok((target, sessions, Some(session)))
+        let session = (target.sessions(ctx).await?)
+            .into_iter()
+            .find(|session| session.name == name && session.stopped.is_none())
+            .with_context(|| format!("{} has no session {name}", target.name()))?;
+        Ok((target, session))
     }
 
     /// Whose settings choose the hosts to look in.

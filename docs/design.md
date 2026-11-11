@@ -210,9 +210,9 @@ background commands ended; configured restore commands receive that prompt throu
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
 daemon instead of cancelling the restore. A waiting wrapper's session shows
-only the stop, so `attach` starts its queued restore and attaches once the
-agent runs, under every place recorded for it, and its picker offers the
-workspace as stopped. A daemon update waits for a stop
+only the stop, so `attach` to it starts its queued restore and attaches once
+the agent runs, under every place recorded for it, and its pickers offer the
+workspace and that session as stopped. A daemon update waits for a stop
 and a restore waiting for load, but not through a wait for an update, which
 may last indefinitely; that wrapper reattaches to the updated daemon. Restores wait in the agent queue,
 and manual recovery persists across restarts. Saved recovery represents

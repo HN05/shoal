@@ -142,38 +142,3 @@ fn every_place_in_a_stopped_agents_session_reports_the_stop() {
         .collect();
     assert_eq!(stopped, [true, true, false]);
 }
-
-#[test]
-fn a_stopped_agents_session_is_not_attachable() {
-    let (work, other) = (
-        Origin::created(HostName::Zmx, "work".to_owned()),
-        Origin::created(HostName::Zmx, "other".to_owned()),
-    );
-    let stopped = Session {
-        stopped: Some(stopped_by_load()),
-        ..Session::open("work".into(), 0, &work)
-    };
-    let running = Session::open("other".into(), 0, &other);
-    let names = |sessions: Vec<Session>| -> Vec<String> {
-        sessions.into_iter().map(|session| session.name).collect()
-    };
-
-    let both = vec![stopped.clone(), running.clone()];
-    assert_eq!(
-        attachable(both.clone(), None).map(names),
-        Ok(vec!["other".into()])
-    );
-    assert_eq!(
-        attachable(both, Some("work")).map(names),
-        Err(stopped_by_load())
-    );
-    assert_eq!(
-        attachable(vec![stopped], None).map(names),
-        Err(stopped_by_load())
-    );
-    assert_eq!(attachable(Vec::new(), None).map(names), Ok(Vec::new()));
-    assert_eq!(
-        attachable(vec![running], Some("missing")).map(names),
-        Ok(vec!["other".into()])
-    );
-}

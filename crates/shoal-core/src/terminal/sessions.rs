@@ -87,11 +87,15 @@ impl Session {
         }
     }
 
-    /// The name, agent, and whether a terminal is attached.
+    /// The name, agent, whether Shoal stopped the agent, and whether a
+    /// terminal is attached.
     pub fn label(&self) -> String {
         let mut label = self.name.clone();
         if let Some(agent) = &self.agent {
             label.push_str(&format!("  {agent}"));
+        }
+        if self.stopped.is_some() {
+            label.push_str("  stopped");
         }
         if self.clients > 0 {
             label.push_str("  attached");

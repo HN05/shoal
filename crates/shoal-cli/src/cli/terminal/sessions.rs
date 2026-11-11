@@ -86,26 +86,6 @@ pub(in crate::cli) async fn sessions(
     Ok(sessions)
 }
 
-/// `sessions` without those where an agent Shoal stopped waits to be
-/// restored, or why not when the `named` session or every session is one.
-pub(in crate::cli) fn attachable(
-    sessions: Vec<Session>,
-    named: Option<&str>,
-) -> Result<Vec<Session>, Protection> {
-    let (stopped, running): (Vec<_>, Vec<_>) = sessions
-        .into_iter()
-        .partition(|session| session.stopped.is_some());
-    let refused = match named {
-        Some(name) => stopped.into_iter().find(|session| session.name == name),
-        None if running.is_empty() => stopped.into_iter().next(),
-        None => None,
-    };
-    match refused.and_then(|session| session.stopped) {
-        Some(protection) => Err(protection),
-        None => Ok(running),
-    }
-}
-
 /// Mark every one of `sessions` that is the session of a stopped agent,
 /// which another place, such as the one Shoal created for the agent, may
 /// have found too.

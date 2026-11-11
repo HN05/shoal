@@ -2573,24 +2573,34 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .unwrap();
     assert_eq!(attached, ["attach", opened[1].as_str()]);
 
-    // Attaching to an agent Shoal stopped, whose session shows only the
-    // stop, starts its waiting restore and attaches once the agent runs.
+    // An agent Shoal stopped is offered as stopped beside the workspace's
+    // shell; picking it starts its waiting restore and attaches to its
+    // session once the agent runs.
     let moved = fixture.ok(&["queue", "move", &fixture.id("second"), "1"]);
     assert_eq!(moved["stopped"], true, "{moved}");
-    let attaches = || {
-        zmx_calls(&fixture)
-            .into_iter()
-            .filter(|call| call[0] == "attach")
-            .count()
+    let (output, rows) = fixture.pick(&["attach", &fixture.id("second")], "0", "");
+    assert!(output.status.success(), "{output:?}\n{rows}");
+    let row = |index: &str| {
+        rows.lines()
+            .find(|row| row.starts_with(&format!("{index}\t")))
+            .unwrap_or_default()
+            .to_owned()
     };
-    let before = attaches();
-    let (output, transcript) = fixture.terminal_command(
-        fixture.command().args(["attach", &fixture.id("second")]),
-        "",
-        true,
+    assert!(row("0").contains("stopped"), "{rows}");
+    assert!(!row("1").contains("stopped"), "{rows}");
+    let attached = zmx_calls(&fixture)
+        .into_iter()
+        .rfind(|call| call[0] == "attach")
+        .unwrap();
+    assert_eq!(attached, ["attach", opened[1].as_str()]);
+    let status = fixture.ok(&["status", &fixture.id("second")]);
+    let executions = status["executions"].as_array().unwrap();
+    assert!(
+        executions
+            .iter()
+            .all(|execution| execution["stopped"].is_null()),
+        "{status}"
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert_eq!(attaches(), before + 1);
 
     // A start that fails ends the wait at once: this one's agent is gone
     // by the time the queue starts it.

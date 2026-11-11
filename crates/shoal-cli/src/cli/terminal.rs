@@ -26,5 +26,5 @@ pub(in crate::cli) use launch::{
 pub(in crate::cli) use naming::{Labels, Renamed, relabel_space};
 pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};
 pub(in crate::cli) use sessions::{
-    Recorded, attach, attachable, open_session_owners, session_owners, sessions,
+    Recorded, attach, open_session_owners, session_owners, sessions,
 };
