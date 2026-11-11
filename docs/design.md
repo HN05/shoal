@@ -1032,7 +1032,13 @@ clones only when no spare is ready. A new snapshot is cloned and the old one
 deleted outside the gate, which it takes only to swap them. Creation restores the
 seed's modification times on tracked files its commit left unchanged, since
 mtime-based tools otherwise treat every freshly checked-out file as new.
-Platforms without clones skip the seed rather than copy. Seeds are best effort:
+Clones of a file still cost time per file, so on btrfs each output is a
+subvolume, whose snapshot takes the same time for any number of files: a freeze
+turns a plain output directory into one, once a probe shows Shoal can remove the
+subvolumes it makes, and removal destroys them before deleting the rest. Other
+filesystems use reflinks or APFS clones; ZFS datasets and APFS snapshots cover
+more than one directory, so neither serves. Platforms without clones skip the
+seed rather than copy. Seeds are best effort:
 failures notify and never fail creation, and builds and spare clones wait under
 host pressure so they never add load an agent would feel.
 A repository's `presets` name the build tools it uses, and each sets up what

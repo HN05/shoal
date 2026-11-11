@@ -2858,7 +2858,8 @@ suffixed as usual when taken. `shoal split --no-branch` makes it a workspace at
 a commit instead. A copy of current files is a linked worktree that Git creates
 without checking anything out; Shoal copies the source's index and worktree Git
 config into it and clones its files (APFS clones on macOS, reflinks on Linux,
-plain copies where the filesystem has neither), so `git status` and `git diff`
+plain copies where the filesystem has neither, and a snapshot of each top-level
+entry that is a btrfs subvolume, as a seed output is), so `git status` and `git diff`
 match the source's. The source must be ready, its worktree must verify, and no
 Git operation may be under way there; an agent running there does not matter,
 since copying only reads it. An untracked nested repository or a changed
@@ -3546,7 +3547,11 @@ two-hour limit and writes each command's output to `.seed/build.log` after a
 running in its process group is stopped when it exits.
 
 A successful build freezes `paths` as a copy-on-write snapshot: APFS clones on
-macOS, reflinks on Linux, never a full copy. A new worktree whose own settings
+macOS, reflinks on Linux, never a full copy. On btrfs each output becomes a
+subvolume in the seed worktree, after a check that Shoal can remove the
+subvolumes it makes there, so freezes, spares and new worktrees take a
+snapshot of it, which takes the same time for any number of files; where that
+check or a snapshot fails, the output is cloned with reflinks. A new worktree whose own settings
 match the snapshot's clones its paths before setup, keeping any path that already
 exists. The daemon keeps one spare clone of them in `.seed/snapshot`, which a new
 worktree without any of the paths takes instead of cloning, and clones the next
