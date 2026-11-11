@@ -19,7 +19,7 @@ pub(in crate::cli::commands) async fn list(
         stopped: ui::stopped_workspaces(&ctx.paths, &workspaces),
         queued: queued_agents::listed(ctx, filter).await?,
     };
-    workspaces.retain(|workspace| filter.keeps_workspace(workspace, statuses.of(workspace)));
+    workspaces.retain(|workspace| filter.keeps_workspace(workspace, &statuses.shown(workspace)));
     let rows = ui::workspace_tree_rows(
         &workspaces,
         &chats,

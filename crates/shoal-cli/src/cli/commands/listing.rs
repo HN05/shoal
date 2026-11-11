@@ -39,9 +39,11 @@ impl ListFilter {
         })
     }
 
-    /// `status` is the one lists show for the workspace.
-    pub(super) fn keeps_workspace(&self, workspace: &Workspace, status: ListStatus) -> bool {
-        self.keeps_repository(&workspace.repository_id) && self.keeps_status(status)
+    /// `shown` are the statuses the workspace's row shows, one of which
+    /// the status filter must keep.
+    pub(super) fn keeps_workspace(&self, workspace: &Workspace, shown: &[ListStatus]) -> bool {
+        self.keeps_repository(&workspace.repository_id)
+            && shown.iter().any(|status| self.keeps_status(*status))
     }
 
     /// An agent queued in a workspace gives the workspace its status, which
