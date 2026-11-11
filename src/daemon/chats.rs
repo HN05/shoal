@@ -868,7 +868,10 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             restore: row.get(9)?,
             links: SpaceLinks::default(),
             review: Vec::new(),
-            completion: store::json_column(row, "completion")?,
+            // An unreadable record fails the cleanup that reads it, for that
+            // chat alone, rather than every listing of chats.
+            completion: (row.get::<_, Option<String>>("completion")?)
+                .and_then(|record| serde_json::from_str(&record).ok()),
             agent_state: None,
             progress: None,
             parent: None,

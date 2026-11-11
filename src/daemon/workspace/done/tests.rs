@@ -634,6 +634,38 @@ async fn undone_keeps_an_unreadable_completion() {
 }
 
 #[tokio::test]
+async fn an_unreadable_chat_completion_leaves_other_spaces_to_completion_cleanup() {
+    let (_root, manager, workspace) = fixture().await;
+    let (chat, _process) =
+        crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_completion(space_id,record,cause) VALUES (?1,'{','manual')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // The chat's cleanup fails, which retains it, and the workspace goes all
+    // the same.
+    manager.sweep_completed().await.unwrap();
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
 async fn issue_and_watch_completion_wait_for_explicit_done() {
     let (_root, manager, workspace) = fixture().await;
     let id = workspace.id.clone();
