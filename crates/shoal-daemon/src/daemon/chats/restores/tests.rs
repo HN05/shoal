@@ -223,3 +223,40 @@ async fn a_blocked_chat_stops_after_its_turn_and_restores_once_unblocked() {
     assert_eq!(restore_saved(&manager).await, 1);
     assert_eq!(resumed(&chat), 1);
 }
+
+#[tokio::test]
+async fn done_cancels_a_blocked_chats_restore_and_removes_its_blockers() {
+    use crate::{
+        client::{assignments::Done, progress::ProgressChange},
+        daemon::workspace_files::Attacher,
+        model::Blocker,
+        state::AgentState,
+    };
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    let selector = SpaceSelector::id(&chat.id);
+    let add = ProgressChange::AddBlocker {
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    manager.set_progress(&selector, add).await.unwrap();
+    let session = Some(crate::agent::AgentSessionId::from("session"));
+    manager
+        .set_agent_state(&selector, AgentState::Idle, None, session)
+        .await
+        .unwrap();
+    manager.save_blocked_chats().await.unwrap();
+    process.wait().unwrap();
+
+    manager
+        .mark_chat_done(&chat.id, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Resume));
+    assert!(saved.completion.is_some());
+    assert!(manager.space_progress(&selector).await.unwrap().is_none());
+    assert_eq!(restore_saved(&manager).await, 0);
+    assert_eq!(resumed(&chat), 0);
+}

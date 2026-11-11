@@ -2,7 +2,8 @@
 //! agent and session keep running until completion cleanup, when requested,
 //! removes the chat as it removes any space.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
+use rusqlite::params;
 
 use crate::{
     client::assignments::Done,
@@ -16,11 +17,12 @@ use crate::{
         workspace_files::Attacher,
     },
     model::{Chat, Completion, PresentSpace},
+    state::ChatRestore,
 };
 
 impl Manager {
-    /// Record `done` for the running chat `selector` names at its
-    /// checkout's HEAD, with copies of the files it hands back attached by
+    /// Record `done` for the running chat `selector` names, or one saved
+    /// while blocked, whose restore it cancels, at its checkout's HEAD, with copies of the files it hands back attached by
     /// `attacher`; its open questions close, as a finished workspace's do.
     pub async fn mark_chat_done(
         &self,
@@ -51,12 +53,15 @@ impl Manager {
         let now = crate::time::UnixTime::now();
         let (closed, progressed) = (self.store)
             .write(move |tx| {
+                // A chat saved while blocked has nothing left to come back
+                // for once done.
+                let held = hold_blocked_restore(tx, &id)?;
                 // Completion removes what blocked the space.
                 let progressed =
                     progress::record_status(tx, &id, recorded.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
                 Ok((
-                    record_completion(tx, &id, &recorded, progressed)?,
+                    record_completion(tx, &id, &recorded, progressed, held)?,
                     progressed,
                 ))
             })
@@ -90,7 +95,15 @@ impl Manager {
     }
 
     async fn done_chat(&self, id: &SpaceId) -> Result<Chat> {
-        (self.running_chat_by_id(id).await?).with_context(|| format!("no running chat {id}"))
+        if let Some(chat) = self.running_chat_by_id(id).await? {
+            return Ok(chat);
+        }
+        let saved = (self.chat_by_id(id).await?)
+            .filter(|chat| chat.restore == Some(ChatRestore::Automatic));
+        match saved {
+            Some(chat) if self.space_blocked(&chat.id).await? => Ok(chat),
+            _ => bail!("no running chat {id}"),
+        }
     }
 
     /// The HEAD of `chat`'s checkout, which its completion records; empty
@@ -106,21 +119,35 @@ impl Manager {
     }
 }
 
-/// Record `completion` for the running chat `id` and close its open
-/// questions, which its finished work waits on no longer; the questions it
-/// closed. A completion that would change nothing, without the status line
-/// it `progressed`, fails.
+/// Make the automatic restore of the chat `id`, saved while its space is
+/// blocked, wait for `shoal resume`, as a workspace's completion cancels
+/// its agent's restore; whether it held one.
+fn hold_blocked_restore(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<bool> {
+    let blocked = progress::current(tx, id)?.is_some_and(|progress| progress.blocked());
+    let held = blocked
+        && tx.execute(
+            "UPDATE chats SET restore=?3 WHERE id=?1 AND restore=?2",
+            params![id, ChatRestore::Automatic, ChatRestore::Resume],
+        )? > 0;
+    Ok(held)
+}
+
+/// Record `completion` for the running chat `id`, or the one whose blocked
+/// restore it `held`, and close its open questions, which its finished
+/// work waits on no longer; the questions it closed. A completion that
+/// would change nothing, without the status line it `progressed`, fails.
 fn record_completion(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     completion: &Completion,
     progressed: bool,
+    held: bool,
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
     ensure!(
         store::exists(
             tx,
-            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL",
-            [id]
+            "SELECT 1 FROM chats WHERE id=?1 AND (restore IS NULL OR ?2)",
+            params![id, held]
         )?,
         "the chat stopped running"
     );
