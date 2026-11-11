@@ -24,8 +24,21 @@ pub(crate) const SESSION_START: &str = "startup|resume|clear";
 /// This Shoal executable quoted for hook shell text. The hooks inherit the
 /// execution's scope and state directory.
 pub(crate) fn shoal() -> std::io::Result<String> {
-    let shoal = crate::fsutil::executables::invoked_executable()?;
+    let shoal = executable(crate::installed::started())?;
     Ok(crate::shell::quote(&[&shoal.to_string_lossy()]))
+}
+
+/// The path hooks run Shoal through: the one the process that launches the
+/// agent started through, as `started` read it, even after an upgrade
+/// replaced the binary there. The daemon restarts into the installed
+/// release, so hooks that named the binary this process runs, as for an
+/// agent restored in place before its wrapper could continue from the
+/// installed release, would speak a protocol the daemon refuses.
+fn executable(started: &crate::installed::Executable) -> std::io::Result<std::path::PathBuf> {
+    match started.path() {
+        Some(path) => Ok(path.to_owned()),
+        None => crate::fsutil::executables::invoked_executable(),
+    }
 }
 
 /// The groups that deliver messages, one per [`MESSAGE_EVENTS`] event.

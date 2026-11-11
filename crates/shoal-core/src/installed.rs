@@ -52,6 +52,12 @@ impl Executable {
         }
     }
 
+    /// The path this command started through, which reaches the installed
+    /// release once an upgrade replaced the binary there.
+    pub(crate) fn path(&self) -> Option<&std::path::Path> {
+        self.path.as_deref()
+    }
+
     /// The identity of the binary this command started from.
     pub fn identity(&self) -> Option<FileIdentity> {
         self.identity

@@ -512,7 +512,10 @@ shared lock on the copy's `lock` file, beside the bundle, and the cleanup sweep
 removes a copy it can lock exclusively, including one of the installed release,
 which the next wrapper copies again. The wrapper hands the copy the path it was
 started through and that file's identity, so it still finds the installed
-release and sees an upgrade. A copy that fails leaves the wrapper running its
+release and sees an upgrade. The agent's hooks run Shoal through that path,
+even after an upgrade replaced the file there, so they reach the release the
+daemon restarts into, also for an agent restored in place while the daemon
+still ran the earlier release. A copy that fails leaves the wrapper running its
 release, with a warning; a bare binary, whose grants follow its path, runs as
 it is. A wrapper running a copy that continues from the
 installed release after an upgrade, as an in-place restore does, replaces

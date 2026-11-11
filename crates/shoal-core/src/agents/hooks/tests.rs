@@ -61,3 +61,14 @@ fn plan_hooks_match_the_plan_tools_and_never_fail() {
     let calls = fs::read_to_string(&log).unwrap();
     assert_eq!(calls.trim_end(), "internal plan --integration codex");
 }
+
+#[test]
+fn hooks_run_the_started_path_after_an_upgrade_replaces_its_binary() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("shoal");
+    fs::write(&path, "old").unwrap();
+    let started = crate::installed::Executable::at(path.clone());
+    fs::remove_file(&path).unwrap();
+    fs::write(&path, "new").unwrap();
+    assert_eq!(executable(&started).unwrap(), path);
+}
