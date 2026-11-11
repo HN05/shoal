@@ -52,6 +52,16 @@ const ALWAYS_EXCLUDED: &[&str] = &[
     ".worktrees",
 ];
 
+/// Variables that point Git at a repository, work tree or index other than
+/// the directory a command names, which setup's environment can set.
+const DISCOVERY_OVERRIDES: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+];
+
 /// An ignored entry of the main checkout, as `git ls-files --directory`
 /// lists it: a whole directory when nothing in it is tracked.
 #[derive(Debug)]
@@ -94,7 +104,7 @@ pub async fn copy(workspace: &Path, exclude: &[String]) -> Result<u64> {
 /// The canonical paths of the repository's worktrees, the main checkout
 /// first, as far as they still exist.
 async fn registered_worktrees(workspace: &Path) -> Result<Vec<PathBuf>> {
-    let worktrees = super::worktrees(workspace, super::run_isolated).await?;
+    let worktrees = super::worktrees(workspace, run).await?;
     let mut paths = Vec::with_capacity(worktrees.len());
     for worktree in worktrees {
         let path = off_runtime::canonicalize(&worktree.path)
@@ -108,7 +118,7 @@ async fn registered_worktrees(workspace: &Path) -> Result<Vec<PathBuf>> {
 /// The ignored entries of `checkout`, whole directories where nothing in
 /// them is tracked. Paths are bytes, which need not be UTF-8.
 async fn ignored_entries(checkout: &Path) -> Result<Vec<Entry>> {
-    let mut command = super::isolated_command(checkout);
+    let mut command = command(checkout);
     command.args([
         "ls-files",
         "-z",
@@ -136,6 +146,23 @@ async fn ignored_entries(checkout: &Path) -> Result<Vec<Entry>> {
             }
         })
         .collect())
+}
+
+/// Isolated Git in `dir`, whatever Git discovery overrides the setup
+/// environment carries.
+fn command(dir: &Path) -> tokio::process::Command {
+    let mut command = super::isolated_command(dir);
+    for name in DISCOVERY_OVERRIDES {
+        command.env_remove(name);
+    }
+    command
+}
+
+/// The output of the Git `command` with `args` in `dir`.
+async fn run(dir: &Path, args: &[&str]) -> Result<String> {
+    let mut command = command(dir);
+    command.args(args);
+    super::output(command).await
 }
 
 /// Which entries the checkout's `.worktreeinclude` and the configured

@@ -637,6 +637,23 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
     assert!(!path.join(".env").exists());
 }
 
+/// Setup's environment pointing Git at the workspace does not hide the
+/// checkout's ignored files from the copy.
+#[test]
+fn ignored_files_are_copied_whatever_git_location_setup_inherits() {
+    let fixture = Fixture::new();
+    fs::write(fixture.repo.join(".gitignore"), ".env\n").unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "[env]\nGIT_WORK_TREE = '{workspace_path}'\nGIT_DIR = '{workspace_path}/.git'\n",
+    );
+    fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
+    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "copied"]);
+    assert_eq!(workspace["state"], "ready");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=1\n");
+}
+
 #[test]
 fn work_setup_skip_accepts_a_failed_setup() {
     let fixture = Fixture::new();
