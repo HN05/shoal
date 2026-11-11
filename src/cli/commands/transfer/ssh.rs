@@ -136,7 +136,7 @@ async fn move_one(
             remote.host
         )));
     };
-    match keep_package(ctx, &name, &file) {
+    match keep_package(ctx, &id, &file) {
         Ok(kept) => Err(error.context(format!(
             "{name} ended here; shoal move import {} continues it here again, unless {} started it",
             kept.display(),
@@ -165,17 +165,19 @@ async fn continues_here(ctx: &Context, chat: &Chat) -> String {
         .unwrap_or_else(|| format!("chat {} ended here", chat.name))
 }
 
-/// Keep the package `file` of the space `name`, whose import failed, where
-/// it outlives the staging directory, returning where it went.
-fn keep_package(ctx: &Context, name: &str, file: &Path) -> Result<std::path::PathBuf> {
+/// Keep the package `file` of the space `id`, whose import failed, where it
+/// outlives the staging directory, named after that ID, returning where it
+/// went.
+fn keep_package(
+    ctx: &Context,
+    id: &crate::client::space_ids::SpaceId,
+    file: &Path,
+) -> Result<std::path::PathBuf> {
     let directory = ctx.paths.unmoved_packages();
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("create the directory {}", directory.display()))?;
     let kept = tempfile::Builder::new()
-        .prefix(&format!(
-            "{}-",
-            crate::client::space_names::directory_name(name)
-        ))
+        .prefix(&format!("{id}-"))
         .suffix(".shoal")
         .tempfile_in(&directory)?;
     std::fs::copy(file, kept.path())?;

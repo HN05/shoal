@@ -1872,7 +1872,8 @@ once it knows the work. Inside Herdr it
 opens a tab labelled with the name, unless
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a
 window; on a terminal it runs in a zmx
-session named after the chat, which [`shoal attach <name>`](#agents)
+session with an opaque name such as `chat-0b9c3a52`, since nothing is built
+from a chat's name, which [`shoal attach <number>`](#agents)
 returns to; inside a zmx session or a Herdr pane it runs in place. `--here` runs
 it in place in this terminal. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it

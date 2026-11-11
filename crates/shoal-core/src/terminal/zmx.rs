@@ -258,7 +258,11 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -
 /// becomes its agent, as it would in place. Returns the session's name.
 async fn run_chat(start: &Start<'_>) -> Result<String> {
     ensure_zmx("chat").await?;
-    let name = unused_name(start.label).await?;
+    // A chat's name is a label nothing is built from, and the chat records
+    // itself only once its session runs, so the session takes an opaque
+    // name, which `shoal attach` finds the chat by.
+    let id = crate::client::space_ids::SpaceId::generate();
+    let name = unused_name(&format!("chat-{}", &id.as_str()[..8])).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.args(["attach", "--labels", CREATED]);
     attach_new(&mut zmx, &name, start);
@@ -597,7 +601,7 @@ fn replacement_labels(owner: Owner<'_>) -> String {
     format!("{} {obsolete}= shoal.demo=", owner_label(owner))
 }
 
-/// `label`, a workspace's directory name or a chat's name, cleaned up as a
+/// `label`, a workspace's directory name or a chat's opaque one, cleaned up as a
 /// directory's name is and shortened to fit a socket path, then suffixed
 /// `-2`, `-3`, ... past sessions that already use it.
 fn free_name(label: &str, taken: &HashSet<String>) -> String {

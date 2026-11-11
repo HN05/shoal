@@ -725,12 +725,13 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
-    // The session is named after the chat, cleaned up as a directory's
-    // name and cut to fit zmx's socket path.
-    let session = &"repo-with---quotes----literal-chat"[..32];
-    assert_eq!(
-        calls[1][..4],
-        ["attach", "--labels", "shoal.created=1", session]
+    // The session takes an opaque name, since nothing is built from the
+    // chat's name.
+    assert_eq!(calls[1][..3], ["attach", "--labels", "shoal.created=1"]);
+    let session = &calls[1][3];
+    assert!(
+        session.starts_with("chat-") && session.len() == "chat-".len() + 8,
+        "{session}"
     );
     // The session's Shoal records the chat under the name chosen here,
     // labels its session with it and becomes its agent.
