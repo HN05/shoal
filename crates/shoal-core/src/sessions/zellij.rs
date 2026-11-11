@@ -18,7 +18,12 @@ use futures_util::future::BoxFuture;
 use serde::Deserialize;
 use tokio::process::Command;
 
-use crate::{env, subprocess::Run, tools::Tool};
+use crate::{
+    env,
+    process::identity::details::{self, CommandLine},
+    subprocess::Run,
+    tools::Tool,
+};
 
 /// What a Zellij origin's data records: the socket directory of its
 /// session's server.
@@ -263,17 +268,12 @@ impl Zellij {
     /// The server process of `session` in this socket directory, among this
     /// user's processes. Without a directory, the only one of that name.
     async fn server(&self, session: &str) -> Result<Option<Server>> {
-        let mut ps = Command::new(Tool::Ps.program());
-        ps.args([
-            "-A", "-o", "uid=", "-o", "pid=", "-o", "ppid=", "-o", "args=",
-        ])
-        .stdin(std::process::Stdio::null());
-        let listed = run(ps).await?;
-        // SAFETY: geteuid has no preconditions.
-        let uid = unsafe { libc::geteuid() };
+        let listed = tokio::task::spawn_blocking(details::own_command_lines)
+            .await
+            .context("process listing worker failed")??;
         let named = listed
-            .lines()
-            .filter_map(|line| parse_server(line, uid, session))
+            .iter()
+            .filter_map(|process| server_of(process, session))
             .filter(|server| {
                 self.socket_dir
                     .as_deref()
@@ -908,25 +908,24 @@ fn same_dir(a: &Path, b: &Path) -> bool {
             .is_some_and(|(a, b)| a == b)
 }
 
-/// A `ps` line of `uid`'s Zellij server for `session`: its owner, process,
-/// parent and `zellij --server <socket dir>/<contract>/<session>`.
-fn parse_server(line: &str, uid: u32, session: &str) -> Option<Server> {
-    let mut fields = line.split_whitespace();
-    let owner: u32 = fields.next()?.parse().ok()?;
-    let pid: u32 = fields.next()?.parse().ok()?;
-    let parent: u32 = fields.next()?.parse().ok()?;
-    let program = fields.next()?;
-    if owner != uid || Path::new(program).file_name()? != "zellij" {
+/// The Zellij server for `session` that `process` is, by its command line
+/// `zellij --server <socket dir>/<contract>/<session>`.
+fn server_of(process: &CommandLine, session: &str) -> Option<Server> {
+    let (program, arguments) = process.arguments.split_first()?;
+    if Path::new(program).file_name()? != "zellij" {
         return None;
     }
-    let (_, socket) = line.split_once(" --server ")?;
-    let socket = Path::new(socket.trim_end());
-    if socket.file_name()?.to_str()? != session {
+    let socket = arguments
+        .iter()
+        .skip_while(|argument| *argument != "--server")
+        .nth(1)?;
+    let socket = Path::new(socket);
+    if socket.file_name()? != session {
         return None;
     }
     Some(Server {
-        pid,
-        parent,
+        pid: process.pid,
+        parent: process.parent,
         socket_dir: socket.parent()?.parent()?.to_owned(),
     })
 }

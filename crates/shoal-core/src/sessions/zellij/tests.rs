@@ -26,22 +26,36 @@ fn places_name_their_session_and_pane() {
 }
 
 #[test]
-fn servers_are_this_users_zellij_serving_the_session() {
-    let line = " 501 14016 1 /opt/homebrew/bin/zellij --server /tmp/z s/contract_version_1/my repo";
+fn servers_are_zellij_serving_the_session() {
+    let process = |arguments: &[&str]| CommandLine {
+        pid: 14016,
+        parent: 1,
+        arguments: arguments.iter().map(Into::into).collect(),
+    };
+    let server = process(&[
+        "/opt/homebrew/bin/zellij",
+        "--server",
+        "/tmp/z s/contract_version_1/my repo",
+    ]);
     assert_eq!(
-        parse_server(line, 501, "my repo"),
+        server_of(&server, "my repo"),
         Some(Server {
             pid: 14016,
             parent: 1,
             socket_dir: PathBuf::from("/tmp/z s"),
         })
     );
-    assert_eq!(parse_server(line, 502, "my repo"), None);
-    assert_eq!(parse_server(line, 501, "repo"), None);
-    let client = " 501 14017 900 zellij attach my-repo";
-    assert_eq!(parse_server(client, 501, "my-repo"), None);
-    let other = " 501 14018 900 /bin/sh -c x --server /tmp/z/contract_version_1/repo";
-    assert_eq!(parse_server(other, 501, "repo"), None);
+    assert_eq!(server_of(&server, "repo"), None);
+    let client = process(&["zellij", "attach", "my-repo"]);
+    assert_eq!(server_of(&client, "my-repo"), None);
+    let other = process(&[
+        "/bin/sh",
+        "-c",
+        "x",
+        "--server",
+        "/tmp/z/contract_version_1/repo",
+    ]);
+    assert_eq!(server_of(&other, "repo"), None);
 }
 
 #[test]
