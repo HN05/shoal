@@ -26,7 +26,7 @@ pub(super) async fn attach(
         !crate::env::inherits_scope(&ctx.paths.state),
         "attach to sessions outside scoped executions"
     );
-    ensure!(ctx.interactive(), "attach requires a terminal");
+    ensure!(ctx.on_terminal(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
     let sessions = (target.attachable(ctx, session.as_deref()).await?)
         .map_err(|protection| anyhow!("{}", stopped_agent(&target, &protection)))?;

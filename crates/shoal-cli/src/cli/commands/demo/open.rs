@@ -17,7 +17,7 @@ pub(super) async fn open(
     name: Option<String>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    ensure!(ctx.interactive(), "opening a demo requires a terminal");
+    ensure!(ctx.on_terminal(), "opening a demo requires a terminal");
     let workspace = scope(ctx, workspace).await?;
     let demos = running(ctx, workspace.as_ref()).await?;
     let demo = match name {

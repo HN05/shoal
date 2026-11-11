@@ -18,7 +18,7 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) ->
         !crate::env::inherits_scope(&ctx.paths.state),
         "start queued agents outside scoped executions"
     );
-    ensure!(!attach || ctx.interactive(), "--attach requires a terminal");
+    ensure!(!attach || ctx.on_terminal(), "--attach requires a terminal");
     // A CI job runs without a session to attach.
     let offered = |queued: &QueueEntry| !attach || queued.kind != QueueKind::Job;
     let entry = selection::selected_among(ctx, entry, "Start> ", offered).await?;
