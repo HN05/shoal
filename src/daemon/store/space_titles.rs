@@ -10,7 +10,21 @@ use rusqlite::{Connection, OptionalExtension as _, params};
 use crate::client::space_names::SpaceName;
 
 pub(super) fn names_from_titles(db: &Connection) -> Result<()> {
-    let chat_renamed: Option<String> = db
+    let chat_renamed = drop_rename_triggers(db)?;
+    let titled = has_titles(db)?;
+    rename_workspaces(db, titled)?;
+    rename_removed_workspaces(db)?;
+    cut_chat_names(db)?;
+    if titled {
+        drop_titles(db)?;
+    }
+    create_rename_triggers(db, chat_renamed)
+}
+
+/// Drop the triggers that journal renames, so the migration's renames add
+/// no events, returning the chat's to create again.
+fn drop_rename_triggers(db: &Connection) -> Result<Option<String>> {
+    let chat_renamed = db
         .query_row(
             "SELECT sql FROM sqlite_schema WHERE type='trigger' AND name='chat_renamed'",
             [],
@@ -22,16 +36,25 @@ pub(super) fn names_from_titles(db: &Connection) -> Result<()> {
          DROP TRIGGER IF EXISTS workspace_name_changed;
          DROP TRIGGER IF EXISTS workspace_renamed;",
     )?;
-    // A database that tests emulate from before titles has none to take.
-    let titled = db
+    Ok(chat_renamed)
+}
+
+/// Whether workspaces have titles, which a database that tests emulate
+/// from before titles lacks.
+fn has_titles(db: &Connection) -> Result<bool> {
+    Ok(db
         .prepare("SELECT 1 FROM pragma_table_info('workspaces') WHERE name='title'")?
-        .exists([])?;
-    rename_workspaces(db, titled)?;
-    rename_removed_workspaces(db)?;
-    cut_chat_names(db)?;
-    if titled {
-        db.execute_batch("ALTER TABLE workspaces DROP COLUMN title")?;
-    }
+        .exists([])?)
+}
+
+fn drop_titles(db: &Connection) -> Result<()> {
+    db.execute_batch("ALTER TABLE workspaces DROP COLUMN title")?;
+    Ok(())
+}
+
+/// Create the chat's rename trigger `chat_renamed` again, and the
+/// workspace's, which journals a new name or branch.
+fn create_rename_triggers(db: &Connection, chat_renamed: Option<String>) -> Result<()> {
     if let Some(trigger) = chat_renamed {
         db.execute_batch(&trigger)?;
     }
