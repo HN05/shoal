@@ -164,6 +164,10 @@ async fn directories_holding_another_worktree_are_not_copied() {
         .unwrap();
     assert_eq!(fixture.copy(&[]).await.unwrap(), 1);
     assert!(!fixture.copied("nested"));
+    // An exclude that splits the worktree into parts copies none of them,
+    // its `.git` file included.
+    assert_eq!(fixture.copy(&["nested/other/tracked"]).await.unwrap(), 0);
+    assert!(!fixture.copied("nested"));
 }
 
 #[tokio::test]

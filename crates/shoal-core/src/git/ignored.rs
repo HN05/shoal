@@ -258,13 +258,14 @@ fn exclude_matcher(checkout: &Path, patterns: &[String]) -> Result<Gitignore> {
         .context("invalid setup.copy_ignored_exclude patterns")
 }
 
-/// Whether the entry is or holds a worktree other than the checkout, which
-/// a copy would nest inside the new one.
+/// Whether the entry is, holds or lies inside a worktree other than the
+/// checkout, which a copy would nest inside the new one, its `.git` file
+/// included.
 fn holds_worktree(checkout: &Path, entry: &Entry, worktrees: &[PathBuf]) -> bool {
     let path = checkout.join(&entry.path);
-    worktrees
-        .iter()
-        .any(|worktree| worktree != checkout && worktree.starts_with(&path))
+    worktrees.iter().any(|worktree| {
+        worktree != checkout && (worktree.starts_with(&path) || path.starts_with(worktree))
+    })
 }
 
 /// Copy the entry at `relative` of `checkout` into `workspace`, keeping

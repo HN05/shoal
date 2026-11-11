@@ -3335,9 +3335,12 @@ it has that workspace's ignored files. Without a `.worktreeinclude` in the
 checkout every ignored file is copied, build caches included; its gitignore-style
 patterns limit the copy to what they match. `[setup] copy_ignored_exclude`, a list
 of gitignore-style patterns that is also a global default, leaves out what it
-matches. The state directories of other version control systems and worktree
-tools (`.bzr`, `.conductor`, `.entire`, `.hg`, `.jj`, `.pijul`, `.sl`, `.svn` and
-`.worktrees`) and directories holding another worktree are never copied.
+matches. A directory holding another worktree, and anything inside one, is never
+copied. The state directories
+of other version control systems and worktree tools (`.bzr`, `.conductor`,
+`.entire`, `.hg`, `.jj`, `.pijul`, `.sl`, `.svn` and `.worktrees`) are left out
+where Git lists them as ignored, and inside ignored directories the patterns
+look into; an ignored directory Git lists whole is otherwise copied whole.
 
 `setup.command` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`
