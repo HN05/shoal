@@ -877,7 +877,16 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
 }
 
 #[test]
-fn shell_function_navigates_after_add_and_away_after_rm() {
+fn bash_function_navigates_after_add_and_away_after_rm() {
+    shell_function_navigates_after_add_and_away_after_rm("bash");
+}
+
+#[test]
+fn zsh_function_navigates_after_add_and_away_after_rm() {
+    shell_function_navigates_after_add_and_away_after_rm("zsh");
+}
+
+fn shell_function_navigates_after_add_and_away_after_rm(shell: &str) {
     let fixture = Fixture::new();
     let integration = fixture.root.path().join("integration.sh");
     fs::write(&integration, fixture.run(&["shell", "init"]).stdout).unwrap();
@@ -953,33 +962,31 @@ _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
 "#;
-    for shell in ["bash", "zsh"] {
-        let output = support::isolated(fixture.root.path(), shell)
-            .arg("-c")
-            .arg(script)
-            .env("INTEGRATION", &integration)
-            .env("REPO", &fixture.repo)
-            .env(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    Path::new(support::shoal_binary())
-                        .parent()
-                        .unwrap()
-                        .display(),
-                    std::env::var("PATH").unwrap()
-                ),
-            )
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{shell}: {}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(String::from_utf8_lossy(&output.stdout).ends_with("navigation-ok\n"));
-    }
+    let output = support::isolated(fixture.root.path(), shell)
+        .arg("-c")
+        .arg(script)
+        .env("INTEGRATION", &integration)
+        .env("REPO", &fixture.repo)
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                Path::new(support::shoal_binary())
+                    .parent()
+                    .unwrap()
+                    .display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{shell}: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).ends_with("navigation-ok\n"));
 }
 
 #[test]
