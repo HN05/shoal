@@ -34,51 +34,69 @@ fn repository(root: &Path, format: &str) -> std::path::PathBuf {
     repo
 }
 
-/// Open each of `names`, new and existing, in a new repository of `format`,
-/// and check that the worktree is on the branch of that literal name.
-async fn check_literal_branches(format: &str, names: &[String]) {
-    for name in names {
-        for existing in [false, true] {
-            let root = tempfile::tempdir().unwrap();
-            let repo = repository(root.path(), format);
-            if existing {
-                git(&repo, &["branch", "--", name, "main"]).await;
+/// Open `name`, a new branch or an existing one, in a new repository of
+/// `format`, and check that the worktree is on the branch of that literal
+/// name.
+async fn check_literal_branch(format: &str, name: &str, existing: bool) {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), format);
+    if existing {
+        git(&repo, &["branch", "--", name, "main"]).await;
+    }
+    let workspace = root.path().join("workspace");
+    let base = (!existing).then_some("main");
+    add(&repo, &workspace, name, base).await.unwrap();
+    assert_eq!(
+        git(&workspace, &["symbolic-ref", "HEAD"]).await,
+        format!("refs/heads/{name}\n")
+    );
+}
+
+/// Names around the reserved ones that Git takes literally, each opened new
+/// and existing in both object formats: hex names one digit off an object
+/// ID's length, non-hex names of that length, and reserved names as one
+/// component of several.
+macro_rules! literal_branch_tests {
+    ($($case:ident: $name:expr;)*) => {$(
+        mod $case {
+            use super::*;
+
+            #[tokio::test]
+            async fn new_in_sha1() {
+                check_literal_branch("sha1", &$name, false).await;
             }
-            let workspace = root.path().join("workspace");
-            let base = (!existing).then_some("main");
-            add(&repo, &workspace, name, base).await.unwrap();
-            assert_eq!(
-                git(&workspace, &["symbolic-ref", "HEAD"]).await,
-                format!("refs/heads/{name}\n"),
-                "{format} {name} existing={existing}"
-            );
+
+            #[tokio::test]
+            async fn existing_in_sha1() {
+                check_literal_branch("sha1", &$name, true).await;
+            }
+
+            #[tokio::test]
+            async fn new_in_sha256() {
+                check_literal_branch("sha256", &$name, false).await;
+            }
+
+            #[tokio::test]
+            async fn existing_in_sha256() {
+                check_literal_branch("sha256", &$name, true).await;
+            }
         }
-    }
+    )*};
 }
 
-/// Names around the reserved ones that Git takes literally: hex names one
-/// digit off an object ID's length, non-hex names of that length, and
-/// reserved names as one component of several.
-fn near_reserved_names() -> Vec<String> {
-    let mut names: Vec<String> = [39, 41, 63, 65]
-        .into_iter()
-        .map(|len| "a".repeat(len))
-        .collect();
-    names.extend([40, 64].map(|len| "g".repeat(len)));
-    for reserved in ["HEAD", "@", &"b".repeat(40)] {
-        names.extend([format!("topic/{reserved}"), format!("{reserved}/topic")]);
-    }
-    names
-}
-
-#[tokio::test]
-async fn names_near_reserved_ones_are_literal_branches_in_sha1() {
-    check_literal_branches("sha1", &near_reserved_names()).await;
-}
-
-#[tokio::test]
-async fn names_near_reserved_ones_are_literal_branches_in_sha256() {
-    check_literal_branches("sha256", &near_reserved_names()).await;
+literal_branch_tests! {
+    hex_39_digits: "a".repeat(39);
+    hex_41_digits: "a".repeat(41);
+    hex_63_digits: "a".repeat(63);
+    hex_65_digits: "a".repeat(65);
+    non_hex_40_digits: "g".repeat(40);
+    non_hex_64_digits: "g".repeat(64);
+    head_as_leaf: "topic/HEAD";
+    head_as_parent: "HEAD/topic";
+    at_as_leaf: "topic/@";
+    at_as_parent: "@/topic";
+    object_id_as_leaf: format!("topic/{}", "b".repeat(40));
+    object_id_as_parent: format!("{}/topic", "b".repeat(40));
 }
 
 /// Template syntax in the workspace path stays literal, and the default
@@ -119,25 +137,31 @@ async fn has_branch(repo: &Path, name: &str) -> bool {
         .unwrap()
 }
 
+/// Remove a worktree that was switched from `topic` to `moved` with
+/// `branch`, and check the outcome and which branches remain.
+async fn check_branch_removal(branch: BranchRemoval, outcome: BranchOutcome, kept: bool) {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    // The worktree's own branch goes, whichever it was created on.
+    git(&workspace, &["switch", "-c", "moved"]).await;
+    let removed = remove(&repo, &workspace, FileRemoval::CleanOnly, branch)
+        .await
+        .unwrap();
+    assert!(!workspace.exists());
+    assert_eq!(removed.branch.as_deref(), Some("moved"));
+    assert_eq!(removed.branch_outcome, outcome);
+    assert_eq!(has_branch(&repo, "moved").await, kept);
+    assert!(has_branch(&repo, "topic").await);
+}
+
 #[tokio::test]
-async fn removal_deletes_the_branch_only_when_asked() {
-    for (branch, outcome, kept) in [
-        (BranchRemoval::Keep, BranchOutcome::NotAttempted, true),
-        (BranchRemoval::Delete, BranchOutcome::Deleted, false),
-    ] {
-        let root = tempfile::tempdir().unwrap();
-        let (repo, workspace) = with_topic(root.path()).await;
-        // The worktree's own branch goes, whichever it was created on.
-        git(&workspace, &["switch", "-c", "moved"]).await;
-        let removed = remove(&repo, &workspace, FileRemoval::CleanOnly, branch)
-            .await
-            .unwrap();
-        assert!(!workspace.exists());
-        assert_eq!(removed.branch.as_deref(), Some("moved"));
-        assert_eq!(removed.branch_outcome, outcome);
-        assert_eq!(has_branch(&repo, "moved").await, kept);
-        assert!(has_branch(&repo, "topic").await);
-    }
+async fn removal_keeps_the_branch_unless_asked() {
+    check_branch_removal(BranchRemoval::Keep, BranchOutcome::NotAttempted, true).await;
+}
+
+#[tokio::test]
+async fn removal_deletes_the_branch_when_asked() {
+    check_branch_removal(BranchRemoval::Delete, BranchOutcome::Deleted, false).await;
 }
 
 #[tokio::test]
