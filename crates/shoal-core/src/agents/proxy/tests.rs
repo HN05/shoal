@@ -370,10 +370,17 @@ fn codex_goes_to_its_providers_base_url_else_the_one_its_login_uses() {
     // A login Codex may keep in the keyring is one Shoal cannot read, so only
     // a base URL the launch names says where its requests go.
     let keyring = ["codex", "-c", "cli_auth_credentials_store=keyring"];
-    let error = try_default_upstream(IntegrationKind::Codex, &keyring, home.path(), &[])
-        .unwrap_err()
-        .to_string();
-    assert!(error.contains("cli_auth_credentials_store"), "{error}");
+    let refused = |args: &[&str]| {
+        try_default_upstream(IntegrationKind::Codex, args, home.path(), &[])
+            .unwrap_err()
+            .to_string()
+    };
+    // The error names the setting that would say, for the provider in use.
+    let error = refused(&keyring);
+    assert!(error.contains("OPENAI_BASE_URL"), "{error}");
+    let bare_keyring = [&keyring[..], &["-c", "model_provider=bare"]].concat();
+    let error = refused(&bare_keyring);
+    assert!(error.contains("model_providers.bare.base_url"), "{error}");
     assert_eq!(url(&keyring, &moved), "http://moved/v1");
     let gateway_keyring = [&keyring[..], &gateway[1..]].concat();
     assert_eq!(url(&gateway_keyring, &[]), "http://gateway/v1");

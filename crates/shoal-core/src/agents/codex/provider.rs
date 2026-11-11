@@ -60,26 +60,41 @@ pub(super) fn base_url(
         _ => selected.base_url,
     };
     let configured = configured.filter(|url| !url.trim().is_empty());
-    match configured {
-        Some(url) => Ok(url),
-        None => {
-            login_base_url(codex_home, selected.credentials_store.as_deref()).map(str::to_owned)
-        }
+    if let Some(url) = configured {
+        return Ok(url);
+    }
+    let store = selected.credentials_store.as_deref();
+    match login_base_url(codex_home, store) {
+        Some(url) => Ok(url.to_owned()),
+        None => bail!(
+            "Codex may keep its login in the keyring (cli_auth_credentials_store = {:?}), \
+             where Shoal cannot tell a ChatGPT login from an API key; {}",
+            store.unwrap_or_default(),
+            naming_the_url(&selected.provider),
+        ),
+    }
+}
+
+/// How a launch on `provider` names the URL its requests go to.
+fn naming_the_url(provider: &str) -> String {
+    match provider {
+        "openai" => format!("set {OPENAI_BASE_URL} in the tool's env to the URL it uses"),
+        id => format!(
+            "set model_providers.{}.base_url in Codex's config",
+            toml_edit::Key::new(id)
+        ),
     }
 }
 
 /// Codex's own base URL for its login, as `auth.json` in `codex_home`
 /// records it: OpenAI's API for an API key, else ChatGPT's, as without a
 /// login. A file without a login mode holds an API key when it names one,
-/// as Codex reads it. A login `store` may keep elsewhere than that file,
-/// such as in the keyring, Shoal cannot read, which the error says.
-fn login_base_url(codex_home: &Path, store: Option<&str>) -> Result<&'static str> {
-    if let Some(store) = store.filter(|store| *store != "file") {
-        bail!(
-            "Codex may keep its login in the keyring (cli_auth_credentials_store = {store:?}), \
-             where Shoal cannot tell a ChatGPT login from an API key; set OPENAI_BASE_URL in \
-             the tool's env to the URL it uses"
-        );
+/// as Codex reads it. `None` when `store` lets Codex keep the login
+/// elsewhere than that file, such as in the keyring, which Shoal cannot
+/// read.
+fn login_base_url(codex_home: &Path, store: Option<&str>) -> Option<&'static str> {
+    if store.is_some_and(|store| store != "file") {
+        return None;
     }
     let auth: serde_json::Value = std::fs::read(codex_home.join("auth.json"))
         .ok()
@@ -89,7 +104,7 @@ fn login_base_url(codex_home: &Path, store: Option<&str>) -> Result<&'static str
         Some(mode) => mode.eq_ignore_ascii_case("apikey"),
         None => auth["OPENAI_API_KEY"].is_string(),
     };
-    Ok(if api_key { OPENAI_API } else { CHATGPT_API })
+    Some(if api_key { OPENAI_API } else { CHATGPT_API })
 }
 
 /// The provider a launch with `flags` uses, by the Codex config in
