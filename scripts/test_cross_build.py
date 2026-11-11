@@ -98,7 +98,7 @@ class CrossBuildTests(unittest.TestCase):
                         capture_output=True, text=True, check=False,
                     )
                     expected = args if tool not in ("cc", "c++") else [
-                        tool, "-O3", "input with spaces.o", "-Wl,-O2", "-L/another library",
+                        tool, "-Wl,-O1", "-O3", "input with spaces.o", "-Wl,-O2", "-L/another library",
                     ]
                     self.assertEqual(json.loads(result.stdout), expected)
                     self.assertEqual(result.stderr, "tool warning\n")
