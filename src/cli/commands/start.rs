@@ -427,9 +427,10 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
 }
 
 /// Start the agent of the workspace's start `args`, which named no branch,
-/// in a chat in the repository `starts` names, in the mode it chose, the
-/// worker's by default, refusing what only a new workspace takes.
-async fn as_chat(
+/// as a start or a contribution may not, in a chat in the repository
+/// `starts` names, in the mode it chose, the worker's by default, refusing
+/// what only a new workspace takes.
+pub(super) async fn as_chat(
     ctx: &Context,
     mut args: StartArgs,
     starts: workspaces::StartsAsChat,

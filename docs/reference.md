@@ -2927,7 +2927,8 @@ shoal contribute https://github.com/owner/repo fix-typo --agent claude
 `shoal contribute <url> [branch]` creates a workspace in a repository you do not
 maintain. The URL names the repository, or an issue, PR or branch in it, which
 opens as `shoal start <link>` does; `--agent`, `--here`, `--focus` and `--now` work
-as for `start`. A repository that is already registered is used as it is.
+as for `start`, and without a branch or link the contribution begins as a chat,
+as a [start without one](#branch-and-workspace-names) does. A repository that is already registered is used as it is.
 Otherwise Shoal clones it as a contribution, first checking whether your forge
 login can push to it. When it cannot, Shoal forks it into your account, reusing
 an existing fork, and the clone gets the fork as its `fork` remote with

@@ -4,13 +4,18 @@
 use anyhow::Result;
 
 use super::workspaces::{
-    AddOptions,
+    AddOptions, StartsAsChat,
     link::{self, AddInput},
 };
 use crate::{
     agent::Agent,
     agents,
-    cli::{args::create::ContributeArgs, context::Context, output::Palette, ui},
+    cli::{
+        args::create::{ContributeArgs, StartArgs},
+        context::Context,
+        output::Palette,
+        ui,
+    },
     config::{Config, repo::ConfigLayers},
     forge::items::link::Link,
     git,
@@ -31,6 +36,16 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         model,
         args,
     } = args;
+    // Without a branch the contribution begins as a chat, as a start does.
+    let unsettled = StartArgs {
+        here,
+        focus,
+        now,
+        agent: agent.clone(),
+        model: model.clone(),
+        args: args.clone(),
+        ..Default::default()
+    };
     let options = AddOptions {
         here,
         focus,
@@ -62,7 +77,13 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         branch,
         ..Default::default()
     };
-    link::add(ctx, input, creation, agent, args, options).await
+    match link::add(ctx, input, creation, agent, args, options).await {
+        Err(error) if error.is::<StartsAsChat>() => {
+            let starts = error.downcast::<StartsAsChat>()?;
+            super::start::as_chat(ctx, unsettled, starts).await
+        }
+        added => added,
+    }
 }
 
 /// Refuse an unavailable agent before registration, which may fork and clone.
