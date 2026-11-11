@@ -1,6 +1,6 @@
 //! Removing what Shoal left behind: the spaces idle or merged cleanup would
 //! remove, branches removal kept, and shared caches.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
@@ -15,6 +15,7 @@ use crate::{
 
 use super::branches;
 use crate::client::output::cleanup::Report;
+use crate::client::space_names::SpaceSelector;
 
 pub(super) async fn run(
     ctx: &Context,
@@ -23,11 +24,11 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let report = match kind {
         None => everything(ctx, &args).await?,
-        Some(CleanupKind::Spaces { names }) => {
-            let spaces = if names.is_empty() {
+        Some(CleanupKind::Spaces { spaces }) => {
+            let spaces = if spaces.is_empty() {
                 Pick::All
             } else {
-                Pick::Only(names)
+                Pick::Only(space_ids(ctx, &spaces).await?)
             };
             let selection = selection(&args, spaces, Pick::None);
             Report {
@@ -55,6 +56,20 @@ fn selection(args: &CleanupArgs, spaces: Pick, caches: Pick) -> Selection {
         caches,
         repository: args.repo.clone(),
     }
+}
+
+/// The IDs of the spaces `selectors` name, which a cleanup request selects
+/// spaces by, since names repeat.
+async fn space_ids(ctx: &Context, selectors: &[SpaceSelector]) -> Result<Vec<String>> {
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    (selectors.iter())
+        .map(|selector| {
+            let space = spaces
+                .find(selector)
+                .with_context(|| format!("no space {selector}"))?;
+            Ok(space.id().to_string())
+        })
+        .collect()
 }
 
 async fn clean(ctx: &Context, dry_run: bool, selection: Selection) -> Result<ManualCleanup> {
@@ -91,7 +106,7 @@ async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
     })
 }
 
-/// What the user picked: space names, the IDs of repositories whose caches
+/// What the user picked: space IDs, the IDs of repositories whose caches
 /// to empty, and kept branches.
 struct Picked {
     spaces: Vec<String>,
@@ -155,14 +170,17 @@ const BRANCH: &str = "branch:";
 const CACHES: &str = "caches:";
 
 /// The picker's rows: the spaces to remove, kept branches, and caches
-/// nothing is using, each labelled with its kind. Caches go by repository ID,
-/// and a repository name another listed one shares carries its ID too.
+/// nothing is using, each labelled with its kind. Spaces and caches go by
+/// ID, and a name another listed one shares carries its ID too.
 fn choices(listing: &Report) -> Vec<(String, String)> {
-    let spaces = listing
-        .cleanup
-        .removed
-        .iter()
-        .map(|name| (format!("{SPACE}{name}"), format!("space      {name}")));
+    let removed = &listing.cleanup.removed;
+    let spaces = (removed.iter().zip(&listing.cleanup.removed_ids)).map(|(name, id)| {
+        let label = match removed.iter().filter(|other| *other == name).count() > 1 {
+            true => format!("{name} ({id})"),
+            false => name.clone(),
+        };
+        (format!("{SPACE}{id}"), format!("space      {label}"))
+    });
     let branches = branches::lines(&listing.branches)
         .into_iter()
         .enumerate()

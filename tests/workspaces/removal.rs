@@ -42,15 +42,10 @@ fn cleanup_removes_idle_candidates_on_request() {
     assert_eq!(fixture.ok(&["cleanup"])["dry_run"], true);
     assert!(Path::new(clean["path"].as_str().unwrap()).exists());
     // A named workspace that stays says why.
-    let named = fixture.ok(&["cleanup", "spaces", "dirty"]);
+    let named = fixture.ok(&["cleanup", "spaces", &fixture.id("dirty")]);
     assert_eq!(named["removed"], serde_json::json!([]));
     assert_eq!(named["kept"][0]["space"], "dirty");
-    assert!(
-        !fixture
-            .run(&["cleanup", "spaces", "missing"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["cleanup", "spaces", "999"]).status.success());
     let report = fixture.ok(&["cleanup", "spaces"]);
     assert_eq!(report["removed"], serde_json::json!(["clean", "parked"]));
     assert_eq!(report["retained"], serde_json::json!([]));

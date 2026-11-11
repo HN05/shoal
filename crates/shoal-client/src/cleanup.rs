@@ -1,5 +1,6 @@
 //! Manual cleanup: what a request covers and what it removed, kept or emptied.
 use crate::repository_ids::RepositoryId;
+use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +13,10 @@ use crate::model::CleanupReason;
 pub struct ManualCleanup {
     pub dry_run: bool,
     pub removed: Vec<String>,
+    /// The IDs of the spaces `removed` names, in its order, since names
+    /// repeat.
+    #[serde(default)]
+    pub removed_ids: Vec<SpaceId>,
     pub retained: Vec<Retained>,
     #[serde(default)]
     pub kept: Vec<Kept>,
@@ -26,7 +31,8 @@ pub enum Pick {
     #[default]
     None,
     All,
-    /// Spaces, or the repositories whose caches to empty, by name or ID.
+    /// Spaces by ID, or the repositories whose caches to empty by name or
+    /// ID.
     Only(Vec<String>),
 }
 

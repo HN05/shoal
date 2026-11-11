@@ -657,7 +657,7 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
 
     // Named workspaces say why they stay; others are left out.
     let named = Selection {
-        spaces: Pick::Only(vec!["dirty".into(), "held".into()]),
+        spaces: Pick::Only(vec![dirty.id.to_string(), held.id.to_string()]),
         ..Selection::default()
     };
     let report = on_request(&manager, false, &named).await.unwrap();
@@ -686,6 +686,45 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
         "only a dry run lists kept workspaces"
     );
     assert_eq!(names(&manager).await, ["broken", "dirty", "held"]);
+}
+
+#[tokio::test]
+async fn a_cleanup_request_takes_one_of_two_same_named_spaces() {
+    use crate::daemon::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut workspaces = Vec::new();
+    for branch in ["first", "second"] {
+        let workspace = manager
+            .create_workspace(&repo.id, branch.into(), None, None, None)
+            .await
+            .unwrap();
+        (manager.set_workspace_name(&SpaceSelector::id(&workspace.id), &"Same".parse().unwrap()))
+            .await
+            .unwrap();
+        workspaces.push(workspace);
+    }
+    // A name selects nothing; the ID selects its space alone.
+    let by_name = Selection {
+        spaces: Pick::Only(vec!["Same".into()]),
+        ..Selection::default()
+    };
+    assert!(on_request(&manager, false, &by_name).await.is_err());
+    let first = Selection {
+        spaces: Pick::Only(vec![workspaces[0].id.to_string()]),
+        ..Selection::default()
+    };
+    let report = on_request(&manager, false, &first).await.unwrap();
+    assert_eq!(report.removed, ["Same"]);
+    assert_eq!(report.removed_ids, [workspaces[0].id.clone()]);
+    let left: Vec<_> = (manager.list_workspaces().await.unwrap().into_iter())
+        .map(|workspace| workspace.id)
+        .collect();
+    assert_eq!(left, [workspaces[1].id.clone()]);
 }
 
 #[tokio::test]

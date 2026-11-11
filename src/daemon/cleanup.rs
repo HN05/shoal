@@ -431,7 +431,12 @@ impl ManualCleanupExt for ManualCleanup {
 
 /// Operations on the client type [`Pick`] that only the `shoal` command uses.
 trait PickExt {
+    /// Whether it covers the repository `name`, `id`.
     fn covers(&self, name: &str, id: &str) -> bool;
+
+    /// Whether it covers the space `id`; names repeat, so it names spaces
+    /// by ID alone.
+    fn covers_space(&self, id: &SpaceId) -> bool;
 
     /// Fails for a name none of `items`, as `(name, id)` pairs, has.
     fn ensure_known<'a>(
@@ -447,6 +452,10 @@ impl PickExt for Pick {
             Self::All => true,
             Self::Only(names) => names.iter().any(|n| n == name || n == id),
         }
+    }
+
+    fn covers_space(&self, id: &SpaceId) -> bool {
+        self.covers("", id.as_str())
     }
 
     fn ensure_known<'a>(
@@ -528,8 +537,8 @@ impl Targets {
                 .filter(|repo| within(&repo.id))
                 .collect(),
         };
-        let workspaces = (targets.workspaces.iter()).map(|w| (w.name.as_str(), w.id.as_str()));
-        let chats = (targets.chats.iter()).map(|chat| (chat.name.as_str(), chat.id.as_str()));
+        let workspaces = (targets.workspaces.iter()).map(|w| ("", w.id.as_str()));
+        let chats = (targets.chats.iter()).map(|chat| ("", chat.id.as_str()));
         selection.spaces.ensure_known(workspaces.chain(chats))?;
         selection.caches.ensure_known(
             targets
@@ -582,7 +591,7 @@ async fn remove_on_request(
 ) -> Result<()> {
     let named = matches!(pick, Pick::Only(_));
     for workspace in workspaces {
-        if !pick.covers(&workspace.name, workspace.id.as_str()) {
+        if !pick.covers_space(&workspace.id) {
             continue;
         }
         if workspace.state != WorkspaceState::Ready {
@@ -604,6 +613,7 @@ async fn remove_on_request(
         };
         if report.dry_run {
             report.removed.push(workspace.name.into());
+            report.removed_ids.push(workspace.id);
             continue;
         }
         match manager
@@ -613,6 +623,7 @@ async fn remove_on_request(
             Ok(()) => {
                 log!("manual cleanup removed {}", workspace.name);
                 report.removed.push(workspace.name.into());
+                report.removed_ids.push(workspace.id);
             }
             Err(error) => {
                 manager
@@ -635,7 +646,7 @@ async fn remove_chats_on_request(
 ) -> Result<()> {
     let named = matches!(pick, Pick::Only(_));
     for chat in chats {
-        if !pick.covers(&chat.name, chat.id.as_str()) {
+        if !pick.covers_space(&chat.id) {
             continue;
         }
         let snapshot = match manager.requested_chat_candidacy(&chat).await {
@@ -652,12 +663,14 @@ async fn remove_chats_on_request(
         };
         if report.dry_run {
             report.removed.push(chat.name.into());
+            report.removed_ids.push(chat.id);
             continue;
         }
         match (manager.remove_unused_chat(&chat, snapshot, EventCause::Manual)).await {
             Ok(_) => {
                 log!("manual cleanup removed chat {}", chat.name);
                 report.removed.push(chat.name.into());
+                report.removed_ids.push(chat.id);
             }
             Err(error) => {
                 log!("manual cleanup retained chat {}: {error:#}", chat.name);

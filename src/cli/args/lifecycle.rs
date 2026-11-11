@@ -84,9 +84,9 @@ pub enum CleanupKind {
     /// waiting for their idle periods.
     ///
     /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces and
-    /// running chats are kept, and the unsaved files of merged ones go into their checkpoints. Names
-    /// limit it to those spaces.
-    Spaces { names: Vec<String> },
+    /// running chats are kept, and the unsaved files of merged ones go into their checkpoints.
+    /// Spaces, by number or ID, limit it to those.
+    Spaces { spaces: Vec<SpaceSelector> },
     /// Delete branches Shoal kept when it removed their workspaces, with the commits only they have.
     ///
     /// Removal keeps a branch only while some of its commits are on no remote and not on the
