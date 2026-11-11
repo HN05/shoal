@@ -215,9 +215,14 @@ pub struct QueueRequest {
     pub now: bool,
     /// The existing workspace the launch opens, such as a child workspace for
     /// its parent's agent. The daemon then starts the entry itself, outside
-    /// the caller's processes, whether or not a limit applies.
+    /// the caller's processes, whether or not a limit applies, unless
+    /// `starts_in_caller`.
     #[serde(default)]
     pub workspace: Option<SpaceSelector>,
+    /// The caller starts the launch in `workspace` itself once admitted, as
+    /// it starts a new workspace's, rather than the daemon.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub starts_in_caller: bool,
     /// What blocks the launch; it always queues while any remains.
     #[serde(default)]
     pub blockers: Vec<Blocker>,

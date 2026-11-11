@@ -56,6 +56,7 @@ pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRe
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now,
         workspace: None,
+        starts_in_caller: false,
         blockers: Vec::new(),
     }
 }
@@ -932,6 +933,27 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
 }
 
 #[tokio::test]
+async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    let workspace = create(&manager, &repo, "here").await;
+    let admission = manager
+        .queue_add(QueueRequest {
+            workspace: Some(SpaceSelector::id(&workspace.id)),
+            starts_in_caller: true,
+            ..request(&repo, "here", false)
+        })
+        .await
+        .unwrap();
+    // The entry keeps the workspace's one launch while the caller starts it.
+    let entry = admission.entry.unwrap();
+    assert!(admission.start);
+    assert_eq!(entry.opens.as_ref(), Some(&workspace.id));
+    assert!(!started(&entry.id));
+}
+
+#[tokio::test]
 async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -1022,16 +1044,24 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
         assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
-    } // Only the user starts one regardless of the limits.
-    let mut method = crate::protocol::QueueMethod::QueueAdd {
-        request: QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "launch", true)
+    } // Only the user starts one regardless of the limits, or in its own process.
+    for request in [
+        request(&repo, "launch", true),
+        QueueRequest {
+            starts_in_caller: true,
+            ..request(&repo, "launch", false)
         },
-    };
-    let authorized =
-        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
-    assert!(authorized.is_err());
+    ] {
+        let mut method = crate::protocol::QueueMethod::QueueAdd {
+            request: QueueRequest {
+                workspace: Some(SpaceSelector::id(&child.id)),
+                ..request
+            },
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
+        assert!(authorized.is_err());
+    }
     // Nor does it open one in another repository.
     let other = register(&manager, &temp, "other").await;
     let mut method = crate::protocol::QueueMethod::QueueAdd {

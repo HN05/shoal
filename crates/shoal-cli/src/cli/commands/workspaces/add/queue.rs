@@ -83,6 +83,8 @@ pub(super) async fn admit_launch(
         issue_title: issue.map(|issue| issue.title.clone()),
         now,
         blockers,
+        // The daemon starts a scoped caller's agents.
+        caller_starts: !crate::env::is_scoped(),
     };
     match queued_agents::admit(ctx, plan, launch).await? {
         queued_agents::Admission::Start { entry, base } => {

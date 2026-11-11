@@ -103,7 +103,7 @@ async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Re
 /// Admit `launch`, which starts here, as a terminal's start is admitted: at
 /// once when a slot is free or `now` says so, otherwise waiting for the
 /// daemon to start it as the launch it plans there. Either way its entry
-/// records `workspace`.
+/// opens `workspace`, which the request names.
 async fn admit_here(
     ctx: &Context,
     workspace: &Workspace,
@@ -115,6 +115,7 @@ async fn admit_here(
         issue_title: launch.issue.as_ref().map(|issue| issue.title.clone()),
         now: launch.now,
         blockers: Vec::new(),
+        caller_starts: true,
     };
     let plan = AddPlan::agent_in(workspace, launch)?;
     match queued_agents::admit(ctx, &plan, request).await? {
@@ -124,9 +125,6 @@ async fn admit_here(
             }
             Ok(Placement::Here(entry))
         }
-        queued_agents::Admission::Queued(entry, waiting) => {
-            queued_agents::attach(ctx, &entry.id, workspace).await?;
-            Ok(Placement::Waiting(entry, waiting))
-        }
+        queued_agents::Admission::Queued(entry, waiting) => Ok(Placement::Waiting(entry, waiting)),
     }
 }

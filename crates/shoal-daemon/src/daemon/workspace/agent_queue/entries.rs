@@ -28,9 +28,10 @@ use crate::{
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
     /// applies to and that nothing blocks starts untracked; one
-    /// admitted here starts in the caller, except one the daemon starts. A
-    /// launch in an existing workspace is admitted only while the workspace
-    /// has no agent of its own.
+    /// admitted here starts in the caller, except one the daemon starts,
+    /// which a launch in an existing workspace is unless its caller starts
+    /// it. A launch in an existing workspace is admitted only while the
+    /// workspace has no agent of its own.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
         self.queue_add_as(request, None).await
     }
@@ -65,8 +66,11 @@ impl Manager {
         let limits = self
             .agent_limits(vec![repository.id.clone()], &[], &[])
             .await?;
-        let detached = target.is_some() || scope.is_some();
-        if !detached && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
+        let detached = (target.is_some() && !request.starts_in_caller) || scope.is_some();
+        // A launch in an existing workspace keeps its entry, which holds the
+        // workspace's one agent until it registers.
+        let opens_new = target.is_none() && scope.is_none();
+        if opens_new && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,

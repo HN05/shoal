@@ -330,6 +330,12 @@ impl Manager {
         const REFUSAL: &str =
             "workspace processes can start agents only in the workspaces split from theirs";
         ensure!(!request.now, NOT_NOW);
+        // The daemon starts a scoped caller's agents detached, so none
+        // inherits the caller's scope.
+        ensure!(
+            !request.starts_in_caller,
+            "workspace processes start agents detached; the daemon starts the agent"
+        );
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;
             return Ok(None);

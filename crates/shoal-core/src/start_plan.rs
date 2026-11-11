@@ -102,6 +102,7 @@ pub fn queued_agent_request(
         env,
         now,
         workspace: Some(SpaceSelector::id(&workspace.id)),
+        starts_in_caller: false,
         blockers: Vec::new(),
     })
 }

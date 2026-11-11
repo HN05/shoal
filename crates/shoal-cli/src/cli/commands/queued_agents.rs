@@ -36,6 +36,9 @@ pub(super) struct Launch {
     pub issue_title: Option<String>,
     pub now: bool,
     pub blockers: Vec<Blocker>,
+    /// The caller starts the launch once admitted, even in the existing
+    /// workspace `plan` opens, which the daemon otherwise starts.
+    pub caller_starts: bool,
 }
 
 /// Ask the daemon for a slot for `launch`, which `plan` starts.
@@ -50,7 +53,8 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         plan: serde_json::to_string(plan)?,
         env: terminal::start_environment(),
         now: launch.now,
-        workspace: None,
+        workspace: plan.workspace.clone().map(SpaceSelector::Id),
+        starts_in_caller: launch.caller_starts,
         blockers: launch.blockers,
     };
     let admission = queue::add(&ctx.paths, request).await?;

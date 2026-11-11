@@ -719,6 +719,7 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
             env: Default::default(),
             now: false,
             workspace: None,
+            starts_in_caller: false,
             blockers: Vec::new(),
         },
     };
@@ -814,6 +815,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         env: Default::default(),
         now: false,
         workspace: None,
+        starts_in_caller: false,
         blockers: Vec::new(),
     };
     let theirs = daemon
