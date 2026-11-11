@@ -7,43 +7,64 @@ use anyhow::{Result, ensure};
 
 use super::super::Manager;
 use crate::client::space_names::SpaceSelector;
-use crate::model::{AgentStatus, RunningAgent};
+use crate::model::{AgentStatus, PresentSpace, RunningAgent};
 
 impl Manager {
-    /// The agents connected in the workspace `selector` names, with the
-    /// turns they reported and the places they run in.
-    pub(crate) async fn workspace_agents(
-        &self,
-        selector: &SpaceSelector,
-    ) -> Result<Vec<RunningAgent>> {
-        let workspace = self.workspace(selector).await?;
-        Ok(self
-            .running_agents()
-            .await?
+    /// The agents connected in the space `selector` names, a workspace's or
+    /// a running chat's, with the turns they reported and the places they
+    /// run in.
+    pub(crate) async fn space_agents(&self, selector: &SpaceSelector) -> Result<Vec<RunningAgent>> {
+        let space = self.space(selector).await?;
+        let agents = match &space {
+            PresentSpace::Workspace(_) => self.running_agents().await?,
+            PresentSpace::Chat(_) => self.running_chat_agents().await?,
+        };
+        Ok(agents
             .into_iter()
-            .filter(|agent| agent.space_id == workspace.id && agent.agent.is_some())
+            .filter(|agent| agent.space_id == *space.id() && agent.agent.is_some())
             .collect())
     }
 
     /// Record that an interrupt ended the turn of the agent `execution`
-    /// runs in the workspace `selector` names.
+    /// runs, as [`Self::space_agents`] lists it, in the space `selector`
+    /// names.
     pub(crate) async fn interrupt_turn(
         &self,
         selector: &SpaceSelector,
         execution: ExecutionId,
     ) -> Result<AgentStatus> {
-        let workspace = self.workspace(selector).await?;
-        let runs_here = self
-            .executions
-            .with_agent(&execution, |agent| agent.workspace_id == workspace.id)
-            .await;
-        ensure!(
-            runs_here == Some(true),
-            "no connected agent of {} runs execution {execution}",
-            workspace.name
-        );
-        self.end_interrupted_turn(&SpaceSelector::id(&workspace.id), execution)
+        let space = self.space(selector).await?;
+        let reporting = self.reporting_execution(&space, execution).await?;
+        self.end_interrupted_turn(&SpaceSelector::id(space.id()), reporting)
             .await
+    }
+
+    /// The execution the connected agent `execution` names in `space`
+    /// reports its turns from: itself in a workspace, and none for a chat's
+    /// agent, which runs in none.
+    async fn reporting_execution(
+        &self,
+        space: &PresentSpace,
+        execution: ExecutionId,
+    ) -> Result<Option<ExecutionId>> {
+        let runs_here = match space {
+            PresentSpace::Workspace(workspace) => {
+                (self.executions)
+                    .with_agent(&execution, |agent| agent.workspace_id == workspace.id)
+                    .await
+                    == Some(true)
+            }
+            PresentSpace::Chat(chat) => {
+                chat.restore.is_none()
+                    && execution == crate::daemon::chats::listed_execution(&chat.id)
+            }
+        };
+        ensure!(
+            runs_here,
+            "no connected agent of {} runs execution {execution}",
+            space.name()
+        );
+        Ok(matches!(space, PresentSpace::Workspace(_)).then_some(execution))
     }
 
     /// Whether the agent of `execution` idles after an interrupt ended its

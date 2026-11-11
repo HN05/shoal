@@ -112,3 +112,20 @@ fn only_a_running_chat_whose_agent_resumes_starts_a_restart() {
     assert!(!listed[0].restorable);
     assert_eq!(listed[0].execution, "c1");
 }
+
+#[test]
+fn a_chat_idles_interrupted_until_a_report_says_otherwise_or_it_runs_again() {
+    let agents = ChatAgents::default();
+    let id = SpaceId::from("c1");
+    let interrupted = || agents.running(vec![(chat(None, None), false)])[0].interrupted;
+    agents.record_turn(&id, Some(true));
+    // A report that neither starts nor ends a turn keeps it.
+    agents.record_turn(&id, None);
+    assert!(interrupted());
+    agents.record_turn(&id, Some(false));
+    assert!(!interrupted());
+
+    agents.record_turn(&id, Some(true));
+    agents.forget_interrupt(&id);
+    assert!(!interrupted());
+}

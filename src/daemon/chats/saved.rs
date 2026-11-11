@@ -286,6 +286,7 @@ impl Manager {
             origin,
             hands_over,
         };
+        self.chat_agents.forget_interrupt(&restored.id);
         let owner = self.root_dir_owner();
         let chat = (self.store)
             .write(move |tx| restore(tx, &owner, &restored))

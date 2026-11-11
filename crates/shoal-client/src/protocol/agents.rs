@@ -100,14 +100,16 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hooked: Option<ExecutionId>,
     },
-    /// The agents connected in the workspace, with their turns and places.
-    WorkspaceAgents {
-        workspace: SpaceSelector,
+    /// The agents connected in the space, a workspace or a running chat,
+    /// with their turns and places.
+    SpaceAgents {
+        space: SpaceSelector,
     },
     /// An interrupt the caller typed ended the turn of the agent `execution`
-    /// runs in the workspace, which leaves it idle.
+    /// runs in the space, as [`Self::SpaceAgents`] lists it, which leaves it
+    /// idle.
     InterruptTurn {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         execution: ExecutionId,
     },
     /// The session of the workspace's agent that a fork starts from: the

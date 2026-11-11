@@ -80,21 +80,14 @@ pub async fn report_wake_end(
     request(daemon, AgentMethod::ReportWakeEnd { space, ended }).await
 }
 
-/// Record that the interrupt key typed into `execution` of `workspace`
-/// ended its agent's turn.
+/// Record that the interrupt key typed into `execution` of `space` ended
+/// its agent's turn.
 pub async fn interrupt_turn(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     execution: ExecutionId,
 ) -> Result<AgentStatus> {
-    request(
-        daemon,
-        AgentMethod::InterruptTurn {
-            workspace,
-            execution,
-        },
-    )
-    .await
+    request(daemon, AgentMethod::InterruptTurn { space, execution }).await
 }
 
 /// The agents connected in every workspace.
@@ -154,9 +147,9 @@ pub async fn restart_chat(
     request(daemon, method).await
 }
 
-/// The agents connected in `workspace`.
-pub async fn running(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<RunningAgent>> {
-    request(daemon, AgentMethod::WorkspaceAgents { workspace }).await
+/// The agents connected in `space`, a workspace or a running chat.
+pub async fn running(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<RunningAgent>> {
+    request(daemon, AgentMethod::SpaceAgents { space }).await
 }
 
 /// A login Git sends over HTTPS. Its `Debug` leaves out the password.

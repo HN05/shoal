@@ -34,13 +34,12 @@ pub(super) async fn handle(
                 Ok(Body::Ok)
             }));
         }
-        AgentMethod::WorkspaceAgents { workspace } => {
-            Body::RunningAgents(manager.workspace_agents(&workspace).await?)
+        AgentMethod::SpaceAgents { space } => {
+            Body::RunningAgents(manager.space_agents(&space).await?)
         }
-        AgentMethod::InterruptTurn {
-            workspace,
-            execution,
-        } => Body::AgentStatus(manager.interrupt_turn(&workspace, execution).await?),
+        AgentMethod::InterruptTurn { space, execution } => {
+            Body::AgentStatus(manager.interrupt_turn(&space, execution).await?)
+        }
         AgentMethod::WaitAgentUpdates { space } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
@@ -248,13 +247,12 @@ impl Scoped for AgentMethod {
             ),
             // The CLI types into the places of the agents it lists, which
             // it interrupts or continues.
-            AgentMethod::WorkspaceAgents { workspace }
-            | AgentMethod::InterruptTurn { workspace, .. } => Some(
+            AgentMethod::SpaceAgents { space } | AgentMethod::InterruptTurn { space, .. } => Some(
                 manager
                     .workspace_below(
                         caller,
-                        workspace,
-                        "workspace processes interrupt and continue only the agents of the workspaces below theirs",
+                        space,
+                        "scoped processes interrupt and continue only the agents of the spaces below theirs",
                     )
                     .await?,
             ),

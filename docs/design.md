@@ -309,11 +309,13 @@ which may then resume the agent as after its own `shoal stop`.
 own interrupt key cancels its turn and keeps its process, background shells
 and subagents, which a stop and resume would end and start again. The CLI types
 the key through the terminal host of the place the daemon recorded for the
-agent, so a client driving Shoal need not know each agent's key or each host,
-and the daemon records the turn's end, which no hook reports. The daemon keeps
-the interruption with the agent's transient metadata until a turn starts or
-ends again; `shoal resume` continues the interrupted turn, as it continues
-stopped work, so a client pairs one command with each.
+agent, a workspace's or a chat's, so a client driving Shoal need not know each
+agent's key or each host, and the daemon records the turn's end, which no hook
+reports. The daemon keeps the interruption with the agent's transient metadata
+until a turn starts or ends again or the chat is restored; `shoal resume`
+continues the interrupted turn, as it continues stopped work, so a
+client pairs one command with each. A chat's agent has no wrapper to wake it
+after an interrupt, so it receives its updates with its next turn.
 The daemon also samples what each workspace's processes use, attributed by
 the workspace identity in their environment, so the user can see which
 workspace loads the machine; admission learns a settled agent's memory from
@@ -2359,8 +2361,9 @@ worktree hooks and lifecycle permission rules, which need a worktree. The
 the chat's state as a workspace's, and the record keeps the session so the chat
 can move. A chat has no tracked execution whose end clears its state, so its
 state ends when the chat stops or is restored. Keep-awake reads it as a
-workspace agent's; overload protection, turn retries and interrupts act on
-tracked executions, which a chat's agent is not.
+workspace agent's, and interrupts act on its agent as on a workspace's;
+overload protection and turn retries act on tracked executions, which a chat's
+agent is not.
 
 A chat may also belong to no repository: a mode with `repository = false`,
 such as the built-in `orchestrate`, starts it in `root_dir`, with the global

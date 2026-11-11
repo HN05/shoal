@@ -1,4 +1,5 @@
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceId;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;
@@ -8,7 +9,7 @@ use crate::{
         workspace::{ExecutionKind, Manager},
         workspace_files::Attacher,
     },
-    model::Workspace,
+    model::{Chat, Workspace},
     protocol::TurnEnd,
     state::AgentState,
 };
@@ -49,7 +50,7 @@ async fn workspace(manager: &Manager, root: &std::path::Path, name: &str) -> Wor
 /// The turn state and interruption of the workspace's only agent.
 async fn turn(manager: &Manager, workspace: &Workspace) -> (Option<AgentState>, bool) {
     let agents = manager
-        .workspace_agents(&SpaceSelector::id(&workspace.id))
+        .space_agents(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [agent] = agents.as_slice() else {
@@ -170,4 +171,81 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .await
         .unwrap();
     wait(true).await.expect("wait ended").unwrap();
+}
+
+/// A running chat with a Claude Code agent in a repository under `root`.
+async fn chat(manager: &Manager, root: &std::path::Path) -> Chat {
+    let checkout = repository(root, "chat-repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap()
+}
+
+/// The turn state, interruption and listed execution of the space's only
+/// agent.
+async fn listed(manager: &Manager, space: &SpaceId) -> (Option<AgentState>, bool, ExecutionId) {
+    let agents = manager
+        .space_agents(&SpaceSelector::id(space))
+        .await
+        .unwrap();
+    let [agent] = agents.as_slice() else {
+        panic!("expected one agent: {agents:?}");
+    };
+    (agent.state, agent.interrupted, agent.execution.clone())
+}
+
+#[tokio::test]
+async fn an_interrupt_leaves_a_chats_agent_idle_until_a_turn_starts() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let selected = SpaceSelector::id(&chat.id);
+    let report = |state| manager.set_agent_state(&selected, state, None, None);
+    report(AgentState::Working).await.unwrap();
+    let (state, interrupted, execution) = listed(&manager, &chat.id).await;
+    assert_eq!((state, interrupted), (Some(AgentState::Working), false));
+
+    let status = manager
+        .interrupt_turn(&SpaceSelector::id(&chat.id), execution.clone())
+        .await
+        .unwrap();
+    assert_eq!(status.state, AgentState::Idle);
+    // The chat's state shows, which a report from an execution it does not
+    // run would hide.
+    let recorded = manager.chats().await.unwrap();
+    assert_eq!(
+        recorded[0].agent_state.as_ref().map(|status| status.state),
+        Some(AgentState::Idle)
+    );
+    assert_eq!(
+        listed(&manager, &chat.id).await,
+        (Some(AgentState::Idle), true, execution.clone())
+    );
+
+    report(AgentState::Idle).await.unwrap();
+    assert!(listed(&manager, &chat.id).await.1);
+    report(AgentState::Working).await.unwrap();
+    assert!(!listed(&manager, &chat.id).await.1);
+}
+
+#[tokio::test]
+async fn an_interrupt_names_a_chats_agent_as_it_is_listed() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let other = workspace_with_agent(&manager, temp.path()).await;
+    manager
+        .interrupt_turn(&SpaceSelector::id(&chat.id), other)
+        .await
+        .unwrap_err();
 }

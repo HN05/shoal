@@ -1003,9 +1003,9 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
                 attachments: Vec::new(),
                 sender_chat: None,
             },
-            AgentMethod::WorkspaceAgents { workspace: name() },
+            AgentMethod::SpaceAgents { space: name() },
             AgentMethod::InterruptTurn {
-                workspace: name(),
+                space: name(),
                 execution: "e1".into(),
             },
         ];

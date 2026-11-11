@@ -108,8 +108,8 @@ const REQUESTS: &[&str] = &[
     r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
     r#"{"report_attached":{"workspace":"fix","execution":"e1","attached":true}}"#,
     r#"{"await_agent_wake":{"workspace":"fix","due":true,"hooked":"e1"}}"#,
-    r#"{"workspace_agents":{"workspace":"fix"}}"#,
-    r#"{"interrupt_turn":{"workspace":"fix","execution":"e1"}}"#,
+    r#"{"space_agents":{"space":"fix"}}"#,
+    r#"{"interrupt_turn":{"space":"fix","execution":"e1"}}"#,
     // Executions.
     r#"{"execute":{"workspace":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
     r#"{"reattach":{"execution":"e1","wrapper":{"pid":2,"birth":"b"},"child":null,"group_id":2,"scope_token":"t1","agent":null,"recover":false,"running_ms":0}}"#,

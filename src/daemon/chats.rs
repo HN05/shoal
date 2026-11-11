@@ -966,7 +966,7 @@ mod saved;
 mod stopped;
 mod stopping;
 
-pub(crate) use agents::ChatAgents;
+pub(crate) use agents::{ChatAgents, listed_execution};
 pub(crate) use removing::Removing;
 pub(crate) use stopping::Stopping;
 

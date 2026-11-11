@@ -1,5 +1,6 @@
 //! What the daemon keeps of chats' agents while it runs: their restarts,
-//! which outlive the requests that asked for them, as a workspace agent's do.
+//! which outlive the requests that asked for them, and whether an interrupt
+//! ended their last turn, as a workspace agent's.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{
@@ -29,6 +30,8 @@ struct ChatAgent {
     stopped_by: Option<SpaceId>,
     /// The daemon restores the chat on its own, as after a shutdown.
     restoring: bool,
+    /// The agent idles after an interrupt ended its last turn.
+    interrupted: bool,
 }
 
 /// A request to restart a chat's agent.
@@ -131,7 +134,7 @@ impl ChatAgents {
                     // run joins that restart rather than skipping it.
                     restorable: resumes || restart.is_some(),
                     state: chat.agent_state.as_ref().map(|status| status.state),
-                    interrupted: false,
+                    interrupted: agent.is_some_and(|agent| agent.interrupted),
                     origin: chat.origin,
                     restarted_by: agent
                         .map(|agent| agent.restarts.restarted_by())
@@ -139,11 +142,27 @@ impl ChatAgents {
                     restart,
                     stopped: None,
                     restarted_from: Vec::new(),
-                    execution: ExecutionId::from(chat.id.to_string()),
+                    execution: listed_execution(&chat.id),
                     space_id: chat.id,
                 })
             })
             .collect()
+    }
+
+    /// Record whether the agent of the chat `id` idles after an interrupt,
+    /// when a report of its turn says, as a workspace agent's report does.
+    pub(crate) fn record_turn(&self, id: &SpaceId, interrupted: Option<bool>) {
+        if let Some(interrupted) = interrupted {
+            self.lock().entry(id.to_owned()).or_default().interrupted = interrupted;
+        }
+    }
+
+    /// Forget the interrupt that ended a turn of the chat `id`'s agent once
+    /// another agent runs the chat, which reports its own turns.
+    pub(super) fn forget_interrupt(&self, id: &SpaceId) {
+        if let Some(agent) = self.lock().get_mut(id) {
+            agent.interrupted = false;
+        }
     }
 
     /// Whether a restart, or a restore the daemon runs on its own, starts
@@ -178,6 +197,12 @@ impl ChatAgents {
     fn lock(&self) -> MutexGuard<'_, HashMap<SpaceId, ChatAgent>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+/// The execution the agent of the chat `id` is listed as: a chat's agent
+/// runs in none, so its chat's ID stands in for one.
+pub(crate) fn listed_execution(id: &SpaceId) -> ExecutionId {
+    ExecutionId::from(id.to_string())
 }
 
 #[cfg(test)]

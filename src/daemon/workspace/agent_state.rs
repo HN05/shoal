@@ -187,23 +187,23 @@ impl Manager {
         Ok(true)
     }
 
-    /// Record that an interrupt ended the turn of the agent `execution`
-    /// runs, which leaves it idle without the hook that ends its other
-    /// turns.
+    /// Record that an interrupt ended the turn of the agent reporting from
+    /// `execution`, which leaves it idle without the hook that ends its
+    /// other turns.
     pub(crate) async fn end_interrupted_turn(
         &self,
         selector: &SpaceSelector,
-        execution: ExecutionId,
+        execution: Option<ExecutionId>,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
             interrupted: true,
             prompt_cache: Some(
-                self.prompt_cache(selector, Some(&execution), &TurnEnd::default())
+                self.prompt_cache(selector, execution.as_ref(), &TurnEnd::default())
                     .await,
             ),
             ..TurnEnding::ended()
         };
-        self.record_agent_state(selector, AgentState::Idle, Some(execution), None, ending)
+        self.record_agent_state(selector, AgentState::Idle, execution, None, ending)
             .await
     }
 
@@ -253,10 +253,8 @@ impl Manager {
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
         let space = self.space(selector).await?;
-        if let Some(execution) = &execution {
-            self.record_agent_turn(execution, state, ending.interrupted_after(state))
-                .await;
-        }
+        self.record_turn(&space, execution.as_ref(), state, ending)
+            .await;
         if let Some(session) = session {
             self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
@@ -278,6 +276,24 @@ impl Manager {
             self.signals.agent_changed();
         }
         Ok(status)
+    }
+
+    /// Record the turn `state` reports with `ending` for the agent that
+    /// reports from `execution` in `space`, with the agent's other transient
+    /// metadata: a chat's agent reports from none.
+    async fn record_turn(
+        &self,
+        space: &PresentSpace,
+        execution: Option<&ExecutionId>,
+        state: AgentState,
+        ending: TurnEnding,
+    ) {
+        let interrupted = ending.interrupted_after(state);
+        match (space, execution) {
+            (_, Some(execution)) => self.record_agent_turn(execution, state, interrupted).await,
+            (PresentSpace::Chat(chat), None) => self.chat_agents.record_turn(&chat.id, interrupted),
+            (PresentSpace::Workspace(_), None) => {}
+        }
     }
 
     /// Record the agent `session` reported in `space`: a chat keeps its
