@@ -208,10 +208,16 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     manager.dispatch_queue().await.unwrap();
     assert!(started(&second.id));
 
-    // Only the queued launch's own agent takes over its entry.
+    // Only the queued launch's own agent takes over its entry, whose
+    // workspace stays known once it left the queue.
     manager.consume_queue_entry(&second.id, &workspace.id).await;
     assert_eq!(manager.queue_entries().await.unwrap().len(), 2);
+    assert_eq!(manager.agent_queue.started_workspace(&second.id), None);
     manager.consume_queue_entry(&first.id, &workspace.id).await;
+    assert_eq!(
+        manager.agent_queue.started_workspace(&first.id),
+        Some(workspace.id.clone())
+    );
     let names: Vec<_> = manager
         .queue_entries()
         .await

@@ -26,18 +26,22 @@ pub enum QueueMethod {
     QueuedPlan {
         entry: QueueEntryId,
     },
-    /// Cancel a waiting entry, named by ID or workspace name; a cancelled
-    /// restore leaves its agent stopped.
+    /// Cancel a waiting entry, named by ID; a cancelled restore leaves its
+    /// agent stopped.
     QueueRemove {
         entry: String,
     },
-    /// Start a waiting entry, named by ID or workspace name, now,
-    /// regardless of the limits.
+    /// Start a waiting entry, named by ID, now, regardless of the limits.
     QueueStart {
         entry: String,
     },
-    /// Move a waiting entry, named by ID or workspace name, to `place`, or stop a running agent and place
-    /// its restore there.
+    /// The workspace a launch that left the queue started its agent in,
+    /// while the daemon still knows it.
+    StartedLaunch {
+        entry: QueueEntryId,
+    },
+    /// Move a waiting entry, named by ID, to `place`, or stop a running
+    /// agent and place its restore there.
     QueueMove {
         entry: String,
         place: crate::model::QueuePlace,

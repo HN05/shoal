@@ -174,6 +174,7 @@ response_bodies! {
     PlaceClose(crate::sessions::PlaceClose),
     PlaceOwnership(crate::sessions::PlaceOwnership),
     QueueEntry(crate::model::QueueEntry),
+    StartedLaunch(Option<crate::space_ids::SpaceId>),
     MovedEntry(crate::model::MovedEntry),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),

@@ -37,19 +37,26 @@ pub async fn plan(daemon: &impl Daemon, entry: QueueEntryId) -> Result<QueuedPla
     request(daemon, QueueMethod::QueuedPlan { entry }).await
 }
 
-/// Start the entry `entry` names by ID or workspace name now, whatever
-/// waits before it.
+/// Start the entry `entry` names by ID now, whatever waits before it.
 pub async fn start(daemon: &impl Daemon, entry: String) -> Result<QueueEntry> {
     request(daemon, QueueMethod::QueueStart { entry }).await
 }
 
-/// Take the entry `entry` names by ID or workspace name out of the queue.
+/// The workspace the launch `entry`, which left the queue, started its
+/// agent in, while the daemon still knows it.
+pub async fn started_workspace(
+    daemon: &impl Daemon,
+    entry: QueueEntryId,
+) -> Result<Option<crate::space_ids::SpaceId>> {
+    request(daemon, QueueMethod::StartedLaunch { entry }).await
+}
+
+/// Take the entry `entry` names by ID out of the queue.
 pub async fn remove(daemon: &impl Daemon, entry: String) -> Result<QueueEntry> {
     request(daemon, QueueMethod::QueueRemove { entry }).await
 }
 
-/// Move the entry `entry` names by ID or workspace name to `place` in the
-/// queue.
+/// Move the entry `entry` names by ID to `place` in the queue.
 pub async fn move_entry(
     daemon: &impl Daemon,
     entry: String,

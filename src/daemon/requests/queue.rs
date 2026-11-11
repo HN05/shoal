@@ -38,6 +38,9 @@ pub(super) async fn handle(
             Body::QueueEntry(manager.queue_remove(&entry, caller).await?)
         }
         QueueMethod::QueueStart { entry } => Body::QueueEntry(manager.queue_start(&entry).await?),
+        QueueMethod::StartedLaunch { entry } => {
+            Body::StartedLaunch(manager.agent_queue.started_workspace(&entry))
+        }
         QueueMethod::QueueMove { entry, place } => {
             Body::MovedEntry(manager.queue_move(&entry, place, caller).await?)
         }
@@ -100,6 +103,7 @@ impl Scoped for QueueMethod {
             }
             QueueMethod::QueuedPlan { .. }
             | QueueMethod::QueueStart { .. }
+            | QueueMethod::StartedLaunch { .. }
             | QueueMethod::QueueHold { .. }
             | QueueMethod::QueueAttach { .. }
             | QueueMethod::QueueFail { .. } => return Err(denied()),

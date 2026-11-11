@@ -1,16 +1,18 @@
 //! What the daemon keeps in memory about the agent queue: who holds starting
 //! entries, which stopped agents wait for their restore, which one-shot runs
 //! wait for or hold a slot, what held back waiting entries at the last
-//! admission pass, and what wakes the dispatcher.
+//! admission pass, which workspace each launch that started opened, and
+//! what wakes the dispatcher.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
+use crate::client::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::{
         Mutex as StdMutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
@@ -18,6 +20,10 @@ use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
 use super::Grant;
 use crate::client::queue::QueueEntryId;
 use crate::model::HeldBy;
+
+/// How long the workspace a launch started its agent in stays known after
+/// the launch left the queue, for a client waiting to attach to it.
+const STARTED_KEPT: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Default)]
 pub(crate) struct AgentQueue {
@@ -31,6 +37,9 @@ pub(crate) struct AgentQueue {
     oneshots: StdMutex<OneShots>,
     /// What held back each waiting entry at the last admission pass.
     held_back: StdMutex<HashMap<QueueEntryId, HeldBy>>,
+    /// The workspace each launch that left the queue started its agent in,
+    /// and when; names repeat, so this alone tells which it opened.
+    started: StdMutex<HashMap<QueueEntryId, (SpaceId, Instant)>>,
     wake: Notify,
     /// Admission waits while the system shuts down.
     suspended: AtomicBool,
@@ -78,6 +87,21 @@ fn oneshot_id(number: u64) -> QueueEntryId {
 const ONESHOT_PREFIX: &str = "oneshot:";
 
 impl AgentQueue {
+    /// Record that the launch `entry` started its agent in `workspace`,
+    /// forgetting launches that started long ago.
+    pub(super) fn record_started(&self, entry: QueueEntryId, workspace: SpaceId) {
+        let mut started = self.started.lock().unwrap_or_else(|e| e.into_inner());
+        started.retain(|_, (_, at)| at.elapsed() < STARTED_KEPT);
+        started.insert(entry, (workspace, Instant::now()));
+    }
+
+    /// The workspace the launch `entry` started its agent in, while known.
+    pub(crate) fn started_workspace(&self, entry: &QueueEntryId) -> Option<SpaceId> {
+        let started = self.started.lock().unwrap_or_else(|e| e.into_inner());
+        let (workspace, at) = started.get(entry)?;
+        (at.elapsed() < STARTED_KEPT).then(|| workspace.clone())
+    }
+
     /// Serialize admission, so two passes cannot fill one slot.
     pub(crate) async fn lock_admission(&self) -> MutexGuard<'_, ()> {
         self.admission.lock().await

@@ -138,6 +138,7 @@ const REQUESTS: &[&str] = &[
     r#"{"queued_plan":{"entry":"q1"}}"#,
     r#"{"queue_remove":{"entry":"q1"}}"#,
     r#"{"queue_start":{"entry":"q1"}}"#,
+    r#"{"started_launch":{"entry":"q1"}}"#,
     r#"{"queue_move":{"entry":"q1","place":{"position":2}}}"#,
     r#"{"queue_hold":{"entry":"q1"}}"#,
     r#"{"queue_attach":{"entry":"q1","workspace":"fix"}}"#,
