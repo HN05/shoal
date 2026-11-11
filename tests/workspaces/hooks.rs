@@ -468,18 +468,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     );
     fs::write(fixture.repo.join(".shoal.toml"), "").unwrap();
     git(&fixture.repo, &["add", ".shoal.toml"]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "-m",
-            "hook only",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["commit", "-m", "hook only"]);
     assert_eq!(fixture.add("hook-only")["state"], "ready");
     assert_eq!(
         fs::read_to_string(home.join("setup-order")).unwrap(),

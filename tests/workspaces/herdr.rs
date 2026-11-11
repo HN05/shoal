@@ -887,18 +887,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     .unwrap();
     install_test_script(fixture.repo.join("fail-setup"), "#!/bin/sh\nexit 17\n");
     git(&fixture.repo, &["add", ".shoal.toml", "fail-setup"]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "setup",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["commit", "-m", "setup"]);
     install_test_script(
         fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\ngrep 'Keep'\n",

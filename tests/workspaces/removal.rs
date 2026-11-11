@@ -345,19 +345,7 @@ fn removal_keeps_an_unpushed_branch_without_asking_and_ignores_external_processe
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "different contents").unwrap();
     git(path, &["add", "tracked"]);
-    git(
-        path,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "--allow-empty",
-            "-m",
-            "unpushed",
-        ],
-    );
+    git_with_identity(path, &["commit", "--allow-empty", "-m", "unpushed"]);
     assert_eq!(
         fixture.ok(&["rm", "--wait", &fixture.id("unpushed")])["branch_deleted"],
         false
@@ -475,19 +463,7 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
     let fixture = Fixture::new();
     let commit = |path: &Path| {
         git(path, &["add", "."]);
-        git(
-            path,
-            &[
-                "-c",
-                "user.name=Shoal Test",
-                "-c",
-                "user.email=shoal@example.invalid",
-                "commit",
-                "--allow-empty",
-                "-m",
-                "work",
-            ],
-        );
+        git_with_identity(path, &["commit", "--allow-empty", "-m", "work"]);
     };
     let same = fixture.add("same-tree");
     commit(Path::new(same["path"].as_str().unwrap()));
@@ -794,18 +770,7 @@ fn removal_confirmation_lists_git_changes_before_asking() {
         fs::write(path.join(name), "original\n").unwrap();
     }
     git(path, &["add", "."]);
-    git(
-        path,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "-m",
-            "Files for removal preview",
-        ],
-    );
+    git_with_identity(path, &["commit", "-m", "Files for removal preview"]);
     git(path, &["mv", "tracked", "renamed file"]);
     fs::write(path.join("modified"), "changed\n").unwrap();
     fs::remove_file(path.join("deleted")).unwrap();
@@ -912,18 +877,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
     // Make the default's tree differ so removal must check ancestry.
     fs::write(path.join("tracked"), "preserved work\n").unwrap();
     git(path, &["add", "tracked"]);
-    git(
-        path,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "work",
-        ],
-    );
+    git_with_identity(path, &["commit", "-m", "work"]);
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     install_failing_git(&fixture);
     for (failure, args) in [
@@ -1149,18 +1103,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert_eq!(workspace["disposable"], true);
     let path = PathBuf::from(workspace["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "changed\n").unwrap();
-    git(
-        &path,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qam",
-            "unpushed",
-        ],
-    );
+    git_with_identity(&path, &["commit", "-qam", "unpushed"]);
     fs::write(path.join("untracked"), "draft\n").unwrap();
     let child = fixture.ok(&[
         "split",

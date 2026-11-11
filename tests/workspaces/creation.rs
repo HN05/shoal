@@ -418,33 +418,9 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
     git(&fixture.repo, &["checkout", "-b", "feature/source"]);
     fs::write(fixture.repo.join("source-only"), "base branch content\n").unwrap();
     git(&fixture.repo, &["add", "."]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "source change",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["commit", "-m", "source change"]);
     let source = git(&fixture.repo, &["rev-parse", "HEAD"]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "tag",
-            "-a",
-            "v1",
-            "-m",
-            "release",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["tag", "-a", "v1", "-m", "release"]);
     git(
         &fixture.repo,
         &["update-ref", "refs/remotes/origin/topic", source.trim()],
@@ -1175,19 +1151,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             )
             .unwrap();
             git(&fixture.repo, &["add", ".shoal.toml"]);
-            git(
-                &fixture.repo,
-                &[
-                    "-c",
-                    "user.name=Shoal Test",
-                    "-c",
-                    "user.email=shoal@example.invalid",
-                    "commit",
-                    "-q",
-                    "-m",
-                    "default agent",
-                ],
-            );
+            git_with_identity(&fixture.repo, &["commit", "-q", "-m", "default agent"]);
         }
         let issue = format!("repos/team/project/issues/{number}");
         script_api(
@@ -1552,18 +1516,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
     )
     .unwrap();
     git(&fixture.repo, &["add", "."]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "hooks",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["commit", "-m", "hooks"]);
     git(&fixture.repo, &["branch", "coworker"]);
     let args = [
         "start",

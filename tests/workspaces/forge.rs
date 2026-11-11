@@ -279,18 +279,7 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
     git(&author, &["switch", "-c", "fix"]);
     fs::write(author.join("fix"), "change\n").unwrap();
     git(&author, &["add", "fix"]);
-    git(
-        &author,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "fix",
-        ],
-    );
+    git_with_identity(&author, &["commit", "-m", "fix"]);
     git(&author, &["push", "origin", "fix"]);
     let bin = fixture.root.path().join("bin");
     install_api_curl(&bin);
@@ -352,18 +341,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let commit = |message: &str| {
         fs::write(author.join(message), "change\n").unwrap();
         git(&author, &["add", message]);
-        git(
-            &author,
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.invalid",
-                "commit",
-                "-m",
-                message,
-            ],
-        );
+        git_with_identity(&author, &["commit", "-m", message]);
     };
     git(&author, &["switch", "-c", "stack/base"]);
     commit("base");
@@ -475,18 +453,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     git(path_in, &["reset", "--hard", "HEAD~1"]);
     fs::write(path_in.join("local"), "change\n").unwrap();
     git(path_in, &["add", "local"]);
-    git(
-        path_in,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "local",
-        ],
-    );
+    git_with_identity(path_in, &["commit", "-m", "local"]);
     assert!(!review(&["--pr", "7"]).status.success());
     let output = review(&["https://forge.example/other/project/pulls/7"]);
     assert!(!output.status.success());
@@ -667,18 +634,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     assert_eq!(fixture.acknowledge("retain")["type"], "ok");
     wait_pr_error(&fixture, "retain", "uncommitted");
     git(path, &["add", "dirty"]);
-    git(
-        path,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "new work",
-        ],
-    );
+    git_with_identity(path, &["commit", "-m", "new work"]);
     fixture.restart();
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
@@ -804,19 +760,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     )
     .unwrap();
     git(&fixture.repo, &["add", ".shoal.toml"]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "-q",
-            "-m",
-            "enable pr cleanup",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["commit", "-q", "-m", "enable pr cleanup"]);
     fixture.add("merged");
     assert_eq!(fixture.acknowledge("merged")["type"], "ok");
     wait_removed(&fixture, "merged");
@@ -1646,18 +1590,7 @@ fn merged_rechecks_head_after_removal_hooks() {
             "#!/bin/sh\ngit -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -m 'hook work'\n",
         );
         git(&fixture.repo, &["add", "."]);
-        git(
-            &fixture.repo,
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.invalid",
-                "commit",
-                "-m",
-                "hook",
-            ],
-        );
+        git_with_identity(&fixture.repo, &["commit", "-m", "hook"]);
         let workspace = fixture.add("hook");
         if key == "hooks.pre_resource_release" {
             fixture.ok(&[
@@ -1693,18 +1626,7 @@ fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
             ),
         );
         git(&fixture.repo, &["add", "."]);
-        git(
-            &fixture.repo,
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.invalid",
-                "commit",
-                "-m",
-                "hook",
-            ],
-        );
+        git_with_identity(&fixture.repo, &["commit", "-m", "hook"]);
         let workspace = fixture.add("hook");
         if key == "hooks.pre_resource_release" {
             fixture.ok(&[
@@ -1804,11 +1726,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     assert!(reason.ends_with(": version."), "{reason}");
 
     // Merging makes a merge commit in the checkout, which needs an identity.
-    git(&fixture.repo, &["config", "user.name", "Test"]);
-    git(
-        &fixture.repo,
-        &["config", "user.email", "test@example.invalid"],
-    );
+    configure_identity(&fixture.repo);
     assert_eq!(
         fixture.ok(&["merge", "--yes", &fixture.id("worker")])["updated"],
         true
@@ -2406,18 +2324,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         git(&author, &["switch", "-q", "--detach", "main"]);
         fs::write(author.join(file), "fork\n").unwrap();
         git(&author, &["add", file]);
-        git(
-            &author,
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.invalid",
-                "commit",
-                "-qm",
-                file,
-            ],
-        );
+        git_with_identity(&author, &["commit", "-qm", file]);
         let head = git(&author, &["rev-parse", "HEAD"]).trim().to_owned();
         git(&remote, &["fetch", "-q", author.to_str().unwrap(), &head]);
         git(&remote, &["update-ref", "refs/pull/8/head", &head]);
@@ -2536,18 +2443,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let moved_path = PathBuf::from(moved["path"].as_str().unwrap());
     fs::write(moved_path.join("local"), "local\n").unwrap();
     git(&moved_path, &["add", "local"]);
-    git(
-        &moved_path,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qm",
-            "local",
-        ],
-    );
+    git_with_identity(&moved_path, &["commit", "-qm", "local"]);
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
     let ended = fixture.ok(&["watch", "review", &review_number(&output)]);

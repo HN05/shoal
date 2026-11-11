@@ -170,18 +170,7 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
     fs::write(source.join("nested/kept"), "kept\n").unwrap();
     fs::write(source.join("nested/deleted"), "deleted\n").unwrap();
     git(&source, &["add", "nested"]);
-    git(
-        &source,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "-m",
-            "Add nested files",
-        ],
-    );
+    git_with_identity(&source, &["commit", "-m", "Add nested files"]);
     fs::remove_file(source.join("nested/deleted")).unwrap();
     fs::write(source.join("tracked"), "changed\n").unwrap();
     fs::write(source.join("untracked"), "new\n").unwrap();
@@ -288,19 +277,7 @@ fn adopt_infers_a_checkout_with_a_separate_git_directory() {
             git_dir.to_str().unwrap(),
         ],
     );
-    git(
-        &checkout,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.test",
-            "commit",
-            "--allow-empty",
-            "-m",
-            "initial",
-        ],
-    );
+    git_with_identity(&checkout, &["commit", "--allow-empty", "-m", "initial"]);
     fixture.ok(&["repo", "add", checkout.to_str().unwrap()]);
     let path = root.join("separate-worktree");
     git(

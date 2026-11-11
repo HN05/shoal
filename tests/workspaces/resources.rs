@@ -403,18 +403,7 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     )
     .unwrap();
     git(&fixture.repo, &["add", ".shoal.toml"]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "config",
-        ],
-    );
+    git_with_identity(&fixture.repo, &["commit", "-m", "config"]);
     let workspace = fixture.add("configured");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let overview = fixture

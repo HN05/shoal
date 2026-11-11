@@ -385,18 +385,7 @@ pub(crate) fn lines(
 pub(crate) fn commit_resource_config(repo: &Path, config: &str) {
     fs::write(repo.join(".shoal.toml"), config).unwrap();
     git(repo, &["add", "."]);
-    git(
-        repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "resources",
-        ],
-    );
+    git_with_identity(repo, &["commit", "-m", "resources"]);
 }
 
 // Local bare origin plus a separate author checkout: no network or personal repos.
@@ -433,18 +422,7 @@ pub(crate) fn upstream_remote(fixture: &Fixture) -> PathBuf {
     );
     fs::write(author.join("upstream"), "from remote\n").unwrap();
     git(&author, &["add", "upstream"]);
-    git(
-        &author,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "upstream change",
-        ],
-    );
+    git_with_identity(&author, &["commit", "-m", "upstream change"]);
     git(&author, &["push", "origin", branch]);
     author
 }
@@ -465,18 +443,7 @@ pub(crate) fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> V
 pub(crate) fn commit_file(path: &Path, file: &str, contents: &str) {
     fs::write(path.join(file), contents).unwrap();
     git(path, &["add", file]);
-    git(
-        path,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            file,
-        ],
-    );
+    git_with_identity(path, &["commit", "-m", file]);
 }
 
 /// Whether `pid` runs: an orphan's zombie counts as ended, since a

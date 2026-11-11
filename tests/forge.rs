@@ -5,7 +5,7 @@ mod support;
 use support::{
     fixture::Base,
     forge::{Server, github_search},
-    git::{git, init_repo},
+    git::{git, git_with_identity, init_repo},
 };
 
 use serde_json::{Value, json};
@@ -5837,20 +5837,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     );
 
     // A newer commit outdates the request; the agent is told to propose again.
-    git(
-        &path,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "-q",
-            "--allow-empty",
-            "-m",
-            "more",
-        ],
-    );
+    git_with_identity(&path, &["commit", "-q", "--allow-empty", "-m", "more"]);
     let first_id = first["number"].as_str().unwrap().to_owned();
     let stale = fixture.run(&["approvals", "--approve", &first_id]);
     assert!(!stale.status.success(), "{stale:?}");
@@ -5861,21 +5848,17 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     assert_eq!(second["specification"]["commit"], head());
 
     // A commit pushed past Shoal outdates the request too.
-    let identity = [
-        "-c",
-        "user.name=Shoal Test",
-        "-c",
-        "user.email=shoal@example.invalid",
-    ];
-    let tree = [
-        "commit-tree",
-        "-p",
-        "HEAD",
-        "-m",
-        "elsewhere",
-        "HEAD^{tree}",
-    ];
-    let pushed = git(&path, &[&identity[..], &tree].concat());
+    let pushed = git_with_identity(
+        &path,
+        &[
+            "commit-tree",
+            "-p",
+            "HEAD",
+            "-m",
+            "elsewhere",
+            "HEAD^{tree}",
+        ],
+    );
     let target = format!("{}:refs/heads/topic", pushed.trim());
     git(&path, &["push", "-q", remote.to_str().unwrap(), &target]);
     let second_id = second["number"].as_str().unwrap().to_owned();

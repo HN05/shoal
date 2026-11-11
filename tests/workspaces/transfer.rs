@@ -1094,18 +1094,9 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
 /// the installed Shoal unless told otherwise.
 fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
     let tree = git(&fixture.repo, &["write-tree"]);
-    let unrelated = git(
+    let unrelated = git_with_identity(
         &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit-tree",
-            tree.trim(),
-            "-m",
-            "Another history",
-        ],
+        &["commit-tree", tree.trim(), "-m", "Another history"],
     );
     git(&fixture.repo, &["branch", "-f", branch, unrelated.trim()]);
     let repo = fixture.repo.to_str().unwrap();

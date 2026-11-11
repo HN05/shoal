@@ -267,18 +267,7 @@ fn placed_checkouts_adopt_their_directory_but_never_another_checkout() {
         git(path, &["init", "-b", "main"]);
         fs::write(path.join("file"), "x").unwrap();
         git(path, &["add", "."]);
-        git(
-            path,
-            &[
-                "-c",
-                "user.name=T",
-                "-c",
-                "user.email=t@example.invalid",
-                "commit",
-                "-m",
-                "i",
-            ],
-        );
+        git_with_identity(path, &["commit", "-m", "i"]);
         fixture.ok(&["repo", "add", path.to_str().unwrap()])
     };
     let shoal = fixture.root.path().join("shoal");

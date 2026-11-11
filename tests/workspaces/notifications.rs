@@ -1246,18 +1246,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
 
     fs::write(path.join("later"), "later\n").unwrap();
     git(path, &["add", "later"]);
-    git(
-        path,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "later",
-        ],
-    );
+    git_with_identity(path, &["commit", "-m", "later"]);
     // An outdated mark no longer needs the user.
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert_eq!(

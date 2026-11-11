@@ -11,18 +11,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
     let path = Path::new(workspace["path"].as_str().unwrap());
     let commit = |path: &Path| {
         git(path, &["add", "."]);
-        git(
-            path,
-            &[
-                "-c",
-                "user.name=Shoal Test",
-                "-c",
-                "user.email=shoal@example.invalid",
-                "commit",
-                "-m",
-                "change",
-            ],
-        );
+        git_with_identity(path, &["commit", "-m", "change"]);
     };
     fs::write(path.join("tracked"), "workspace change\n").unwrap();
     commit(path);
@@ -30,17 +19,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
     commit(&fixture.repo);
     for rebase in [false, true] {
         if rebase {
-            git(
-                path,
-                &[
-                    "-c",
-                    "user.name=Shoal Test",
-                    "-c",
-                    "user.email=shoal@example.invalid",
-                    "rebase",
-                    "main",
-                ],
-            );
+            git_with_identity(path, &["rebase", "main"]);
             fs::write(path.join("staged"), "staged workspace content\n").unwrap();
             git(path, &["add", "staged"]);
             fs::write(path.join("tracked"), "unstaged workspace content\n").unwrap();
@@ -342,11 +321,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
 #[test]
 fn a_merge_that_pushes_asks_first_unless_confirmed() {
     let fixture = Fixture::new();
-    git(&fixture.repo, &["config", "user.name", "Test"]);
-    git(
-        &fixture.repo,
-        &["config", "user.email", "test@example.invalid"],
-    );
+    configure_identity(&fixture.repo);
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
     upstream_remote(&fixture);
@@ -392,11 +367,7 @@ fn a_merge_that_pushes_asks_first_unless_confirmed() {
 fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
     for interruption in ["stop", "daemon", "interrupt"] {
         let mut fixture = Fixture::new();
-        git(&fixture.repo, &["config", "user.name", "Test"]);
-        git(
-            &fixture.repo,
-            &["config", "user.email", "test@example.invalid"],
-        );
+        configure_identity(&fixture.repo);
         fs::write(fixture.repo.join(".gitattributes"), "tracked merge=slow\n").unwrap();
         commit_file(&fixture.repo, ".gitattributes", "tracked merge=slow\n");
         let worker = fixture.add("worker");
