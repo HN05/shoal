@@ -1,6 +1,3 @@
-// Each integration test uses only the transport operations its fixture needs.
-#![allow(dead_code)]
-
 use serde_json::Value;
 use std::{
     io::{BufRead, BufReader, Write},

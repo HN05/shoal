@@ -55,7 +55,7 @@ pub fn answer(command: &mut Command, answer: &str, options: AnswerOptions) -> (O
     // and the write then fails with EIO. Its output still shows what happened.
     let written = master.write_all(answer.as_bytes());
     let mut transcript = Vec::new();
-    let status = crate::support::wait::try_wait_for(|| {
+    let status = super::wait::try_wait_for(|| {
         let _ = master.read_to_end(&mut transcript);
         child.try_wait().unwrap()
     })

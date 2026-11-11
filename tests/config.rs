@@ -1,7 +1,6 @@
 mod support;
 
-#[path = "support/pty.rs"]
-mod pty;
+use support::pty;
 
 use std::{fs, path::Path, process::Command};
 

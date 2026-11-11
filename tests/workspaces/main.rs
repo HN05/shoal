@@ -40,27 +40,14 @@ mod upgrades;
 mod zellij;
 mod zmx;
 
-#[path = "../support/prompt.rs"]
-mod prompt;
-#[path = "../support/pty.rs"]
-mod pty;
-
-#[path = "../support/daemon.rs"]
-mod daemon_fixture;
-use daemon_fixture::{CommandGroup, DaemonGuard, Detached};
-
-#[path = "../support/git.rs"]
-mod git_fixture;
-use git_fixture::{git, init_repo};
-
-#[path = "../support/ports.rs"]
-mod ports;
-
 #[path = "../support/mod.rs"]
 mod support;
 
 use support::{
-    cli, install_test_script, install_test_script_with_mode,
+    cli,
+    daemon::{CommandGroup, DaemonGuard, Detached},
+    git::{git, init_repo},
+    install_test_script, install_test_script_with_mode, ports, prompt, pty,
     wait::{try_wait_for, try_wait_within, wait_for, wait_until},
 };
 

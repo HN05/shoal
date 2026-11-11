@@ -1,8 +1,5 @@
 //! The client side of the daemon's newline-delimited JSON protocol, for requests
 //! the CLI cannot express. Fixtures build their own envelopes.
-// Each integration test uses only the exchanges its fixture needs.
-#![allow(dead_code)]
-
 use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader, Write},

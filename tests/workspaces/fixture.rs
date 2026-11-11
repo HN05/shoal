@@ -526,7 +526,7 @@ pub(crate) fn upstream_remote(fixture: &Fixture) -> PathBuf {
 /// daemon's PATH when the runner has none.
 fn daemon_launch(root: &Path) -> Command {
     let mut launch = cli(root);
-    daemon_fixture::provide_zmx(root, &mut launch);
+    support::daemon::provide_zmx(root, &mut launch);
     launch
 }
 

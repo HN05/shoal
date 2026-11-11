@@ -114,12 +114,10 @@ impl Drop for DaemonGuard {
 /// wrapper. It is not the daemon's, which a test kills to simulate a crash
 /// that wrappers outlive. A `cat` reading a pipe from the test leads it, so
 /// the group lasts across daemon restarts and its leader exits with the test.
-#[allow(dead_code)] // Integration test binaries use different subsets of support.
 pub struct CommandGroup {
     leader: Child,
 }
 
-#[allow(dead_code)]
 impl CommandGroup {
     pub fn new() -> Self {
         let leader = Command::new("cat")
@@ -166,11 +164,9 @@ impl Drop for CommandGroup {
 
 /// The daemon's `timing::EXECUTION_STOP_GRACE`, which a wrapper gives its
 /// command after SIGTERM before it kills it.
-#[allow(dead_code)]
 const EXECUTION_STOP_GRACE: Duration = Duration::from_secs(2);
 
 /// Whether a process of process group `group` runs, other than zombies.
-#[allow(dead_code)]
 fn group_runs(group: u32) -> bool {
     let Ok(output) = Command::new("ps")
         .args(["-ax", "-o", "pgid=,stat="])
@@ -190,12 +186,10 @@ fn group_runs(group: u32) -> bool {
 /// Dropped after the commands and the daemon stop, it kills them with their
 /// groups before the fixture's directory goes: a watcher still polling its
 /// host would write into the directory while it is removed and keep it.
-#[allow(dead_code)]
 pub struct Detached {
     state: PathBuf,
 }
 
-#[allow(dead_code)]
 impl Detached {
     pub fn new(state: PathBuf) -> Self {
         Self { state }
@@ -222,7 +216,6 @@ impl Drop for Detached {
 
 /// The process and group IDs of the processes whose command line contains
 /// `text`, other than zombies.
-#[allow(dead_code)]
 fn processes_naming(text: &str) -> Vec<(i32, i32)> {
     let Ok(output) = Command::new("ps")
         .args(["-ax", "-ww", "-o", "pid=,pgid=,stat=,command="])
@@ -246,7 +239,6 @@ fn processes_naming(text: &str) -> Vec<(i32, i32)> {
 /// Give the daemon a `zmx`, last on its PATH, when the runner has none, so
 /// its startup check for required tools records no alert every test would
 /// count. A runner with zmx keeps its own, and the CLI's PATH is unchanged.
-#[allow(dead_code)]
 pub fn provide_zmx(root: &Path, launch: &mut Command) {
     let path = launch
         .get_envs()

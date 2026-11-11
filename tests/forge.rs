@@ -1,16 +1,11 @@
 //! Issue and PR actions against a scripted forge: a `curl` that answers for
 //! GitHub, and an HTTP server on Forgejo, both from `fixtures/forge.py`.
-// These tests never restart the daemon.
-#[allow(dead_code)]
-#[path = "support/daemon.rs"]
-mod daemon_fixture;
-use daemon_fixture::{CommandGroup, DaemonGuard};
-
-#[path = "support/git.rs"]
-mod git_fixture;
-use git_fixture::{git, init_repo};
-
 mod support;
+
+use support::{
+    daemon::{CommandGroup, DaemonGuard},
+    git::{git, init_repo},
+};
 
 use serde_json::{Value, json};
 use std::{

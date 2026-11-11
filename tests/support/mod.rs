@@ -1,11 +1,16 @@
 //! Shared fixtures and process defaults for integration tests. Apply overrides with
 //! `Command::env` / `current_dir` / `stdin` after constructing a command.
+// Each integration test binary uses its own subset of support.
+#![allow(dead_code)]
+
+pub mod daemon;
 pub mod daemon_client;
 pub mod fake_daemon;
-
-#[allow(dead_code)]
+pub mod git;
+pub mod ports;
+pub mod prompt;
+pub mod pty;
 pub mod run;
-#[allow(dead_code)]
 pub mod wait;
 
 use std::{
@@ -19,17 +24,14 @@ use std::{
 };
 
 /// A generous bound on a daemon socket read or write, never a timing assertion.
-#[allow(dead_code)]
 pub const HANG_GUARD: Duration = Duration::from_secs(60);
 
 /// Install an executable fixture, including any parent directories it needs.
-#[allow(dead_code)] // Integration test binaries use different subsets of support.
 pub fn install_test_script(path: impl AsRef<Path>, script: impl AsRef<[u8]>) {
     install_test_script_with_mode(path, script, 0o755);
 }
 
 /// Install an executable fixture with an explicit Unix permission mode.
-#[allow(dead_code)]
 pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<[u8]>, mode: u32) {
     let path = std::path::absolute(path).unwrap();
     let parent = path.parent().unwrap();
@@ -106,7 +108,6 @@ pub fn cli(root: &Path) -> Command {
 /// child makes the pipe after it forks: a reader closed here could still be
 /// open in another test's child forked in the meantime, until that one execs,
 /// and a write into the pipe would succeed.
-#[allow(dead_code)]
 pub fn close_stdout(command: &mut Command) -> &mut Command {
     use std::os::unix::process::CommandExt;
     // SAFETY: pipe, close and dup2 are async-signal-safe and touch no memory
@@ -130,7 +131,6 @@ pub fn close_stdout(command: &mut Command) -> &mut Command {
 /// variable at run time, and that value wins: a test binary that a workspace
 /// keeps from its seed build is not rebuilt for a new binary path, so its
 /// compile-time value names the seed worktree's binary.
-#[allow(dead_code)]
 pub fn shoal_binary() -> &'static str {
     static BINARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     BINARY.get_or_init(|| {

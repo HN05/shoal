@@ -1,7 +1,6 @@
-#[path = "support/pty.rs"]
-mod pty;
-
 mod support;
+
+use support::pty;
 
 use std::{
     io::Read,

@@ -1,15 +1,6 @@
-#[path = "support/daemon.rs"]
-mod daemon_fixture;
-use daemon_fixture::DaemonGuard;
-
-#[path = "support/git.rs"]
-mod git_fixture;
-
-#[path = "support/prompt.rs"]
-mod prompt;
-#[path = "support/pty.rs"]
-mod pty;
 mod support;
+
+use support::{daemon::DaemonGuard, prompt};
 
 use std::{
     fs,
@@ -742,7 +733,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
 
     // A changed executable path must update the definition without breaking an
     // existing execution's daemon connection.
-    let repo = git_fixture::init_repo(root.path(), "repo", &[]);
+    let repo = support::git::init_repo(root.path(), "repo", &[]);
     run(&["repo", "add", repo.to_str().unwrap()]);
     run(&["start", repo.to_str().unwrap(), "keep-running"]);
     let keep_running = support::daemon_client::space_id(root.path(), "keep-running");

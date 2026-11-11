@@ -1,22 +1,18 @@
 //! The runner against a scripted Forgejo, with a `forgejo-runner` that
 //! records how it was run and waits for the test to end it.
-// These tests never restart the daemon.
-#[allow(dead_code)]
-#[path = "support/daemon.rs"]
-mod daemon_fixture;
-use daemon_fixture::DaemonGuard;
-
-#[path = "support/git.rs"]
-mod git_fixture;
-use git_fixture::{git, init_repo};
-
 mod support;
 
 use std::{fs, path::Path, process::Output};
 
 use serde_json::{Value, json};
 use shoal_forge::test_support::Server;
-use support::{cli, install_test_script, wait::wait_until};
+use support::{
+    cli,
+    daemon::DaemonGuard,
+    git::{git, init_repo},
+    install_test_script,
+    wait::wait_until,
+};
 
 /// A Forgejo whose `team/repo` holds job `h1` waiting in run 1, a push to
 /// `main` at `head`, and registers runner 5; cancelling the run creates

@@ -1,8 +1,6 @@
-#[path = "support/prompt.rs"]
-mod prompt;
-#[path = "support/pty.rs"]
-mod pty;
 mod support;
+
+use support::prompt;
 
 use serde_json::{Value, json};
 use std::{
