@@ -44,8 +44,35 @@ fn a_workspace_with_chats_in_it_is_refused_before_anything_ends() {
     }))
     .unwrap();
     // Exporting the split workspace with it does not move the chat.
-    let error = ensure_children_exported(&check, &["worker", "split"]).unwrap_err();
+    let ids = [SpaceId::from("worker"), SpaceId::from("split")];
+    let error = ensure_children_exported(&check, &[&ids[0], &ids[1]]).unwrap_err();
     assert!(error.to_string().contains("(reading)"), "{error}");
+}
+
+#[test]
+fn a_child_sharing_its_parents_name_is_not_taken_as_exported() {
+    let workspace = crate::model::Workspace::new_record(
+        "repo".into(),
+        "worker".into(),
+        "/work/worker".into(),
+        Some("worker".into()),
+        crate::state::WorkspaceState::Ready,
+    );
+    let child = crate::model::SpaceRef {
+        id: "child-id".into(),
+        name: workspace.name.clone(),
+        kind: crate::model::SpaceKind::Workspace,
+        branch: None,
+    };
+    let check: RemovalCheck = serde_json::from_value(serde_json::json!({
+        "workspace": workspace, "running_commands": 0, "processes": [], "dirty": false,
+        "unpushed_commits": 0, "branch": "worker", "matches_default_branch": true,
+        "children": [child],
+    }))
+    .unwrap();
+    let error = ensure_children_exported(&check, &[&workspace.id]).unwrap_err();
+    assert!(error.to_string().contains("(worker)"), "{error}");
+    ensure_children_exported(&check, &[&workspace.id, &SpaceId::from("child-id")]).unwrap();
 }
 
 #[test]

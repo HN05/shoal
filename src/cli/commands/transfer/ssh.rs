@@ -172,7 +172,10 @@ fn keep_package(ctx: &Context, name: &str, file: &Path) -> Result<std::path::Pat
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("create the directory {}", directory.display()))?;
     let kept = tempfile::Builder::new()
-        .prefix(&format!("{name}-"))
+        .prefix(&format!(
+            "{}-",
+            crate::client::space_names::directory_name(name)
+        ))
         .suffix(".shoal")
         .tempfile_in(&directory)?;
     std::fs::copy(file, kept.path())?;

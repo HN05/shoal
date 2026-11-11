@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 
 use crate::client::output::transfer::{Exported, Exports};
+use crate::client::space_ids::SpaceId;
 use crate::{
     cli::{context::Context, ui},
     transfer::ExportedSpace,
@@ -32,18 +33,19 @@ impl ExportDirectory {
         &self.shown
     }
 
-    /// The file the space `name` goes to.
-    pub(in super::super) fn file(&self, name: &str) -> PathBuf {
-        self.path.join(Self::file_name(name))
+    /// The file the space `id` goes to, named after its ID: names repeat
+    /// and may hold any character.
+    pub(in super::super) fn file(&self, id: &SpaceId) -> PathBuf {
+        self.path.join(Self::file_name(id))
     }
 
-    /// The file the space `name` goes to, as the user names it.
-    fn shown_file(&self, name: &str) -> PathBuf {
-        self.shown.join(Self::file_name(name))
+    /// The file the space `id` goes to, as the user names it.
+    fn shown_file(&self, id: &SpaceId) -> PathBuf {
+        self.shown.join(Self::file_name(id))
     }
 
-    fn file_name(name: &str) -> String {
-        format!("{name}.shoal")
+    fn file_name(id: &SpaceId) -> String {
+        format!("{id}.shoal")
     }
 }
 
@@ -68,9 +70,14 @@ impl<'a> DirectoryReport<'a> {
         }
     }
 
-    /// Record the export of the space `name` to its file, or its failure,
-    /// which does not stop the others.
-    pub(super) fn add(&mut self, ctx: &Context, name: &str, exported: Result<ExportedSpace>) {
+    /// Record the export of the space `name`, `id`, to its file, or its
+    /// failure, which does not stop the others.
+    pub(super) fn add(
+        &mut self,
+        ctx: &Context,
+        (name, id): (&str, &SpaceId),
+        exported: Result<ExportedSpace>,
+    ) {
         let exported = match exported {
             Ok(exported) => exported,
             Err(error) => return self.report.failed(ctx, name, &error),
@@ -81,10 +88,10 @@ impl<'a> DirectoryReport<'a> {
         };
         let message = format!(
             "Exported {space} to {}",
-            self.directory.shown_file(name).display()
+            self.directory.shown_file(id).display()
         );
         let value = Exported {
-            file: self.directory.file(name),
+            file: self.directory.file(id),
             manifest: exported.manifest,
             removal: exported.removal,
         };

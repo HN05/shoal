@@ -50,7 +50,7 @@ async fn copy_one(
     checkpoint: Option<CheckpointNumber>,
     resume: bool,
 ) -> Result<Imported> {
-    let file = directory.file(space.name());
+    let file = directory.file(space.id());
     export::copy::copy(ctx, SpaceSelector::id(space.id()), checkpoint, file.clone()).await?;
     remote.import(&file, resume).await
 }

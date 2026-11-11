@@ -320,7 +320,7 @@ impl Checked {
     /// Refuse to export a workspace without the workspaces below it, which
     /// removing it here would take unexported, unless they are among the
     /// `exported` too.
-    fn ensure_children_exported(&self, exported: &[&str]) -> Result<()> {
+    fn ensure_children_exported(&self, exported: &[&SpaceId]) -> Result<()> {
         match self {
             Self::Workspace(check) => ensure_children_exported(check, exported),
             Self::Chat(_) => Ok(()),
@@ -399,7 +399,7 @@ async fn check_workspace_export(
 /// Refuse to export the workspace `check` describes without the workspaces
 /// below it, which removing it here would take unexported, unless they are
 /// among the `exported` too.
-fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<()> {
+fn ensure_children_exported(check: &RemovalCheck, exported: &[&SpaceId]) -> Result<()> {
     let (chats, workspaces): (Vec<_>, Vec<_>) =
         (check.children.iter()).partition(|child| child.kind == crate::model::SpaceKind::Chat);
     let chats: Vec<&str> = chats.iter().map(|chat| chat.name.as_str()).collect();
@@ -410,8 +410,8 @@ fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<(
     );
     let missing: Vec<&str> = workspaces
         .iter()
+        .filter(|child| !exported.contains(&&child.id))
         .map(|child| child.name.as_str())
-        .filter(|child| !exported.contains(child))
         .collect();
     ensure!(
         missing.is_empty(),
@@ -544,7 +544,7 @@ pub(super) async fn check_exports(
 ) -> Result<Vec<PlannedExport>> {
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
-    let exported: Vec<&str> = spaces.iter().map(|space| space.name().as_str()).collect();
+    let exported: Vec<&SpaceId> = spaces.iter().map(PresentSpace::id).collect();
     for space in spaces {
         let export = async {
             let export = plan_export(ctx, space, directory, operation).await?;
@@ -574,7 +574,7 @@ async fn plan_export(
     directory: &ExportDirectory,
     operation: Operation,
 ) -> Result<PlannedExport> {
-    let output = Output::reserve(&directory.file(space.name()))?;
+    let output = Output::reserve(&directory.file(space.id()))?;
     let check = check_export(ctx, space.clone(), &output).await?;
     if let Checked::Workspace(check) = &check {
         super::super::workspaces::ensure_batch_removable(ctx, check, operation).await?;
@@ -591,7 +591,7 @@ async fn export_each(
     let mut report = DirectoryReport::new(directory, false);
     for PlannedExport { check, output } in planned {
         let exported = export_checked(ctx, &check, &output).await;
-        report.add(ctx, check.name(), exported);
+        report.add(ctx, (check.name(), check.id()), exported);
     }
     report.finish(ctx)
 }

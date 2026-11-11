@@ -69,7 +69,7 @@ async fn copy_into(
     let mut report = DirectoryReport::new(&directory, true);
     for space in spaces {
         let copied = copy_one(ctx, &directory, space, checkpoint).await;
-        report.add(ctx, space.name(), copied);
+        report.add(ctx, (space.name(), space.id()), copied);
     }
     report.finish(ctx)
 }
@@ -82,7 +82,7 @@ async fn copy_one(
     space: &PresentSpace,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<ExportedSpace> {
-    let output = Output::reserve(&directory.file(space.name()))?;
+    let output = Output::reserve(&directory.file(space.id()))?;
     copy(
         ctx,
         SpaceSelector::id(space.id()),

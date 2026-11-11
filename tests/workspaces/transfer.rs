@@ -419,6 +419,8 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     ]);
     let repo = fixture.repo.to_str().unwrap();
     let directory = fixture.root.path().join("exports");
+    // Each export's file is named after its space's ID.
+    let files = ["first", "second"].map(|name| format!("{}.shoal", fixture.id(name)));
     let export = |extra: &[&str]| {
         let mut args = vec!["move", "export", "--repo", repo, "--all", "-o"];
         args.push(directory.to_str().unwrap());
@@ -432,11 +434,11 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     assert!(paths.iter().all(|path| path.exists()));
     assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
     // So does a file that one of them would overwrite.
-    fs::write(directory.join("first.shoal"), "").unwrap();
+    fs::write(directory.join(&files[0]), "").unwrap();
     let refused = export(&["--yes"]);
     assert!(!refused.status.success());
     assert!(paths.iter().all(|path| path.exists()));
-    fs::remove_file(directory.join("first.shoal")).unwrap();
+    fs::remove_file(directory.join(&files[0])).unwrap();
     // So does one still in a lifecycle operation, which removal refuses.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let set_state = |state: &str| {
@@ -464,7 +466,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     assert_eq!(names, ["first", "second"]);
     assert_eq!(exported["failed"], serde_json::json!([]));
     assert!(paths.iter().all(|path| !path.exists()));
-    assert!(directory.join("first.shoal").exists() && directory.join("second.shoal").exists());
+    assert!(files.iter().all(|file| directory.join(file).exists()));
 
     // A file that is no export fails alone; the others import, and a failed
     // post-setup hook fails its file without removing the workspace.
@@ -490,8 +492,9 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         .iter()
         .map(|import| import["workspace"]["name"].clone())
         .collect();
-    assert_eq!(names, ["first", "second"]);
-    let failed: Vec<_> = imported["failed"]
+    assert_eq!(names.len(), 2, "{imported}");
+    assert!(names.contains(&"first".into()) && names.contains(&"second".into()));
+    let mut failed: Vec<_> = imported["failed"]
         .as_array()
         .unwrap()
         .iter()
@@ -499,10 +502,15 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
             Path::new(failure["file"].as_str().unwrap())
                 .file_name()
                 .unwrap()
+                .to_str()
+                .unwrap()
                 .to_owned()
         })
         .collect();
-    assert_eq!(failed, ["broken.shoal", "second.shoal"], "{imported}");
+    failed.sort();
+    let mut expected = ["broken.shoal".to_owned(), files[1].clone()];
+    expected.sort();
+    assert_eq!(failed, expected, "{imported}");
     for (path, name) in paths.iter().zip(["first", "second"]) {
         assert_eq!(
             fs::read_to_string(path.join("notes")).unwrap(),
@@ -521,8 +529,9 @@ fn export_all_keep_copies_every_space_past_one_that_cannot_be_copied() {
     let repo = fixture.repo.to_str().unwrap();
     let directory = fixture.root.path().join("copies");
     fs::create_dir(&directory).unwrap();
+    let files = ["first", "second"].map(|name| format!("{}.shoal", fixture.id(name)));
     // The file the first copy would overwrite fails that copy alone.
-    fs::write(directory.join("first.shoal"), "").unwrap();
+    fs::write(directory.join(&files[0]), "").unwrap();
     let copied = fixture
         .command()
         .args([
@@ -542,7 +551,7 @@ fn export_all_keep_copies_every_space_past_one_that_cannot_be_copied() {
     assert_eq!(names, ["second"], "{copied}");
     assert_eq!(copied["failed"][0]["workspace"], "first", "{copied}");
     assert!(paths.iter().all(|path| path.exists()));
-    assert!(fs::metadata(directory.join("second.shoal")).unwrap().len() > 0);
+    assert!(fs::metadata(directory.join(&files[1])).unwrap().len() > 0);
 }
 
 #[test]
@@ -553,6 +562,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         .map(|name| PathBuf::from(fixture.add(name)["path"].as_str().unwrap()))
         .collect();
     let directory = fixture.root.path().join("exports");
+    let ids = ["first", "second", "third"].map(|name| fixture.id(name));
     let refused = fixture.run(&[
         "move",
         "export",
@@ -579,8 +589,8 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         "{exported}"
     );
     assert_eq!(exported["failed"], serde_json::json!([]));
-    for name in ["first", "second"] {
-        assert!(directory.join(format!("{name}.shoal")).exists());
+    for id in &ids[..2] {
+        assert!(directory.join(format!("{id}.shoal")).exists());
     }
     assert!(!paths[0].exists() && !paths[1].exists() && paths[2].exists());
     // An existing file is refused before the picker opens.
@@ -600,7 +610,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         .to_owned();
     let (picked, _) = fixture.pick(&["move", "export", "-o", output, "--yes"], &third, "");
     assert!(picked.status.success(), "{picked:?}");
-    assert!(directory.join("third.shoal").exists());
+    assert!(directory.join(format!("{}.shoal", ids[2])).exists());
     assert!(!paths[2].exists());
 }
 
@@ -1156,6 +1166,7 @@ fn exporting_a_parent_needs_its_children_exported_with_it() {
     }
     // Exported together, the child comes from the checkpoint its parent's
     // removal kept, whichever goes first.
+    let ids = ["parent", "child"].map(|name| fixture.id(name));
     let exported = fixture.ok(&[
         "move",
         "export",
@@ -1166,8 +1177,8 @@ fn exporting_a_parent_needs_its_children_exported_with_it() {
         "--yes",
     ]);
     assert_eq!(exported["failed"], serde_json::json!([]), "{exported}");
-    for name in ["parent", "child"] {
-        assert!(directory.join(format!("{name}.shoal")).exists(), "{name}");
+    for id in ids {
+        assert!(directory.join(format!("{id}.shoal")).exists(), "{id}");
     }
     assert!(!parent.exists() && !child.exists());
 }

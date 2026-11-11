@@ -3868,8 +3868,8 @@ it or in a workspace's worktree; the chat is then removed. The file's manifest n
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export
 --repo <repository> --all -o <directory>`, for every workspace and running chat
-of the repository, export each to `<name>.shoal` in the directory, creating it
-when missing. It checks every space as a single export does, that no workspace
+of the repository, export each to `<id>.shoal` in the directory, named after
+the space's ID since names repeat, creating it when missing. It checks every space as a single export does, that no workspace
 is in the middle of another lifecycle operation, and that the terminal does not
 close with one of them, before ending any: when one cannot be exported, it lists
 each refusal and ends nothing. It asks once before ending the chats and releasing
@@ -3882,7 +3882,7 @@ copy of it instead: a workspace at a new checkpoint, as `shoal checkpoint`
 takes one, or with `--checkpoint N` at an earlier one `shoal restore
 <workspace>` lists, and a chat with its session. It refuses a removed workspace
 and a chat whose agent reported no session. With several spaces, a directory or
-`--all`, it writes a copy of each to `<name>.shoal` in the directory, reporting
+`--all`, it writes a copy of each to `<id>.shoal` in the directory, reporting
 each space it cannot copy and copying the rest. It refuses `--checkpoint` for
 more than one space, since its number names a checkpoint of one workspace. The import
 opens a workspace copy as a new workspace on the nearest free `-2`, `-3`, ...
