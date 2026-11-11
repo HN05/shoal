@@ -70,12 +70,7 @@ impl OriginExt for Origin {
 }
 
 pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
-    // Unit tests inject hosts and never discover or close the user's sessions.
-    if cfg!(test) {
-        Vec::new()
-    } else {
-        HostName::ALL.iter().copied().filter_map(host).collect()
-    }
+    HostName::ALL.iter().copied().filter_map(host).collect()
 }
 
 /// Refuse when the program of host `name` is missing; the plain terminal

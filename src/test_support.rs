@@ -413,23 +413,33 @@ pub fn run_until_stopped_in(dir: &Path) -> tokio::process::Command {
 }
 
 /// The arguments that make this test binary, or a copy, run until stopped.
-const RUN_UNTIL_STOPPED: [&str; 3] = ["--exact", "test_support::run_until_stopped", "--ignored"];
+const RUN_UNTIL_STOPPED: [&str; 3] = ["--exact", "helper_tests::run_until_stopped", "--ignored"];
 
-#[test]
-#[ignore = "helper process tests start"]
-fn run_until_stopped() {
-    std::thread::sleep(std::time::Duration::from_secs(300));
+/// The ignored tests that the helpers above and below start in this test
+/// binary. Each crate whose tests use those helpers defines them as the
+/// `helper_tests` module at its root.
+#[macro_export]
+macro_rules! helper_tests {
+    () => {
+        #[test]
+        #[ignore = "helper process tests start"]
+        fn run_until_stopped() {
+            std::thread::sleep(std::time::Duration::from_secs(300));
+        }
+
+        #[test]
+        #[ignore = "helper child launched by ownership tests"]
+        fn marked_child() {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    };
 }
 
 /// This test binary's `marked_child` helper, which waits 30 seconds, for a
 /// test to give its environment before [`spawn_marked_child`] starts it.
 pub fn marked_child() -> tokio::process::Command {
     let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
-    command.args([
-        "--exact",
-        "process::identity::tests::marked_child",
-        "--ignored",
-    ]);
+    command.args(["--exact", "helper_tests::marked_child", "--ignored"]);
     command
 }
 

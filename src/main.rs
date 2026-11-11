@@ -40,6 +40,10 @@ mod start_plan;
 mod terminal;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod helper_tests {
+    crate::helper_tests!();
+}
 mod tmp_dirs;
 mod tools;
 mod transfer;

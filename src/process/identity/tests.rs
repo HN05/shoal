@@ -689,11 +689,6 @@ fn list_unreaped_child(
     Ok((live, own, list_same_user()?))
 }
 
-#[test]
-#[ignore = "helper child launched by ownership test"]
-fn marked_child() {
-    std::thread::sleep(Duration::from_secs(30));
-}
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn stat_read_after_process_exit_is_not_an_inventory_failure() {

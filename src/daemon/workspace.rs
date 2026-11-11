@@ -183,7 +183,13 @@ impl Manager {
             syncs: Default::default(),
             publications: Default::default(),
             store: Store::open(paths.database()).await?,
-            session_hosts: crate::sessions::hosts(),
+            // Unit tests inject hosts and never discover or close the
+            // user's sessions.
+            session_hosts: if cfg!(test) {
+                Vec::new()
+            } else {
+                crate::sessions::hosts()
+            },
             place_ownership: Default::default(),
             gates: Default::default(),
             paths,
