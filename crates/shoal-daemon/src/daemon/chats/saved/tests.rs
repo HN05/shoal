@@ -4,7 +4,7 @@ use crate::process::identity::IdentityExt;
 use crate::{
     daemon::{
         events::EventItem,
-        test_support::{ProcessGroup, manager, repository, unmarked},
+        test_support::{ProcessGroup, manager, repository},
         workspace::{Ending, Manager},
     },
     model::{Chat, Repository},
@@ -31,7 +31,7 @@ pub(in crate::daemon::chats) async fn named_chat(
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -340,7 +340,7 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
     let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
     manager.save_chats(ChatRestore::Automatic).await;
     process.wait().unwrap();
-    let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let restoring = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let restoring_pid = restoring.id();
     manager
         .restore_chat(&chat.id, restoring_pid, Default::default(), None, false)
@@ -462,7 +462,7 @@ async fn a_survivor_in_the_chats_process_group_holds_it_saved() {
     // identity, as a command it ran.
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
+        std::process::Command::new("sh")
             .arg("-c")
             .arg("sleep 600 & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -556,7 +556,7 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
         .unwrap();
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
+        std::process::Command::new("sh")
             .arg("-c")
             .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -729,7 +729,7 @@ async fn a_saved_chat_takes_no_handoff() {
         .await
         .unwrap();
     // A launcher that hands the chat to a session it starts, as Happy's does.
-    let mut launcher = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let mut launcher = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.into(),
@@ -769,7 +769,7 @@ async fn a_stop_after_the_agent_exited_ends_what_it_left_running() {
         .unwrap();
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
+        std::process::Command::new("sh")
             .arg("-c")
             .arg("sleep 600 & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -820,7 +820,7 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
     let id_file = root.path().join("chat-id");
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
+        std::process::Command::new("sh")
             .arg("-c")
             .arg(
                 "while [ ! -s \"$0\" ]; do sleep 0.1; done; \
@@ -895,7 +895,7 @@ wait
     )
     .unwrap();
     let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
+        std::process::Command::new("sh")
             .arg("-c")
             .arg("sh \"$0\" \"$1\" \"$2\" & wait")
             .arg(&script)
@@ -1088,7 +1088,7 @@ async fn a_survivor_that_left_the_group_of_an_exited_agent_holds_the_chat() {
         .unwrap();
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        unmarked("sh")
+        std::process::Command::new("sh")
             .arg("-c")
             .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -1141,8 +1141,6 @@ async fn a_blocked_chat_with_a_background_task_keeps_running() {
     // on macOS, so the test binary stands in for it.
     let mut task = crate::daemon::test_support::spawn_marked_child(
         crate::daemon::test_support::marked_child()
-            .env_remove(crate::env::WORKSPACE_ID)
-            .env_remove(crate::env::EXECUTION_ID)
             .env(crate::env::CHAT, chat.id.as_str())
             .process_group(0),
     );
@@ -1182,8 +1180,6 @@ async fn a_blocked_chats_waiting_hook_is_no_background_work() {
     // environment on macOS, so the test binary stands in for it.
     let mut hook = crate::daemon::test_support::spawn_marked_child(
         crate::daemon::test_support::marked_child()
-            .env_remove(crate::env::WORKSPACE_ID)
-            .env_remove(crate::env::EXECUTION_ID)
             .env(crate::env::CHAT, chat.id.as_str())
             .env(crate::env::WAITING_HOOK, "1")
             .process_group(0),

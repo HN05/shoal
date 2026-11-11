@@ -436,10 +436,44 @@ macro_rules! helper_tests {
 
 /// This test binary's `marked_child` helper, which waits 30 seconds, for a
 /// test to give its environment before [`spawn_marked_child`] starts it.
+/// It carries no Shoal identity but the one the test gives it.
 pub fn marked_child() -> tokio::process::Command {
     let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
     command.args(["--exact", "helper_tests::marked_child", "--ignored"]);
+    without_runner_identity(command.as_std_mut());
     command
+}
+
+/// `program` without the identity of a workspace or chat the runner may run
+/// in, which would make what it starts theirs rather than the test's spaces'.
+pub fn unmarked(program: &str) -> Command {
+    let mut command = Command::new(program);
+    without_runner_identity(&mut command);
+    command
+}
+
+/// The variables that tell Shoal which space or execution a process
+/// belongs to, which a runner inside a workspace or chat carries.
+const IDENTITY: [&str; 4] = [
+    crate::env::EXECUTION_ID,
+    crate::env::WORKSPACE_ID,
+    crate::env::CHAT,
+    crate::env::ONESHOT_RUN,
+];
+
+/// Remove from `command` the Shoal identity it would inherit from the
+/// runner, keeping what the test set itself, so tests behave the same inside
+/// and outside a workspace.
+fn without_runner_identity(command: &mut Command) {
+    let set: Vec<_> = command
+        .get_envs()
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    for name in IDENTITY {
+        if !set.iter().any(|set| set == name) {
+            command.env_remove(name);
+        }
+    }
 }
 
 /// Start `command` from [`marked_child`] and return once the helper runs its
@@ -471,8 +505,11 @@ pub struct ProcessGroup {
 }
 
 impl ProcessGroup {
+    /// Start `command` without the runner's Shoal identity, keeping the one
+    /// the test gave it.
     pub fn spawn(command: &mut Command) -> Self {
         use std::os::unix::process::CommandExt as _;
+        without_runner_identity(command);
         Self {
             leader: command.process_group(0).spawn().unwrap(),
             reaped: false,

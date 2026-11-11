@@ -72,3 +72,18 @@ fn snapshot(dir: &Path) -> Result<BTreeMap<std::path::PathBuf, Vec<u8>>> {
     }
     Ok(files)
 }
+
+#[test]
+fn spawned_helpers_drop_the_runners_identity_but_keep_the_tests() {
+    let mut command = std::process::Command::new("sleep");
+    command.env(crate::env::CHAT, "test-chat");
+    super::without_runner_identity(&mut command);
+    let environment: BTreeMap<_, _> = command
+        .get_envs()
+        .map(|(name, value)| (name.to_owned(), value.map(ToOwned::to_owned)))
+        .collect();
+    let value = |name: &str| environment.get(std::ffi::OsStr::new(name)).cloned();
+    assert_eq!(value(crate::env::CHAT), Some(Some("test-chat".into())));
+    assert_eq!(value(crate::env::WORKSPACE_ID), Some(None));
+    assert_eq!(value(crate::env::EXECUTION_ID), Some(None));
+}

@@ -5,7 +5,7 @@ use crate::{
             restores::tests::{HELD, RESUMED, UNRESUMABLE},
             saved::tests::named_chat,
         },
-        test_support::{ProcessGroup, manager, repository, unmarked},
+        test_support::{ProcessGroup, manager, repository},
     },
     state::ChatRestore,
 };
@@ -53,7 +53,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
     // A space whose process holds the permission it gives.
-    let coordinating = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let coordinating = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let pid = coordinating.id();
     let coordinator = (manager.start_chat(
         repo.id.into(),
@@ -113,7 +113,7 @@ async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
     let restart = manager.restart_chat(&chat.id, run("a"), coordinator, None);
     assert!(restart.await.is_err());
     process.wait().unwrap();
-    let restored = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let restored = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     manager
         .restore_chat(&chat.id, restored.id(), Default::default(), None, false)
         .await
@@ -145,7 +145,7 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
         let manager = &manager;
         let id = &chat.id;
         async move {
-            let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+            let restoring = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
             let pid = restoring.id();
             manager
                 .restore_chat(id, pid, Default::default(), None, false)
@@ -186,7 +186,7 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     process.wait().unwrap();
-    let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let restoring = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let pid = restoring.id();
     manager
         .restore_chat(&chat.id, pid, Default::default(), None, false)
@@ -240,7 +240,7 @@ async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
         .await
         .unwrap();
     // No AI tool describes the agent, so nothing resumes its session.
-    let process = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.into(),
