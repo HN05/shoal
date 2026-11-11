@@ -46,3 +46,13 @@ fn cleanup_rows_round_trip_without_a_workspace() {
     assert!(matches!(row, Row::Cleanup));
     assert_eq!(row.space(), None);
 }
+
+#[test]
+fn blocked_rows_round_trip_their_space() {
+    let row = Row::parse(Row::Blocked("space-id".into()).id()).unwrap();
+    let Row::Blocked(space) = &row else {
+        panic!("not a blocked row");
+    };
+    assert_eq!(space.as_str(), "space-id");
+    assert_eq!(row.space(), Some(SpaceSelector::id(&"space-id".into())));
+}

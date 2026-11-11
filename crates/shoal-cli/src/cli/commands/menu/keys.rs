@@ -185,8 +185,8 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             target: Some(SpaceSelector::Id(space)),
             session: None,
         }),
-        Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
-            space: Some(workspace.to_string()),
+        Row::Failed(space) | Row::Blocked(space) => Command::Workspace(WorkspaceCommand::Status {
+            space: Some(space.to_string()),
             item: None,
         }),
         Row::Ready {

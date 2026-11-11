@@ -44,6 +44,8 @@ pub(super) enum Row {
     },
     NeedsInput(SpaceId),
     Failed(SpaceId),
+    /// A blocked workspace or chat, whose status shows what blocks it.
+    Blocked(SpaceId),
     /// A mark of a workspace or chat, on its item or on itself.
     Ready {
         space: SpaceId,
@@ -81,8 +83,8 @@ impl Row {
             Item::NeedsInput { workspace } => Self::NeedsInput(workspace.id.clone()),
             Item::ChatNeedsInput { chat } => Self::NeedsInput(chat.id.clone()),
             Item::Failed { workspace } => Self::Failed(workspace.id.clone()),
-            Item::Blocked { workspace } => Self::Workspace(workspace.id.clone()),
-            Item::ChatBlocked { chat } => Self::Workspace(chat.id.clone()),
+            Item::Blocked { workspace } => Self::Blocked(workspace.id.clone()),
+            Item::ChatBlocked { chat } => Self::Blocked(chat.id.clone()),
             Item::Ready { workspace, mark } => Self::Ready {
                 space: workspace.id.clone(),
                 url: mark.url.clone(),
@@ -118,6 +120,7 @@ impl Row {
             } => format!("approval:{workspace}:{number}:{created_at}"),
             Self::NeedsInput(workspace) => format!("needs-input:{workspace}"),
             Self::Failed(workspace) => format!("failed:{workspace}"),
+            Self::Blocked(space) => format!("blocked:{space}"),
             Self::Ready { space, url } => {
                 format!("ready:{space}:{}", url.as_deref().unwrap_or_default())
             }
@@ -169,6 +172,7 @@ impl Row {
             }
             "needs-input" => Self::NeedsInput(space),
             "failed" => Self::Failed(space),
+            "blocked" => Self::Blocked(space),
             "ready" => Self::Ready {
                 space,
                 url: (!detail.is_empty()).then(|| detail.to_owned()),
@@ -190,6 +194,7 @@ impl Row {
             }
             | Self::NeedsInput(space)
             | Self::Failed(space)
+            | Self::Blocked(space)
             | Self::Ready { space, .. }
             | Self::Demo {
                 workspace: space, ..
