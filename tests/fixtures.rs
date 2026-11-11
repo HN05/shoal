@@ -45,6 +45,17 @@ fn installed_scripts_preserve_literal_paths_contents_and_modes() {
 }
 
 #[test]
+fn a_command_running_at_its_hang_guard_fails_naming_it() {
+    let error = support::run::try_output_within(
+        Command::new("sleep").arg("600"),
+        std::time::Duration::from_secs(1),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    assert!(error.to_string().contains("`sleep 600`"), "{error}");
+}
+
+#[test]
 fn processes_ignore_launching_environment_and_allow_explicit_overrides() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let outside = root.path().join("outside");

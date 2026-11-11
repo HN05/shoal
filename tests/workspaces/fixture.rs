@@ -214,11 +214,17 @@ impl Fixture {
         self.commands.join(&mut command);
         command
     }
+    /// What the Shoal command `command` printed once it ended. One still
+    /// running after five minutes fails the test, naming it: a hang guard
+    /// that outlasts the daemon's own on the tools it runs.
+    pub(crate) fn output(&self, command: &mut Command) -> Output {
+        support::run::output_within(command, Duration::from_secs(300))
+    }
     pub(crate) fn run(&self, args: &[&str]) -> Output {
-        self.command().args(args).output().unwrap()
+        self.output(self.command().args(args))
     }
     pub(crate) fn ok(&self, args: &[&str]) -> Value {
-        let output = self.command().arg("--json").args(args).output().unwrap();
+        let output = self.output(self.command().arg("--json").args(args));
         assert!(
             output.status.success(),
             "{args:?}: {}",

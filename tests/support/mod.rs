@@ -4,6 +4,8 @@ pub mod daemon_client;
 pub mod fake_daemon;
 
 #[allow(dead_code)]
+pub mod run;
+#[allow(dead_code)]
 pub mod wait;
 
 use std::{
