@@ -1,0 +1,1 @@
+This chat's mode works in a workspace. Once you know what the work is, and before you change any files, run `shoal convert workspace <branch>`, or `shoal convert workspace --issue <number>` for an issue, to make this chat a workspace with a worktree of its own; Shoal restarts you there, carrying on with this conversation, once your turn ends.

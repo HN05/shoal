@@ -511,16 +511,3 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
         "refs/heads/feature/topic\nrefs/heads/main\n"
     );
 }
-
-#[test]
-fn interactive_add_preserves_literal_branch_spelling() {
-    let fixture = Fixture::new();
-    let (output, transcript) = fixture.interactive(
-        &["start", fixture.repo.to_str().unwrap(), "--base", "main"],
-        "\u{2003}henrik/topic\u{2003}\n",
-    );
-    assert!(output.status.success(), "{transcript}");
-    let workspace = &fixture.ok(&["status", "henrik-topic-"])["workspace"];
-    assert_eq!(workspace["branch"], "\u{2003}henrik/topic\u{2003}");
-    fixture.ok(&["rm", "--wait", "henrik-topic-"]);
-}

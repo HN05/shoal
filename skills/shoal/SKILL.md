@@ -54,7 +54,10 @@ URL; an issue becomes the agent's first message, followed by its mode's
 instructions, and text after `--` is the task. `--mode` picks the mode,
 `worker` by default, which starts in a workspace; `chat` and `plan` start in a
 chat, and `--chat` or `--worktree` overrides the mode's kind. `--base` naming
-another workspace's branch stacks the new workspace on it. `contribute` takes
+another workspace's branch stacks the new workspace on it. A start that names
+no branch, issue, PR, existing branch or copy begins as a chat in its mode,
+`worker` by default, which `shoal convert workspace` makes a workspace once the
+work is known. `contribute` takes
 the same URLs for a repository the user does not maintain: it clones it, forks
 it when the user cannot push there, and removes the clone once nothing of it is
 left.

@@ -47,6 +47,15 @@ pub struct CopyCreation {
 }
 
 impl Creation {
+    /// Whether nothing names the branch yet: no new or existing branch, PR
+    /// head or copy.
+    pub fn unsettled(&self) -> bool {
+        self.branch.is_none()
+            && self.existing.is_none()
+            && self.pull_head.is_none()
+            && self.copy.is_none()
+    }
+
     /// Build a new branch on `base`, the branch of a done dependency, unless
     /// the addition names its own base, opens an existing branch or copies a
     /// workspace, which starts from that workspace instead.

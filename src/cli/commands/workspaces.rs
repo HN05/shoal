@@ -21,7 +21,7 @@ mod title;
 mod unmerge;
 mod watch;
 
-pub(super) use add::{AddOptions, AgentLaunch, add, check_target, link};
+pub(super) use add::{AddOptions, AgentLaunch, StartsAsChat, add, check_target, link};
 pub(in crate::cli) use add::{execute_add, item_context, start_queued};
 pub(super) use adopt::adopt;
 pub(super) use cd::cd;

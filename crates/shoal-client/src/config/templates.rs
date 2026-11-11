@@ -26,6 +26,10 @@ const ROOT_CHAT_FACTS: &str = include_str!("templates/facts/root_chat.md");
 /// The practices Shoal's own mechanics depend on, sent to every agent after
 /// its space's facts.
 const SPACE_RULES: &str = include_str!("templates/space_rules.md");
+/// What the agent of a chat in a repository's checkout whose mode works in a
+/// workspace is told after the space rules, as a start without a branch
+/// begins.
+const CONVERT_RULE: &str = include_str!("templates/convert_rule.md");
 /// A review's instructions: the fixed task, read-only rules, output contract
 /// and treatment of history, then the base the `review` rule replaces.
 const REVIEW: &str = include_str!("templates/review.md");
@@ -259,6 +263,9 @@ fn system_text(
 ) -> Result<String> {
     let resolved = place.mode(settings, mode)?;
     let mut system = vec![facts(place).to_owned(), SPACE_RULES.to_owned()];
+    if converts_to_workspace(place, &resolved) {
+        system.push(CONVERT_RULE.to_owned());
+    }
     for name in &resolved.rules {
         let rule = settings
             .rules
@@ -267,6 +274,20 @@ fn system_text(
         system.push(rule.text.clone());
     }
     Ok(fields.render(&join(system)))
+}
+
+/// Whether the agent at `place` in `mode` is a chat in a repository's
+/// checkout whose mode works in a workspace, which it becomes once the work
+/// is known.
+fn converts_to_workspace(place: Place<'_>, mode: &modes::Mode) -> bool {
+    let in_checkout = matches!(
+        place,
+        Place::Chat {
+            home: ChatHome::Checkout(_),
+            ..
+        }
+    );
+    in_checkout && mode.kind == SpaceKind::Workspace
 }
 
 /// What the agent at `place` is told about its space, by the space's kind.

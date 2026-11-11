@@ -412,8 +412,43 @@ async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repos
     super::issues::current_repository_id(ctx, &repos).await
 }
 
-/// Start the agent in a new or reopened workspace.
+/// Start the agent in a new or reopened workspace, or, for a start that
+/// names no branch, issue, PR, existing branch or copy, in a chat that its
+/// agent makes a workspace once it knows the work.
 async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
+    let unsettled = args.clone();
+    match in_new_workspace(ctx, args, mode).await {
+        Err(error) if error.is::<workspaces::StartsAsChat>() => {
+            let starts = error.downcast::<workspaces::StartsAsChat>()?;
+            as_chat(ctx, unsettled, starts).await
+        }
+        started => started,
+    }
+}
+
+/// Start the agent of the workspace's start `args`, which named no branch,
+/// in a chat in the repository `starts` names, in the mode it chose, the
+/// worker's by default, refusing what only a new workspace takes.
+async fn as_chat(
+    ctx: &Context,
+    mut args: StartArgs,
+    starts: workspaces::StartsAsChat,
+) -> Result<i32> {
+    let worktree = args.worktree.then_some("--worktree");
+    if let Some(flag) = worktree.into_iter().chain(workspace_flags(&args)).next() {
+        anyhow::bail!(
+            "{flag} applies to a new workspace's branch; name the branch, since a start without one begins as a chat"
+        );
+    }
+    args.repository = None;
+    args.repository_override = Some(starts.repository.value().to_owned());
+    args.checked_repository = None;
+    let mode = starts.mode.unwrap_or(modes::ModeName::DEFAULT);
+    in_chat(ctx, args, ModeChoice::Named(mode)).await
+}
+
+/// Start the agent in a new or reopened workspace.
+async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
     let issue = match args.issue {
         Some(None) => anyhow::bail!("--issue needs a number or URL outside plan mode"),
         Some(Some(issue)) => Some(issue),

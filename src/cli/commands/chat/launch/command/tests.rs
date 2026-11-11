@@ -95,3 +95,28 @@ fn a_converted_chat_is_told_what_its_space_is_while_it_continues_its_session() {
         .expect("a converted chat's first message");
     assert!(message.contains("/repos/shoal"), "{message}");
 }
+
+#[test]
+fn a_workspace_mode_in_a_checkout_is_told_to_convert() {
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let agent: Agent = "claude".parse().unwrap();
+    let repo = repository();
+    let repo = ChatRepository::Registered(repo.clone());
+    let told = |mode: crate::config::modes::ModeName| {
+        let Some(registered) = repo.registered() else {
+            unreachable!()
+        };
+        let topic = Topic::repository(registered, &mode);
+        brief(&settings, &agent, &repo, &topic, false)
+            .unwrap()
+            .system
+    };
+
+    let worker = told(crate::config::modes::ModeName::DEFAULT);
+    let chat = told(crate::config::modes::ModeName::CHAT);
+
+    assert!(worker.contains("shoal convert workspace"), "{worker}");
+    assert!(!chat.contains("shoal convert workspace"), "{chat}");
+}

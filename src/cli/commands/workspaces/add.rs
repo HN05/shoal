@@ -111,6 +111,11 @@ pub(in crate::cli::commands) async fn add(
     let agent = choose_for_picked_issue(&settings, agent, picked.is_some()).await?;
     let agent = agent::for_creation(&creation, agent)?;
     let issue = load_add_issue(ctx, &target, issue.or(picked)).await?;
+    if issue.is_none() && creation.unsettled() {
+        let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
+        let repository = target.selector.clone();
+        return Err(StartsAsChat { repository, mode }.into());
+    }
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
@@ -148,6 +153,23 @@ pub(in crate::cli::commands) async fn add(
     }
     execute_add_with_target(ctx, plan, target, issue).await
 }
+
+/// A workspace's start that names no branch, issue, PR, existing branch or
+/// copy, which begins as a chat in `repository` in `mode` instead, whose
+/// agent makes it a workspace once it knows the work.
+#[derive(Debug)]
+pub(in crate::cli::commands) struct StartsAsChat {
+    pub repository: crate::repository::Selector,
+    pub mode: Option<crate::config::modes::ModeName>,
+}
+
+impl std::fmt::Display for StartsAsChat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("name the workspace's branch, or pass --issue")
+    }
+}
+
+impl std::error::Error for StartsAsChat {}
 
 /// The repository a start goes in, the one `repository` names or `issue`
 /// belongs to, else the current or a picked one, once the daemon accepts a

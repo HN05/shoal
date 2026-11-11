@@ -2515,7 +2515,15 @@ replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
 expand in them.
 
 ### Branch and workspace names
-`shoal start <repository> [branch]` creates a literal Git branch;
+`shoal start <repository> [branch]` creates a literal Git branch. A start that
+names no branch, issue, PR, existing branch or copy, including the picker's
+"Create a new branch" and a start without a terminal, begins as a
+[chat](#chats) in the chosen mode, `worker` by default, under the chat's
+default name; the mode's agent is told to make it a workspace with
+[`shoal convert workspace <branch>`](#convert-a-chat-or-a-workspace) once it
+knows the work, before it changes any files. Flags that only a new branch
+takes, such as `--base`, are refused there.
+`--existing <branch|remote/branch>` uses an existing one
 `--existing <branch|remote/branch>` uses an existing one (incompatible with the
 branch argument and `--issue`); its `--base` is the ref `diff` and `{diff_base}`
 compare against instead of the default branch, for new worktrees only. The picker

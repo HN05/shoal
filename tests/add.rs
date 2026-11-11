@@ -152,12 +152,12 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
             &["check_creation missing"][..],
             "repository is not registered",
         ),
-        // The typed branch is checked again before the agent picker.
+        // Without a branch it begins as a chat, which takes no base.
         (
             &["start", "test", "--base", "main"],
-            "taken\n",
-            &["check_creation test", "check_creation test taken"],
-            "workspace name already exists: taken",
+            "",
+            &["check_creation test", "layered_config test"],
+            "--base applies to a new workspace's branch",
         ),
         (
             &["repo", "rename", "missing"],

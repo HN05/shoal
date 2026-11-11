@@ -741,7 +741,10 @@ turn ends, so the command that asked for it finishes: the daemon records the
 pending conversion, which survives a restart, and one task watching agent
 states stops the agent and starts it again in the new place from a fork of
 its session, as `start --fork` and a copy's restore do, since a session
-resumed in another directory would not find its files there.
+resumed in another directory would not find its files there. A start without a
+branch begins as a chat in its mode, whose agent converts it once it knows the
+work, instead of a workspace on a placeholder branch whose directory would keep
+a meaningless name.
 
 A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching

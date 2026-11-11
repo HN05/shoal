@@ -93,30 +93,19 @@ async fn read_context(ctx: &Context, target: &AddTarget) -> Result<ItemContext> 
     issues::read_context(ctx, target.repository(ctx).await?).await
 }
 
+/// The branch an issue's addition opens, unless one is chosen already.
 pub(super) async fn select_add_creation(
     ctx: &Context,
     target: &AddTarget,
-    mut creation: Creation,
+    creation: Creation,
     issue: Option<&issues::Issue>,
 ) -> Result<Creation> {
-    if creation.branch.is_some()
-        || creation.existing.is_some()
-        || creation.pull_head.is_some()
-        || creation.copy.is_some()
-    {
-        return Ok(creation);
+    match issue {
+        Some(issue) if creation.unsettled() => {
+            issue_creation(ctx, target, creation, issue.branch_name(), &issue.url).await
+        }
+        _ => Ok(creation),
     }
-    if let Some(issue) = issue {
-        return issue_creation(ctx, target, creation, issue.branch_name(), &issue.url).await;
-    }
-    ui::require_argument(ctx, "branch", "branch")?;
-    // Check here so a typo can be corrected before creating work.
-    let branch = ui::input_until(ctx, "Branch name", None, |name| async move {
-        git::check_branch_name(None, &name).await?;
-        Ok(name)
-    });
-    creation.branch = Some(branch.await?);
-    Ok(creation)
 }
 
 /// Reopen the local branch or workspace that earlier work on the issue left
