@@ -131,7 +131,8 @@ fn assert_failed_labelling_refuses_launches(
         vec!["resume", &fixture.id("new-owner"), "--focus"],
         vec![
             "start",
-            "--chat",
+            "--mode",
+            "chat",
             "--here",
             repo,
             "--name",

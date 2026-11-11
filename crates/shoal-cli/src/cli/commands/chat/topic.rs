@@ -187,7 +187,7 @@ impl Relaunch {
     /// `shoal start` of a chat in `mode` with `args`.
     fn start(mode: &crate::config::modes::ModeName, args: StartArgs) -> Self {
         Self::Start(Box::new(StartArgs {
-            chat: true,
+            as_chat: true,
             mode: Some(mode.clone()),
             ..args
         }))

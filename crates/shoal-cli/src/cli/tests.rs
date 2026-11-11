@@ -335,19 +335,17 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
     let on_issue = start(&["37", "--in", "4"]).unwrap();
     assert_eq!(on_issue.repository.as_deref(), Some("37"));
     assert_eq!(on_issue.in_workspace, Some(Some("4".into())));
-    // A chat has no worktree to create.
+    // The mode alone decides the kind of space.
     for refused in [
-        &["--chat", "--worktree"][..],
-        &["--chat", "repo", "topic"],
-        &["--chat", "--now"],
-        &["--chat", "--fork"],
+        &["--chat"][..],
+        &["--worktree"],
+        &["--as-chat", "--now"],
+        &["--session", "s1", "--fork"],
         &["--in", "4", "--base", "main"],
-        &["--restore", "c1", "--name", "talk"],
+        &["--restore", "c1"],
     ] {
         assert!(start(refused).is_err(), "{refused:?}");
     }
-    // A workspace takes a name too.
-    start(&["--worktree", "--name", "Login retries"]).unwrap();
 }
 
 #[test]

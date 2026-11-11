@@ -24,7 +24,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
     assert_round_trips(StartArgs {
         mode: Some("plan".into()),
         permissions: changes.to_vec(),
-        chat: true,
+        as_chat: true,
         // Without a value, before another flag.
         in_workspace: Some(None),
         parent: Some(SpaceSelector::from("7")),
@@ -48,7 +48,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
     let narrowing = PermissionsConfig::assigned(&["push=deny".to_owned()]).unwrap();
     assert_round_trips(StartArgs {
         recorded_narrowing: Some(narrowing),
-        chat: true,
+        as_chat: true,
         in_workspace: Some(Some(SpaceSelector::from("4"))),
         // Without a value, last before --.
         issue: Some(None),
@@ -61,7 +61,6 @@ fn a_chats_start_parses_back_from_its_command_line() {
 fn a_workspaces_start_parses_back_from_its_command_line() {
     assert_round_trips(StartArgs {
         mode: Some("worker".into()),
-        worktree: true,
         repository: Some("shoal".into()),
         repository_override: Some("team/shoal".into()),
         branch: Some("feature".into()),

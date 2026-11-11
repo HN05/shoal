@@ -97,7 +97,7 @@ fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&modes::ModeName>
         return ensure_worker_fits(args);
     }
     let unfit = workspace_flags(args);
-    let hint = "pass --worktree for a workspace";
+    let hint = "start it in a mode that starts in a workspace, such as -m worker";
     let Some(flag) = unfit.first() else {
         return Ok(());
     };
@@ -196,13 +196,11 @@ async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
     if let Some(mode) = named {
         return shaped(ctx, args, mode).await;
     }
-    let forced = forced_kind(args);
-    if let Some(kind) = forced.or_else(|| fitting_kind(args)) {
+    if let Some(kind) = asked_kind(args).or_else(|| fitting_kind(args)) {
         ensure_fits(args, kind, None)?;
-        let pick = ModeChoice::Pick { forced };
         return Ok(match kind {
-            SpaceKind::Workspace => Start::Workspace(pick),
-            SpaceKind::Chat => Start::Chat(pick),
+            SpaceKind::Workspace => Start::Workspace(ModeChoice::Pick),
+            SpaceKind::Chat => Start::Chat(ModeChoice::Pick),
         });
     }
     let mode = picked_mode(ctx, args).await?;
@@ -336,7 +334,7 @@ async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeN
         kind: None,
         repository: (names_repository || args.in_workspace.is_some()).then_some(true),
     };
-    ModeChoice::Pick { forced: None }.chosen(ctx, &settings.modes, fit)
+    ModeChoice::Pick.chosen(ctx, &settings.modes, fit)
 }
 
 /// The repository the start goes in, resolved and checked with its parent
@@ -372,20 +370,20 @@ async fn checked_repository(
 /// The mode without `--mode`: chat for a start that asks for a chat, whose
 /// agent the worker mode would not tell it is one, else the worker.
 fn default_mode(args: &StartArgs) -> modes::ModeName {
-    match args.chat {
+    match asks_chat(args) {
         true => modes::ModeName::CHAT,
         false => modes::ModeName::DEFAULT,
     }
 }
 
-/// The kind of space the start creates, what `--chat`, `--worktree`,
-/// `--fork` or a copy says, else the kind of `mode`, which must exist before
-/// anything is created, and whether `mode` starts it in a repository. The
-/// default mode always exists and always starts in a workspace, so it asks
-/// the daemon nothing; a chat's start checks a mode found nowhere here
-/// itself once it has the repository. With `--in`, the mode's kind decides
-/// whether the agent is the workspace's worker or a chat in its worktree,
-/// which belongs to its repository either way.
+/// The kind of space the start creates, the kind of `mode`, which must
+/// exist before anything is created, unless the start [`asks_chat`], and
+/// whether `mode` starts it in a repository. The default mode always exists
+/// and always starts in a workspace, so it asks the daemon nothing; a
+/// chat's start checks a mode found nowhere here itself once it has the
+/// repository. With `--in`, the mode's kind decides whether the agent is the
+/// workspace's worker or a chat in its worktree, which belongs to its
+/// repository either way.
 async fn shape(
     ctx: &Context,
     args: &StartArgs,
@@ -396,7 +394,7 @@ async fn shape(
             .await
             .map(|kind| (kind, true));
     }
-    let asks_chat = args.chat;
+    let asks_chat = asks_chat(args);
     if *mode == modes::ModeName::DEFAULT && !asks_chat {
         return Ok((SpaceKind::Workspace, true));
     }
@@ -406,20 +404,13 @@ async fn shape(
         return Ok((SpaceKind::Chat, found.map_or(true, |mode| mode.repository)));
     }
     let found = found?;
-    let forced = args.worktree || args.fork || args.copy.is_set();
-    ensure!(
-        found.repository || !forced,
-        "mode {mode} starts a chat without a repository; leave out --worktree, --fork, --copy and --checkpoint"
-    );
-    Ok(match forced {
-        true => (SpaceKind::Workspace, true),
-        false => (found.kind, found.repository),
-    })
+    Ok((found.kind, found.repository))
 }
 
 /// The role of the agent `--in` starts in `mode`: the workspace's worker
-/// for a mode that starts in a workspace, else a chat in its worktree, as
-/// `--chat` asks whatever the mode. A mode without a repository is refused.
+/// for a mode that starts in a workspace, else a chat in its worktree, as a
+/// start that [`asks_chat`] gets whatever the mode. A mode without a
+/// repository is refused.
 async fn in_workspace_kind(
     ctx: &Context,
     args: &StartArgs,
@@ -431,22 +422,27 @@ async fn in_workspace_kind(
         found.repository,
         "mode {mode} starts a chat without a repository, which --in cannot"
     );
-    Ok(match args.chat {
+    Ok(match asks_chat(args) {
         true => SpaceKind::Chat,
         false => found.kind,
     })
 }
 
-/// The kind of space `--chat`, `--worktree`, `--fork` or a copy asks for,
-/// whatever the mode's kind.
-fn forced_kind(args: &StartArgs) -> Option<SpaceKind> {
-    if args.chat {
-        Some(SpaceKind::Chat)
-    } else if args.worktree || args.fork || args.copy.is_set() {
-        Some(SpaceKind::Workspace)
-    } else {
-        None
-    }
+/// Whether the start continues a chat whatever its mode's kind: one the
+/// place it opens in starts, or one a flag only a chat's start takes asks
+/// for, such as a session it continues or a stopped chat it restores.
+fn asks_chat(args: &StartArgs) -> bool {
+    args.as_chat
+        || args.session.is_some()
+        || args.restore.is_some()
+        || args.linked_issue.is_some()
+        || args.handoff.is_some()
+}
+
+/// The kind of space a start that [`asks_chat`] asks for, whatever the
+/// mode's kind.
+fn asked_kind(args: &StartArgs) -> Option<SpaceKind> {
+    asks_chat(args).then_some(SpaceKind::Chat)
 }
 
 /// The settings whose modes decide the kind: the workspace's `--in` names,
@@ -511,8 +507,7 @@ pub(super) async fn as_chat(
     mut args: StartArgs,
     starts: workspaces::StartsAsChat,
 ) -> Result<i32> {
-    let worktree = args.worktree.then_some("--worktree");
-    if let Some(flag) = worktree.into_iter().chain(workspace_flags(&args)).next() {
+    if let Some(flag) = workspace_flags(&args).first() {
         anyhow::bail!(
             "{flag} applies to a new workspace's branch; name the branch, since a start without one begins as a chat"
         );
@@ -820,7 +815,7 @@ fn positional_target(
     let kind = positional_kind(&positional);
     ensure!(
         kind != Positional::Branch,
-        "a chat starts on an issue, not a PR or branch link; pass --worktree for a workspace"
+        "a chat starts on an issue, not a PR or branch link; start it in a mode that starts in a workspace, such as -m worker"
     );
     if kind == Positional::Issue {
         ensure!(

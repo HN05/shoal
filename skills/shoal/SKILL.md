@@ -53,7 +53,7 @@ shoal contribute https://github.com/other/repo/issues/12 --agent claude
 URL; an issue becomes the agent's first message, followed by its mode's
 instructions, and text after `--` is the task. `--mode` picks the mode,
 `worker` by default, which starts in a workspace; `chat` and `plan` start in a
-chat, and `--chat` or `--worktree` overrides the mode's kind. `--name` names
+chat; the mode alone decides the kind of space. `--name` names
 the new space; without it, it takes the issue's or PR's title, else its
 branch. `--base` naming another workspace's branch stacks the new workspace on
 it. A start that names no branch, issue, PR, existing branch or copy begins as
@@ -70,7 +70,7 @@ left.
 Run inside a space, `start` creates a child of it, or of a space below it that
 `--parent` names, in its repository, or for a master session in any registered
 one, on a branch from the default branch;
-`--chat` starts a child chat in a background place and returns once the chat
+a chat-kind mode starts a child chat in a background place and returns once the chat
 has started, and `--here` is refused. Outside any space it creates top-level
 spaces. Without a terminal, as from a tool call, agents start detached; `--here`
 runs one in the calling terminal until it exits. `--fork` starts the caller's

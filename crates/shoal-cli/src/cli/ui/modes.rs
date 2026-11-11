@@ -18,11 +18,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModeChoice {
     Named(ModeName),
-    /// A mode picked on the terminal; `forced` is the kind of space the
-    /// command line asks for whatever the mode's.
-    Pick {
-        forced: Option<SpaceKind>,
-    },
+    /// A mode picked on the terminal.
+    Pick,
 }
 
 /// The spaces a picked mode must start: of `kind`, and in a repository or
@@ -53,14 +50,11 @@ impl ModeChoice {
         modes: &BTreeMap<String, Mode>,
         fit: ModeFit,
     ) -> Result<ModeName> {
-        let forced = match self {
-            Self::Named(name) => {
-                modes::get(modes, &name)?;
-                return Ok(name);
-            }
-            Self::Pick { forced } => forced,
-        };
-        let entries = mode_entries(modes, fit, forced, Palette::picker());
+        if let Self::Named(name) = self {
+            modes::get(modes, &name)?;
+            return Ok(name);
+        }
+        let entries = mode_entries(modes, fit, Palette::picker());
         match entries.as_slice() {
             [(only, _)] => Ok(only.as_str().into()),
             _ => {
@@ -72,21 +66,15 @@ impl ModeChoice {
 }
 
 /// The picker's entries for the `modes` that start in the spaces `fit`
-/// allows, of the kind `forced` or else their own: the usual mode of that
-/// kind first, so Enter keeps it, then the rest by name, each with the
-/// space it starts.
-fn mode_entries(
-    modes: &BTreeMap<String, Mode>,
-    fit: ModeFit,
-    forced: Option<SpaceKind>,
-    palette: Palette,
-) -> Entries {
-    let usual = match forced.or(fit.kind) {
+/// allows: the usual mode of that kind first, so Enter keeps it, then the
+/// rest by name, each with the space it starts.
+fn mode_entries(modes: &BTreeMap<String, Mode>, fit: ModeFit, palette: Palette) -> Entries {
+    let usual = match fit.kind {
         Some(SpaceKind::Chat) => ModeName::CHAT,
         _ => ModeName::DEFAULT,
     };
     let mut modes: Vec<_> = (modes.iter())
-        .map(|(name, mode)| (name, forced.unwrap_or(mode.kind), mode.repository))
+        .map(|(name, mode)| (name, mode.kind, mode.repository))
         .filter(|(_, kind, repository)| {
             fit.kind.is_none_or(|fit| fit == *kind)
                 && fit.repository.is_none_or(|fit| fit == *repository)

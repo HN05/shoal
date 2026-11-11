@@ -369,7 +369,6 @@ pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
     let command = crate::shell::quote(&[
         "shoal",
         "start",
-        "--chat",
         "--mode",
         &mode,
         repository,

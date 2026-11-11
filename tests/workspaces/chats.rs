@@ -42,7 +42,7 @@ pub(crate) fn save_running_chat(fixture: &Fixture, stop: impl FnOnce(&Fixture)) 
         let chat = scope.spawn(|| {
             fixture.interactive_command(
                 fixture.command().current_dir(&fixture.repo).args([
-                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                    "start", "--mode", "chat", "--here", "--agent", "claude", "--name", "talk",
                 ]),
                 "",
             )
@@ -119,7 +119,8 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     // over, tells the user.
     let output = fixture.run(&[
         "start",
-        "--chat",
+        "--mode",
+        "chat",
         "no-such-repository",
         "--here",
         "--name",
@@ -716,7 +717,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let (output, transcript) = launch(fixture.command().env("SHOAL_OUTPUT", "json").args([
         "--text",
         "start",
-        "--chat",
+        "--mode",
+        "chat",
         fixture.repo.to_str().unwrap(),
         "--agent",
         "claude",
@@ -742,8 +744,19 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(
         calls[1][chat..],
         [
-            "start", id, "--mode", "chat", "--chat", "--here", "--agent", "claude", "--name",
-            CHAT_NAME, "--", "--model", "fast"
+            "start",
+            id,
+            "--mode",
+            "chat",
+            "--as-chat",
+            "--here",
+            "--agent",
+            "claude",
+            "--name",
+            CHAT_NAME,
+            "--",
+            "--model",
+            "fast"
         ]
     );
     let started = journal(&fixture)
@@ -819,7 +832,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
             .env("ZMX_SESSION", "outer")
             .args([
                 "start",
-                "--chat",
+                "--mode",
+                "chat",
                 "--agent",
                 "claude",
                 "--name",
@@ -860,7 +874,7 @@ fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Resu
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "reused")
             .args([
-                "start", "--chat", "--here", "--name", "new-chat", "--agent", "claude",
+                "start", "--mode", "chat", "--here", "--name", "new-chat", "--agent", "claude",
             ]),
         "",
         true,
@@ -903,7 +917,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
             .env_remove("SHOAL_STATE_DIR")
             .arg("--state-dir")
             .arg(&state)
-            .args(["start", "--chat", "--agent", "claude"]),
+            .args(["start", "--mode", "chat", "--agent", "claude"]),
         "\n",
         true,
     );
@@ -1120,7 +1134,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
                     .command()
                     .current_dir(&fixture.repo)
                     .env("ZMX_SESSION", "outer")
-                    .args(["start", "--chat", "--agent", "claude"]),
+                    .args(["start", "--mode", "chat", "--agent", "claude"]),
                 "\n",
                 true,
             )
@@ -1193,7 +1207,9 @@ run remove rm "$below" --yes --wait
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["start", "--chat", "--agent", "claude", "--name", "planning"]),
+            .args([
+                "start", "--mode", "chat", "--agent", "claude", "--name", "planning",
+            ]),
         "",
         true,
     );
@@ -1245,7 +1261,9 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["start", "--chat", "--agent", "claude", "--name", "planning"]),
+            .args([
+                "start", "--mode", "chat", "--agent", "claude", "--name", "planning",
+            ]),
         "",
         true,
     );
@@ -1322,7 +1340,9 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["start", "--chat", "--agent", "claude", "--name", "planning"]),
+            .args([
+                "start", "--mode", "chat", "--agent", "claude", "--name", "planning",
+            ]),
         "",
         true,
     );
@@ -1390,7 +1410,7 @@ fn a_background_place_below_its_starter_takes_the_handed_scope() {
         ])
         .arg(
             "printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HANDOFF/scope\"; unset SHOAL_SCOPE_TOKEN; \
-             exec \"$SHOAL\" --json start --chat \"$REPO\" --here --name sub --agent claude \
+             exec \"$SHOAL\" --json start --mode chat \"$REPO\" --here --name sub --agent claude \
              --handoff \"$HANDOFF\" </dev/null",
         )
         .env("SHOAL", support::shoal_binary())
@@ -1423,7 +1443,7 @@ fn any_space_opens_any_kind_of_child() {
              echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
              if [ ! -e \"$HOME/nested-started\" ]; then\n\
              touch \"$HOME/nested-started\"\n\
-             \"$shoal\" start --chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
+             \"$shoal\" start --mode chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
              echo $? > \"$HOME/nested-status\"\n\
              fi\n\
              trap 'exit 0' TERM\n\
@@ -1445,7 +1465,7 @@ fn any_space_opens_any_kind_of_child() {
     let here = scoped_command(
         &fixture,
         "parent",
-        &["start", "--chat", "--here", "--agent", "claude"],
+        &["start", "--mode", "chat", "--here", "--agent", "claude"],
     );
     assert!(!here.status.success(), "{here:?}");
     // ...nor one in the worktree of a workspace outside its tree...
@@ -1460,7 +1480,9 @@ fn any_space_opens_any_kind_of_child() {
     let sub = scoped_command(
         &fixture,
         "parent",
-        &["start", "--chat", "--agent", "claude", "--name", "sub"],
+        &[
+            "start", "--mode", "chat", "--agent", "claude", "--name", "sub",
+        ],
     );
     assert!(sub.status.success(), "{sub:?}");
     // The nested start, like sub's, returns once its chat holds its own
@@ -1541,7 +1563,9 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     let middle = scoped_command(
         &fixture,
         "top",
-        &["start", "--chat", "--agent", "claude", "--name", "middle"],
+        &[
+            "start", "--mode", "chat", "--agent", "claude", "--name", "middle",
+        ],
     );
     assert!(middle.status.success(), "{middle:?}");
     wait_until("the chat's workspace", || home.join("chat-ready").exists());
@@ -1618,7 +1642,7 @@ fn chat_instructions_append_the_chat_rules_to_shoals_description() {
                 .command()
                 .current_dir(&fixture.repo)
                 .env("ZMX_SESSION", "outer")
-                .args(["start", "--chat", "--agent", "claude"]),
+                .args(["start", "--mode", "chat", "--agent", "claude"]),
             "\n",
             true,
         );
@@ -1737,7 +1761,8 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     // A chat in a workspace takes its repository from it.
     let both = fixture.run(&[
         "start",
-        "--chat",
+        "--mode",
+        "chat",
         fixture.repo.to_str().unwrap(),
         "--workspace",
         &fixture.id("worker"),
@@ -1798,7 +1823,7 @@ fn chat_starts_from_the_checkout_without_syncing() {
                 .command()
                 .current_dir(&fixture.repo)
                 .env("ZMX_SESSION", "outer")
-                .args(["start", "--chat", "--agent", "claude"]),
+                .args(["start", "--mode", "chat", "--agent", "claude"]),
             "\n",
             true,
         );
@@ -1813,7 +1838,8 @@ fn chat_starts_from_the_checkout_without_syncing() {
     let (output, transcript) = fixture.interactive_command(
         fixture.command().current_dir(&fixture.repo).args([
             "start",
-            "--chat",
+            "--mode",
+            "chat",
             "--agent",
             "happy-claude",
         ]),
@@ -1854,7 +1880,8 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         &fixture,
         &[
             "start",
-            "--chat",
+            "--mode",
+            "chat",
             fixture.repo.to_str().unwrap(),
             "--agent",
             "codex",
@@ -1878,8 +1905,18 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     assert_eq!(
         worker[chat..],
         [
-            "start", id, "--mode", "chat", "--chat", "--here", "--agent", "codex", "--name",
-            CHAT_NAME, "--", "--search"
+            "start",
+            id,
+            "--mode",
+            "chat",
+            "--as-chat",
+            "--here",
+            "--agent",
+            "codex",
+            "--name",
+            CHAT_NAME,
+            "--",
+            "--search"
         ]
     );
     // The chat registers only once the tab runs it, so nothing is recorded
@@ -1958,7 +1995,7 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
         install_recording_agent(&fixture, agent);
         let (output, transcript) = fixture.interactive_command(
             fixture.command().args([
-                "start", "--chat", repo, "--agent", agent, "--here", "--", "--fast",
+                "start", "--mode", "chat", repo, "--agent", agent, "--here", "--", "--fast",
             ]),
             "\n",
         );
@@ -2017,7 +2054,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     install_fake_agents(&fixture, &["claude", "happy"]);
     let repo = fixture.repo.to_str().unwrap();
     // Without a default agent a picker offers the installed agents that can run.
-    let (output, rows) = fixture.pick(&["start", "--chat", repo, "--mode", "chat"], "0", "\n");
+    let (output, rows) = fixture.pick(&["start", repo, "--mode", "chat"], "0", "\n");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         rows.lines()
@@ -2026,11 +2063,11 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
         ["claude"]
     );
     // An agent that cannot run a chat is refused before the mode picker.
-    let args = ["start", "--chat", repo, "--agent", "happy-claude"];
+    let args = ["start", "--mode", "chat", repo, "--agent", "happy-claude"];
     let (output, rows) = fixture.pick(&args, "chat", "");
     assert!(!output.status.success(), "{output:?}");
     assert!(rows.is_empty(), "a picker opened: {rows}");
-    let output = fixture.run(&["start", "--chat", repo, "--agent", "claude"]);
+    let output = fixture.run(&["start", "--mode", "chat", repo, "--agent", "claude"]);
     assert!(!output.status.success());
     // The checkout has no value for a workspace's placeholders.
     fs::write(
@@ -2040,7 +2077,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     .unwrap();
     let (output, transcript) = fixture.interactive_command(
         fixture.command().args([
-            "start", "--chat", repo, "--agent", "claude", "--here", "--mode", "chat",
+            "start", repo, "--agent", "claude", "--here", "--mode", "chat",
         ]),
         "\n",
     );

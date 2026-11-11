@@ -288,7 +288,9 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     // The split names itself, never the caller's window.
     assert_eq!(rex.windows(&session), windows);
     assert_eq!(sessions(&fixture, "placed"), ["placed"]);
-    launch(&["start", "--chat", repo, "--name", "talk", "--agent", "pi"]);
+    launch(&[
+        "start", "--mode", "chat", repo, "--name", "talk", "--agent", "pi",
+    ]);
     wait_until("the chat to open beside the caller", || {
         rex.blocks(&session).len() == 3
     });

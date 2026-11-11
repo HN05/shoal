@@ -614,7 +614,8 @@ done
         .args([
             "--json",
             "start",
-            "--chat",
+            "--mode",
+            "chat",
             fixture.repo.to_str().unwrap(),
             "--agent",
             "happy-claude",
@@ -654,7 +655,15 @@ fn happy_chats_get_the_agent_token_helper_for_git() {
 
     let output = fixture
         .command()
-        .args(["--json", "start", "--chat", repo, "--agent", "happy-claude"])
+        .args([
+            "--json",
+            "start",
+            "--mode",
+            "chat",
+            repo,
+            "--agent",
+            "happy-claude",
+        ])
         .env("HAPPY_RECORD", &record)
         .output()
         .unwrap();
@@ -693,7 +702,8 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         let output = fixture
             .command()
             .args([
-                "--json", "start", "--chat", repo, "--agent", agent, "--", "--model", "test",
+                "--json", "start", "--mode", "chat", repo, "--agent", agent, "--", "--model",
+                "test",
             ])
             .env("HAPPY_RECORD", &record)
             .env("REX_SESSION", "session:caller")

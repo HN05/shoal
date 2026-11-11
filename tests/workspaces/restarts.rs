@@ -95,7 +95,7 @@ fn restart_restores_a_chat_in_a_new_place() {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
                 fixture.command().current_dir(&fixture.repo).args([
-                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                    "start", "--mode", "chat", "--here", "--agent", "claude", "--name", "talk",
                 ]),
                 "",
             )
@@ -189,7 +189,7 @@ fn restart_gives_a_chats_agent_permissions() {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
                 fixture.command().current_dir(&fixture.repo).args([
-                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                    "start", "--mode", "chat", "--here", "--agent", "claude", "--name", "talk",
                 ]),
                 "",
             )
@@ -424,7 +424,8 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
             fixture.interactive_command(
                 fixture.command().current_dir(&fixture.repo).args([
                     "start",
-                    "--chat",
+                    "--mode",
+                    "chat",
                     "--here",
                     "--agent",
                     "claude",
@@ -463,7 +464,8 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
             fixture.interactive_command(
                 fixture.command().current_dir(&fixture.repo).args([
                     "start",
-                    "--chat",
+                    "--mode",
+                    "chat",
                     "--here",
                     "--agent",
                     "claude",

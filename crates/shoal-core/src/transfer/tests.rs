@@ -464,7 +464,7 @@ fn a_chat_continues_by_a_command_that_quotes_its_name() {
 
     assert!(
         line.contains(
-            "shoal start --chat --mode chat 'my repo' --name 'shoal chat'\\''s $HOME' --agent claude --session session"
+            "shoal start --mode chat 'my repo' --name 'shoal chat'\\''s $HOME' --agent claude --session session"
         ),
         "{line}"
     );

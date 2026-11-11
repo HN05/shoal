@@ -1647,11 +1647,10 @@ other commands do. Failed session closes notify and retry at startup or with
 
 ### Chats
 
-`shoal start --chat [repository | --in [WORKSPACE]] [--mode NAME] [--permission KEY=VALUE]... [--issue [ISSUE]] [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
+`shoal start [repository | --in [WORKSPACE]] --mode NAME [--permission KEY=VALUE]... [--issue [ISSUE]] [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
+in a [mode](#modes-and-rules) whose kind is `chat`, such as `chat` or `plan`,
 starts a new chat with an agent about a repository, to discuss it, its issues
-and plans, or to coordinate work, without changing code; so does `shoal start`
-in a [mode](#modes-and-rules) whose kind is `chat`. Without `--mode`, `--chat`
-starts in the `chat` mode, or one picked on a terminal. The
+and plans, or to coordinate work, without changing code. The
 repository is the named one, else the issue URL's, else the current
 checkout's or workspace's, else a picker. The
 agent is `--agent`, else `agent.default`, else a picker of the installed ones.
@@ -2199,13 +2198,13 @@ cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
 errors that ask for another name, and `shoal start --mode setup` is refused.
 
 `shoal start` starts every new agent, in the mode `-m`/`--mode` names, and in the
-kind of space the mode names unless `--chat` or `--worktree` says
-otherwise; with `--in`, the mode's kind decides whether the agent is the
-workspace's own or a chat in its worktree, and a mode without a repository is
-refused. `worker` always starts in a workspace, and config that gives it
-another kind is refused. Without `--mode`, a terminal offers the modes in a
-picker with the kind of space each starts in, and without one the start takes
-`worker`, or `chat` with `--chat`, which the picker lists first.
+kind of space the mode names; with `--in`, the mode's kind decides whether the
+agent is the workspace's own or a chat in its worktree, and a mode without a
+repository is refused. A flag the mode's kind of space cannot use is refused.
+`worker` always starts in a workspace, and config that gives it another kind
+is refused. Without `--mode`, a terminal offers the modes in a picker with the
+kind of space each starts in, and without one the start takes `worker`, which
+the picker lists first.
 `--permission KEY=VALUE`, repeatable, gives that agent a
 [permission](#mode-permissions) whatever its mode allows. The picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,

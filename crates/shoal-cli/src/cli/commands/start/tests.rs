@@ -226,7 +226,7 @@ fn a_start_names_an_issue_with_issue_or_positionally() {
 async fn the_setup_mode_starts_only_with_its_own_commands() {
     let home = tempfile::tempdir().unwrap();
     let ctx = Context::new(crate::paths::Paths::for_test(home.path()), true);
-    for args in [&["--mode", "setup"][..], &["--mode", "setup", "--chat"]] {
+    for args in [&["--mode", "setup"][..], &["--mode", "setup", "--as-chat"]] {
         let error = run(&ctx, start(args)).await.unwrap_err().to_string();
         assert!(error.contains("shoal config setup"), "{error}");
     }

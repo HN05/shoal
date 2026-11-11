@@ -904,7 +904,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
                 fixture.command().current_dir(&fixture.repo).args([
-                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                    "start", "--mode", "chat", "--here", "--agent", "claude", "--name", "talk",
                 ]),
                 "",
             )

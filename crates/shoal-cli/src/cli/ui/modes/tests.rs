@@ -9,8 +9,8 @@ fn built_in() -> BTreeMap<String, Mode> {
 }
 
 /// Each entry's mode and the space its label names.
-fn listed(fit: ModeFit, forced: Option<SpaceKind>) -> Vec<(String, String)> {
-    mode_entries(&built_in(), fit, forced, Palette::stdout(true))
+fn listed(fit: ModeFit) -> Vec<(String, String)> {
+    mode_entries(&built_in(), fit, Palette::stdout(true))
         .into_iter()
         .map(|(id, label)| {
             let space = label.trim_start_matches(id.as_str()).trim().to_owned();
@@ -26,7 +26,7 @@ fn pair(mode: &str, space: &str) -> (String, String) {
 #[test]
 fn the_mode_picker_lists_the_usual_mode_first_with_the_space_it_starts() {
     assert_eq!(
-        listed(ModeFit::default(), None),
+        listed(ModeFit::default()),
         [
             pair("worker", "workspace"),
             pair("chat", "chat"),
@@ -34,30 +34,9 @@ fn the_mode_picker_lists_the_usual_mode_first_with_the_space_it_starts() {
             pair("plan", "chat")
         ]
     );
-    // A forced kind is the kind every mode in a repository starts.
+    // A start of one kind of space lists only its modes.
     let chat = ModeFit::in_repository(SpaceKind::Chat);
-    assert_eq!(
-        listed(chat, Some(SpaceKind::Chat)),
-        [
-            pair("chat", "chat"),
-            pair("plan", "chat"),
-            pair("worker", "chat")
-        ]
-    );
-    let workspace = ModeFit::in_repository(SpaceKind::Workspace);
-    assert_eq!(
-        listed(workspace, Some(SpaceKind::Workspace)),
-        [
-            pair("worker", "workspace"),
-            pair("chat", "workspace"),
-            pair("plan", "workspace")
-        ]
-    );
-    // Without one, a start of one kind of space lists only its modes.
-    assert_eq!(
-        listed(chat, None),
-        [pair("chat", "chat"), pair("plan", "chat")]
-    );
+    assert_eq!(listed(chat), [pair("chat", "chat"), pair("plan", "chat")]);
 }
 
 #[test]
@@ -66,7 +45,7 @@ fn a_start_takes_the_only_mode_of_its_kind_without_asking() {
         crate::paths::Paths::for_test(std::path::Path::new("state")),
         true,
     );
-    let pick = ModeChoice::Pick { forced: None };
+    let pick = ModeChoice::Pick;
     let fit = ModeFit::in_repository(SpaceKind::Workspace);
     assert_eq!(pick.chosen(&ctx, &built_in(), fit).unwrap(), "worker");
     let named = ModeChoice::Named("missing".into());

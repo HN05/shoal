@@ -1191,7 +1191,14 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
             .command()
             .current_dir(&fixture.repo)
             .env("INHERITED_TOKEN", "secret")
-            .args(["start", "--chat", "--agent", "claude-chat", "--here"]),
+            .args([
+                "start",
+                "--mode",
+                "chat",
+                "--agent",
+                "claude-chat",
+                "--here",
+            ]),
         "\n",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -1750,7 +1757,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     assert_eq!(fixture.ok(&["list"]), before);
     // A chat takes a value wider than its mode's too.
     let chat = [
-        "start", "--chat", repo, "--mode", "plan", "--agent", "helper", "--here",
+        "start", repo, "--mode", "plan", "--agent", "helper", "--here",
     ];
     let mut command = fixture.command();
     command
@@ -1917,8 +1924,8 @@ fn resume_changes_the_permissions_a_stopped_chat_was_given() {
 }
 
 /// A repository's own mode decides the kind of space, its rules and the
-/// instructions after the subject; `--worktree` starts a chat mode in a
-/// workspace; the workspace records the mode of its latest agent.
+/// instructions after the subject; the workspace records the mode of its
+/// agent.
 #[test]
 fn start_runs_a_repositorys_own_mode_and_records_it() {
     let fixture = Fixture::with_config(Some(
@@ -1964,26 +1971,12 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
         )
     );
     assert_eq!(status["workspace"]["mode"], "triage", "{status}");
-    // A chat mode in the issue's workspace, reopened, is told the chat rule's
-    // additions and the plan, after the same subject.
-    let (_, args, status) = start(&["--mode", "plan", "--worktree"]);
-    assert!(
-        args.starts_with("--prompt=Issue #37: Sort the queue\n"),
-        "{args}"
-    );
-    let plan_end = include_str!("../../crates/shoal-client/src/config/modes/plan.md")
-        .trim_end()
-        .lines()
-        .last()
-        .unwrap();
-    assert!(args.ends_with(&format!("{plan_end}\0")), "{args}");
-    assert_eq!(status["workspace"]["mode"], "plan", "{status}");
     // A mode no config defines is refused before anything is created, also
     // when a flag decides the kind.
     let before = fixture.ok(&["list"]);
     for args in [
         &["start", "38", "--repo", repo, "--mode", "missing"][..],
-        &["start", repo, "topic", "--worktree", "--mode", "missing"],
+        &["start", repo, "topic", "--mode", "missing"],
     ] {
         let output = fixture.run(args);
         assert!(
@@ -2024,7 +2017,8 @@ fn start_puts_a_chat_below_the_parent_it_names() {
     install_recording_agent(&fixture, "claude");
     let (output, transcript) = fixture.interactive_command(
         fixture.command().current_dir(&fixture.repo).args([
-            "start", "--chat", "--parent", &number, "--agent", "claude", "--name", "talk", "--here",
+            "start", "--mode", "chat", "--parent", &number, "--agent", "claude", "--name", "talk",
+            "--here",
         ]),
         "",
     );
@@ -2036,7 +2030,11 @@ fn start_puts_a_chat_below_the_parent_it_names() {
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let other = other.to_str().unwrap();
-    let (output, rows) = fixture.pick(&["start", "--chat", other, "--parent", &number], "1", "");
+    let (output, rows) = fixture.pick(
+        &["start", "--mode", "chat", other, "--parent", &number],
+        "1",
+        "",
+    );
     assert!(!output.status.success(), "{output:?}");
     assert!(rows.is_empty(), "the agent picker opened: {rows}");
 }
@@ -2440,7 +2438,7 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     // Outside plan mode, --issue names one.
     let output = fixture
         .command()
-        .args(["start", "--chat", "--issue", "--agent", "pi"])
+        .args(["start", "--mode", "chat", "--issue", "--agent", "pi"])
         .current_dir(&fixture.repo)
         .output()
         .unwrap();

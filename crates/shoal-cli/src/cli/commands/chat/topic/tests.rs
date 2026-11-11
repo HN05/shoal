@@ -69,7 +69,7 @@ fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent()
         let handoff = Path::new("/tmp/shoal-chat.1");
         let named = options.in_new_place(&agent, &"named".into(), Some(handoff));
         let mut start = parsed_start(topic.relaunch.command_line(named));
-        assert!(start.chat);
+        assert!(start.as_chat);
         assert_eq!(start.mode, Some(crate::config::modes::ModeName::CHAT));
         assert_eq!(start.repository.as_deref(), Some("repo"));
         assert_eq!(

@@ -26,7 +26,7 @@ pub(super) async fn repository(
     input: Option<&str>,
     repository: Option<String>,
 ) -> Result<Repository> {
-    let retry = "shoal start --chat --issue <url> --repo <repository>";
+    let retry = "shoal start --mode chat --issue <url> --repo <repository>";
     issues::item_repository(ctx, ItemKind::Issue, input, repository, retry).await
 }
 

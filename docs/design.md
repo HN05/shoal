@@ -2590,9 +2590,9 @@ another first resolves and checks its repository, parent and agent. The
 default mode, `worker`, always starts in a workspace, so a plain `start`
 without a terminal needs nothing from the daemon before it resolves its
 repository; another mode's kind is read
-from the named or current repository's settings, and `--chat` and
-`--worktree` override it, a chat without `--mode` starting in the `chat` mode,
-since a worker would not be told it is in a chat. With `--in`, the mode's kind
+from the named or current repository's settings. The mode alone decides the
+kind of space, with no flag overriding it, so a mode's rules and instructions
+always describe the space its agent is in. With `--in`, the mode's kind
 gives the agent its role in that existing workspace: a mode that starts in a
 workspace starts the workspace's own agent, creating no space, so a workspace
 keeps its place, name and links across agents, and a chat-kind mode starts a

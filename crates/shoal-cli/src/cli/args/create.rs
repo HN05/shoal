@@ -18,10 +18,9 @@ use crate::{
 pub enum CreateCommand {
     /// Start an agent in a mode, in a new or reopened workspace or in a chat.
     ///
-    /// The mode decides what the agent is told and, unless --chat or
-    /// --worktree says otherwise, the kind of space it starts in; with --in,
-    /// whether it is the workspace's worker or a chat in its worktree. Run
-    /// inside a space, a new space goes below it.
+    /// The mode decides what the agent is told and the kind of space it
+    /// starts in; with --in, whether it is the workspace's worker or a chat
+    /// in its worktree. Run inside a space, a new space goes below it.
     Start(Box<StartArgs>),
     /// Create a workspace in someone else's repository for a PR.
     ///
@@ -133,8 +132,7 @@ pub struct BranchArgs {
 pub struct StartArgs {
     /// The mode the agent starts in; on a terminal, a picker, which an issue
     /// labelled [issue] planned_label or plan_label answers with worker or
-    /// plan when the arguments ask for neither kind of space; else chat with
-    /// --chat, else worker.
+    /// plan when the arguments ask for neither kind of space; else worker.
     #[arg(short = 'm', long)]
     pub mode: Option<crate::config::modes::ModeName>,
     /// Set a permission of the agent, as KEY=VALUE such as push=propose or
@@ -146,12 +144,10 @@ pub struct StartArgs {
     /// which a start in a background place keeps unchecked.
     #[arg(long, hide = true, value_parser = recorded, conflicts_with = "permissions")]
     pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
-    /// Start in a chat, whatever the mode's kind.
-    #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
-    pub chat: bool,
-    /// Start in a workspace with a worktree, whatever the mode's kind.
-    #[arg(long, conflicts_with = "in_workspace")]
-    pub worktree: bool,
+    /// Start in a chat whatever the mode's kind, as the place a chat opens in
+    /// starts it, which shoal start passes.
+    #[arg(long, hide = true, conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
+    pub as_chat: bool,
     /// Start in this ready workspace instead of a new space: its worker in a
     /// mode that starts in a workspace, else a chat in its worktree; without
     /// a value, the current workspace, else a picker.
@@ -234,8 +230,9 @@ pub struct StartArgs {
     pub creation: CreationArgs,
     #[command(flatten)]
     pub model: ModelArgs,
-    /// Agent session the chat continues, which shoal move import passes.
-    #[arg(long, hide = true, requires = "chat")]
+    /// Agent session the chat continues, which shoal move import passes; it
+    /// starts a chat whatever the mode's kind.
+    #[arg(long, hide = true, conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub session: Option<crate::client::agent::AgentSessionId>,
     /// Start from a fork of --session instead of continuing it, which shoal
     /// move import passes for a copy.
@@ -243,18 +240,18 @@ pub struct StartArgs {
     pub fork_session: bool,
     /// Stopped chat, by ID, that this start restores under its own name,
     /// which shoal resume passes.
-    #[arg(long, hide = true, requires_all = ["chat", "name"])]
+    #[arg(long, hide = true, requires = "name")]
     pub restore: Option<SpaceId>,
     /// Issue, by URL, that an imported chat is linked to, whose fields its
     /// rules take without asking the forge, which shoal move import passes.
-    #[arg(long, hide = true, requires = "chat")]
+    #[arg(long, hide = true)]
     pub linked_issue: Option<String>,
     /// Title of --linked-issue.
     #[arg(long, hide = true, requires = "linked_issue")]
     pub linked_issue_title: Option<String>,
     /// Handoff of the starter that waits on this background place, which
     /// shoal start passes.
-    #[arg(long, hide = true, requires_all = ["chat", "here"])]
+    #[arg(long, hide = true, requires = "here")]
     pub handoff: Option<PathBuf>,
     /// Arguments forwarded to the agent, such as its prompt.
     #[arg(last = true)]
@@ -269,8 +266,7 @@ impl StartArgs {
             mode,
             permissions,
             recorded_narrowing,
-            chat,
-            worktree,
+            as_chat,
             in_workspace,
             parent,
             here,
@@ -313,8 +309,7 @@ impl StartArgs {
             permissions.iter().flat_map(|change| change.assignments()),
         );
         line.values("recorded_narrowing", recorded_narrowing.map(written));
-        line.switch("chat", *chat);
-        line.switch("worktree", *worktree);
+        line.switch("as_chat", *as_chat);
         line.optional("in_workspace", selected(in_workspace));
         line.values("parent", parent.as_ref().map(ToString::to_string));
         line.switch("here", *here);

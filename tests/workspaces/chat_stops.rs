@@ -144,7 +144,7 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     wait_zmx_sessions_ended(&home);
 }
 
-/// Start the chat `name` with `shoal start --chat --here`, below `parent`
+/// Start the chat `name` with `shoal start --mode chat --here`, below `parent`
 /// when given, and run `stop` once its agent runs, which must end it.
 fn run_chat_until_stopped(
     fixture: &Fixture,
@@ -156,7 +156,7 @@ fn run_chat_until_stopped(
     let _ = fs::remove_file(&started);
     let parent = parent.map(|parent| fixture.id(parent));
     let mut args = vec![
-        "start", "--chat", "--here", "--agent", "claude", "--name", name,
+        "start", "--mode", "chat", "--here", "--agent", "claude", "--name", name,
     ];
     args.extend(parent.iter().flat_map(|parent| ["--parent", parent]));
     std::thread::scope(|scope| {
