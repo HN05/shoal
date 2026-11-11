@@ -276,10 +276,13 @@ async fn handle_setup_failure(
 ) -> Result<Option<SetUp>> {
     if let Some(waiting) = waiting.as_deref_mut() {
         waiting.park(ctx, workspace).await;
+        // The waiting agent starts from the queue once a retry gets past
+        // the post-setup hook.
         if waiting.failed()
             && let Some(retry) = &mut retry
         {
             retry.agent = None;
+            retry.post_setup = true;
         }
     }
     let ran = !matches!(

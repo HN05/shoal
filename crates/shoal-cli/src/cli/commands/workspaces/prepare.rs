@@ -40,6 +40,11 @@ pub(in crate::cli::commands) async fn prepare(
         workspace = match run_setup(ctx, &workspace).await {
             Ok(set_up) => set_up,
             Err(error) => {
+                // The workspace stays for a retried setup, with its PR and
+                // the agent that waits for it.
+                if let Some(pr) = &steps.pr {
+                    link_or_warn(ctx, &workspace.id, pr).await;
+                }
                 if let Some(launch) = steps.agent {
                     leave_waiting(ctx, &workspace, *launch).await;
                 }
@@ -63,8 +68,8 @@ pub(in crate::cli::commands) async fn prepare(
             })?;
     }
     // The agents waiting for the workspace's setup may start now, once this
-    // preparation set it up or got past its post-setup hook.
-    if (steps.setup || steps.post_setup) && workspace.state == WorkspaceState::Ready {
+    // preparation got past its post-setup hook.
+    if steps.post_setup && workspace.state == WorkspaceState::Ready {
         reporter.reached(Step::PostSetupEnded).await?;
     }
     let agent = match steps.agent {

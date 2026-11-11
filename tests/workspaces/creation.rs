@@ -1969,7 +1969,9 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
         operations::{Followed, Following},
         protocol::{
             OperationMethod,
-            operations::{QueuedLaunch, StartedWorkspace, WorkspaceStart},
+            operations::{
+                OperationSpec, Preparation, QueuedLaunch, Started, StartedWorkspace, WorkspaceStart,
+            },
         },
         space_names::SpaceSelector,
     };
@@ -1988,6 +1990,12 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
     );
     let app = fixture.connector();
     let runtime = tokio::runtime::Runtime::new().unwrap();
+    let follow = |operation: String| {
+        runtime.block_on(async {
+            let mut following = Following::open(&app, operation, 0).await.unwrap();
+            while let Followed::Event(_) = following.next().await.unwrap() {}
+        })
+    };
     let start = |start: WorkspaceStart, agent: Option<QueuedLaunch>| {
         let method = OperationMethod::StartWorkspace {
             repository: fixture.repo.to_str().unwrap().into(),
@@ -2003,14 +2011,9 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
             agent: agent.map(Box::new),
             queue_entry: None,
         };
-        runtime.block_on(async {
-            let started: StartedWorkspace = request(&app, method).await.unwrap();
-            let mut following = Following::open(&app, started.operation.clone(), 0)
-                .await
-                .unwrap();
-            while let Followed::Event(_) = following.next().await.unwrap() {}
-            started.workspace
-        })
+        let started: StartedWorkspace = runtime.block_on(request(&app, method)).unwrap();
+        follow(started.operation);
+        started.workspace
     };
     let blockers = || fixture.ok(&["queue"])[0]["blockers"].clone();
     // An agent meant to start at once waits for the failed setup.
@@ -2021,8 +2024,8 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
     let workspace = start(WorkspaceStart::Name("failing".into()), Some(launch));
     assert_eq!(blockers(), serde_json::json!(["setup of failing"]));
 
-    // A setup whose hook fails, then a reopening that runs neither, keep
-    // it waiting.
+    // A setup whose hook fails, a reopening that runs neither, and an app's
+    // setup that runs no hook keep it waiting.
     fs::write(workspace.path.join("fixed"), "").unwrap();
     assert!(
         !fixture
@@ -2034,6 +2037,19 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
         WorkspaceStart::Workspace(SpaceSelector::id(&workspace.id)),
         None,
     );
+    assert_eq!(blockers(), serde_json::json!(["setup of failing"]));
+    let setup_only = OperationMethod::StartOperation {
+        spec: OperationSpec::Prepare {
+            workspace: SpaceSelector::id(&workspace.id),
+            steps: Preparation {
+                setup: true,
+                ..Default::default()
+            },
+        },
+        env: None,
+    };
+    let started: Started = runtime.block_on(request(&app, setup_only)).unwrap();
+    follow(started.id);
     assert_eq!(blockers(), serde_json::json!(["setup of failing"]));
     assert!(!workspace.path.join("agent-started").exists());
 }
