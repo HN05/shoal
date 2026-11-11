@@ -2061,11 +2061,12 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
-    // Fail the requests whose URL contains the pattern in ~/fail.
+    // Fail the requests whose URL contains the pattern in ~/fail, with
+    // curl's HTTP error, which the forge client does not send again.
     install_test_script(
         root.join("bin/curl"),
         "#!/bin/sh\nfor arg; do url=$arg; done\n\
-         [ -e \"$HOME/fail\" ] && case \"$url\" in *\"$(cat \"$HOME/fail\")\"*) echo failed >&2; exit 7;; esac\n\
+         [ -e \"$HOME/fail\" ] && case \"$url\" in *\"$(cat \"$HOME/fail\")\"*) echo failed >&2; exit 22;; esac\n\
          exec \"$HOME/forge.py\" \"$@\"\n",
     );
     let head = git(
