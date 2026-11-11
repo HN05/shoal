@@ -354,7 +354,7 @@ wait for approval instead of checks; `shoal view` lists them in `waiting_runs`.
 ## Local reviews
 
 ```sh
-shoal review run                    # Or a workspace name, or a PR URL
+shoal review run                    # Or a workspace's number or ID, or a PR URL
 shoal review ls                   # Reviews, newest first, with unresolved findings
 shoal view review [<id>]
 shoal watch review [<id>]

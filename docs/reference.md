@@ -1914,10 +1914,8 @@ files, messages, questions, workspaces and `TMPDIR`, and `shoal list` shows it
 as `stopped`. A chat ends only when it is removed: by `shoal rm <chat>`, which
 first removes the spaces below it and stops its agent, by
 `shoal resume <chat> --discard`, or by [cleanup](#automatic-cleanup), as a workspace is.
-Workspaces and chats share one set of names across
-repositories: a chat cannot take a workspace's name or a name an unfinished
-rename reserves, and a workspace cannot be created or renamed to a chat's name.
-The name frees once the chat is removed.
+A chat's name is a label like a workspace's: chats and workspaces may share one,
+and commands select a chat by its number or ID.
 
 `shoal start --in [WORKSPACE]` starts the chat in a ready workspace's
 worktree instead of the checkout, to debug, audit or review its work, committed
