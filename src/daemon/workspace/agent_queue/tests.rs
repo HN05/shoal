@@ -83,6 +83,26 @@ async fn launches_without_a_limit_start_untracked() {
 }
 
 #[tokio::test]
+async fn launches_of_one_branch_queue_once_whatever_their_names() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let on = |branch: &str, name: &str| QueueRequest {
+        plan: serde_json::json!({"creation": {"branch": branch}}).to_string(),
+        ..request(&repo, name, false)
+    };
+    // Names repeat, so two branches with one name both queue.
+    manager.queue_add(on("first", "Fix login")).await.unwrap();
+    manager.queue_add(on("second", "Fix login")).await.unwrap();
+    // A branch already queued is refused under any name.
+    let error = manager.queue_add(on("first", "Other")).await.unwrap_err();
+    assert!(
+        error.to_string().contains("already in the agent queue"),
+        "{error:#}"
+    );
+}
+
+#[tokio::test]
 async fn a_full_machine_queues_until_a_start_ends() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -99,10 +119,6 @@ async fn a_full_machine_queues_until_a_start_ends() {
         (second.state, second.position),
         (QueueState::Queued, Some(1))
     );
-    manager
-        .queue_add(request(&repo, "second", false))
-        .await
-        .unwrap_err();
     // Starting now takes a slot beyond the limit without passing the queue.
     let now = manager
         .queue_add(request(&repo, "urgent", true))

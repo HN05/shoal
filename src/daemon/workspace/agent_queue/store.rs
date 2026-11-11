@@ -60,8 +60,19 @@ pub(super) struct Launch {
     pub opens: Option<SpaceId>,
 }
 
-/// Record `launch` unless its repository already queues the same name or is
-/// being removed. A launch in an existing workspace needs it ready in the same
+/// The branch the launch `plan` creates or opens, if it names one.
+fn planned_branch(plan: &str) -> Option<String> {
+    let plan: serde_json::Value = serde_json::from_str(plan).ok()?;
+    let creation = &plan["creation"];
+    let branch = creation["branch"]
+        .as_str()
+        .or(creation["existing"].as_str())?;
+    Some(branch.to_owned())
+}
+
+/// Record `launch` unless its repository already queues a launch in the
+/// same workspace, or of the same branch, or is being removed; names repeat,
+/// so they tell no two launches apart. A launch in an existing workspace needs it ready in the same
 /// transaction: removal reserves the workspace before its final checks, so the
 /// launch either precedes them, which keeps the workspace, or is refused here.
 pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> Result<()> {
@@ -77,8 +88,18 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
     ensure!(
         !crate::daemon::store::exists(
             tx,
-            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND name=?2 AND kind=?3",
-            params![launch.repository, request.name, QueueKind::Launch],
+            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND kind=?2 AND CASE
+                WHEN ?3 IS NOT NULL THEN opens_workspace_id IS ?3
+                WHEN ?4 IS NOT NULL AND opens_workspace_id IS NULL AND json_valid(plan)
+                    THEN coalesce(json_extract(plan,'$.creation.branch'),
+                        json_extract(plan,'$.creation.existing')) IS ?4
+                ELSE 0 END",
+            params![
+                launch.repository,
+                QueueKind::Launch,
+                launch.opens,
+                planned_branch(&request.plan)
+            ],
         )?,
         "{} is already in the agent queue",
         request.name
