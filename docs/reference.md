@@ -1958,6 +1958,14 @@ waits for: one `--focus` focuses, or an agent added from a terminal without an
 issue or arguments that the `focus` setting does not send to the background, unless `--add-blocker`
 makes it wait for work.
 
+A workspace has one agent of its own. The daemon refuses a launch in an
+existing workspace, from any caller, while that workspace's agent runs, waits
+in the queue, including for `--after`, or is stopped awaiting `shoal resume`;
+the refusal names `shoal attach`, `shoal restart`, `shoal queue` or `shoal
+resume` as fits. A last session, whose agent exited on its own, does not
+count: the new agent replaces it. Chats in the workspace's worktree never
+count.
+
 An agent's automatic restore after a protection stop waits in the same queue,
 ranked with launches, from when its processes stop. A restore of an agent
 stopped while idle holds back nothing behind it, and holds no slot once its

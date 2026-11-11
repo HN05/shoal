@@ -76,6 +76,25 @@ fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Res
     Ok(())
 }
 
+/// Whether an agent of `workspace`'s own waits in the queue or starts there.
+/// The starting launches whose setup failed there do not count: the launch
+/// left waiting for that setup takes their place, and any other is refused
+/// until the workspace is ready.
+pub(super) fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
+    crate::daemon::store::exists(
+        tx,
+        "SELECT 1 FROM agent_queue WHERE ?1 IN (workspace_id,opens_workspace_id)
+         AND kind IN (?2,?3) AND NOT (?5 AND kind=?2 AND state=?4)",
+        params![
+            workspace,
+            QueueKind::Launch,
+            QueueKind::Restore,
+            QueueState::Starting,
+            setup_failed(tx, workspace)?
+        ],
+    )
+}
+
 /// Whether `workspace`'s setup failed, or never started and runs in no
 /// execution, as when the daemon refused it, either of which a retried
 /// setup can ready.

@@ -2409,7 +2409,11 @@ debug, audit or review that workspace's live work, committed and uncommitted,
 with the commands that read a branch, rather than reading another worktree by
 path. A workspace has one editing agent, its own: a chat in it reads and does
 not edit, which its instructions say and nothing enforces until modes decide
-what an agent may do. It stays a chat, with its own identity, scope,
+what an agent may do. The daemon keeps the workspace's own agent one: it
+refuses to queue a launch in an existing workspace while that workspace's
+agent runs, waits in the queue or is stopped awaiting `shoal resume`, so the
+CLI, coordinators and apps get one answer; a last session gives way, since its
+agent ended on its own. It stays a chat, with its own identity, scope,
 temporary directory and messages, and is not the workspace's child, since a
 child's questions and approvals go to its parent's agent while the user attends
 a chat; so Shoal commands it runs never act as the workspace's agent. Its scope

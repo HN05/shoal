@@ -16,6 +16,7 @@ mod state;
 mod stopped;
 mod store;
 mod wake;
+mod worker;
 
 pub(crate) use dispatch::Start;
 pub(crate) use state::{AgentQueue, OneShotSlot, OneShotStop, Serving};

@@ -28,7 +28,9 @@ use crate::{
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
     /// applies to and that nothing blocks starts untracked; one
-    /// admitted here starts in the caller, except one the daemon starts.
+    /// admitted here starts in the caller, except one the daemon starts. A
+    /// launch in an existing workspace is admitted only while the workspace
+    /// has no agent of its own.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
         self.queue_add_as(request, None).await
     }
@@ -55,6 +57,10 @@ impl Manager {
             None => caller.map(|caller| caller.space_id.clone()),
         };
         let _gate = self.agent_queue.lock_admission().await;
+        if let Some(workspace) = &target {
+            self.ensure_takes_worker(workspace).await?;
+        }
+        let target = target.map(|workspace| workspace.id);
         // Whether any limit applies does not depend on the slots in use.
         let limits = self
             .agent_limits(vec![repository.id.clone()], &[], &[])
@@ -107,13 +113,13 @@ impl Manager {
         })
     }
 
-    /// The ID of the workspace of `repository_id` a launch opens; the
-    /// insertion requires it ready.
+    /// The workspace of `repository_id` a launch opens; the insertion
+    /// requires it ready.
     async fn launch_target(
         &self,
         workspace: &SpaceSelector,
         repository_id: &RepositoryId,
-    ) -> Result<SpaceId> {
+    ) -> Result<crate::model::Workspace> {
         let workspace = self.workspace(workspace).await?;
         Self::ensure_holds_agents(&workspace)?;
         ensure!(
@@ -121,7 +127,7 @@ impl Manager {
             "workspace {} belongs to another repository",
             workspace.name
         );
-        Ok(workspace.id)
+        Ok(workspace)
     }
 
     /// What blocks the space of the restore `entry` of an agent Shoal
