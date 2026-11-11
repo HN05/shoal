@@ -333,16 +333,22 @@ impl Manager {
         id: &SpaceId,
         session: AgentSessionId,
     ) -> Result<()> {
-        let id = id.to_owned();
-        self.store
+        let (chat, reported) = (id.to_owned(), session.clone());
+        let recorded = self
+            .store
             .run(move |db| {
-                db.execute(
+                Ok(db.execute(
                     "UPDATE chats SET session=?2 WHERE id=?1",
-                    params![id, session],
-                )?;
-                Ok(())
+                    params![chat, reported],
+                )?)
             })
-            .await
+            .await?;
+        // A chat that became a workspace since the report found it: its
+        // agent's session goes with the conversion.
+        if recorded == 0 {
+            self.record_converting_session(id, session).await?;
+        }
+        Ok(())
     }
 
     /// Running and stopped chats in start order, after stopping those whose

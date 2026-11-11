@@ -729,3 +729,17 @@ async fn converting_session(manager: &Manager, workspace: &Workspace) -> Option<
         .session
         .map(|session| session.to_string())
 }
+
+#[tokio::test]
+async fn a_session_report_for_a_chat_that_became_a_workspace_goes_with_the_conversion() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+
+    // The report found the chat before the conversion replaced it.
+    (manager.record_chat_session(&workspace.id, "s5".into()))
+        .await
+        .unwrap();
+
+    let kept = converting_session(&manager, &workspace).await;
+    assert_eq!(kept.as_deref(), Some("s5"));
+}
