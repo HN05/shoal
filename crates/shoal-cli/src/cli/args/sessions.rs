@@ -18,8 +18,9 @@ pub enum SessionsCommand {
     /// Queue the restore of stopped agent sessions and list interrupted commands.
     ///
     /// The daemon starts queued restores as `max_agents` allows: where each
-    /// agent stopped, otherwise in a background Herdr tab or a detached zmx
-    /// session. `--all` leaves out workspaces whose assignment is done. A named workspace
+    /// agent stopped, otherwise in a background place of the terminal host it
+    /// was queued from or of `terminal.default_host`, such as a Herdr tab or a
+    /// detached zmx session. `--all` leaves out workspaces whose assignment is done. A named workspace
     /// or running chat whose agent's turn `shoal stop --interrupt` ended continues that
     /// turn instead.
     /// A stopped chat restores at once under its name, continuing its
@@ -115,8 +116,9 @@ pub enum SessionsCommand {
     },
     /// Attach this terminal to a workspace's or chat's agent session; Ctrl-\ detaches.
     ///
-    /// Terminal agents and chats run in zmx sessions that keep running after
-    /// their terminal closes or detaches. Without a target, attaches the
+    /// Terminal agents and chats run in sessions of a terminal host, such as
+    /// zmx sessions, that keep running after their terminal closes or
+    /// detaches. Without a target, attaches the
     /// current workspace's session, else the current checkout's only running
     /// chat, else offers a picker. The session of an agent Shoal stopped
     /// until its automatic restore is not offered.
