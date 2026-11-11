@@ -177,9 +177,10 @@ shoal alerts
 and in `cleanup_reason` why cleanup keeps it. `list` and `status` show the
 `agent_state` agents' hooks report (`working`, `waiting`, `idle`). `log`
 lists a space's creation, agent starts and exits, links, PR changes, ready
-marks, completion, questions, approvals, alerts and child spaces, oldest
-first; a removed space is selected by its ID. Outside a space, `status`
-shows the daemon and `log` every space's entries with the daemon's.
+marks, completion, questions, approvals, alerts, child spaces and its
+removal, with where a removal failed or stopped, oldest first; a removed
+space is selected by its ID. Outside a space, `status` shows the daemon and
+`log` every space's entries with the daemon's.
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
 scoped callers cannot read them.

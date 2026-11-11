@@ -291,6 +291,11 @@ impl Manager {
             None => None,
         };
         let id = space.id();
+        let cause = (worktree.as_ref()).map_or(removal.cause(), |stage| stage.cause(removal));
+        // A conversion's own event records what became of the space.
+        if !removal.converts() {
+            self.record_removal_start(id, cause).await?;
+        }
         let initial =
             (self.check_space_and_worktree(id, removal, Stage::Initial, worktree.as_ref(), &[]))
                 .await?;
@@ -322,8 +327,6 @@ impl Manager {
             let released = self.commit_conversion(id, chat).await?;
             self.ask_user_about(&released).await;
         } else {
-            let cause =
-                (worktree.as_ref()).map_or(removal.cause(), |(stage, _)| stage.cause(removal));
             self.delete_space_record(space, cause).await?;
         }
         Ok((children, worktree))

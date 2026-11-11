@@ -493,6 +493,30 @@ impl Manager {
             .await
     }
 
+    /// Record that a removal of the space `id` for `cause` started, unless
+    /// it retries one for the same cause that just failed, so a cleanup that
+    /// fails on every sweep leaves one failure in the log rather than a pair
+    /// for each attempt.
+    pub(crate) async fn record_removal_start(&self, id: &SpaceId, cause: EventCause) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .write(move |tx| {
+                let retry = super::store::exists(
+                    tx,
+                    "SELECT 1 FROM workspace_events WHERE id=(
+                         SELECT MAX(id) FROM workspace_events WHERE space_id=?1
+                     ) AND json_extract(record,'$.kind')=?2
+                         AND json_extract(record,'$.cause')=?3",
+                    params![id, EventKind::Retained, cause],
+                )?;
+                if retry {
+                    return Ok(());
+                }
+                record(tx, &id, EventKind::RemovalStarted, cause, None)
+            })
+            .await
+    }
+
     pub(crate) async fn record_retained(
         &self,
         id: &SpaceId,

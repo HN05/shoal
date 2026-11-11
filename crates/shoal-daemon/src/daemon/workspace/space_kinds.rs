@@ -187,8 +187,8 @@ impl Manager {
     }
 
     /// Give up `reservation` after its removal failed with `error`, for
-    /// `cause`: a workspace returns to the state it had, or to failed once
-    /// its worktree can no longer be ready, which its journal records.
+    /// `cause`, which the space's journal records: a workspace returns to the
+    /// state it had, or to failed once its worktree can no longer be ready.
     pub(crate) async fn release_space(
         &self,
         reservation: SpaceReservation<'_>,
@@ -205,7 +205,7 @@ impl Manager {
                 };
                 (self.retain_workspace(reservation.space.id(), state, cause, error)).await
             }
-            Held::Chat(_) => Ok(()),
+            Held::Chat(_) => (self.record_retained(reservation.space.id(), cause, error)).await,
         }
     }
 

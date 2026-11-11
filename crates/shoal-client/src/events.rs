@@ -82,7 +82,11 @@ states!(EventKind {
     Continued => "continued",
     /// A recorded completion was withdrawn.
     Undone => "undone",
+    /// A removal of the workspace reserved it and began.
+    RemovalStarted => "removal_started",
     Removed => "removed",
+    /// A removal failed or stopped before it finished, and the workspace
+    /// stays.
     Retained => "retained",
     BranchChanged => "branch_changed",
     /// A workspace process marked linked work ready for review.

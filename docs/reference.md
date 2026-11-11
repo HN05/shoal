@@ -5260,8 +5260,9 @@ shoal log --json          # One JSON line per entry
 chat's life, oldest first, each with its local time, a label and its
 details, under a heading for each date:
 
-- the space's creation, with its base and parent, its renames, its removal
-  with the cause and a workspace's restore;
+- the space's creation, with its base and parent, its renames, the start
+  of its removal and the removal with the cause, a removal that failed or
+  stopped before it finished with the reason, and a workspace's restore;
 - its agent's starts, stops and exits, with the exit code;
 - its ready marks and their withdrawal, and `done` and its withdrawal;
 - the issues, PRs and CI runs it links and unlinks, the changes Shoal made to
@@ -5271,9 +5272,9 @@ details, under a heading for each date:
 - the spaces created and removed below it;
 - a CI job Shoal ended after its run finished, with the processes it stopped.
 
-`--all` adds every other event of the space, dimmed: setup and cleanup
-results, branch, base and parent changes, its agent's turn states and
-progress changes, other forge activity such as comments and checks, demos, simulator leases and
+`--all` adds every other event of the space, dimmed: setup results, branch,
+base and parent changes, its agent's turn states and progress changes, other
+forge activity such as comments and checks, demos, simulator leases and
 attached files. With `--json` each line is the entry as
 [`shoal internal events`](#workspace-events) prints it.
 

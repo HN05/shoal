@@ -84,6 +84,10 @@ fn event_line(event: &EventDetails) -> (String, String) {
     match event.kind {
         EventKind::Created => fixed("Created", created(event)),
         EventKind::Renamed => fixed("Renamed", renamed(event)),
+        EventKind::RemovalStarted => fixed(
+            "Removal started",
+            event.cause.map(cause).unwrap_or_default(),
+        ),
         EventKind::Removed => fixed("Removed", event.cause.map(cause).unwrap_or_default()),
         EventKind::Restored => fixed("Restored", String::new()),
         EventKind::Converted => fixed("Converted", converted(event)),
@@ -111,7 +115,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::JobEnded => fixed("CI job ended", job(event)),
         EventKind::Ready => fixed("Setup finished", String::new()),
         EventKind::SetupFailed => fixed("Setup failed", error(event)),
-        EventKind::Retained => fixed("Cleanup failed", error(event)),
+        EventKind::Retained => fixed("Removal failed", error(event)),
         EventKind::BranchChanged => fixed(
             "Branch changed",
             event

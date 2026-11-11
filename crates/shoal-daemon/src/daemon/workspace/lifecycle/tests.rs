@@ -2,12 +2,13 @@ use super::super::Manager;
 use super::worktree::removal_options;
 use super::*;
 use crate::client::assignments::Done;
+use crate::client::log::{LogEntry, LogFilter};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
-        events::EventCause,
+        events::{EventCause, EventKind},
         test_support::{git, install_test_script, manager, repository},
         workspace_files::Attacher,
     },
@@ -41,6 +42,26 @@ pub(super) async fn fixture_with_removal_hook(
     script: &str,
 ) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     fixture_with_hook("hooks.pre_remove", |_| script.to_owned()).await
+}
+
+/// The kinds and causes of the removal events the space's log shows by
+/// default, oldest first.
+pub(super) async fn removal_entries(
+    manager: &Manager,
+    space: &SpaceSelector,
+) -> Vec<(EventKind, Option<EventCause>)> {
+    let entries = manager
+        .space_log(space, LogFilter::Entries, 50)
+        .await
+        .unwrap();
+    entries
+        .into_iter()
+        .filter_map(|entry| match entry {
+            LogEntry::Event(event) => Some((event.details.kind, event.details.cause)),
+            _ => None,
+        })
+        .filter(|(kind, _)| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))
+        .collect()
 }
 
 /// A workspace whose repository runs `script(root)` as the `key` hook.
@@ -1444,4 +1465,23 @@ async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
     assert!(!git(&path, &["branch", "--list", "kept"]).is_empty());
     // Nor does cleanup delete it later as a branch the workspace kept.
     assert!(manager.list_kept_branches(None).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_log_shows_a_removal_that_failed_once_however_often_it_fails() {
+    let (_root, manager, workspace) = fixture_with_removal_hook("exit 1").await;
+    let selector = SpaceSelector::id(&workspace.id);
+    for _ in 0..2 {
+        manager
+            .remove_workspace(&selector, NOTHING.clone(), InspectionPolicy::GitOnly)
+            .await
+            .unwrap_err();
+    }
+    assert_eq!(
+        removal_entries(&manager, &selector).await,
+        [
+            (EventKind::RemovalStarted, Some(EventCause::Manual)),
+            (EventKind::Retained, Some(EventCause::Manual)),
+        ]
+    );
 }

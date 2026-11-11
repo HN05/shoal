@@ -1087,3 +1087,57 @@ async fn a_chat_records_the_mode_its_agent_started_in() {
     let chats = manager.chats().await.unwrap();
     assert_eq!(chats[0].mode, "plan");
 }
+
+#[tokio::test]
+async fn a_chat_s_log_shows_a_removal_that_failed() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    manager
+        .create_workspace_below(
+            repo.id.clone().into(),
+            "opened".into(),
+            None,
+            Default::default(),
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    // Confirmed without the workspace below it, the removal fails.
+    manager
+        .remove_chat(&selector, Some(Vec::new()))
+        .await
+        .unwrap_err();
+
+    let entries = manager
+        .space_log(&selector, crate::client::log::LogFilter::Entries, 50)
+        .await
+        .unwrap();
+    let removal: Vec<_> = (entries.into_iter())
+        .filter_map(|entry| match entry {
+            crate::client::log::LogEntry::Event(event) => Some(event.details.kind),
+            _ => None,
+        })
+        .filter(|kind| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))
+        .collect();
+    assert_eq!(removal, [EventKind::RemovalStarted, EventKind::Retained]);
+    drop(process);
+}
