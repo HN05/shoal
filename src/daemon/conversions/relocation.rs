@@ -84,6 +84,13 @@ impl Manager {
         if !self.turn_ended(id, &pending).await? {
             return Ok(());
         }
+        // Read again once the turn ended, with the reports that change it,
+        // its agent's sessions and its preparation's end, held off.
+        let space = id.clone();
+        let pending = self.store.run(move |db| super::pending(db, &space)).await?;
+        let Some(pending) = pending else {
+            return Ok(());
+        };
         let relocated = match pending.clone() {
             Pending::Workspace {
                 mode,
@@ -165,7 +172,8 @@ impl Manager {
         let kept = (self.store).run(move |db| {
             super::record::record_prepared(db, &space, &operation, hook_failure.as_deref())
         });
-        if let Err(error) = kept.await {
+        // Under the hand-overs, so no relocation acts on the end it misses.
+        if let Err(error) = self.conversion_handovers.hold(kept).await {
             log!("preparation end of {id} not kept: {error:#}");
         }
     }
@@ -276,9 +284,9 @@ impl Manager {
         session: AgentSessionId,
     ) -> Result<()> {
         let id = id.to_owned();
-        (self.store)
-            .run(move |db| super::record::record_session(db, &id, &session))
-            .await
+        let recorded = (self.store).run(move |db| super::record::record_session(db, &id, &session));
+        // Under the hand-overs, so no relocation keeps a session it misses.
+        self.conversion_handovers.hold(recorded).await
     }
 
     /// Keep the chat that the workspace `id` becomes stopped, as a stop of

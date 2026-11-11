@@ -674,3 +674,48 @@ async fn a_preparation_end_reported_before_its_record_is_kept() {
     assert!(prepared);
     assert_eq!(hook_failure.as_deref(), Some("hook exited 1"));
 }
+
+#[tokio::test]
+async fn a_session_report_waits_for_a_hand_over_under_way() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+    let (held, holding) = tokio::sync::oneshot::channel();
+    let (release, released) = tokio::sync::oneshot::channel::<()>();
+    let handing_over = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            let work = async {
+                held.send(()).unwrap();
+                released.await.ok();
+            };
+            manager.conversion_handovers.hold(work).await;
+        }
+    });
+    holding.await.unwrap();
+
+    let reporting = tokio::spawn({
+        let (manager, id) = (manager.clone(), workspace.id.clone());
+        async move { manager.record_converting_session(&id, "s4".into()).await }
+    });
+    tokio::task::yield_now().await;
+    let reported_early = reporting.is_finished();
+    release.send(()).unwrap();
+    handing_over.await.unwrap();
+    reporting.await.unwrap().unwrap();
+
+    assert!(!reported_early, "the report waited for the hand-over");
+    let id = workspace.id.clone();
+    let pending = (manager.store)
+        .run(move |db| crate::daemon::conversions::pending(db, &id))
+        .await
+        .unwrap();
+    let Some(crate::daemon::conversions::Pending::Workspace { chat, .. }) = pending else {
+        panic!("expected the conversion: {pending:?}");
+    };
+    let session = chat
+        .agent()
+        .unwrap()
+        .session
+        .map(|session| session.to_string());
+    assert_eq!(session.as_deref(), Some("s4"));
+}
