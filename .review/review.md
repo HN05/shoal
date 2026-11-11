@@ -485,8 +485,7 @@ instead of the PR delivery guidance below.
   Below each enabled protection's stop threshold, `[machine.overload.warning]` queues an
   agent message for every workspace with a running agent, at most once per signal
   and workspace per repeat interval; warnings never stop, clean up or notify.
-  A memory or CPU warning wakes an idle agent only while something besides the
-  agents runs in its workspace when the agent would be woken.
+  A memory or CPU warning never wakes an idle agent; a disk warning does.
   Automatic recovery uses built-in Codex and Claude session restore commands or a
 configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom;
