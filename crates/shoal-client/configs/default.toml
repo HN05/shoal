@@ -157,6 +157,9 @@ dirs = ["/tmp"]
 # Whether its launches take the terminal, over [terminal] focus; set it for
 # a mode whose agent needs your input to start, such as one without instructions.
 # focus = true
+# Minutes its agent may stay idle before Shoal wakes it and asks it to
+# continue, until it runs `shoal sleep`; 0 never wakes it. worker sets 60.
+# idle_wake_minutes = 30
 
 # Each AI tool's launch settings, merged option by option with a repository's.
 [agents.claude]

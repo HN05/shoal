@@ -2381,24 +2381,26 @@ the agent's subject in its first message and never again on a restore;
 `focus`, whether the new tab or session of its launches takes the terminal
 over `terminal.focus`, unset following that setting, which a mode whose agent
 needs the user's input to start, such as one without instructions, sets to
-`true`; and `permissions`, what
-its agents may do, under the keys and values of
+`true`; `idle_wake_minutes`, how long its agent may stay
+[idle before Shoal wakes it](#idle-wakes), unset or 0 never; and
+`permissions`, what its agents may do, under the keys and values of
 [`[permissions]`](#mode-permissions).
 `[rules.<name>]` sets a rule's `text`, which any mode can list. Shoal ships
 these modes:
 
-| Mode | Kind | Rules | Instructions | Focus |
-|---|---|---|---|---|
-| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-client/src/config/modes/worker.md) | unset |
-| `chat` | chat | `work`, `chat` | none | `true` |
-| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-client/src/config/modes/plan.md) | `true` |
-| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-client/src/config/rules/orchestrate.md) | none | `true` |
+| Mode | Kind | Rules | Instructions | Focus | Idle wake |
+|---|---|---|---|---|---|
+| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-client/src/config/modes/worker.md) | unset | 60 |
+| `chat` | chat | `work`, `chat` | none | `true` | unset |
+| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-client/src/config/modes/plan.md) | `true` | unset |
+| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-client/src/config/rules/orchestrate.md) | none | `true` | unset |
 
 The built-in `setup` mode is apart from these: [`repo setup` and `config
 setup`](#set-up-config) start it, and a space records it as its mode. It takes
 the kind, reach, rules and permissions of `worker` in a workspace and of
 `orchestrate` in a chat without a repository, as config sets them, and [its own
-instructions](../crates/shoal-client/src/config/modes/setup.md) after its subject. Config
+instructions](../crates/shoal-client/src/config/modes/setup.md) after its subject.
+Its agent waits for the user, so Shoal never wakes it while it is idle. Config
 cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
 errors that ask for another name, and `shoal start --mode setup` is refused.
 

@@ -35,6 +35,11 @@ const SETUP_INSTRUCTIONS: &str = include_str!("modes/setup.md");
 /// list, replace or leave out.
 const WORK_RULE: &str = "work";
 
+/// How long a worker may stay idle before Shoal wakes it.
+const WORKER_IDLE_WAKE_MINUTES: u64 = 60;
+/// The longest idle wake a mode may set: a year.
+const MAX_IDLE_WAKE_MINUTES: u64 = 525_600;
+
 const MODES_DIR: &str = "modes";
 const RULES_DIR: &str = "rules";
 
@@ -60,6 +65,10 @@ pub struct ModeConfig {
     /// Whether the new tab or session of a space started in this mode
     /// takes the terminal, over `terminal.focus`; unset follows the launch.
     pub focus: Option<bool>,
+    /// How many minutes its agent may stay idle before Shoal wakes it and
+    /// asks it to continue; 0 never wakes it.
+    #[option(default = 0)]
+    pub idle_wake_minutes: Option<u64>,
     /// What the mode's agents may do, over `[permissions]`.
     #[option(section)]
     pub permissions: PermissionsConfig,
@@ -75,7 +84,8 @@ pub struct RuleConfig {
 }
 
 /// The modes Shoal ships, each with the `work` rule before its own; the
-/// chats, which wait for the user's input, take the terminal.
+/// chats, which wait for the user's input, take the terminal, and only the
+/// worker is woken while it stays idle.
 pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     let mode = |kind, rule: &str, instructions: &str| ModeConfig {
         kind: Some(kind),
@@ -83,6 +93,7 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
         rules: vec![WORK_RULE.to_owned(), rule.to_owned()],
         instructions: Some(instructions.to_owned()),
         focus: None,
+        idle_wake_minutes: None,
         permissions: PermissionsConfig::default(),
     };
     let focused = |mode: ModeConfig| ModeConfig {
@@ -92,11 +103,14 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     BTreeMap::from([
         (
             ModeName::DEFAULT.into(),
-            mode(
-                SpaceKind::Workspace,
-                "worker",
-                include_str!("modes/worker.md"),
-            ),
+            ModeConfig {
+                idle_wake_minutes: Some(WORKER_IDLE_WAKE_MINUTES),
+                ..mode(
+                    SpaceKind::Workspace,
+                    "worker",
+                    include_str!("modes/worker.md"),
+                )
+            },
         ),
         (
             ModeName::CHAT.into(),
@@ -145,9 +159,14 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
 /// The mode and rule names one layer writes, which name their files, and
 /// the kind of the default mode, which always starts in a workspace.
 pub fn validate(config: &RepoConfig) -> Result<()> {
-    for name in config.modes.keys() {
+    for (name, mode) in &config.modes {
         crate::validate::name("mode", name)?;
         ensure_configurable(&name.as_str().into())?;
+        ensure!(
+            mode.idle_wake_minutes
+                .is_none_or(|minutes| minutes <= MAX_IDLE_WAKE_MINUTES),
+            "modes.{name}.idle_wake_minutes must be at most {MAX_IDLE_WAKE_MINUTES}"
+        );
     }
     let default = ModeName::DEFAULT;
     let default_kind = config
@@ -193,7 +212,8 @@ pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &ModeName) -> Result<&'a
 
 /// The mode `name` of a space of `kind`, with a repository or without one
 /// as `repository` says: a setup space's [`setup_base`] with the setup
-/// instructions, else the mode `modes` defines.
+/// instructions, never woken while idle since it waits for the user, else
+/// the mode `modes` defines.
 pub fn resolve<'a>(
     modes: &'a BTreeMap<String, Mode>,
     name: &ModeName,
@@ -206,6 +226,7 @@ pub fn resolve<'a>(
     let base = get(modes, &setup_base(kind, repository)?)?;
     Ok(Cow::Owned(Mode {
         instructions: SETUP_INSTRUCTIONS.to_owned(),
+        idle_wake_minutes: 0,
         ..base.clone()
     }))
 }

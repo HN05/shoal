@@ -227,6 +227,16 @@ impl Effective {
         configured.or(self.terminal.focus)
     }
 
+    /// How many minutes an agent of `mode` may stay idle before Shoal wakes
+    /// it; none when its mode never does.
+    pub fn idle_wake_minutes(
+        &self,
+        mode: crate::config::permissions::SpaceMode,
+    ) -> Result<Option<u64>> {
+        let mode = modes::resolve(&self.modes, mode.name, mode.kind, mode.repository)?;
+        Ok(Some(mode.idle_wake_minutes).filter(|minutes| *minutes > 0))
+    }
+
     /// The model and effort a launch of `agent` runs with: each
     /// `requested` value, else `[agent] model` and `effort` when `[agent]
     /// default` names it, else its AI tool's.

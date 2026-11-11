@@ -448,6 +448,40 @@ fn a_launch_focuses_as_its_mode_then_the_terminal_says() {
 }
 
 #[test]
+fn only_a_mode_that_sets_idle_wake_minutes_wakes_its_idle_agents() {
+    use crate::{
+        config::{modes::ModeName, permissions::SpaceMode},
+        model::SpaceKind,
+    };
+    let minutes = |global: &str, name: ModeName, kind: SpaceKind| {
+        let global = Config::from_toml(global).unwrap();
+        let effective = global.effective(&RepoConfig::default()).unwrap();
+        let mode = SpaceMode {
+            name: &name,
+            kind,
+            repository: true,
+        };
+        effective.idle_wake_minutes(mode).unwrap()
+    };
+    let workspace = SpaceKind::Workspace;
+    assert_eq!(minutes("", ModeName::DEFAULT, workspace), Some(60));
+    assert_eq!(minutes("", ModeName::CHAT, SpaceKind::Chat), None);
+    // Setup waits for the user, whatever the worker's setting.
+    assert_eq!(minutes("", ModeName::SETUP, workspace), None);
+    let changed = "[modes.worker]\nidle_wake_minutes = 15\n[modes.chat]\nidle_wake_minutes = 5\n";
+    assert_eq!(minutes(changed, ModeName::DEFAULT, workspace), Some(15));
+    assert_eq!(minutes(changed, ModeName::CHAT, SpaceKind::Chat), Some(5));
+    let off = "[modes.worker]\nidle_wake_minutes = 0\n";
+    assert_eq!(minutes(off, ModeName::DEFAULT, workspace), None);
+    // Another option of a built-in mode keeps its setting.
+    let rules = "[modes.worker]\nrules = ['work']\n";
+    assert_eq!(minutes(rules, ModeName::DEFAULT, workspace), Some(60));
+    let paths = Paths::for_test("/home/test");
+    let long = "[modes.worker]\nidle_wake_minutes = 525601\n";
+    assert!(Config::parse(long, &paths).is_err());
+}
+
+#[test]
 fn a_global_mode_may_name_a_rule_only_its_file_defines() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());
