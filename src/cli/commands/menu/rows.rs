@@ -142,9 +142,8 @@ impl Row {
             return Ok(Self::Workspace(SpaceId::from(id)));
         };
         if kind == "notification" {
-            return Ok(Self::Notification(
-                (!rest.is_empty()).then(|| SpaceName::from(rest)),
-            ));
+            let name = (!rest.is_empty()).then(|| SpaceName::parse(rest));
+            return Ok(Self::Notification(name.transpose()?));
         }
         if kind == "untracked" {
             return Ok(Self::Untracked(decode_path(rest)?));
