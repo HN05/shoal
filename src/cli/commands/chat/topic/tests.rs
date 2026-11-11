@@ -254,6 +254,8 @@ fn a_restored_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
             "id": "c", "number": 4, "repository_id": "repo", "name": "fix-login",
             "agent": "claude", "mode": "chat", "pid": 1, "started_at": 0,
             "restore": "resume", "converted": converted,
+            "links": {"issue": "https://forge.example/team/repo/issues/7",
+                "issue_title": "Fix the login", "prs": []},
         }))
         .unwrap()
     };
@@ -273,6 +275,9 @@ fn a_restored_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
         &repo.path,
     );
 
-    assert!(converted.tells_resumed && converted.subject.is_some());
+    assert!(converted.tells_resumed);
     assert!(!plain.tells_resumed && plain.subject.is_none());
+    // Its mode's instructions name the issue it was linked to as a workspace.
+    let issue = converted.subject.and_then(|subject| subject.issue);
+    assert_eq!(issue.map(|issue| issue.number), Some(7));
 }

@@ -704,19 +704,29 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
 
 #[test]
 fn a_converted_workspaces_agent_is_told_its_place_and_the_stopped_commands() {
-    let workspace = Workspace::new_record(
+    let mut workspace = Workspace::new_record(
         "repo".into(),
         "talk".into(),
         "/work/fix-login".into(),
         Some("fix-login".into()),
         crate::state::WorkspaceState::Ready,
     );
+    let url = "https://forge.example/team/repo/issues/7";
+    workspace.links.issue = Some(url.into());
+    workspace.links.issue_title = Some("Fix the login".into());
 
-    let told = converted_prompt(&workspace, true, Some("handoff"));
+    let told = converted_subject(&workspace, true, Some("handoff"));
 
+    let text = &told.text;
     assert!(
-        told.contains("/work/fix-login") && told.contains("fix-login"),
-        "{told}"
+        text.contains("/work/fix-login") && text.contains("fix-login"),
+        "{text}"
     );
-    assert!(told.ends_with("\n\nhandoff"), "{told}");
+    assert!(text.ends_with("\n\nhandoff"), "{text}");
+    // Its mode's instructions name the issue it was linked to as a chat.
+    let issue = told.issue.expect("the linked issue's fields");
+    assert_eq!(
+        (issue.number, issue.title.as_str(), issue.url.as_str()),
+        (7, "Fix the login", url)
+    );
 }

@@ -114,14 +114,19 @@ impl Topic {
     }
 
     /// This topic for a chat that was a workspace, whose session, which it
-    /// continues in `home`, is told so.
+    /// continues in `home`, is told so, with the fields of the issue it is
+    /// linked to for its mode's instructions.
     pub(in crate::cli::commands) fn converted(self, home: &std::path::Path) -> Self {
-        let told = format!(
+        let text = format!(
             "Shoal converted this workspace into a chat. You now work in the repository's checkout at {}. The workspace's worktree is gone; its branch stays, and shoal restore brings its files back from the checkpoint Shoal kept.",
             home.display()
         );
+        let told = templates::Subject {
+            text,
+            issue: self.linked_issue.clone(),
+        };
         Self {
-            subject: Some(templates::Subject::told(told)),
+            subject: Some(told),
             tells_resumed: true,
             ..self
         }

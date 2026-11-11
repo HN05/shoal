@@ -137,12 +137,13 @@ pub fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>) -> Str
 
 /// What the agent of a chat that became `workspace` is told, carrying on
 /// from a fork of the chat's session when `forked`, followed by `handoff`,
-/// before its mode's instructions.
-pub fn converted_prompt(
+/// before its mode's instructions, which take the fields of the issue the
+/// workspace is linked to.
+pub fn converted_subject(
     workspace: &Workspace,
     forked: bool,
     handoff: Option<&str>,
-) -> String {
+) -> crate::config::templates::Subject {
     let mut prompt = format!(
         "Shoal converted this chat into a workspace. You now work in its worktree at {} on branch {}.",
         workspace.path.display(),
@@ -157,7 +158,10 @@ pub fn converted_prompt(
         prompt.push_str("\n\n");
         prompt.push_str(handoff);
     }
-    prompt
+    crate::config::templates::Subject {
+        text: prompt,
+        issue: crate::config::templates::IssueFields::linked(&workspace.links),
+    }
 }
 
 /// What a restore command of agent `name` in `workspace` is built from:

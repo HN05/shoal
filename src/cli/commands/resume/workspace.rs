@@ -234,7 +234,7 @@ async fn start_converted(
         .session
         .clone()
         .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
-    let message = crate::execution::recovery::converted_prompt(workspace, fork.is_some(), handoff);
+    let subject = crate::execution::recovery::converted_subject(workspace, fork.is_some(), handoff);
     let options = crate::cli::agents::LaunchOptions {
         replaces: records,
         fork,
@@ -243,7 +243,7 @@ async fn start_converted(
     };
     let opening = crate::cli::agents::Opening::New {
         mode: session.mode.clone(),
-        subject: Some(crate::config::templates::Subject::told(message)),
+        subject: Some(subject),
     };
     crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
 }
