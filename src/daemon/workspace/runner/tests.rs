@@ -443,6 +443,42 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
 }
 
 #[tokio::test]
+async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
+    use crate::daemon::runner::INTERVAL;
+    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    let reads = || {
+        fixture
+            .server
+            .received()
+            .iter()
+            .filter(|request| {
+                request
+                    .line
+                    .starts_with("GET /api/v1/repos/team/repo/actions/runners/jobs?")
+            })
+            .count()
+    };
+    // Two running jobs fill max_jobs.
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    assert_eq!(claimed.len(), 2);
+    for job in &claimed {
+        LAUNCHED.lock().unwrap().remove(&job.workspace_id);
+    }
+    assert!(!manager.job_could_start().await.unwrap());
+
+    // Half the interval leaves no read due, however slow the runner.
+    let read = reads();
+    manager.runners.age_waiting_read(INTERVAL / 2);
+    manager.poll_waiting_jobs().await.unwrap();
+    assert_eq!(reads(), read);
+    manager.runners.age_waiting_read(INTERVAL);
+    manager.poll_waiting_jobs().await.unwrap();
+    assert_eq!(reads(), read + 1);
+}
+
+#[tokio::test]
 async fn a_job_whose_pr_moved_on_is_passed_over_without_a_workspace() {
     let fixture = fixture(vec![job("old", 4, 2)], "new", "").await;
     let manager = &fixture.manager;

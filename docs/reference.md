@@ -3479,8 +3479,9 @@ The jobs the forge holds for the runner's labels join the [agent
 queue](#agent-queue) as `job` entries named `ci-<job>-<ID>`, in the order the
 forge queued them, except that a job goes ahead of a queued restore of the
 agent of the workspace its run links. The daemon reads them every ten seconds
-while a job could start, so an idle runner or a full machine sends no requests,
-and drops the entries of jobs the forge no longer lists. `machine.max_jobs`
+while a job could start and every minute while none can, so new jobs show in
+the queue and the entries of jobs the forge no longer lists, which another
+runner took or a cancel ended, leave it. `machine.max_jobs`
 limits jobs as `machine.max_agents` limits agents, counting only jobs. Under
 `dynamic`, agents and jobs start through one admission, one at a time at least
 10 seconds apart, while measured memory and disk leave room below the

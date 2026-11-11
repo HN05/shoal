@@ -1072,8 +1072,10 @@ has no handle and no label that keeps a runner to one job, so its runner may
 take another job its labels match; a job-started hook holds a job of another
 run until its workspace is at that run's commit, so a check never reports on
 another commit. Polling stands in for webhooks, which a local daemon cannot
-receive; it runs only while a job could start, and conditional reads keep
-unchanged answers off the rate limit. Each job runs as a tracked execution in
+receive; it runs every ten seconds while a job could start and every minute
+while none can, so the queue still shows new jobs and drops those other
+runners took, and conditional reads keep unchanged answers off the rate
+limit. Each job runs as a tracked execution in
 a disposable workspace at its commit, which goes once the forge's runner
 exits, at low CPU priority so that a build takes only the cores agents and the
 user leave idle. A job ends only on the forge's word, so stopping it cancels its run

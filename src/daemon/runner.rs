@@ -3,7 +3,8 @@
 //! config changes and every [`INTERVAL`] for the repositories' own files; every
 //! [`POLL_INTERVAL`], and whenever admission admits a job, the jobs that
 //! ended give up their workspaces, admitted jobs are claimed, and the
-//! forge's waiting jobs are read while the machine has room for one.
+//! forge's waiting jobs are read while one could start, and every
+//! [`INTERVAL`] while none can.
 use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
@@ -16,10 +17,10 @@ use tokio::{sync::Notify, time::Instant};
 use crate::client::queue::QueueEntryId;
 use crate::daemon::{log, workspace::Manager};
 
-/// How often the runners are checked against the repositories' settings.
-const INTERVAL: Duration = Duration::from_secs(60);
-/// How often the forge's waiting jobs are read, as often as admission
-/// samples the machine's load.
+/// How often the runners are checked against the repositories' settings,
+/// and the forge's waiting jobs read while none could start.
+pub(crate) const INTERVAL: Duration = Duration::from_secs(60);
+/// How often the forge's waiting jobs are read while one could start.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// How long a repository whose runner could not change waits to try again.
 const RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
@@ -33,6 +34,8 @@ const PERMITS_BUSY_FOR: Duration = Duration::from_secs(15);
 pub(crate) struct Runners {
     failures: Mutex<HashMap<RepositoryId, Instant>>,
     permits_busy: Mutex<HashMap<RepositoryId, Instant>>,
+    /// When the forge's waiting jobs were last read.
+    waiting_read: Mutex<Option<Instant>>,
     /// The queue entries of the jobs whose claim runs.
     claiming: Mutex<HashSet<QueueEntryId>>,
     /// Admission admitted a job, or one ended.
@@ -83,6 +86,22 @@ impl Runners {
     #[cfg(test)]
     pub(crate) fn forget_permits_busy(&self) {
         lock(&self.permits_busy).clear();
+    }
+
+    /// Whether the forge's waiting jobs are due for a read whether or not
+    /// one could start.
+    pub(crate) fn waiting_jobs_due(&self) -> bool {
+        lock(&self.waiting_read).is_none_or(|read| read.elapsed() >= INTERVAL)
+    }
+
+    pub(crate) fn read_waiting_jobs(&self) {
+        *lock(&self.waiting_read) = Some(Instant::now());
+    }
+
+    /// Make the last read of the forge's waiting jobs `age` old.
+    #[cfg(test)]
+    pub(crate) fn age_waiting_read(&self, age: Duration) {
+        *lock(&self.waiting_read) = Instant::now().checked_sub(age);
     }
 
     /// Take the claim of the job `entry`, unless one runs.
@@ -167,18 +186,14 @@ pub(super) async fn run(manager: Arc<Manager>) {
 /// Record the running jobs' usage, remove the workspaces of the jobs that
 /// ended, move a job's workspace to the commit of the job its runner took
 /// instead, release the runners the forge gave no job, claim the jobs
-/// admission admitted, and read the forge's waiting jobs while one could
-/// start.
+/// admission admitted, and read the forge's waiting jobs when due.
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.sample_job_usage().await?;
     manager.finish_ended_jobs().await?;
     manager.follow_taken_jobs().await?;
     manager.release_idle_runners().await?;
     claim_admitted_jobs(manager).await?;
-    if manager.job_could_start().await? {
-        manager.refresh_waiting_jobs().await?;
-    }
-    Ok(())
+    manager.poll_waiting_jobs().await
 }
 
 /// Claim each admitted job no claim runs for yet, each in a task of its own

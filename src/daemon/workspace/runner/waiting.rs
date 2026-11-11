@@ -22,9 +22,20 @@ use crate::{
 };
 
 impl Manager {
+    /// Read the forge's waiting jobs while one could start, and every
+    /// [`INTERVAL`](crate::daemon::runner::INTERVAL) while none can, so that new jobs show in the queue and
+    /// those another runner took leave it.
+    pub(crate) async fn poll_waiting_jobs(&self) -> Result<()> {
+        if self.runners.waiting_jobs_due() || self.job_could_start().await? {
+            self.refresh_waiting_jobs().await?;
+        }
+        Ok(())
+    }
+
     /// Bring the job entries of each repository whose runner is registered
     /// and enabled in line with the jobs its forge lists as waiting.
     pub(crate) async fn refresh_waiting_jobs(&self) -> Result<()> {
+        self.runners.read_waiting_jobs();
         let config = self.config();
         for repository in self.repositories().await? {
             let Ok(settings) = self.repository_settings_from(&config, &repository.id).await else {
