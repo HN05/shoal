@@ -23,8 +23,7 @@ pub(super) async fn pick_and_open(
     space: Option<SpaceSelector>,
     requests: Vec<ApprovalRequest>,
 ) -> Result<i32> {
-    let space = space.as_ref().map(ToString::to_string);
-    let row = choose(ctx, space.as_deref(), requests)?;
+    let row = choose(ctx, space.as_ref(), requests)?;
     let request = displayed(ctx, &row).await?;
     show_request(ctx, Box::new(request)).await
 }
@@ -32,9 +31,8 @@ pub(super) async fn pick_and_open(
 /// Print the list's rows for the picker to reload after a decision.
 pub(in crate::cli::commands) async fn print_rows(
     ctx: &Context,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let space = space.as_deref().map(SpaceSelector::parse);
     for (id, label) in listed_rows(list_requests(ctx, space).await?)? {
         outln!("{}", ui::picker_line(&id, &label));
     }
@@ -63,7 +61,11 @@ pub(in crate::cli::commands) async fn decide_row(
 
 /// Choose a request's row, with keys that decide the highlighted one
 /// without leaving the list.
-fn choose(ctx: &Context, space: Option<&str>, requests: Vec<ApprovalRequest>) -> Result<String> {
+fn choose(
+    ctx: &Context,
+    space: Option<&SpaceSelector>,
+    requests: Vec<ApprovalRequest>,
+) -> Result<String> {
     let keys = [
         decision_key(ctx, ui::Key::Ctrl('a'), "approve", Decision::Approve)?,
         decision_key(ctx, ui::Key::Ctrl('d'), "deny", Decision::Deny)?,

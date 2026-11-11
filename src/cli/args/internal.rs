@@ -34,7 +34,7 @@ pub enum InternalCommand {
     #[command(name = workers::APPROVAL_ROWS)]
     ApprovalRows {
         #[arg(long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Decide the request a `shoal approvals` picker row names, and print the outcome.
     #[command(name = workers::APPROVAL_DECIDE)]
@@ -56,7 +56,7 @@ pub enum InternalCommand {
         /// Workspace or chat to report for; defaults to the chat this runs
         /// in, else the caller's own or the current workspace.
         #[arg(long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Report a turn an API error ended, with the failure the hook event of an
     /// agent with this integration names; Shoal's agent hooks call it.
@@ -67,7 +67,7 @@ pub enum InternalCommand {
         /// Workspace or chat to report for; defaults to the chat this runs
         /// in, else the caller's own or the current workspace.
         #[arg(long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Report the plan that the hook event of an agent with this integration
     /// names after a plan tool call; Shoal's agent hooks call it.
@@ -78,7 +78,7 @@ pub enum InternalCommand {
         /// Workspace or chat to report for; defaults to the chat this runs
         /// in, else the caller's own or the current workspace.
         #[arg(long)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     /// Wait for the next agent messages or item activity of the workspace or
     /// chat, print them and exit 2; Shoal's Claude Code `Stop` and `StopFailure`
@@ -91,7 +91,7 @@ pub enum InternalCommand {
         /// Workspace or chat whose updates to wait for; defaults to the
         /// agent's own.
         #[arg(long, hide = true)]
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         /// The workspace the wake hook of an earlier release names when an
         /// upgrade hands its wait over to this one.
         #[arg(

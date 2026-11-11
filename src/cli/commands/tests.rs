@@ -267,7 +267,7 @@ fn a_resumed_wake_names_its_space_or_an_earlier_releases_workspace() {
     };
     assert_eq!(
         parse(&["--space", "work", "--resume"]).unwrap(),
-        (Some("work".to_owned()), None)
+        (Some("work".into()), None)
     );
     // The wake hook of an earlier release hands its wait over this way.
     assert_eq!(

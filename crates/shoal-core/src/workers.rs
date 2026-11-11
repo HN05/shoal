@@ -2,6 +2,7 @@
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -123,7 +124,7 @@ pub enum Worker<'a> {
     MenuNext,
     /// Print the `shoal approvals` picker's rows, of `space` only when given.
     ApprovalRows {
-        space: Option<&'a str>,
+        space: Option<&'a SpaceSelector>,
     },
     /// Make `decision` on the request whose picker row the picker appends.
     ApprovalDecide {
@@ -360,7 +361,7 @@ pub(crate) fn internal_command_for(
         Worker::ApprovalRows { space } => {
             args.push(APPROVAL_ROWS.into());
             if let Some(space) = space {
-                args.extend(["--space".into(), space.into()]);
+                args.extend(["--space".into(), space.to_string().into()]);
             }
         }
         Worker::ApprovalDecide { decision } => {

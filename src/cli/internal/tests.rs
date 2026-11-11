@@ -1,4 +1,5 @@
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
 use std::os::unix::ffi::OsStringExt;
 
 use clap::Parser;
@@ -169,13 +170,16 @@ fn menu_workers_round_trip_their_view() {
 
 #[test]
 fn approval_workers_round_trip_their_space_and_decision() {
-    for space in [None, Some("agent")] {
-        let InternalCommand::ApprovalRows { space: parsed } =
-            parse(Worker::ApprovalRows { space }, false)
-        else {
+    for space in [None, Some(SpaceSelector::from("agent"))] {
+        let InternalCommand::ApprovalRows { space: parsed } = parse(
+            Worker::ApprovalRows {
+                space: space.as_ref(),
+            },
+            false,
+        ) else {
             panic!("expected approval rows worker");
         };
-        assert_eq!(parsed.as_deref(), space);
+        assert_eq!(parsed, space);
     }
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
