@@ -187,24 +187,26 @@ impl Manager {
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
     ) -> Result<bool> {
-        let claimed = match &execution {
-            Some(id) => self.claim_woken_turn(id).await,
-            // The save of a blocked chat leaves a message, which waits for
-            // its restore when its stop comes before its hook's wake.
-            None => !self.chat_saved(self.space(selector).await?.id()).await?,
-        };
-        if !claimed {
+        if let Some(id) = &execution
+            && !self.claim_woken_turn(id).await
+        {
             return Ok(false);
         }
-        self.record_agent_state(
-            selector,
-            AgentState::Working,
-            execution,
-            None,
-            TurnEnding::default(),
-        )
-        .await?;
-        Ok(true)
+        let recorded = self
+            .take_agent_state(
+                selector,
+                AgentState::Working,
+                execution.clone(),
+                None,
+                TurnEnding::default(),
+                UnixTime::now(),
+            )
+            .await?;
+        // A chat whose save came first, in the transaction that would have
+        // recorded the turn, takes no report: the update that woke its hook,
+        // such as the one a blocked chat's save leaves, waits for its
+        // restore.
+        Ok(execution.is_some() || recorded.is_some())
     }
 
     /// Record that an interrupt ended the turn of the agent reporting from
@@ -272,6 +274,23 @@ impl Manager {
         session: Option<AgentSessionId>,
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
+        let now = UnixTime::now();
+        let taken =
+            (self.take_agent_state(selector, state, execution, session, ending, now)).await?;
+        Ok(taken.unwrap_or_else(|| unrecorded(state, now)))
+    }
+
+    /// [`Self::record_agent_state`] at `now`, returning the status the space
+    /// takes, or none when it takes no report, as a chat that stopped.
+    async fn take_agent_state(
+        &self,
+        selector: &SpaceSelector,
+        state: AgentState,
+        execution: Option<ExecutionId>,
+        session: Option<AgentSessionId>,
+        ending: TurnEnding,
+        now: UnixTime,
+    ) -> Result<Option<AgentStatus>> {
         let space = self.space(selector).await?;
         self.record_turn(&space, execution.as_ref(), state, ending)
             .await;
@@ -279,7 +298,6 @@ impl Manager {
             self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
         }
-        let now = UnixTime::now();
         let report = Report {
             space: space.id().to_owned(),
             state,
@@ -290,12 +308,12 @@ impl Manager {
         };
         let saved = self.store.write(move |tx| save(tx, &report)).await?;
         let Some((status, changed)) = saved else {
-            return Ok(unrecorded(state, now));
+            return Ok(None);
         };
         if changed {
             self.signals.agent_changed();
         }
-        Ok(status)
+        Ok(Some(status))
     }
 
     /// Record the turn `state` reports with `ending` for the agent that
