@@ -611,8 +611,11 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     };
     // Agents get JSON output unless they inherit a setting; commands get none.
     let mut children = vec![
-        spawn_with(&["claude", &fixture.id("stopped")], None),
-        spawn_with(&["claude", &fixture.id("stopped")], Some("text")),
+        spawn_with(&["run", "claude", "-w", &fixture.id("stopped")], None),
+        spawn_with(
+            &["run", "claude", "-w", &fixture.id("stopped")],
+            Some("text"),
+        ),
         spawn_with(
             &[
                 "run",
@@ -756,7 +759,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("talked")])
+        .args(["run", "claude", "-w", &fixture.id("talked")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -809,7 +812,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("quit")])
+        .args(["run", "claude", "-w", &fixture.id("quit")])
         .stdin(Stdio::null())
         .output()
         .unwrap();

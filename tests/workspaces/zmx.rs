@@ -52,7 +52,12 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     let runs = || fs::read_to_string(home.join("agent-runs")).unwrap_or_default();
 
     let launch = |command: &mut Command| fixture.terminal_command(command, "", true);
-    let (output, transcript) = launch(fixture.command().args(["claude", &fixture.id("persist")]));
+    let (output, transcript) =
+        launch(
+            fixture
+                .command()
+                .args(["run", "claude", "-w", &fixture.id("persist")]),
+        );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
@@ -87,7 +92,12 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         format!("  name=persist\tpid=1\tclients=0\tshoal.workspace={id}\n"),
     )
     .unwrap();
-    let (output, transcript) = launch(fixture.command().args(["claude", &fixture.id("persist")]));
+    let (output, transcript) =
+        launch(
+            fixture
+                .command()
+                .args(["run", "claude", "-w", &fixture.id("persist")]),
+        );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let attaches = |calls: Vec<Vec<String>>| calls.into_iter().filter(|call| call[0] == "attach");
     assert_eq!(
@@ -97,14 +107,14 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
 
     // Inside a session or without a terminal, the agent runs in place.
     let before = zmx_calls(&fixture).len();
-    let (output, transcript) = launch(
-        fixture
-            .command()
-            .env("ZMX_SESSION", "outer")
-            .args(["claude", &fixture.id("persist")]),
-    );
+    let (output, transcript) = launch(fixture.command().env("ZMX_SESSION", "outer").args([
+        "run",
+        "claude",
+        "-w",
+        &fixture.id("persist"),
+    ]));
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let output = fixture.run(&["claude", &fixture.id("persist")]);
+    let output = fixture.run(&["run", "claude", "-w", &fixture.id("persist")]);
     assert!(output.status.success(), "{output:?}");
     // Watching sessions lists them on its own schedule, so only the other
     // calls are counted. The execution tells its session apart from a later
@@ -506,7 +516,9 @@ fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
         ),
     );
     let (output, transcript) = fixture.terminal_command(
-        fixture.command().args(["codex", &fixture.id("prompted")]),
+        fixture
+            .command()
+            .args(["run", "codex", "-w", &fixture.id("prompted")]),
         "",
         true,
     );
@@ -538,7 +550,7 @@ fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
     command
         .env("TERM", "xterm-256color")
         .env("ZMX_TEST_LEAK_INPUT_MODE", "1")
-        .args(["claude", &fixture.id("persist")]);
+        .args(["run", "claude", "-w", &fixture.id("persist")]);
     let (output, transcript) = fixture.terminal_command(&mut command, "", true);
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let enabled = transcript.rfind("\x1b[?1000h").unwrap();
@@ -588,7 +600,7 @@ pub(crate) fn agent_in_session<'a>(
     let agent = fixture
         .command()
         .env("ZMX_SESSION", session)
-        .args(["claude", &fixture.id(workspace)])
+        .args(["run", "claude", "-w", &fixture.id(workspace)])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(fs::File::create(&errors).unwrap())
@@ -780,7 +792,7 @@ fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
     install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
     fs::write(home.join("zmx-attach-detaches"), "").unwrap();
     let mut launch = fixture.command();
-    launch.args(["claude", &fixture.id("launched")]);
+    launch.args(["run", "claude", "-w", &fixture.id("launched")]);
     let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
     assert!(output.status.success(), "{output:?}\n{transcript}");
     fs::remove_file(home.join("zmx-attach-detaches")).unwrap();
@@ -910,7 +922,9 @@ fn terminal_agent_launches_refuse_a_zmx_older_than_1_0_1_before_opening_a_sessio
     install_fake_agents(&fixture, &["claude"]);
     fs::write(fixture.root.path().join("zmx-version"), "0.8.1").unwrap();
     let (output, transcript) = fixture.terminal_command(
-        fixture.command().args(["claude", &fixture.id("persist")]),
+        fixture
+            .command()
+            .args(["run", "claude", "-w", &fixture.id("persist")]),
         "",
         true,
     );

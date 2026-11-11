@@ -12,7 +12,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     let mut child = fixture
         .command()
         .current_dir(path)
-        .args(["check", "--", "two words", "--flag"])
+        .args(["run", "check", "--", "two words", "--flag"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -40,14 +40,18 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     )
     .unwrap();
     assert_eq!(
-        fixture.run(&["check", &fixture.id("custom")]).stdout,
+        fixture
+            .run(&["run", "check", "-w", &fixture.id("custom")])
+            .stdout,
         b"from worktree"
     );
     let saved = fixture.root.path().join("commands.toml");
     fs::write(&saved, "[commands]\ncheck = ['printf', '%s', 'saved']\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     assert_eq!(
-        fixture.run(&["check", &fixture.id("custom")]).stdout,
+        fixture
+            .run(&["run", "check", "-w", &fixture.id("custom")])
+            .stdout,
         b"saved"
     );
 }
@@ -188,15 +192,15 @@ fn repository_commands_pick_a_workspace_that_defines_them() {
     )
     .unwrap();
     let id = defining["id"].as_str().unwrap();
-    let (output, rows) = fixture.pick(&["local-check"], id, "");
+    let (output, rows) = fixture.pick(&["run", "local-check"], id, "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"repository command");
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
-    let previous = fixture.run(&["local-check", "-"]);
+    let previous = fixture.run(&["run", "local-check", "-w", "-"]);
     assert!(previous.status.success(), "{previous:?}");
     assert_eq!(previous.stdout, b"repository command");
-    let (output, rows) = fixture.pick(&["lsit"], id, "");
+    let (output, rows) = fixture.pick(&["run", "lsit"], id, "");
     assert!(!output.status.success());
     assert!(rows.is_empty(), "{rows:?}");
 }
@@ -314,7 +318,7 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
         "[commands]\nports = ['printf', '%s', 'configured command']\n",
     )
     .unwrap();
-    let output = fixture.run(&["ports", &fixture.id("command-target")]);
+    let output = fixture.run(&["run", "ports", "-w", &fixture.id("command-target")]);
     assert!(output.status.success());
     assert_eq!(output.stdout, b"configured command");
 }

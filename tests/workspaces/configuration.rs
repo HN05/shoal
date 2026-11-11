@@ -630,7 +630,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
         .env("GIT_CONFIG_VALUE_0", "12")
         .env("GIT_AUTHOR_EMAIL", "inherited@example.invalid")
         .env("GIT_COMMITTER_NAME", "Inherited Name")
-        .args(["claude", &fixture.id("agent-git")])
+        .args(["run", "claude", "-w", &fixture.id("agent-git")])
         .output()
         .unwrap();
     assert!(
@@ -664,7 +664,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
         format!("{commands}[agent]\ngit_profile = 'missing'\n"),
     )
     .unwrap();
-    let output = fixture.run(&["claude", &fixture.id("agent-git")]);
+    let output = fixture.run(&["run", "claude", "-w", &fixture.id("agent-git")]);
     assert!(!output.status.success());
 }
 
@@ -690,7 +690,7 @@ fn agents_git_over_https_uses_the_hosts_agent_token() {
     )
     .unwrap();
 
-    let agent = fixture.run(&["claude", &fixture.id("agent-login")]);
+    let agent = fixture.run(&["run", "claude", "-w", &fixture.id("agent-login")]);
     let other = fixture.run(&[
         "run",
         "--workspace",

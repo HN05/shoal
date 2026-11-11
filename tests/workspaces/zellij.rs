@@ -602,7 +602,11 @@ fn zellij_off_leaves_launches_from_its_panes_to_zmx() {
     };
     fixture.add("plain");
     let (output, transcript) = fixture.terminal_command(
-        zellij.inside(fixture.command().args(["pi", &fixture.id("plain")])),
+        zellij.inside(
+            fixture
+                .command()
+                .args(["run", "pi", "-w", &fixture.id("plain")]),
+        ),
         "",
         true,
     );

@@ -43,7 +43,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
     // Without its key the agent never starts, and its execution ends.
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("proxied")])
+        .args(["run", "claude", "-w", &fixture.id("proxied")])
         .env_remove("CLIPROXY_TEST_KEY")
         .output()
         .unwrap();
@@ -55,7 +55,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
     // With it, Claude Code is pointed at the proxy on a loopback port.
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("proxied")])
+        .args(["run", "claude", "-w", &fixture.id("proxied")])
         .env("CLIPROXY_TEST_KEY", "sk-test")
         .output()
         .unwrap();
@@ -102,7 +102,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
     )
     .unwrap();
-    let output = fixture.run(&["claude", &fixture.id("secrets")]);
+    let output = fixture.run(&["run", "claude", "-w", &fixture.id("secrets")]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"global secret|AGENT_TOKEN\n");
     let output = fixture.run(&[
@@ -139,7 +139,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[secrets.AGENT_TOKEN]\ncommand = ['false']\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
-    let output = fixture.run(&["claude", &fixture.id("secrets")]);
+    let output = fixture.run(&["run", "claude", "-w", &fixture.id("secrets")]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
 
@@ -179,7 +179,7 @@ fn tool_secrets_reach_only_their_tools() {
         "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s\\n\" \"${TOOL_TOKEN-unset}\"; show-token \"two words\" -x']\n",
     )
     .unwrap();
-    let output = fixture.run(&["claude", &fixture.id("tool-secrets")]);
+    let output = fixture.run(&["run", "claude", "-w", &fixture.id("tool-secrets")]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
@@ -302,7 +302,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
         "TOOL_TOKEN: tools: show-token; approval required (lease)\n"
     );
     let launch = || {
-        let output = fixture.run(&["claude", &fixture.id("gated")]);
+        let output = fixture.run(&["run", "claude", "-w", &fixture.id("gated")]);
         (
             output.status.success(),
             String::from_utf8_lossy(&output.stderr).into_owned(),

@@ -54,7 +54,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     install_test_script(bin.join("claude"), "#!/bin/sh\nexit 7\n");
     let agent = fixture
         .command()
-        .args(["claude", &fixture.id("waiter")])
+        .args(["run", "claude", "-w", &fixture.id("waiter")])
         .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
@@ -467,7 +467,7 @@ fn a_title_request_reaches_only_a_running_agent() {
     );
     let mut agent = fixture
         .command()
-        .args(["claude", &fixture.id("titled")])
+        .args(["run", "claude", "-w", &fixture.id("titled")])
         .env("PATH", fixture.restricted_path(&bin))
         .stdout(Stdio::null())
         .spawn()

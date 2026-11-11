@@ -25,7 +25,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
     let agent = fixture
         .command()
-        .args(["claude", &fixture.id("moving")])
+        .args(["run", "claude", "-w", &fixture.id("moving")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -176,7 +176,7 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
     .unwrap();
     let agent = fixture
         .command()
-        .args(["claude", &fixture.id("handed")])
+        .args(["run", "claude", "-w", &fixture.id("handed")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -299,7 +299,7 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     .unwrap();
     let agent = here
         .command()
-        .args(["claude", &here.id("handed")])
+        .args(["run", "claude", "-w", &here.id("handed")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -738,7 +738,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("carried")])
+        .args(["run", "claude", "-w", &fixture.id("carried")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -811,7 +811,7 @@ fn export_carries_session_files_that_import_puts_back() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("transcript")])
+        .args(["run", "claude", "-w", &fixture.id("transcript")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -994,7 +994,7 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude-moving", &fixture.id("profiled")])
+        .args(["run", "claude-moving", "-w", &fixture.id("profiled")])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -1046,7 +1046,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["claude", &fixture.id("unplaced")])
+        .args(["run", "claude", "-w", &fixture.id("unplaced")])
         .stdin(Stdio::null())
         .output()
         .unwrap();

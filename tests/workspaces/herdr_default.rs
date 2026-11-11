@@ -107,7 +107,7 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     for args in [
         vec!["start", repo, "shell"],
         vec!["start", "--chat", repo, "--name", "talk", "--agent", "pi"],
-        vec!["pi", &fixture.id("agent")],
+        vec!["run", "pi", "-w", &fixture.id("agent")],
     ] {
         fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap_or_default();
         let (output, transcript) = plain_terminal(&fixture, &args);

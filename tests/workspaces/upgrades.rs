@@ -22,7 +22,7 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let mut agent = Stopped {
         fixture: &fixture,
         agent: support::isolated(fixture.root.path(), &installed)
-            .args(["claude", &fixture.id("upgraded")])
+            .args(["run", "claude", "-w", &fixture.id("upgraded")])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()

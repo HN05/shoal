@@ -82,7 +82,14 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
     );
     assert_eq!(
         fixture
-            .run(&["plain", &fixture.id("changes"), "--", "{diff_base}"])
+            .run(&[
+                "run",
+                "plain",
+                "-w",
+                &fixture.id("changes"),
+                "--",
+                "{diff_base}"
+            ])
             .stdout,
         b"{diff_base}"
     );

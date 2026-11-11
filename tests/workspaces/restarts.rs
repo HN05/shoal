@@ -30,7 +30,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
         agent: fixture
             .command()
             .env("BROKEN_TREE", "1")
-            .args(["claude", &fixture.id("renewed")])
+            .args(["run", "claude", "-w", &fixture.id("renewed")])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -530,7 +530,7 @@ impl<'a> Running<'a> {
         fs::write(path.join("resume.sh"), fake_agent_script("restored")).unwrap();
         let agent = fixture
             .command()
-            .args(["claude", &fixture.id(workspace)])
+            .args(["run", "claude", "-w", &fixture.id(workspace)])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

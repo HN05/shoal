@@ -120,7 +120,9 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .command()
                 .args([
                     "--json",
+                    "run",
                     "happy-claude",
+                    "-w",
                     &fixture.id(&name),
                     "--",
                     "--model",
@@ -390,7 +392,15 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         fixture.add(&name);
         let output = fixture
             .command()
-            .args(["--json", "happy-codex", &fixture.id(&name), "--", "--yolo"])
+            .args([
+                "--json",
+                "run",
+                "happy-codex",
+                "-w",
+                &fixture.id(&name),
+                "--",
+                "--yolo",
+            ])
             .env("HAPPY_RECORD", &record)
             .env("HAPPY_SERVER_URL", &server.url)
             .output()
@@ -490,7 +500,13 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     fixture.add("unseeded");
     let output = fixture
         .command()
-        .args(["--json", "happy-codex", &fixture.id("unseeded")])
+        .args([
+            "--json",
+            "run",
+            "happy-codex",
+            "-w",
+            &fixture.id("unseeded"),
+        ])
         .env("HAPPY_RECORD", &record)
         .env("HAPPY_SERVER_URL", &server.url)
         // Launched from inside another seeded session: its attachment must not leak.
@@ -520,7 +536,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let launch_orphan = || {
         fixture
             .command()
-            .args(["--json", "happy-codex", &fixture.id("orphan")])
+            .args(["--json", "run", "happy-codex", "-w", &fixture.id("orphan")])
             .env("HAPPY_SERVER_URL", &server.url)
             // Only the fixture directory and system tools: a real happy must not be found.
             .env(
