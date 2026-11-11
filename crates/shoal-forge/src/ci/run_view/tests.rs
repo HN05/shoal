@@ -75,6 +75,7 @@ fn the_newest_finished_run_skips_unfinished_and_held_runs() {
         workflow: Some("ci.yml".into()),
         commit: None,
         state,
+        succeeded: state == JobState::Finished,
         waiting,
     };
     let runs = vec![
@@ -114,6 +115,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         workflow: None,
         commit: None,
         state: JobState::Failed,
+        succeeded: false,
         waiting: false,
     };
     let jobs = github.kind.run_jobs(
@@ -184,6 +186,7 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
         workflow: None,
         commit: None,
         state: JobState::Failed,
+        succeeded: false,
         waiting: false,
     };
     let job = |id, name: &str| RunJob {

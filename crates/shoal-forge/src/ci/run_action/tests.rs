@@ -10,6 +10,7 @@ fn run(id: u64) -> Run {
         workflow: None,
         commit: None,
         state: JobState::Finished,
+        succeeded: true,
         waiting: false,
     }
 }
@@ -126,6 +127,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             workflow: Some("ci.yml".into()),
             commit: Some("abc".into()),
             state: JobState::Failed,
+            succeeded: false,
             waiting: false,
         }
     );
@@ -153,6 +155,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             workflow: Some("deps.yml".into()),
             commit: Some("123".into()),
             state: JobState::Finished,
+            succeeded: true,
             waiting: false,
         }
     );
@@ -236,5 +239,31 @@ async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() 
         .act_on_run(&account, &run(9), CiAction::Rerun, true)
         .await;
     assert!(rerun.is_err());
+    Ok(())
+}
+
+#[test]
+fn only_a_run_the_forge_reports_successful_passes() -> Result<()> {
+    let read = |remote: &str, value| -> Result<Run> {
+        let repo = ForgeRepo::parse(remote)?;
+        repo.kind.run(&repo, RunNumber::new(12), &value)
+    };
+    let gitlab = |status: &str| {
+        json!({"id": 12, "web_url": "https://gitlab.com/team/repo/-/pipelines/12",
+                "ref": "main", "tag": false, "status": status})
+    };
+    assert!(read("https://gitlab.com/team/repo", gitlab("success"))?.passed());
+    for status in ["skipped", "manual"] {
+        assert!(
+            !read("https://gitlab.com/team/repo", gitlab(status))?.passed(),
+            "{status}"
+        );
+    }
+    let forgejo = |status: &str| {
+        json!({"workflow_runs": [{"id": 9331, "index_in_repo": 12, "prettyref": "main",
+                "workflow_id": "ci.yml", "status": status}]})
+    };
+    assert!(read("https://codeberg.org/team/repo", forgejo("success"))?.passed());
+    assert!(!read("https://codeberg.org/team/repo", forgejo("skipped"))?.passed());
     Ok(())
 }

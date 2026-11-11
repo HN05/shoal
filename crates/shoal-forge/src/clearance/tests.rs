@@ -9,6 +9,7 @@ fn run(id: u64, state: JobState) -> Run {
         workflow: Some("ci.yml".into()),
         commit: Some("0123456789abcdef".into()),
         state,
+        succeeded: state == JobState::Finished,
         waiting: false,
     }
 }
@@ -27,6 +28,21 @@ fn an_issue_clears_once_closed_and_a_pr_once_merged_or_closed() {
     assert!(cleared(ItemKind::Issue, ItemState::Closed));
     assert!(cleared(ItemKind::Pr, ItemState::Merged));
     assert!(cleared(ItemKind::Pr, ItemState::Closed));
+}
+
+#[test]
+fn a_finished_run_that_did_not_succeed_clears_nothing() {
+    let failed = run(10, JobState::Failed);
+    // A skipped pipeline, or one waiting for manual action, finished without
+    // succeeding.
+    let skipped = Run {
+        succeeded: false,
+        ..run(12, JobState::Finished)
+    };
+    assert_eq!(
+        later_run_clearance(&failed, "main", Some(&skipped)),
+        Clearance::Open
+    );
 }
 
 #[test]

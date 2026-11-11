@@ -859,6 +859,7 @@ impl Backend for GitLab {
             workflow: None,
             commit: text(&value["sha"]),
             state: status_state(&value["status"])?.into(),
+            succeeded: value["status"] == "success",
             waiting: false,
         })
     }

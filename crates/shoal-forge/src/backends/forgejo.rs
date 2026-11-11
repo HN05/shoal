@@ -762,6 +762,7 @@ impl Backend for Forgejo {
             workflow: text(&value["workflow_id"]),
             commit: text(&value["commit_sha"]),
             state: actions::state(&value["status"])?,
+            succeeded: value["status"] == "success",
             waiting: value["need_approval"] == true,
         })
     }

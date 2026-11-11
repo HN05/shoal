@@ -33,6 +33,10 @@ pub struct Run {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
     pub state: JobState,
+    /// The forge reports it succeeded, which a finished run that was
+    /// skipped or waits for manual action has not.
+    #[serde(skip)]
+    pub(crate) succeeded: bool,
     /// The forge holds the run until a maintainer approves it.
     #[serde(skip)]
     pub(crate) waiting: bool,
@@ -45,9 +49,9 @@ impl Run {
         self.id > other.id
     }
 
-    /// Whether it finished and passed.
+    /// Whether it finished and succeeded.
     pub fn passed(&self) -> bool {
-        !self.waiting && self.state == JobState::Finished
+        !self.waiting && self.succeeded
     }
 }
 

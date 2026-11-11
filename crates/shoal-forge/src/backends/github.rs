@@ -657,6 +657,7 @@ impl Backend for GitHub {
             workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
             commit: text(&value["head_sha"]),
             state: actions::state(value)?,
+            succeeded: value["conclusion"] == "success",
             waiting: value["conclusion"] == "action_required",
         })
     }
