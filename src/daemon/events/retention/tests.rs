@@ -72,3 +72,36 @@ async fn a_restored_workspace_takes_the_removed_ones_events() {
         .unwrap();
     assert_eq!(left, ["restored", "other"]);
 }
+
+#[tokio::test]
+async fn shoal_s_own_events_stay_for_the_global_retention() {
+    let (_temp, manager) = manager().await;
+    let decade = 3651 * 24 * 3600;
+    let shoal = |db: &Connection, version: &str, age: i64| {
+        db.execute(
+            "INSERT INTO workspace_events(created_at,record) VALUES (unixepoch()-?2,
+                json_object('kind','daemon_started','version',?1))",
+            params![version, age],
+        )
+    };
+    manager
+        .store
+        .run(move |db| {
+            shoal(db, "old", decade)?;
+            shoal(db, "new", 0)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_events().await.unwrap();
+    let left: Vec<String> = (manager.store)
+        .run(|db| {
+            Ok(db
+                .prepare("SELECT json_extract(record,'$.version') FROM workspace_events")?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(left, ["new"]);
+}

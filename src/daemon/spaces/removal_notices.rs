@@ -157,6 +157,10 @@ impl Manager {
         let about = About::space(space.name, space.id);
         let Err(error) = removal else {
             log!("{} removed {} {}", cleanup.name(), space.kind, space.name);
+            // A parent's removal, which may be the user's, names the spaces below it.
+            if !matches!(cleanup, Cleanup::Parent(_)) {
+                self.cleanup_removals.push(space.name);
+            }
             let notice = space.removal_notice(cleanup);
             (self.notify_about(about, NotificationKind::SpaceRemoved, notice)).await;
             return Ok(());

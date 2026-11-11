@@ -22,7 +22,10 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
                 let parent = event.details.parent.flatten().map(|parent| parent.id);
                 Some(format!("{} {parent:?}", event.details.name))
             }
-            EventItem::Event(_) | EventItem::File(_) | EventItem::Gap { .. } => None,
+            EventItem::Event(_)
+            | EventItem::File(_)
+            | EventItem::Shoal(_)
+            | EventItem::Gap { .. } => None,
         })
         .collect()
 }

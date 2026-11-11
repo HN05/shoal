@@ -46,3 +46,23 @@ fn a_missing_default_terminal_host_is_an_error() {
     });
     assert_eq!(check.status, CheckStatus::Error);
 }
+
+#[tokio::test]
+async fn shoal_s_log_records_each_reload_and_why_one_kept_the_settings() {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    crate::test_support::write_global_config(&manager.paths, "agent = 'not a table'\n");
+    assert!(manager.reload_config_and_recheck().await.is_err());
+    crate::test_support::write_global_config(&manager.paths, "");
+    manager.reload_config_and_recheck().await.unwrap();
+    let events = manager.workspace_events(None, 50).await.unwrap();
+    let reloads: Vec<_> = (events.iter())
+        .map(|item| match item {
+            crate::daemon::events::EventItem::Shoal(event) => {
+                (event.details.kind, event.details.error.is_some())
+            }
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect();
+    use crate::daemon::events::ShoalEventKind::ConfigReloaded;
+    assert_eq!(reloads, [(ConfigReloaded, true), (ConfigReloaded, false)]);
+}

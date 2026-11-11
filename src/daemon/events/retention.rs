@@ -1,7 +1,8 @@
 //! How long a space's events stay: while the space exists, and once it is
 //! gone for its repository's `cleanup.restore.retention_days` after its
 //! removal, as its checkpoints and attached files do. A removal record or
-//! a removed chat's unexpired files keep them longer.
+//! a removed chat's unexpired files keep them longer. Shoal's own events
+//! stay for the global retention.
 use crate::client::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 
@@ -22,11 +23,18 @@ struct Gone {
 }
 
 impl Manager {
-    /// Forget the events of each space gone for longer than its retention.
+    /// Forget the events of each space gone for longer than its retention,
+    /// and Shoal's own events older than the global retention.
     pub(crate) async fn expire_events(&self) -> Result<()> {
         let gone = self.store.run(|db| gone(db)).await?;
         let expired = self.expired(gone).await;
-        self.store.write(move |tx| forget(tx, &expired)).await
+        let shoal_kept_from = UnixTime::now() - self.retention(None).await;
+        self.store
+            .write(move |tx| {
+                forget(tx, &expired)?;
+                forget_shoal_before(tx, shoal_kept_from)
+            })
+            .await
     }
 
     /// The IDs of the `gone` spaces whose retention after their removal
@@ -80,7 +88,8 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
                 COALESCE(MAX(CASE WHEN json_extract(record,'$.kind') IN ('removed','chat_ended')
                     THEN created_at END), MAX(created_at)) AS removed_at
             FROM workspace_events
-            WHERE space_id NOT IN (SELECT id FROM workspaces)
+            WHERE space_id IS NOT NULL
+                AND space_id NOT IN (SELECT id FROM workspaces)
                 AND space_id NOT IN (SELECT id FROM chats)
                 AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
                 AND space_id NOT IN (SELECT chat_id FROM ended_chats
@@ -113,6 +122,20 @@ fn forget(tx: &Transaction<'_>, ids: &[SpaceId]) -> Result<()> {
             [id],
         )?;
     }
+    Ok(())
+}
+
+/// Forget Shoal's own events recorded before `time`.
+fn forget_shoal_before(tx: &Transaction<'_>, time: UnixTime) -> Result<()> {
+    tx.execute(
+        "UPDATE journal_pruned SET id=MAX(id, (SELECT COALESCE(MAX(id),0)
+            FROM workspace_events WHERE space_id IS NULL AND created_at<?1))",
+        [time],
+    )?;
+    tx.execute(
+        "DELETE FROM workspace_events WHERE space_id IS NULL AND created_at<?1",
+        [time],
+    )?;
     Ok(())
 }
 

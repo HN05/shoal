@@ -30,6 +30,7 @@ pub(super) async fn run(ctx: &Context, follow: bool, after: Option<EventCursor>)
                     event.details.file.name
                 )
             }
+            EventItem::Shoal(event) => outln!("{} {}", event.id, event.details.kind),
             EventItem::Gap {
                 after,
                 oldest_id,

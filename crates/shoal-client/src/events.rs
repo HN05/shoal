@@ -1,4 +1,5 @@
-//! The workspace and chat event journal, as `shoal events` replays it.
+//! The journal of workspace, chat, file and Shoal events, as `shoal internal
+//! events` replays it.
 use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
@@ -166,6 +167,26 @@ states!(
         Added => "file_added",
         /// Its record and Shoal's copy went, by whatever deleted them.
         Removed => "file_removed",
+    }
+);
+
+states!(
+    /// What happened to Shoal itself, which belongs to no space.
+    ShoalEventKind {
+        /// The daemon started, at the release `version` names.
+        DaemonStarted => "daemon_started",
+        /// The daemon stopped, ending the work it ran; `error` says why when
+        /// it failed.
+        DaemonStopped => "daemon_stopped",
+        /// The daemon stopped for the next one to take over its running
+        /// work, as `shoal daemon restart` and an update ask.
+        DaemonRestarted => "daemon_restarted",
+        /// The daemon reread the global config; `error` says why it kept the
+        /// settings it had.
+        ConfigReloaded => "config_reloaded",
+        /// Automatic cleanup removed the spaces `removed` names since it last
+        /// ran, or failed in a new way, as `error` says.
+        CleanupRan => "cleanup_ran",
     }
 );
 
@@ -453,12 +474,48 @@ pub struct FileEventDetails {
     pub file: crate::files::AttachedFile,
 }
 
+/// An event of Shoal itself.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShoalEvent {
+    pub id: EventCursor,
+    pub created_at: UnixTime,
+    #[serde(flatten)]
+    pub details: ShoalEventDetails,
+}
+
+/// An event of Shoal itself as stored, with no space.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShoalEventDetails {
+    pub kind: ShoalEventKind,
+    /// The daemon's release, as it starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// What failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// The spaces automatic cleanup removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed: Vec<SpaceName>,
+}
+
+impl ShoalEventDetails {
+    pub fn new(kind: ShoalEventKind) -> Self {
+        Self {
+            kind,
+            version: None,
+            error: None,
+            removed: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventItem {
     Event(Box<WorkspaceEvent>),
     Chat(Box<ChatEvent>),
     File(Box<FileEvent>),
+    Shoal(Box<ShoalEvent>),
     /// The journal no longer holds every event after the requested cursor.
     Gap {
         #[serde(rename = "since")]
@@ -475,6 +532,7 @@ impl EventItem {
             Self::Event(event) => Some(event.id),
             Self::Chat(event) => Some(event.id),
             Self::File(event) => Some(event.id),
+            Self::Shoal(event) => Some(event.id),
             Self::Gap { .. } => None,
         }
     }
@@ -486,6 +544,7 @@ impl EventItem {
             Self::Event(event) => event.id,
             Self::Chat(event) => event.id,
             Self::File(event) => event.id,
+            Self::Shoal(event) => event.id,
             Self::Gap { oldest_id, .. } => oldest_id.before(),
         }
     }

@@ -87,6 +87,7 @@ use tokio::{
 };
 
 use answer::OperationGuard;
+use events::{ShoalEventDetails, ShoalEventKind};
 pub(crate) use log::log;
 use ownership::Ownership;
 use scope::Caller;
@@ -125,6 +126,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let startup = startup::Startup::begin(ownership.listen()?);
     log!("shoal daemon listening on {}", paths.socket.display());
     let manager = start(&startup, &paths).await?;
+    manager.record_start().await;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (exit, mut exit_requested) = mpsc::channel(1);
@@ -239,9 +241,9 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     // A daemon that stops accepting connections fails and leaves work
     // running for the next daemon the service manager starts. Background
     // loops run on meanwhile, so a stop the shutdown lock started finishes.
-    manager
-        .end_work(*result.as_ref().unwrap_or(&Ending::Detach))
-        .await;
+    let ending = *result.as_ref().unwrap_or(&Ending::Detach);
+    manager.end_work(ending).await;
+    manager.record_exit(ending, result.as_ref().err()).await;
     background.shutdown().await;
     // Aborting a run kills its process group; what it started elsewhere
     // carries its marker.
@@ -288,6 +290,26 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     let sessions = manager.cleanup_orphan_sessions();
     startup.step("cleaning up orphan sessions", sessions).await;
     Ok(manager)
+}
+
+impl Manager {
+    /// Record in Shoal's log that the daemon started.
+    async fn record_start(&self) {
+        let mut started = ShoalEventDetails::new(ShoalEventKind::DaemonStarted);
+        started.version = Some(env!("CARGO_PKG_VERSION").to_owned());
+        self.record_shoal(started).await;
+    }
+
+    /// Record in Shoal's log that the daemon exits with `ending`, after
+    /// `error` when it failed: a restart where the next daemon takes over
+    /// running work, else a stop.
+    async fn record_exit(&self, ending: Ending, error: Option<&anyhow::Error>) {
+        let kind = match (ending, error) {
+            (Ending::Detach, None) => ShoalEventKind::DaemonRestarted,
+            _ => ShoalEventKind::DaemonStopped,
+        };
+        self.record_shoal_outcome(kind, error).await;
+    }
 }
 
 /// Register a manager-owned loop with panic supervision.

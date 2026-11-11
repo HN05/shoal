@@ -38,10 +38,12 @@ mod grace;
 mod health;
 mod kept_branches;
 mod merged;
+mod runs;
 
 use failures::LoggedFailures;
 pub(crate) use failures::{SpaceFailures, SweepFailures};
 pub(crate) use health::CleanupHealth;
+pub(crate) use runs::Removed;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -709,10 +711,12 @@ pub async fn run(manager: Arc<Manager>) {
         {
             let _operation = manager.gates.operation().await;
             let result = sweep(&manager, &mut timers).await;
-            if let Some(failed) = logged.new_failures(&result) {
+            let failed = logged.new_failures(&result);
+            if let Some(failed) = &failed {
                 log!("auto cleanup: {failed}");
             }
             manager.record_sweep(result).await;
+            manager.record_cleanup_run(failed).await;
         }
         tokio::select! {
             _ = sleep(SWEEP_INTERVAL) => {},

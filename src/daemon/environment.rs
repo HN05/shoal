@@ -7,7 +7,7 @@ use std::{ffi::OsStr, path::PathBuf};
 use anyhow::Result;
 
 use crate::{
-    daemon::{log, notifications::NotificationKind, workspace::Manager},
+    daemon::{events::ShoalEventKind, log, notifications::NotificationKind, workspace::Manager},
     sessions::HostName,
     tools::{Dependency, Tool},
 };
@@ -152,7 +152,10 @@ impl Manager {
     /// Reload the global config, then recheck the environment with it in
     /// [`watch_environment`], since the checks can outlast a reply's budget.
     pub async fn reload_config_and_recheck(&self) -> Result<()> {
-        self.reload_config().await?;
+        let reloaded = self.reload_config().await;
+        let refused = reloaded.as_ref().err();
+        (self.record_shoal_outcome(ShoalEventKind::ConfigReloaded, refused)).await;
+        reloaded?;
         self.signals.recheck_environment();
         Ok(())
     }

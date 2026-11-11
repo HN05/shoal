@@ -5219,6 +5219,15 @@ and `file`, the record as
 `shoal files --json` lists it, with its own `id`. Attaching a file that is
 already attached adds nothing.
 
+A `type: "shoal"` line records an event of Shoal itself, which belongs to no
+space: its `id`, `created_at` and `kind`: `daemon_started` with the daemon's
+`version`; `daemon_stopped`, with `error` when the daemon failed;
+`daemon_restarted` when it stopped for the next daemon to take over running
+work, as `shoal daemon restart` and an update do; `config_reloaded`, with
+`error` when the daemon kept its settings; and `cleanup_ran` with `removed`,
+the names of the spaces automatic cleanup removed since the last such line,
+or `error` when a pass failed in a new way.
+
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history or retention deleted events after it, then
 replay continues with the retained events from `oldest_id`; a stream reports

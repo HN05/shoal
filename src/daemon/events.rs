@@ -9,12 +9,14 @@ use serde::Deserialize;
 use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
     AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventCursor,
-    EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, WorkspaceEvent,
+    EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, ShoalEvent, ShoalEventDetails,
+    ShoalEventKind, WorkspaceEvent,
 };
 use crate::time::UnixTime;
 
 /// A journal row as stored: chat events carry the chat in place of a
-/// workspace, and file events the space's identity.
+/// workspace, file events the space's identity, and Shoal's own events no
+/// space.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Record {
@@ -23,6 +25,7 @@ enum Record {
         chat: Box<crate::model::Chat>,
     },
     File(Box<FileEventDetails>),
+    Shoal(Box<ShoalEventDetails>),
     Workspace(Box<EventDetails>),
 }
 
@@ -41,6 +44,11 @@ fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventIt
             chat: *chat,
         })),
         Record::File(details) => EventItem::File(Box::new(FileEvent {
+            id,
+            created_at,
+            details: *details,
+        })),
+        Record::Shoal(details) => EventItem::Shoal(Box::new(ShoalEvent {
             id,
             created_at,
             details: *details,
@@ -300,6 +308,15 @@ fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -
     }))
 }
 
+/// Record `details`, an event of Shoal itself.
+fn record_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
+    db.execute(
+        "INSERT INTO workspace_events(record) VALUES (?1)",
+        [serde_json::to_string(details)?],
+    )?;
+    Ok(())
+}
+
 /// Record that the request's space asked for it, or that it was decided,
 /// in the transaction that stores it.
 pub(crate) fn record_approval(
@@ -333,6 +350,29 @@ impl Manager {
         if let Err(error) = recorded {
             log!("agent event of {id} not recorded: {error:#}");
         }
+    }
+
+    /// Record `details`, an event of Shoal itself, in Shoal's log; a
+    /// failure is logged, never returned, as it must not fail what Shoal
+    /// did.
+    pub(crate) async fn record_shoal(&self, details: ShoalEventDetails) {
+        let kind = details.kind;
+        let recorded = self.store.run(move |db| record_shoal(db, &details)).await;
+        if let Err(error) = recorded {
+            log!("{kind} not recorded: {error:#}");
+        }
+    }
+
+    /// Record `kind` in Shoal's log, with `error` when what it records
+    /// failed.
+    pub(crate) async fn record_shoal_outcome(
+        &self,
+        kind: ShoalEventKind,
+        error: Option<&anyhow::Error>,
+    ) {
+        let mut details = ShoalEventDetails::new(kind);
+        details.error = error.map(|error| format!("{error:#}"));
+        self.record_shoal(details).await;
     }
 
     /// Record the alert the space `id` sent, which reached its coordinator

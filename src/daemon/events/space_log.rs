@@ -113,7 +113,7 @@ fn events_of(db: &Connection, id: &SpaceId) -> Result<Vec<LogEntry>> {
             EventItem::Event(event) => LogEntry::Event(event),
             EventItem::Chat(event) => LogEntry::Chat(event),
             EventItem::File(event) => LogEntry::File(event),
-            EventItem::Gap { .. } => continue,
+            EventItem::Shoal(_) | EventItem::Gap { .. } => continue,
         });
     }
     Ok(entries)

@@ -54,7 +54,10 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
         .into_iter()
         .filter_map(|item| match item {
             EventItem::Chat(event) => Some(format!("{} {}", event.kind, event.chat.name)),
-            EventItem::Event(_) | EventItem::File(_) | EventItem::Gap { .. } => None,
+            EventItem::Event(_)
+            | EventItem::File(_)
+            | EventItem::Shoal(_)
+            | EventItem::Gap { .. } => None,
         })
         .collect()
 }

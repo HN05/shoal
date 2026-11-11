@@ -112,6 +112,8 @@ pub struct Manager {
     pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
     pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
+    /// The spaces automatic cleanup removed since Shoal's log recorded it.
+    pub(crate) cleanup_removals: super::cleanup::Removed,
     pub(crate) syncs: super::checkout_sync::Syncs,
     /// The spaces whose PRs' progress sections wait for an update.
     pub(crate) publications: super::progress::Publications,
@@ -177,6 +179,7 @@ impl Manager {
             item_waits: Default::default(),
             chat_waits: Default::default(),
             cleanup_health: Default::default(),
+            cleanup_removals: Default::default(),
             syncs: Default::default(),
             publications: Default::default(),
             store: Store::open(paths.database()).await?,
