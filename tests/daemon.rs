@@ -402,18 +402,13 @@ impl IncompatibleDaemon {
 
     fn with_version(root: &Path, malformed: bool, version_mismatch: bool) -> Self {
         let listener = support::fake_daemon::bind_fake_daemon(root);
-        listener.set_nonblocking(true).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
         let done = stop.clone();
         let thread = thread::spawn(move || {
             while !done.load(Ordering::Relaxed) {
-                let (mut stream, _) = match listener.accept() {
-                    Ok(connection) => connection,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
-                        continue;
-                    }
-                    Err(error) => panic!("{error}"),
+                let Some(mut stream) = support::fake_daemon::try_accept(&listener) else {
+                    thread::sleep(Duration::from_millis(10));
+                    continue;
                 };
                 let request = support::fake_daemon::read_request(&stream)
                     .expect("missing fake daemon request");
@@ -917,15 +912,10 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         .to_owned();
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
-        listener.set_nonblocking(true).unwrap();
         let daemon = thread::spawn(move || {
             // `run` first lists workspaces to remember the one it runs in.
             loop {
-                let stream = wait_for("client connection", || match listener.accept() {
-                    Ok((stream, _)) => Some(stream),
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
-                    Err(error) => panic!("{error}"),
-                });
+                let stream = support::fake_daemon::accept(&listener);
                 let request = support::fake_daemon::answer(stream, |request| {
                     if request["method"] == "list_workspaces" {
                         json!({"type": "workspaces", "data": []})
@@ -960,7 +950,7 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         let daemon = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            let mut stream = support::fake_daemon::accept(&listener);
             let request =
                 support::fake_daemon::read_request(&stream).expect("missing fake daemon request");
             assert_eq!(
@@ -1006,16 +996,11 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
 fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing_cleanup() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
-    listener.set_nonblocking(true).unwrap();
     let worktree = |n: usize| json!({"repository_id": "repo", "path": format!("/repo/stray-{n}")});
     let sync = |n: usize| json!({"repository_id": format!("repo-{n}"), "failing_since": 1, "error": "offline"});
     let daemon = thread::spawn(move || {
         loop {
-            let stream = wait_for("client connection", || match listener.accept() {
-                Ok((stream, _)) => Some(stream),
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
-                Err(error) => panic!("{error}"),
-            });
+            let stream = support::fake_daemon::accept(&listener);
             let request = support::fake_daemon::read_request(&stream).unwrap();
             // Unit methods are a string, the others an object keyed by name.
             let method = match &request["method"] {
@@ -1108,7 +1093,7 @@ fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
     let daemon = thread::spawn(move || {
         let mut methods = Vec::new();
         loop {
-            let (mut stream, _) = listener.accept().unwrap();
+            let mut stream = support::fake_daemon::accept(&listener);
             let request =
                 support::fake_daemon::read_request(&stream).expect("missing fake daemon request");
             methods.push(request["method"].clone());

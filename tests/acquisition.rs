@@ -7,16 +7,10 @@ use std::{process::Output, thread};
 fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output, Vec<Value>) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
-    listener.set_nonblocking(true).unwrap();
     let server = thread::spawn(move || {
         let mut requests = Vec::new();
         for reply in replies {
-            let stream =
-                support::wait::wait_for("acquisition attempt", || match listener.accept() {
-                    Ok((stream, _)) => Some(stream),
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
-                    Err(error) => panic!("accept: {error}"),
-                });
+            let stream = support::fake_daemon::accept(&listener);
             let request = support::fake_daemon::answer(stream, |_| reply);
             requests.push(request["method"].clone());
         }

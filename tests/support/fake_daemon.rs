@@ -13,6 +13,22 @@ pub fn bind_fake_daemon(root: &Path) -> UnixListener {
     UnixListener::bind(root.join("state/daemon.sock")).unwrap()
 }
 
+/// Wait for the next client connection, polling so a client that never
+/// connects fails the test instead of hanging it.
+pub fn accept(listener: &UnixListener) -> UnixStream {
+    super::wait::wait_for("client connection", || try_accept(listener))
+}
+
+/// The next client connection, or None while no client waits.
+pub fn try_accept(listener: &UnixListener) -> Option<UnixStream> {
+    listener.set_nonblocking(true).unwrap();
+    match listener.accept() {
+        Ok((stream, _)) => Some(stream),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+        Err(error) => panic!("accept: {error}"),
+    }
+}
+
 /// Return None for the empty connection used to stop a fixture's server loop.
 pub fn read_request(stream: &UnixStream) -> Option<Value> {
     stream.set_nonblocking(false).unwrap();
