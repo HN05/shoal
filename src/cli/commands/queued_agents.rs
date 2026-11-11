@@ -185,7 +185,7 @@ pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<St
 
 /// Remove `selector` from the queue when it names a waiting launch; `None`
 /// leaves it to workspace removal, which a starting entry belongs to. A name
-/// shared with a workspace is refused rather than guessed.
+/// shared with a workspace or a chat is refused rather than guessed.
 pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>> {
     remove_waiting(ctx, selector, |_| true).await
 }
@@ -213,14 +213,15 @@ async fn remove_waiting(
         return Ok(None);
     };
     if entry.id != selector
-        && let Some(workspace) = crate::client::workspaces::list(&ctx.paths)
+        && let Some(space) = crate::client::workspaces::spaces(&ctx.paths)
             .await?
-            .into_iter()
-            .find(|workspace| workspace.name == selector)
+            .find(&SpaceSelector::parse(selector))
     {
         anyhow::bail!(
-            "{selector} names both a workspace and a queued agent; pass the workspace ID {} or the queued agent's ID {}",
-            workspace.id,
+            "{selector} names both a {} and a queued agent; pass the {} ID {} or the queued agent's ID {}",
+            space.kind(),
+            space.kind(),
+            space.id(),
             entry.id
         );
     }

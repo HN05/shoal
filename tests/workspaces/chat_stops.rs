@@ -92,6 +92,26 @@ fn stop_all_stops_running_chats() {
     assert!(!chat_runs(&fixture, "talk"));
 }
 
+/// A name a chat shares with a queued agent of a new workspace is refused
+/// rather than taken as the queued agent's.
+#[test]
+fn stop_refuses_a_name_a_chat_shares_with_a_queued_agent() {
+    let fixture = Fixture::new();
+    fixture.add("first");
+    let repo = fixture.repo.to_str().unwrap();
+    fixture.ok(&[
+        "start", repo, "talk", "--after", "first", "--agent", "claude",
+    ]);
+    let _chat = SleepingChat::start(&fixture, "talk", serde_json::json!({}));
+
+    let output = fixture.run(&["stop", "talk"]);
+
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("names both a chat"), "{output:?}");
+    assert!(chat_runs(&fixture, "talk"));
+    assert_eq!(fixture.ok(&["queue"]).as_array().unwrap().len(), 1);
+}
+
 /// Stopping the processes of several spaces refuses a stopped chat among
 /// them before stopping any.
 #[test]
