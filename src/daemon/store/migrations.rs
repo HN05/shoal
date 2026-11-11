@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 151;
+pub(super) const SCHEMA_VERSION: i64 = 152;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -417,6 +417,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (149, UNNAMED_RENAMES, None),
     (150, "", Some(repeatable_names)),
     (151, "", Some(super::space_titles::names_from_titles)),
+    (152, STARTED_LAUNCHES, None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -495,6 +496,16 @@ INSERT INTO workspace_renames_branch(workspace_id,branch)
     SELECT workspace_id,branch FROM workspace_renames;
 DROP TABLE workspace_renames;
 ALTER TABLE workspace_renames_branch RENAME TO workspace_renames;";
+
+/// The workspace each launch that left the queue started its agent in,
+/// recorded as its entry goes, since names repeat and nothing else tells
+/// which one it opened; the record is forgotten a while after. A migration
+/// from an earlier version applies it again.
+pub(super) const STARTED_LAUNCHES: &str = "CREATE TABLE IF NOT EXISTS started_launches (
+    entry_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL
+);";
 
 /// Admission counts a CI job at its memory alone, so its runs' peak CPU is
 /// no longer kept. Nothing references either table, so each is rebuilt,

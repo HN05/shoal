@@ -212,10 +212,12 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     // workspace stays known once it left the queue.
     manager.consume_queue_entry(&second.id, &workspace.id).await;
     assert_eq!(manager.queue_entries().await.unwrap().len(), 2);
-    assert_eq!(manager.agent_queue.started_workspace(&second.id), None);
+    assert_eq!(manager.started_launch(&second.id).await.unwrap(), None);
     manager.consume_queue_entry(&first.id, &workspace.id).await;
+    // Recorded in the transaction that took the entry out, in the store,
+    // so neither a poll in between nor a daemon restart misses it.
     assert_eq!(
-        manager.agent_queue.started_workspace(&first.id),
+        manager.started_launch(&first.id).await.unwrap(),
         Some(workspace.id.clone())
     );
     let names: Vec<_> = manager

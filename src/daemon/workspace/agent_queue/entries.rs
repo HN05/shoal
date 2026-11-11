@@ -363,23 +363,69 @@ impl Manager {
 
     /// The agent a queued launch started takes over the slot its entry kept.
     /// Only that launch's agent names the entry, so another agent registering
-    /// in the same workspace leaves it starting. The workspace stays known
-    /// as the one the launch started in.
+    /// in the same workspace leaves it starting. The workspace is recorded
+    /// as the one the launch started in as the entry goes, so a client that
+    /// no longer finds the entry finds it.
     pub(crate) async fn consume_queue_entry(&self, id: &QueueEntryId, workspace_id: &SpaceId) {
         let (entry, workspace) = (id.to_owned(), workspace_id.to_owned());
         let consumed = self
             .store
-            .run(move |db| {
-                Ok(db.execute(
+            .write(move |tx| {
+                let consumed = tx.execute(
                     "DELETE FROM agent_queue WHERE id=?1 AND workspace_id=?2 AND state=?3",
                     params![entry, workspace, QueueState::Starting],
-                )?)
+                )?;
+                if consumed == 1 {
+                    record_started(tx, &entry, &workspace)?;
+                }
+                Ok(())
             })
             .await;
-        match consumed {
-            Ok(1) => (self.agent_queue).record_started(id.to_owned(), workspace_id.to_owned()),
-            Ok(_) => {}
-            Err(error) => crate::daemon::log!("agent queue: {error:#}"),
+        if let Err(error) = consumed {
+            crate::daemon::log!("agent queue: {error:#}");
         }
     }
+
+    /// The workspace the launch `entry`, which left the queue, started its
+    /// agent in, while it is recorded.
+    pub(crate) async fn started_launch(&self, entry: &QueueEntryId) -> Result<Option<SpaceId>> {
+        let entry = entry.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT workspace_id FROM started_launches
+                            WHERE entry_id=?1 AND started_at>?2",
+                        params![entry, crate::time::UnixTime::now() - STARTED_KEPT],
+                        |row| row.get(0),
+                    )
+                    .optional()?)
+            })
+            .await
+    }
+}
+
+/// How long the workspace a launch started its agent in stays recorded
+/// after the launch left the queue, for a client waiting to attach to it.
+const STARTED_KEPT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+/// Record that the launch `entry` started its agent in `workspace`, in the
+/// transaction that takes it out of the queue, forgetting launches that
+/// started long ago.
+fn record_started(
+    tx: &rusqlite::Transaction<'_>,
+    entry: &QueueEntryId,
+    workspace: &SpaceId,
+) -> Result<()> {
+    let now = crate::time::UnixTime::now();
+    tx.execute(
+        "DELETE FROM started_launches WHERE started_at<=?1",
+        [now - STARTED_KEPT],
+    )?;
+    tx.execute(
+        "INSERT OR REPLACE INTO started_launches(entry_id,workspace_id,started_at)
+            VALUES (?1,?2,?3)",
+        params![entry, workspace, now],
+    )?;
+    Ok(())
 }

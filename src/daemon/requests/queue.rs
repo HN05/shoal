@@ -39,7 +39,7 @@ pub(super) async fn handle(
         }
         QueueMethod::QueueStart { entry } => Body::QueueEntry(manager.queue_start(&entry).await?),
         QueueMethod::StartedLaunch { entry } => {
-            Body::StartedLaunch(manager.agent_queue.started_workspace(&entry))
+            Body::StartedLaunch(manager.started_launch(&entry).await?)
         }
         QueueMethod::QueueMove { entry, place } => {
             Body::MovedEntry(manager.queue_move(&entry, place, caller).await?)
