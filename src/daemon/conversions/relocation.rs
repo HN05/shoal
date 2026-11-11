@@ -66,7 +66,8 @@ impl Manager {
 
     /// Whether the agent of the space `id` that `pending` converts ended its
     /// turn, or its process its run, and the new place is ready to take it:
-    /// a new workspace once its setup is over.
+    /// a new workspace once it is ready, after its setup or the repair of a
+    /// setup that failed.
     async fn turn_ended(&self, id: &SpaceId, pending: &Pending) -> Result<bool> {
         let space = id.to_owned();
         let state = self
@@ -76,8 +77,9 @@ impl Manager {
         let idle = state.is_some_and(|status| status.state == AgentState::Idle);
         match pending {
             Pending::Workspace { chat, .. } => {
+                // A setup that failed waits for its repair, which readies it.
                 let workspace = self.workspace_by_id(id).await?;
-                if workspace.state == WorkspaceState::Preparing {
+                if workspace.state != WorkspaceState::Ready {
                     return Ok(false);
                 }
                 let process = chat.agent()?.process()?;

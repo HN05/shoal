@@ -1991,8 +1991,9 @@ hold, or creates it from the default branch or `--base`; without one, the issue
 branch as [`shoal start --issue`](#workspaces) derives it, and a chat without
 either is refused. The worktree, its directory and setup are a new
 workspace's: the command follows setup as `shoal split` does and returns once the
-workspace is ready, or with its setup failure. A worktree that cannot be made
-gives the chat back. The workspace's mode and permissions are `--mode`'s,
+workspace is ready, or with its setup failure, after which the agent runs on in
+the chat's place until [`shoal setup`](#workspace-setup-and-hooks) repairs the
+setup. A worktree that cannot be made gives the chat back. The workspace's mode and permissions are `--mode`'s,
 `worker` by default, with the permissions given to the chat's agent. A chat
 in a workspace's worktree (`shoal start --in`), one without a repository and a
 stopped chat are refused.

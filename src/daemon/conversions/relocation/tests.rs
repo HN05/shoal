@@ -102,3 +102,26 @@ async fn a_working_agent_finishes_its_turn_where_it_runs() {
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     assert!(sessions.is_empty(), "{sessions:?}");
 }
+
+#[tokio::test]
+async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+
+    manager.relocate_finished_turns().await.unwrap();
+
+    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(manager.caller(&token).await.unwrap().is_some());
+}
