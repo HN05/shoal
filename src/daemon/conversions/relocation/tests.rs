@@ -152,6 +152,34 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
 }
 
 #[tokio::test]
+async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
+    let (root, manager) = manager().await;
+    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='preparing' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
+        .await
+        .unwrap();
+    assert!(targets.iter().any(|target| target.id == workspace.id));
+
+    let selector = SpaceSelector::id(&workspace.id);
+    let keep = crate::protocol::QueuedLaunches::Keep;
+    (manager.stop_workspace_manually(&selector, false, None, keep))
+        .await
+        .unwrap();
+
+    process.wait().unwrap();
+    let state = manager.workspace_by_id(&workspace.id).await.unwrap().state;
+    assert_eq!(state, crate::state::WorkspaceState::Preparing);
+}
+
+#[tokio::test]
 async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
     let (root, manager) = manager().await;
     let (workspace, _process, _token) = converted(root.path(), &manager).await;

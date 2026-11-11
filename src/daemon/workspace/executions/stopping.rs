@@ -22,17 +22,24 @@ use tokio::time::{Instant, sleep};
 #[cfg(test)]
 mod tests;
 
-/// The workspaces with a running execution, or a chat's agent that has yet
-/// to restart there after a conversion. One whose wrapper is gone is left
-/// for `shoal stop <workspace>` rather than failing every bulk stop.
+/// The workspaces with a running execution. One whose wrapper is gone is
+/// left for `shoal stop <workspace>` rather than failing every bulk stop.
 fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
+        .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
+        .query_map([ExecutionState::Running], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The workspaces in which a chat's agent has yet to restart after a
+/// conversion, which runs where the chat was whatever the workspace's state.
+fn converting_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
+    Ok(db
         .prepare(
-            "SELECT DISTINCT workspace_id FROM executions WHERE state=?1
-             UNION SELECT space_id FROM space_conversions
+            "SELECT space_id FROM space_conversions
                 WHERE json_extract(record,'$.to')='workspace'",
         )?
-        .query_map([ExecutionState::Running], |row| row.get(0))?
+        .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -202,6 +209,8 @@ impl Manager {
     pub async fn stop_targets(&self, launches: QueuedLaunches) -> Result<Vec<Workspace>> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
+        let converting = self.store.run(|db| converting_workspaces(db)).await?;
+        targets.extend(converting.iter().cloned());
         targets.extend(self.pending_restore_workspaces().await?);
         if launches == QueuedLaunches::Cancel {
             targets.extend(self.waiting_launch_workspaces().await?);
@@ -211,10 +220,11 @@ impl Manager {
             .await?
             .into_iter()
             .filter(|workspace| {
-                matches!(
+                let stoppable = matches!(
                     workspace.state,
                     WorkspaceState::Ready | WorkspaceState::Failed
-                ) && targets.contains(&workspace.id)
+                );
+                (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
             })
             .collect())
     }
@@ -323,6 +333,13 @@ impl Manager {
         keep: Keep<'_>,
     ) -> Result<Vec<QueueEntry>> {
         let workspace = self.workspace(selector).await?;
+        // Setup is no agent's, so a workspace still preparing after a
+        // conversion has only the converting agent to stop.
+        if self.stop_converting_agent(&workspace.id).await?
+            && workspace.state == WorkspaceState::Preparing
+        {
+            return Ok(Vec::new());
+        }
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
