@@ -196,7 +196,7 @@ impl Manager {
             if targets.is_empty() {
                 return Ok(stopped);
             }
-            let described = described::describe(&pids_of(&targets)).await?;
+            let described = described::describe(&pids_of(&targets))?;
             stop(&targets).await?;
             stopped.extend(as_stopped(&targets, described));
         }

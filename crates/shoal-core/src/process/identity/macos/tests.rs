@@ -46,3 +46,16 @@ fn an_exiting_or_exited_process_has_ended_its_image() {
     assert!(matches!(bsd_image(&bsd(2, 0x14)), Image::Ended));
     assert!(matches!(bsd_image(&bsd(5, 0)), Image::Ended));
 }
+
+#[test]
+fn procargs_split_into_arguments_and_environment() {
+    let mut record = 2_i32.to_ne_bytes().to_vec();
+    record.extend_from_slice(b"/bin/sleep\0\0\0\0sleep\0a b\0HOME=/h\0A=\0\0\0junk");
+    let split = split_procargs(&record).unwrap();
+    assert_eq!(split.arguments, [b"sleep".to_vec(), b"a b".to_vec()]);
+    assert_eq!(split.environment, [b"HOME=/h".to_vec(), b"A=".to_vec()]);
+
+    let mut cut = 3_i32.to_ne_bytes().to_vec();
+    cut.extend_from_slice(b"/bin/sleep\0sleep\x00300\0");
+    assert!(split_procargs(&cut).is_err());
+}

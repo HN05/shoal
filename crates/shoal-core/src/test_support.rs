@@ -355,9 +355,7 @@ impl Adopted {
         // A generous hang guard; the fork execs the command at once.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
-            let described = crate::process::described::describe(&[self.identity.pid])
-                .await
-                .unwrap();
+            let described = crate::process::described::describe(&[self.identity.pid]).unwrap();
             let command = &described[&self.identity.pid].command;
             if !command.ends_with(script) {
                 return;

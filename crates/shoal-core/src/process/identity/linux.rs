@@ -2,7 +2,7 @@
 //! their environments as `/proc` shows them.
 use super::{Identity, Image, Lineage, Listed};
 use anyhow::{Context, Result, ensure};
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 /// Linux reads the environment of a process whose exec has not published it
 /// yet as empty instead of refusing it.
@@ -210,6 +210,65 @@ pub(super) fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
         .filter(|e| !e.is_empty())
         .map(<[u8]>::to_vec)
         .collect())
+}
+
+/// The arguments `pid` runs with, `None` once it has exited or for a kernel
+/// thread, which has none.
+pub(super) fn arguments(pid: u32) -> Option<Vec<Vec<u8>>> {
+    let command_line = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    Some(split_command_line(&command_line)).filter(|arguments| !arguments.is_empty())
+}
+
+/// The arguments of a `/proc/<pid>/cmdline` record, each terminated by a NUL.
+fn split_command_line(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let bytes = bytes.strip_suffix(&[0]).unwrap_or(bytes);
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+    bytes.split(|b| *b == 0).map(<[u8]>::to_vec).collect()
+}
+
+/// How long `pid` has run, `None` once it has exited.
+pub(super) fn elapsed(pid: u32) -> Result<Option<Duration>> {
+    let Some(fields) = live_stat(pid)? else {
+        return Ok(None);
+    };
+    let started: u64 = fields[19].parse().context("invalid process start")?;
+    let mut now = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: clock_gettime fills the structure it is given.
+    let read = unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut now) };
+    ensure!(read == 0, "read time since boot");
+    let uptime = Duration::new(now.tv_sec as u64, now.tv_nsec as u32);
+    Ok(Some(elapsed_since(
+        started,
+        sysconf(libc::_SC_CLK_TCK)?,
+        uptime,
+    )))
+}
+
+/// How long a process started `started` clock ticks after boot has run at
+/// `uptime`.
+fn elapsed_since(started: u64, ticks_per_second: u64, uptime: Duration) -> Duration {
+    let nanoseconds = u128::from(started) * 1_000_000_000 / u128::from(ticks_per_second);
+    uptime.saturating_sub(Duration::from_nanos(
+        u64::try_from(nanoseconds).unwrap_or(u64::MAX),
+    ))
+}
+
+/// The `stat` fields of `pid`, from its state on, `None` once it has exited.
+fn live_stat(pid: u32) -> Result<Option<Vec<String>>> {
+    let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {
+        return Ok(None);
+    };
+    let fields = stat_fields(&stat)?;
+    ensure!(fields.len() > 19, "incomplete process stat");
+    if fields[0] == "Z" || fields[0] == "X" {
+        return Ok(None);
+    }
+    Ok(Some(fields.into_iter().map(str::to_owned).collect()))
 }
 
 /// The system configuration value `name`.

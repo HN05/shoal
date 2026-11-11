@@ -3,7 +3,12 @@
 use super::{Identity, Image, Lineage, Listed};
 use crate::client::processes::UniqueId;
 use anyhow::{Context, Result, ensure};
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    os::unix::ffi::OsStrExt,
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 /// macOS refuses the arguments of a process whose exec has not published them
 /// yet, often right after reading them as empty.
@@ -320,6 +325,18 @@ fn process_identity_unavailable(errno: Option<i32>) -> bool {
 }
 
 pub(super) fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
+    Ok(split_procargs(&procargs(pid)?)?.environment)
+}
+
+/// The arguments `pid` runs with, `None` once it has exited or when macOS
+/// refuses them, as it does another user's.
+pub(super) fn arguments(pid: u32) -> Option<Vec<Vec<u8>>> {
+    let procargs = procargs(pid).ok()?;
+    Some(split_procargs(&procargs).ok()?.arguments)
+}
+
+/// `pid`'s `KERN_PROCARGS2` record.
+fn procargs(pid: u32) -> Result<Vec<u8>> {
     let capacity = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
     ensure!(
         (1..=16 * 1024 * 1024).contains(&capacity),
@@ -340,6 +357,19 @@ pub(super) fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
     };
     ensure!(result == 0, "cannot inspect process environment");
     bytes.truncate(len);
+    Ok(bytes)
+}
+
+/// A process's arguments and environment.
+struct ProcArgs {
+    arguments: Vec<Vec<u8>>,
+    environment: Vec<Vec<u8>>,
+}
+
+/// The arguments and environment of a `KERN_PROCARGS2` record: the argument
+/// count, the executable's path and padding, then each argument and
+/// environment entry terminated by a NUL.
+fn split_procargs(bytes: &[u8]) -> Result<ProcArgs> {
     ensure!(bytes.len() >= 4, "incomplete process arguments");
     let argc = i32::from_ne_bytes(bytes[..4].try_into()?);
     ensure!(argc > 0, "process arguments unavailable");
@@ -350,21 +380,43 @@ pub(super) fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
     while offset < bytes.len() && bytes[offset] == 0 {
         offset += 1;
     }
+    let mut arguments = Vec::new();
     for _ in 0..argc {
+        let start = offset;
         while offset < bytes.len() && bytes[offset] != 0 {
             offset += 1;
         }
+        ensure!(offset < bytes.len(), "incomplete process arguments");
+        arguments.push(bytes[start..offset].to_vec());
         offset += 1;
     }
-    ensure!(offset <= bytes.len(), "incomplete process arguments");
     while offset < bytes.len() && bytes[offset] == 0 {
         offset += 1;
     }
-    Ok(bytes[offset..]
+    let environment = bytes[offset..]
         .split(|b| *b == 0)
         .take_while(|entry| !entry.is_empty())
         .map(<[u8]>::to_vec)
-        .collect())
+        .collect();
+    Ok(ProcArgs {
+        arguments,
+        environment,
+    })
+}
+
+/// How long `pid` has run, `None` once it has exited.
+pub(super) fn elapsed(pid: u32) -> Result<Option<Duration>> {
+    let Some(info) = bsd_info(pid, false)? else {
+        return Ok(None);
+    };
+    let started = UNIX_EPOCH
+        + Duration::from_secs(info.bsd.pbi_start_tvsec)
+        + Duration::from_micros(info.bsd.pbi_start_tvusec);
+    Ok(Some(
+        SystemTime::now()
+            .duration_since(started)
+            .unwrap_or_default(),
+    ))
 }
 
 /// The PIDs in process group `group`, including zombies.

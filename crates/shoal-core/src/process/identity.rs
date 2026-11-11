@@ -1,9 +1,9 @@
 //! Same-user process ownership for cooperative recovery: identifying,
 //! signalling and following processes through the records of the platform
-//! back end it selects. Never expose process arguments/environment; only the
+//! back end it selects. Never expose process environments; only the
 //! explicit execution marker, ancestor PIDs, scoped ancestors' state
 //! directories and the working directories of a space's untracked processes
-//! leave this module.
+//! leave this module, and the command lines [`details`] reads.
 use crate::client::execution_ids::ExecutionId;
 pub use crate::client::processes::Identity;
 use crate::protocol::timing;
@@ -531,6 +531,7 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
 }
 
 mod attribution;
+pub(crate) mod details;
 mod marks;
 mod owners;
 pub mod spaces;

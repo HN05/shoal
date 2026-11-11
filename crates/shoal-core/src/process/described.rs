@@ -1,13 +1,12 @@
-//! What `ps` shows about processes for a person to recognize them: the
-//! command line and how long each has run.
+//! What a person recognizes processes by: the command line and how long
+//! each has run.
 use std::collections::HashMap;
 
-use anyhow::{Context, Result};
-use tokio::process::Command;
+use anyhow::Result;
 
-use crate::{protocol::timing, tools::Tool};
+use super::identity::{self, details};
 
-/// A process as `ps` shows it.
+/// A process as a person recognizes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Description {
     pub command: String,
@@ -16,53 +15,42 @@ pub struct Description {
 }
 
 /// The processes of `pids` that still run, by PID.
-pub async fn describe(pids: &[u32]) -> Result<HashMap<u32, Description>> {
-    if pids.is_empty() {
-        return Ok(HashMap::new());
+pub fn describe(pids: &[u32]) -> Result<HashMap<u32, Description>> {
+    let mut described = HashMap::new();
+    for &pid in pids {
+        if let Some(description) = description(pid)? {
+            described.insert(pid, description);
+        }
     }
-    let list = pids
+    Ok(described)
+}
+
+/// `pid` as a person recognizes it, `None` once it has exited. One whose
+/// arguments the kernel hides shows the file it runs.
+fn description(pid: u32) -> Result<Option<Description>> {
+    let Some(elapsed) = details::elapsed(pid)? else {
+        return Ok(None);
+    };
+    let command = match details::arguments(pid) {
+        Some(arguments) => command_line(&arguments),
+        None => match identity::executable(pid) {
+            Some(executable) => executable.to_string_lossy().into_owned(),
+            None => return Ok(None),
+        },
+    };
+    Ok(Some(Description {
+        command,
+        elapsed: elapsed.as_secs(),
+    }))
+}
+
+/// `arguments` separated by spaces, as `ps` shows a command.
+fn command_line(arguments: &[std::ffi::OsString]) -> String {
+    arguments
         .iter()
-        .map(u32::to_string)
+        .map(|argument| argument.to_string_lossy())
         .collect::<Vec<_>>()
-        .join(",");
-    let mut command = Command::new(Tool::Ps.program());
-    command
-        .args(["-o", "pid=,etime=,command=", "-p", &list])
-        .env("LC_ALL", "C");
-    // `ps` exits 1 when one of the processes has exited; its output still
-    // lists the others.
-    let output = crate::subprocess::Run::new(command)
-        .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
-        .capture()
-        .await
-        .context("describe processes")?;
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(parse_line)
-        .collect())
-}
-
-/// A `pid etime command` line, whose command keeps its own spaces.
-fn parse_line(line: &str) -> Option<(u32, Description)> {
-    let (pid, rest) = line.trim_start().split_once(char::is_whitespace)?;
-    let (time, command) = rest.trim_start().split_once(char::is_whitespace)?;
-    let description = Description {
-        command: command.trim().to_owned(),
-        elapsed: elapsed(time)?,
-    };
-    Some((pid.parse().ok()?, description))
-}
-
-/// Seconds from `ps`'s `[[dd-]hh:]mm:ss` elapsed time.
-fn elapsed(field: &str) -> Option<u64> {
-    let (days, clock) = match field.split_once('-') {
-        Some((days, clock)) => (days.parse::<u64>().ok()?, clock),
-        None => (0, field),
-    };
-    let seconds = clock.split(':').try_fold(0_u64, |total, part| {
-        Some(total * 60 + part.parse::<u64>().ok()?)
-    })?;
-    Some(days * 86_400 + seconds)
+        .join(" ")
 }
 
 #[cfg(test)]

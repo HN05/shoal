@@ -176,7 +176,7 @@ async fn described_leftovers(
         .iter()
         .map(|(_, process)| process.identity.pid)
         .collect();
-    let described = described::describe(&pids).await?;
+    let described = described::describe(&pids)?;
     let now = UnixTime::now();
     let mut by_space: HashMap<SpaceId, Vec<(Identity, Leftover)>> = HashMap::new();
     for (space, process) in leftovers {

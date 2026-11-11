@@ -29,3 +29,31 @@ fn empty_environment_waits_only_for_a_loading_image() {
         Image::Ended
     ));
 }
+
+#[test]
+fn a_command_line_splits_at_each_nul() {
+    assert_eq!(
+        split_command_line(b"sleep\x00300\0a b\0"),
+        [b"sleep".to_vec(), b"300".to_vec(), b"a b".to_vec()]
+    );
+    assert_eq!(
+        split_command_line(b"sh\0\0x\0"),
+        [b"sh".to_vec(), Vec::new(), b"x".to_vec()]
+    );
+    // A process that rewrote its arguments may leave no terminating NUL.
+    assert_eq!(
+        split_command_line(b"nginx: worker"),
+        [b"nginx: worker".to_vec()]
+    );
+    assert!(split_command_line(b"").is_empty());
+}
+
+#[test]
+fn elapsed_time_counts_from_the_start_tick() {
+    let uptime = Duration::from_secs(10);
+    assert_eq!(
+        elapsed_since(250, 100, uptime),
+        Duration::from_millis(7_500)
+    );
+    assert_eq!(elapsed_since(2_000, 100, uptime), Duration::ZERO);
+}
