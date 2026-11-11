@@ -100,6 +100,7 @@ const REQUESTS: &[&str] = &[
     r#"{"set_agent_state":{"workspace":"fix","state":"idle","session":"s1","turn_end":{"prompt_cache_secs":3600,"final_message":"Which one?"}}}"#,
     r#"{"set_progress":{"space":"fix","change":{"step_created":{"name":"Fix","state":"pending","key":"2"}}}}"#,
     r#"{"progress":{"space":"fix"}}"#,
+    r#"{"sleep":{"space":"fix","sleep":"permanent"}}"#,
     r#"{"start_woken_turn":{"workspace":"fix"}}"#,
     r#"{"report_turn_failure":{"workspace":"fix","failure":"rate_limited","turn_end":{"prompt_cache_secs":300}}}"#,
     r#"{"report_wake_end":{"space":"fix","ended":{"signalled":{"signal":"SIGTERM"}}}}"#,

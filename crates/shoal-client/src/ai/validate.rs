@@ -196,6 +196,7 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "files",
     "questions",
     "progress",
+    "sleep",
     "approvals",
     "done",
     "rm",
