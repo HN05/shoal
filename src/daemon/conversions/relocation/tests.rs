@@ -125,3 +125,28 @@ async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
     assert!(RESUMED.lock().unwrap().is_empty());
     assert!(manager.caller(&token).await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
+    let (root, manager) = manager().await;
+    let (workspace, mut process, token) = converted(root.path(), &manager).await;
+    let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
+        .await
+        .unwrap();
+    assert!(targets.iter().any(|target| target.id == workspace.id));
+
+    let selector = SpaceSelector::id(&workspace.id);
+    let keep = crate::protocol::QueuedLaunches::Keep;
+    (manager.stop_workspace_manually(&selector, false, None, keep))
+        .await
+        .unwrap();
+
+    process.wait().unwrap();
+    assert!(RESUMED.lock().unwrap().is_empty());
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    let [last] = sessions.as_slice() else {
+        panic!("one last session to continue: {sessions:?}");
+    };
+    assert!(last.converted);
+    assert!(manager.caller(&token).await.unwrap().is_none());
+}

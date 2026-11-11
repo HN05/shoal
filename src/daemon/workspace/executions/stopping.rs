@@ -22,11 +22,16 @@ use tokio::time::{Instant, sleep};
 #[cfg(test)]
 mod tests;
 
-/// The workspaces with a running execution. One whose wrapper is gone is
-/// left for `shoal stop <workspace>` rather than failing every bulk stop.
+/// The workspaces with a running execution, or a chat's agent that has yet
+/// to restart there after a conversion. One whose wrapper is gone is left
+/// for `shoal stop <workspace>` rather than failing every bulk stop.
 fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
-        .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
+        .prepare(
+            "SELECT DISTINCT workspace_id FROM executions WHERE state=?1
+             UNION SELECT space_id FROM space_conversions
+                WHERE json_extract(record,'$.to')='workspace'",
+        )?
         .query_map([ExecutionState::Running], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -493,6 +498,7 @@ impl Manager {
         request: &StopRequest,
         protected: Protected,
     ) -> Result<()> {
+        self.stop_converting_agent(id).await?;
         let id = id.to_owned();
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {

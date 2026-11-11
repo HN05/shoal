@@ -113,6 +113,25 @@ impl Manager {
         resume_workspace(&self.paths, id, origin.as_ref()).await
     }
 
+    /// Hand the agent of a chat that became the workspace `id`, whose row was
+    /// `chat`, over to the workspace, ahead of a stop of the workspace's
+    /// agents, which finds it nowhere else: once its session is kept as the
+    /// workspace's last session, which `shoal resume` continues, stop it
+    /// where it ran, and forget the conversion.
+    pub(crate) async fn stop_converting_agent(&self, id: &SpaceId) -> Result<()> {
+        let space = id.to_owned();
+        let pending = self.store.run(move |db| super::pending(db, &space)).await?;
+        let Some(Pending::Workspace {
+            mode,
+            chat,
+            execution,
+        }) = pending
+        else {
+            return Ok(());
+        };
+        self.hand_over(id, mode, &chat, execution).await
+    }
+
     /// Keep the session of the agent of the chat that became the workspace
     /// `id`, whose row was `chat`, as the workspace's last session under
     /// `execution`, marked converted, in `mode`, then stop the agent where it
