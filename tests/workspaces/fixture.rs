@@ -3,15 +3,20 @@
 //! tests of several areas share.
 use super::*;
 
-pub(crate) struct Fixture {
-    // Fields drop in declaration order: the commands stop while the daemon
-    // still answers them, and what left their group stops before the
-    // directory goes.
-    pub(crate) commands: CommandGroup,
-    pub(crate) daemon: DaemonGuard,
-    pub(crate) _detached: Detached,
-    pub(crate) root: TempDir,
-    pub(crate) repo: PathBuf,
+pub(crate) struct Fixture(Base);
+
+impl std::ops::Deref for Fixture {
+    type Target = Base;
+
+    fn deref(&self) -> &Base {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Fixture {
+    fn deref_mut(&mut self) -> &mut Base {
+        &mut self.0
+    }
 }
 
 /// Global config without a cleanup grace period, at the root so the rest of a
@@ -25,11 +30,6 @@ pub(crate) const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 pub(crate) const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
-
-/// Global config without overload warnings, which would add a message to
-/// each running agent's workspace whenever the runner is short of disk space,
-/// memory or CPU. The daemon's unit tests cover the warnings.
-pub(crate) const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
 
 /// Global config without memory overload protection, which stops a running
 /// agent as soon as the machine running the tests reports critical memory
@@ -51,22 +51,11 @@ impl Fixture {
     }
 
     pub(crate) fn with_tools(config: Option<&str>, fake_sim: bool) -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = support::fixture::home();
         // Debug builds only open existing native ownership locks. Prepare the
         // isolated zmx namespace for terminal launch and cleanup tests.
         fs::write(root.path().join("zmx.shoal-ownership.lock"), "")
             .expect("prepare isolated zmx ownership lock");
-        // Remove eligible workspaces on their first sweep unless a test sets
-        // its own grace period.
-        fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
-        fs::write(
-            root.path().join(".config/shoal/config.toml"),
-            format!(
-                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_OVERLOAD_WARNINGS}{NO_MEMORY_OVERLOAD}{}",
-                config.unwrap_or_default()
-            ),
-        )
-        .unwrap();
         if fake_sim {
             let script = root.path().join("bin/xcrun");
             install_test_script(
@@ -74,38 +63,18 @@ impl Fixture {
                 include_str!("../../crates/shoal-daemon/tests/fixtures/simctl.py"),
             );
         }
-        // Forge requests reach only the scripted forge, which answers none
-        // until a test scripts it.
-        fs::create_dir_all(root.path().join("forge")).unwrap();
-        fs::create_dir_all(root.path().join("bin")).unwrap();
-        fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
-        install_test_script(
-            root.path().join("forge.py"),
-            include_str!("../fixtures/forge.py"),
+        // Remove eligible workspaces on their first sweep unless a test sets
+        // its own grace period.
+        let config = format!(
+            "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_MEMORY_OVERLOAD}{}",
+            config.unwrap_or_default()
         );
-        std::os::unix::fs::symlink(root.path().join("forge.py"), root.path().join("bin/curl"))
-            .unwrap();
-        let repo = init_repo(
-            root.path(),
+        Self(Base::start(
+            root,
+            &config,
             "repo with ' quotes & $literal",
             &[("tracked", "committed\n"), (".gitignore", "ignored/\n")],
-        );
-        // Model a starting commit already present on a remote, without network I/O.
-        git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-        // Fetches over SSH, as the daemon's background sync of a GitHub
-        // origin a test adds, fail here without reaching the network; a test
-        // that serves SSH itself sets its own command.
-        git(&repo, &["config", "core.sshCommand", "false"]);
-        let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
-        let fixture = Self {
-            commands: CommandGroup::new(),
-            _detached: Detached::new(root.path().join("state")),
-            root,
-            repo,
-            daemon,
-        };
-        fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
-        fixture
+        ))
     }
 
     // Exercise persisted/manual acknowledgement compatibility without retaining
@@ -115,10 +84,6 @@ impl Fixture {
         self.request(serde_json::json!({"set_pr":{"space":space,"clear":false}}))
     }
 
-    pub(crate) fn request(&self, method: Value) -> Value {
-        self.request_with_id(1, method)
-    }
-
     pub(crate) fn request_with_id(&self, id: u64, method: Value) -> Value {
         let protocol = self.protocol();
         self.raw_request(protocol, id, method)
@@ -126,6 +91,13 @@ impl Fixture {
 
     pub(crate) fn protocol(&self) -> u64 {
         support::daemon_client::protocol(self.root.path())
+    }
+
+    pub(crate) fn raw_request(&self, protocol: u64, id: u64, method: Value) -> Value {
+        support::daemon_client::exchange(
+            self.root.path(),
+            &serde_json::json!({"protocol": protocol, "id": id, "method": method}),
+        )
     }
 
     /// The daemon as an app reaches it through `shoal_client`, as the user.
@@ -139,13 +111,6 @@ impl Fixture {
             },
             scope: None,
         }
-    }
-
-    pub(crate) fn raw_request(&self, protocol: u64, id: u64, method: Value) -> Value {
-        support::daemon_client::exchange(
-            self.root.path(),
-            &serde_json::json!({"protocol": protocol, "id": id, "method": method}),
-        )
     }
 
     /// Write `file`'s contents as repository `repository`'s local config, as
@@ -197,41 +162,9 @@ impl Fixture {
     /// Answer forge requests through the scripted `curl` with `responses`,
     /// as tests/forge.rs does; later calls replace the responses.
     pub(crate) fn script_github(&self, responses: &serde_json::Map<String, Value>) {
-        fs::write(
-            self.root.path().join("forge/responses.json"),
-            Value::from(responses.clone()).to_string(),
-        )
-        .unwrap();
+        support::forge::respond(self.root.path(), &Value::from(responses.clone()));
     }
 
-    pub(crate) fn restart(&mut self) {
-        self.daemon
-            .restart(self.root.path(), &mut daemon_launch(self.root.path()));
-    }
-
-    pub(crate) fn command(&self) -> Command {
-        let mut command = cli(self.root.path());
-        self.commands.join(&mut command);
-        command
-    }
-    /// What the Shoal command `command` printed once it ended. One still
-    /// running after five minutes fails the test, naming it: a hang guard
-    /// that outlasts the daemon's own on the tools it runs.
-    pub(crate) fn output(&self, command: &mut Command) -> Output {
-        support::run::output_within(command, Duration::from_secs(300))
-    }
-    pub(crate) fn run(&self, args: &[&str]) -> Output {
-        self.output(self.command().args(args))
-    }
-    pub(crate) fn ok(&self, args: &[&str]) -> Value {
-        let output = self.output(self.command().arg("--json").args(args));
-        assert!(
-            output.status.success(),
-            "{args:?}: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        serde_json::from_slice(&output.stdout).unwrap()
-    }
     pub(crate) fn add(&self, name: &str) -> Value {
         self.ok(&["start", self.repo.to_str().unwrap(), name])
     }
@@ -245,12 +178,6 @@ impl Fixture {
             || name.to_owned(),
             |entry| entry["id"].as_str().unwrap().to_owned(),
         )
-    }
-
-    /// The ID of the space named `name`, which commands select it by,
-    /// since a name never does.
-    pub(crate) fn id(&self, name: &str) -> String {
-        support::daemon_client::space_id(self.root.path(), name)
     }
 
     /// `~/shoal`, the default parent of every repository directory.
@@ -520,14 +447,6 @@ pub(crate) fn upstream_remote(fixture: &Fixture) -> PathBuf {
     );
     git(&author, &["push", "origin", branch]);
     author
-}
-
-/// How fixtures start their daemon: as the CLI runs, with a `zmx` on the
-/// daemon's PATH when the runner has none.
-fn daemon_launch(root: &Path) -> Command {
-    let mut launch = cli(root);
-    support::daemon::provide_zmx(root, &mut launch);
-    launch
 }
 
 pub(crate) fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {

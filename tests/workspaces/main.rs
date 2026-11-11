@@ -45,7 +45,8 @@ mod support;
 
 use support::{
     cli,
-    daemon::{CommandGroup, DaemonGuard, Detached},
+    daemon::DaemonGuard,
+    fixture::Base,
     git::{git, init_repo},
     install_test_script, install_test_script_with_mode, ports, prompt, pty,
     wait::{try_wait_for, try_wait_within, wait_for, wait_until},

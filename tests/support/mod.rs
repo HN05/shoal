@@ -6,6 +6,8 @@
 pub mod daemon;
 pub mod daemon_client;
 pub mod fake_daemon;
+pub mod fixture;
+pub mod forge;
 pub mod git;
 pub mod ports;
 pub mod prompt;

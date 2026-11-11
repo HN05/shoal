@@ -2,20 +2,7 @@
 //! restacking and `shoal view`.
 use super::chats::start_test_chat;
 use super::*;
-
-/// GitHub's search request for `query`, page `page`.
-fn github_search(query: &str, page: u32) -> String {
-    let query: String = query
-        .bytes()
-        .map(|byte| match byte {
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect();
-    format!("GET search/issues?q={query}&sort=created&order=desc&per_page=100&page={page}")
-}
+use support::forge::github_search;
 
 /// GitHub's answers listing `issues` and `pulls` as team/project's open
 /// items, each PR from its `topic` branch.

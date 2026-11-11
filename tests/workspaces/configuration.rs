@@ -1,8 +1,11 @@
 //! Global, repository and local configuration, its layers and reloads, and
 //! Git profiles.
-#[cfg(target_os = "macos")]
-use super::fixture::{FORGEJO_HOST, NO_GRACE, NO_OVERLOAD_WARNINGS, UNSETTLED};
 use super::*;
+#[cfg(target_os = "macos")]
+use {
+    super::fixture::{FORGEJO_HOST, NO_GRACE, UNSETTLED},
+    support::fixture::NO_OVERLOAD_WARNINGS,
+};
 
 #[test]
 fn config_show_reports_effective_values_and_their_layers() {

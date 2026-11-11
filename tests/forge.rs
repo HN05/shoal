@@ -3,7 +3,8 @@
 mod support;
 
 use support::{
-    daemon::{CommandGroup, DaemonGuard},
+    fixture::Base,
+    forge::{Server, github_search},
     git::{git, init_repo},
 };
 
@@ -11,10 +12,8 @@ use serde_json::{Value, json};
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Child, Command, Output},
+    process::Output,
 };
-
-const FORGE: &str = include_str!("fixtures/forge.py");
 
 #[derive(Clone, Copy, PartialEq)]
 enum Forge {
@@ -23,23 +22,19 @@ enum Forge {
 }
 
 struct Fixture {
-    // Fields drop in declaration order: the commands, daemon and server before
-    // the directory.
-    commands: CommandGroup,
-    _daemon: DaemonGuard,
-    server: Option<Child>,
-    root: tempfile::TempDir,
-    repo: PathBuf,
+    // Fields drop in declaration order: the server before the base removes
+    // its directory.
+    _server: Option<Server>,
+    base: Base,
     /// `owner/repository` URL prefix of items on the scripted forge.
     web: String,
 }
 
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        if let Some(server) = &mut self.server {
-            let _ = server.kill();
-            let _ = server.wait();
-        }
+impl std::ops::Deref for Fixture {
+    type Target = Base;
+
+    fn deref(&self) -> &Base {
+        &self.base
     }
 }
 
@@ -47,102 +42,43 @@ impl Drop for Fixture {
 const AGENT_TOKEN: &str = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n\
     token = \"usertoken\"\nagent_token = \"agenttoken\"\n";
 
-/// Global config without overload warnings, which would add a message to
-/// each running agent's workspace whenever the runner is short of disk space,
-/// memory or CPU.
-const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
-
-/// Start the Forgejo server in `root` and return it with its `host:port`.
-fn serve(root: &Path) -> (Child, String) {
-    let port_file = root.join("forge/port");
-    let child = support::isolated(root, "python3")
-        .arg(root.join("forge.py"))
-        .args(["serve", port_file.to_str().unwrap()])
-        .spawn()
-        .unwrap();
-    // A hang guard only: the server writes its port once it listens.
-    support::wait::wait_until("forge server to start", || port_file.exists());
-    let port = fs::read_to_string(port_file).unwrap();
-    (child, format!("127.0.0.1:{port}"))
-}
-
-/// The JSON `command` prints with `args`, which must succeed.
-fn json_output(mut command: Command, args: &[&str]) -> Value {
-    let output = command.arg("--json").args(args).output().unwrap();
-    assert!(
-        output.status.success(),
-        "{args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).unwrap()
-}
-
 impl Fixture {
-    /// The ID of the space named `name`, which commands select it by,
-    /// since a name never does.
-    fn id(&self, name: &str) -> String {
-        support::daemon_client::space_id(self.root.path(), name)
-    }
-
     /// `config` names the forge's host as `{forge}` and its type as `{type}`;
     /// unless `config` sets the host's table, its type is pinned and the user
     /// has the token `usertoken` there.
     fn new(forge: Forge, config: &str) -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
-        fs::create_dir_all(root.path().join("forge")).unwrap();
-        fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
-        let script = root.path().join("forge.py");
-        support::install_test_script(&script, FORGE);
-        let server = (forge == Forge::Forgejo).then(|| serve(root.path()));
+        let root = support::fixture::home();
+        let server = (forge == Forge::Forgejo).then(|| Server::start(root.path()));
         let host = server
             .as_ref()
-            .map_or_else(|| "github.com".to_owned(), |(_, host)| host.clone());
+            .map_or_else(|| "github.com".to_owned(), |server| server.host.clone());
         let kind = match forge {
             Forge::GitHub => "github",
             Forge::Forgejo => "forgejo",
         };
-        let mut config = format!(
-            "{NO_OVERLOAD_WARNINGS}{}",
-            config.replace("{forge}", &host).replace("{type}", kind)
-        );
+        let mut config = config.replace("{forge}", &host).replace("{type}", kind);
         let table = format!("[machine.forges.\"{host}\"]");
         if !config.contains(&table) {
             config.push_str(&format!(
                 "\n{table}\ntype = \"{kind}\"\ntoken = \"usertoken\"\n"
             ));
         }
-        fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
-        fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
-        let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
-        git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-        // Fetches over SSH, as the daemon's background sync of the GitHub
-        // origin, fail here without reaching the network.
-        git(&repo, &["config", "core.sshCommand", "false"]);
-        let mut launch = support::cli(root.path());
-        let daemon = DaemonGuard::start(root.path(), &mut launch);
-        let mut fixture = Self {
-            commands: CommandGroup::new(),
-            _daemon: daemon,
-            server: server.map(|(child, _)| child),
-            root,
-            repo,
-            web: String::new(),
+        let (web, origin) = match forge {
+            Forge::GitHub => (
+                "https://github.com/team/project".to_owned(),
+                "git@github.com:team/project.git".to_owned(),
+            ),
+            Forge::Forgejo => (
+                format!("http://{host}/team/project"),
+                format!("http://{host}/team/project.git"),
+            ),
         };
-        fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
+        let fixture = Self {
+            _server: server,
+            base: Base::start(root, &config, "repo", &[("tracked", "committed\n")]),
+            web,
+        };
         fixture.ok(&["start", fixture.repo.to_str().unwrap(), "topic"]);
-        // Every forge request goes through the scripted curl.
-        fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
-        std::os::unix::fs::symlink(&script, fixture.root.path().join("bin/curl")).unwrap();
-        let origin = match forge {
-            Forge::GitHub => {
-                fixture.web = "https://github.com/team/project".into();
-                "git@github.com:team/project.git".to_owned()
-            }
-            Forge::Forgejo => {
-                fixture.web = format!("http://{host}/team/project");
-                format!("http://{host}/team/project.git")
-            }
-        };
         git(&fixture.repo, &["remote", "add", "origin", &origin]);
         git(
             &fixture.repo,
@@ -161,11 +97,7 @@ impl Fixture {
     }
 
     fn respond(&self, responses: Value) {
-        fs::write(
-            self.root.path().join("forge/responses.json"),
-            responses.to_string(),
-        )
-        .unwrap();
+        support::forge::respond(self.root.path(), &responses);
     }
 
     /// Requests since the last call, as `[key, body, auth]`.
@@ -181,52 +113,20 @@ impl Fixture {
             .collect()
     }
 
-    fn command(&self) -> Command {
-        let mut command = support::cli(self.root.path());
-        self.commands.join(&mut command);
-        command
-    }
-
-    fn run(&self, args: &[&str]) -> Output {
-        self.command().args(args).output().unwrap()
-    }
-
-    fn ok(&self, args: &[&str]) -> Value {
-        json_output(self.command(), args)
-    }
-
-    /// [`Self::ok`] in the `topic` workspace's directory.
+    /// [`Base::ok`] in the `topic` workspace's directory.
     fn ok_in_topic(&self, args: &[&str]) -> Value {
-        let mut command = self.command();
-        command.current_dir(self.topic());
-        json_output(command, args)
+        self.ok_from(self.command().current_dir(self.topic()), args)
     }
 
-    /// [`Self::run`] in the `topic` workspace's directory.
+    /// [`Base::run`] in the `topic` workspace's directory.
     fn run_in_topic(&self, args: &[&str]) -> Output {
-        (self.command().current_dir(self.topic()))
-            .args(args)
-            .output()
-            .unwrap()
+        self.output(self.command().current_dir(self.topic()).args(args))
     }
 
     /// The `topic` workspace's directory.
     fn topic(&self) -> PathBuf {
         let status = self.ok(&["status", &self.id("topic")]);
         PathBuf::from(status["workspace"]["path"].as_str().unwrap())
-    }
-
-    fn request(&self, method: Value) -> Value {
-        self.request_as(method, None)
-    }
-
-    fn request_as(&self, method: Value, scope: Option<&str>) -> Value {
-        let root = self.root.path();
-        let protocol = support::daemon_client::protocol(root);
-        support::daemon_client::exchange(
-            root,
-            &json!({"protocol": protocol, "id": 1, "method": method, "scope": scope}),
-        )
     }
 
     fn events(&self) -> Vec<Value> {
@@ -237,20 +137,6 @@ impl Fixture {
             .map(|line| serde_json::from_str(line).unwrap())
             .collect()
     }
-}
-
-/// GitHub's search request for `query`, page `page`.
-fn github_search(query: &str, page: u32) -> String {
-    let query: String = query
-        .bytes()
-        .map(|byte| match byte {
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect();
-    format!("GET search/issues?q={query}&sort=created&order=desc&per_page=100&page={page}")
 }
 
 fn pull(number: u64, state: &str, title: &str, labels: &[&str]) -> Value {
