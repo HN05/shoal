@@ -857,6 +857,7 @@ impl Backend for GitLab {
             url: text(&value["web_url"]).context("pipeline has no URL")?,
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
+            commit: text(&value["sha"]),
             state: status_state(&value["status"])?.into(),
             waiting: false,
         })

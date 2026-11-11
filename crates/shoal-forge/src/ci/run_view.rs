@@ -16,6 +16,9 @@ use crate::{
 
 /// The most runs one list returns.
 pub const MAX_RUNS: usize = 100;
+/// How many of the newest runs of a workflow on a branch a lookup of the
+/// newest finished one reads.
+const FINISHED_LOOKUP: usize = 20;
 /// The jobs one page of a run's jobs holds.
 pub(crate) const JOBS_PAGE: usize = 100;
 
@@ -223,6 +226,31 @@ impl ForgeRepo {
             .map(|run| self.kind.run_item(self, run))
             .collect()
     }
+
+    /// The newest finished run of `workflow` on `branch`, or of the
+    /// branch's pipeline on a forge that runs one per branch; none while
+    /// every recent run has yet to finish.
+    pub async fn newest_finished_run(
+        &self,
+        account: &Account,
+        workflow: Option<&str>,
+        branch: &str,
+    ) -> Result<Option<Run>> {
+        let filter = RunFilter {
+            branch: Some(branch.to_owned()),
+            workflow: workflow.map(str::to_owned),
+            commit: None,
+            limit: FINISHED_LOOKUP,
+        };
+        Ok(newest_finished(self.list_runs(account, &filter).await?))
+    }
+}
+
+/// The first finished run of `runs`, newest first; a run held for approval
+/// has yet to run.
+fn newest_finished(runs: Vec<Run>) -> Option<Run> {
+    runs.into_iter()
+        .find(|run| !run.waiting && !run.state.unfinished())
 }
 
 #[cfg(test)]

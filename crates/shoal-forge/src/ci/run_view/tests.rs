@@ -67,6 +67,30 @@ fn each_forge_lists_the_runs_on_a_commit_its_own_way() -> Result<()> {
 }
 
 #[test]
+fn the_newest_finished_run_skips_unfinished_and_held_runs() {
+    let run = |id: u64, state: JobState, waiting: bool| Run {
+        id: RunId::new(id),
+        url: id.to_string(),
+        branch: Some("main".into()),
+        workflow: Some("ci.yml".into()),
+        commit: None,
+        state,
+        waiting,
+    };
+    let runs = vec![
+        run(4, JobState::Running, false),
+        run(3, JobState::Failed, true),
+        run(2, JobState::Failed, false),
+        run(1, JobState::Finished, false),
+    ];
+    assert_eq!(newest_finished(runs).map(|run| run.url), Some("2".into()));
+    assert_eq!(
+        newest_finished(vec![run(5, JobState::Running, false)]),
+        None
+    );
+}
+
+#[test]
 fn listed_runs_are_read_like_one_run() -> Result<()> {
     let repo = ForgeRepo::parse("https://gitlab.com/team/repo")?;
     let value = json!([{"id": 12, "web_url": "https://gitlab.com/team/repo/-/pipelines/12",
@@ -88,6 +112,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         url: "https://github.com/team/repo/actions/runs/12".into(),
         branch: None,
         workflow: None,
+        commit: None,
         state: JobState::Failed,
         waiting: false,
     };
@@ -157,6 +182,7 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
         url: "https://github.com/team/repo/actions/runs/12".into(),
         branch: None,
         workflow: None,
+        commit: None,
         state: JobState::Failed,
         waiting: false,
     };

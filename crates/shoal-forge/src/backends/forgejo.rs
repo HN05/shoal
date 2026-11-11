@@ -510,8 +510,7 @@ impl Backend for Forgejo {
         account: &Account,
         number: IssueNumber,
     ) -> Result<Vec<String>> {
-        github_rest::open_blockers(repo, account, &format!("issues/{number}/dependencies"))
-            .await
+        github_rest::open_blockers(repo, account, &format!("issues/{number}/dependencies")).await
     }
 
     async fn pr_diff(
@@ -761,6 +760,7 @@ impl Backend for Forgejo {
             url: format!("{}/actions/runs/{number}", repo.repository_url()),
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
+            commit: text(&value["commit_sha"]),
             state: actions::state(&value["status"])?,
             waiting: value["need_approval"] == true,
         })

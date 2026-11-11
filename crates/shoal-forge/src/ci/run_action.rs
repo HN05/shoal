@@ -29,6 +29,9 @@ pub struct Run {
     /// Its workflow file, where the forge runs several per branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
+    /// The commit it ran on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     pub state: JobState,
     /// The forge holds the run until a maintainer approves it.
     #[serde(skip)]

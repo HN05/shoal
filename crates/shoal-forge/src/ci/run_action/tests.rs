@@ -8,6 +8,7 @@ fn run(id: u64) -> Run {
         url: String::new(),
         branch: None,
         workflow: None,
+        commit: None,
         state: JobState::Finished,
         waiting: false,
     }
@@ -106,7 +107,7 @@ fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
 }
 
 #[test]
-fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
+fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<()> {
     let read = |remote: &str, value| -> Result<Run> {
         let repo = ForgeRepo::parse(remote)?;
         repo.kind.run(&repo, RunNumber::new(12), &value)
@@ -116,13 +117,14 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
             "https://github.com/team/repo",
             json!({"id": 12, "html_url": "https://github.com/team/repo/actions/runs/12",
                     "head_branch": "topic", "path": ".github/workflows/ci.yml",
-                    "status": "completed", "conclusion": "failure"})
+                    "head_sha": "abc", "status": "completed", "conclusion": "failure"})
         )?,
         Run {
             id: RunId::new(12),
             url: "https://github.com/team/repo/actions/runs/12".into(),
             branch: Some("topic".into()),
             workflow: Some("ci.yml".into()),
+            commit: Some("abc".into()),
             state: JobState::Failed,
             waiting: false,
         }
@@ -131,13 +133,16 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
     let tag = read(
         "https://gitlab.com/team/repo",
         json!({"id": 12, "web_url": "https://gitlab.com/team/repo/-/pipelines/12",
-                "ref": "v1", "tag": true, "status": "running"}),
+                "ref": "v1", "tag": true, "sha": "def", "status": "running"}),
     )?;
-    assert_eq!((tag.branch, tag.state), (None, JobState::Running));
+    assert_eq!(
+        (tag.branch, tag.commit.as_deref(), tag.state),
+        (None, Some("def"), JobState::Running)
+    );
     let forgejo = read(
         "https://codeberg.org/team/repo",
         json!({"workflow_runs": [{"id": 9331, "index_in_repo": 12, "prettyref": "topic",
-                "workflow_id": "deps.yml", "status": "success"}]}),
+                "workflow_id": "deps.yml", "commit_sha": "123", "status": "success"}]}),
     )?;
     assert_eq!(
         forgejo,
@@ -146,6 +151,7 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
             url: "https://codeberg.org/team/repo/actions/runs/12".into(),
             branch: Some("topic".into()),
             workflow: Some("deps.yml".into()),
+            commit: Some("123".into()),
             state: JobState::Finished,
             waiting: false,
         }

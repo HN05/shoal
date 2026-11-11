@@ -655,6 +655,7 @@ impl Backend for GitHub {
             url: text(&value["html_url"]).context("Actions run has no URL")?,
             branch: text(&value["head_branch"]),
             workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
+            commit: text(&value["head_sha"]),
             state: actions::state(value)?,
             waiting: value["conclusion"] == "action_required",
         })
