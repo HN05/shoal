@@ -568,3 +568,31 @@ async fn a_message_to_the_user_sends_a_limited_number_of_files() {
     );
     assert!(manager.notifications(false, 50).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn an_event_named_alone_takes_no_workspace_that_shares_its_name() {
+    let (temp, manager) = manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .create_workspace(&repo.id, "fix".into(), None, None, None)
+        .await
+        .unwrap();
+
+    // A launch that opened no workspace is named alone.
+    (manager.notify(
+        Some(&"fix".into()),
+        NotificationKind::QueueFailed,
+        "did not start",
+    ))
+    .await;
+
+    let [notification] = &manager.notifications(true, 10).await.unwrap()[..] else {
+        panic!("one notification");
+    };
+    assert_eq!(notification.workspace.as_deref(), Some("fix"));
+    assert_eq!(notification.space_id, None);
+}

@@ -51,7 +51,10 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
             let failures = expire_starts(tx, &held, UnixTime::from_seconds(100))?;
             assert_eq!(failures.len(), 2);
             assert!(failures.contains(&FailedStart::UnopenedLaunch("launch".into())));
-            assert!(failures.contains(&FailedStart::UnstartedRestore("restore".into())));
+            assert!(failures.contains(&FailedStart::UnstartedRestore(
+                "restore".into(),
+                "workspace".into()
+            )));
             assert_eq!(
                 remaining(tx)?,
                 ["boundary", "held", "queued", "recent", "unseen", "wrapper"]

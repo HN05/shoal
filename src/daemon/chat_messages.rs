@@ -248,14 +248,9 @@ fn insert(
     attachments: &[PathBuf],
 ) -> Result<Option<i64>> {
     let workspace = about.name.as_deref().unwrap_or_default();
-    // Names repeat: a message is about the space its ID names, else the
-    // only workspace with the name, and is the same as another only when
-    // both are about that space.
-    let id = match (&about.id, &about.name) {
-        (Some(id), _) => Some(id.clone()),
-        (None, Some(name)) => crate::daemon::notifications::only_workspace_named(tx, name)?,
-        (None, None) => None,
-    };
+    // Names repeat: a message is about the space its ID names, and is the
+    // same as another only when both are about that space.
+    let id = about.id.clone();
     let attachments = serde_json::to_string(attachments)?;
     let pending: Option<i64> = tx
         .query_row(

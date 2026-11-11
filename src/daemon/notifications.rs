@@ -76,7 +76,8 @@ pub(crate) struct About {
 }
 
 impl About {
-    /// The workspace named `name`, whose identity recording looks up.
+    /// A space named `name` whose identity the caller does not know, such
+    /// as a launch that opened no workspace; names repeat, so it has none.
     fn named(name: Option<&SpaceName>) -> Self {
         Self {
             name: name.cloned(),
@@ -92,32 +93,6 @@ impl About {
             subject: None,
         }
     }
-
-    /// With the identity of the only workspace that has the name now when
-    /// none was given; names repeat, so a name others share names none.
-    fn resolve(mut self, db: &rusqlite::Connection) -> Result<Self> {
-        if self.id.is_none()
-            && let Some(name) = &self.name
-        {
-            self.id = only_workspace_named(db, name)?;
-        }
-        Ok(self)
-    }
-}
-
-/// The only workspace named `name`, if one alone has it.
-pub(crate) fn only_workspace_named(
-    db: &rusqlite::Connection,
-    name: &SpaceName,
-) -> Result<Option<SpaceId>> {
-    let ids = db
-        .prepare("SELECT id FROM workspaces WHERE name=?1 LIMIT 2")?
-        .query_map([name], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<SpaceId>>>()?;
-    Ok(match <[SpaceId; 1]>::try_from(ids) {
-        Ok([id]) => Some(id),
-        Err(_) => None,
-    })
 }
 
 /// Record an event for the user in the caller's transaction, with the files
@@ -399,11 +374,7 @@ impl Manager {
     ) -> Result<i64> {
         let recorded = self
             .store
-            .write(move |tx| {
-                let about = about.resolve(tx)?;
-                let recorded = insert(tx, &about, kind, &message, &files)?;
-                Ok(recorded)
-            })
+            .write(move |tx| insert(tx, &about, kind, &message, &files))
             .await?;
         if recorded.new {
             self.signals.notification_recorded(recorded.id);

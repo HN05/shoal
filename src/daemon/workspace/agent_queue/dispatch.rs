@@ -390,21 +390,23 @@ impl Manager {
         Ok(())
     }
 
+    /// Tell the user about `failure`, by the workspace's identity for a
+    /// restore and by name alone for a launch that opened none, which no
+    /// workspace's name identifies since names repeat.
     async fn report_expired_start(&self, failure: expiry::FailedStart) {
-        let (name, reason) = match failure {
+        let kind = NotificationKind::QueueFailed;
+        match failure {
             expiry::FailedStart::UnopenedLaunch(name) => {
-                (name, "its launch ended without opening the workspace")
+                let reason = "its launch ended without opening the workspace";
+                let message = format!("{name} did not start from the agent queue: {reason}");
+                self.notify(Some(&name), kind, message).await;
             }
-            expiry::FailedStart::UnstartedRestore(name) => {
-                (name, "its restore ended before the agent started")
+            expiry::FailedStart::UnstartedRestore(name, workspace) => {
+                let reason = "its restore ended before the agent started";
+                let message = format!("{name} did not start from the agent queue: {reason}");
+                self.notify_space(&name, &workspace, kind, message).await;
             }
-        };
-        self.notify(
-            Some(&name),
-            NotificationKind::QueueFailed,
-            format!("{name} did not start from the agent queue: {reason}"),
-        )
-        .await;
+        }
     }
 
     /// Forget restores whose wrapper has been gone for the grace period, such

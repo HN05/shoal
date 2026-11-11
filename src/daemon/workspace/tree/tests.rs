@@ -894,8 +894,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // The daemon's events about a child's agent reach the coordinator.
     manager
-        .notify(
-            Some(&helper.name),
+        .notify_space(
+            &helper.name,
+            &helper.id,
             NotificationKind::AgentExited,
             "claude exited",
         )
@@ -904,7 +905,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         received().await,
         [
             format!("{} child: second", child.number),
-            "helper: claude exited".into()
+            format!("{} helper: claude exited", helper.number)
         ]
     );
     assert_eq!(user().await, ["first", "from the parent"]);

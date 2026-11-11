@@ -1,5 +1,5 @@
 use crate::{
-    client::{files::Attacher, space_names::SpaceName},
+    client::files::Attacher,
     daemon::notifications::NotificationKind,
     model::{SpaceDetail, SpaceStatus},
 };
@@ -12,11 +12,13 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    let mut workspaces = Vec::new();
     for name in ["own", "other"] {
-        manager
+        let workspace = manager
             .create_workspace(&repo.id, name.into(), None, None, None)
             .await
             .unwrap();
+        workspaces.push(workspace);
     }
     let chat = manager
         .start_chat(
@@ -37,19 +39,12 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
             .unwrap(),
     );
 
-    for (workspace, message) in [
-        (Some("own"), "own"),
-        (Some("other"), "other"),
-        (None, "daemon"),
-    ] {
-        manager
-            .notify(
-                workspace.map(SpaceName::from).as_ref(),
-                NotificationKind::CleanupFailed,
-                message,
-            )
-            .await;
+    let kind = NotificationKind::CleanupFailed;
+    for workspace in &workspaces {
+        let message = workspace.name.to_string();
+        (manager.notify_space(&workspace.name, &workspace.id, kind, message)).await;
     }
+    manager.notify(None, kind, "daemon").await;
     manager
         .send_message(
             &manager.named("planning").await,

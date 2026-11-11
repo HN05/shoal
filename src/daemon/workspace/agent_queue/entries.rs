@@ -326,11 +326,12 @@ impl Manager {
         let entry = self
             .store
             .run(move |db| {
-                let entry: Option<(SpaceName, bool)> = db
+                let entry: Option<(SpaceName, bool, Option<SpaceId>)> = db
                     .query_row(
-                        "SELECT name, state=?2 FROM agent_queue WHERE id=?1",
+                        "SELECT name, state=?2, COALESCE(workspace_id,opens_workspace_id)
+                            FROM agent_queue WHERE id=?1",
                         params![entry_id, QueueState::Starting],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                     )
                     .optional()?;
                 db.execute(
@@ -340,18 +341,22 @@ impl Manager {
                 Ok(entry)
             })
             .await?;
-        let name = match entry {
+        let (name, workspace) = match entry {
             None => return Ok(()),
-            Some((_, false)) => bail!("queue entry is no longer starting"),
-            Some((name, true)) => name,
+            Some((_, false, _)) => bail!("queue entry is no longer starting"),
+            Some((name, true, workspace)) => (name, workspace),
         };
         self.fail_renewal_started_by(id, error).await;
-        self.notify(
-            Some(&name),
+        // A launch that opened no workspace has its name alone, which no
+        // workspace's identifies since names repeat.
+        let (kind, message) = (
             NotificationKind::QueueFailed,
             format!("{name} did not start from the agent queue: {error}"),
-        )
-        .await;
+        );
+        match workspace {
+            Some(workspace) => self.notify_space(&name, &workspace, kind, message).await,
+            None => self.notify(Some(&name), kind, message).await,
+        }
         self.agent_queue.wake();
         Ok(())
     }
