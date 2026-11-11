@@ -69,7 +69,9 @@ impl Manager {
                 (None, None) => log!("removal of {id} failed: {error:#}"),
             }
         });
-        passed.await.context("the removal ended before its checks")?
+        passed
+            .await
+            .context("the removal ended before its checks")?
     }
 
     /// Tell the agent of `requester`, or else the user, that removing
