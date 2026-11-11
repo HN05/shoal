@@ -68,22 +68,15 @@ pub(in crate::cli::commands) struct AddOptions {
 impl AddOptions {
     /// Whether `plan`'s agent skips the queue: the user waits for a focused
     /// launch, so it starts at once as `--now` does. That is a launch `--focus`
-    /// focuses, or, from an `interactive` call, one waiting for the user's
+    /// focuses, or, from a call `on_terminal`, one waiting for the user's
     /// input that the `focus` setting does not send to the background; the
     /// setting alone does not, so it cannot switch the limit off. A launch
     /// that waits for work queues.
-    fn starts_now(&self, plan: &AddPlan, focus_setting: Option<bool>, interactive: bool) -> bool {
-        let waits_for_user = interactive && !plan.runs_unattended();
+    fn starts_now(&self, plan: &AddPlan, focus_setting: Option<bool>, on_terminal: bool) -> bool {
+        let waits_for_user = on_terminal && !plan.runs_unattended();
         self.now
             || self.focus
             || (self.after.is_empty() && waits_for_user && focus_setting != Some(false))
-    }
-
-    /// Whether a call with `ctx` starts its work beside its terminal: an
-    /// interactive one, or one on a terminal whose `--focus` asks to show the
-    /// work there, whatever output it asked for.
-    fn starts_beside(&self, ctx: &Context) -> bool {
-        ctx.interactive() || (self.focus && ctx.on_terminal())
     }
 }
 

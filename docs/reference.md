@@ -3,8 +3,9 @@
 Start with the [usage guide](../README.md).
 
 Commands print human-readable output unless `--json` or `SHOAL_OUTPUT=json`
-selects JSON, which also turns off prompts without confirming anything: a command
-that would ask still needs `--yes`. `--text` overrides `SHOAL_OUTPUT`, and an
+selects JSON, which also turns off prompts and pickers without confirming
+anything: a command that would ask still needs `--yes`. Nothing else changes: a
+command does the same work with either format. `--text` overrides `SHOAL_OUTPUT`, and an
 unset or empty `SHOAL_OUTPUT` means `text`; any other value fails. Errors use the
 selected format on stderr. The agents Shoal starts, including chats and resumed
 sessions, get `SHOAL_OUTPUT=json` unless the command that launches them sets a
@@ -1187,8 +1188,7 @@ exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
 as a Herdr pane with `terminal.herdr.enabled`, runs in place, as does an agent
 shortcut such as `shoal claude` without a terminal. Scoped callers, and callers
-without a terminal or with `--json`, such as another agent's tool call, unless
-`start --focus` keeps one on a terminal beside it, start the agents of `start`, `contribute` and `resume --now` detached
+without a terminal, such as another agent's tool call, start the agents of `start`, `contribute` and `resume --now` detached
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
 agent running. An agent Happy runs leaves the call at once anyway, so a
@@ -1262,8 +1262,8 @@ there. Setup and agent execution run in that tab, which reads the issue again an
 is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
 allocated workspace branch otherwise, unless `tab_name` supplies a template;
 a [space's name](#workspaces) replaces either.
-`--here` keeps the command in the current pane; JSON, help, and noninteractive
-calls run in place, except that their agent starts detached as
+`--here` keeps the command in the current pane; help and calls without a
+terminal run in place, except that their agent starts detached as
 [Agents](#agents) describes.
 
 The `[terminal.herdr]` table in global or repository config uses normal per-option
@@ -1272,8 +1272,8 @@ with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
 `terminal.focus` overrides this for tabs and zmx sessions alike, the
 [mode's](#modes-and-rules) `focus` overrides that for its launches, and
-`shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does,
-also with `--json` on a terminal, which then prints the planned `workspace` and
+`shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does.
+With `--json`, a start beside the terminal prints the planned `workspace` and
 its `agent` once the host opens the launch's place.
 `enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
 overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
@@ -2158,7 +2158,7 @@ once readings are healthy.
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. A start that runs detached, from
-a scoped caller, one without a terminal or one with `--json` and no `--focus`, creates the
+a scoped caller or one without a terminal creates the
 workspace and sets it up
 first, reporting setup errors to the caller. A scoped caller's preparation then
 queues the agent in it; for the user's, the caller queues it once setup ends,
@@ -2949,8 +2949,8 @@ directory as another working directory; `--here` and `--agent` work as for
 
 Only the user runs `repo setup` and `config setup`, since both change the
 user's own config. Both start their agent at once regardless of the limits,
-in a tab that takes focus whatever `terminal.focus` says; without a terminal or
-with `--json`, `repo setup` starts it detached and `config setup` in a
+in a tab that takes focus whatever `terminal.focus` says; without a terminal,
+`repo setup` starts it detached and `config setup` in a
 background place.
 
 ### Contributions

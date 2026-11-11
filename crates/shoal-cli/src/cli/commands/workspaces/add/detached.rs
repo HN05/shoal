@@ -1,5 +1,5 @@
 //! Starting an addition's agent detached, as scoped callers and
-//! noninteractive ones do: the daemon starts it outside the caller, so
+//! ones without a terminal do: the daemon starts it outside the caller, so
 //! interrupting the caller leaves it running. A scoped caller's preparation
 //! queues the agent; the user's is placed once its workspace is set up.
 use anyhow::{Context as _, Result, ensure};
@@ -27,8 +27,8 @@ use crate::{
 };
 
 /// Whether the plan's agent starts detached: always for a scoped caller,
-/// which `--here` cannot keep in place, and for one that does not start it
-/// beside its terminal, unless `--here` asks to run it in place.
+/// which `--here` cannot keep in place, and for one without a terminal to
+/// start it beside, unless `--here` asks to run it in place.
 pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> Result<bool> {
     let agent = plan.agent_name().is_some();
     if crate::env::is_scoped() {
@@ -38,7 +38,7 @@ pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOption
         );
         return Ok(true);
     }
-    Ok(agent && !options.here && !options.starts_beside(ctx))
+    Ok(agent && !options.here && !ctx.on_terminal())
 }
 
 /// Open the planned workspace and start its agent detached. A scoped

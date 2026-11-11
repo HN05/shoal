@@ -53,7 +53,7 @@ pub(super) async fn run_all(
     // An agent restored here replaces this run's report, so it takes the
     // terminal only when there is nothing else to report.
     let alone = resumed.chats.is_empty() && resumed.failed.is_empty();
-    let single = sessions.len() == 1 && alone && ctx.interactive();
+    let single = sessions.len() == 1 && alone && ctx.on_terminal();
     start_sessions(ctx, sessions, single, resumed).await
 }
 

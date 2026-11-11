@@ -291,7 +291,7 @@ async fn launch(
     );
     if !recovery.automatic {
         ensure!(
-            ctx.interactive(),
+            ctx.on_terminal(),
             "session picker requires a terminal; configure [agents.{}] resume_command for noninteractive recovery",
             recovery.agent
         );

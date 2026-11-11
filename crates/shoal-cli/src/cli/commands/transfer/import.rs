@@ -91,7 +91,7 @@ pub(super) async fn import(
 /// Where a chat imported on its own starts: beside this terminal, unless
 /// `--resume` starts it in the background, as it must without a terminal.
 fn chat_place(ctx: &Context, options: &ImportOptions) -> ChatPlace {
-    match options.resume || !ctx.interactive() {
+    match options.resume || !ctx.on_terminal() {
         true => ChatPlace::Background,
         false => ChatPlace::Beside,
     }

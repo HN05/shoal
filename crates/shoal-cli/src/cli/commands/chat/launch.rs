@@ -143,7 +143,7 @@ impl Launch {
     /// Run the chat in a new place beside this terminal, where a host opens
     /// one and its place asks for it, otherwise here.
     async fn run_in_terminal(self, ctx: &Context) -> Result<i32> {
-        ensure!(ctx.interactive(), "chat needs a terminal");
+        ensure!(ctx.on_terminal(), "chat needs a terminal");
         let model_args =
             crate::agents::model_args(&self.chat.settings, &self.agent, &self.chat.model)?;
         if self.options.place == ChatPlace::Beside && self.start_beside(ctx).await? {

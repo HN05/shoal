@@ -61,24 +61,24 @@ pub(super) async fn start(
         None,
         workspaces::AgentLaunch::Explicit(Some(agent)),
         options.args,
-        add_options(options.here, options.model, prompt, ctx.interactive()),
+        add_options(options.here, options.model, prompt, ctx.on_terminal()),
     )
     .await
 }
 
 /// How the setup agent starts on `prompt`: the user waits for it, so it
-/// skips the queue and, from an `interactive` call, takes a focused tab
+/// skips the queue and, from a call `on_terminal`, takes a focused tab
 /// whatever the `focus` setting says. A call without a terminal starts it
 /// detached, with nothing to focus.
 fn add_options(
     here: bool,
     model: ModelChoice,
     prompt: String,
-    interactive: bool,
+    on_terminal: bool,
 ) -> workspaces::AddOptions {
     workspaces::AddOptions {
         here,
-        focus: interactive,
+        focus: on_terminal,
         now: true,
         model,
         mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),

@@ -67,7 +67,7 @@ pub(super) async fn admit(
     let now = options.starts_now(
         plan,
         settings.get().await?.focus(&plan.mode()),
-        ctx.interactive(),
+        ctx.on_terminal(),
     );
     let after = launch_dependencies(ctx, target, issue, now, after).await?;
     admit_launch(ctx, target, plan, issue, now, after).await

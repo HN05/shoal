@@ -434,15 +434,15 @@ pub(super) async fn as_chat(
     args.checked_repository = None;
     let mode = starts.mode.unwrap_or(modes::ModeName::DEFAULT);
     let mut options = chat::Options::taken_from(&mut args);
-    options.place = branchless_place(ctx.interactive(), options.place);
+    options.place = branchless_place(ctx.on_terminal(), options.place);
     in_chat_with(ctx, args, ModeChoice::Named(mode), options).await
 }
 
 /// Where the chat a branchless start begins as runs: beside this terminal
 /// or here, as `place` says, on a terminal, and without one, which nothing
 /// could run it in, in a background place.
-fn branchless_place(interactive: bool, place: chat::ChatPlace) -> chat::ChatPlace {
-    match (interactive, place) {
+fn branchless_place(on_terminal: bool, place: chat::ChatPlace) -> chat::ChatPlace {
+    match (on_terminal, place) {
         (false, chat::ChatPlace::Beside) => chat::ChatPlace::Background,
         (_, place) => place,
     }

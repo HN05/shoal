@@ -26,16 +26,16 @@ pub(super) enum Queuing {
     /// for `now` started by this process where each stopped or in the
     /// background.
     Here { now: bool },
-    /// Queued for the daemon to start, which a noninteractive process
+    /// Queued for the daemon to start, which a process without a terminal
     /// needs, at once regardless of the limits for `now`.
     Daemon { now: bool },
 }
 
 impl Queuing {
-    /// How a process with `ctx` starts restores: a noninteractive one has no
-    /// terminal to start them beside.
+    /// How a process with `ctx` starts restores: one without a terminal has
+    /// none to start them beside.
     pub(super) fn of(ctx: &Context, now: bool) -> Self {
-        match ctx.interactive() {
+        match ctx.on_terminal() {
             true => Self::Here { now },
             false => Self::Daemon { now },
         }

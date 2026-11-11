@@ -62,7 +62,9 @@ impl Context {
     }
 
     /// Prompts are allowed: a human is on both stdin and stderr, and the caller
-    /// did not ask for JSON.
+    /// did not ask for JSON. It decides only whether to ask or pick; what the
+    /// command does follows [`Self::on_terminal`], since JSON changes only
+    /// the output.
     pub fn interactive(&self) -> bool {
         Self::is_interactive(self.json)
     }
@@ -72,7 +74,9 @@ impl Context {
         self.interactive() && io::stdout().is_terminal()
     }
 
-    /// A human is on both stdin and stderr, whatever output the caller asked for.
+    /// A human is on both stdin and stderr, whatever output the caller asked
+    /// for: where the command starts work, such as beside this terminal or
+    /// in it.
     pub fn on_terminal(&self) -> bool {
         Self::is_interactive(false)
     }

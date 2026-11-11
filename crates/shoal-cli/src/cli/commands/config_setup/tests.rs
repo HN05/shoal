@@ -34,7 +34,7 @@ fn the_subject_names_the_global_config() {
     );
 }
 
-fn place(here: bool, interactive: bool) -> ChatPlace {
+fn place(here: bool, on_terminal: bool) -> ChatPlace {
     let args = ConfigSetupArgs {
         here,
         agent: None,
@@ -46,7 +46,7 @@ fn place(here: bool, interactive: bool) -> ChatPlace {
         args: Vec::new(),
     };
     let agent = Agent::unchecked("claude".into());
-    options(args, agent, Default::default(), interactive).place
+    options(args, agent, Default::default(), on_terminal).place
 }
 
 #[test]

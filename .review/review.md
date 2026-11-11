@@ -418,10 +418,9 @@ instead of the PR delivery guidance below.
   or forwarded arguments stay in the background, tabs waiting for input receive
   focus, and explicit focus settings override either default. `--focus` also
   starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
-  JSON, help, noninteractive and `--here` calls run in place, except that a
-  scoped caller's agent, and an agent of `start` or `resume --now` from a caller
-  without a terminal or with `--json`, unless `start --focus` keeps one on a terminal
-  beside it, start detached through the daemon unless `start --here` or
+  Help calls, calls without a terminal and `--here` calls run in place, except
+  that a scoped caller's agent, and an agent of `start` or `resume --now` from a
+  caller without a terminal, start detached through the daemon unless `start --here` or
   `resume --focus` keeps an unscoped caller's in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
@@ -615,7 +614,9 @@ configured command for another agent, plus proven child
   and blocking PIDs or inspection error instead of offering to ignore uncertainty.
   CLI styles, enum `Display` formatting and transient progress belong at presentation
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
-  redirected stderr and dumb terminals.
+  redirected stderr and dumb terminals. `--json` changes only the output and
+  turns off prompts and pickers; flag any other decision it changes, such as
+  where an agent starts, which follows whether the call has a terminal.
 - Client response extraction reports expected and received variants and preserves
   typed daemon error codes and messages without changing the wire format; unfamiliar
   codes survive verbatim for version compatibility.

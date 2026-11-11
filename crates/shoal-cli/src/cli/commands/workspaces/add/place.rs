@@ -1,7 +1,7 @@
-//! Placing a noninteractive start's agent once its workspace is set up,
-//! from that workspace's own settings: queued for the daemon, or, for an
-//! agent that runs its own way and so leaves this process at once, started
-//! here when the agent limits admit it.
+//! Placing the agent of a start without a terminal once its workspace is
+//! set up, from that workspace's own settings: queued for the daemon, or,
+//! for an agent that runs its own way and so leaves this process at once,
+//! started here when the agent limits admit it.
 use std::ffi::OsString;
 
 use anyhow::Result;

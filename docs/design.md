@@ -1416,8 +1416,7 @@ so daemons sharing zmx can distinguish their sessions. A detached session that S
 starts labels itself once its workspace exists. A start queued from a zmx
 session joins no group, so it goes to `terminal.default_host`. Launches inside a zmx session, or in
 a Herdr pane with the integration enabled, run in place, since Herdr reads agent
-state from the pane's process. A caller without a terminal, or with `--json`
-unless `start --focus` asks a terminal's host to show the agent, such as an
+state from the pane's process. A caller without a terminal, such as an
 orchestrating agent's tool call, starts the agents of `start` and `resume --now`
 detached through the daemon, as a scoped caller does: run in place, the agent
 would hold the call until it exits and die with an interrupt of the caller.
@@ -1597,8 +1596,10 @@ lifecycle, fork-point changes, active work and leases; the daemon looks PRs up o
 request and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values
 stay unstyled. The output format resolves once after parsing, from `--json` or
-`--text`, then `SHOAL_OUTPUT`, then text, so results, errors and prompts agree;
-internal commands name their format, and hooks run without the setting.
+`--text`, then `SHOAL_OUTPUT`, then text, so results, errors and prompts agree.
+The format changes only the output, turning prompts and pickers off with it;
+where and how a command does its work follows whether it has a terminal.
+Internal commands name their format, and hooks run without the setting.
 Agent launches set `SHOAL_OUTPUT=json` unless the launcher carries a setting,
 rather than guessing from the workspace or terminal: people use workspaces
 too, agents sometimes have terminals, and piped human output keeps its meaning. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
