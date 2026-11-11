@@ -852,6 +852,19 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
             .unwrap()
     };
     happy_launch(&start(&["--branch", "placed"]));
+    // As does a start of an existing workspace's agent.
+    fixture.add("existing");
+    let existing = fixture
+        .command()
+        .args(["--json", "start", "--in", &fixture.id("existing")])
+        .args(["--agent", "happy-codex"])
+        .env("HAPPY_RECORD", &record)
+        .env("PATH", &path)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    happy_launch(&existing);
+    fixture.ok(&["stop", &fixture.id("existing")]);
     fixture.add("finished");
     fixture.ok(&["done", &fixture.id("finished")]);
     happy_launch(&start(&[

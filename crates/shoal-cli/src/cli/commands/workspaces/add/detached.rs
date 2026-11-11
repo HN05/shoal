@@ -58,7 +58,9 @@ pub(super) async fn add_detached(
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     }
     let blockers = launch_blockers(ctx, &target, issue.as_ref(), options.now, blockers).await?;
-    if plan.workspace.is_some() {
+    // A scoped caller may not reopen a recorded workspace, so its agent there
+    // queues directly; the user's is placed as a new workspace's is.
+    if plan.workspace.is_some() && crate::env::is_scoped() {
         return queue_in_existing(ctx, &target, plan, issue.as_ref(), (options.now, blockers))
             .await;
     }
