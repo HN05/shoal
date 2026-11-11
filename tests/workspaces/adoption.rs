@@ -35,7 +35,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     );
     let ordinary = fixture.add("ordinary");
     assert!(Path::new(ordinary["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
-    fixture.ok(&["rm", "custom-topic", "--yes"]);
+    fixture.ok(&["rm", "--wait", "custom-topic", "--yes"]);
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
@@ -305,7 +305,7 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
         .parent()
         .unwrap()
         .to_owned();
-    fixture.ok(&["rm", output["name"].as_str().unwrap(), "--yes"]);
+    fixture.ok(&["rm", "--wait", output["name"].as_str().unwrap(), "--yes"]);
     let source = add("copy/second", "second worktree");
     fs::remove_dir_all(&directory).unwrap();
     std::os::unix::fs::symlink(&source, &directory).unwrap();

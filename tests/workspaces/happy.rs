@@ -182,7 +182,10 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         assert!(text.contains("happy stderr"), "{text}");
         assert!(process_alive(pid));
 
-        fixture.ok(&[operation, &name]);
+        match operation {
+            "rm" => fixture.ok(&[operation, "--wait", &name]),
+            _ => fixture.ok(&[operation, &name]),
+        };
         wait_until("happy to exit", || !process_alive(pid));
         if operation == "stop" {
             assert_eq!(
@@ -190,7 +193,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 serde_json::json!([])
             );
             assert!(log.exists());
-            fixture.ok(&["rm", &name]);
+            fixture.ok(&["rm", "--wait", &name]);
         }
         assert!(
             !log.parent().unwrap().exists(),
@@ -300,7 +303,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
         }
         let pid = launch["pid"].as_u64().unwrap() as u32;
-        fixture.ok(&["rm", &name, "--yes"]);
+        fixture.ok(&["rm", "--wait", &name, "--yes"]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
     }
@@ -465,7 +468,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         );
 
         let pid = launch["pid"].as_u64().unwrap() as u32;
-        fixture.ok(&["rm", &name]);
+        fixture.ok(&["rm", "--wait", &name]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
     }
@@ -496,7 +499,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let recorded = fs::read_to_string(&record).unwrap();
     assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
     let pid = launch["pid"].as_u64().unwrap() as u32;
-    fixture.ok(&["rm", "unseeded"]);
+    fixture.ok(&["rm", "--wait", "unseeded"]);
     wait_until("happy to exit", || !process_alive(pid));
 
     // A seeded session that no launch will ever attach to is deleted again.

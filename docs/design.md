@@ -895,6 +895,11 @@ hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Ownership and removal policy are rechecked after
 all removal hooks, with branch deletion derived from the final inspection.
+A manual removal answers its request once the workspace is reserved and passes
+the checks removal makes before changing anything, and goes on in the
+background, under the gate a daemon update waits for, unless the caller waits
+for it; a later failure retains the workspace and reaches the requesting agent,
+or else the user as a notification. Chat removal stays synchronous.
 Idle cleanup requires unchanged
 HEAD, activity and file metadata; while the timer runs, sweeps compare HEAD and
 activity and check recorded state and directory users, and inspect Git state and

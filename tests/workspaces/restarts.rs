@@ -126,7 +126,7 @@ fn restart_restores_a_chat_in_a_new_place() {
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["restore"], Value::Null, "{chats}");
-    fixture.ok(&["rm", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 
@@ -212,7 +212,7 @@ fn restart_gives_a_chats_agent_permissions() {
     fixture.ok(&["restart", "talk"]);
     wait_until("chat restored a third time", || restored.exists());
     assert_eq!(narrowing(), wider);
-    fixture.ok(&["rm", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 
@@ -414,7 +414,7 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
         assert!(output.status.success(), "{output:?}\n{transcript}");
     });
     wait_until("chat restored", || home.join("chat-restored").exists());
-    fixture.ok(&["rm", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
     drop(agent);
     wait_zmx_sessions_ended(&home);
 }
@@ -478,7 +478,7 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
     let resumed = parent.ok(fixture, &["resume", "talk"]);
     assert_eq!(resumed["chats"][0]["chat"], "talk", "{resumed}");
     wait_until("the parent's restore", || restored.exists());
-    fixture.ok(&["rm", "talk", "--yes"]);
+    fixture.ok(&["rm", "--wait", "talk", "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 

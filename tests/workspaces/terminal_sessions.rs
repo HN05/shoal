@@ -20,7 +20,7 @@ fn removal_and_cleanup_leave_a_session_the_user_opened() -> anyhow::Result<()> {
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
     assert!(sessions.contains("shoal.workspace="), "{sessions}");
     assert!(!sessions.contains("shoal.created="), "{sessions}");
-    fixture.ok(&["rm", "guest", "--yes"]);
+    fixture.ok(&["rm", "--wait", "guest", "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(!zmx_calls(&fixture).iter().any(|call| call[0] == "kill"));
     Ok(())
@@ -89,11 +89,11 @@ fn an_agent_shortcut_replaces_reused_zmx_ownership() -> anyhow::Result<()> {
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
     assert!(sessions.contains(&format!("shoal.workspace={new_id}")));
     assert!(!sessions.contains("shoal.demo="));
-    fixture.ok(&["rm", "old-owner", "--yes"]);
+    fixture.ok(&["rm", "--wait", "old-owner", "--yes"]);
     assert!(!zmx_calls(&fixture).iter().any(|call| call[0] == "kill"));
     assert!(agent.child.try_wait()?.is_none());
     drop(agent);
-    fixture.ok(&["rm", "new-owner", "--yes"]);
+    fixture.ok(&["rm", "--wait", "new-owner", "--yes"]);
     assert!(
         zmx_calls(&fixture)
             .iter()
@@ -293,7 +293,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
     let mut removal = PausedTerminalCall {
         child: original
             .command()
-            .args(["rm", "old-owner", "--yes"])
+            .args(["rm", "--wait", "old-owner", "--yes"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?,
@@ -414,11 +414,17 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
     };
     let export = in_session("sessioned", &["move", "export", "sessioned", "-o", "-"])?;
     assert!(!export.status.success());
-    let removal = in_session("sessioned", &["rm", "sessioned", "other", "--yes"])?;
+    let removal = in_session(
+        "sessioned",
+        &["rm", "--wait", "sessioned", "other", "--yes"],
+    )?;
     assert!(!removal.status.success());
     assert_eq!(fixture.ok(&["list"]).as_array().map(Vec::len), Some(2));
     // Another session goes on with the batch.
-    let removal = in_session("elsewhere", &["rm", "sessioned", "other", "--yes"])?;
+    let removal = in_session(
+        "elsewhere",
+        &["rm", "--wait", "sessioned", "other", "--yes"],
+    )?;
     assert!(removal.status.success(), "{removal:?}");
     Ok(())
 }

@@ -224,7 +224,7 @@ fn workspace_rename_refuses_collisions_and_recovers_git_failure() {
     assert_eq!(fixture.rename("original", "original")["type"], "workspace");
     assert_eq!(fixture.rename("original", "new-name")["type"], "workspace");
     assert_eq!(fixture.rename("new-name", "new/name")["type"], "workspace");
-    fixture.ok(&["rm", "new-name", "--yes"]);
+    fixture.ok(&["rm", "--wait", "new-name", "--yes"]);
     assert!(!path.exists());
     assert!(
         git(
@@ -385,7 +385,7 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
         .unwrap();
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
     drop(db);
-    let removed = fixture.ok(&["rm", "original"]);
+    let removed = fixture.ok(&["rm", "--wait", "original"]);
     assert_eq!(removed["branch_deleted"], false);
     assert!(!fixture.run(&["status", "original"]).status.success());
     assert!(
@@ -423,7 +423,7 @@ fn concurrent_adds_cannot_claim_the_same_name() {
         let first = first.wait_with_output().unwrap();
         assert_ne!(first.status.success(), second.status.success());
         assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
-        fixture.ok(&["rm", workspace_name]);
+        fixture.ok(&["rm", "--wait", workspace_name]);
     }
 }
 
@@ -453,7 +453,7 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
             git(path, &["symbolic-ref", "HEAD"]),
             format!("refs/heads/{branch}\n")
         );
-        assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
+        assert_eq!(fixture.ok(&["rm", "--wait", name])["branch_deleted"], true);
     }
 }
 
@@ -522,5 +522,5 @@ fn interactive_add_preserves_literal_branch_spelling() {
     assert!(output.status.success(), "{transcript}");
     let workspace = &fixture.ok(&["status", "henrik-topic-"])["workspace"];
     assert_eq!(workspace["branch"], "\u{2003}henrik/topic\u{2003}");
-    fixture.ok(&["rm", "henrik-topic-"]);
+    fixture.ok(&["rm", "--wait", "henrik-topic-"]);
 }

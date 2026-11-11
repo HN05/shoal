@@ -10,15 +10,37 @@ use crate::{
     removal::RemovalResult,
 };
 
-/// A removed workspace, and the holds it had.
+/// A removed workspace, or one being removed, and the holds it had.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Removed {
     /// The workspace's name, which a removal of several reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<SpaceName>,
+    /// What the removal did, once it finished.
     #[serde(flatten)]
-    pub removal: RemovalResult,
+    pub removal: Option<RemovalResult>,
+    /// The removal goes on in the background.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<BackgroundRemoval>,
     pub holds: Vec<WorkspaceHold>,
+}
+
+impl Removed {
+    /// The spaces below it the removal took, or takes, first.
+    pub fn children(&self) -> &[SpaceName] {
+        match (&self.removal, &self.background) {
+            (Some(removal), _) => &removal.children,
+            (None, Some(background)) => &background.children,
+            (None, None) => &[],
+        }
+    }
+}
+
+/// A removal that goes on after the command returned.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackgroundRemoval {
+    /// The spaces below it it takes first, each after those below it.
+    pub children: Vec<SpaceName>,
 }
 
 /// The spaces a removal of several removed.

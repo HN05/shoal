@@ -29,7 +29,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
             .unwrap(),
         directory
     );
-    fixture.ok(&["rm", "cloned"]);
+    fixture.ok(&["rm", "--wait", "cloned"]);
     assert!(clone.is_dir());
     // No workspace name can collide with the clone's directory.
     let main = fixture.ok(&["start", &url, "main"]);
@@ -762,7 +762,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
     fixture.ok(&["start", ssh_url, "alias", "--base", "HEAD"]);
-    fixture.ok(&["rm", "alias"]);
+    fixture.ok(&["rm", "--wait", "alias"]);
 }
 
 #[test]

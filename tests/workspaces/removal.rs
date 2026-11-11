@@ -70,7 +70,7 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let workspace = fixture.add("scratch");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
-    fixture.ok(&["rm", "scratch", "--yes"]);
+    fixture.ok(&["rm", "--wait", "scratch", "--yes"]);
     assert!(!path.exists());
     let removed = fixture.ok(&["restore"]);
     assert_eq!(removed[0]["name"], "scratch");
@@ -101,7 +101,7 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
     let fixture = Fixture::new();
     fixture.add("scratch");
-    fixture.ok(&["rm", "scratch", "--yes"]);
+    fixture.ok(&["rm", "--wait", "scratch", "--yes"]);
     // Copies of the record with long checkpoint names add up to more than
     // the 64 KiB frame.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
@@ -137,8 +137,8 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     fixture.add("kept");
     let path = Path::new(picked["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
-    fixture.ok(&["rm", "picked", "--yes"]);
-    fixture.ok(&["rm", "kept", "--yes"]);
+    fixture.ok(&["rm", "--wait", "picked", "--yes"]);
+    fixture.ok(&["rm", "--wait", "kept", "--yes"]);
 
     let (output, rows) = fixture.pick(&["restore"], picked["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
@@ -209,7 +209,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
         "executions did not start"
     );
 
-    fixture.ok(&["rm", "removed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "removed", "--yes"]);
     agent.wait_with_output().unwrap();
     command.wait_with_output().unwrap();
     assert!(!path.exists());
@@ -246,7 +246,7 @@ fn removal_accepts_switched_branch_but_refuses_replaced_repository() {
     let workspace = fixture.add("switched");
     let path = Path::new(workspace["path"].as_str().unwrap());
     git(path, &["switch", "-c", "my-branch"]);
-    fixture.ok(&["rm", "switched"]);
+    fixture.ok(&["rm", "--wait", "switched"]);
     assert_eq!(
         git(
             &fixture.repo,
@@ -266,7 +266,7 @@ fn removal_accepts_switched_branch_but_refuses_replaced_repository() {
     fs::create_dir(path).unwrap();
     git(path, &["init", "-b", "main"]);
     fs::write(path.join("precious"), "keep me").unwrap();
-    let output = fixture.run(&["rm", "replaced"]);
+    let output = fixture.run(&["rm", "--wait", "replaced"]);
     assert!(!output.status.success());
     assert_eq!(
         fs::read_to_string(path.join("precious")).unwrap(),
@@ -275,18 +275,36 @@ fn removal_accepts_switched_branch_but_refuses_replaced_repository() {
 }
 
 #[test]
+fn removal_goes_on_in_the_background_once_its_checks_pass() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("dirty");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    fs::write(path.join("untracked"), "keep me").unwrap();
+    assert!(!fixture.run(&["rm", "dirty"]).status.success());
+    assert_eq!(
+        fixture.ok(&["status", "dirty"])["workspace"]["state"],
+        "ready"
+    );
+    let started = fixture.ok(&["rm", "dirty", "--yes"]);
+    assert_eq!(started["background"]["children"], serde_json::json!([]));
+    assert!(started.get("removed").is_none(), "{started}");
+    wait_removed(&fixture, "dirty");
+    assert!(!path.exists());
+}
+
+#[test]
 fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
     let fixture = Fixture::new();
     let workspace = fixture.add("dirty");
     let file = Path::new(workspace["path"].as_str().unwrap()).join("untracked");
     fs::write(&file, "keep me").unwrap();
-    assert!(!fixture.run(&["rm", "dirty"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "dirty"]).status.success());
     assert_eq!(fs::read_to_string(file).unwrap(), "keep me");
     assert_eq!(
         fixture.ok(&["status", "dirty"])["workspace"]["state"],
         "ready"
     );
-    fixture.ok(&["rm", "dirty", "--yes"]);
+    fixture.ok(&["rm", "--wait", "dirty", "--yes"]);
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert!(
         !fixture
@@ -304,7 +322,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
         fixture.ok(&["status", "broken"])["workspace"]["state"],
         "failed"
     );
-    fixture.ok(&["rm", "broken"]);
+    fixture.ok(&["rm", "--wait", "broken"]);
 }
 
 #[test]
@@ -327,7 +345,10 @@ fn removal_keeps_an_unpushed_branch_without_asking_and_ignores_external_processe
             "unpushed",
         ],
     );
-    assert_eq!(fixture.ok(&["rm", "unpushed"])["branch_deleted"], false);
+    assert_eq!(
+        fixture.ok(&["rm", "--wait", "unpushed"])["branch_deleted"],
+        false
+    );
     git(
         &fixture.repo,
         &[
@@ -344,7 +365,7 @@ fn removal_keeps_an_unpushed_branch_without_asking_and_ignores_external_processe
         .current_dir(path)
         .spawn()
         .unwrap();
-    let output = fixture.run(&["rm", "external"]);
+    let output = fixture.run(&["rm", "--wait", "external"]);
     let _ = process.kill();
     let _ = process.wait();
     assert!(
@@ -361,7 +382,7 @@ fn kept_branches_are_listed_and_deleted_on_request() {
     for name in ["first", "second", "third"] {
         let workspace = fixture.add(name);
         commit_file(Path::new(workspace["path"].as_str().unwrap()), name, name);
-        assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], false);
+        assert_eq!(fixture.ok(&["rm", "--wait", name])["branch_deleted"], false);
     }
     let idle = fixture.add("idle");
     let names = |report: &Value| -> Vec<String> {
@@ -454,7 +475,10 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
     };
     let same = fixture.add("same-tree");
     commit(Path::new(same["path"].as_str().unwrap()));
-    assert_eq!(fixture.ok(&["rm", "same-tree"])["branch_deleted"], true);
+    assert_eq!(
+        fixture.ok(&["rm", "--wait", "same-tree"])["branch_deleted"],
+        true
+    );
 
     let pushed = fixture.add("pushed");
     let path = Path::new(pushed["path"].as_str().unwrap());
@@ -484,7 +508,10 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
             "refs/remotes/origin/main",
         ],
     );
-    assert_eq!(fixture.ok(&["rm", "pushed"])["branch_deleted"], true);
+    assert_eq!(
+        fixture.ok(&["rm", "--wait", "pushed"])["branch_deleted"],
+        true
+    );
 
     // The fake remote above models pushed history, not a fetchable upstream.
     let divergent = fixture.ok(&[
@@ -497,7 +524,10 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
     let path = Path::new(divergent["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "unmerged work").unwrap();
     commit(path);
-    assert_eq!(fixture.ok(&["rm", "divergent"])["branch_deleted"], false);
+    assert_eq!(
+        fixture.ok(&["rm", "--wait", "divergent"])["branch_deleted"],
+        false
+    );
     assert!(!path.exists());
 }
 
@@ -518,20 +548,24 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let again = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(!again.status.success(), "{again:?}");
     for name in ["parent", "other"] {
-        let output = scoped_command(&fixture, "parent", &["rm", name, "--yes"]);
+        let output = scoped_command(&fixture, "parent", &["rm", "--wait", name, "--yes"]);
         assert!(!output.status.success(), "{name}: {output:?}");
     }
     // A held child is the user's: a batch naming it removes none.
     let held = scoped_command(&fixture, "parent", &["split", "held"]);
     assert!(held.status.success(), "{held:?}");
     fixture.ok(&["acquire", "hold", "--workspace", "held", "--name", "review"]);
-    let refused = scoped_command(&fixture, "parent", &["rm", "child", "held", "--yes"]);
+    let refused = scoped_command(
+        &fixture,
+        "parent",
+        &["rm", "--wait", "child", "held", "--yes"],
+    );
     assert!(!refused.status.success(), "{refused:?}");
     assert_eq!(
         fixture.ok(&["status", "child"])["workspace"]["state"],
         "preparing"
     );
-    let removed = scoped_command(&fixture, "parent", &["rm", "child", "--yes"]);
+    let removed = scoped_command(&fixture, "parent", &["rm", "--wait", "child", "--yes"]);
     assert!(removed.status.success(), "{removed:?}");
     let again = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(again.status.success(), "{again:?}");
@@ -551,7 +585,7 @@ fn removal_confirmation_says_when_the_checkpoint_cannot_keep_the_files() {
     let workspace = fixture.add("large");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("uncommitted"), "too large to archive").unwrap();
-    let (no, prompt) = fixture.interactive(&["rm", "large"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "large"], "n\n");
     assert!(!no.status.success());
     assert!(prompt.contains("cannot be restored"), "{prompt}");
     assert!(path.join("uncommitted").exists());
@@ -564,15 +598,15 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     let workspace = fixture.add("worker");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("uncommitted"), "keep until approved").unwrap();
-    let piped = fixture.run(&["rm", "worker"]);
+    let piped = fixture.run(&["rm", "--wait", "worker"]);
     assert!(!piped.status.success());
-    let (no, prompt) = fixture.interactive(&["rm", "worker"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "worker"], "n\n");
     assert!(!no.status.success());
     // Changes small enough for the checkpoint can be restored.
     assert!(!prompt.contains("cannot be restored"), "{prompt}");
     assert!(path.join("uncommitted").exists());
     // An answer that is neither is asked again.
-    let (yes, prompt) = fixture.interactive(&["rm", "worker"], "maybe\ny\n");
+    let (yes, prompt) = fixture.interactive(&["rm", "--wait", "worker"], "maybe\ny\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!path.exists());
     // The branch had no commits of its own.
@@ -603,7 +637,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     for index in [0, 2] {
         fs::write(path(index).join("uncommitted"), "unsaved").unwrap();
     }
-    let refused = fixture.run(&["rm", "first", "missing", "--yes"]);
+    let refused = fixture.run(&["rm", "--wait", "first", "missing", "--yes"]);
     assert!(!refused.status.success());
     assert!(path(0).exists());
     // So does one in another lifecycle operation, which the check accepts.
@@ -616,7 +650,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
         .unwrap();
     };
     set_state("updating");
-    let refused = fixture.run(&["rm", "first", "second", "--yes"]);
+    let refused = fixture.run(&["rm", "--wait", "first", "second", "--yes"]);
     assert!(!refused.status.success());
     assert!(path(0).exists());
     set_state("ready");
@@ -630,7 +664,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     fs::write(state.join("closing-herdr-w1:p7"), "").unwrap();
     let refused = fixture
         .command()
-        .args(["rm", "first", "second", "--yes"])
+        .args(["rm", "--wait", "first", "second", "--yes"])
         .env("HERDR_ENV", "1")
         .env("HERDR_PANE_ID", "w1:p7")
         .output()
@@ -639,7 +673,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!(path(0).exists());
     fs::remove_file(state.join("closing-herdr-w1:p7")).unwrap();
 
-    let (no, prompt) = fixture.interactive(&["rm", "first", "second", "third"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "first", "second", "third"], "n\n");
     let prompt = prompt.replace("\r\n", "\n");
     assert!(!no.status.success(), "{prompt}");
     assert_eq!(prompt.matches("Are you sure? [y/N]").count(), 1, "{prompt}");
@@ -649,7 +683,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!((0..3).all(|index| path(index).exists()));
 
     let (picked, prompt) = fixture.pick(
-        &["rm"],
+        &["rm", "--wait"],
         &format!(
             "{} {}",
             workspaces[0]["id"].as_str().unwrap(),
@@ -669,7 +703,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     .unwrap();
     // A workspace named by its name and its ID is removed once.
     let third = workspaces[2]["id"].as_str().unwrap();
-    let removed = fixture.ok(&["rm", "third", third, "fourth", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", "third", third, "fourth", "--yes"]);
     let removed_names: Vec<&str> = removed["removed"]
         .as_array()
         .unwrap()
@@ -716,7 +750,7 @@ fn removal_confirmation_lists_git_changes_before_asking() {
     git(path, &["config", "status.relativePaths", "true"]);
     git(path, &["config", "status.showUntrackedFiles", "no"]);
 
-    let (no, prompt) = fixture.interactive(&["rm", "preview"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "preview"], "n\n");
     assert!(!no.status.success(), "{prompt}");
     let confirmation = prompt.find("Are you sure? [y/N]").unwrap();
     for entry in [
@@ -736,7 +770,7 @@ fn removal_confirmation_lists_git_changes_before_asking() {
         "changed\n"
     );
     assert!(path.join("new directory/child").exists());
-    let removed = fixture.run(&["rm", "preview", "--yes"]);
+    let removed = fixture.run(&["rm", "--wait", "preview", "--yes"]);
     assert!(removed.status.success());
     assert!(!path.exists());
 }
@@ -754,16 +788,16 @@ fn removal_preview_limits_large_untracked_directories() {
         )
         .unwrap();
     }
-    let (no, prompt) = fixture.interactive(&["rm", "large-preview"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "large-preview"], "n\n");
     assert!(!no.status.success(), "{prompt}");
     assert_eq!(prompt.matches("?? untracked/").count(), 50, "{prompt}");
     assert!(prompt.contains("450 more"), "{prompt}");
     assert_eq!(fs::read_dir(path.join("untracked")).unwrap().count(), 500);
-    let piped = fixture.run(&["rm", "large-preview"]);
+    let piped = fixture.run(&["rm", "--wait", "large-preview"]);
     assert!(!piped.status.success());
     let error = String::from_utf8_lossy(&piped.stderr);
     assert!(!error.contains("?? untracked/"), "{error}");
-    fixture.ok(&["rm", "large-preview", "--yes"]);
+    fixture.ok(&["rm", "--wait", "large-preview", "--yes"]);
     assert!(!path.exists());
 }
 
@@ -834,8 +868,8 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
                 "main",
             ],
         ),
-        ("--is-ancestor", vec!["rm", "worker", "--yes"]),
-        ("for-each-ref", vec!["rm", "worker", "--yes"]),
+        ("--is-ancestor", vec!["rm", "--wait", "worker", "--yes"]),
+        ("for-each-ref", vec!["rm", "--wait", "worker", "--yes"]),
     ] {
         fs::write(fixture.root.path().join("git-failure"), failure).unwrap();
         let output = fixture.run(&args);
@@ -933,10 +967,10 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         fixture.ok(&["leases", "hold", "--workspace", "held"]),
         expected
     );
-    let (no, prompt) = fixture.interactive(&["rm", "held"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "held"], "n\n");
     assert!(!no.status.success());
     assert!(prompt.contains("app-thread"), "{prompt}");
-    let removed = fixture.ok(&["rm", "held", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", "held", "--yes"]);
     assert_eq!(removed["holds"], expected);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     assert_eq!(
@@ -979,20 +1013,20 @@ fn removing_a_parent_lists_and_removes_its_children() {
     let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
     let child_path = Path::new(child["path"].as_str().unwrap()).to_owned();
     // A clean parent still asks, naming the children it takes.
-    let piped = fixture.run(&["rm", "parent"]);
+    let piped = fixture.run(&["rm", "--wait", "parent"]);
     assert!(!piped.status.success());
-    let (no, prompt) = fixture.interactive(&["rm", "parent"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "parent"], "n\n");
     assert!(!no.status.success());
     assert!(prompt.contains("child"), "{prompt}");
     assert!(child_path.exists());
-    let (yes, prompt) = fixture.interactive(&["rm", "parent"], "y\n");
+    let (yes, prompt) = fixture.interactive(&["rm", "--wait", "parent"], "y\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!child_path.exists());
     assert!(!fixture.run(&["status", "child"]).status.success());
 
     fixture.add("parent");
     fixture.ok(&["split", "child", "--workspace", "parent"]);
-    let removed = fixture.ok(&["rm", "parent", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", "parent", "--yes"]);
     assert_eq!(
         removed["children"],
         serde_json::json!(["child"]),
@@ -1032,7 +1066,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     fs::write(child_path.join("untracked"), "draft\n").unwrap();
 
     // No confirmation: nothing in it is worth keeping.
-    let removed = fixture.ok(&["rm", "scratch"]);
+    let removed = fixture.ok(&["rm", "--wait", "scratch"]);
     assert_eq!(removed["branch_deleted"], true, "{removed}");
     assert!(!path.exists() && !child_path.exists());
     assert!(git(&fixture.repo, &["branch", "--list", "scratch"]).is_empty());

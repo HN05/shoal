@@ -100,7 +100,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
             .stdout,
         b"{diff_base}"
     );
-    fixture.ok(&["rm", "changes", "--yes"]);
+    fixture.ok(&["rm", "--wait", "changes", "--yes"]);
 }
 
 #[test]
@@ -252,7 +252,10 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
         false
     );
     // Merged work is on the default branch, so its branch goes.
-    assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
+    assert_eq!(
+        fixture.ok(&["rm", "--wait", "worker"])["branch_deleted"],
+        true
+    );
 }
 
 #[test]
@@ -313,7 +316,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
 
     // A workspace cleanup removed comes back before its merge is undone.
     fixture.ok(&["merge", "--no-push", "worker"]);
-    fixture.ok(&["rm", "worker", "--yes"]);
+    fixture.ok(&["rm", "--wait", "worker", "--yes"]);
     let removed = fixture.run(&["unmerge", "worker"]);
     assert!(!removed.status.success());
     assert!(

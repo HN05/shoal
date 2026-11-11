@@ -1571,7 +1571,7 @@ fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
             fixture.ok(&["acquire", "resource", "signing", "--workspace", "hook"]);
         }
         // The final inspection sees the hook's commit, which only the branch has.
-        let removal = fixture.ok(&["rm", "hook", "--yes"]);
+        let removal = fixture.ok(&["rm", "--wait", "hook", "--yes"]);
         assert_eq!(removal["branch_deleted"], false);
         assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
         let branch = workspace["branch"].as_str().unwrap();
@@ -2319,7 +2319,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
 
     // Adding the PR runs its setup hooks once; reviewing it reopens the
     // workspace without running them again.
-    fixture.ok(&["rm", "pr-8", "--yes"]);
+    fixture.ok(&["rm", "--wait", "pr-8", "--yes"]);
     let local = fixture.root.path().join("local.toml");
     let hook = fixture.root.path().join("post-setup.sh");
     install_test_script(&hook, "#!/bin/sh\necho ran >> \"$HOME/post-setup-ran\"\n");

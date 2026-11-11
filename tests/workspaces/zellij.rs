@@ -561,7 +561,7 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     // Agents outlive the client, and the tab closes without one.
     zellij.detach();
     assert_eq!(executions(&fixture, "placed"), 2);
-    fixture.ok(&["rm", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
     wait_until("the tab Shoal opened to close", || {
         !zellij.tabs().contains(&"placed".to_owned())
     });
@@ -585,7 +585,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
         zellij.panes("caller").len() == 2
     });
 
-    fixture.ok(&["rm", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
     wait_until("the split Shoal opened to close", || {
         zellij.panes("caller").len() == 1
     });
@@ -628,7 +628,7 @@ fn removal_leaves_a_pane_recorded_on_an_earlier_server() {
             "owned": true, "data": {"socket_dir": zellij.sockets.path()}, "instance": "1:1"},
     }}));
     assert!(recorded.get("error").is_none(), "{recorded}");
-    fixture.ok(&["rm", "earlier", "--yes"]);
+    fixture.ok(&["rm", "--wait", "earlier", "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(zellij.pane_open("caller", USERS));
 }
@@ -659,7 +659,7 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
         wait_for_agent(&fixture, "outside");
         assert!(zellij.sessions().contains(&"outside".to_owned()));
         assert_eq!(sessions(&fixture, "outside"), ["outside"]);
-        fixture.ok(&["rm", "outside", "--yes"]);
+        fixture.ok(&["rm", "--wait", "outside", "--yes"]);
         wait_until("the session Shoal opened to end", || {
             !zellij.sessions().contains(&"outside".to_owned())
         });

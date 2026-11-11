@@ -465,7 +465,9 @@ shoal move export <workspace> --yes | shoal move import --resume
 ```
 
 Removing a space removes the spaces below it first, held ones included, and
-asks what to do with unmerged work. A checkpoint keeps HEAD and unsaved files;
+asks what to do with unmerged work. `rm` returns once its checks pass and
+removes a workspace in the background; a later failure arrives as a message,
+and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
 Shoal also takes one when an agent exits or is stopped. `restore` reopens
 a removed workspace, or lists an existing one's checkpoints, and with a number
 returns to one after keeping the current state in a new checkpoint; it refuses

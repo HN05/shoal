@@ -205,7 +205,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
     wait_until("the user's command to run", || {
         executions(&fixture, "placed") == 2
     });
-    fixture.ok(&["rm", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
     wait_until("the window Shoal opened to close", || {
         !tmux.windows().contains(&"placed".to_owned())
     });
@@ -237,7 +237,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
     assert_eq!(tmux.windows(), windows);
     assert_eq!(tmux.panes().len(), 2);
 
-    fixture.ok(&["rm", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
     wait_until("the split Shoal opened to close", || {
         tmux.panes().len() == 1
     });
@@ -286,13 +286,13 @@ fn removal_closes_a_recorded_pane_only_on_the_server_that_created_it() {
     // A record from before the server restarted names another pane now
     // under the same ID.
     record("earlier", &users, "1:1");
-    fixture.ok(&["rm", "earlier", "--yes"]);
+    fixture.ok(&["rm", "--wait", "earlier", "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(tmux.pane_open(&users));
 
     let opened = tmux.lines(&["split-window", "-d", "-P", "-F", "#{pane_id}"])[0].clone();
     record("current", &opened, &instance);
-    fixture.ok(&["rm", "current", "--yes"]);
+    fixture.ok(&["rm", "--wait", "current", "--yes"]);
     wait_until("the recorded pane to close", || !tmux.pane_open(&opened));
     assert!(tmux.pane_open(&users));
 }

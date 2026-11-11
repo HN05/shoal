@@ -204,7 +204,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     assert_eq!(queued["state"], "queued", "{queued}");
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
-    fixture.ok(&["rm", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", "first", "--yes"]);
     // The daemon's worker opens the tab on the session the caller chose.
     let sessions = fixture.root.path().join("herdr-list-sessions");
     wait_until("the queued start to look up its workspace", || {

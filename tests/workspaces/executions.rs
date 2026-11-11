@@ -231,7 +231,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
         fixture.ok(&["status", "execute"])["executions"],
         serde_json::json!([])
     );
-    fixture.ok(&["rm", "execute"]);
+    fixture.ok(&["rm", "--wait", "execute"]);
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn configured_environment_renders_for_tracked_commands() {
         format!("http://localhost:{}", port["port"])
     );
     assert_eq!(exported["GOCACHE"], cache);
-    fixture.ok(&["rm", "env-values"]);
+    fixture.ok(&["rm", "--wait", "env-values"]);
     // The repository keeps its caches until cleanup empties them.
     assert!(Path::new(cache).join("entry").exists());
     let report = fixture.ok(&["cleanup", "caches"]);
@@ -343,13 +343,14 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .command()
             .current_dir(workspace["path"].as_str().unwrap())
             .args(["--json", operation])
+            .args((operation == "rm").then_some("--wait"))
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         let output = child.wait_with_output().unwrap();
         assert!(!output.status.success());
         if operation == "stop" {
-            fixture.ok(&["rm", "running"]);
+            fixture.ok(&["rm", "--wait", "running"]);
         }
     }
 }

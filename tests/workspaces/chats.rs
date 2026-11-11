@@ -837,7 +837,7 @@ fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Resu
     assert!(sessions.contains("user.label=keep"), "{sessions}");
     assert!(!sessions.contains("shoal.workspace="), "{sessions}");
     assert!(!sessions.contains("shoal.demo="), "{sessions}");
-    fixture.ok(&["rm", "old-owner", "--yes"]);
+    fixture.ok(&["rm", "--wait", "old-owner", "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(
         !zmx_calls(&fixture)
@@ -934,7 +934,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "chat-worker",
     ]);
     assert_eq!(reopened["parent"], Value::Null);
-    let removed = fixture.ok(&["rm", CHAT_NAME]);
+    let removed = fixture.ok(&["rm", "--wait", CHAT_NAME]);
     assert_eq!(removed["chat"]["id"], *chat, "{removed}");
     assert!(removed["children"].is_null(), "{removed}");
     assert_eq!(fixture.ok(&["list"])[0]["name"], "chat-worker");
@@ -968,12 +968,12 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     assert_eq!(response["type"], "chat", "{response}");
 
     // Removing the chat asks first, naming what it takes.
-    let (output, prompt) = fixture.interactive(&["rm", "planning"], "n\n");
+    let (output, prompt) = fixture.interactive(&["rm", "--wait", "planning"], "n\n");
     assert!(!output.status.success(), "{prompt}");
     assert!(prompt.contains("opened, reading, below"), "{prompt}");
 
     // Naming the resident chat too removes it once, with the chat above it.
-    let removed = fixture.ok(&["rm", "planning", "reading", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", "planning", "reading", "--yes"]);
     assert_eq!(removed["failed"], serde_json::json!([]), "{removed}");
     let chats = removed["chats"].as_array().unwrap();
     assert_eq!(chats.len(), 1, "{removed}");
@@ -1135,7 +1135,7 @@ run alerts alerts
 run repo repo add "$HOME"
 run outside messages send --space outside hello
 run takeover start "$PWD" --existing outside
-run remove rm below --yes
+run remove rm below --yes --wait
 "#,
             support::shoal_binary()
         ),
@@ -1422,7 +1422,7 @@ fn any_space_opens_any_kind_of_child() {
     assert_eq!(parent(&chat("nested")).as_deref(), Some("sub"), "{chats}");
     assert_eq!(chat("nested")["parent"]["kind"], "chat");
     // Removing the workspace takes every space below it, deepest first.
-    let removed = fixture.ok(&["rm", "parent", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", "parent", "--yes"]);
     let children: Vec<_> = (removed["children"].as_array().unwrap().iter())
         .map(|name| name.as_str().unwrap().to_owned())
         .collect();
@@ -1516,7 +1516,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     fs::write(home.join("release"), "").unwrap();
     assert!(worker.wait().unwrap().success());
     // Removing the top workspace takes the chat and the workspace below it.
-    let removed = fixture.ok(&["rm", "top", "--yes"]);
+    let removed = fixture.ok(&["rm", "--wait", "top", "--yes"]);
     assert_eq!(
         removed["children"],
         serde_json::json!(["deep", "middle"]),
@@ -1692,10 +1692,10 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     );
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
 
-    let (no, prompt) = fixture.interactive(&["rm", "worker"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", "worker"], "n\n");
     assert!(!no.status.success());
     assert!(prompt.contains("worker-chat"), "{prompt}");
-    let removed = fixture.run(&["rm", "worker", "--yes"]);
+    let removed = fixture.run(&["rm", "--wait", "worker", "--yes"]);
     assert!(removed.status.success(), "{removed:?}");
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 }

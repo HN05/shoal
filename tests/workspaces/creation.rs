@@ -18,7 +18,7 @@ fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     );
     fs::create_dir(path.join("ignored")).unwrap();
     fs::write(path.join("ignored/cache"), "disposable").unwrap();
-    fixture.ok(&["rm", "fix-login"]);
+    fixture.ok(&["rm", "--wait", "fix-login"]);
     assert!(!path.exists());
     assert_eq!(
         git(
@@ -67,7 +67,7 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     );
     let report = recovery_report(&fixture, &["reserved", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
-    let removal = fixture.run(&["rm", "reserved", "--yes"]);
+    let removal = fixture.run(&["rm", "--wait", "reserved", "--yes"]);
     assert!(!removal.status.success());
     assert!(reserved.exists());
 }
@@ -388,7 +388,7 @@ fn add_uses_develop_as_the_repository_default() {
     assert_eq!(workspace["base_ref"], "refs/heads/develop");
     assert_eq!(workspace["base_commit"], expected.trim());
     let name = workspace["name"].as_str().unwrap();
-    assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
+    assert_eq!(fixture.ok(&["rm", "--wait", name])["branch_deleted"], true);
 }
 
 #[test]
@@ -928,7 +928,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         "failed"
     );
     assert!(path.join("setup-started").exists());
-    fixture.ok(&["rm", "interrupted", "--yes"]);
+    fixture.ok(&["rm", "--wait", "interrupted", "--yes"]);
     assert!(!path.exists());
 }
 
@@ -1455,7 +1455,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     // A commit of its own keeps the branch when the workspace goes.
     let path = Path::new(created["path"].as_str().unwrap());
     commit_file(path, "work", "work\n");
-    fixture.ok(&["rm", branch, "--yes"]);
+    fixture.ok(&["rm", "--wait", branch, "--yes"]);
     let elsewhere = fixture.root.path().join("elsewhere");
     git(
         &fixture.repo,
@@ -1932,7 +1932,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
         (ran("setup"), ran("post-setup")),
         (String::new(), String::new())
     );
-    fixture.ok(&["rm", "skipped", "--yes"]);
+    fixture.ok(&["rm", "--wait", "skipped", "--yes"]);
     assert_eq!(ran("pre-remove"), "");
 
     // Setup run later clears the mark, so the hooks around it run again.
@@ -1943,7 +1943,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
         (ran("setup"), ran("post-setup")),
         ("later\n".into(), "later\n".into())
     );
-    fixture.ok(&["rm", "later", "--yes"]);
+    fixture.ok(&["rm", "--wait", "later", "--yes"]);
     assert_eq!(ran("pre-remove"), "later\n");
     // With only a post-setup hook, setup run later still clears the mark and
     // runs the hook.

@@ -84,7 +84,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     }
     assert!(complete(&["status", "fi"], fixture.root.path()).contains(&"first".into()));
     // A command taking several workspaces offers each one once.
-    let choices = complete(&["rm", "first", ""], fixture.root.path());
+    let choices = complete(&["rm", "--wait", "first", ""], fixture.root.path());
     assert!(choices.contains(&"second".into()), "{choices:?}");
     assert!(!choices.contains(&"first".into()), "{choices:?}");
     for words in [
@@ -258,8 +258,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         )
         .contains(&"beta".into())
     );
-    fixture.ok(&["rm", "second"]);
-    assert!(!complete(&["rm", ""], cwd).contains(&"second".into()));
+    fixture.ok(&["rm", "--wait", "second"]);
+    assert!(!complete(&["rm", "--wait", ""], cwd).contains(&"second".into()));
     fixture.add("second");
     let scoped = fixture.run(&[
         "run",
@@ -789,7 +789,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     for args in [
         vec!["rename", "Retitled"],
         vec!["attach"],
-        vec!["rm", "--yes"],
+        vec!["rm", "--wait", "--yes"],
     ] {
         if args[0] == "rm" {
             drop(agent.take());
@@ -855,7 +855,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
     for args in [
         &["start"][..],
         &["run", "--", "true"],
-        &["rm"],
+        &["rm", "--wait"],
         &["checkpoint"],
         &["rename"],
         &["stop"],
@@ -921,11 +921,11 @@ test -f untracked
 rm untracked
 mkdir nested
 cd nested
-shoal rm
+shoal rm --wait
 test "$PWD" = "$shoal_repo_dir"
 shoal cd -
 test "${PWD##*/}" = other
-shoal rm
+shoal rm --wait
 test "$PWD" = "$shoal_repo_dir"
 if shoal cd -; then
   exit 1
@@ -1059,7 +1059,7 @@ fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
         );
     }
     assert_eq!(fs::read_to_string(&directive).unwrap(), "");
-    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "--wait", "first"]);
     let removed = cd(Path::new(&second_path), &["cd", "-"]);
     assert!(!removed.status.success());
     assert_eq!(fs::read_to_string(&directive).unwrap(), "");

@@ -88,7 +88,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     );
     let path = Path::new(first["path"].as_str().unwrap());
     fs::write(path.join("dirty"), "keep").unwrap();
-    assert!(!fixture.run(&["rm", "first"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "first"]).status.success());
     assert_eq!(
         fixture.ok(&["leases", "port", "--workspace", "first"])["reserved"]
             .as_array()
@@ -96,7 +96,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
             .len(),
         2
     );
-    fixture.ok(&["rm", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", "first", "--yes"]);
     assert_eq!(
         fixture.ok(&["leases", "port", "--all"])[0]["reserved"],
         serde_json::json!([])
@@ -115,7 +115,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         fixture.ok(&["leases", "port", "--workspace", "second"])["reserved"],
         serde_json::json!([])
     );
-    fixture.ok(&["rm", "second"]);
+    fixture.ok(&["rm", "--wait", "second"]);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
         fixture.ok(&["leases", "port", "--workspace", "ports"]),
         before
     );
-    fixture.ok(&["rm", "ports"]);
+    fixture.ok(&["rm", "--wait", "ports"]);
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn port_range_exhaustion_and_release() -> bool {
         return false;
     };
     assert_eq!(lease["port"], number);
-    fixture.ok(&["rm", "limited"]);
+    fixture.ok(&["rm", "--wait", "limited"]);
     true
 }
 
@@ -678,9 +678,9 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
             .code(),
         Some(2)
     );
-    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "--wait", "first"]);
     fixture.ok(&["acquire", "resource", "signing", "--workspace", "second"]);
-    fixture.ok(&["rm", "third"]);
+    fixture.ok(&["rm", "--wait", "third"]);
     let overviews = fixture.ok(&["leases", "resource", "--all"]);
     let mut device_leases = overviews
         .as_array()
@@ -768,7 +768,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         "retain",
     )
     .unwrap();
-    assert!(!fixture.run(&["rm", "worker"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "worker"]).status.success());
     assert_eq!(
         fixture.ok(&["leases", "resource", "--all"])[0]["leases"]
             .as_array()
@@ -776,7 +776,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
             .len(),
         3
     );
-    fixture.ok(&["rm", "worker", "--yes"]);
+    fixture.ok(&["rm", "--wait", "worker", "--yes"]);
     assert!(
         fixture
             .ok(&["leases", "resource", "--all"])
@@ -1096,7 +1096,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
     let status = fixture.ok(&["leases", "resource", "--workspace", "second"]);
     assert_eq!(status["pools"][0]["resources"][0]["writers"], 1);
     assert_eq!(status["pools"][0]["resources"][0]["read_available"], false);
-    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "--wait", "first"]);
     fixture.ok(&[
         "acquire",
         "resource",
@@ -1351,7 +1351,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
     assert!(waiter.try_wait().unwrap().is_none());
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("unfinished"), "retain").unwrap();
-    assert!(!fixture.run(&["rm", "reader"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "reader"]).status.success());
     assert_eq!(
         fixture.ok(&["leases", "resource", "--workspace", "reader"])["leases"][0],
         lease
@@ -1600,7 +1600,7 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     let before = git(&related, &["status", "--porcelain"]);
     let head = git(&related, &["rev-parse", "HEAD"]);
     let worktrees = git(&related, &["worktree", "list", "--porcelain"]);
-    fixture.ok(&["rm", "consumer", "--yes"]);
+    fixture.ok(&["rm", "--wait", "consumer", "--yes"]);
     assert_eq!(git(&related, &["status", "--porcelain"]), before);
     assert_eq!(git(&related, &["rev-parse", "HEAD"]), head);
     assert_eq!(

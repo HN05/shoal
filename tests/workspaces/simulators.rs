@@ -182,7 +182,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         serde_json::from_slice::<Value>(&listed.stdout).unwrap()["simulators"],
         serde_json::json!([])
     );
-    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "--wait", "first"]);
     assert_eq!(
         fixture.ok(&["leases", "sim", "--all"])["simulators"]
             .as_array()
@@ -190,7 +190,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
             .len(),
         1
     );
-    fixture.ok(&["rm", "second"]);
+    fixture.ok(&["rm", "--wait", "second"]);
     assert_eq!(
         fixture.ok(&["leases", "sim", "--all"])["simulators"],
         serde_json::json!([])
@@ -210,7 +210,7 @@ fn simulator_leases_journal_acquisition_and_release() {
     fixture.ok(&["release", "sim", "--workspace", "first"]);
     fixture.ok(&["acquire", "sim", "--workspace", "first"]);
     // Removal deletes the leased device, which releases the lease.
-    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "--wait", "first"]);
     let events: Vec<_> = journal(&fixture)
         .into_iter()
         .filter(|event| event["simulator"].is_object())
@@ -275,13 +275,13 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
         Some(2)
     );
     fs::write(fixture.root.path().join("sim-fail"), "delete").unwrap();
-    assert!(!fixture.run(&["rm", "first"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "first"]).status.success());
     assert_eq!(
         fixture.ok(&["leases", "sim", "--workspace", "first"])["simulators"][0]["udid"],
         lease["udid"]
     );
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
-    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "--wait", "first"]);
     assert_eq!(
         fixture.ok(&["leases", "sim", "--all"])["simulators"],
         serde_json::json!([])
@@ -448,7 +448,7 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
     }
     let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
     assert!(!events.contains("external"));
-    fixture.ok(&["rm", "worker", "--yes"]);
+    fixture.ok(&["rm", "--wait", "worker", "--yes"]);
 }
 
 #[test]
@@ -571,8 +571,8 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
         (sims["simulators"].as_array().unwrap().len() == 1).then_some(sims)
     });
     assert_eq!(sims["simulators"][0]["udid"], second["udid"]);
-    fixture.ok(&["rm", "first"]);
-    fixture.ok(&["rm", "second"]);
+    fixture.ok(&["rm", "--wait", "first"]);
+    fixture.ok(&["rm", "--wait", "second"]);
 }
 
 fn set_sim_apps(fixture: &Fixture, udid: &Value, count: usize) {
@@ -695,7 +695,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         serde_json::from_slice::<Value>(&visible.stdout).unwrap(),
         serde_json::json!([])
     );
-    fixture.ok(&["rm", "third"]);
+    fixture.ok(&["rm", "--wait", "third"]);
     assert_eq!(fixture.ok(&["history", "sim", "--all"]), history);
     fixture.daemon.kill();
     fixture.restart();

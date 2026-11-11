@@ -105,7 +105,7 @@ fn execution_scope_limits_management_and_expires() {
         .success()
     );
     for args in [
-        vec!["rm", "worker", "--yes"],
+        vec!["rm", "--wait", "worker", "--yes"],
         vec!["stop", "worker"],
         vec!["status", "other"],
         vec!["run", "--workspace", "other", "--", "true"],
@@ -786,7 +786,7 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
         ],
     ));
     assert_ne!(write["number"], pending["number"]);
-    fixture.ok(&["rm", "agent", "--yes"]);
+    fixture.ok(&["rm", "--wait", "agent", "--yes"]);
     assert!(fixture.ok(&["approvals"]).as_array().unwrap().is_empty());
 }
 
@@ -1225,8 +1225,8 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let below = fixture.ok(&["status", "below"]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
     for args in [
-        vec!["rm", "external", "--yes"],
-        vec!["rm", "other", "--yes"],
+        vec!["rm", "--wait", "external", "--yes"],
+        vec!["rm", "--wait", "other", "--yes"],
         vec!["alerts"],
         vec!["status", "other"],
         vec!["internal", "env"],
@@ -1284,9 +1284,9 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
         "preserve\n",
     )
     .unwrap();
-    assert!(!fixture.run(&["rm", "external"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "external"]).status.success());
     assert!(inspect(second_token).status.success());
-    fixture.ok(&["rm", "external", "--yes"]);
+    fixture.ok(&["rm", "--wait", "external", "--yes"]);
     let removed = inspect(second_token);
     assert!(!removed.status.success());
     // The branch had no commits, so removal deleted it too.

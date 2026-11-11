@@ -5243,7 +5243,7 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
 
     // The remaining proposal belongs to the repository, so it stays when the
     // workspace goes and opens through the repository's checkout.
-    fixture.ok(&["rm", "topic", "--yes"]);
+    fixture.ok(&["rm", "--wait", "topic", "--yes"]);
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["number"].as_str().unwrap().to_owned(), flaky);

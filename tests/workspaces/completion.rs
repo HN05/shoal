@@ -298,7 +298,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
     );
     for args in [
         vec!["setup", "hooked"],
-        vec!["rm", "hooked", "--yes"],
+        vec!["rm", "--wait", "hooked", "--yes"],
         vec!["acquire", "resource", "device", "--workspace", "hooked"],
     ] {
         let output = fixture.run(&args);

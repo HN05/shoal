@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 
 use super::removal::{ensure_batch_removable, leaving};
-use crate::client::output::workspaces::{Removals, Removed};
+use crate::client::output::workspaces::{BackgroundRemoval, Removals, Removed};
 use crate::client::space_names::{self, SpaceName, SpaceSelector};
 use crate::{
     cli::{
@@ -19,6 +19,7 @@ pub(in crate::cli::commands) async fn remove(
     ctx: &Context,
     names: Vec<SpaceSelector>,
     yes: bool,
+    wait: bool,
 ) -> Result<i32> {
     // A number always names a space, never a queued launch.
     if let [SpaceSelector::IdOrName(selector)] = names.as_slice()
@@ -39,9 +40,9 @@ pub(in crate::cli::commands) async fn remove(
         return remove_one_chat(ctx, chat, &spaces).await;
     }
     match <[RemovalCheck; 1]>::try_from(checks) {
-        Ok([check]) if chats.is_empty() => remove_one(ctx, check).await,
-        Ok(check) => remove_each(ctx, &chats, check.into(), &spaces).await,
-        Err(checks) => remove_each(ctx, &chats, checks, &spaces).await,
+        Ok([check]) if chats.is_empty() => remove_one(ctx, check, wait).await,
+        Ok(check) => remove_each(ctx, &chats, check.into(), &spaces, wait).await,
+        Err(checks) => remove_each(ctx, &chats, checks, &spaces, wait).await,
     }
 }
 
@@ -104,21 +105,22 @@ async fn remove_one_chat(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<
     Ok(0)
 }
 
-async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
-    let result = remove_checked(ctx, &check).await?;
-    let message = removal_message("Workspace removed", &result);
-    ctx.emit_styled(Style::Success, &message, removed(result, &check, None))?;
+async fn remove_one(ctx: &Context, check: RemovalCheck, wait: bool) -> Result<i32> {
+    let removed = remove_checked(ctx, &check, None, wait).await?;
+    let message = removal_message("Workspace removed", "Removing workspace", &removed);
+    ctx.emit_styled(Style::Success, &message, removed)?;
     Ok(0)
 }
 
 /// Remove each of the `chats`, then each checked workspace, going on after
-/// one fails. One that a removal before it took with its own is not removed
-/// again.
+/// one fails. One that a chat's removal took, or another named workspace's
+/// takes, with its own is not removed again.
 async fn remove_each(
     ctx: &Context,
     chats: &[Chat],
     checks: Vec<RemovalCheck>,
     spaces: &Spaces,
+    wait: bool,
 ) -> Result<i32> {
     let mut removed_chats = ui::Report::new("remove");
     let mut taken: Vec<SpaceName> = Vec::new();
@@ -136,17 +138,24 @@ async fn remove_each(
         }
     }
     let (chats, failed) = removed_chats.into_parts();
+    // A workspace below another named one goes with it, even while that
+    // removal goes on in the background.
+    let below = checks.iter().flat_map(|check| &check.children);
+    taken.extend(below.map(|child| child.name.clone()));
     let mut report = ui::Report::new("remove");
     for check in checks {
         let name = &check.workspace.name;
         if taken.contains(name) {
             continue;
         }
-        match remove_checked(ctx, &check).await {
-            Ok(result) => {
-                let message = removal_message(&format!("Removed {name}"), &result);
-                taken.extend(result.children.iter().cloned());
-                report.done(ctx, &message, removed(result, &check, Some(name)));
+        match remove_checked(ctx, &check, Some(name), wait).await {
+            Ok(removed) => {
+                let message = removal_message(
+                    &format!("Removed {name}"),
+                    &format!("Removing {name}"),
+                    &removed,
+                );
+                report.done(ctx, &message, removed);
             }
             Err(error) => report.failed(ctx, name, &error),
         }
@@ -161,30 +170,55 @@ async fn remove_each(
     Ok(if chats_failed { 1 } else { code })
 }
 
-/// Remove the workspace `check` inspected, deleting only the unsaved work it
-/// saw: more appearing meanwhile makes the daemon refuse.
-async fn remove_checked(ctx: &Context, check: &RemovalCheck) -> Result<RemovalResult> {
+/// Remove the workspace `check` inspected, which a removal of several
+/// reports by its `name`, or without `wait` start removing it; either
+/// deletes only the unsaved work it saw: more appearing meanwhile makes the
+/// daemon refuse.
+async fn remove_checked(
+    ctx: &Context,
+    check: &RemovalCheck,
+    name: Option<&SpaceName>,
+    wait: bool,
+) -> Result<Removed> {
+    let (removal, background) = match wait {
+        true => (Some(finish_removal(ctx, check).await?), None),
+        false => (None, Some(start_removal(ctx, check).await?)),
+    };
+    Ok(Removed {
+        workspace: name.cloned(),
+        removal,
+        background,
+        holds: check.workspace.holds.clone(),
+    })
+}
+
+/// Remove the workspace `check` inspected, warning of a post-remove hook
+/// that failed.
+async fn finish_removal(ctx: &Context, check: &RemovalCheck) -> Result<RemovalResult> {
     let unsaved = UnsavedWork::confirming(check);
-    let result = leaving(
-        ctx,
-        &check.workspace,
-        crate::client::removal::remove(&ctx.paths, SpaceSelector::id(&check.workspace.id), unsaved),
-    )
-    .await?;
+    let selector = SpaceSelector::id(&check.workspace.id);
+    let removal = crate::client::removal::remove(&ctx.paths, selector, unsaved);
+    let result = leaving(ctx, &check.workspace, removal).await?;
     if let Some(error) = &result.hook_error {
         eprintln!("warning: {error}");
     }
     Ok(result)
 }
 
-/// What JSON reports for a removal: its result and the holds of the
-/// workspace, which a removal of several names.
-fn removed(removal: RemovalResult, check: &RemovalCheck, name: Option<&SpaceName>) -> Removed {
-    Removed {
-        workspace: name.cloned(),
-        removal,
-        holds: check.workspace.holds.clone(),
-    }
+/// Start removing the workspace `check` inspected, which takes the spaces
+/// below it the check listed.
+async fn start_removal(ctx: &Context, check: &RemovalCheck) -> Result<BackgroundRemoval> {
+    let unsaved = UnsavedWork::confirming(check);
+    let selector = SpaceSelector::id(&check.workspace.id);
+    let removal = crate::client::removal::start(&ctx.paths, selector, unsaved);
+    leaving(ctx, &check.workspace, removal).await?;
+    Ok(BackgroundRemoval {
+        children: check
+            .children
+            .iter()
+            .map(|child| child.name.clone())
+            .collect(),
+    })
 }
 
 /// Ask once before removing `chats` that take workspaces or stop an agent,
@@ -301,19 +335,23 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     lines
 }
 
-/// `removed`, such as `Workspace removed`, with the Git branch the removal
-/// kept and the workspaces below it it took.
-fn removal_message(removed: &str, result: &RemovalResult) -> String {
-    let mut message = match &result.branch {
-        Some(branch) if !result.branch_outcome.is_deleted() => {
-            format!("{removed}; kept Git branch {branch}")
-        }
-        _ => removed.into(),
+/// `finished`, such as `Workspace removed`, with the Git branch the removal
+/// kept and the workspaces below it it took, or `started` with those it
+/// takes for one that goes on in the background.
+fn removal_message(finished: &str, started: &str, removed: &Removed) -> String {
+    let (mut message, also) = match &removed.removal {
+        Some(result) => match &result.branch {
+            Some(branch) if !result.branch_outcome.is_deleted() => {
+                (format!("{finished}; kept Git branch {branch}"), "removed")
+            }
+            _ => (finished.to_owned(), "removed"),
+        },
+        None => (started.to_owned(), "removing"),
     };
-    if !result.children.is_empty() {
+    if !removed.children().is_empty() {
         message.push_str(&format!(
-            "; also removed {}",
-            space_names::join(&result.children, ", ")
+            "; also {also} {}",
+            space_names::join(removed.children(), ", ")
         ));
     }
     message

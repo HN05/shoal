@@ -433,7 +433,7 @@ fn local_config_scripts_live_beside_it_and_go_with_the_repository() {
     git(&other_path, &["init", "-b", "main"]);
     let other = fixture.ok(&["repo", "add", other_path.to_str().unwrap()]);
     assert!(fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["toml"].is_null());
-    fixture.ok(&["rm", "scripted", "--yes"]);
+    fixture.ok(&["rm", "--wait", "scripted", "--yes"]);
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!directory.exists());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
@@ -549,7 +549,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     let failed = fixture.ok(&["status", "unknown"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
-    fixture.ok(&["rm", "unknown", "--yes"]);
+    fixture.ok(&["rm", "--wait", "unknown", "--yes"]);
 }
 
 #[test]

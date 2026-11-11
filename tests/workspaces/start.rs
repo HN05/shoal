@@ -905,7 +905,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     )
     .unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
-    fixture.ok(&["rm", "early", "--yes"]);
+    fixture.ok(&["rm", "--wait", "early", "--yes"]);
     fs::write(second_path.join("fail-removal"), "busy").unwrap();
     assert!(
         !fixture
@@ -1267,7 +1267,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             assert!(prompt.contains("Issue context"), "{prompt}");
             fs::remove_file(&agent_args).unwrap();
         }
-        fixture.ok(&["rm", "298-pick-agent", "--yes"]);
+        fixture.ok(&["rm", "--wait", "298-pick-agent", "--yes"]);
     }
 
     // A regular add uses the same picker when no agent was named or configured.
@@ -2348,7 +2348,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(stopped["name"], "fourth", "{stopped}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
 
-    let removed = fixture.ok(&["rm", "second"]);
+    let removed = fixture.ok(&["rm", "--wait", "second"]);
     assert_eq!(removed["name"], "second", "{removed}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 
@@ -2369,15 +2369,15 @@ fn add_queues_agents_past_max_agents_until_removed() {
     wait_until("the focused agent start", || started("focused"));
     fixture.ok(&["stop", "focused"]);
     focused.wait().unwrap();
-    fixture.ok(&["rm", "focused", "--yes"]);
+    fixture.ok(&["rm", "--wait", "focused", "--yes"]);
 
     // A queued agent named like a workspace is removed only by its ID.
     let shared = fixture.ok(&["start", repo, "first", "--here", "--agent", "waiter"]);
     assert_eq!(shared["state"], "queued", "{shared}");
-    let ambiguous = fixture.run(&["rm", "first", "--yes"]);
+    let ambiguous = fixture.run(&["rm", "--wait", "first", "--yes"]);
     assert!(!ambiguous.status.success());
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
-    fixture.ok(&["rm", shared["id"].as_str().unwrap()]);
+    fixture.ok(&["rm", "--wait", shared["id"].as_str().unwrap()]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
@@ -2522,7 +2522,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     // Removal frees the slot, which a stopped agent keeps for its resume.
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
-    fixture.ok(&["rm", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", "first", "--yes"]);
     let recorded = fixture.root.path().join("queued-output");
     wait_until("the queued agent start", || recorded.exists());
     wait_until("the queued agent's record", || {
@@ -2701,7 +2701,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     );
 
     fixture.ok(&["stop", "first"]);
-    fixture.ok(&["rm", "first", "--yes"]);
+    fixture.ok(&["rm", "--wait", "first", "--yes"]);
     wait_until("the second restore", || paths[1].join("restored").exists());
     assert!(!paths[3].join("restored").exists());
     // Stopping everything also cancels the restore still waiting.

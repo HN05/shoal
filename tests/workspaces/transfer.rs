@@ -1029,7 +1029,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
 
     // The workspace's next removal record lists them, so the next restore
     // puts them in place.
-    fixture.ok(&["rm", "unplaced", "--yes"]);
+    fixture.ok(&["rm", "--wait", "unplaced", "--yes"]);
     restore_with_user_files(&fixture, "unplaced");
     assert_eq!(
         fs::read_to_string(project.join("unplaced-session.jsonl")).unwrap(),

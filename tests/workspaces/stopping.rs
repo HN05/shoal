@@ -782,7 +782,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     // The removal record keeps the last session for the restored workspace.
-    fixture.ok(&["rm", "quit", "--yes"]);
+    fixture.ok(&["rm", "--wait", "quit", "--yes"]);
     let removed = fixture.ok(&["restore"]);
     let last = &removed[0]["last_sessions"][0];
     assert_eq!(

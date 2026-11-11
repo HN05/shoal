@@ -240,7 +240,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     wait_until("the user's command to run", || {
         executions(&fixture, "placed") == 2
     });
-    fixture.ok(&["rm", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
     wait_until("the window Shoal opened to close", || {
         !rex.windows(&session).contains(&"placed".to_owned())
     });
@@ -289,7 +289,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     });
     assert_eq!(rex.windows(&session), windows);
 
-    fixture.ok(&["rm", "placed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "placed", "--yes"]);
     wait_until("the split Shoal opened to close", || {
         !rex.blocks(&session).contains(&"placed".to_owned())
     });
@@ -515,7 +515,7 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
     assert!(output.status.success(), "{output:?} {transcript}");
     let zmx_calls = fs::read_to_string(fixture.root.path().join("zmx-calls")).unwrap_or_default();
     assert!(zmx_calls.contains("attach"), "{zmx_calls} {transcript}");
-    fixture.ok(&["rm", "plain", "--yes"]);
+    fixture.ok(&["rm", "--wait", "plain", "--yes"]);
     fixture.ok(&["cleanup"]);
     assert!(rex.block_open(&block));
 }

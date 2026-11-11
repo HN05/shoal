@@ -48,11 +48,17 @@ pub enum LifecycleCommand {
     /// agent. A branch goes too when a remote or the default branch has all its commits;
     /// otherwise it stays. Deleting uncommitted changes or commits on a detached HEAD needs
     /// confirmation, asked once for every space.
+    ///
+    /// A workspace's removal goes on in the background once Shoal has reserved it and checked
+    /// that it can go; a failure after that keeps the workspace and arrives as a notification.
     Rm {
         #[arg(value_name = "SPACE")]
         space: Vec<SpaceSelector>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
+        /// Wait until each workspace is removed, reporting the branches kept.
+        #[arg(long)]
+        wait: bool,
     },
     /// Remove what Shoal left behind: spaces cleanup would remove, kept branches and caches.
     ///

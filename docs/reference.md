@@ -738,6 +738,7 @@ shoal stop fix-login                     # Stop agents and commands until shoal 
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 shoal rm fix-login old-spike             # Remove several, confirming once for all
 shoal rm plan-cache                      # Remove a chat and the spaces below it
+shoal rm fix-login --wait                # Return once it is gone, naming a kept branch
 ```
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,
@@ -3594,6 +3595,16 @@ workspace or chat of the repository, or to no chat without a repository.
 Removing the repository deletes `.tmp`.
 
 ### Remove a workspace
+
+`shoal rm` returns once Shoal has reserved the workspace and checked that it can
+go: a refusal, such as unsaved work it was not told to delete, a hold or another
+operation under way, fails the command and leaves the workspace as it was.
+Stopping its commands, its hooks, the checkpoint and deleting the worktree then go
+on in the background, and `--json` reports `background` with the spaces it takes
+first instead of what it did. A failure from then on keeps the workspace and
+arrives as a `removal_failed` notification, or for an agent's removal as a message
+to that agent, saying why; `shoal rm` tries again. `--wait` returns only once the
+workspace is removed and reports the branch it kept. Removing a chat always waits.
 
 Removal deletes the workspace's branch when a remote-tracking branch or the
 default branch has every one of its commits, including squash and rebase merges

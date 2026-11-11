@@ -457,7 +457,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         if args[1] == "34" {
-            fixture.ok(&["rm", "34-fix-api-timeout", "--yes"]);
+            fixture.ok(&["rm", "--wait", "34-fix-api-timeout", "--yes"]);
             wait_for_herdr_close(&fixture);
         }
     }
@@ -531,7 +531,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         assert!(!fixture.root.path().join("injected").exists());
-        fixture.ok(&["rm", "topic", "--yes"]);
+        fixture.ok(&["rm", "--wait", "topic", "--yes"]);
         wait_for_herdr_close(&fixture);
     }
 }
@@ -761,7 +761,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
         workspace["workspace"]["path"].as_str().unwrap()
     );
     assert_eq!(herdr_changes(&fixture).len(), 3);
-    fixture.ok(&["rm", "herdr-shell", "--yes"]);
+    fixture.ok(&["rm", "--wait", "herdr-shell", "--yes"]);
     wait_for_herdr_close(&fixture);
 }
 
@@ -1055,7 +1055,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     // A server Shoal cannot reach keeps the record for the next sweep.
     let unreachable = fixture.root.path().join("herdr-unreachable");
     fs::write(&unreachable, "").unwrap();
-    fixture.ok(&["rm", "tabbed", "--yes"]);
+    fixture.ok(&["rm", "--wait", "tabbed", "--yes"]);
     assert!(closes(&fixture) >= 1);
     assert!(recorded(&fixture));
     let alerts = fixture.ok(&["alerts"]);

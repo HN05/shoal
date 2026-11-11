@@ -462,7 +462,9 @@ tools such as `agent-browser`, values fetched from your secret store; see
 
 `shoal rm` removes workspaces and chats with their resources and the workspaces
 below them, prompting once, and only before it deletes uncommitted work, takes
-workspaces below a chat or stops a chat's agent. It deletes the branch too unless the branch has commits that are
+workspaces below a chat or stops a chat's agent. It returns once its checks pass
+and removes a workspace in the background, notifying you if that fails; `--wait`
+waits for it. It deletes the branch too unless the branch has commits that are
 on no remote and not on the default branch; Shoal deletes such a kept branch once
 they are, and `shoal cleanup branches` deletes kept branches, several at a time, with
 their commits. `shoal stop` keeps the workspace.

@@ -374,7 +374,7 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
             .len(),
         1
     );
-    fixture.ok(&["rm", "other", "--yes"]);
+    fixture.ok(&["rm", "--wait", "other", "--yes"]);
     assert!(!log.exists());
 
     // A command that cannot run never reports a started demo.

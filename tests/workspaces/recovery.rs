@@ -641,9 +641,19 @@ fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
     );
     let report = recovery_report(&fixture, &["moved", "--repair"]);
     assert!(!report[0]["issues"].as_array().unwrap().is_empty());
-    assert!(!fixture.run(&["rm", "moved", "--yes"]).status.success());
+    assert!(
+        !fixture
+            .run(&["rm", "--wait", "moved", "--yes"])
+            .status
+            .success()
+    );
     assert!(elsewhere.join("tracked").exists());
-    assert!(fixture.run(&["rm", "deleted", "--yes"]).status.success());
+    assert!(
+        fixture
+            .run(&["rm", "--wait", "deleted", "--yes"])
+            .status
+            .success()
+    );
     let names: Vec<_> = fixture
         .ok(&["list"])
         .as_array()
@@ -706,7 +716,12 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
                     .status
                     .success()
             );
-            assert!(!fixture.run(&["rm", name, "--yes"]).status.success());
+            assert!(
+                !fixture
+                    .run(&["rm", "--wait", name, "--yes"])
+                    .status
+                    .success()
+            );
         } else {
             assert_eq!(report[0]["workspace"]["state"], "ready");
             assert_eq!(
@@ -783,7 +798,7 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
     let preview = recovery_report(&fixture, &["original"]);
     assert_eq!(preview[0]["issues"], report[0]["issues"]);
     assert_eq!(preview[0]["issues"].as_array().unwrap().len(), 1);
-    assert!(!fixture.run(&["rm", "original"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "original"]).status.success());
     assert_eq!(fs::read_to_string(moved.join("dirty")).unwrap(), "saved");
     git(
         &fixture.repo,
@@ -809,7 +824,12 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
     }
     let report = recovery_report(&fixture, &["original", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
-    assert!(!fixture.run(&["rm", "original", "--yes"]).status.success());
+    assert!(
+        !fixture
+            .run(&["rm", "--wait", "original", "--yes"])
+            .status
+            .success()
+    );
     assert!(
         !fixture
             .run(&["run", "--workspace", "original", "--", "true"])
@@ -865,7 +885,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
         fixture.ok(&["status", "moved"])["workspace"]["state"],
         "failed"
     );
-    assert!(!fixture.run(&["rm", "moved"]).status.success());
+    assert!(!fixture.run(&["rm", "--wait", "moved"]).status.success());
     assert_eq!(
         fixture
             .ok(&["leases", "port", "--all"])
@@ -895,7 +915,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
         "work",
     );
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
-    let result = fixture.ok(&["rm", "explicit"]);
+    let result = fixture.ok(&["rm", "--wait", "explicit"]);
     assert_eq!(result["branch_deleted"], false);
     assert!(!git(&fixture.repo, &["rev-parse", "refs/heads/explicit"]).is_empty());
 
@@ -915,7 +935,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
         &["worktree", "remove", missing_path.to_str().unwrap()],
     );
     fs::remove_dir_all(missing_path.parent().unwrap()).unwrap();
-    let result = fixture.ok(&["rm", "missing-parent"]);
+    let result = fixture.ok(&["rm", "--wait", "missing-parent"]);
     assert_eq!(result["branch_deleted"], false);
     assert!(!git(&fixture.repo, &["rev-parse", "refs/heads/missing-parent"]).is_empty());
 
@@ -1088,7 +1108,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     wait_until("orphan execution to become unknown", || {
         fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
     });
-    fixture.ok(&["rm", "orphan"]);
+    fixture.ok(&["rm", "--wait", "orphan"]);
     assert_eq!(
         fixture.ok(&["leases", "resource", "--all"]),
         serde_json::json!([])

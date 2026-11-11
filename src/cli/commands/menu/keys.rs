@@ -151,6 +151,7 @@ fn chat_action(action: Action, chat: SpaceSelector) -> Result<Command> {
         Action::Delete => Command::Lifecycle(LifecycleCommand::Rm {
             space: chat.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
+            wait: false,
         }),
         Action::Attach => Command::Sessions(SessionsCommand::Attach {
             target: chat,
@@ -287,6 +288,7 @@ async fn workspace_command(
         Action::Delete => Command::Lifecycle(LifecycleCommand::Rm {
             space: workspace.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
+            wait: false,
         }),
         Action::Status => Command::Workspace(WorkspaceCommand::Status {
             space: workspace,
