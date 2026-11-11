@@ -5,7 +5,7 @@ DROP TRIGGER chat_completed; DROP TRIGGER chat_undone;
 DROP TRIGGER space_review_ready; DROP TRIGGER space_review_ready_again;
 DROP TRIGGER space_review_cleared; DROP TRIGGER space_agent_state_set;
 DROP TRIGGER space_agent_state_changed; DROP TRIGGER space_agent_state_cleared;
-DROP TRIGGER workspace_renamed; DROP TRIGGER question_asked;
+DROP TRIGGER IF EXISTS workspace_renamed; DROP TRIGGER question_asked;
 DROP TRIGGER question_answered; DROP TRIGGER workspace_child_created;
 DROP TRIGGER chat_child_created; DROP TRIGGER workspace_base_recorded;
 DROP TRIGGER workspace_name_changed;

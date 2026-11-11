@@ -18,9 +18,6 @@ pub struct Workspace {
     pub number: SpaceNumber,
     pub repository_id: RepositoryId,
     pub name: SpaceName,
-    /// What its agent calls the work, which its tabs show.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
     /// The mode its latest agent started in; none before it had one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<crate::config::modes::ModeName>,
@@ -202,7 +199,6 @@ impl Workspace {
             number: SpaceNumber::default(),
             repository_id,
             name,
-            title: None,
             mode: None,
             path,
             branch,
@@ -288,11 +284,11 @@ pub struct OpenedWorkspace {
     pub reused: bool,
 }
 
-/// A workspace after its title changed, with the title it had before.
+/// A workspace after it took a new name, with the name it had before.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RetitledWorkspace {
+pub struct RenamedWorkspace {
     pub workspace: Workspace,
-    pub previous_title: Option<String>,
+    pub previous_name: SpaceName,
 }
 
 /// A branch a new workspace can take, local or on a remote.

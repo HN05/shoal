@@ -373,7 +373,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
 }
 
 #[test]
-fn herdr_labels_name_issues_by_repository_and_number() {
+fn herdr_tabs_take_the_name_of_their_space() {
     let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
@@ -390,8 +390,8 @@ fn herdr_labels_name_issues_by_repository_and_number() {
                 "--agent",
                 "pi",
             ],
-            "project#34",
-            "project#34",
+            "34-fix-api-timeout",
+            "34-fix-api-timeout",
             false,
         ),
         (
@@ -403,8 +403,8 @@ fn herdr_labels_name_issues_by_repository_and_number() {
                 "--agent",
                 "pi",
             ],
-            "project#34",
-            "project#34",
+            "34-fix-api-timeout",
+            "34-fix-api-timeout",
             false,
         ),
         (
@@ -417,8 +417,8 @@ fn herdr_labels_name_issues_by_repository_and_number() {
                 "--agent",
                 "pi",
             ],
-            "project#34",
-            "project#34",
+            "fix/short",
+            "fix/short",
             true,
         ),
         (
@@ -537,10 +537,10 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
 }
 
 /// `shoal rename` run in the tab Shoal opened for `workspace`.
-fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
+fn rename_in_herdr(fixture: &Fixture, workspace: &str, name: &str) -> Output {
     fixture
         .command()
-        .args(["--json", "rename", &fixture.id(workspace), title])
+        .args(["--json", "rename", workspace, name])
         .env("HERDR_ENV", "1")
         .env("HERDR_WORKSPACE_ID", "w1")
         .env("HERDR_TAB_ID", "w1:t9")
@@ -550,7 +550,7 @@ fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
 }
 
 #[test]
-fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
+fn a_rename_renames_the_herdr_tab_shoal_opened_for_it() {
     // Without a watcher, nothing polls the tab after the fixture is gone.
     let fixture = Fixture::with_config(Some(
         "[terminal.herdr]\nclose_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
@@ -570,16 +570,17 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
 
-    let titled = title_in_herdr(&fixture, "topic", "Agent tab names");
-    assert!(titled.status.success(), "{titled:?}");
-    let record: Value = serde_json::from_slice(&titled.stdout).unwrap();
-    assert_eq!(record["title"], "Agent tab names");
+    let topic = fixture.id("topic");
+    let renamed = rename_in_herdr(&fixture, &topic, "Agent tab names");
+    assert!(renamed.status.success(), "{renamed:?}");
+    let record: Value = serde_json::from_slice(&renamed.stdout).unwrap();
+    assert_eq!(record["name"], "Agent tab names");
     assert_eq!(
         herdr_changes(&fixture).last().unwrap(),
         &["tab", "rename", "w1:t9", "Agent tab names"]
     );
     assert_eq!(
-        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["title"],
+        fixture.ok(&["status", &topic])["workspace"]["name"],
         "Agent tab names"
     );
 
@@ -590,11 +591,11 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     )
     .unwrap();
     let before = herdr_changes(&fixture).len();
-    let titled = title_in_herdr(&fixture, "topic", "Tab names");
-    assert!(titled.status.success(), "{titled:?}");
+    let renamed = rename_in_herdr(&fixture, &topic, "Tab names");
+    assert!(renamed.status.success(), "{renamed:?}");
     assert_eq!(herdr_changes(&fixture).len(), before);
 
-    // A tab the user closed keeps the title on the record only, though it
+    // A tab the user closed keeps the name on the record only, though it
     // showed the label Shoal gave it.
     fs::write(
         fixture.root.path().join("herdr-tab-labels"),
@@ -603,22 +604,25 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     .unwrap();
     fs::write(fixture.root.path().join("closed-tabs"), "w1:t9\n").unwrap();
     let before = herdr_changes(&fixture).len();
-    let titled = title_in_herdr(&fixture, "topic", "Renamed later");
-    assert!(titled.status.success(), "{titled:?}");
+    let renamed = rename_in_herdr(&fixture, &topic, "Renamed later");
+    assert!(renamed.status.success(), "{renamed:?}");
     assert!(
-        titled.stderr.is_empty(),
+        renamed.stderr.is_empty(),
         "{}",
-        String::from_utf8_lossy(&titled.stderr)
+        String::from_utf8_lossy(&renamed.stderr)
     );
     assert_eq!(herdr_changes(&fixture).len(), before);
 
-    let refused = title_in_herdr(&fixture, "topic", "two\nlines");
+    let refused = rename_in_herdr(&fixture, &topic, "two\nlines");
     assert!(!refused.status.success());
-    // Without a workspace, the title is refused before a picker asks for one.
+    // Without a space, the name is refused before a picker asks for one.
     let (refused, transcript) =
         fixture.interactive_command(fixture.command().args(["rename", "   "]), "");
     assert!(!refused.status.success());
-    assert!(transcript.contains("titles must be"), "{transcript}");
+    assert!(
+        transcript.contains("a space's name cannot be empty"),
+        "{transcript}"
+    );
 }
 
 #[test]

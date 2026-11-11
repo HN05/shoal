@@ -1292,6 +1292,7 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_converted;
     DROP TRIGGER workspace_left_tree;
     DROP TRIGGER chat_left_tree;
     DROP TABLE space_parents;
+    ALTER TABLE workspaces ADD COLUMN title TEXT;
     ALTER TABLE workspaces ADD COLUMN parent_workspace_id TEXT;
     CREATE INDEX workspaces_parent ON workspaces(parent_workspace_id);
     ALTER TABLE workspaces ADD COLUMN chat_id TEXT REFERENCES chats(id) ON DELETE SET NULL;

@@ -659,16 +659,16 @@ again: it first finishes the interrupted rename when Git completed it, or cancel
 when the branch is unchanged, then renames to the branch given. Confirmed-deleted
 worktrees can still be removed through normal cleanup.
 
-`shoal rename [WORKSPACE] TITLE` gives a workspace a title, one line of at
-most 40 characters that its agent chooses to say what the work is. The tabs,
-windows and blocks Shoal opens for the workspace show it in place of the issue
-label or branch, and setting it renames those already open, wherever the command
-runs, while they still show the label Shoal gave them; one the user named keeps
-its label. Scoped callers may title their own workspace.
-`shoal rename --request [WORKSPACE]` sends the workspace's agent an
-[agent message](#agent-messages) asking it to choose the title and set it; it is
+`shoal rename [SPACE] NAME` gives a workspace or chat a new name, which its
+agent may choose to say what the work is. The tabs, windows and blocks Shoal
+opens for the space show it, and setting it renames those already open,
+wherever the command runs, while they still show the label Shoal gave them; one
+the user named keeps its label. The worktree directory, branch and zmx session
+keep their names. Scoped callers may rename their own space.
+`shoal rename --request [SPACE]` sends the space's agent an
+[agent message](#agent-messages) asking it to choose the name and set it; it is
 refused while no agent runs there. `shoal rename` without arguments picks a
-workspace or running chat and asks for its title or name.
+workspace or running chat and asks for its name.
 
 `shoal start <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `-r`/`--repo` selects one explicitly and
@@ -756,7 +756,7 @@ their status asks of you: ● your turn to answer, review or resume, ◐ an agen
 or process works, ○ quiet, ◌ changing state, or ✗ failed. Each shows the
 space's number, then names the workspace, its repository when the
 rows span several, its status, what its processes use while any run, and the
-linked issue's title, cut with `…` to fit a terminal's width. Usage counts every
+linked issue's title or CI job, cut with `…` to fit a terminal's width. Usage counts every
 process carrying the workspace's `SHOAL_WORKSPACE_ID`: CPU as a percent of one
 core over the daemon's last ten-second sample, including children those
 processes have waited for, then memory, resident on Linux and the physical
@@ -1258,7 +1258,7 @@ then opens a tab in `HERDR_WORKSPACE_ID` and returns once the command is submitt
 there. Setup and agent execution run in that tab, which reads the issue again and
 is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
 allocated workspace branch otherwise, unless `tab_name` supplies a template;
-a [workspace title](#workspaces) replaces either.
+a [space's name](#workspaces) replaces either.
 `--here` keeps the command in the current pane; JSON, help, and noninteractive
 calls run in place, except that their agent starts detached as
 [Agents](#agents) describes.
@@ -1284,8 +1284,8 @@ workspace_name = "{repo}" # The workspace for tabs Shoal opens outside Herdr
 ```
 
 `tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, `{issue_title}`, and
-`{title}`, or a literal name. `{title}` is the workspace title, or without one the
-label it would replace; issue fields are empty without an issue; unknown placeholders
+`{name}`, or a literal name. `{name}` is the space's name, which `{title}` also gives, as earlier versions
+named it; issue fields are empty without an issue; unknown placeholders
 stay literal and inserted values are never expanded again. `{branch}` uses the
 requested branch when the tab opens and the allocated branch after creation.
 
@@ -1947,9 +1947,8 @@ Shoal, which nothing keeps, removes its chats first and stops their agents;
 `shoal rm` lists them before asking. A chat
 never moves to another directory: one about another workspace is a new chat.
 
-`shoal rename [chat] NAME` gives a running chat a new name that is free as
-a new chat's would be, and frees the old one. Without a space it gives the
-current workspace a title, else renames the chat it runs in, else the current
+`shoal rename [chat] NAME` gives a running chat a new name. Without a space it
+renames the current workspace, else the chat it runs in, else the current
 checkout's only running chat, else offers a picker. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs. The tab,
 window or block the chat runs in takes the new name while it still shows the
@@ -5304,8 +5303,9 @@ workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
 a [chat](#chats) that opened it returned it to you. Earlier versions recorded
 `parent_workspace` on these events and `chat`, the chat's ID, on
 `chat_changed` events.
-`renamed` events record a workspace's new `name` and `branch`, as a branch
-rename gives them, or add its new `title`, null once cleared; a chat's rename
+`renamed` events record a workspace's new `name` and `branch`, as
+`shoal rename` or a branch rename gives them; earlier versions added a
+`title`, which a workspace's name has since replaced. A chat's rename
 is its own `chat_renamed` line. `restored` events record a workspace
 `shoal restore` reopened, which takes the removed workspace's events
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request

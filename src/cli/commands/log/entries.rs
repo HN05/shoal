@@ -169,15 +169,9 @@ fn converted(event: &EventDetails) -> String {
     }
 }
 
-/// A workspace's new title, or its new name and a branch named otherwise.
+/// A space's new name.
 fn renamed(event: &EventDetails) -> String {
-    match &event.title {
-        Some(title) => title.clone().unwrap_or_default(),
-        None => match event.branch.as_deref() {
-            Some(branch) if branch != event.name => format!("{}, branch {branch}", event.name),
-            _ => event.name.to_string(),
-        },
-    }
+    event.name.to_string()
 }
 
 /// A branch or tag without its `refs/` prefix.

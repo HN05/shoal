@@ -1,10 +1,9 @@
 //! What the places hosts open for spaces are called. A workspace's take the
-//! host's name template with the repository, branch, issue and title filled
-//! in, otherwise the title the workspace's agent gave it, otherwise
-//! `<repo>#<number>` for an issue, otherwise the branch; a chat's take its
-//! name. Hosts that show names apply the label they are given, and a place
-//! takes a space's new label only while it still shows the one Shoal gave
-//! it, since another is the user's.
+//! host's name template with the repository, branch, issue and name filled
+//! in, otherwise its name; a chat's take its name. Hosts that show names
+//! apply the label they are given, and a place takes a space's new label
+//! only while it still shows the one Shoal gave it, since another is the
+//! user's.
 use anyhow::{Context as _, Result};
 use tokio::sync::OnceCell;
 
@@ -54,10 +53,10 @@ pub(super) async fn name_plan(
     Ok(())
 }
 
-/// The label of the place `host` opens for `workspace`, from its name
-/// `template`, or the workspace's directory name when the host shows no
-/// names and names its places after it. A failed lookup falls back to the
-/// branch.
+/// The label of the place `host` opens for `workspace`: its name, or its
+/// name `template` filled in, or the workspace's directory name when the
+/// host shows no names and names its places after it. A failed lookup
+/// falls back to the name.
 pub(super) async fn workspace_label(
     ctx: &Context,
     template: Option<String>,
@@ -67,16 +66,16 @@ pub(super) async fn workspace_label(
     if !names_places(host) {
         return workspace.directory_name().to_owned();
     }
-    if let (None, Some(title)) = (&template, &workspace.title) {
-        return title.clone();
+    if template.is_none() {
+        return workspace.name.to_string();
     }
     match place_name(ctx, workspace).await {
         Ok(name) => name
             .templated(template)
-            .render(workspace.branch_or_name(), workspace.title.as_deref()),
+            .render(workspace.branch_or_name(), &workspace.name),
         Err(error) => {
             eprintln!("warning: cannot name the {} place: {error:#}", host.name());
-            workspace.branch_or_name().to_owned()
+            workspace.name.to_string()
         }
     }
 }
@@ -111,21 +110,21 @@ pub(in crate::cli) struct Labels {
     pub expected: String,
 }
 
-/// The labels of the places hosting `workspace` after its title changed
+/// The labels of the places hosting `workspace` after its name changed
 /// from `previous`, from one lookup of its repository and issue, made when
 /// a host first needs it.
-pub(in crate::cli) struct Retitled<'a> {
+pub(in crate::cli) struct Renamed<'a> {
     ctx: &'a Context,
     workspace: &'a Workspace,
-    previous: Option<&'a str>,
+    previous: &'a str,
     name: OnceCell<Option<PlaceName>>,
 }
 
-impl<'a> Retitled<'a> {
+impl<'a> Renamed<'a> {
     pub(in crate::cli) fn new(
         ctx: &'a Context,
         workspace: &'a Workspace,
-        previous: Option<&'a str>,
+        previous: &'a str,
     ) -> Self {
         Self {
             ctx,
@@ -136,10 +135,17 @@ impl<'a> Retitled<'a> {
     }
 
     /// The labels of the workspace's places on a host with `options`,
-    /// rendered for its title and its previous one. Without the lookup both
-    /// are the branch, so the places keep their labels.
+    /// rendered for its name and its previous one. Without a template the
+    /// labels are the names; without the lookup a template's places keep
+    /// their labels.
     pub(in crate::cli) async fn labels(&self, options: &Options) -> Labels {
         let branch = self.workspace.branch_or_name();
+        if options.name_template.is_none() {
+            return Labels {
+                new: self.workspace.name.to_string(),
+                expected: self.previous.to_owned(),
+            };
+        }
         let Some(name) = self.name().await else {
             return Labels {
                 new: branch.to_owned(),
@@ -148,7 +154,7 @@ impl<'a> Retitled<'a> {
         };
         let name = name.templated(options.name_template.clone());
         Labels {
-            new: name.render(branch, self.workspace.title.as_deref()),
+            new: name.render(branch, &self.workspace.name),
             expected: name.render(branch, self.previous),
         }
     }

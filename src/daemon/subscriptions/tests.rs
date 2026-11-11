@@ -515,13 +515,13 @@ mod streams {
         assert!(!records.is_empty());
         daemon
             .manager
-            .set_workspace_title(&SpaceSelector::id(&own.id), Some("Login fix".into()))
+            .set_workspace_name(&SpaceSelector::id(&own.id), &"Login fix".into())
             .await
             .unwrap();
         // Another space's entries stay out.
         daemon
             .manager
-            .set_workspace_title(&SpaceSelector::id(&other.id), Some("Other".into()))
+            .set_workspace_name(&SpaceSelector::id(&other.id), &"Other".into())
             .await
             .unwrap();
         let Update::Changed(record) = until(&mut subscription, changed(RecordKind::LogEntry)).await
@@ -534,7 +534,7 @@ mod streams {
         let LogEntry::Event(event) = *entry else {
             panic!("expected the rename");
         };
-        assert_eq!(event.details.title, Some(Some("Login fix".into())));
+        assert_eq!(event.details.name, "Login fix");
     }
 
     #[tokio::test]

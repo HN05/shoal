@@ -93,9 +93,9 @@ shoal start my-project quick-fix --path ../quick-fix
 shoal adopt ../existing-worktree        # Take ownership, including automatic cleanup
 shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directory
 shoal branch rename 3 fix/login              # Rename its branch; its name stays
-shoal rename 3 "Login retries"          # Title the tabs Shoal opens for it
-shoal rename --request 3                # Ask its agent to choose the title
-shoal rename                            # Pick a workspace or chat, then type its title or name
+shoal rename 3 "Login retries"          # Name the space in lists and tabs
+shoal rename --request 3                # Ask its agent to choose the name
+shoal rename                            # Pick a workspace or chat, then type its name
 shoal start https://github.com/owner/repo/issues/68 # Create from an issue
 shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards

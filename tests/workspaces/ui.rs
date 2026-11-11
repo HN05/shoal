@@ -799,7 +799,7 @@ fn log_without_a_space_shows_the_space_here_else_shoal_s() {
 }
 
 #[test]
-fn rename_without_arguments_picks_a_space_and_asks_for_its_title() {
+fn rename_without_arguments_picks_a_space_and_asks_for_its_name() {
     let fixture = Fixture::new();
     fixture.add("other");
     let id = fixture.add("topic")["id"].as_str().unwrap().to_owned();
@@ -807,10 +807,13 @@ fn rename_without_arguments_picks_a_space_and_asks_for_its_title() {
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("other"), "{rows}");
     assert_eq!(
-        fixture.ok(&["status", &fixture.id("topic")])["workspace"]["title"],
+        fixture.ok(&["status", &id])["workspace"]["name"],
         "Login retries"
     );
-    assert!(fixture.ok(&["status", &fixture.id("other")])["workspace"]["title"].is_null());
+    assert_eq!(
+        fixture.ok(&["status", &fixture.id("other")])["workspace"]["name"],
+        "other"
+    );
 }
 
 #[test]
@@ -833,7 +836,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     let mut agent = Some(agent_in_session(&fixture, "available", "available"));
 
     for args in [
-        vec!["rename", "Retitled"],
+        vec!["rename", "Renamed"],
         vec!["attach"],
         vec!["rm", "--wait", "--yes"],
     ] {
@@ -878,7 +881,10 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
             assert!(transcript.is_empty(), "{transcript}");
         }
         if args[0] == "rename" {
-            assert!(stdout.contains("of available to Retitled"), "{stdout}");
+            assert!(
+                stdout.contains("Renamed workspace 1 available to Renamed"),
+                "{stdout}"
+            );
         } else if args[0] == "attach" {
             assert!(stdout.is_empty(), "{stdout}");
         } else {

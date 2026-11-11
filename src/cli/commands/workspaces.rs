@@ -8,6 +8,7 @@ mod environment;
 mod link_pull;
 mod list;
 mod merge;
+mod naming;
 mod open;
 mod prepare;
 mod recovery;
@@ -17,7 +18,6 @@ mod rename;
 mod run;
 mod setup;
 mod status;
-mod title;
 mod unmerge;
 mod watch;
 
@@ -32,6 +32,7 @@ pub(super) use environment::environment;
 pub(super) use link_pull::link_pull;
 pub(super) use list::list;
 pub(super) use merge::{merge, merge_branch, merge_worker};
+pub(super) use naming::{request_name, set_name};
 pub(super) use open::open;
 pub(super) use prepare::prepare;
 pub(super) use removal::{ensure_batch_removable, leaving};
@@ -42,7 +43,6 @@ pub(super) use setup::{
     SetUp, copy_ignored_worker, follow_setup, run_post_setup, setup, setup_workspace, skip_setup,
 };
 pub(super) use status::status;
-pub(super) use title::{ask_title, request_title, title};
 pub(super) use unmerge::{unmerge, unmerge_branch, unmerge_worker};
 pub(super) use watch::watch_items;
 

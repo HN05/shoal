@@ -14,7 +14,8 @@ use crate::{
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum BranchCommand {
-    /// Rename a workspace's Git branch and derived workspace name.
+    /// Rename a workspace's Git branch; the workspace keeps its name and
+    /// worktree directory.
     #[command(allow_missing_positional = true)]
     Rename {
         workspace: Option<SpaceSelector>,

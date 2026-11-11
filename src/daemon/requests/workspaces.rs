@@ -195,8 +195,8 @@ pub(super) async fn handle(
         WorkspaceMethod::SetBaseWorkspace { workspace, base } => {
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
         }
-        WorkspaceMethod::SetWorkspaceTitle { workspace, title } => {
-            Body::RetitledWorkspace(manager.set_workspace_title(&workspace, title).await?)
+        WorkspaceMethod::SetWorkspaceName { workspace, name } => {
+            Body::RenamedWorkspace(manager.set_workspace_name(&workspace, &name).await?)
         }
         WorkspaceMethod::VerifyWorkspace {
             workspace,
@@ -373,7 +373,7 @@ impl Scoped for WorkspaceMethod {
             // The handler answers with the caller's own space's.
             WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
-            | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }
+            | WorkspaceMethod::SetWorkspaceName { workspace, .. }
             | WorkspaceMethod::WorkspacePlaces { workspace }
             | WorkspaceMethod::RenameWorkspace { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }

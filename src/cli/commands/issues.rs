@@ -252,11 +252,6 @@ impl Issue {
         name
     }
 
-    /// The place label of a workspace for this issue in `repo`.
-    pub fn tab_label(&self, repo: &Repository) -> String {
-        crate::terminal::issue_label(crate::repository::name(repo), self.number)
-    }
-
     /// The issue's number and title, which name a place for its workspace.
     pub fn place_issue(&self) -> (u64, &str) {
         (self.number, &self.title)

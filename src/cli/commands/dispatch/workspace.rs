@@ -44,21 +44,20 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
         } => workspaces::open(&ctx, workspace, app, args).await,
         WorkspaceCommand::Rename {
             space,
-            title: Some(title),
+            name: Some(name),
             request: false,
-        } => rename::rename(&ctx, space, title).await,
+        } => rename::rename(&ctx, space, name).await,
         WorkspaceCommand::Rename {
             space: None,
-            title: None,
+            name: None,
             request: false,
         } => rename::rename_picked(&ctx).await,
-        // Otherwise only --request leaves out the title, and its single argument
-        // takes the title's place.
-        WorkspaceCommand::Rename { space, title, .. } => {
+        // Otherwise only --request leaves out the name, and its single argument
+        // takes the name's place.
+        WorkspaceCommand::Rename { space, name, .. } => {
             rename::request(
                 &ctx,
-                title
-                    .map(|title| SpaceSelector::parse(&title))
+                name.map(|name| SpaceSelector::parse(&name))
                     .transpose()?
                     .or(space),
             )

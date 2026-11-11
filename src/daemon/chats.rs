@@ -280,6 +280,8 @@ impl Manager {
 
     /// Give the chat `chat` the name `name`.
     pub async fn rename_chat(&self, chat: SpaceId, name: SpaceName) -> Result<RenamedChat> {
+        // A request's name reads as sent, so the rule applies here.
+        let name = SpaceName::parse(&name)?;
         let owner = self.root_dir_owner();
         let (old, renamed) = self
             .store

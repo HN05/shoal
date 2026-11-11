@@ -1171,12 +1171,10 @@ hide the decision being made.
 `terminal.herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
 plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
-agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
-allocated workspace branch by default. An issue number or branch says little about
-the work, so its agent names it with a workspace title, which replaces that
-default and fills a template's `{title}`. The user may set the title or ask the
-agent to choose one, a fixed agent message refused without a running agent,
-which would leave it unread until removal. Setting one relabels the places Shoal
+agent choices and labels the tab with the space's name by default, which a
+template's `{name}` also gives. The user may rename the space or ask the
+agent to choose a name, a fixed agent message refused without a running agent,
+which would leave it unread until removal. A rename relabels the places Shoal
 created for the workspace, wherever the command runs: each through the host
 that opened it, on the server its record names, as closing reaches it. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue

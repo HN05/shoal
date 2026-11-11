@@ -133,12 +133,10 @@ pub(super) async fn add_planned(
     if let Some(entry) = &queue_entry {
         queued_agents::attach(ctx, entry, &started.workspace).await?;
     }
-    let (branch, title) = (started.workspace.branch_or_name(), &started.workspace.title);
-    let label = match (place_name, &issue, title) {
-        (Some(name), _, title) => name.render(branch, title.as_deref()),
-        (None, _, Some(title)) => title.clone(),
-        (None, Some(issue), None) => issue.tab_label(target.repository(ctx).await?),
-        (None, None, None) => branch.to_owned(),
+    let (branch, name) = (started.workspace.branch_or_name(), &started.workspace.name);
+    let label = match place_name {
+        Some(place) => place.render(branch, name),
+        None => name.to_string(),
     };
     // A placed agent may still be queued, so this place becomes the
     // workspace's only once it launches here.

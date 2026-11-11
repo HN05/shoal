@@ -259,7 +259,7 @@ fn tree_workspace_row(
 fn workspace_text(workspace: &Workspace) -> String {
     match status_line(workspace.progress.as_ref()) {
         Some(status) => status.to_owned(),
-        None => workspace_title(workspace),
+        None => workspace_subject(workspace),
     }
 }
 
@@ -286,7 +286,7 @@ fn progress_cell(progress: Option<&Progress>) -> Cell {
 
 /// What a workspace row names as its work: the CI job it runs, or the
 /// linked issue's title when known.
-fn workspace_title(workspace: &Workspace) -> String {
+fn workspace_subject(workspace: &Workspace) -> String {
     match &workspace.job {
         Some(job) => job_subject(job),
         None => workspace.links.issue_title.clone().unwrap_or_default(),

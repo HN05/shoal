@@ -185,7 +185,7 @@ response_bodies! {
     Reached(crate::output::messages::Reached),
     Chat(crate::model::Chat),
     RenamedChat(crate::model::RenamedChat),
-    RetitledWorkspace(crate::model::RetitledWorkspace),
+    RenamedWorkspace(crate::model::RenamedWorkspace),
     Chats(Vec<crate::model::Chat>),
     RemovedChat(crate::output::chat::RemovedChat),
     ScopeToken(ChatScope),

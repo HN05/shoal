@@ -33,7 +33,7 @@ pub use hosts::{
     Beside, Configured, Options, background_place, current, enabled_host, hosts, installed_hosts,
     keeps_agents_in_sessions, named, names_places,
 };
-pub use naming::{PlaceName, issue_label};
+pub use naming::PlaceName;
 pub(crate) use prompts::{PromptSession, agents_can_be_prompted};
 pub use prompts::{WAKE_PROMPT, send_keys, submit_prompt};
 pub(crate) use sessions::{Attachment, OwnerKind};

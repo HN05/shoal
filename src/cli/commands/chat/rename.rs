@@ -4,14 +4,14 @@ use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{context::Context, terminal, ui},
+    cli::{context::Context, terminal},
     client::space_names::SpaceName,
     model::RenamedChat,
     protocol::ConfigTarget,
 };
 
 /// What `shoal rename --request` asks a chat's agent.
-const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal rename <name>`.";
+const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in a few words with `shoal rename \"<name>\"`.";
 
 /// Rename `chat`, by ID or name; the daemon lets a chat's agent rename only
 /// its own chat.
@@ -65,12 +65,4 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let places = std::slice::from_ref(place);
     terminal::relabel_space(&settings, places, async |_| labels.clone()).await;
     Ok(())
-}
-
-/// Ask for the chat's new name until the daemon accepts one.
-pub(in crate::cli::commands) async fn ask_name(ctx: &Context) -> Result<SpaceName> {
-    ui::input_until(ctx, "Chat name", None, |name| async move {
-        SpaceName::parse(&name)
-    })
-    .await
 }

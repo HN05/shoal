@@ -1,5 +1,5 @@
-//! What a place hosting a workspace is called, from the host's name
-//! template, the repository and the workspace's issue.
+//! What a place hosting a workspace is called: its name, or the host's name
+//! template filled with it, the repository, the branch and the issue.
 use serde::{Deserialize, Serialize};
 
 use crate::model::Repository;
@@ -34,31 +34,25 @@ impl PlaceName {
         }
     }
 
-    /// The label of a place hosting the workspace on `branch` with `title`.
-    pub fn render(&self, branch: &str, title: Option<&str>) -> String {
+    /// The label of a place hosting the workspace `name` on `branch`: the
+    /// name, or the host's template filled in.
+    pub fn render(&self, branch: &str, name: &str) -> String {
         match &self.template {
-            Some(template) => self.fill(template, branch, title),
-            None => title.map_or_else(|| self.untitled(branch), str::to_owned),
+            Some(template) => self.fill(template, branch, name),
+            None => name.to_owned(),
         }
     }
 
-    /// The label without a title or template: the issue's, else the branch.
-    fn untitled(&self, branch: &str) -> String {
-        match self.issue_number {
-            Some(number) => issue_label(&self.repo, number),
-            None => branch.to_owned(),
-        }
-    }
-
-    /// `template` filled in; `{title}` falls back to the untitled label.
-    fn fill(&self, template: &str, branch: &str, title: Option<&str>) -> String {
-        let title = title.map_or_else(|| self.untitled(branch), str::to_owned);
+    /// `template` filled in.
+    fn fill(&self, template: &str, branch: &str, name: &str) -> String {
         crate::config::templates::render(
             template,
             &[
                 ("{repo}", &self.repo),
                 ("{branch}", branch),
-                ("{title}", &title),
+                ("{name}", name),
+                // As templates written before names replaced titles say it.
+                ("{title}", name),
                 (
                     "{issue_number}",
                     &self.issue_number.map(|n| n.to_string()).unwrap_or_default(),
@@ -70,11 +64,6 @@ impl PlaceName {
             ],
         )
     }
-}
-
-/// `<repo>#<number>`: short, and unique across repositories sharing a host.
-pub fn issue_label(repo: &str, number: u64) -> String {
-    format!("{repo}#{number}")
 }
 
 #[cfg(test)]

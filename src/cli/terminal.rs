@@ -24,7 +24,7 @@ pub(in crate::cli) use launch::{
     ChatStarted, Placement, ensure_background, rerun_where_stopped, restore_queued, run_agent,
     run_in_background, start_add, start_chat, start_chat_in_background, start_queued,
 };
-pub(in crate::cli) use naming::{Labels, Retitled, relabel_space};
+pub(in crate::cli) use naming::{Labels, Renamed, relabel_space};
 pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};
 pub(in crate::cli) use sessions::{
     Recorded, attach, attachable, open_session_owners, session_owners, sessions,

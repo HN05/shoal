@@ -118,10 +118,10 @@ pub enum WorkspaceMethod {
     FindSpaces {
         target: crate::model::SpaceTarget,
     },
-    /// Give the workspace a title its places show, or clear it without one.
-    SetWorkspaceTitle {
+    /// Give the workspace a new name.
+    SetWorkspaceName {
         workspace: SpaceSelector,
-        title: Option<String>,
+        name: crate::space_names::SpaceName,
     },
     /// The places Shoal created for the workspace.
     WorkspacePlaces {

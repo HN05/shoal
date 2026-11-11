@@ -478,6 +478,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         repeatable_names(&db)?;
         db.execute_batch("PRAGMA foreign_keys=ON;")?;
     }
+    if version >= 151 {
+        super::space_titles::names_from_titles(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -806,6 +809,75 @@ fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
             ("reused".into(), 2)
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> Result<()> {
+    let mut db = historical_database(150)?;
+    let long = "Make space names free-text labels people can read in a tab";
+    db.execute_batch(&format!(
+        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state,title)
+             VALUES ('titled','repo','fix-login','/titled','fix-login','ready','Login retries'),
+                 ('issued','repo','34-fix-api','/issued','34-fix-api','ready',NULL),
+                 ('plain','repo','plain','/plain','plain','ready',NULL);
+         INSERT INTO space_issue(space_id,url,title)
+             VALUES ('titled','https://forge.example/o/r/issues/1','Not this one'),
+                 ('issued','https://forge.example/o/r/issues/34','{long}');
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','{}','claude',1,'b',1);
+         INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
+             VALUES ('gone','repo','old-name',9,
+                 '{{"name":"old-name","links":{{"issue_title":"Gone issue"}}}}'),
+                 ('titled-gone','repo','other',9,
+                 '{{"name":"other","title":"Gone title","links":{{"issue_title":"Gone issue"}}}}');"#,
+        "x".repeat(64)
+    ))?;
+    let events = |db: &Connection| -> Result<i64> {
+        Ok(db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?)
+    };
+    let before = events(&db)?;
+    migrate(&mut db)?;
+    let name = |sql: &str| -> Result<String> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='titled'")?,
+        "Login retries"
+    );
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='issued'")?,
+        "Make space names free-text labels peopl…"
+    );
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='plain'")?,
+        "plain"
+    );
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='workspace'")?,
+        "worker"
+    );
+    assert_eq!(
+        name("SELECT name FROM chats")?,
+        format!("{}…", "x".repeat(39))
+    );
+    assert_eq!(
+        name(
+            "SELECT name || ' ' || json_extract(record,'$.name') FROM removed_workspaces
+                WHERE workspace_id='gone'"
+        )?,
+        "Gone issue Gone issue"
+    );
+    assert_eq!(
+        name(
+            "SELECT name || ' ' || (json_type(record,'$.title') IS NULL) FROM removed_workspaces
+                WHERE workspace_id='titled-gone'"
+        )?,
+        "Gone title 1"
+    );
+    assert_eq!(events(&db)?, before);
+    // A later rename, or a branch rename, is journaled again.
+    db.execute("UPDATE workspaces SET name='renamed' WHERE id='plain'", [])?;
+    db.execute("UPDATE workspaces SET branch='other' WHERE id='plain'", [])?;
+    assert_eq!(events(&db)?, before + 2);
     Ok(())
 }
 

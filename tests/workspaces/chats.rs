@@ -432,8 +432,8 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
     let renamed = rename_in(&other["path"], "replanning");
     assert_eq!(renamed, chat.as_str());
     assert_eq!(
-        fixture.ok(&["status", &fixture.id("other")])["workspace"]["title"],
-        Value::Null
+        fixture.ok(&["status", other["id"].as_str().unwrap()])["workspace"]["name"],
+        "other"
     );
     for agent in [&mut agent, &mut nested_agent] {
         agent.kill().unwrap();

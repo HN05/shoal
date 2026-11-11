@@ -1,4 +1,4 @@
-//! Workspaces: listing, creating and adopting them, their names, titles,
+//! Workspaces: listing, creating and adopting them, their names,
 //! bases and places, their status, environment and settings, and the Git
 //! state the daemon reads in their worktrees; and the spaces, workspaces and
 //! chats together.
@@ -14,7 +14,7 @@ use crate::{
     connection::{Daemon, call, pages, request},
     model::{
         ConflictCheck, Dependency, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
-        RetitledWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
+        RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, WorkspaceMethod},
     repository::Selector,
@@ -147,17 +147,17 @@ pub async fn rename(
     .await
 }
 
-/// Give `workspace` the title its places show.
-pub async fn set_title(
+/// Give `workspace` the name `name`.
+pub async fn set_name(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    title: String,
-) -> Result<RetitledWorkspace> {
-    let method = WorkspaceMethod::SetWorkspaceTitle {
-        workspace,
-        title: Some(title),
-    };
-    request(daemon, method).await
+    name: crate::space_names::SpaceName,
+) -> Result<RenamedWorkspace> {
+    request(
+        daemon,
+        WorkspaceMethod::SetWorkspaceName { workspace, name },
+    )
+    .await
 }
 
 /// Build `workspace` on the workspace `base`, or on the default branch

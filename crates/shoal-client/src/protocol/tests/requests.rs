@@ -46,7 +46,7 @@ const REQUESTS: &[&str] = &[
     r#""list_workspaces""#,
     r#""untracked_worktrees""#,
     r#"{"find_spaces":{"target":{"item":{"kind":"pr","input":"7"}}}}"#,
-    r#"{"set_workspace_title":{"workspace":"fix","title":"Login retries"}}"#,
+    r#"{"set_workspace_name":{"workspace":"3","name":"Login retries"}}"#,
     r#"{"workspace_places":{"workspace":"fix"}}"#,
     r#"{"set_base_workspace":{"workspace":"part","base":"fix"}}"#,
     r#"{"inspect_workspace":{"workspace":"fix"}}"#,

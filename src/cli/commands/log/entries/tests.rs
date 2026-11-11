@@ -33,12 +33,10 @@ fn details_name_what_each_entry_is_about() {
         "from api-part"
     );
     assert_eq!(
-        details(serde_json::json!({"kind": "renamed", "name": "fix-login",
-            "branch": "fix/login"})),
-        "fix-login, branch fix/login"
-    );
-    assert_eq!(
-        details(serde_json::json!({"kind": "renamed", "title": "Login retries"})),
+        details(
+            serde_json::json!({"kind": "renamed", "name": "Login retries",
+            "branch": "fix/login"})
+        ),
         "Login retries"
     );
     assert_eq!(

@@ -309,7 +309,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("DROP TABLE repository_agent_environments;")?;
     db.execute_batch("DROP TABLE workspace_item_activity;")?;
     db.execute_batch("ALTER TABLE workspaces DROP COLUMN active_at;")?;
-    db.execute_batch("ALTER TABLE workspaces DROP COLUMN title;")?;
     db.execute_batch("DROP TABLE removed_workspaces;")?;
     db.execute_batch(
         "DROP INDEX questions_number; ALTER TABLE questions DROP COLUMN number;
@@ -494,7 +493,7 @@ fn journal(db: &Connection) -> Result<Vec<crate::daemon::events::EventDetails>> 
 }
 
 #[test]
-fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
+fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
     use crate::daemon::events::EventKind;
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
@@ -508,8 +507,8 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
          INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
              VALUES ('chat','repo','helper','claude',1,'birth',1);
          INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','parent');
-         UPDATE workspaces SET title='Fix login' WHERE id='child';
-         UPDATE workspaces SET name='fix-login',branch='fix/login' WHERE id='child';
+         UPDATE workspaces SET name='Fix login' WHERE id='child';
+         UPDATE workspaces SET branch='fix/login' WHERE id='child';
          INSERT INTO questions(space_number,number,workspace_id,created_at,question,
                  recommendation,choices)
              VALUES (2,1,'child',1,'Which database?','SQLite','[]');
@@ -526,7 +525,11 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                 EventKind::ChildCreated | EventKind::ChildRemoved => {
                     event.child.map(|child| child.name.to_string())
                 }
-                EventKind::Renamed => event.title.flatten().or(Some(event.name.into())),
+                EventKind::Renamed => Some(format!(
+                    "{} {}",
+                    event.name,
+                    event.branch.unwrap_or_default()
+                )),
                 EventKind::QuestionAsked | EventKind::QuestionAnswered => event
                     .question
                     .map(|question| format!("{} {:?}", question.number, question.answer)),
@@ -541,8 +544,12 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
         [
             ("parent".into(), EventKind::ChildCreated, some("fix")),
             ("parent".into(), EventKind::ChildCreated, some("helper")),
-            ("child".into(), EventKind::Renamed, some("Fix login")),
-            ("child".into(), EventKind::Renamed, some("fix-login")),
+            ("child".into(), EventKind::Renamed, some("Fix login fix")),
+            (
+                "child".into(),
+                EventKind::Renamed,
+                some("Fix login fix/login")
+            ),
             ("child".into(), EventKind::QuestionAsked, some("2.1 None")),
             (
                 "child".into(),
@@ -550,7 +557,7 @@ fn titles_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                 some("2.1 Some(\"SQLite\")")
             ),
             ("parent".into(), EventKind::ChildRemoved, some("helper")),
-            ("parent".into(), EventKind::ChildRemoved, some("fix-login")),
+            ("parent".into(), EventKind::ChildRemoved, some("Fix login")),
         ]
     );
     Ok(())

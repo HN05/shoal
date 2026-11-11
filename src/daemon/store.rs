@@ -24,6 +24,7 @@ mod item_numbers;
 mod migrations;
 mod place_owners;
 mod place_servers;
+mod space_titles;
 mod worker;
 #[cfg(test)]
 mod workspace_availability_tests;
@@ -363,7 +364,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,mode,narrowing,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
+pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,mode,narrowing,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -388,7 +389,6 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         number: row.get("number")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
-        title: row.get("title")?,
         mode: row.get("mode")?,
         narrowing: json_column(row, "narrowing")?.unwrap_or_default(),
         path: PathBuf::from(row.get::<_, String>("path")?),

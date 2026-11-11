@@ -180,10 +180,11 @@ Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
 scoped callers cannot read them.
 
-## Space title
+## Space name
 
-`shoal rename "<title>"` names the space's work; the tabs and windows
-Shoal opens for it show the title instead of its branch or issue number.
+`shoal rename "<name>"` names the space's work, in free text of at most 40
+characters; lists and the tabs and windows Shoal opens for it show the name.
+Its branch and worktree directory keep theirs.
 
 ## Progress
 

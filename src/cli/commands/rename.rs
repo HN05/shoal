@@ -1,5 +1,5 @@
-//! `shoal rename`: title a workspace or rename a chat, a picked one with
-//! what the user types, or ask its agent to choose.
+//! `shoal rename`: rename a workspace or a chat, a picked one with what the
+//! user types, or ask its agent to choose.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
@@ -14,47 +14,52 @@ use crate::{
     model::PresentSpace,
 };
 
-/// Title the named workspace, or rename the named chat, else the space this
-/// runs in or a picked one.
+/// Rename the space `space` selects, else the space this runs in or a
+/// picked one.
 pub(super) async fn rename(
     ctx: &Context,
     space: Option<SpaceSelector>,
-    title: String,
+    name: String,
 ) -> Result<i32> {
-    // Refuse what neither a title nor a chat's name may be before a picker
-    // asks for the space.
-    if let Err(error) = crate::validate::title(title.trim()) {
-        SpaceName::parse(&title).map_err(|_| error)?;
-    }
-    match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::rename(ctx, SpaceSelector::Id(chat), SpaceName::parse(&title)?).await,
-        Err(workspace) => workspaces::title(ctx, Some(workspace), title).await,
-    }
+    // Refuse a name before a picker asks for the space.
+    let name = SpaceName::parse(&name)?;
+    rename_space(ctx, space, name).await
 }
 
-/// Title a picked workspace, or rename a picked chat, with what the user
-/// types next.
+/// Rename a picked workspace or chat with what the user types next.
 pub(super) async fn rename_picked(ctx: &Context) -> Result<i32> {
     let space = ui::pick_any_space(ctx).await?;
-    match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
-        Some(PresentSpace::Chat(chat)) => {
-            let name = chat::ask_name(ctx).await?;
-            chat::rename(ctx, SpaceSelector::Id(chat.id), name).await
-        }
-        _ => {
-            let title = workspaces::ask_title(ctx).await?;
-            workspaces::title(ctx, Some(space), title).await
-        }
+    let name = ask_name(ctx).await?;
+    rename_space(ctx, Some(space), name).await
+}
+
+/// Give the chat or workspace `space` names, else the one this runs in or
+/// a picked one, the name `name`.
+async fn rename_space(ctx: &Context, space: Option<SpaceSelector>, name: SpaceName) -> Result<i32> {
+    match chosen_chat(ctx, space).await? {
+        Ok(chat) => chat::rename(ctx, SpaceSelector::Id(chat), name).await,
+        Err(workspace) => workspaces::set_name(ctx, Some(workspace), name).await,
     }
 }
 
-/// Ask the agent of the named space, else the one this runs in or a picked
-/// one, to choose its title or name.
+/// Ask for a space's new name until it is one a space can have.
+async fn ask_name(ctx: &Context) -> Result<SpaceName> {
+    ui::input_until(
+        ctx,
+        "Name",
+        None,
+        |name| async move { SpaceName::parse(&name) },
+    )
+    .await
+}
+
+/// Ask the agent of the space `space` selects, else the one this runs in or
+/// a picked one, to choose its name.
 pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     chat::ensure_scope_token(ctx)?;
     match chosen_chat(ctx, space).await? {
         Ok(chat) => chat::request_name(ctx, SpaceSelector::Id(chat)).await,
-        Err(workspace) => workspaces::request_title(ctx, Some(workspace)).await,
+        Err(workspace) => workspaces::request_name(ctx, Some(workspace)).await,
     }
 }
 

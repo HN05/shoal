@@ -116,7 +116,7 @@ states!(EventKind {
     SimulatorAcquired => "simulator_acquired",
     /// A booted simulator lease was released or its device deleted.
     SimulatorReleased => "simulator_released",
-    /// The workspace took a new name and branch, or a new `title`.
+    /// The space took a new name.
     Renamed => "renamed",
     /// `shoal restore` reopened the removed workspace, whose events
     /// the reopened one took.
@@ -289,13 +289,6 @@ pub struct EventDetails {
     /// The simulator lease acquired or released.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator: Option<SimulatorEvent>,
-    /// The workspace's new title; null once it has none.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "present_or_null"
-    )]
-    pub title: Option<Option<String>>,
     /// The agent that started, stopped or exited.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<AgentEvent>,

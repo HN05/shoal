@@ -16,8 +16,8 @@ pub(in crate::cli::commands) async fn rename(
     let renamed = crate::client::workspaces::rename(&ctx.paths, workspace.clone(), branch).await?;
     ctx.show(&renamed, |workspace| {
         outln!(
-            "Renamed workspace to {} ({})",
-            workspace.name,
+            "Renamed the branch of {} to {}",
+            workspace.label(),
             workspace.branch_or_name()
         )
     })?;
