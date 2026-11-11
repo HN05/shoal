@@ -1,4 +1,5 @@
 use super::*;
+use crate::{fsutil::subvolume, test_support::subvolumes::FakeSubvolumes};
 use std::os::unix::fs::PermissionsExt as _;
 
 #[test]
@@ -105,5 +106,46 @@ fn copying_a_worktree_removes_entries_deleted_at_any_depth() -> io::Result<()> {
     assert!(!destination.join("removed").exists());
     assert!(!destination.join("nested/deleted").exists());
     assert!(!destination.join("nested/gone").exists());
+    Ok(())
+}
+
+#[test]
+fn only_subvolume_roots_are_snapshotted_and_a_failed_snapshot_is_left_to_reflinks() -> io::Result<()>
+{
+    let temp = tempfile::tempdir()?;
+    let (volume, plain) = (temp.path().join("volume"), temp.path().join("plain"));
+    fs::create_dir_all(&volume)?;
+    fs::create_dir_all(&plain)?;
+    let volumes = FakeSubvolumes::default();
+    volumes.add_root(&volume);
+
+    assert!(snapshot_root(&volumes, &volume, &temp.path().join("copy")));
+    assert!(!snapshot_root(&volumes, &plain, &temp.path().join("other")));
+    assert_eq!(volumes.calls().len(), 1);
+    // The destination now exists, so a second snapshot fails.
+    assert!(!snapshot_root(&volumes, &volume, &temp.path().join("copy")));
+    Ok(())
+}
+
+/// The real ioctls, where the temporary directory is on btrfs.
+#[tokio::test]
+async fn copying_a_worktree_snapshots_its_subvolume_outputs() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    if !subvolume::removable_at(&Btrfs, &temp.path().join("probe")) {
+        return Ok(());
+    }
+    let (source, copy) = (temp.path().join("source"), temp.path().join("copy"));
+    fs::create_dir_all(&source)?;
+    fs::create_dir_all(&copy)?;
+    Btrfs.create(&source.join("target"))?;
+    fs::write(source.join("target/built"), "built")?;
+    fs::write(source.join("tracked"), "tracked")?;
+
+    clone_worktree(&source, &copy).await?;
+
+    assert!(Btrfs.is_root(&copy.join("target")));
+    assert_eq!(fs::read_to_string(copy.join("target/built"))?, "built");
+    assert_eq!(fs::read_to_string(copy.join("tracked"))?, "tracked");
+    subvolume::remove_tree(&Btrfs, temp.path(), &[])?;
     Ok(())
 }

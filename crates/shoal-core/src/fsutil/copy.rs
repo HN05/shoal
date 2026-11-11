@@ -7,7 +7,10 @@ use std::{
 
 use anyhow::Context;
 
-use super::off_runtime;
+use super::{
+    off_runtime,
+    subvolume::{Btrfs, Subvolumes},
+};
 
 /// Copy the contents of a worktree without copying its Git administrative
 /// file. The destination may already contain the clean checkout created for
@@ -83,11 +86,29 @@ fn remove_existing(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Clone `source`, a file or directory tree, to the missing `destination`
-/// without copying data: APFS clones on macOS and reflinks on Linux, keeping
-/// modification times. Fails instead of falling back to a full copy, which
-/// would cost the disk space cloning saves.
+/// Clone `source`, a file or directory tree, to `destination` without
+/// copying data, keeping modification times: a writable snapshot of a btrfs
+/// subvolume, which takes the same time for any number of files, otherwise
+/// APFS clones on macOS and reflinks on Linux. `destination` is missing, or
+/// on Linux an empty directory the reflinks fill. Fails instead of falling
+/// back to a full copy, which would cost the disk space cloning saves.
 pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    let (from, to) = (source.to_owned(), destination.to_owned());
+    if off_runtime::run(move || Ok(snapshot_root(&Btrfs, &from, &to))).await? {
+        return Ok(());
+    }
+    reflink_tree(source, destination).await
+}
+
+/// Make `destination` a snapshot of `source` when it is a subvolume root,
+/// and say whether it did. Any other source, or a failed snapshot, as onto
+/// another filesystem, is left to a reflink.
+fn snapshot_root(volumes: &impl Subvolumes, source: &Path, destination: &Path) -> bool {
+    volumes.is_root(source) && volumes.snapshot(source, destination).is_ok()
+}
+
+/// [`clone_tree`] by APFS clones or reflinks of every file.
+async fn reflink_tree(source: &Path, destination: &Path) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {
         let (from, to) = (source.to_owned(), destination.to_owned());
