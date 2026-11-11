@@ -42,6 +42,9 @@ states!(NotificationKind {
     /// An automatic removal was attempted and the workspace retained, or a
     /// cleanup pass failed.
     CleanupFailed => "cleanup_failed",
+    /// A removal the user asked for failed after the command returned, and
+    /// the workspace stays.
+    RemovalFailed => "removal_failed",
     /// Disk protection, a system shutdown or the daemon's exit could not
     /// stop a workspace's tracked executions.
     StopFailed => "stop_failed",

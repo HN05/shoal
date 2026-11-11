@@ -53,6 +53,7 @@ impl NotificationKindExt for NotificationKind {
                 | Self::QueueStarted
                 | Self::QueueFailed
                 | Self::ChatRestoreFailed
+                | Self::RemovalFailed
         )
     }
 }

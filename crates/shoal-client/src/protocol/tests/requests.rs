@@ -79,6 +79,7 @@ const REQUESTS: &[&str] = &[
     r#"{"stop_processes":{"space":"fix","selection":"leftovers","requester":42}}"#,
     r#"{"check_removal":{"workspace":"fix","include_changes":true}}"#,
     r#"{"remove_workspace":{"workspace":"fix","unsaved":"all"}}"#,
+    r#"{"start_removal":{"workspace":"fix","unsaved":"all"}}"#,
     r#"{"cleanup":{"dry_run":true,"spaces":"all","caches":"none"}}"#,
     r#""removed_workspaces""#,
     r#"{"restore_workspace":{"workspace":"fix"}}"#,

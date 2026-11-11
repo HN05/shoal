@@ -314,6 +314,17 @@ pub async fn remove(
     .await
 }
 
+/// Start removing `workspace`, returning once nothing but a change made
+/// meanwhile or a step that fails can keep it; a later failure reaches
+/// the caller's agent, or else the user's notifications.
+pub async fn start(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    unsaved: UnsavedWork,
+) -> Result<()> {
+    request(daemon, RemovalMethod::StartRemoval { workspace, unsaved }).await
+}
+
 /// Remove what `selection` selects that nothing keeps, or with `dry_run`
 /// only list it.
 pub async fn clean_up(

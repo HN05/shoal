@@ -23,7 +23,7 @@ use crate::{
 };
 use std::{fs, sync::Arc};
 
-async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+pub(super) async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -37,12 +37,14 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     (root, manager, workspace)
 }
 
-async fn fixture_with_removal_hook(script: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+pub(super) async fn fixture_with_removal_hook(
+    script: &str,
+) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     fixture_with_hook("hooks.pre_remove", |_| script.to_owned()).await
 }
 
 /// A workspace whose repository runs `script(root)` as the `key` hook.
-async fn fixture_with_hook(
+pub(super) async fn fixture_with_hook(
     key: &str,
     script: impl FnOnce(&std::path::Path) -> String,
 ) -> (tempfile::TempDir, Arc<Manager>, Workspace) {

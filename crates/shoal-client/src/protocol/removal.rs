@@ -55,6 +55,13 @@ pub enum RemovalMethod {
         workspace: SpaceSelector,
         unsaved: UnsavedWork,
     },
+    /// Remove `workspace` as `RemoveWorkspace` does, answering once removal
+    /// has reserved it and passed the checks it makes before changing
+    /// anything, while the rest goes on in the background.
+    StartRemoval {
+        workspace: SpaceSelector,
+        unsaved: UnsavedWork,
+    },
     /// Remove idle and merged cleanup candidates without waiting for their
     /// idle delay, and empty shared caches nothing is using.
     Cleanup {

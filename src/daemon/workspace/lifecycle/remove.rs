@@ -49,8 +49,8 @@ fn ensure_confirmed(parent: &str, children: &[SpaceRef], removal: Removal<'_>) -
 
 /// A workspace reserved for removal: its record, whether its directory
 /// existed, and the state the reservation replaced.
-struct Reserved {
-    workspace: Workspace,
+pub(super) struct Reserved {
+    pub(super) workspace: Workspace,
     present: bool,
     replaced: WorkspaceState,
 }
@@ -290,11 +290,57 @@ impl Manager {
         selector: &SpaceSelector,
         removal: Removal<'_>,
     ) -> Result<RemovalResult> {
+        let reserved = self.reserve_removal(selector, removal).await?;
+        self.remove_reserved(reserved, removal).await
+    }
+
+    /// Refuse now what removing the `reserved` workspace would refuse
+    /// before it changes anything, retaining the workspace, so a removal that
+    /// goes on in the background fails only on what changes meanwhile.
+    pub(super) async fn check_reserved_removal(
+        &self,
+        reserved: &Reserved,
+        removal: Removal<'_>,
+    ) -> Result<()> {
+        let workspace = &reserved.workspace;
+        let checked = async {
+            ensure_confirmed(
+                &workspace.name,
+                &self.taken_first(&workspace.id).await?,
+                removal,
+            )?;
+            if !reserved.present {
+                ensure!(
+                    self.missing_worktree(workspace).await?.is_none(),
+                    "worktree was moved; restore its recorded path before removing it"
+                );
+                return Ok(());
+            }
+            self.ensure_no_pending_rename(&workspace.id).await?;
+            self.recheck_removal(workspace, removal, Stage::Initial, &[])
+                .await
+                .map(drop)
+        }
+        .await;
+        if let Err(error) = &checked {
+            self.retain_workspace(&workspace.id, reserved.replaced, removal.cause(), error)
+                .await?;
+        }
+        checked
+    }
+
+    /// Remove the workspace `reserved` holds for `removal`, retaining it
+    /// when a step fails.
+    pub(super) async fn remove_reserved(
+        &self,
+        reserved: Reserved,
+        removal: Removal<'_>,
+    ) -> Result<RemovalResult> {
         let Reserved {
             workspace,
             present,
             replaced: reserved_state,
-        } = self.reserve_removal(selector, removal).await?;
+        } = reserved;
         // Checked again after the reservation, so a worktree restored meanwhile
         // cannot be deleted by an unattended removal.
         let result = async {
@@ -358,7 +404,7 @@ impl Manager {
     /// it was interrupted; it waits on the repository's Git gate for that
     /// creation to end and reads the workspace again, which creation has
     /// since finished recording.
-    async fn reserve_removal(
+    pub(super) async fn reserve_removal(
         &self,
         selector: &SpaceSelector,
         removal: Removal<'_>,

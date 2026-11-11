@@ -88,6 +88,14 @@ pub(super) async fn handle(
                 }
             })
         }
+        RemovalMethod::StartRemoval { workspace, unsaved } => {
+            let requester = caller.map(|caller| caller.space_id.clone());
+            let release_holds = caller.is_none();
+            manager
+                .start_workspace_removal(&workspace, unsaved, release_holds, requester)
+                .await?;
+            Body::Ok
+        }
         RemovalMethod::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
@@ -150,7 +158,8 @@ impl Scoped for RemovalMethod {
         match self {
             // The check refuses holds too, so a batch refuses before removing any.
             RemovalMethod::CheckRemoval { workspace, .. }
-            | RemovalMethod::RemoveWorkspace { workspace, .. } => manager
+            | RemovalMethod::RemoveWorkspace { workspace, .. }
+            | RemovalMethod::StartRemoval { workspace, .. } => manager
                 .unheld_workspace_below(caller, workspace, REFUSAL)
                 .await
                 .map(Some),
