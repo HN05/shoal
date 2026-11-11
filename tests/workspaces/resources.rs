@@ -1323,7 +1323,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "--workspace",
         &fixture.id("owner"),
         "--member",
-        &fixture.id("worker"),
+        "worker",
         "--name",
         "job",
     ]);

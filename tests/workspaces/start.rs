@@ -1608,14 +1608,7 @@ fn start_gives_the_agent_permissions_and_records_them() {
     assert_eq!(fixture.ok(&["list"]), before);
     // A chat takes a value wider than its mode's too.
     let chat = [
-        "start",
-        "--chat",
-        repo,
-        "--mode",
-        &fixture.id("plan"),
-        "--agent",
-        "helper",
-        "--here",
+        "start", "--chat", repo, "--mode", "plan", "--agent", "helper", "--here",
     ];
     let mut command = fixture.command();
     command
@@ -2325,7 +2318,7 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
             "plan",
             "--issue",
             "--agent",
-            &fixture.id("missing-agent"),
+            "missing-agent",
         ])
         .current_dir(&fixture.repo)
         .output()

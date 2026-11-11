@@ -1115,7 +1115,7 @@ async fn a_survivor_that_left_the_group_of_an_exited_agent_holds_the_chat() {
     manager.stop_finished_chats().await.unwrap();
     assert!(
         manager
-            .chat(&"talk".into())
+            .chat(&manager.named("talk").await)
             .await
             .unwrap()
             .restore

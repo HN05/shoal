@@ -63,7 +63,7 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
             "--workspace",
             &fixture.id("worker"),
             "--profile",
-            &fixture.id("phone")
+            "phone"
         ]),
         first
     );
@@ -399,7 +399,7 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
         "--workspace",
         &fixture.id("worker"),
         "--profile",
-        &fixture.id("phone"),
+        "phone",
     ]);
     assert_ne!(phone["udid"], tablet["udid"]);
     let devices: Value = serde_json::from_str(
@@ -847,7 +847,7 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
         "--workspace",
         &fixture.id("tablet"),
         "--profile",
-        &fixture.id("tablet"),
+        "tablet",
     ]);
     set_sim_apps(&fixture, &phone["udid"], 5);
     fixture.ok(&[

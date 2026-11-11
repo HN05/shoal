@@ -596,7 +596,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
         fixture.repo.to_str().unwrap(),
         "bad-profile",
         "--git-profile",
-        &fixture.id("unknown"),
+        "unknown",
     ]);
     assert!(!output.status.success());
     assert_eq!(fixture.ok(&["list"]), before);
