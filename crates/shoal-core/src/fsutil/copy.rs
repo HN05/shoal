@@ -239,7 +239,7 @@ pub async fn clone_or_copy_keeping_times(source: &Path, destination: &Path) -> a
 /// already has: a directory there gets the entries it lacks, at any depth,
 /// and any other entry stays as it is. Returns how many files and symbolic
 /// links it wrote.
-pub async fn copy_missing(source: &Path, destination: &Path) -> anyhow::Result<u64> {
+pub(crate) async fn copy_missing(source: &Path, destination: &Path) -> anyhow::Result<u64> {
     let (from, to) = (source.to_owned(), destination.to_owned());
     let missing = off_runtime::run(move || {
         missing_entries(&from, &to).with_context(|| format!("compare with {}", from.display()))

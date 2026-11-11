@@ -235,3 +235,40 @@ async fn nothing_is_written_outside_the_workspace() {
     );
     assert_eq!(fs::read_dir(outside.path()).unwrap().count(), 0);
 }
+
+/// Git lists an ignored directory with nothing tracked in it as one entry,
+/// whose insides the patterns still decide.
+async fn collapsed_cache() -> Fixture {
+    let fixture = Fixture::new("cache/\n").await;
+    fixture.write("cache/public/a", "a");
+    fixture.write("cache/private/b", "b");
+    fixture.write("cache/top", "top");
+    fixture
+}
+
+#[tokio::test]
+async fn an_exclude_reaches_inside_a_directory_git_lists_whole() {
+    let fixture = collapsed_cache().await;
+    assert_eq!(fixture.copy(&["cache/private/"]).await.unwrap(), 2);
+    assert!(fixture.copied("cache/public/a"));
+    assert!(fixture.copied("cache/top"));
+    assert!(!fixture.copied("cache/private"));
+}
+
+#[tokio::test]
+async fn an_include_reaches_inside_a_directory_git_lists_whole() {
+    let fixture = collapsed_cache().await;
+    fixture.write(".worktreeinclude", "cache/public/\n");
+    assert_eq!(fixture.copy(&[]).await.unwrap(), 1);
+    assert!(fixture.copied("cache/public/a"));
+    assert!(!fixture.copied("cache/top"));
+    assert!(!fixture.copied("cache/private"));
+}
+
+#[tokio::test]
+async fn other_tools_state_inside_a_walked_directory_is_not_copied() {
+    let fixture = collapsed_cache().await;
+    fixture.write("cache/.jj/store", "jj");
+    assert_eq!(fixture.copy(&["*.log"]).await.unwrap(), 3);
+    assert!(!fixture.copied("cache/.jj"));
+}

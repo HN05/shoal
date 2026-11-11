@@ -78,11 +78,14 @@ pub async fn copy(workspace: &Path, exclude: &[String]) -> Result<u64> {
         return Ok(0);
     }
     let entries = ignored_entries(&checkout).await?;
-    let matchers = Matchers::new(&checkout, exclude).await?;
+    let parts = Matchers::new(&checkout, exclude)
+        .await?
+        .selected_parts(&checkout, entries)
+        .await?;
     let mut copied = 0;
-    for entry in entries {
-        if matchers.selects(&entry) && !holds_worktree(&checkout, &entry, &worktrees) {
-            copied += copy_entry(&checkout, &workspace, &entry.path).await?;
+    for part in parts {
+        if !holds_worktree(&checkout, &part, &worktrees) {
+            copied += copy_entry(&checkout, &workspace, &part.path).await?;
         }
     }
     Ok(copied)
@@ -154,24 +157,75 @@ impl Matchers {
         .await
     }
 
-    /// An entry is selected when `.worktreeinclude`, if any, matches it or a
-    /// directory it is in, no exclude pattern does, and it is not another
-    /// tool's state. Matching parents lets a directory pattern cover a file
-    /// Git lists on its own, beside tracked files in its directory.
-    fn selects(&self, entry: &Entry) -> bool {
-        let matches = |matcher: &Gitignore| {
-            matcher
-                .matched_path_or_any_parents(&entry.path, entry.is_dir)
-                .is_ignore()
-        };
-        self.include.as_ref().is_none_or(matches)
-            && !matches(&self.exclude)
-            && !(entry.is_dir
+    /// The parts of `entries` to copy, read on the blocking pool.
+    async fn selected_parts(self, checkout: &Path, entries: Vec<Entry>) -> Result<Vec<Entry>> {
+        let checkout = checkout.to_owned();
+        off_runtime::run(move || {
+            let mut parts = Vec::new();
+            for entry in entries {
+                parts.extend(self.parts(&checkout, entry)?);
+            }
+            Ok(parts)
+        })
+        .await
+    }
+
+    /// The parts of `entry` to copy: the entry itself when everything in it
+    /// is selected, otherwise the selected parts below it. Git lists an
+    /// ignored directory as one entry, so a pattern for something inside it
+    /// takes a walk of the directory, which only patterns call for.
+    fn parts(&self, checkout: &Path, entry: Entry) -> Result<Vec<Entry>> {
+        if self.leaves_out(&entry) {
+            return Ok(Vec::new());
+        }
+        if !entry.is_dir || (self.include.is_none() && self.exclude.is_empty()) {
+            return Ok(vec![entry]);
+        }
+        let dir = checkout.join(&entry.path);
+        let mut parts = Vec::new();
+        let mut whole = self.includes(&entry);
+        for child in std::fs::read_dir(&dir).with_context(|| format!("read {}", dir.display()))? {
+            let child = child?;
+            let child = Entry {
+                path: entry.path.join(child.file_name()),
+                is_dir: child.file_type()?.is_dir(),
+            };
+            let child_path = child.path.clone();
+            let child_parts = self.parts(checkout, child)?;
+            whole &= matches!(&child_parts[..], [part] if part.path == child_path);
+            parts.extend(child_parts);
+        }
+        Ok(if whole { vec![entry] } else { parts })
+    }
+
+    /// `.worktreeinclude`, if any, matches the entry or a directory it is in,
+    /// which lets a directory pattern cover a file Git lists on its own,
+    /// beside tracked files in its directory.
+    fn includes(&self, entry: &Entry) -> bool {
+        self.include
+            .as_ref()
+            .is_none_or(|include| matches(include, entry))
+    }
+
+    /// The entry is not to be copied, whatever is in it: an exclude pattern
+    /// matches it or a directory it is in, it is another tool's state, or
+    /// `.worktreeinclude` leaves out a file.
+    fn leaves_out(&self, entry: &Entry) -> bool {
+        matches(&self.exclude, entry)
+            || (entry.is_dir
                 && entry
                     .path
                     .file_name()
                     .is_some_and(|name| ALWAYS_EXCLUDED.iter().any(|excluded| name == *excluded)))
+            || (!entry.is_dir && !self.includes(entry))
     }
+}
+
+/// Whether `matcher` matches the entry or a directory it is in.
+fn matches(matcher: &Gitignore, entry: &Entry) -> bool {
+    matcher
+        .matched_path_or_any_parents(&entry.path, entry.is_dir)
+        .is_ignore()
 }
 
 /// The patterns of the checkout's `.worktreeinclude`, when it has one.
